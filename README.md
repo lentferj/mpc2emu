@@ -181,12 +181,14 @@ Output:
                       needed (e.g. 100 → B.100-NAME_01.E4B, B.101-NAME_02.E4B …)
 
 ZuluSCSI images:
-  --iso               Build CD ISO image(s) for ZuluSCSI  (e4b/krz)
-  --hda               Build SCSI hard disk image (.hda) for ZuluSCSI  (e4b)
+  --iso               Build CD image(s) for ZuluSCSI  (e4b → EMU3, krz → K2000 FAT16)
+  --hda               Build SCSI hard disk image (.hda) for ZuluSCSI  (e4b + krz)
+                      e4b → E4XT EMU-fs/FAT disk; krz → K2000 FAT16 disk
+                      (HW-confirmed — loads from a ZuluSCSI HDx device)
   --hda-size MB       Hard disk image size in MB
-                      (default: auto — the smallest 128 MB step that fits the
-                       banks; max: 14336)
-  --hda-fs FS         HDA filesystem: fat | emu  (default: fat)
+                      e4b default: auto — smallest 128 MB step that fits; max 14336
+                      krz default: content + ~50% headroom to save onto (FAT16 max ~2047)
+  --hda-fs FS         E4B HDA filesystem: fat | emu  (default: fat; ignored for krz)
                       fat — FAT16 image in EOS's native layout (MBR partition
                             at LBA 63, 32 KB clusters), read by EOS 4.7+ (needs
                             the `mtools` package); banks B.NNN-NAME.E4B in the
@@ -309,10 +311,19 @@ python convert.py /mpc/programs/ --format e4b --bank-size 64 --bank-start 100 --
 Multiple `.iso` files on the same SD card appear as separate CD drives
 (CD1, CD2, …); the E4XT can switch between them.
 
-### CD image — K2000 (ISO 9660)
+### CD image — K2000 (FAT16 disk-image)
 
-When `--format krz`, `--iso` produces a standard **ISO 9660** image that
-any CD-ROM drive (including ZuluSCSI) can read.
+When `--format krz`, `--iso` produces a **FAT16 disk-image copy** (BPB at sector
+0, no partition table, OEM `KCDM1.2`) — the universally-compatible K2000/K2500
+disk form that **every K2000 OS reads**. It is *not* ISO 9660: real ISO 9660
+needs K2000 OS **v3.87+** / K2500 2.96+ (`build_iso_9660` can produce that if you
+need it). ZuluSCSI serves the `.iso` as a CD-ROM.
+
+> **Full byte-level KRZ format reference:** see
+> [`docs/KRZ_FORMAT.md`](docs/KRZ_FORMAT.md) — the bank/object model
+> (Sample / Keymap / Program), the VAST program encoding (filter, envelopes,
+> LFO), and the FAT16 CD/hard-disk media layout, reverse-engineered from
+> hardware and the KurzFiler source.
 
 ```bash
 python convert.py /sfz/pianos/ --format krz --iso
@@ -322,7 +333,10 @@ python convert.py /sfz/pianos/ --format krz --iso
 2. Rename to `CD1.iso`
 3. Power on K2000 → **Load → CD-ROM** → select bank
 
-### SCSI Hard Disk (.hda) — recommended
+> The very same FAT16 image also works as a **hard disk** — see the K2000 HD
+> section below.
+
+### SCSI Hard Disk (.hda) — E4XT
 
 ```bash
 python convert.py /mpc/programs/ --format e4b --bank-size 64 --hda --hda-size 200
@@ -334,6 +348,25 @@ python convert.py /mpc/programs/ --format e4b --bank-size 64 --hda --hda-size 20
 
 The hard disk image loads faster than CD and supports up to 14 GB
 (EIV OS limit).
+
+### SCSI Hard Disk (.hda) — K2000
+
+When `--format krz`, `--hda` builds a **K2000 FAT16 hard-disk image** — the same
+disk-image copy as the CD form, sized with free space so the K2000 can also save
+onto it. **Hardware-confirmed on a K2000R**: banks load and play straight from a
+ZuluSCSI `HDx` device.
+
+```bash
+python convert.py /sfz/pianos/ --format krz --hda --hda-size 1024
+```
+
+1. Copy the generated `.hda` to the ZuluSCSI SD card
+2. Rename to `HD1-<name>.hda` — pick any **free SCSI ID** (`HD1`, `HD3`, …);
+   ZuluSCSI reads it as a hard disk with the default 512-byte blocks
+3. Power on K2000 → **Load → Disk** → select bank
+
+`--hda-size` sets the volume size in MB (default: content + ~50% headroom;
+FAT16 tops out near ~2047 MB).
 
 ### Adding files to an existing .hda with emu3fs (Linux)
 

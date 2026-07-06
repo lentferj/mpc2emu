@@ -50,12 +50,15 @@ Options:
                        detected for a WAV-only directory).
   --middle-c {auto,C3,C4,C5}  Octave naming for filename root notes: which C =
                        MIDI 60 (default auto — detect from embedded WAV roots).
-  --iso                Build ZuluSCSI CD ISO image(s)  (e4b/krz only)
-  --hda                Build ZuluSCSI SCSI hard disk image (.hda)  (e4b only)
-  --hda-size MB        HDA image size in MB (default: auto — smallest 128 MB
-                       step that fits the banks; max: 14336)
-  --hda-fs FS          HDA filesystem: fat (EOS 4.7+, default, needs mtools) |
-                       emu (native EMU-fs, all EOS versions)
+  --iso                Build a ZuluSCSI CD image (e4b → EMU3, krz → K2000 FAT16)
+  --hda                Build a ZuluSCSI SCSI hard disk image (.hda). e4b → E4XT
+                       EMU-fs/FAT disk; krz → K2000 FAT16 disk (HW-confirmed:
+                       loads from a ZuluSCSI HDx device).
+  --hda-size MB        HDA image size in MB. e4b default: auto (smallest 128 MB
+                       step that fits; max 14336). krz default: content + ~50%
+                       headroom to save onto (FAT16 max ~2047).
+  --hda-fs FS          E4B HDA filesystem: fat (EOS 4.7+, default, needs mtools)
+                       | emu (native EMU-fs, all EOS versions). Ignored for krz.
   --add-to IMAGE       Append the bank(s) to an existing .hda (FAT or EMU-fs,
                        auto-detected) instead of building a new one.
   --folder NAME        With --add-to: target folder on the image (created if
@@ -376,14 +379,17 @@ def main():
         help='Write each KRZ bank to a DOS FAT12 floppy image (.img) for a Gotek/'
              'FlashFloppy on the K2000R  [krz only; default 1440 = 1.44 MB]')
     ap.add_argument('--hda',  action='store_true',
-        help='Build ZuluSCSI SCSI hard disk image (.hda)  [e4b only]')
+        help='Build a ZuluSCSI SCSI hard disk image (.hda). e4b → EMU-fs/FAT '
+             'E4XT disk; krz → K2000 FAT16 disk (HW-confirmed: loads from a '
+             'ZuluSCSI HDx device).')
     ap.add_argument('--hda-size', type=int, default=None, metavar='MB',
-        help='HDA image size in MB (default: auto — smallest 128 MB step that '
-             'fits the banks, so the image is not bigger/slower-to-copy than '
-             'needed; max: 14336)')
+        help='HDA image size in MB. e4b default: auto (smallest 128 MB step that '
+             'fits; max 14336). krz default: content + ~50%% headroom to save '
+             'onto (FAT16 max ~2047).')
     ap.add_argument('--hda-fs', choices=['fat', 'emu'], default='fat',
-        help="HDA filesystem: 'fat' (EOS 4.7+, default; needs mtools) or 'emu' "
-             "(native EMU-fs, all EOS versions)")
+        help="E4B HDA filesystem: 'fat' (EOS 4.7+, default; needs mtools) or "
+             "'emu' (native EMU-fs, all EOS versions). Ignored for krz (K2000 "
+             "is always FAT16).")
     ap.add_argument('--add-to', metavar='IMAGE',
         help='Append the converted bank(s) to an existing .hda image (FAT or '
              'EMU-fs, auto-detected) instead of building a new one. Never '
@@ -643,7 +649,8 @@ def main():
     planned = [_bank_path(i, b) for i, b in enumerate(output_banks)]
     if args.iso:
         planned.append(str(out_dir / f"{bank_name}.iso"))
-    if args.hda and args.format == 'e4b' and (args.hda_size is None or args.hda_size <= 14 * 1024):
+    if args.hda and (args.format == 'krz' or
+                     (args.format == 'e4b' and (args.hda_size is None or args.hda_size <= 14 * 1024))):
         planned.append(str(out_dir / f"{bank_name}.hda"))
     if not _confirm_overwrite(planned, args.overwrite):
         print("\nAborted — no files written. Re-run with --overwrite to skip this check.")
@@ -723,9 +730,24 @@ def main():
 
     # ── HDA ───────────────────────────────────────────────────────────────────
     if args.hda and out_paths:
-        if args.format != 'e4b':
-            print("\n[HDA] Skipped — HDA output is only supported for E4B format.")
-        else:
+        if args.format == 'krz':
+            # K2000 SCSI hard disk = the same FAT16 disk-image copy as the CD form
+            # (HW-confirmed: banks load from a ZuluSCSI HDx device).  Give it
+            # headroom by default so the K2000 can also save onto it.
+            from writers.iso_builder import build_k2000_disk
+            content_mb = sum(Path(p).stat().st_size for p in out_paths) / 1024 / 1024
+            hda_size = args.hda_size or min(2047, max(64, ((int(content_mb * 1.5) // 64) + 1) * 64))
+            if hda_size > 2047:
+                print(f"\n[HDA] --hda-size {hda_size} MB exceeds the FAT16 limit; "
+                      f"clamping to 2047 MB.")
+                hda_size = 2047
+            hda_path = str(out_dir / f"{bank_name}.hda")
+            print(f"\n[HDA] Building K2000 FAT16 hard-disk image "
+                  f"({hda_size} MB, ~{hda_size - content_mb:.0f} MB free)...")
+            build_k2000_disk(out_paths, hda_path, bank_name, size_mb=hda_size)
+            print(f"  → Copy to the ZuluSCSI SD card as HDx-{bank_name}.hda "
+                  f"(x = a free SCSI ID)")
+        elif args.format == 'e4b':
             # default: auto-size to the smallest 128 MB step that fits the banks.
             hda_size = args.hda_size or auto_hda_size_mb(out_paths, args.hda_fs)
             if hda_size > 14 * 1024:

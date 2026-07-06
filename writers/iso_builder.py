@@ -65,7 +65,7 @@ identical fixed-position layout the EOS firmware expects.
 
 import struct
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -347,19 +347,25 @@ def _iso9660_unique_names(filenames: List[str]) -> List[str]:
     return names
 
 def build_k2000_disk(krz_files: List[str], output_img: str,
-                     volume_label: str = "K2000", subdir: str = "BANKS") -> None:
+                     volume_label: str = "K2000", subdir: str = "BANKS",
+                     size_mb: Optional[int] = None) -> None:
     """Build a Kurzweil K2000/K2500 SCSI **disk-image copy** (FAT16, no partition).
 
-    This is the universally-compatible CD/disk form: every K2000 OS reads it.
-    (ISO 9660 — `build_iso_9660` — only works on K2000 OS **v3.87+** / K2500 2.96+;
-    older OS "require an image of a Kurzweil/DOS-formatted disk" — see the Kurzweil
-    SCSI doc + the v3.87 release notes.)  Layout mirrors a real K2000 CD (verified
-    against a working factory CD): FAT16, BPB at sector 0, **no MBR/partition**, OEM
-    ``KCDM1.2``, KRZ files in a sub-directory with clean 8.3 names.  ZuluSCSI serves
-    the image as a CD regardless of the internal filesystem (hence the .iso ext)."""
+    This is the universally-compatible CD/disk form: every K2000 OS reads it, as a
+    CD **or as a SCSI hard disk** (HW-confirmed on a K2000R — the same image loads
+    from a ZuluSCSI ``HDx`` device).  (ISO 9660 — `build_iso_9660` — only works on
+    K2000 OS **v3.87+** / K2500 2.96+; older OS "require an image of a Kurzweil/DOS-
+    formatted disk" — see the Kurzweil SCSI doc + the v3.87 release notes.)  Layout
+    mirrors a real K2000 CD (verified against a working factory CD): FAT16, BPB at
+    sector 0, **no MBR/partition**, OEM ``KCDM1.2``, KRZ files in a sub-directory
+    with clean 8.3 names.
+
+    `size_mb` sets the volume size; when None the image is auto-sized to just fit
+    the banks (the CD form).  Pass an explicit size for a hard disk with free space
+    to save onto (FAT16 tops out near ~2047 MB)."""
     from writers.fat16 import format_new
     total = sum(Path(f).stat().st_size for f in krz_files)
-    img_mb = max(16, int(total / 1024 / 1024 * 1.08) + 8)
+    img_mb = int(size_mb) if size_mb else max(16, int(total / 1024 / 1024 * 1.08) + 8)
     print(f"\nBuilding K2000 FAT16 disk image: {output_img}")
     print(f"  Volume label: {volume_label.upper()[:11]}  files: {len(krz_files)}  "
           f"size: {img_mb} MB")
@@ -381,7 +387,6 @@ def build_k2000_disk(krz_files: List[str], output_img: str,
         fs.add_file(str(kf), f"{pfx}_{i:02d}.KRZ", folder_cluster=folder)
         print(f"  + {subdir}/{pfx}_{i:02d}.KRZ  ({Path(kf).stat().st_size/1024/1024:.1f} MB)")
     fs.close()
-    print(f"  → ZuluSCSI: copy to SD card, rename to CDx.iso")
 
 
 def build_iso_9660(e4b_files: List[str], output_iso: str,

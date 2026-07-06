@@ -104,7 +104,7 @@ cd mpc2emu
 ```bash
 # HINWEIS: Die Ausgabe ist standardmäßig --format e4b (EMU E4B). Die Beispiele
 # unten geben es explizit an; mit --format krz (Kurzweil K2000) oder
-# --format talsmpl (TAL-Sampler) änderst du das. --hda ist nur für e4b,
+# --format talsmpl (TAL-Sampler) änderst du das. --hda gibt es für e4b + krz,
 # --floppy nur für krz.
 
 # Datei prüfen ohne Konvertierung
@@ -180,12 +180,14 @@ Ausgabe:
                       können — kein --iso nötig (z. B. 100 → B.100-NAME_01.E4B …)
 
 ZuluSCSI-Images:
-  --iso               CD-ISO-Image(s) für ZuluSCSI erzeugen  (e4b/krz)
-  --hda               SCSI-Festplatten-Image (.hda) erzeugen  (e4b)
+  --iso               CD-Image(s) für ZuluSCSI erzeugen  (e4b → EMU3, krz → K2000 FAT16)
+  --hda               SCSI-Festplatten-Image (.hda) erzeugen  (e4b + krz)
+                      e4b → E4XT EMU-fs/FAT-Disk; krz → K2000-FAT16-Disk
+                      (HW-bestätigt — lädt von einem ZuluSCSI-HDx-Gerät)
   --hda-size MB       Größe des HDA-Images in MB
-                      (Standard: auto — kleinste 128-MB-Stufe, die die Bänke
-                       fasst; max: 14336)
-  --hda-fs FS         HDA-Dateisystem: fat | emu  (Standard: fat)
+                      e4b-Standard: auto — kleinste 128-MB-Stufe, die passt; max 14336
+                      krz-Standard: Inhalt + ~50% Reserve zum Speichern (FAT16 max ~2047)
+  --hda-fs FS         E4B-HDA-Dateisystem: fat | emu  (Standard: fat; für krz ignoriert)
                       fat — FAT16-Image im nativen EOS-Layout (MBR-Partition bei
                             LBA 63, 32-KB-Cluster), von EOS 4.7+ lesbar (benötigt
                             'mtools'); Bänke B.NNN-NAME.E4B im Stammverzeichnis.
@@ -315,10 +317,19 @@ python convert.py /mpc/programs/ --format e4b --bank-size 64 --bank-start 100 --
 Mehrere `.iso`-Dateien auf derselben SD-Karte erscheinen als separate
 CD-Laufwerke (CD1, CD2, …).
 
-### CD-Image — K2000 (ISO 9660)
+### CD-Image — K2000 (FAT16-Disk-Image)
 
-Bei `--format krz` erzeugt `--iso` ein Standard-**ISO-9660**-Image,
-das jedes CD-ROM-Laufwerk (einschließlich ZuluSCSI) lesen kann.
+Bei `--format krz` erzeugt `--iso` eine **FAT16-Disk-Image-Kopie** (BPB in
+Sektor 0, keine Partitionstabelle, OEM `KCDM1.2`) — die universell kompatible
+K2000/K2500-Disk-Form, die **jedes K2000-OS liest**. Es ist *kein* ISO 9660:
+echtes ISO 9660 braucht K2000-OS **v3.87+** / K2500 2.96+ (`build_iso_9660`
+erzeugt das bei Bedarf). ZuluSCSI stellt die `.iso` als CD-ROM bereit.
+
+> **Vollständige Byte-Format-Referenz für KRZ:** siehe
+> [`docs/KRZ_FORMAT.md`](docs/KRZ_FORMAT.md) (Englisch) — das Bank/Objekt-Modell
+> (Sample / Keymap / Program), die VAST-Programm-Kodierung (Filter, Hüllkurven,
+> LFO) und das FAT16-CD/Festplatten-Layout, reverse-engineered aus Hardware und
+> dem KurzFiler-Quellcode.
 
 ```bash
 python convert.py /sfz/pianos/ --format krz --iso
@@ -328,7 +339,10 @@ python convert.py /sfz/pianos/ --format krz --iso
 2. Umbenennen zu `CD1.iso`
 3. K2000 einschalten → **Load → CD-ROM** → Bank auswählen
 
-### SCSI Festplatte (.hda) — empfohlen
+> Dasselbe FAT16-Image funktioniert auch als **Festplatte** — siehe den
+> K2000-HD-Abschnitt unten.
+
+### SCSI Festplatte (.hda) — E4XT
 
 ```bash
 python convert.py /mpc/programs/ --format e4b --bank-size 64 --hda --hda-size 200
@@ -340,6 +354,25 @@ python convert.py /mpc/programs/ --format e4b --bank-size 64 --hda --hda-size 20
 
 Die Festplatte lädt schneller als CD und unterstützt bis zu 14 GB
 (EIV-OS-Limit).
+
+### SCSI Festplatte (.hda) — K2000
+
+Bei `--format krz` erzeugt `--hda` ein **K2000-FAT16-Festplatten-Image** — dieselbe
+Disk-Image-Kopie wie die CD-Form, aber mit freiem Speicher, damit der K2000 auch
+darauf **speichern** kann. **Hardware-bestätigt auf einem K2000R**: Bänke laden
+und spielen direkt von einem ZuluSCSI-`HDx`-Gerät.
+
+```bash
+python convert.py /sfz/pianos/ --format krz --hda --hda-size 1024
+```
+
+1. Erzeugte `.hda`-Datei auf die ZuluSCSI SD-Karte kopieren
+2. Umbenennen zu `HD1-<name>.hda` — eine **freie SCSI-ID** wählen (`HD1`, `HD3`, …);
+   ZuluSCSI liest sie als Festplatte mit den Standard-512-Byte-Blöcken
+3. K2000 einschalten → **Load → Disk** → Bank auswählen
+
+`--hda-size` legt die Volume-Größe in MB fest (Standard: Inhalt + ~50% Reserve;
+FAT16-Maximum ~2047 MB).
 
 ### Dateien nachträglich mit emu3fs hinzufügen (Linux)
 
