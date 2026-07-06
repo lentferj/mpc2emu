@@ -94,6 +94,16 @@ When a single preset won't fit its bank, mpc2emu (in an interactive shell)
 prints sized suggestions — drop velocity layers / thin key zones / downsample —
 and applies your choice; a batch run needs --auto-fit or it exits non-zero.
 
+E4B (E4XT) output: filter type/cutoff/Q, the 6-stage amp + filter envelopes,
+chorus, LFO routing and forward/ping-pong loops are mapped from the source (RE'd
+against EOS 4.x hardware).  Full byte reference: docs/E4B_FORMAT.md.
+
+KRZ (K2000) output: filter type, cutoff (semitones) + resonance, amp + filter
+envelopes and LFO1 vibrato are mapped onto the K2000 #199 template.  A program
+with more than 3 UNIQUE (split) layers becomes a K2000 "drum program" — PLAY IT
+ON A DRUM CHANNEL; stacked/unison layers are thinned to 3 (any channel).  Each
+preset prints a [layers] note.  Full byte reference: docs/KRZ_FORMAT.md.
+
 Examples:
   python convert.py Piano.sf2 --info
   python convert.py DrumKit.sfz --format e4b --hda

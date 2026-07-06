@@ -554,6 +554,30 @@ werden **Ping-Pong-Loops ins PCM gerendert** (eine umgekehrte Kopie des
 Loop-Inneren wird eingefügt). Die Ausgabe erfolgt **nur in Mono** —
 Stereo-Quellen werden downgemischt.
 
+### Layer & Drum-Programme
+
+Ein **reguläres** K2000-Programm hat bis zu **3 Layer** und spielt auf jedem
+MIDI-Kanal; ein Programm mit **mehr als 3 Layern** ist ein **Drum-Programm**,
+das nur auf einem Drum-Kanal klingt (hardware-bestätigt). Der Konverter
+entscheidet je Preset:
+
+- **Velocity-Bänder werden zuerst aufgeteilt** — eine Voice, die mehrere
+  Velocity-Layer als Zonen trägt, wird in einen Layer pro Band zerlegt, damit
+  die K2000-Keymaps auf einer Taste nicht kollidieren.
+- **Gestapelte / Unison-Programme** — jeder Layer überlappt denselben Tasten- +
+  Velocity-Bereich (redundante Detune-/Unison-Stacks) — werden **auf 3 Layer
+  ausgedünnt**, damit der häufige melodische Fall weiterhin auf **jedem Kanal**
+  spielt.
+- **Split-Programme** — Velocity-Layer, Key-Splits und **Drum-Kits**, bei denen
+  jeder Layer eigenes Territorium abdeckt — werden **vollständig als
+  Drum-Programm** erhalten (bis zum K2000-Maximum von **32 Layern**; darüber wird
+  gekappt). Diese auf einem **Drum-Kanal** spielen.
+
+Der Konverter gibt je Preset eine `[layers]`-Zeile aus, welcher Weg gewählt wurde
+(und bei einem Drum-Programm den Hinweis auf den Drum-Kanal). Weitbereichige
+Oktav-Slice-Stacks, die nicht über die K2000-Up-Pitch-Grenze keytracken können,
+werden zuvor als Coverage-Multisample-Keymaps neu aufgebaut (`[coverage]`-Hinweis).
+
 ---
 
 ## Vintage Resampler

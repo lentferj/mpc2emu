@@ -538,6 +538,29 @@ so **ping-pong loops are baked into the PCM** (a reversed copy of the loop
 interior is spliced in). Output is **mono only** — stereo sources are
 downmixed.
 
+### Layers & drum programs
+
+A K2000 **regular program** holds up to **3 layers** and plays on any MIDI
+channel; a program with **more than 3 layers** is a **drum program** that only
+sounds on a drum channel (hardware-confirmed). The converter picks between them
+per preset:
+
+- **Velocity bands are split first** — a voice that carries several velocity
+  layers as zones is broken into one layer per band, so the K2000 keymaps don't
+  collide on a key.
+- **Stacked / unison programs** — every layer overlaps the same key + velocity
+  range (redundant detune/unison stacks) — are **spread-picked down to 3 layers**
+  so the common melodic case still plays on **any channel**.
+- **Split programs** — velocity layers, key splits, and **drum kits** where each
+  layer covers unique territory — are **kept in full as a drum program** (up to
+  the K2000 maximum of **32 layers**; anything beyond is clamped). Play these on
+  a **drum channel**.
+
+The converter prints a `[layers]` line per preset saying which path it took (and,
+for a drum program, the reminder to use a drum channel). Wide-range octave-slice
+stacks that can't key-track past the K2000 up-pitch ceiling are first rebuilt as
+coverage multisample keymaps (a `[coverage]` note).
+
 ---
 
 ## Vintage Resampler
