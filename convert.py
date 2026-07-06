@@ -27,6 +27,7 @@ OUTPUT:  e4b   krz   talsmpl
 Usage:
   python convert.py <input> [options]
   python convert.py <input> --info [--verbose]
+  python convert.py --long-help                 # full README as a manual
 
 Options:
   --info               Inspect input file(s) without converting
@@ -197,6 +198,26 @@ def _size_bytes_type(s: str) -> int:
     return _parse_size_bytes(s)
 
 
+class _LongHelpAction(argparse.Action):
+    """--long-help: print the full README (the long-form manual) and exit.
+    Fires during parsing like -h, so it works with no input argument. Prints
+    README.md next to this script (single source of truth); falls back to the
+    GitHub URL if the file isn't alongside (e.g. an odd install layout)."""
+    def __init__(self, option_strings, dest=argparse.SUPPRESS,
+                 default=argparse.SUPPRESS, help=None):
+        super().__init__(option_strings=option_strings, dest=dest,
+                         default=default, nargs=0, help=help)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        readme = Path(__file__).resolve().parent / 'README.md'
+        if readme.exists():
+            sys.stdout.write(readme.read_text(encoding='utf-8'))
+        else:
+            print("Full documentation (README):\n"
+                  "  https://github.com/lentferj/mpc2emu/blob/main/README.md")
+        parser.exit()
+
+
 def _print_fit_options(preset_name: str, source_name: str, cur_bytes: int,
                        limit_bytes: int, bound_desc: str, opts: list) -> list:
     """Print the over-limit banner + numbered fitting options. Returns the list
@@ -360,11 +381,14 @@ def main():
     ap.add_argument('input',
         help='Input file or directory '
              '(.e4b .xpm .pgm .set .img .talsmpl .sfz .sf2 .exs .gig)')
+    ap.add_argument('--long-help', action=_LongHelpAction,
+        help='Print the full README (long-form manual) and exit')
     ap.add_argument('--info',    action='store_true',
         help='Inspect without converting')
     ap.add_argument('--verbose', action='store_true',
         help='Show per-zone detail with --info')
-    ap.add_argument('--wav-dir')
+    ap.add_argument('--wav-dir',
+        help='Extra directory to search for referenced WAV samples')
     ap.add_argument('--output-dir', '--out-dir', dest='out_dir', default='.',
         metavar='DIR', help='Output directory (default: current directory)')
     ap.add_argument('--overwrite', action='store_true',
@@ -378,13 +402,18 @@ def main():
         help='Cap each single preset/program, e.g. 8192K / 8MB, so no one '
              'preset fills a whole bank (thinned to fit like an over-bank preset; '
              'use with --auto-fit for batch runs). Default: no per-preset cap.')
-    ap.add_argument('--bank-name', default='EMU_BANK', metavar='NAME')
+    ap.add_argument('--bank-name', default='EMU_BANK', metavar='NAME',
+        help='Base (internal) name for output banks (default: EMU_BANK). The '
+             'on-disk B.NNN- prefix comes from --bank-start.')
     ap.add_argument('--bank-start', type=int, default=None, metavar='N',
         help='Number output bank files B.NNN-NAME… starting at N so they can be '
              'copied straight onto an existing E4XT volume (e.g. 100 → '
              'B.100-NAME_01.E4B); no --iso needed')
-    ap.add_argument('--format', choices=['e4b','krz','talsmpl'], default='e4b')
-    ap.add_argument('--iso',  action='store_true')
+    ap.add_argument('--format', choices=['e4b','krz','talsmpl'], default='e4b',
+        help='Output format (default: e4b). e4b = EMU Emulator 4 / E4XT, '
+             'krz = Kurzweil K2000/K2500/K2600, talsmpl = TAL-Sampler.')
+    ap.add_argument('--iso',  action='store_true',
+        help='Build a ZuluSCSI CD image (e4b → EMU3 filesystem, krz → K2000 FAT16)')
     ap.add_argument('--floppy', nargs='?', const='1440', choices=['720', '1440'],
         metavar='KB',
         help='Write each KRZ bank to a DOS FAT12 floppy image (.img) for a Gotek/'
@@ -413,8 +442,11 @@ def main():
         default='prompt',
         help='With --add-to, when a bank name already exists: prompt (default), '
              'add-new (next free number/slot), skip, or overwrite.')
-    ap.add_argument('--resample', choices=list(PROFILES.keys()), metavar='PROFILE')
-    ap.add_argument('--no-bandpass', action='store_true')
+    ap.add_argument('--resample', choices=list(PROFILES.keys()), metavar='PROFILE',
+        help='Vintage resampling profile: emulator2 (EMU Emulator II, 8-bit) or '
+             'emax1 (EMU Emax I, 12-bit) — both 27.5 kHz.')
+    ap.add_argument('--no-bandpass', action='store_true',
+        help='Skip the bandpass output coloring stage when using --resample')
     ap.add_argument('--resample-keep-gain', action='store_true',
         help='With --resample, keep the gain-staged "hot" level instead of '
              "restoring each sample's original level afterwards")
@@ -439,7 +471,8 @@ def main():
              'zones, else downsample) instead of failing. For batch/non-interactive '
              'builds; in an interactive shell you are prompted with sized options '
              'either way.')
-    ap.add_argument('--max-presets', type=int, default=64)
+    ap.add_argument('--max-presets', type=int, default=64,
+        help='Max presets to import from a multi-preset SF2 / GIG (default: 64)')
     ap.add_argument('--from-samples', action='store_true',
         help='Treat the input directory as a folder of WAVs (root note in the '
              'filename) and auto-build one multisample preset (also auto-detected '
