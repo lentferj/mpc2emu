@@ -103,7 +103,7 @@ cd mpc2emu
 ```bash
 # NOTE: output defaults to --format e4b (EMU E4B). The examples below pass it
 # explicitly; use --format krz (Kurzweil K2000) or --format talsmpl (TAL-Sampler)
-# to change it. Note --hda is e4b-only and --floppy is krz-only.
+# to change it. Note --hda works for e4b + krz, and --floppy is krz-only.
 
 # Inspect a file without converting
 python convert.py Piano.sf2 --info
