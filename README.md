@@ -101,21 +101,25 @@ cd mpc2emu
 ## Quick Start
 
 ```bash
+# NOTE: output defaults to --format e4b (EMU E4B). The examples below pass it
+# explicitly; use --format krz (Kurzweil K2000) or --format talsmpl (TAL-Sampler)
+# to change it. Note --hda is e4b-only and --floppy is krz-only.
+
 # Inspect a file without converting
 python convert.py Piano.sf2 --info
 python convert.py DrumKit.sfz --info --verbose
 
 # Convert XPM to E4B + ZuluSCSI CD ISO
-python convert.py MyDrums.xpm --iso
+python convert.py MyDrums.xpm --format e4b --iso
 
 # Convert XPM to E4B + ZuluSCSI SCSI hard disk image
-python convert.py MyDrums.xpm --hda
+python convert.py MyDrums.xpm --format e4b --hda
 
 # Convert a whole folder, 32 MB banks, both ISO and HDA
-python convert.py /mpc/programs/ --bank-size 32 --iso --hda
+python convert.py /mpc/programs/ --format e4b --bank-size 32 --iso --hda
 
 # B.NNN prefix naming (for E4XT bank slot ordering)
-python convert.py /mpc/programs/ --bank-size 64 --bank-start 100 --iso
+python convert.py /mpc/programs/ --format e4b --bank-size 64 --bank-start 100 --iso
 
 # TAL-Sampler preset to E4B
 python convert.py MyPreset.talsmpl --format e4b
@@ -127,7 +131,7 @@ python convert.py /sfz/pianos/ --format krz
 python convert.py Orchestra.gig --format e4b --max-presets 16 --hda
 
 # Vintage resampling: EMU Emulator II sound
-python convert.py /mpc/programs/ --resample emulator2 --iso
+python convert.py /mpc/programs/ --format e4b --resample emulator2 --iso
 
 # Vintage resampling: EMU Emax I sound, no bandpass coloring
 python convert.py /sfz/ --format e4b --resample emax1 --no-bandpass
@@ -295,7 +299,7 @@ containing all banks.  It is **not** standard ISO 9660.
 > as well as the K2000's standard ISO 9660 image format below.
 
 ```bash
-python convert.py /mpc/programs/ --bank-size 64 --bank-start 100 --iso
+python convert.py /mpc/programs/ --format e4b --bank-size 64 --bank-start 100 --iso
 ```
 
 1. Copy the generated `.iso` to the ZuluSCSI SD card
@@ -321,7 +325,7 @@ python convert.py /sfz/pianos/ --format krz --iso
 ### SCSI Hard Disk (.hda) — recommended
 
 ```bash
-python convert.py /mpc/programs/ --bank-size 64 --hda --hda-size 200
+python convert.py /mpc/programs/ --format e4b --bank-size 64 --hda --hda-size 200
 ```
 
 1. Copy `output/EMU_BANK.hda` to the ZuluSCSI SD card

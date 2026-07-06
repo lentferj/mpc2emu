@@ -102,18 +102,23 @@ cd mpc2emu
 ## Schnellstart
 
 ```bash
+# HINWEIS: Die Ausgabe ist standardmäßig --format e4b (EMU E4B). Die Beispiele
+# unten geben es explizit an; mit --format krz (Kurzweil K2000) oder
+# --format talsmpl (TAL-Sampler) änderst du das. --hda ist nur für e4b,
+# --floppy nur für krz.
+
 # Datei prüfen ohne Konvertierung
 python convert.py Piano.sf2 --info
 python convert.py DrumKit.sfz --info --verbose
 
 # XPM → E4B + ZuluSCSI CD-ISO
-python convert.py MyDrums.xpm --iso
+python convert.py MyDrums.xpm --format e4b --iso
 
 # XPM → E4B + ZuluSCSI SCSI-Festplatten-Image
-python convert.py MyDrums.xpm --hda
+python convert.py MyDrums.xpm --format e4b --hda
 
 # Ganzen Ordner konvertieren, 64 MB Bänke, B.NNN-Präfix-Benennung, ISO
-python convert.py /mpc/programs/ --bank-size 64 --bank-start 100 --iso
+python convert.py /mpc/programs/ --format e4b --bank-size 64 --bank-start 100 --iso
 
 # TAL-Sampler-Preset → E4B
 python convert.py MyPreset.talsmpl --format e4b
@@ -125,7 +130,7 @@ python convert.py /sfz/pianos/ --format krz
 python convert.py Orchestra.gig --format e4b --max-presets 16 --hda
 
 # Vintage-Resampling: EMU Emulator II Sound
-python convert.py /mpc/programs/ --resample emulator2 --iso
+python convert.py /mpc/programs/ --format e4b --resample emulator2 --iso
 
 # Vintage-Resampling: EMU Emax I Sound, ohne Bandpass-Coloring
 python convert.py /sfz/ --format e4b --resample emax1 --no-bandpass
@@ -300,7 +305,7 @@ als CD-ROM-Laufwerk bereit; der E4XT liest es direkt und zeigt einen
 > K2000 weiter unten.
 
 ```bash
-python convert.py /mpc/programs/ --bank-size 64 --bank-start 100 --iso
+python convert.py /mpc/programs/ --format e4b --bank-size 64 --bank-start 100 --iso
 ```
 
 1. Erzeugte `.iso`-Datei auf die ZuluSCSI SD-Karte kopieren
@@ -326,7 +331,7 @@ python convert.py /sfz/pianos/ --format krz --iso
 ### SCSI Festplatte (.hda) — empfohlen
 
 ```bash
-python convert.py /mpc/programs/ --bank-size 64 --hda --hda-size 200
+python convert.py /mpc/programs/ --format e4b --bank-size 64 --hda --hda-size 200
 ```
 
 1. `output/EMU_BANK.hda` auf die ZuluSCSI SD-Karte kopieren
