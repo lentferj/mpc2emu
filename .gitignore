@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+
+# Claude Code / AI-assistant working files — kept out of the public repo
+CLAUDE.md
+.claude/
+
+# Local test data, demo sources, and generated converter output (not distributable)
+demo_sources/
+tests/
+*.E4B
+*.KRZ
+*.e4b
+*.krz
+*.iso
+*.img
+*.hda
+*.SND
+*.wav
+*.ods
+
+# Personal demo / build / analysis scripts (hardcoded local paths — user-specific,
+# not part of the distributable program)
+apply_ods_colour.py
+feature_scan.py
+make_feature_demo.py
+make_krz_demo_ods.py
+make_packed_ods.py
+make_pingpong_demo.py
+rebuild_all.py
+rebuild_krz_demo.py
+rebuild_krz_floppies.py
+rebuild_ods.py
+test_pipeline.py

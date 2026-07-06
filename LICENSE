@@ -1,0 +1,85 @@
+mpc2emu — Multi-format Sampler Converter
+Copyright (C) 2025  mpc2emu contributors
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+-------------------------------------------------------------------------------
+Third-party references and their licenses
+-------------------------------------------------------------------------------
+
+parsers/gig_parser.py
+  The GIG/DLS2 binary structure knowledge used in this file is derived from
+  the reverse-engineering work documented in libgig:
+    libgig — C++ cross-platform Gigasampler format file access library
+    Copyright (C) 2003-2021  Christian Schoenebeck <cuse@users.sourceforge.net>
+    https://www.linuxsampler.org/libgig/
+    License: GNU General Public License v2.0 or later (GPL-2.0-or-later)
+  The initial GIG format reverse engineering was carried out by
+  Paul Kellett and Ruben van Royen; GigaStudio v3/v4 support was added
+  by Andreas Persson. See libgig ChangeLog for full contributor list.
+  This file is therefore also released under GPL-2.0-or-later.
+
+parsers/sf2_parser.py
+  Based on the publicly available SoundFont 2.04 File Specification,
+  published by E-mu Systems / Creative Technology Ltd.
+  The SF2 C++ classes in libgig were written by Grigor Iliev (GPL-2.0-or-later).
+  This file is an independent reimplementation from the specification;
+  no source code was copied. Released under GPL-2.0-or-later for consistency.
+
+parsers/exs24_parser.py
+  EXS24 binary format knowledge derived from:
+    - exs2sfz (GPL-2.0): https://github.com/mqnc/exs2sfz
+    - ConvertWithMoss (LGPLv3), Jürgen Moßgraber:
+      https://github.com/git-moss/ConvertWithMoss
+  This file is an independent reimplementation; no source code was copied.
+  Released under GPL-2.0-or-later for consistency.
+
+parsers/talsmpl_parser.py
+  TAL-Sampler format knowledge partially informed by:
+    - ConvertWithMoss (LGPLv3), Jürgen Moßgraber:
+      https://github.com/git-moss/ConvertWithMoss
+  XML structure verified against live .talsmpl files.
+  This file is an independent reimplementation; no source code was copied.
+  Released under GPL-2.0-or-later for consistency.
+
+writers/krz_writer.py
+  Kurzweil K2000 KRZ format knowledge partially derived from:
+    - KurzFiler (GPL-2.0), Marc Halbrügge:
+      https://kurzfiler.sourceforge.io/
+  Binary field layout verified against community documentation and
+  live .KRZ files. This file is an independent reimplementation;
+  no source code was copied. Released under GPL-2.0-or-later.
+
+parsers/sfz_parser.py
+  Based on the publicly available SFZ v1/v2 community specification:
+    https://sfzformat.com/
+  No third-party source code used. Released under GPL-2.0-or-later
+  for consistency with the rest of the project.
+
+All other files (models/common.py, writers/e4b_writer.py,
+writers/bank_splitter.py, writers/iso_builder.py,
+processors/resampler.py, convert.py, test_pipeline.py)
+  Original work. Released under GPL-2.0-or-later.
+
+-------------------------------------------------------------------------------
+Trademarks
+-------------------------------------------------------------------------------
+E-mu, Emulator, EOS are trademarks of Creative Technology Ltd.
+Kurzweil is a trademark of Young Chang Co. Ltd.
+Akai MPC is a trademark of inMusic Brands Inc.
+TAL-Sampler is a trademark of TAL Software GmbH.
+GigaStudio, GigaSampler are trademarks of Tascam / TEAC Corporation.
+Logic, EXS24, MainStage are trademarks of Apple Inc.
+SoundFont is a trademark of Creative Technology Ltd.
+All other trademarks are property of their respective owners.
