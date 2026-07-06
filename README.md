@@ -368,23 +368,24 @@ python convert.py /sfz/pianos/ --format krz --hda --hda-size 1024
 `--hda-size` sets the volume size in MB (default: content + ~50% headroom;
 FAT16 tops out near ~2047 MB).
 
-### Adding files to an existing .hda with emu3fs (Linux)
+### Adding banks to an existing image (`--add-to`)
+
+Append converted bank(s) to an image you already built — **in place, no rebuild,
+no mounting, no external tools** (pure Python):
 
 ```bash
-# Mount the image
-sudo losetup -b 512 /dev/loop0 output/EMU_BANK.hda
-mkdir -p /mnt/emu4
-sudo mount -t emu4 /dev/loop0 /mnt/emu4
+# E4B → an existing E4XT hard disk (.hda; FAT or EMU-fs, auto-detected)
+python convert.py NewPad.xpm --format e4b --add-to /path/to/DISK.hda
 
-# Copy files
-sudo cp NewBank.E4B /mnt/emu4/
-
-# Unmount
-sudo umount /mnt/emu4
-sudo losetup -d /dev/loop0
+# KRZ → an existing K2000 image (CD .iso OR hard disk .hda — same FAT16 format)
+python convert.py NewPad.sfz --format krz --add-to /path/to/K2KBANKS.iso
 ```
 
-emu3fs: <https://github.com/dagargo/emu3fs>
+- `--folder NAME` targets (and creates) a sub-folder on the image.
+- `--on-duplicate {prompt,add-new,skip,overwrite}` handles name clashes; existing
+  banks are **never overwritten** unless you ask.
+- E4B appends to a `.hda` (FAT or EMU-fs); KRZ appends into the `BANKS/` directory
+  of a K2000 CD or hard-disk image.
 
 ---
 

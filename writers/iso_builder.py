@@ -389,6 +389,56 @@ def build_k2000_disk(krz_files: List[str], output_img: str,
     fs.close()
 
 
+def k2000_disk_append(image: str, krz_files: List[str], folder: Optional[str] = None,
+                      on_duplicate: str = 'prompt') -> int:
+    """Append KRZ bank(s) to an **existing** K2000/K2500 FAT16 disk image in place
+    — a CD (`.iso`) or SCSI hard-disk (`.hda`) image, both the same disk-image
+    format — WITHOUT rebuilding it or mounting anything (no emu3fs).  Banks go into
+    the ``BANKS/`` sub-directory (or ``folder``) with clean 8.3 names; existing
+    banks are never overwritten unless ``on_duplicate='overwrite'``.  Returns the
+    number added.  Pure Python (writers/fat16.py)."""
+    from writers.fat16 import Fat16
+    from writers.hda_builder import _resolve_duplicate
+
+    fs = Fat16(image)
+    try:
+        subdir = folder or "BANKS"
+        target = fs.find_dir(subdir)
+        if target is None:
+            target = fs.makedir(subdir)
+            print(f"  + created folder '{subdir}'")
+        existing = {n.upper() for n in fs.list_dir(target)
+                    if n.upper().endswith('.KRZ')}
+
+        def _safe83(stem: str) -> str:
+            return ''.join(c for c in stem.upper() if c.isalnum())[:8] or 'BANK'
+
+        added = 0
+        for path in krz_files:
+            base = _safe83(Path(path).stem)
+            dest = f"{base}.KRZ"
+            if dest.upper() in existing:
+                act = _resolve_duplicate(base, on_duplicate)
+                if act == 'skip':
+                    print(f"  skip '{dest}' (already present)")
+                    continue
+                if act == 'overwrite':
+                    fs.delete_file(dest, target)
+                    existing.discard(dest.upper())
+                elif act == 'add-new':
+                    i = 2
+                    while f"{base[:6]}{i}.KRZ".upper() in existing:
+                        i += 1
+                    dest = f"{base[:6]}{i}.KRZ"
+            fs.add_file(str(path), dest, folder_cluster=target)
+            existing.add(dest.upper())
+            added += 1
+            print(f"  + {subdir}/{dest}")
+    finally:
+        fs.close()
+    return added
+
+
 def build_iso_9660(e4b_files: List[str], output_iso: str,
                    volume_label: str = "EMU_BANK") -> None:
     """

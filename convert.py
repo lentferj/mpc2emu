@@ -59,8 +59,9 @@ Options:
                        headroom to save onto (FAT16 max ~2047).
   --hda-fs FS          E4B HDA filesystem: fat (EOS 4.7+, default, needs mtools)
                        | emu (native EMU-fs, all EOS versions). Ignored for krz.
-  --add-to IMAGE       Append the bank(s) to an existing .hda (FAT or EMU-fs,
-                       auto-detected) instead of building a new one.
+  --add-to IMAGE       Append the bank(s) to an existing image in place, no
+                       rebuild / no emu3fs.  e4b → a .hda (FAT or EMU-fs); krz →
+                       a K2000 FAT16 CD (.iso) or hard disk (.hda), into BANKS/.
   --folder NAME        With --add-to: target folder on the image (created if
                        absent; default: root / Default Folder).
   --on-duplicate {prompt,add-new,skip,overwrite}
@@ -401,9 +402,10 @@ def main():
              "'emu' (native EMU-fs, all EOS versions). Ignored for krz (K2000 "
              "is always FAT16).")
     ap.add_argument('--add-to', metavar='IMAGE',
-        help='Append the converted bank(s) to an existing .hda image (FAT or '
-             'EMU-fs, auto-detected) instead of building a new one. Never '
-             'overwrites existing banks/folders.')
+        help='Append the converted bank(s) to an existing image in place (no '
+             'rebuild, no emu3fs). e4b → a .hda (FAT or EMU-fs, auto-detected); '
+             'krz → a K2000 FAT16 CD (.iso) or hard-disk (.hda), into BANKS/. '
+             'Never overwrites existing banks unless --on-duplicate overwrite.')
     ap.add_argument('--folder', metavar='NAME',
         help='With --add-to: target folder on the image, created if absent '
              '(default: root / Default Folder).')
@@ -679,11 +681,20 @@ def main():
 
     # ── Append to an existing image ─────────────────────────────────────────────
     if args.add_to and out_paths:
-        if args.format != 'e4b':
-            print("\n[ADD] Skipped — --add-to is only supported for E4B format.")
-        elif not Path(args.add_to).exists():
+        if not Path(args.add_to).exists():
             print(f"\n[ADD] ERROR: image not found: {args.add_to}")
-        else:
+        elif args.format == 'krz':
+            # K2000 CD (.iso) and hard-disk (.hda) are the same FAT16 disk-image;
+            # append into BANKS/ in place — no rebuild, no emu3fs.
+            from writers.iso_builder import k2000_disk_append
+            print(f"\n[ADD] Appending {len(out_paths)} bank(s) to "
+                  f"{Path(args.add_to).name} (K2000 FAT16)"
+                  + (f", folder '{args.folder}'" if args.folder else "") + "...")
+            try:
+                k2000_disk_append(args.add_to, out_paths, args.folder, args.on_duplicate)
+            except Exception as e:
+                print(f"  [ADD] ERROR: {e}")
+        elif args.format == 'e4b':
             from writers.hda_builder import detect_hda_fs, fat_hda_append
             from writers.iso_builder import emu_hdd_append
             try:
