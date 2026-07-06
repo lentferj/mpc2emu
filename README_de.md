@@ -44,6 +44,50 @@ korrekt macht. Vollständige Darstellung in [DISCLAIMER_de.md](DISCLAIMER_de.md)
 
 ---
 
+## Funktionen
+
+mpc2emu ist ein Konverter für Sampler-Instrumente. Er **liest** eine breite
+Palette von Sampler- und Bibliotheksformaten — Akai MPC Keygroups (`.xpm`) und
+binäre Drum-Programme (`.pgm` — MPC 500/1000/2500, MPC 2000/2000XL und MPC 60),
+SFZ v1/v2, SoundFont 2, GigaSampler / GigaStudio (unkomprimiert), Logic EXS24
+(klassisch und v1.1), TAL-Sampler, EMU-E4B-Bänke und sogar einen einfachen
+Ordner mit grundton-benannten WAVs — und **schreibt** EMU E4B (Emulator 4 /
+E4XT / EOS 4.x), Kurzweil KRZ (K2000 / K2500 / K2600) und TAL-Sampler-Presets.
+
+**Er überträgt die musikalischen Parameter, nicht nur die rohen Samples.**
+Filtertyp / Cutoff / Resonanz, die Amplituden- und Filterhüllkurven, der LFO und
+die Loops werden auf die jeweilige Synth-Engine des Ziels abgebildet — nicht auf
+Standardwerten belassen. Diese Zuordnung ist gegen echte E4XT- und
+K2000R-Hardware reverse-engineered; die Abschnitte
+[E4B Voice-Parameter](#e4b-voice-parameter) und
+[KRZ-Programmparameter](#krz-programmparameter) weiter unten dokumentieren genau,
+was übertragen wird und wie es verifiziert wurde.
+
+**Vintage-Resampling** kann optional jedes Sample durch ein Modell der
+Signalkette des EMU Emulator II (8 Bit, 27,5 kHz, rau) oder Emax I (12 Bit)
+laufen lassen — Anti-Alias → Dezimation → Gain-Staging → Truncation → Dither →
+Bandpass — für authentischen Lo-Fi-Charakter statt eines sauberen Bit-Crushes.
+
+**Er passt sich automatisch an die Hardware an.** Presets werden mit einem
+First-Fit-Algorithmus in bank-große Abschnitte gepackt; ist ein einzelnes Preset
+zu groß für eine Bank, bietet mpc2emu dimensionierte Reduktionen an —
+Velocity-Layer entfernen, Key-Zonen ausdünnen oder heruntersampeln — entweder
+interaktiv oder mit `--auto-fit` automatisch angewendet. `--max-preset-size`
+begrenzt jedes einzelne Preset, damit kein Preset eine ganze Bank füllt.
+
+**Er startet direkt am Instrument.** mpc2emu schreibt ZuluSCSI-fähige Medien:
+EMU3-CD-Images und SCSI-Festplatten-Images für den E4XT sowie
+FAT16-CD-Images, SCSI-Festplatten-Images und Gotek-FAT12-Floppies (alle
+hardware-bestätigt) für den K2000. Bänke können mit `--add-to` auch direkt an ein
+vorhandenes Image angehängt werden — ohne Neuaufbau und ohne Mounten.
+
+Schließlich kannst du jede Eingabe **prüfen, ohne sie zu konvertieren**
+(`--info`), und es gibt **keine Pflicht-Abhängigkeiten** — mpc2emu nutzt reine
+Python-Standardbibliothek (`mtools` ist optional und nur für einen
+E4B-HDA-Dateisystem-Pfad nötig).
+
+---
+
 ## Unterstützte Formate
 
 ### Eingabe

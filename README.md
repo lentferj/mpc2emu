@@ -42,6 +42,47 @@ results correct. Full account in [DISCLAIMER.md](DISCLAIMER.md).
 
 ---
 
+## Features
+
+mpc2emu is a converter for sampler instruments. It **reads** a wide range of
+sampler and library formats — Akai MPC keygroups (`.xpm`) and binary drum
+programs (`.pgm` — MPC 500/1000/2500, MPC 2000/2000XL, and MPC 60), SFZ v1/v2,
+SoundFont 2, GigaSampler / GigaStudio (uncompressed), Logic EXS24 (classic and
+v1.1), TAL-Sampler, EMU E4B banks, and even a plain folder of root-note-named
+WAVs — and **writes** EMU E4B (Emulator 4 / E4XT / EOS 4.x), Kurzweil KRZ
+(K2000 / K2500 / K2600), and TAL-Sampler presets.
+
+**It maps the musical parameters, not just the raw samples.** Filter
+type / cutoff / resonance, the amplitude and filter envelopes, the LFO, and the
+loops are translated onto each target's own synth engine — not left at default.
+That mapping is reverse-engineered against real E4XT and K2000R hardware; the
+[E4B Voice Parameters](#e4b-voice-parameters) and
+[KRZ Program Parameters](#krz-program-parameters) sections below document exactly
+what transfers and how it was verified.
+
+**Vintage resampling** can optionally run every sample through a model of the
+EMU Emulator II (8-bit, 27.5 kHz, gritty) or Emax I (12-bit) signal path —
+anti-alias → decimate → gain-stage → truncate → dither → bandpass — for
+authentic lo-fi character rather than a clean bit-crush.
+
+**It fits the hardware automatically.** Presets are packed into bank-sized
+chunks with a First-Fit algorithm; when a single preset is too big for one bank,
+mpc2emu offers sized reductions — drop velocity layers, thin key zones, or
+downsample — either interactively or applied automatically with `--auto-fit`.
+`--max-preset-size` caps any single preset so no one preset fills a whole bank.
+
+**It boots straight on the instrument.** mpc2emu writes ZuluSCSI-ready media:
+EMU3 CD images and SCSI hard-disk images for the E4XT, and FAT16 CD images, SCSI
+hard-disk images, and Gotek FAT12 floppies (all hardware-confirmed) for the
+K2000. Banks can also be appended to an existing image in place with `--add-to`
+— no rebuild and no mounting.
+
+Finally, you can **inspect any input without converting** it (`--info`), and
+there are **no required dependencies** — mpc2emu is pure Python standard
+library (`mtools` is optional, only for one E4B HDA filesystem path).
+
+---
+
 ## Supported Formats
 
 ### Input
