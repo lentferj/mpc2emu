@@ -106,17 +106,6 @@ E4B-HDA-Dateisystem-Pfad nötig).
 | Zampler | — | Nutzt SFZ nativ → über SFZ-Parser |
 | **WAV-Sample-Ordner** | _Verzeichnis_ | Auf ein Verzeichnis mit grundton-benannten `.wav`s zeigen (z. B. `Piano C3.wav`, `Pad_60.wav`) → baut automatisch ein Multisample-Preset (`--from-samples`; auch automatisch erkannt bei reinem WAV-Verzeichnis; `--middle-c` legt die Oktavkonvention fest) |
 
-> `.pgm` umfasst drei **binäre** Drum-Programm-Formate, per Magic erkannt:
-> MPC500/1000/2500 (`MPC1000 PGM 1.00` — 64 Pads, 4 Samples/Pad → Velocity-Layer);
-> MPC2000/2000XL (`0x07 0x04` — 64 Pads mit externen `.WAV`); und MPC 60
-> (`0x07 0x00` — externe 12-Bit-`.SND`, auf 40 kHz dekodiert). Sample-Dateien
-> liegen neben der `.pgm`; eine MPC2000-**ISO9660-CD** zuerst entpacken
-> (z. B. `7z x disc.iso`) und den Ordner konvertieren. Andere `.pgm`-Varianten
-> (z. B. Akai `BD12`) und das XML-`.xpm` werden separat behandelt.  
-> `.talwav`-Dateien (TAL-verschlüsselt) können nicht gelesen werden.  
-> Giga-komprimierte Samples werden nicht unterstützt; unkomprimierte `.gig`-Dateien funktionieren.  
-> EXS24 v1.1 (Logic 10.4+, Magic `0x00000101`): Zonen-Sample-Zuordnung ist positionsbasiert; Mehrschicht-Velocity-Instrumente laden nur die erste Schicht.
-
 ### Ausgabe
 
 | Format | Endung | Zielgerät |

@@ -101,18 +101,6 @@ library (`mtools` is optional, only for one E4B HDA filesystem path).
 | Zampler | — | Uses SFZ natively → read via SFZ parser |
 | **WAV sample folder** | _directory_ | Point at a directory of root-note-named `.wav`s (e.g. `Piano C3.wav`, `Pad_60.wav`) → auto-builds one multisample preset (`--from-samples`; auto-detected for a WAV-only dir; `--middle-c` sets the octave convention) |
 
-> `.pgm` covers three **binary** drum-program formats, auto-detected by magic:
-> MPC500/1000/2500 (`MPC1000 PGM 1.00` — 64 pads, each pad's 4 samples → velocity
-> layers); MPC2000/2000XL (`0x07 0x04` — 64 pads referencing external `.WAV`);
-> and MPC 60 (`0x07 0x00` — external 12-bit `.SND`, decoded to 40 kHz). Sample
-> files sit next to the `.pgm`; for an MPC2000 **ISO9660 CD**, extract it first
-> (e.g. `7z x disc.iso`) and convert the resulting folder. Other `.pgm` variants
-> (e.g. Akai `BD12`) and the XML `.xpm` are handled separately.  
-> `.talwav` files (TAL-encrypted) cannot be read.  
-> Giga-compressed samples are not supported; uncompressed `.gig` files work.  
-> EXS24 v1.1 (Logic 10.4+, magic `0x00000101`): zone–sample mapping is positional;
-> multi-velocity-layer instruments load only the first layer.
-
 ### Output
 
 | Format | Extension | Target device |
