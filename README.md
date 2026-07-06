@@ -593,6 +593,39 @@ coverage multisample keymaps (a `[coverage]` note).
 
 ---
 
+## Building a preset from a folder of WAVs
+
+Point mpc2emu at a directory of `.wav` files and it builds **one playable
+multisample preset** — no program file needed:
+
+```bash
+python convert.py /my/samples/ --from-samples --format e4b --iso
+```
+
+`--from-samples` is implied automatically when the directory contains only WAVs,
+so you can usually leave it off. Each sample is mapped to the keys nearest its
+root note, split at the midpoints between adjacent roots and key-tracked across
+its span, with neutral default envelope / filter values.
+
+**Root note** is chosen per sample in this priority order:
+
+1. the WAV `smpl` chunk's unity note (the authoritative embedded MIDI note);
+2. a standalone MIDI number in the filename, e.g. `Pad_60.wav`;
+3. a note name in the filename, e.g. `Piano C3.wav`, `Cello-A#2.wav`,
+   `Bass Gb1.wav` (sharps and flats via `#`, `s`, or `b`; negative octaves are
+   allowed; if a name has several note tokens the **last** one wins);
+4. fallback to C3 = MIDI 60.
+
+`.aif` / `.aiff` base notes are read too where present.
+
+**Octave convention.** Vendors disagree on whether MIDI 60 is called "C3",
+"C4", or "C5". By default (`--middle-c auto`) mpc2emu auto-detects the convention
+by cross-checking the filename note-names against any embedded `smpl` / MIDI
+roots in the same folder. When a pack is inconsistent or has no embedded roots,
+pin it down explicitly with `--middle-c C3`, `--middle-c C4`, or `--middle-c C5`.
+
+---
+
 ## Vintage Resampler
 
 Simulates the signal chain of two classic E-mu samplers:

@@ -614,6 +614,42 @@ werden zuvor als Coverage-Multisample-Keymaps neu aufgebaut (`[coverage]`-Hinwei
 
 ---
 
+## Preset aus einem WAV-Ordner erstellen
+
+Zeige mpc2emu auf ein Verzeichnis mit `.wav`-Dateien, und es baut **ein
+spielbares Multisample-Preset** — ganz ohne Programmdatei:
+
+```bash
+python convert.py /my/samples/ --from-samples --format e4b --iso
+```
+
+`--from-samples` wird automatisch impliziert, wenn das Verzeichnis nur WAVs
+enthält, du kannst es also meist weglassen. Jedes Sample wird den Tasten in der
+Nähe seines Grundtons zugeordnet, an den Mittelpunkten zwischen benachbarten
+Grundtönen aufgeteilt und über seinen Bereich key-getrackt, mit neutralen
+Standard-Hüllkurven- / Filterwerten.
+
+**Der Grundton** wird je Sample in dieser Prioritätsreihenfolge bestimmt:
+
+1. der Unity-Note aus dem WAV-`smpl`-Chunk (die maßgebliche eingebettete
+   MIDI-Note);
+2. eine eigenständige MIDI-Nummer im Dateinamen, z. B. `Pad_60.wav`;
+3. ein Notenname im Dateinamen, z. B. `Piano C3.wav`, `Cello-A#2.wav`,
+   `Bass Gb1.wav` (Kreuze und Bes über `#`, `s` oder `b`; negative Oktaven sind
+   erlaubt; hat ein Name mehrere Noten-Token, gewinnt das **letzte**);
+4. Rückfall auf C3 = MIDI 60.
+
+`.aif` / `.aiff`-Grundtöne werden ebenfalls gelesen, sofern vorhanden.
+
+**Oktavkonvention.** Die Hersteller sind sich uneinig, ob MIDI 60 „C3", „C4"
+oder „C5" heißt. Standardmäßig (`--middle-c auto`) erkennt mpc2emu die
+Konvention automatisch, indem es die Notennamen aus den Dateinamen mit etwaigen
+eingebetteten `smpl`- / MIDI-Grundtönen im selben Ordner abgleicht. Ist ein Pack
+inkonsistent oder hat keine eingebetteten Grundtöne, lege es mit `--middle-c C3`,
+`--middle-c C4` oder `--middle-c C5` explizit fest.
+
+---
+
 ## Vintage Resampler
 
 Simuliert die Signalkette zweier klassischer E-mu-Sampler:
