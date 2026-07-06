@@ -468,6 +468,94 @@ Tonhöhenverfolgung) werden in einer einzigen Zone über den gesamten Tastaturbe
 
 ---
 
+## KRZ-Programmparameter
+
+KRZ-Programmparameter werden auf das VAST-Programmmodell des Kurzweil K2000
+abgebildet, indem die ROM-Vorlage **#199 „Default Program"** geklont und die
+Werte je Voice (Filter, Hüllkurven, LFO, Loop-Punkte) hineingepatcht werden —
+ein Keymap + eine Layer je Voice. Ein Großteil dieser Zuordnung ist auf einem
+**K2000R** hardware-verifiziert: Filtertyp, Cutoff (in Hz) und Resonanz wurden
+per Gehör bestätigt, und die LFO-Formen wurden aus einem Live-SysEx-Probe
+dekodiert.
+
+> **Vollständige Byte-Format-Referenz:** siehe
+> [`docs/KRZ_FORMAT.md`](docs/KRZ_FORMAT.md) (Englisch) für die komplette
+> Objekt-/Programm-/Keymap-/Sample-Struktur, Byte-Offset-Tabellen und die
+> nicht offensichtlichen Kodierungskonventionen, die wir dabei entdeckt haben
+> (Filter-Algorithmus-Bytes, Hüllkurven-Segmente, Loop-Flag-Regel) — damit
+> andere von dieser Reverse-Engineering-Arbeit profitieren können.
+
+### Filter
+
+Jeder MPC/XPM-Filtertyp wird dem nächstliegenden K2000-VAST-Filteralgorithmus
+zugeordnet. Die Flankensteilheit wird der Quelle so weit wie möglich angepasst
+(1-, 2- oder 4-polig), sodass die Quell-Cutoff-Frequenz ~1:1 übertragen wird
+(sie ist der −3-dB-Eckpunkt, unabhängig von der Steilheit):
+
+| MPC/XPM-Typ | Name | K2000-Filter (Algorithmus) |
+|---|---|---|
+| 0 | Off | Kein / Bypass (Byte 62) |
+| 1 | Low1 (1-polig, 6 dB) | 1-pole LOPASS (Alg 16) |
+| 2, 29 | Low2 / MPC3000 LPF (2-polig, 12 dB) | 2-pole LOWPASS (Alg 5) |
+| 3–5 | Low4/6/8 (4/6/8-polig TP) | 4POLE LOPASS W/SEP (Alg 1, 24 dB) |
+| 6–10 | High 1–8 (HP) | 4POLE HIPASS W/SEP (Alg 1) |
+| 11 | Band2 (2-polig BP) | 2-pole BANDPASS (Alg 5) |
+| 12–14 | Band4–8 (BP) | TWIN PEAKS BANDPASS (Alg 1, 4-polig) |
+| 15–18 | BS 2P–8P (Bandsperr-/Notchfilter) | DOUBLE NOTCH W/SEP (Alg 1) |
+| 19–22 | BB 2P–8P (Bandanhebung) | PARA MID parametrische Anhebung (Alg 2) |
+| 23–25 | Model 1–3 | 4POLE LOPASS (Alg 1) |
+| 26–28 | Vocal 1–3 (Formant) | 4POLE LOPASS (Alg 1) |
+
+Die Bandanhebung (BB) wird auf die parametrische **PARA MID**-Anhebung (Alg 2)
+abgebildet — sie erhält den Körper des Signals und hebt ein Band um die
+Cutoff-Frequenz an, anders als ein Bandpass, der das Signal außerhalb des
+Bandes fälschlich entfernen würde (hardware-reverse-engineered 2026-06-25).
+Filter**typ** *und* Cutoff-Hz-Zuordnung wurden per Gehör auf einem K2000R
+hardware-verifiziert (Demos: 4-poliger HP ≈ 330 Hz, 2-poliger BP ≈ 466 Hz,
+Double-Notch ≈ 22 Hz). Der Cutoff wird als vorzeichenbehaftete Halbtöne
+kodiert, die Resonanz als `round(dB × 2)`, beides klanglich bestätigt.
+
+Verlustbehaftet (akzeptabel): Der K2000 hat eine Flankensteilheit je
+Filterfamilie, daher fallen mehrpolige Varianten (6-/8-polig) auf die
+nächstliegende reverse-engineerte Steilheit zusammen; die Bytes für 2-poligen
+HP und 2-poligen Notch sind noch nicht RE'd (diese Quellen nutzen den
+4-poligen Pfad); Vocal-Formantfilter fallen auf Tiefpass zurück.
+
+### Hüllkurven
+
+Die Amplituden- und Filter-ADSR-Hüllkurven (Attack / Decay / Sustain /
+Release) werden aus dem Quell-Preset gelesen und in die Segmentstruktur der
+#199-Vorlage gepatcht (die Amp-Hüllkurve wird in den User-Modus gezwungen; die
+Filterhüllkurve ENV2 wird nur dann auf die Filterfrequenz geroutet, wenn ihre
+Tiefe positiv ist). Die Filterhüllkurven-**Tiefe** und die LFO→Pitch-**Tiefe**
+sind näherungsweise 2-Punkt-lineare Kalibrierungen statt vollständig
+reverse-engineerter Kurven.
+
+### LFO
+
+LFO1 (Vibrato) wird abgebildet: Rate sowie alle **26 LFO-Formen**, die aus
+einem Live-K2000R-SysEx-Probe dekodiert wurden (0 = Sinus … 4 = Dreieck …
+6 = steigender Sägezahn … 8 = fallend … 20 = 8 Step). Über die
+CAL-Steuerquellen-Bytes auf die Tonhöhe geroutet.
+
+Noch nicht abgebildet (ehrliche Lücken): **LFO2**, **LFO → Filter**
+(Filter-Wobble), **LFO → Amp** (Tremolo) sowie LFO **Delay / Fade-in /
+Tempo-Sync**.
+
+### Loops
+
+WAV-SMPL-Chunks werden für alle Eingabedateien gelesen. Das Loop-Flag folgt der
+hardware-bestätigten K2000-Regel: Das `0x80`-Bit im Sample-Header ist
+**gelöscht** zum Loopen (`0x70`) und **gesetzt** für One-Shot-Wiedergabe
+(`0xF0`); bei einem geloopten Sample wird das `sampleEnd`-Feld auf das Loop-Ende
+gesetzt (nicht auf das PCM-Ende), damit der K2000 nicht über den
+Nach-Loop-Ausklang loopt. Der K2000 hat keinen Ping-Pong-Loop-Modus, daher
+werden **Ping-Pong-Loops ins PCM gerendert** (eine umgekehrte Kopie des
+Loop-Inneren wird eingefügt). Die Ausgabe erfolgt **nur in Mono** —
+Stereo-Quellen werden downgemischt.
+
+---
+
 ## Vintage Resampler
 
 Simuliert die Signalkette zweier klassischer E-mu-Sampler:
@@ -604,7 +692,12 @@ mpc2emu/
 | E4B Chorus-Amount | ✅ je Voice `vpar[42]` gelesen/geschrieben (0–100 % → 0–127, hardware-bestätigt) |
 | E4B Chorus-Stereobreite | ❌ separates Byte, noch nicht dekodiert |
 | EMU3-ISO-Laden von ZuluSCSI-CD | ✅ `blks`-Ceiling-Division-Fix — End-of-File-Fehler behoben |
-| KRZ VAST-Parameter | ⚠️ Safe Defaults — auf K2000 editierbar |
+| KRZ Filter-Typ / Cutoff / Resonanz | ✅ aus MPC XPM abgebildet; Filter-Typ + Cutoff-Hz auf K2000R HW-verifiziert (inkl. Bandanhebung → PARA MID) |
+| KRZ Amp- + Filterhüllkurve aus Quelle | ✅ aus Quell-ADSR abgebildet (Filterhüllkurven-/LFO-Tiefenkalibrierungen näherungsweise) |
+| KRZ LFO1-Vibrato (Rate + 26 Formen) | ✅ Rate + alle 26 Formen (Live-SysEx-Probe); LFO2 / Filter-Wobble / Tremolo ❌ noch nicht |
+| KRZ Ping-Pong-Loops | ✅ K2000 hat keinen Ping-Pong-Modus — ins PCM gerendert (Bounce eingebacken) |
+| KRZ mehrpolige Filter-Steilheiten (6-/8-polig, 2-poliger HP/Notch) | ⚠️ fallen auf nächste RE'd-Steilheit zusammen |
+| KRZ SCSI-CD / Festplatte (FAT16) / Gotek-Floppy | ✅ HW-bestätigt (CD und HDx-Festplatte); Gotek-FAT12-Floppy ✅ |
 | LFO Rate / Form / Routing | ✅ LFO-Rate/-Form + Pitch-/Filter-Routing für E4B und KRZ abgebildet, plus tempo-synchrone MPC-LFOs via `--lfo-sync-bpm`; einige Tiefenkalibrierungen näherungsweise |
 | Binäres MPC `.pgm` | ✅ MPC500/1000/2500, MPC2000/2000XL, MPC60 unterstützt (automatisch erkannt) |
 | MPC3000 `.pgm` | ❌ nicht unterstützt — Magic kollidiert mit MPC60, benötigt Body-Diskriminator |

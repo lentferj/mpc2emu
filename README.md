@@ -459,6 +459,87 @@ neutral root note (60), preventing extreme pitch transposition.
 
 ---
 
+## KRZ Program Parameters
+
+KRZ program parameters are mapped onto the Kurzweil K2000 VAST program model
+by cloning the ROM **#199 "Default Program"** template and patching the
+per-voice values (filter, envelopes, LFO, loop points) into a single keymap +
+single layer per voice. Much of this mapping is hardware-verified on a
+**K2000R** — filter type, cutoff (in Hz) and resonance were confirmed by ear,
+and the LFO shapes were decoded from a live SysEx probe.
+
+> **Full byte-level format reference:** see
+> [`docs/KRZ_FORMAT.md`](docs/KRZ_FORMAT.md) for the complete
+> object/program/keymap/sample structure, byte-offset tables, and the
+> non-obvious encoding conventions discovered along the way (filter algorithm
+> bytes, envelope segments, loop-flag rule) — written so other implementers
+> can benefit from this reverse-engineering work.
+
+### Filter
+
+Each MPC/XPM filter type is mapped to the nearest K2000 VAST filter algorithm.
+Slope is matched to the source wherever the K2000 can (1-, 2- or 4-pole), so
+the source cutoff frequency transfers ~1:1 (it is the −3 dB corner regardless
+of slope):
+
+| MPC/XPM type | Name | K2000 filter (algorithm) |
+|---|---|---|
+| 0 | Off | None / bypass (byte 62) |
+| 1 | Low1 (1-pole, 6 dB) | 1-pole LOPASS (Alg 16) |
+| 2, 29 | Low2 / MPC3000 LPF (2-pole, 12 dB) | 2-pole LOWPASS (Alg 5) |
+| 3–5 | Low4/6/8 (4/6/8-pole LP) | 4POLE LOPASS W/SEP (Alg 1, 24 dB) |
+| 6–10 | High 1–8 (HP) | 4POLE HIPASS W/SEP (Alg 1) |
+| 11 | Band2 (2-pole BP) | 2-pole BANDPASS (Alg 5) |
+| 12–14 | Band4–8 (BP) | TWIN PEAKS BANDPASS (Alg 1, 4-pole) |
+| 15–18 | BS 2P–8P (band-stop / notch) | DOUBLE NOTCH W/SEP (Alg 1) |
+| 19–22 | BB 2P–8P (band-boost) | PARA MID parametric boost (Alg 2) |
+| 23–25 | Model 1–3 | 4POLE LOPASS (Alg 1) |
+| 26–28 | Vocal 1–3 (formant) | 4POLE LOPASS (Alg 1) |
+
+Band-boost (BB) maps to the Alg-2 **PARA MID** parametric boost — it keeps the
+body of the signal and lifts a band around the cutoff, unlike a bandpass which
+would wrongly remove the out-of-band signal (hardware reverse-engineered
+2026-06-25). Filter **TYPE** *and* cutoff-Hz mapping were hardware-verified by
+ear on a K2000R (4-pole HP ≈ 330 Hz, 2-pole BP ≈ 466 Hz, double-notch ≈ 22 Hz
+demos). Cutoff is encoded as signed semitones and resonance as
+`round(dB × 2)`, both sonically confirmed.
+
+Lossiness (acceptable): the K2000 has one slope per filter family, so
+multi-pole variants (6/8-pole) collapse onto the nearest reverse-engineered
+slope; the 2-pole HP and 2-pole notch bytes are not yet RE'd (those sources use
+the 4-pole path); Vocal formant filters fall back to lowpass.
+
+### Envelopes
+
+The amplitude and filter ADSR envelopes (attack / decay / sustain / release)
+are read from the source preset and patched onto the #199 template's segment
+structure (the amp envelope is forced to User mode; the filter envelope ENV2 is
+routed to filter frequency only when its depth is positive). The filter-env
+**depth** and the LFO→pitch **depth** are approximate 2-point linear
+calibrations rather than fully reverse-engineered curves.
+
+### LFO
+
+LFO1 (vibrato) is mapped: rate plus all **26 LFO shapes**, which were decoded
+from a live K2000R SysEx probe (0 = Sine … 4 = Triangle … 6 = Rising Sawtooth …
+8 = Falling … 20 = 8 Step). Routed to pitch via the CAL control-source bytes.
+
+Not yet mapped (honest gaps): **LFO2**, **LFO → filter** (filter wobble),
+**LFO → amp** (tremolo), and LFO **delay / fade-in / tempo-sync**.
+
+### Loops
+
+WAV SMPL chunks are read for all input files. The loop flag follows the
+hardware-confirmed K2000 rule: the sample header's `0x80` bit is **clear** to
+loop (`0x70`) and **set** to play one-shot (`0xF0`); a looped sample's
+`sampleEnd` field is set to the loop end (not the PCM end) so the K2000 does
+not loop over the post-loop decay tail. The K2000 has no ping-pong loop mode,
+so **ping-pong loops are baked into the PCM** (a reversed copy of the loop
+interior is spliced in). Output is **mono only** — stereo sources are
+downmixed.
+
+---
+
 ## Vintage Resampler
 
 Simulates the signal chain of two classic E-mu samplers:
@@ -593,7 +674,12 @@ mpc2emu/
 | E4B chorus amount | ✅ per-voice `vpar[42]` read/written (0–100 % → 0–127, hardware-confirmed) |
 | E4B chorus stereo width | ❌ separate byte, not yet decoded |
 | EMU3 ISO loading from ZuluSCSI CD | ✅ `blks` ceiling-division fix — end-of-file error resolved |
-| KRZ VAST parameters | ⚠️ safe defaults — editable on K2000 |
+| KRZ filter type / cutoff / resonance | ✅ mapped from MPC XPM; filter-type + cutoff-Hz HW-verified on a K2000R (incl. band-boost → PARA MID) |
+| KRZ amp + filter envelope from source | ✅ mapped from source ADSR (filter-env / LFO depth calibrations approximate) |
+| KRZ LFO1 vibrato (rate + 26 shapes) | ✅ rate + all 26 shapes (live SysEx probe); LFO2 / filter-wobble / tremolo ❌ not yet |
+| KRZ ping-pong loops | ✅ K2000 has no ping-pong mode — baked into PCM (bounce spliced in) |
+| KRZ multi-pole filter slopes (6/8-pole, 2-pole HP/notch) | ⚠️ collapse to nearest RE'd slope |
+| KRZ SCSI CD / hard disk (FAT16) / Gotek floppy | ✅ HW-confirmed (CD and HDx hard disk); Gotek FAT12 floppy ✅ |
 | LFO rate / shape / routing | ✅ LFO rate/shape + pitch/filter routing mapped for E4B and KRZ, plus tempo-synced MPC LFOs via `--lfo-sync-bpm`; some depth calibrations approximate |
 | Binary MPC `.pgm` | ✅ MPC500/1000/2500, MPC2000/2000XL, MPC60 supported (auto-detected) |
 | MPC3000 `.pgm` | ❌ not supported — magic collides with MPC60, needs a body-level discriminator |
