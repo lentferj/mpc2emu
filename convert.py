@@ -486,6 +486,36 @@ def main():
              'not stored in the XPM). See docs/lfo_sync_rates.md for the table.')
     ap.add_argument('--jobs', type=int, default=None, metavar='N',
         help='Parallel workers for resampling (default: cpu_count-1)')
+    ap.add_argument('--single-cycle', nargs='?', const='auto', default=None,
+        metavar='auto|N',
+        help='Turn each sample into a looped oscillator so the sampler plays it '
+             'as a synth voice (its own filter/envelopes shape the tone). '
+             'Bare/"auto" extracts ONE clean cycle (sub-sample accurate) and tiles '
+             'it to a hardware-safe loop length; "=N" takes N contiguous cycles '
+             'instead (keeps the source\'s cycle-to-cycle movement). Pitch is baked '
+             'into the sample rate so it plays in tune. Emits a neutral 4-pole-'
+             'lowpass + organ-envelope preset; see the --single-cycle-keep-* '
+             'flags to retain the source filter/LFO/amp-env instead. Best on '
+             'multisampled input (each key plays a near-pitched cycle → no aliasing).')
+    ap.add_argument('--single-cycle-keep-flt', action='store_true',
+        help='With --single-cycle: keep the converted source filter '
+             '(type/cutoff/resonance/env) instead of the neutral 4-pole lowpass.')
+    ap.add_argument('--single-cycle-keep-lfo', action='store_true',
+        help='With --single-cycle: keep the converted source LFO(s) and their '
+             'modulation routings instead of stripping them.')
+    ap.add_argument('--single-cycle-keep-amp', action='store_true',
+        help='With --single-cycle: keep the converted source amp envelope '
+             'instead of the organ-style (instant-on, full-sustain) default.')
+    ap.add_argument('--single-cycle-keep-all', action='store_true',
+        help='With --single-cycle: keep the whole converted voice (implies '
+             '--single-cycle-keep-flt/-lfo/-amp); only shorten the samples.')
+    ap.add_argument('--single-cycle-dump-dir', metavar='DIR', default=None,
+        help='With --single-cycle: also write each extracted cycle as a .wav '
+             'into DIR for audition/QA.')
+    ap.add_argument('--split-velocity-layers', action='store_true',
+        help='Explode each preset\'s velocity layers into separate full-velocity '
+             'presets (a playable palette). Pairs naturally with --single-cycle, '
+             'where each layer is a distinct oscillator waveform.')
 
     args       = ap.parse_args()
     input_path = Path(args.input)
@@ -505,6 +535,22 @@ def main():
         if not 0.0 <= opt_val <= 100.0:
             print(f"Error: {opt_name} must be between 0 and 100 (got {opt_val:.0f}).")
             sys.exit(1)
+
+    # --single-cycle: normalise 'auto' | positive int; fold keep-all into the trio.
+    if args.single_cycle is not None and args.single_cycle != 'auto':
+        try:
+            sc_n = int(args.single_cycle)
+            if sc_n < 1:
+                raise ValueError
+        except ValueError:
+            print("Error: --single-cycle takes 'auto' or a positive integer "
+                  f"(got {args.single_cycle!r}).")
+            sys.exit(1)
+        args.single_cycle = sc_n
+    if args.single_cycle_keep_all:
+        args.single_cycle_keep_flt = True
+        args.single_cycle_keep_lfo = True
+        args.single_cycle_keep_amp = True
 
     if not input_path.exists():
         print(f"Error: '{input_path}' not found."); sys.exit(1)
@@ -587,6 +633,22 @@ def main():
               f"{args.lfo_sync_bpm:g} BPM (the XPM has no tempo; override with "
               f"--lfo-sync-bpm). E4XT can't tempo-follow; see docs/lfo_sync_rates.md.")
 
+    # ── Single-cycle oscillator extraction ─────────────────────────────────────
+    # Runs first so the shrunk samples flow through reduce/resample/fit/split with
+    # their real (tiny) sizes.
+    if args.single_cycle is not None:
+        _sc_lbl = 'auto' if args.single_cycle == 'auto' else f'{args.single_cycle} cycle(s)'
+        print(f"\n[{step_n}] Single-cycle extraction ({_sc_lbl})...")
+        step_n += 1
+        from processors.single_cycle import single_cycle_bank
+        for bank in source_banks:
+            single_cycle_bank(bank, cycles=args.single_cycle,
+                              keep_flt=args.single_cycle_keep_flt,
+                              keep_lfo=args.single_cycle_keep_lfo,
+                              keep_amp=args.single_cycle_keep_amp,
+                              dump_dir=args.single_cycle_dump_dir,
+                              workers=args.jobs)
+
     # ── Reduce ────────────────────────────────────────────────────────────────
     if args.reduce_key_zones > 0 or args.reduce_velocity_layers > 0:
         print(f"\n[{step_n}] Reducing sample count "
@@ -661,6 +723,15 @@ def main():
         print(f"Done: {len(all_written)} preset(s) written to {out_dir}/")
         print(f"{'='*60}\n")
         return
+
+    # ── Explode velocity layers into separate presets ──────────────────────────
+    # Before the fit assistant + split so both see the final preset set.
+    if args.split_velocity_layers:
+        print(f"\n[{step_n}] Splitting velocity layers into separate presets...")
+        step_n += 1
+        from processors.zone_reducer import explode_velocity_layers
+        for bank in source_banks:
+            explode_velocity_layers(bank)
 
     # ── Fit oversized single presets (interactive assistant) ───────────────────
     # A preset is never split across banks, so one too big for a bank must be

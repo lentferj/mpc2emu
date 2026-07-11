@@ -38,9 +38,10 @@ Anthropic entwickelt. Die **Ideen, die Projektvision und jedes Feature** stammen
 vom menschlichen Autor; Claude unterstützte beim **Schreiben des Codes und der
 Analyse der Binärformate**. Entscheidend ist: Das **Reverse Engineering beruht
 auf praktischer menschlicher Arbeit** — alle Tests und die Verifikation auf
-echter E-mu-E4XT-Hardware, das Erstellen der RE-Referenz-Images auf dieser
-Hardware und der akustische A/B-Vergleich der Presets — was die Ergebnisse
-korrekt macht. Vollständige Darstellung in [DISCLAIMER_de.md](DISCLAIMER_de.md).
+echter **E-mu-E4XT**- und **Kurzweil-K2000R**-Hardware, das Erstellen der
+RE-Referenz-Images/-Bänke auf diesen Instrumenten (Disk-Saves, SysEx-Probes) und
+der akustische A/B-Vergleich der Presets — was die Ergebnisse korrekt macht.
+Vollständige Darstellung in [DISCLAIMER_de.md](DISCLAIMER_de.md).
 
 ---
 
@@ -67,6 +68,14 @@ was übertragen wird und wie es verifiziert wurde.
 Signalkette des EMU Emulator II (8 Bit, 27,5 kHz, rau) oder Emax I (12 Bit)
 laufen lassen — Anti-Alias → Dezimation → Gain-Staging → Truncation → Dither →
 Bandpass — für authentischen Lo-Fi-Charakter statt eines sauberen Bit-Crushes.
+
+**Single-Cycle-Synthese** (`--single-cycle`) verwandelt ein gesampeltes
+Instrument in einen Synthesizer: Aus jedem Sample wird eine kurze geloopte
+Wellenform extrahiert, sodass der Sampler sie als statischen Oszillator spielt
+und Filter, Hüllkurven und LFO der Hardware den Klang formen. Ein ganzes
+Multisample schrumpft auf wenige hundert Bytes pro Zone, und jede Zone wird so
+gestimmt, dass sie über die Tastatur sauber klingt. Siehe
+[Single-Cycle-Synthese](#single-cycle-synthese) weiter unten.
 
 **Er passt sich automatisch an die Hardware an.** Presets werden mit einem
 First-Fit-Algorithmus in bank-große Abschnitte gepackt; ist ein einzelnes Preset
@@ -282,6 +291,28 @@ Sample-Anzahl reduzieren (moderne Libraries an Vintage-Speichergrenzen anpassen)
                       der verbleibenden Zonen werden gleichmäßig auf
                       benachbarte Zonen verteilt, um die entstandenen
                       Lücken zu schließen.
+
+Single-Cycle-Synth (ein gesampeltes Instrument in einen Oszillator verwandeln):
+  --single-cycle[=auto|N]  Ersetzt jedes Sample durch eine kurze geloopte
+                      Wellenform aus seinem Sustain, sodass der Sampler es als
+                      statischen Oszillator spielt und Filter/Hüllkurven den Klang
+                      formen. auto (Standard) extrahiert EINEN sub-sample-genauen
+                      Zyklus und kachelt ihn zu einem hardware-sicheren Loop; =N
+                      nimmt N zusammenhängende Zyklen (bewahrt die Bewegung der
+                      Quelle). Erzeugt ein neutrales Preset: 4-Pol-Tiefpass weit
+                      offen, orgelartige Amp-Hüllkurve, kein LFO. Die Stimmung wird
+                      in die Samplerate eingebacken, sodass es sauber stimmt.
+                      Reduziert ein ganzes Multisample auf wenige hundert Bytes pro
+                      Zone. Am besten mit multisampled Material (kein Aliasing);
+                      Best-Effort bei untoniertem Material.
+  --single-cycle-keep-flt   Quell-Filter statt des neutralen 4PLP behalten
+  --single-cycle-keep-lfo   Quell-LFO(s) / Modulation behalten
+  --single-cycle-keep-amp   Quell-Amp-Hüllkurve statt der Orgel-Hüllkurve behalten
+  --single-cycle-keep-all   Die ganze konvertierte Voice behalten (nur Samples kürzen)
+  --single-cycle-dump-dir DIR   Jeden extrahierten Zyklus zusätzlich als .wav ablegen
+  --split-velocity-layers   Velocity-Layer jedes Presets in einzelne Presets mit
+                      voller Velocity aufteilen (spielbare Palette; passt zu
+                      --single-cycle, wo jeder Layer eine eigene Welle ist).
 ```
 
 ---
@@ -650,6 +681,127 @@ inkonsistent oder hat keine eingebetteten Grundtöne, lege es mit `--middle-c C3
 
 ---
 
+## Single-Cycle-Synthese
+
+`--single-cycle[=auto|N]` ersetzt jedes Sample durch einen kurzen, sauber
+geloopten Ausschnitt seiner eigenen Wellenform — einen Zyklus oder wenige — sodass
+der Sampler ihn als statischen **Oszillator** statt als Aufnahme spielt. Das
+Instrument wird damit zur subtraktiven Synth-Stimme: die Z-Plane-Filter des E4XT
+bzw. der VAST-Filter des K2000, dazu Amp- und Filterhüllkurve, übernehmen das
+Sounddesign. Es ist die extremste Form der „in Vintage-RAM passen"-Idee — ein
+ganzes Multisample-Instrument schrumpft auf eine Handvoll winziger Loops (je
+wenige hundert Bytes) — und zugleich ein eigenständiger Kreativ-Modus: aus einem
+MPC-Multisample wird ein spielbares E4XT-/K2000-Synth-Patch.
+
+Der Schritt läuft als erste Pipeline-Stufe (direkt nach dem Parsen), damit alle
+späteren Stufen — Reduktion, Resampling, Einpassen, Splitten — die bereits
+winzigen Samples sehen. Funktioniert für E4B- und KRZ-Ausgabe.
+
+### Wie ein Zyklus extrahiert wird
+
+Pro Sample, in reinem Python (kein numpy):
+
+1. **Sustain finden.** Ein Kurzzeit-RMS-Scan lokalisiert den stationären Kern des
+   Tons hinter dem Attack-Transienten, wo die Wellenform am stabilsten ist.
+2. **Grundperiode erkennen** per normalisierter Autokorrelation. Die Suche wird
+   vom Grundton des Samples *geführt* — die Konvertierung vertraut diesem Wert
+   ohnehin für die Stimmung, also macht eine Suche nur nahe der erwarteten Periode
+   die Erkennung schnell und immun gegen Oktavfehler. Liefert das nichts
+   Überzeugendes (fehlende/falsche Grundton-Metadaten), übernimmt eine breitere
+   „erste-starke-Spitze"-Suche, die den echten Grundton statt eines seiner
+   Autokorrelations-Vielfachen findet.
+3. **Periode auf Sub-Sample-Genauigkeit verfeinern** (parabolische Interpolation
+   der Autokorrelations-Spitze). Das ist wichtiger als es klingt: ein Schnitt auf
+   ganze Samples hinterlässt am Loop-Umbruch einen Bruchteil-Sample-Phasensprung,
+   und bei einem kurzen (hohen) Zyklus ist dieser „Knick" hörbar als breitbandige
+   Hochfrequenz-Härte. Sub-Sample-Genauigkeit beseitigt sie an der Quelle.
+4. **Genau eine Periode resamplen** (`auto`, Standard) — oder N zusammenhängende
+   Perioden (`=N`) — auf eine ganzzahlige Frame-Zahl. Da die Spanne auf eine ganze
+   Zahl Perioden phasengekoppelt ist, ist der Loop-Umbruch phasen-perfekt: keine
+   Naht, keine Überblendung nötig. `auto` liefert den saubersten, echtesten
+   Einzelzyklus; `=N` bewahrt die Bewegung der Quelle (Schwebung, PWM) auf Kosten
+   dieses Driftens.
+5. **Auf hardware-sichere Länge kacheln, dann Vorlauf.** Der nahtlose Zyklus wird
+   wiederholt, bis der Loop ≥ ~256 Frames hat — der E4XT spielt einen Loop unter
+   ~84 Frames eine *Oktave zu tief* (er verdoppelt ihn stillschweigend), und
+   identische Wiederholungen bleiben exakt periodisch, also kein Drift und kein
+   Naht-Brummen. Ein kleiner eingeblendeter Vorlauf wird vorangestellt, damit der
+   Loop nie bei Frame 0 beginnt (alte EMU-Anforderung; beim K2000 harmlos).
+
+### Stimmung — in die Samplerate eingebacken
+
+Die wahrgenommene Tonhöhe des Loops ergibt sich aus der Einzelzyklus-Periode,
+**nicht** aus der Loop-Länge: ein N-Zyklen-Loop einer periodischen Welle klingt
+weiterhin auf seinem Grundton. Der nächste MIDI-Ton wird zum Grundton des Samples;
+die Feinkorrektur unterhalb eines Halbtons wird dann **in die gespeicherte
+Samplerate eingebacken** statt in ein Fine-Tune-Feld. Die Wiedergabetonhöhe
+skaliert mit der gespeicherten Rate, also lässt eine Rate von
+`Originalrate × freq(nächster_Ton) / erkannter_Grundton` den Loop am Grundton exakt
+sauber klingen.
+
+Das ist wichtig, weil **E4B nur einen Fine-Tune-Wert pro Voice** trägt — ein
+Cents-Feld pro Zone kann Samples, die sich eine Voice teilen, nicht einzeln
+stimmen, und ein kurzer Hochton-Loop kann durch Ganzzahl-Rundung der Länge sonst
+zig Cent daneben liegen. Das Einbacken in die Rate ist pro Sample, nahezu exakt
+(Ganzzahl-Hz-Rundung ≈ 0,04 Cent nahe 44 kHz) und engine-unabhängig (beide Writer
+leiten die Tonhöhe aus gespeicherter Rate und Grundton ab).
+
+### Multisamples und Aliasing
+
+Ein einzelner Zyklus, *nach oben* transponiert, faltet seine Obertöne als Aliasing
+zurück — harmlos bei Sinus oder Dreieck, aber ein heller Saw/Square oder ein
+dünner Puls wird kratzig, weit über seiner Quell-Tonhöhe gespielt. Die Lösung ist
+**multisampled Material**: ein Zyklus pro Quell-Oktave (wie jedes echte
+`.xpm`/`.sf2`/Multisample ohnehin hat), sodass jede Taste einen *nahe gestimmten*
+Zyklus spielt und kaum transponiert. Die Stufe behält die Zonenstruktur der Quelle,
+also bekommen Multisamples das gratis. Eine Ein-Ton-über-die-ganze-Tastatur-Quelle
+aliast in den hohen Lagen — als Multisample bauen oder den Filter schließen, falls
+es stört.
+
+### Das erzeugte Preset — und die Quelle behalten
+
+Standardmäßig erzeugt Single-Cycle ein **neutrales Synth-Preset**, damit der
+Oszillator sofort hörbar und spielbar ist:
+
+- **Filter:** 4-poliger Tiefpass, weit offen (E4B Lowpass 4-Pole / K2000
+  Algorithmus-1 4POLE LOPASS)
+- **Amp-Hüllkurve:** orgelartig — sofort an, voller Sustain solange gehalten,
+  schnelles Release
+- **Filterhüllkurve:** neutraler Standard; **kein LFO** oder sonstige Modulation
+
+Filterbewegung, Hüllkurven und LFOs stellst du dann am Instrument ein. Um
+stattdessen zu behalten, was die Konvertierung aus der Quelle abgebildet hat,
+kannst du je Bereich zurückschalten:
+
+| Flag | Wirkung |
+|---|---|
+| `--single-cycle-keep-flt` | Quell-Filter behalten (Typ / Cutoff / Resonanz / Hüllkurve) |
+| `--single-cycle-keep-lfo` | Quell-LFO(s) und Modulations-Routings behalten |
+| `--single-cycle-keep-amp` | Quell-Amp-Hüllkurve statt der Orgel-Hüllkurve behalten |
+| `--single-cycle-keep-all` | Die ganze konvertierte Voice behalten (nur Samples kürzen) |
+| `--single-cycle-dump-dir DIR` | Jeden extrahierten Zyklus zusätzlich als `.wav` ablegen |
+
+Die Extraktion ist **Best-Effort**: untoniertes oder zu kurzes Material
+(Perkussion, Rauschen) wird in voller Länge belassen und protokolliert, das Preset
+aber trotzdem neutralisiert — ein Kreativ-Modus, in dem ein schräges Ergebnis
+akzeptabel und kein Fehler ist. Eine Zusammenfassung pro Sample zeigt erkannten
+Grundton, Zyklenzahl, Loop-Länge, eingebackene Rate und eine
+Periodizitäts-Konfidenz und markiert unsichere Samples, damit du weißt, welche du
+abhören solltest.
+
+### `--split-velocity-layers`
+
+Ein Begleit-Flag, das die Velocity-Layer jedes Presets in **einzelne Presets mit
+voller Velocity** aufteilt — eine spielbare Palette statt eines Presets, das einen
+Layer nur bei einer bestimmten Velocity zeigt. Es passt natürlich zu
+`--single-cycle`, wo jeder Velocity-Layer eine eigene Oszillator-Welle ist: du
+erhältst ein Preset pro Klangfarbe, jeweils über die ganze Tastatur spielbar. Es
+behandelt beide Layer-Darstellungen (XPM-Velocity-Bänder als Zonen und die
+separaten Voices von SF2 / SFZ / GIG); ein Überlauf über das Limit von 1000
+Presets pro Bank verteilt sich automatisch auf weitere Bänke.
+
+---
+
 ## Vintage Resampler
 
 Simuliert die Signalkette zweier klassischer E-mu-Sampler:
@@ -750,7 +902,8 @@ mpc2emu/
 │   └── bank_splitter.py        # Bank-Aufteilung
 ├── processors/
 │   ├── resampler.py             # Vintage Resampler
-│   ├── zone_reducer.py          # Key-Zonen-/Velocity-Layer-Ausdünnung für Vintage-Speichergrenzen
+│   ├── zone_reducer.py          # Key-Zonen-/Velocity-Layer-Ausdünnung; Velocity-Layer-Split (--split-velocity-layers)
+│   ├── single_cycle.py          # Single-Cycle-Oszillator-Extraktion + Nachstimmen (--single-cycle)
 │   └── loop_renderer.py         # Ping-Pong → Vorwärts-Loop (Bounce ins PCM eingebacken)
 └── tests/
     └── re_banks/                # Hardware-RE-Helfer: Testbank-Generatoren

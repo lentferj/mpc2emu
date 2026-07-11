@@ -2016,3 +2016,114 @@ Wired in `_k2_filter_plan` (BB → `(2, 51, 16, 40)`) and `_patch_layer`
 end-to-end on #204 Bass-MS20-Patch (FilterType=19 → ALG2/51/AMP+20 dB).  Full
 procedure + capture table: `docs/re_procedures/krz_paramid.md`.  Later refinement:
 measure the MPC's actual BB gain law to calibrate the dB depth (FRQ already exact).
+
+### Single-cycle oscillator extraction — IMPLEMENTED + HW-CONFIRMED 2026-07-10 (E4XT)
+
+New creative stage `processors/single_cycle.py` (CLI `--single-cycle[=auto|N]`):
+replaces each sample with a short forward-looped slice of its own waveform so the
+sampler plays it as an oscillator, and the hardware's filter/envelopes make the
+patch. Turns an MPC multisample into an E4XT / K2000 synth voice; collapses a
+bank to a few hundred bytes per zone. No writer changes were needed — the feature
+only populates the shared `models.common` structures.
+
+Key design decisions (all verified end-to-end, tuning within ≤1 cent):
+
+- **Pitch detect**: pure-Python normalised autocorrelation (no numpy). Primary
+  search is narrow, around the period implied by the sample's own `root_note`
+  (the converter already trusts it for tuning), so it never locks to a spurious
+  octave; a wide first-strong-peak fallback covers missing/wrong root metadata.
+- **Cycle count**: `auto` = ONE cycle (see the 2026-07-11 refinement below); `=N`
+  takes N contiguous cycles for the source's cycle-to-cycle movement.
+- **Sub-sample extraction + loop**: refine the period to sub-sample precision
+  (parabolic interp of the autocorr peak), resample exactly 1 (or N) period(s) to
+  an integer frame count so the wrap is phase-perfect (no crossfade), TILE to
+  `_MIN_LOOP_FRAMES=256`, and prepend an 8-frame faded lead-in so `loop_start ≥ 1`
+  (old EMU "loop can't start at frame 0" caveat; harmless on K2000).
+- **Tuning — the crux**: the perceived pitch is `rate / single-cycle-period`
+  (an N-cycle loop of a periodic wave still sounds at the fundamental, NOT at
+  `rate/loop_len`). The sub-semitone correction is **baked into each sample's
+  stored sample rate** (`rate = orig_rate · freq(nearest_note) / f_fund`), not a
+  cents field — because **E4B carries only ONE fine-tune per voice**, so a
+  per-zone cents field cannot individually tune samples that share a voice.
+  Rate-baking is per-sample and near-exact (integer-Hz rounding ≈ 0.04 c near
+  44 kHz) and is engine-agnostic (both writers derive pitch from stored rate +
+  root). `fine_tune`/`coarse_tune`/`transpose` are zeroed; `root_key` set to the
+  nearest note. Survives the KRZ headroom downsample (a clean resample preserves
+  `rate/loop_len`).
+- **Neutral preset**: `filter_type=3` (XPM "Low 4" → E4B `0x00` 4-Pole LP /
+  K2000 Alg-1 4POLE LOPASS — the one XPM value that lands on 4PLP on BOTH and is
+  truthy so the KRZ writer actually patches it), `filter_cutoff=1.0` (open),
+  organ amp env (instant on, full sustain), no LFO. `--single-cycle-keep-flt/
+  -lfo/-amp/-all` let the already-converted source params pass through instead.
+- **Best-effort**: unpitched/too-short samples are left full-length (logged), the
+  preset is still neutralised — a creative option where "failing" is acceptable.
+- **EOS minimum loop length (HW-confirmed 2026-07-10)**: the E4XT silently
+  DOUBLES an ultra-short loop → the note plays an **octave low**. Measured on the
+  E4XT with pure-sine single cycles: an 84-frame loop (C5, 523 Hz) played in
+  tune, but a **42-frame loop (C6, should be 1046 Hz) played 524 Hz** — exactly
+  one octave down, identical to the 84-frame note. Fix: `_MIN_LOOP_FRAMES = 256`
+  in `single_cycle.py` — high notes repeat whole cycles (`n_cyc` bumped to
+  `ceil(256/p)`) until the loop clears the minimum. Identical repeats keep the
+  pitch and single-cycle timbre; low notes stay literally one cycle. After the
+  fix, MIDI 24→84 track perfectly (each octave doubles, 0 cents). (Above MIDI ~84
+  gxtuner can't lock at 2–4 kHz and reports garbage, but the notes are audibly
+  correct — a tuner limit, not playback.)
+
+Companion flag `--split-velocity-layers` (`processors/zone_reducer.explode_velocity_layers`)
+explodes each preset's velocity layers into separate full-velocity presets
+(handles both the XPM zone-band and SF2/SFZ/GIG multi-voice representations);
+overflow past the 1000-preset cap fans into extra banks automatically.
+
+Verification done: N=1 tunes to 0.0 c through a real E4B write→parse round-trip;
+N=4 within ±1 c (sub-sample measured); loop_start ≥ 1; filter/keep-flags; both
+representations of the layer split; E4B + KRZ both write. **HW-CONFIRMED on the
+E4XT 2026-07-10** (via `SINETEST.iso`, pure-sine single cycles): tuning tracks
+perfectly and in tune from MIDI 24 to 84 (each octave doubles, 0 cents), loops
+sound and look good. The one issue found on hardware — ultra-short loops playing
+an octave low — is fixed (see the EOS-minimum-loop bullet above) and re-confirmed
+on the E4XT.  KRZ (K2000) tested via a Gotek FAT12 floppy (SCSYNTH.img) — sounds
+good.  Cleared to commit.
+
+#### Refinements from real-world HW testing (2026-07-11)
+
+Everything below is in `processors/single_cycle.py` and was driven by playing the
+output on the E4XT (and a K2000 floppy).
+
+- **`auto` is now ONE cycle, tiled — not a multi-cycle fill.**  The original
+  `auto` filled ~1024 frames with *contiguous* cycles.  A real analog oscillator
+  drifts slightly cycle-to-cycle, so a multi-cycle loop isn't exactly periodic and
+  buzzed at the loop rate.  `auto` now extracts a single cycle and TILES identical
+  copies to reach the minimum length (perfectly periodic → no drift, no seam
+  buzz).  `=N` still cuts N contiguous cycles for those who want the movement.
+- **Sub-sample-accurate extraction (the harshness fix).**  The remaining
+  "harshness" on short/high-note cycles (and the tiled pink noise) was traced —
+  via the user's filter test (it lived above ~10 kHz) and an offline spectrum
+  check — to a **fractional-sample phase step at the loop wrap**: a whole-sample
+  cut of a fractional-period cycle leaves a "kink" that is proportionally huge on a
+  60-frame cycle (tiny on a 475-frame one).  Fix: refine the period to sub-sample
+  precision (parabolic interp of the autocorr peak) and resample exactly one period
+  to integer frames.  Measured ~0.00 % energy > 10 kHz on the previously-harsh
+  triangle/square loops afterward.
+- **Aliasing is inherent to single cycles played up; multisampling cures it.**
+  A bright single cycle transposed up the keyboard folds harmonics past Nyquist.
+  The real fix is multisampled input (a cycle per source octave → each key barely
+  transposes); real `.xpm`/`.sf2` multisamples get this for free.  (The SYS100
+  construction-kit build originally mapped one cycle across all keys → aliased;
+  rebuilding it as a per-octave multisample fixed it.)
+- **Octave-fold-to-prior was TRIED and REVERTED.**  Forcing a harmonic/subharmonic
+  lock back to the labeled octave regressed 45 → 356 low-confidence (it drags clean
+  locks onto non-periodic points).  Some lo-fi textures (e.g. BoC "Annenberg" —
+  dominated by a ~2 kHz partial with a weak fundamental) simply have no clean single
+  cycle at their labeled pitch.  Accepted as a best-effort limitation.
+- **`--split-velocity-layers` + single-cycle → near-duplicate presets.**  Single-
+  cycle strips dynamics, so a pad's velocity layers collapse to the same oscillator.
+  A build-time de-dupe (phase/pitch-invariant harmonic-magnitude fingerprint,
+  cosine ≥ 0.99) removes them, but MUST be scoped **within each source patch**
+  (group by preset name minus the `_L<n>` suffix) — a global compare falsely merges
+  different instruments because many single cycles share low-harmonic spectra.
+- **K2000 floppy path.**  Single-cycle multisamples need the KRZ headroom
+  downsample (~24 kHz) or wide zones clamp on the K2000 up-pitch ceiling; then
+  `write_krz` → FAT12 via `writers.fat12.format_new` → `.add_file`.  Scratchpad
+  builders `build_sys100.py` / `build_synth_sc.py` show the full recipe (combine
+  many XPMs → single-cycle → re-split zones by *detected* root → split-layers →
+  de-dupe → E4B/ISO + KRZ/floppy).

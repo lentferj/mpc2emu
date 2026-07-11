@@ -556,6 +556,14 @@ A single **preset** must fit entirely within one output bank together with
 *all* of its referenced samples — presets are never split across banks, and
 samples are deduplicated by name within a bank (`bank_splitter.py`).
 
+**Minimum forward-loop length (HW-confirmed 2026-07-10).** A forward loop shorter
+than ~84 frames plays an **octave low** — the E4XT silently doubles it. An
+84-frame loop is fine; a 42-frame loop plays at half pitch. This bites
+single-cycle waveforms of high notes (a 740 Hz cycle is only ~60 frames); the
+`single_cycle` processor works around it by tiling the cycle to ≥256 frames (a
+single-period loop of that pitch is physically impossible at a playable rate, so
+identical repeats are the fix — see `docs/RESOLUTION_NOTES.md`).
+
 ---
 
 ## Sources & Attribution

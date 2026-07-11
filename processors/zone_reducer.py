@@ -260,3 +260,88 @@ def reduce_bank(bank: Bank, key_zone_pct: float = 0.0,
     print(f"  '{bank.name}': removed {removed_voices} velocity layer(s), "
           f"{removed_zones} key zone(s) -> {removed_samples} sample(s) "
           f"no longer needed")
+
+
+def _suffix_layer_name(base: str, idx: int, maxlen: int = 16) -> str:
+    """Append a distinct `_L<idx>` layer suffix, truncating the base to stay
+    within `maxlen` (mirrors the sample-name suffixing in bank_splitter)."""
+    suffix = f"_L{idx}"
+    return base[:max(0, maxlen - len(suffix))] + suffix
+
+
+def _explode_preset(preset: Preset) -> List[Preset]:
+    """Split one preset's velocity layers into separate full-velocity presets.
+
+    Handles both representations (mirrors `thin_velocity_layers`):
+      - **Separate VoiceLayer objects** per layer (SFZ / SF2 / GIG) → one preset
+        per voice.
+      - **One voice carrying velocity bands as zones** (XPM keygroups) → one
+        preset per distinct (lo_vel, hi_vel) band.
+    Each emitted layer is widened to the full 0..127 velocity range.  Returns the
+    original preset unchanged (as a 1-element list) when there is nothing to split.
+    Voices/zones are deep-copied so the split presets never share mutable state.
+    """
+    import copy
+    from collections import OrderedDict
+
+    voices = preset.voices
+    if not voices:
+        return [preset]
+
+    def _mk(new_voices, idx):
+        return Preset(
+            name=_suffix_layer_name(preset.name, idx),
+            program_number=preset.program_number,
+            voices=new_voices,
+            volume=preset.volume,
+            pan=preset.pan,
+            transpose=preset.transpose,
+        )
+
+    # Case A — separate voices are the velocity layers (SFZ / SF2 / GIG).
+    if len(voices) > 1:
+        ordered = sorted(voices,
+                         key=lambda v: min((z.lo_vel for z in v.zones), default=0))
+        out = []
+        for i, v in enumerate(ordered, 1):
+            nv = copy.deepcopy(v)
+            for z in nv.zones:
+                z.lo_vel, z.hi_vel = 0, 127
+            out.append(_mk([nv], i))
+        return out
+
+    # Case B — one voice, velocity bands packed as zones (XPM keygroups).
+    v = voices[0]
+    bands: "OrderedDict[tuple, list]" = OrderedDict()
+    for z in v.zones:
+        bands.setdefault((z.lo_vel, z.hi_vel), []).append(z)
+    if len(bands) <= 1:
+        return [preset]
+
+    out = []
+    for i, (_band, zones) in enumerate(
+            sorted(bands.items(), key=lambda kv: kv[0][0]), 1):
+        nv = copy.deepcopy(v)
+        nv.zones = [copy.deepcopy(z) for z in zones]
+        for z in nv.zones:
+            z.lo_vel, z.hi_vel = 0, 127
+        out.append(_mk([nv], i))
+    return out
+
+
+def explode_velocity_layers(bank: Bank) -> None:
+    """Explode every preset's velocity layers into separate full-velocity
+    presets, in place.  Preset count may grow; the bank splitter fans any
+    overflow past the 1000-preset cap into additional banks automatically."""
+    new_presets: List[Preset] = []
+    added = 0
+    for preset in bank.presets:
+        exploded = _explode_preset(preset)
+        added += len(exploded) - 1
+        new_presets.extend(exploded)
+    bank.presets = new_presets
+    if added:
+        print(f"  '{bank.name}': velocity layers split -> "
+              f"{len(bank.presets)} preset(s) (+{added})")
+    else:
+        print(f"  '{bank.name}': no multi-layer presets to split")

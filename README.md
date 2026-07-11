@@ -36,9 +36,10 @@ mpc2emu was built by its human author together with Anthropic's **Claude**. The
 **ideas, the project vision, and every feature** came from the human author;
 Claude assisted with **writing the code and analyzing the binary formats**.
 Crucially, the **reverse engineering rests on hands-on human work** — all testing
-and verification on real E-mu E4XT hardware, creating the RE reference images on
-that hardware, and aural A/B comparison of presets — which is what makes the
-results correct. Full account in [DISCLAIMER.md](DISCLAIMER.md).
+and verification on real **E-mu E4XT** and **Kurzweil K2000R** hardware, creating
+the RE reference images/banks on those instruments (disk saves, SysEx probes),
+and aural A/B comparison of presets — which is what makes the results correct.
+Full account in [DISCLAIMER.md](DISCLAIMER.md).
 
 ---
 
@@ -64,6 +65,13 @@ what transfers and how it was verified.
 EMU Emulator II (8-bit, 27.5 kHz, gritty) or Emax I (12-bit) signal path —
 anti-alias → decimate → gain-stage → truncate → dither → bandpass — for
 authentic lo-fi character rather than a clean bit-crush.
+
+**Single-cycle synthesis** (`--single-cycle`) turns a sampled instrument into a
+synth: it extracts a short looped waveform from each sample so the sampler plays
+it as a static oscillator, and the hardware's own filter, envelopes and LFO shape
+the sound. A whole multisample collapses to a few hundred bytes per zone, and
+every zone is retuned to play in tune across the keyboard. See
+[Single-Cycle Synthesis](#single-cycle-synthesis) below.
 
 **It fits the hardware automatically.** Presets are packed into bank-sized
 chunks with a First-Fit algorithm; when a single preset is too big for one bank,
@@ -272,6 +280,27 @@ Sample-count reduction (fit modern libraries into vintage memory limits):
                       and thin only the keyboard split. Survivors' key/
                       velocity ranges are stretched to fill the resulting
                       gaps, split evenly between neighbors.
+
+Single-cycle synth (turn a sampled instrument into an oscillator patch):
+  --single-cycle[=auto|N]  Replace each sample with a short looped waveform from
+                      its own sustain, so the sampler plays it as a static
+                      oscillator and its filter/envelopes shape the tone. auto
+                      (default) extracts ONE sub-sample-accurate cycle and tiles
+                      it to a hardware-safe loop; =N takes N contiguous cycles
+                      (keeps the source's movement). Emits a neutral preset: 4-pole
+                      lowpass wide open, organ-style amp envelope, no LFO. Tuning
+                      is baked into each sample's stored rate, so it plays in tune.
+                      Collapses a whole multisample to a few hundred bytes per
+                      zone. Best on multisampled input (no aliasing); best-effort
+                      on unpitched material.
+  --single-cycle-keep-flt   Keep the source filter instead of the neutral 4PLP
+  --single-cycle-keep-lfo   Keep the source LFO(s) / modulation
+  --single-cycle-keep-amp   Keep the source amp envelope instead of the organ one
+  --single-cycle-keep-all   Keep the whole converted voice (only shorten samples)
+  --single-cycle-dump-dir DIR   Also write each extracted cycle as a .wav (audition)
+  --split-velocity-layers   Explode each preset's velocity layers into separate
+                      full-velocity presets (a playable palette; pairs naturally
+                      with --single-cycle, where each layer is a distinct wave).
 ```
 
 ---
@@ -626,6 +655,118 @@ pin it down explicitly with `--middle-c C3`, `--middle-c C4`, or `--middle-c C5`
 
 ---
 
+## Single-Cycle Synthesis
+
+`--single-cycle[=auto|N]` replaces each sample with a short, cleanly-looped slice
+of its own waveform — one cycle, or a few — so the sampler plays it as a static
+**oscillator** instead of a recording. The instrument then becomes a subtractive
+synth voice: the E4XT's Z-plane filters or the K2000's VAST filter, plus the amp
+and filter envelopes, do the sound design. It is the most extreme form of the
+"fit into vintage RAM" idea — an entire multisampled instrument collapses to a
+handful of tiny loops (hundreds of bytes each) — and a genuine creative mode in
+its own right: an MPC multisample becomes a playable E4XT / K2000 synth patch.
+
+It runs as the first pipeline stage (right after parsing), so every later stage —
+reduction, resampling, fit, split — sees the already-tiny samples. It works for
+both E4B and KRZ output.
+
+### How a cycle is extracted
+
+Per sample, in pure Python (no numpy):
+
+1. **Find the sustain.** A short-time RMS scan locates the steady-state body of
+   the note, past the attack transient, where the waveform is most stable.
+2. **Detect the fundamental period** by normalised autocorrelation. The search is
+   *guided by the sample's own root note* — the converter already trusts that
+   value for tuning, so searching only near the expected period makes detection
+   fast and immune to octave errors. If that yields nothing convincing (missing or
+   wrong root metadata), a wider first-strong-peak search takes over, which finds
+   the true fundamental rather than one of its autocorrelation multiples.
+3. **Refine the period to sub-sample precision** (parabolic interpolation of the
+   autocorrelation peak). This matters more than it sounds: cutting at a
+   whole-sample boundary leaves a fractional-sample phase step at the loop wrap,
+   and on a short (high-note) cycle that "kink" is an audible broadband
+   high-frequency harshness. Sub-sample accuracy removes it at the source.
+4. **Resample exactly one period** (`auto`, the default) — or N contiguous
+   periods (`=N`) — to an integer frame count. Because the span is phase-locked
+   to a whole number of periods, the loop wrap is phase-perfect: no seam, no
+   crossfade needed. `auto` gives the cleanest, truest single cycle; `=N` keeps
+   the source's cycle-to-cycle movement (beating, PWM) at the cost of that drift.
+5. **Tile to a hardware-safe length, then front-pad.** The seamless cycle is
+   repeated until the loop is at least ~256 frames — the E4XT plays a loop
+   shorter than ~84 frames an *octave low* (it silently doubles it), and identical
+   repeats stay perfectly periodic, so there is no drift and no seam buzz. A tiny
+   faded lead-in is prepended so the loop never starts at frame 0 (an old EMU
+   requirement; harmless on the K2000).
+
+### Tuning — baked into the sample rate
+
+The perceived pitch of the loop is set by the single-cycle period, **not** the
+loop length: an N-cycle loop of a periodic wave still sounds at its fundamental.
+The nearest MIDI note becomes the sample's root; the sub-semitone correction is
+then **baked into the sample's stored sample rate** rather than a fine-tune field.
+Playback pitch scales with the stored rate, so a rate of
+`original_rate × freq(nearest_note) / detected_fundamental` makes the loop play
+exactly in tune at its root key.
+
+This matters because **E4B carries only one fine-tune value per voice** — a
+per-zone cents field cannot individually tune samples that share a voice, and a
+short high-note loop can otherwise be tens of cents off from integer-length
+rounding. Rate-baking is per-sample, near-exact (integer-Hz rounding is ≈ 0.04
+cents near 44 kHz), and engine-agnostic (both writers derive pitch from the stored
+rate and root).
+
+### Multisamples and aliasing
+
+A single cycle transposed *up* the keyboard folds its harmonics back as aliasing —
+harmless on a sine or triangle, but a bright saw/square or a thin pulse turns
+gritty when played well above its source pitch. The cure is **multisampled input**:
+give the instrument a cycle per source octave (as any real `.xpm`/`.sf2`/multisample
+already has), so each key plays a *near-pitched* cycle and barely transposes. The
+stage keeps the source's zone structure, so multisamples get this for free. A
+one-note-across-the-whole-keyboard source will alias on the high keys — build it as
+a multisample, or close the filter, if that bothers you.
+
+### The preset it emits, and keeping the source
+
+By default single-cycle emits a **neutral synth preset** so the oscillator is
+audible and playable immediately:
+
+- **Filter:** 4-pole lowpass, wide open (E4B Lowpass 4-Pole / K2000 Algorithm-1
+  4POLE LOPASS)
+- **Amp envelope:** organ-style — instant on, full sustain while held, quick release
+- **Filter envelope:** neutral default; **no LFO** or other modulation
+
+You then dial in filter movement, envelopes and LFOs on the instrument. To instead
+keep what the converter mapped from the source, opt back in per section:
+
+| Flag | Effect |
+|---|---|
+| `--single-cycle-keep-flt` | Keep the source filter (type / cutoff / resonance / env) |
+| `--single-cycle-keep-lfo` | Keep the source LFO(s) and modulation routings |
+| `--single-cycle-keep-amp` | Keep the source amp envelope instead of the organ one |
+| `--single-cycle-keep-all` | Keep the whole converted voice (only shorten the samples) |
+| `--single-cycle-dump-dir DIR` | Also write each extracted cycle as a `.wav` for audition |
+
+Extraction is **best-effort**: unpitched or too-short material (percussion, noise)
+is left full-length and logged, while the preset is still neutralised — a creative
+option where an odd result is acceptable, not a failure. A per-sample summary
+prints the detected root, cycle count, loop length, baked rate and a periodicity
+confidence, flagging low-confidence samples so you know which to audition.
+
+### `--split-velocity-layers`
+
+A companion flag that explodes each preset's velocity layers into **separate
+full-velocity presets** — a playable palette instead of one preset that only
+exposes a given layer at a certain velocity. It pairs naturally with
+`--single-cycle`, where each velocity layer is a distinct oscillator waveform, so
+you get one preset per timbre, each playable across the whole keyboard. It handles
+both layer representations (XPM velocity bands packed as zones, and the separate
+voices used by SF2 / SFZ / GIG); overflow past the 1000-preset-per-bank limit fans
+into additional banks automatically.
+
+---
+
 ## Vintage Resampler
 
 Simulates the signal chain of two classic E-mu samplers:
@@ -724,7 +865,8 @@ mpc2emu/
 │   └── bank_splitter.py        # First-Fit-Decreasing bank splitting
 ├── processors/
 │   ├── resampler.py             # Vintage resampler (EMU E2 / Emax I)
-│   ├── zone_reducer.py          # Key-zone / velocity-layer thinning for vintage memory limits
+│   ├── zone_reducer.py          # Key-zone / velocity-layer thinning; velocity-layer split (--split-velocity-layers)
+│   ├── single_cycle.py          # Single-cycle oscillator extraction + retune (--single-cycle)
 │   └── loop_renderer.py         # Ping-pong → forward loop (bakes the bounce into PCM)
 └── tests/
     └── re_banks/                # Hardware-RE helpers: test-bank generators
