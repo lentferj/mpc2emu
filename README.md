@@ -297,7 +297,9 @@ Single-cycle synth (turn a sampled instrument into an oscillator patch):
   --single-cycle-keep-lfo   Keep the source LFO(s) / modulation
   --single-cycle-keep-amp   Keep the source amp envelope instead of the organ one
   --single-cycle-keep-all   Keep the whole converted voice (only shorten samples)
-  --single-cycle-dump-dir DIR   Also write each extracted cycle as a .wav (audition)
+  --single-cycle-dump-dir DIR   Export each oscillator to DIR as a named WAV
+                      (<sample>_<note>.wav) with loop points + root note embedded
+                      (a smpl chunk), ready to import into other samplers
   --split-velocity-layers   Explode each preset's velocity layers into separate
                       full-velocity presets (a playable palette; pairs naturally
                       with --single-cycle, where each layer is a distinct wave).
@@ -746,7 +748,7 @@ keep what the converter mapped from the source, opt back in per section:
 | `--single-cycle-keep-lfo` | Keep the source LFO(s) and modulation routings |
 | `--single-cycle-keep-amp` | Keep the source amp envelope instead of the organ one |
 | `--single-cycle-keep-all` | Keep the whole converted voice (only shorten the samples) |
-| `--single-cycle-dump-dir DIR` | Also write each extracted cycle as a `.wav` for audition |
+| `--single-cycle-dump-dir DIR` | Export each oscillator as a named WAV (`<sample>_<note>.wav`) with its loop points + root note embedded (`smpl` chunk), for import into samplers whose preset formats aren't supported |
 
 Extraction is **best-effort**: unpitched or too-short material (percussion, noise)
 is left full-length and logged, while the preset is still neutralised — a creative

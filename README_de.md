@@ -309,7 +309,10 @@ Single-Cycle-Synth (ein gesampeltes Instrument in einen Oszillator verwandeln):
   --single-cycle-keep-lfo   Quell-LFO(s) / Modulation behalten
   --single-cycle-keep-amp   Quell-Amp-Hüllkurve statt der Orgel-Hüllkurve behalten
   --single-cycle-keep-all   Die ganze konvertierte Voice behalten (nur Samples kürzen)
-  --single-cycle-dump-dir DIR   Jeden extrahierten Zyklus zusätzlich als .wav ablegen
+  --single-cycle-dump-dir DIR   Jeden Oszillator als benannte WAV nach DIR
+                      exportieren (<Sample>_<Note>.wav) mit eingebetteten
+                      Loop-Punkten + Grundton (smpl-Chunk) – direkt in andere
+                      Sampler importierbar
   --split-velocity-layers   Velocity-Layer jedes Presets in einzelne Presets mit
                       voller Velocity aufteilen (spielbare Palette; passt zu
                       --single-cycle, wo jeder Layer eine eigene Welle ist).
@@ -779,7 +782,7 @@ kannst du je Bereich zurückschalten:
 | `--single-cycle-keep-lfo` | Quell-LFO(s) und Modulations-Routings behalten |
 | `--single-cycle-keep-amp` | Quell-Amp-Hüllkurve statt der Orgel-Hüllkurve behalten |
 | `--single-cycle-keep-all` | Die ganze konvertierte Voice behalten (nur Samples kürzen) |
-| `--single-cycle-dump-dir DIR` | Jeden extrahierten Zyklus zusätzlich als `.wav` ablegen |
+| `--single-cycle-dump-dir DIR` | Jeden Oszillator als benannte WAV (`<Sample>_<Note>.wav`) mit eingebetteten Loop-Punkten + Grundton (`smpl`-Chunk) exportieren – zum Import in Sampler, deren Preset-Formate nicht unterstützt werden |
 
 Die Extraktion ist **Best-Effort**: untoniertes oder zu kurzes Material
 (Perkussion, Rauschen) wird in voller Länge belassen und protokolliert, das Preset

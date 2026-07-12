@@ -55,7 +55,7 @@ Pure Python (array + math), matching the rest of the DSP here — no numpy.
 
 import os
 import math
-import wave
+import struct
 import concurrent.futures
 from dataclasses import replace
 from typing import Optional, Tuple
@@ -371,17 +371,70 @@ def _safe_filename(name: str) -> str:
     return ''.join(keep) or 'cycle'
 
 
+def _note_name(note: int) -> str:
+    """MIDI note → e.g. 'C3' (same convention as the extraction log)."""
+    return _NOTE_NAMES[note % 12] + str(note // 12 - 1)
+
+
+def _wav_bytes_with_loop(sample: SampleData) -> bytes:
+    """Build a mono 16-bit WAV for `sample`, embedding a `smpl` chunk (loop points
+    + MIDI unity note) when it carries a forward loop, so other samplers import it
+    with the loop and tuning intact.  Field layout matches xpm_parser's
+    `_read_smpl_loop` / `_read_smpl_root`, so it also round-trips back into our own
+    importer."""
+    pcm = sample.data
+    data_sz = len(pcm)
+    if data_sz & 1:                        # keep the data chunk word-aligned
+        pcm = pcm + b'\x00'
+    sr = sample.sample_rate
+
+    fmt = struct.pack('<HHIIHH', 1, 1, sr, sr * 2, 2, 16)   # PCM, mono, 16-bit
+    chunks = [b'fmt ' + struct.pack('<I', len(fmt)) + fmt,
+              b'data' + struct.pack('<I', data_sz) + pcm]
+
+    if sample.loop_type == LoopType.FORWARD and sample.loop_end > sample.loop_start:
+        sample_period = int(round(1e9 / sr)) if sr > 0 else 0
+        root = sample.root_note if 0 <= sample.root_note <= 127 else 60
+        smpl = struct.pack('<9I',
+                           0,              # manufacturer
+                           0,              # product
+                           sample_period,  # samplePeriod (ns)
+                           root,           # MIDIUnityNote
+                           0,              # MIDIPitchFraction
+                           0,              # SMPTEFormat
+                           0,              # SMPTEOffset
+                           1,              # numSampleLoops
+                           0)              # samplerData
+        smpl += struct.pack('<6I',
+                            0,                   # cuePointID
+                            0,                   # type: 0 = forward
+                            sample.loop_start,   # start (inclusive)
+                            sample.loop_end,     # end   (inclusive)
+                            0,                   # fraction
+                            0)                   # playCount
+        chunks.append(b'smpl' + struct.pack('<I', len(smpl)) + smpl)
+
+    body = b'WAVE' + b''.join(chunks)
+    return b'RIFF' + struct.pack('<I', len(body)) + body
+
+
 def _dump_cycle(sample: SampleData, dump_dir: str) -> None:
+    """Write one extracted oscillator as a named, import-ready WAV: a descriptive
+    filename plus an embedded loop + root note (`smpl` chunk), so it loads straight
+    into samplers whose preset formats we don't write.
+
+    The detected root note is appended to the filename (`<sample>_<note>.wav`)
+    ONLY when the sample name doesn't already carry a note token — judged with the
+    same `_name_note` the sample-dir importer uses — so a source like 'Pad C1'
+    stays 'Pad_C1', not a redundant 'Pad_C1_C2'.  The `smpl` unity note is the
+    authoritative root on import regardless."""
+    from parsers.sampledir_parser import _name_note
     os.makedirs(dump_dir, exist_ok=True)
-    path = os.path.join(dump_dir, _safe_filename(sample.name) + '.wav')
-    w = wave.open(path, 'wb')
-    try:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(sample.sample_rate)
-        w.writeframes(sample.data)
-    finally:
-        w.close()
+    stem = _safe_filename(sample.name)
+    if _name_note(sample.name) is None and 0 <= sample.root_note <= 127:
+        stem += '_' + _safe_filename(_note_name(sample.root_note))
+    with open(os.path.join(dump_dir, stem + '.wav'), 'wb') as f:
+        f.write(_wav_bytes_with_loop(sample))
 
 
 def single_cycle_bank(bank, *, cycles='auto',
@@ -427,7 +480,7 @@ def single_cycle_bank(bank, *, cycles='auto',
             if info['conf'] < 0.7:
                 n_low += 1
                 flag = '  [LOW CONFIDENCE — audition]'
-            note = _NOTE_NAMES[info['root'] % 12] + str(info['root'] // 12 - 1)
+            note = _note_name(info['root'])
             print(f"    '{info['name']}': {info['n']}cyc×{info['reps']} = "
                   f"{info['loop']}f loop (-{shrink:.1f}%), root {note} @ "
                   f"{info['rate']}Hz ({info['cents']:+d}c), "

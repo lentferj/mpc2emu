@@ -510,8 +510,10 @@ def main():
         help='With --single-cycle: keep the whole converted voice (implies '
              '--single-cycle-keep-flt/-lfo/-amp); only shorten the samples.')
     ap.add_argument('--single-cycle-dump-dir', metavar='DIR', default=None,
-        help='With --single-cycle: also write each extracted cycle as a .wav '
-             'into DIR for audition/QA.')
+        help='With --single-cycle: also export each extracted oscillator to DIR '
+             'as a named WAV (<sample>_<note>.wav) with its loop points and root '
+             'note embedded (a smpl chunk), ready to import into samplers whose '
+             'preset formats we do not write.')
     ap.add_argument('--split-velocity-layers', action='store_true',
         help='Explode each preset\'s velocity layers into separate full-velocity '
              'presets (a playable palette). Pairs naturally with --single-cycle, '

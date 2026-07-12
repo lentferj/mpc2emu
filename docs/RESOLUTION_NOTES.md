@@ -2127,3 +2127,10 @@ output on the E4XT (and a K2000 floppy).
   builders `build_sys100.py` / `build_synth_sc.py` show the full recipe (combine
   many XPMs → single-cycle → re-split zones by *detected* root → split-layers →
   de-dupe → E4B/ISO + KRZ/floppy).
+- **`--single-cycle-dump-dir` WAV export (2026-07-12).**  The dump path
+  (`single_cycle._dump_cycle` → `_wav_bytes_with_loop`) now emits a proper `smpl`
+  chunk — one forward loop (`loop_start`/`loop_end`, inclusive) plus the MIDI
+  unity note — under a descriptive `<sample>_<note>.wav` name, so the oscillators
+  import into samplers we don't write presets for (loop + tuning intact). Field
+  offsets mirror `xpm_parser._read_smpl_loop` / `_read_smpl_root`, so they
+  round-trip back through our own importer.
