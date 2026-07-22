@@ -132,6 +132,48 @@ bytes not yet RE'd): High1/2, Band2, notch — another disk-save batch if wanted
 
 ---
 
+## KRZ: fidelity gaps found via ConvertWithMoss cross-reference (OPEN, 2026-07-22)
+
+ConvertWithMoss (git-moss) added a KurzFiler-derived K2000/K2500/K2600 reader+
+writer in 2026 (`format/kurzweil/`, not HW-tested). A full byte-level compare
+against `krz_writer.py` found **nothing to learn on the VAST program side** (we
+decode filter/env/LFO; CWM writes a flat default program — and in two spots CWM's
+writer is *wrong* where ours is HW-corrected: it writes `LYR[6]=hiVel` when that
+byte is the Enable source, and writes the keymap id into `CAL[7,8]` which silences
+4+-layer programs). The gaps run the **other** way — container/keymap/sample-header
+fidelity we don't yet emit. Fix recipes in `docs/RESOLUTION_NOTES.md` §KRZ-CWM.
+
+- **Per-sample gain dropped.** `Soundfilehead.volumeAdjust` (byte 2) is a signed
+  i8 in **0.5 dB steps** (−64…+63.5 dB); `_write_sample_object` hardcodes `0`.
+  Source per-zone gain should be `round(gain_dB × 2)`. *Blocked on:* nothing —
+  quick, low-risk. Encoding HW-documented (K2600 manual, MISC page).
+- **Partial key-tracking not expressible.** `_build_keymap_entries` writes a
+  *constant* per-zone tuning → implicitly 100 % chromatic tracking. A source with
+  reduced/zero key-tracking (drum maps) needs the per-key form
+  `round((keyTracking − 1)·(note − rootkey)·100) + fine_tune`. *Blocked on:* a
+  source that actually carries a keytrack ≠ 1 to test against.
+- **Native 8-level multi-table keymap not used.** The K2000 keymap `Level[8]`
+  can address up to 8 velocity tables in *one* keymap (level `j` = velocity
+  `j·16…+15`). We instead split every velocity band into a separate keymap +
+  program layer (`_split_voice_by_velocity`), which burns layers against the
+  32-layer cap and the "3 regular layers" rule. Adopting the native form would
+  fold velocity layers back into one keymap. *Blocked on:* design decision +
+  HW confirm (larger change; weigh against current layer-splitting, which is
+  HW-verified). Bit-layout HW-documented but the multi-table write path is untested.
+- **Stereo / multi-root sample objects.** We emit mono, single-header only. The
+  generalization is `numHeaders = N−1`, `flags` bit 0 = stereo (L/R header pairs,
+  even index = left), and envelope offsets `(numHeaders−1−i)·32 + 8/+6` instead
+  of the hardcoded `8/6`. *Blocked on:* stereo handling is a broader converter
+  feature; HW confirm needed.
+- **Doc-only:** our `hash >> 10` object-type decode mislabels the FX/song/QA
+  objects (types > 42 use the 8-bit `hash >> 8` decode when the 0x8000 bit is
+  clear). We never emit them, so this only matters for a future reader — noted in
+  `docs/KRZ_FORMAT.md` §2.2. Also verify the entry-index base: CWM places entry
+  `i` at note `i+12`; we index entries by raw MIDI note (ours is HW-confirmed to
+  play, so this only bites an external reader of our files).
+
+---
+
 ## KRZ: program parameters (envelopes / filter / LFOs) — OPEN (2026-06-14)
 
 **Status:** strategy + tooling complete; hardware RE not yet started.

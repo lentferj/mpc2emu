@@ -135,6 +135,18 @@ the whole block to a 4-byte boundary before computing `blocksize`.
 | 38 | `T_SAMPLE`  | `0x9800 + id` | ✅ one per sample |
 | 28 | `T_FX` (Studio/effects) | `0x7000 + id` | ❌ — programs use ROM effects |
 
+> **Hash decode for high type codes — cross-implementation discrepancy.** mpc2emu
+> only reads/writes types 36/37/38, which all set the `0x8000` bit, so it decodes
+> the hash unconditionally as `type = hash >> 10`, `id = hash & 0x3FF`. KurzFiler
+> and ConvertWithMoss use a **conditional** decode: when the `0x8000` bit is
+> **clear** (type > 42), the type is 8-bit — `type = hash >> 8`, `id = hash & 0xFF`
+> — reserving `111 = quick-access bank, 112 = song, 113 = effect`. Under that rule
+> the `0x7000`-based objects we call "type 28" decode instead as `type 112`
+> (song) / `113` (effect). The bytes are identical either way; only the *label*
+> differs, and mpc2emu never emits these objects — but a future reader that must
+> distinguish FX / song / QA-bank objects should adopt the conditional decode
+> rather than our unconditional `>> 10`. This is unreconciled against hardware.
+
 ### 2.3 End marker & PCM region
 
 After the last object, `write_krz()` writes `int32 = 0` (the object-section
@@ -175,16 +187,16 @@ Written by `_write_sample_object()`. Body layout after the object name:
 |---|---|---|---|
 | `0`   | 1 | `rootkey`          | MIDI note; the K2000 auto-transposes each key relative to this |
 | `1`   | 1 | `flags`            | **`0x70` when looped, `0xF0` when one-shot** — see below |
-| `2`   | 1 | `volumeAdjust`     | `0` |
-| `3`   | 1 | `altVolumeAdjust`  | `0` |
+| `2`   | 1 | `volumeAdjust`     | `0` — **signed i8 in 0.5 dB steps** (−64.0 … +63.5 dB, the "Volume Adjust" MISC-page parameter). mpc2emu writes `0`; a per-sample gain would be `round(gain_dB × 2)`. See TODO. |
+| `3`   | 1 | `altVolumeAdjust`  | `0` — same 0.5 dB-step encoding, applied when the Alt start is active |
 | `4:6` | 2 | `maxPitch`         | BE u16, the ×100-cents pitch at which the sample, transposed up, hits the K2000's 48 kHz playback ceiling. `round(100·rootkey + 1200·log2(48000 / sample_rate))` (`_compute_max_pitch`). |
 | `6:8` | 2 | `offsetToName`     | `0` |
 | `8:12`  | 4 | `sampleStart`      | BE i32, absolute **word** offset of the sample's first PCM word |
 | `12:16` | 4 | `altSampleStart`   | `== sampleStart` in real files |
 | `16:20` | 4 | `sampleLoopStart`  | looped → loop start word; one-shot → PCM-end word |
 | `20:24` | 4 | `sampleEnd`        | looped → **loop end** word (not PCM end); one-shot → PCM-end word. See below (`CR-10`). |
-| `24:26` | 2 | `offsetToEnvelope` | `8` (mono, 1 header) |
-| `26:28` | 2 | `altOffsetToEnvelope` | `6` |
+| `24:26` | 2 | `offsetToEnvelope` | `8` (mono, 1 header). **General (multi-header) form:** `(numHeaders − 1 − i) × 32 + 8` for header `i`, so every header's envelope offset points at the shared envelope records that follow the last header. mpc2emu only emits one header, where this reduces to `8`. |
+| `26:28` | 2 | `altOffsetToEnvelope` | `6` — general form `(numHeaders − 1 − i) × 32 + 6` |
 | `28:32` | 4 | `samplePeriod`     | BE u32 = `round(1e9 / sample_rate)` (`_compute_sample_period`) |
 
 Followed by **2× Envelope** (12 bytes each), each `struct '>hhhhhh'` =
@@ -216,18 +228,31 @@ voice. Body layout after the object name:
 | Offset | Size | Field | Value |
 |---|---|---|---|
 | `0:2`   | 2 | `sampleId`     | default sample id (0 for multi-sample keymaps; the per-entry ids carry the mapping) |
-| `2:4`   | 2 | `method`       | **`0x0013`** (`KEYMAP_METHOD`) = per-entry `2-byte tuning \| 2-byte sampleID \| 1-byte subSample`. This is what the K2000 itself writes on save. |
+| `2:4`   | 2 | `method`       | **`0x0013`** (`KEYMAP_METHOD`) = per-entry `2-byte tuning \| 2-byte sampleID \| 1-byte subSample`. This is what the K2000 itself writes on save. **Full bitfield** (each bit adds one per-entry field, in this order): `0x10` tuning i16 · `0x08` tuning i8 · `0x04` volumeAdjust i8 · `0x02` sampleID i16 · `0x01` subSample u8. `entrySize` is the sum of the selected field widths. With `0x02` **clear** the keymap is *compacted* — every entry uses the header `sampleId` and carries no per-entry id. mpc2emu always writes `0x13` (i16 tuning + i16 id + u8 subSample = 5 bytes); it does not read/write i8-tuning, per-entry-volume, or compacted keymaps. |
 | `4:6`   | 2 | `basePitch`    | **`0`** — matches every real production soundset (an earlier `ceil(1200·log2(96000/sr))` guess was wrong). |
 | `6:8`   | 2 | `centsPerEntry`| `100` (one semitone per key) |
 | `8:10`  | 2 | `entriesPerVel`| `NUM_KEYS − 1 = 127` |
 | `10:12` | 2 | `entrySize`    | `5` (`KEYMAP_ENTRY_SIZE` = 2 + 2 + 1) |
 | `12:28` | 16 | `Level[8]`     | `(8 − j)·2` for `j` in 0..7 — the single-velocity-level encoding; a reader decodes it back to a single level spanning all 8 velocity buckets |
 
+> **`Level[8]` is the format's native velocity-zone mechanism, and mpc2emu does
+> not use it.** Each of the 8 entries is a byte offset from its own `Level[j]`
+> slot to the entry table that dynamic level `j` (ppp…fff, mapping linearly onto
+> velocity — level `j` covers velocities `j·16 … j·16+15`) should read. Distinct
+> offsets select distinct entry tables, so **one keymap can hold up to 8 velocity
+> layers** as `numTables × (entriesPerVel+1) × entrySize` bytes, with equal
+> offsets sharing a table (write side: `(8 − j)·2 + tableIndex × tableSize`). A
+> reader recovers `numTables` by counting distinct normalized offsets. mpc2emu
+> instead points all 8 levels at one table and **splits velocity into separate
+> keymaps + program layers** ([§7.2](#72-velocity-splits--multisample-collapse));
+> using the native multi-table form would avoid that layer proliferation (see
+> TODO).
+
 **Key entries** — `NUM_KEYS = 128` × 5 bytes, `struct '>hHB'` per key:
 
 | Offset | Size | Field | Notes |
 |---|---|---|---|
-| `0:2` | 2 | `tuning`   | BE **i16** cents — a **constant per-zone fine offset** `100·(R_sample − R_zone) + fine_tune`, usually 0. The K2000 already transposes each key from the sample rootkey + `centsPerEntry`; the tuning field must **not** re-encode the per-key shift (the old `100·(root−12−key)` double-counted it and drove high keys to −72 semitones → silent). |
+| `0:2` | 2 | `tuning`   | BE **i16** cents — a **constant per-zone fine offset** `100·(R_sample − R_zone) + fine_tune`, usually 0. The K2000 already transposes each key from the sample rootkey + `centsPerEntry`; the tuning field must **not** re-encode the per-key shift (the old `100·(root−12−key)` double-counted it and drove high keys to −72 semitones → silent). A constant offset means mpc2emu assumes **100 % chromatic key-tracking**; the field can also express *partial* tracking per key as `round((keyTracking − 1)·(note − R_sample)·100) + fine_tune` (KurzFiler/CWM form) — a drum map cancels tracking entirely with `keyTracking = 0`. Not yet mapped (see TODO). |
 | `2:4` | 2 | `sampleID` | BE u16, the referenced Sample object id |
 | `4`   | 1 | `SSNr`     | subsample index = `1` |
 
@@ -582,6 +607,16 @@ This reverse-engineering effort drew on:
   model, and the `Soundfilehead` / `KKeymap` / `KProgram` field names. **No
   source code was copied**; `writers/krz_writer.py` is an independent Python
   implementation informed by it.
+- **ConvertWithMoss** by Jürgen Moßgraber — <https://github.com/git-moss/ConvertWithMoss>
+  (GPL-3.0), which added a KurzFiler-derived K2000/K2500/K2600 reader+writer in
+  2026 (`format/kurzweil/`, commit `cf4a49f`, not yet HW-tested). A second
+  independent KurzFiler-lineage implementation used here as a **cross-check** of
+  the container / keymap / sample-header surface (it independently documents the
+  0.5 dB `volumeAdjust`, the multi-header envelope-offset formula, the full
+  keymap `method` bitfield, and the native 8-level multi-table keymap noted
+  above). It decodes **none** of the VAST program (filter/env/LFO) that
+  `krz_writer.py` reverse-engineered, so the program-parameter semantics in §4
+  are mpc2emu-original. **No source code was copied.**
 - **Hardware-saved K2000R banks** created and disk-saved by Jan Lentfer via a
   Gotek floppy (`DFLT.KRZ`, `FILTERS.KRZ`, `POLE2LP/POLE2A5/POLE1LP.KRZ`,
   `PARAJLZ.KRZ`, `VELAYRE.KRZ`, and the `KRZ_*` forward-RE series) plus live

@@ -2134,3 +2134,91 @@ output on the E4XT (and a K2000 floppy).
   import into samplers we don't write presets for (loop + tuning intact). Field
   offsets mirror `xpm_parser._read_smpl_loop` / `_read_smpl_root`, so they
   round-trip back through our own importer.
+
+---
+
+## §KRZ-CWM — Fidelity gaps found via ConvertWithMoss cross-reference (2026-07-22)
+
+TODO item: *"KRZ: fidelity gaps found via ConvertWithMoss cross-reference"*.
+Source: a full byte-level diff of ConvertWithMoss's KurzFiler-derived
+`format/kurzweil/*.java` against `writers/krz_writer.py`. Ordered easiest-first.
+
+### 1. Per-sample gain (`Soundfilehead.volumeAdjust`) — ready to apply
+
+`volumeAdjust` (Soundfilehead byte 2) and `altVolumeAdjust` (byte 3) are signed
+i8 in **0.5 dB steps** (−64.0…+63.5 dB — the MISC-page "Volume Adjust"). We write
+`0`. To carry a source zone's gain:
+
+```python
+# in _write_sample_object(), replace the hardcoded volumeAdjust=0:
+def _vol_adjust_byte(gain_db: float) -> int:
+    return max(-128, min(127, round(gain_db * 2)))   # 0.5 dB steps, signed i8
+# ...
+vol_adj = _vol_adjust_byte(getattr(sample, 'gain_db', 0.0) or 0.0)
+# pack vol_adj into the '>...bb...' volumeAdjust/altVolumeAdjust fields (both same)
+```
+
+No hardware needed to *encode* it (documented in the K2600 manual + KurzFiler);
+worth one HW spot-check that the sign/step matches (louder at +N, not quieter).
+Interacts with nothing else — the program-layer amp path is separate.
+
+### 2. Partial key-tracking in the keymap entry `tuning` — needs a test source
+
+`_build_keymap_entries` writes a **constant** per-zone `tuning` = `100·(R_sample −
+R_zone) + fine_tune`, i.e. it assumes 100 % chromatic tracking (the K2000 does the
+per-key transpose itself). To honour a source `key_tracking` (0..1, where 1 =
+normal, 0 = drum/fixed pitch), make the tuning per-key:
+
+```python
+# per key `note` in the zone, instead of a constant offset:
+tuning = round((key_tracking - 1.0) * (note - R_sample) * 100) + fine_tune
+# key_tracking == 1.0 -> constant fine_tune (today's behaviour); == 0.0 -> fixed pitch
+```
+
+*Blocked on:* an input path that actually carries keytrack ≠ 1 (XPM/SFZ). Add the
+plumbing only alongside a real source + HW drum-map check. Beware the existing
+hole-fill and up-pitch-ceiling logic operate on the *constant* assumption — a
+fixed-pitch (keytrack 0) map has no up-pitch problem, so gate the ceiling cap off
+when `key_tracking == 0`.
+
+### 3. Native 8-level multi-table keymap — larger, weigh vs current splitting
+
+The keymap `Level[8]` field can point the 8 dynamic levels (velocity `j·16…+15`)
+at up to 8 distinct entry tables inside **one** keymap:
+
+```
+Level[j] = (8 - j)*2 + tableIndex_for_level_j * (num_entries * entry_size)
+tables laid out after the header: numTables x (entriesPerVel+1) x entrySize
+```
+
+CWM builds these from source velocity zones (`KurzweilCreator.calcBandOverlap` /
+`setTableIndexOfLevel`, sharing a table across levels with identical content).
+Adopting it would let `_split_voice_by_velocity` fold velocity bands back into one
+keymap + **one** layer, relieving the 32-layer cap and the "3 regular layers"
+spread. *Trade-off:* our current per-band split-layer approach is HW-verified; the
+multi-table form is not. Decision + HW confirm required before touching a working
+path — keep as a design item, not a drive-by change.
+
+### 4. Stereo / multi-root sample objects — broader feature
+
+We emit mono, single-`Soundfilehead` samples. The multi-header generalization
+(also in `docs/KRZ_FORMAT.md` §3.1):
+
+- `KSample.numHeaders = N − 1` (N headers); `flags` bit `0x01` = stereo, headers
+  in L/R pairs, even index = left; keymap `subSample` references the **left** (odd:
+  1,3,5…).
+- each header's envelope offsets become `(numHeaders − 1 − i)·32 + 8` and `+6`
+  (we hardcode `8`/`6`, valid only for the single/last header).
+
+Gated behind general stereo support in the converter; HW confirm needed.
+
+### 5. Doc-only reconciliations (no code change)
+
+- **Object-type hash decode:** our unconditional `hash >> 10` mislabels objects
+  with the `0x8000` bit clear (types > 42 use `hash >> 8`: 111 QA-bank / 112 song
+  / 113 effect). We never emit them; only relevant if we add a reader. Documented
+  in `docs/KRZ_FORMAT.md` §2.2.
+- **Entry-index base:** CWM sounds entry `i` at MIDI note `i + 12` (`basePitch=0`,
+  `BASE_NOTE=12`); we index entries by raw MIDI note. Ours is HW-confirmed to play
+  correctly, so this only matters if an external reader (incl. CWM) reads our files
+  — verify whether it sees our zones shifted +12 before assuming interop.
