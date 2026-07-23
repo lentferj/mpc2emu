@@ -418,7 +418,7 @@ def _wav_bytes_with_loop(sample: SampleData) -> bytes:
     return b'RIFF' + struct.pack('<I', len(body)) + body
 
 
-def _dump_cycle(sample: SampleData, dump_dir: str) -> None:
+def _dump_cycle(sample: SampleData, dump_dir: str, seen: set) -> None:
     """Write one extracted oscillator as a named, import-ready WAV: a descriptive
     filename plus an embedded loop + root note (`smpl` chunk), so it loads straight
     into samplers whose preset formats we don't write.
@@ -427,12 +427,23 @@ def _dump_cycle(sample: SampleData, dump_dir: str) -> None:
     ONLY when the sample name doesn't already carry a note token — judged with the
     same `_name_note` the sample-dir importer uses — so a source like 'Pad C1'
     stays 'Pad_C1', not a redundant 'Pad_C1_C2'.  The `smpl` unity note is the
-    authoritative root on import regardless."""
+    authoritative root on import regardless.
+
+    `seen` accumulates the (case-folded) stems already written this run; a
+    colliding stem gets a `_N` suffix so no dump silently overwrites another.
+    `_safe_filename` folds every non-alnum char to `_`, so distinct source names
+    like 'Kick 1' / 'Kick_1' — and case-only pairs 'Kick' / 'kick' on the
+    case-insensitive filesystems of macOS and Windows — would otherwise clash."""
     from parsers.sampledir_parser import _name_note
     os.makedirs(dump_dir, exist_ok=True)
     stem = _safe_filename(sample.name)
     if _name_note(sample.name) is None and 0 <= sample.root_note <= 127:
         stem += '_' + _safe_filename(_note_name(sample.root_note))
+    base, n = stem, 1
+    while stem.lower() in seen:
+        n += 1
+        stem = f'{base}_{n}'
+    seen.add(stem.lower())
     with open(os.path.join(dump_dir, stem + '.wav'), 'wb') as f:
         f.write(_wav_bytes_with_loop(sample))
 
@@ -467,6 +478,7 @@ def single_cycle_bank(bank, *, cycles='auto',
 
     # Apply transformed samples, collect per-name retuning, report.
     tune = {}
+    dumped_stems = set()   # case-folded, so dumps never silently overwrite (macOS/Windows)
     n_ok = 0
     n_low = 0
     for i, (new_s, info) in enumerate(results):
@@ -488,7 +500,7 @@ def single_cycle_bank(bank, *, cycles='auto',
         else:
             print(f"    '{info['name']}': SKIPPED ({info['reason']}) — left full-length")
         if dump_dir and info['ok']:
-            _dump_cycle(new_s, dump_dir)
+            _dump_cycle(new_s, dump_dir, dumped_stems)
 
     # Retune the zones that reference a transformed sample, and neutralise voices.
     for preset in bank.presets:
