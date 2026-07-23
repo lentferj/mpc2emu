@@ -187,8 +187,8 @@ Written by `_write_sample_object()`. Body layout after the object name:
 |---|---|---|---|
 | `0`   | 1 | `rootkey`          | MIDI note; the K2000 auto-transposes each key relative to this |
 | `1`   | 1 | `flags`            | **`0x70` when looped, `0xF0` when one-shot** — see below |
-| `2`   | 1 | `volumeAdjust`     | `0` — **signed i8 in 0.5 dB steps** (−64.0 … +63.5 dB, the "Volume Adjust" MISC-page parameter). mpc2emu writes `0`; a per-sample gain would be `round(gain_dB × 2)`. See TODO. |
-| `3`   | 1 | `altVolumeAdjust`  | `0` — same 0.5 dB-step encoding, applied when the Alt start is active |
+| `2`   | 1 | `volumeAdjust`     | Per-sample gain: **signed i8 in 0.5 dB steps** (−64.0 … +63.5 dB, the "Volume Adjust" MISC-page parameter). `_vol_adjust_byte` = `round(gain_dB × 2)` clamped to i8; `write_krz` derives it from the mean `ZoneMapping.volume` of the zones referencing the sample. `0 dB → 0` (unity = byte-identical). **HW-confirmed on the K2000R 2026-07-23** (the `VOLADJ` constant-pitch floppy). |
+| `3`   | 1 | `altVolumeAdjust`  | Same 0.5 dB-step gain, applied when the Alt start is active (mpc2emu writes the same value as `volumeAdjust`). |
 | `4:6` | 2 | `maxPitch`         | BE u16, the ×100-cents pitch at which the sample, transposed up, hits the K2000's 48 kHz playback ceiling. `round(100·rootkey + 1200·log2(48000 / sample_rate))` (`_compute_max_pitch`). |
 | `6:8` | 2 | `offsetToName`     | `0` |
 | `8:12`  | 4 | `sampleStart`      | BE i32, absolute **word** offset of the sample's first PCM word |

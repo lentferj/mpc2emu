@@ -143,10 +143,16 @@ byte is the Enable source, and writes the keymap id into `CAL[7,8]` which silenc
 4+-layer programs). The gaps run the **other** way — container/keymap/sample-header
 fidelity we don't yet emit. Fix recipes in `docs/RESOLUTION_NOTES.md` §KRZ-CWM.
 
-- **Per-sample gain dropped.** `Soundfilehead.volumeAdjust` (byte 2) is a signed
-  i8 in **0.5 dB steps** (−64…+63.5 dB); `_write_sample_object` hardcodes `0`.
-  Source per-zone gain should be `round(gain_dB × 2)`. *Blocked on:* nothing —
-  quick, low-risk. Encoding HW-documented (K2600 manual, MISC page).
+- **Per-sample gain — DONE + HW-CONFIRMED (2026-07-23).** `Soundfilehead.volumeAdjust`
+  (byte 2) is a signed i8 in **0.5 dB steps**; `write_krz` now aggregates the
+  referencing zones' `ZoneMapping.volume` (mean) per sample and `_write_sample_object`
+  writes `round(gain_dB × 2)` (`_vol_adjust_byte`, clamped ±i8) into volumeAdjust +
+  altVolumeAdjust. 0 dB → 0, so unity banks stay byte-identical (HW-verified filter
+  floppies unaffected). **HW check on the K2000R** (`tests/re_banks/gen_volume_adjust_test.py`
+  → `VOLADJ` floppy): three constant-pitch key-blocks at 0/−6/−12 dB stepped down in
+  loudness exactly as intended → the K2000 honours the field and the 0.5 dB/step scale
+  is right. (Note: K2000 labels middle C = MIDI 60 as **C3**; our `_note_name` uses the
+  C4=60 scientific convention — a one-octave display-only difference, no byte impact.)
 - **Partial key-tracking not expressible.** `_build_keymap_entries` writes a
   *constant* per-zone tuning → implicitly 100 % chromatic tracking. A source with
   reduced/zero key-tracking (drum maps) needs the per-key form

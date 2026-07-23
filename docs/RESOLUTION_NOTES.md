@@ -2143,24 +2143,32 @@ TODO item: *"KRZ: fidelity gaps found via ConvertWithMoss cross-reference"*.
 Source: a full byte-level diff of ConvertWithMoss's KurzFiler-derived
 `format/kurzweil/*.java` against `writers/krz_writer.py`. Ordered easiest-first.
 
-### 1. Per-sample gain (`Soundfilehead.volumeAdjust`) — ready to apply
+### 1. Per-sample gain (`Soundfilehead.volumeAdjust`) — DONE + HW-CONFIRMED (2026-07-23)
 
 `volumeAdjust` (Soundfilehead byte 2) and `altVolumeAdjust` (byte 3) are signed
-i8 in **0.5 dB steps** (−64.0…+63.5 dB — the MISC-page "Volume Adjust"). We write
-`0`. To carry a source zone's gain:
+i8 in **0.5 dB steps** (−64.0…+63.5 dB — the MISC-page "Volume Adjust"). We used
+to write `0`. Now applied in `writers/krz_writer.py`:
 
 ```python
-# in _write_sample_object(), replace the hardcoded volumeAdjust=0:
-def _vol_adjust_byte(gain_db: float) -> int:
-    return max(-128, min(127, round(gain_db * 2)))   # 0.5 dB steps, signed i8
-# ...
-vol_adj = _vol_adjust_byte(getattr(sample, 'gain_db', 0.0) or 0.0)
-# pack vol_adj into the '>...bb...' volumeAdjust/altVolumeAdjust fields (both same)
+def _vol_adjust_byte(volume_db: float) -> int:
+    return max(-128, min(127, round(volume_db * 2)))   # 0.5 dB steps, signed i8
 ```
 
-No hardware needed to *encode* it (documented in the K2600 manual + KurzFiler);
-worth one HW spot-check that the sign/step matches (louder at +N, not quieter).
-Interacts with nothing else — the program-layer amp path is separate.
+Gain is per-zone in our model (`ZoneMapping.volume`, dB) but the header field is
+per-sample, so `write_krz` aggregates the **mean** volume of every zone referencing
+a sample into `sample_gain_db[name]` and passes it to `_write_sample_object`, which
+packs `_vol_adjust_byte(gain) & 0xFF` into both volumeAdjust and altVolumeAdjust.
+The common MPC case is 1 zone : 1 sample (exact); a sample shared by zones at
+different levels averages (lossy, rare). **0 dB → 0**, so unity samples are
+byte-identical and the HW-verified filter floppies are untouched.
+
+**HW-confirmed on the K2000R (2026-07-23).** `tests/re_banks/gen_volume_adjust_test.py`
+builds a constant-pitch `VOLADJ` floppy: three key-blocks playing the *same* 240 Hz
+sine at unison, differing only in zone volume (0/−6/−12 dB → bytes 0/−12/−24). On
+hardware each block stepped down in loudness exactly as intended → the K2000 honours
+the field and the 0.5 dB/step scale is correct. (An initial 0/−12/−24 dB build had a
+silent −24 dB block = below monitor level, plus an octave-label mismatch — the K2000
+calls MIDI 60 "C3", our `_note_name` calls it "C4"; display-only, no byte impact.)
 
 ### 2. Partial key-tracking in the keymap entry `tuning` — needs a test source
 

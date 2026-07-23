@@ -238,8 +238,15 @@ class _BlockWriter:
 # Sample object  (KSample + Soundfilehead + Envelopes)
 # ---------------------------------------------------------------------------
 
+def _vol_adjust_byte(volume_db: float) -> int:
+    """Soundfilehead.volumeAdjust encoding: a signed i8 in 0.5 dB steps
+    (the "Volume Adjust" MISC-page parameter, K2600 manual range −64.0..+63.5 dB).
+    0 dB → 0 (no change), so unity-gain samples are byte-identical to before."""
+    return max(-128, min(127, round(volume_db * 2)))
+
+
 def _write_sample_object(f, sample: SampleData, obj_id: int,
-                          word_offset: int) -> None:
+                          word_offset: int, volume_db: float = 0.0) -> None:
     num_words = len(sample.data) // 2
     loop_start_w = sample.loop_start
     loop_end_w   = sample.loop_end if sample.loop_end > 0 else num_words - 1
@@ -297,11 +304,15 @@ def _write_sample_object(f, sample: SampleData, obj_id: int,
     # Soundfilehead (32 bytes) — single mono header
     # offsetToEnvelope: for 1 header, envofs=0, value=0+8=8
     # altOffsetToEnvelope: 0+6=6
+    # volumeAdjust / altVolumeAdjust: per-sample gain, signed i8 in 0.5 dB steps.
+    # Our gain is per-zone (ZoneMapping.volume); write_krz aggregates it per sample
+    # and passes it here.  0 dB → 0, so unity samples are unchanged (pending HW).
+    va = _vol_adjust_byte(volume_db) & 0xFF
     f.write(struct.pack('>BBBBhh',
         sample.root_note & 0xFF,
         sfh_flags & 0xFF,
-        0,    # volumeAdjust
-        0,    # altVolumeAdjust
+        va,   # volumeAdjust      (signed i8, 0.5 dB steps)
+        va,   # altVolumeAdjust   (same, applied when the Alt start is active)
         max_pitch & 0xFFFF,
         0,    # offsetToName
     ))
@@ -1024,6 +1035,19 @@ def write_krz(bank: Bank, output_path: str) -> None:
     sample_id_map   = {s.name: base_id + i for i, s in enumerate(samples)}
     samples_by_name = {s.name: s for s in samples}
 
+    # Per-sample gain.  The KRZ Soundfilehead.volumeAdjust is per-sample, but our
+    # gain lives per-zone (ZoneMapping.volume, dB), so aggregate the volume of every
+    # zone referencing a sample (mean).  The common MPC case is 1 zone : 1 sample →
+    # exact; a sample shared by zones at different levels averages (lossy but rare).
+    # Zones default to 0 dB (full) → 0 byte → no change, so HW-verified unity banks
+    # stay byte-identical.
+    _sample_vols: dict[str, list] = {}
+    for _preset in bank.presets:
+        for _voice in _preset.voices:
+            for _z in _voice.zones:
+                _sample_vols.setdefault(_z.sample_name, []).append(_z.volume)
+    sample_gain_db = {name: sum(v) / len(v) for name, v in _sample_vols.items()}
+
     # Pre-compute per-sample word offsets into the PCM region
     word_offsets: list[int] = []
     cursor = 0
@@ -1097,9 +1121,11 @@ def write_krz(bank: Bank, output_path: str) -> None:
         # --- Sample objects ---
         for i, sample in enumerate(samples):
             sid = base_id + i
-            _write_sample_object(f, sample, sid, word_offsets[i])
+            gain = sample_gain_db.get(sample.name, 0.0)
+            _write_sample_object(f, sample, sid, word_offsets[i], gain)
             print(f"  Sample  [{sid}] '{sample.name}': "
-                  f"{len(sample.data)//2} words @ {sample.sample_rate} Hz")
+                  f"{len(sample.data)//2} words @ {sample.sample_rate} Hz"
+                  + (f", {gain:+.1f} dB" if _vol_adjust_byte(gain) else ""))
 
         # --- Keymap objects (one per voice) ---
         for pi, preset in enumerate(bank.presets):
