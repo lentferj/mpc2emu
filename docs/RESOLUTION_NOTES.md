@@ -16,6 +16,43 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 
 ---
 
+## §AUTOLOOP — Auto sustain-loop for sustained samples (design)
+
+**Goal.** Set a clean forward sustain loop in the steady region so held notes
+sustain on the target sampler. The autosampler follow-on to `--trim-tail`
+(`processors/tail_trim.py`): trim the dead tail (dropping the whole-take default
+loop), then place a *real* sustain loop. New `processors/auto_loop.py` +
+`--auto-loop` flag, run right after `--trim-tail` in `convert.py`.
+
+**Algorithm (reuse the single-cycle DSP — pure Python, no numpy):**
+1. `region = single_cycle._sustain_start(sig)` — skip the attack.
+2. `p, conf = single_cycle._detect_period(sig, region, sr, root0)` then
+   `p_float = _refine_period(...)` — fundamental period, root-note-primed.
+3. Choose a loop length = an **integer number of periods** (a few hundred ms, or
+   `--auto-loop-len`), so start and end are in phase.
+4. Cross-correlate candidate end points against the start window to pick the pair
+   with the best waveform match within the steady region; snap both to **rising
+   zero-crossings** (`single_cycle._find_rising_zero`).
+5. Optional short equal-power **crossfade** across the splice to kill any residual
+   seam (write the crossfaded samples into the loop tail).
+6. Set `loop_type=FORWARD`, `loop_start`, `loop_end` (inclusive — codebase
+   convention). Every writer already emits loop points (E4B `smpl`, KRZ
+   `sampleEnd`/loop bit).
+
+**Knobs:** `--auto-loop [MS]` (target loop length), `--auto-loop-xfade MS`,
+confidence log + `[LOW CONFIDENCE — audition]` flag like single-cycle.
+
+**Edge cases:** unpitched/noisy → best-effort, flag low confidence; already-looped
+(real sustain loop) → leave unless `--force`; percussion/one-shots → skip (pairs
+with `--trim-tail-keep-loops`, which protects loops).
+
+**Validation:** dump looped WAVs (`smpl` chunk) for audition like
+`single_cycle._dump_cycle`; **HW audition** the seam on E4XT + K2000 before
+declaring done (loop-click is the usual failure). Cross-ref the open-source prior
+art: LoopAuditioneer (autocorr loop search) and PyMusicLooper.
+
+---
+
 ## §CR — Code-review findings (2026-06-10), fix recipes
 
 Items confirmed by the high-effort review (`TODO.md` "Code-review findings").

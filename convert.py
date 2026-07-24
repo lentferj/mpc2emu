@@ -486,6 +486,34 @@ def main():
              'not stored in the XPM). See docs/lfo_sync_rates.md for the table.')
     ap.add_argument('--jobs', type=int, default=None, metavar='N',
         help='Parallel workers for resampling (default: cpu_count-1)')
+    ap.add_argument('--trim-tail', nargs='?', const=72.0, type=float, default=None,
+        metavar='DB',
+        help='Cleanly cut the decaying tail + trailing silence off the END of '
+             'each sample (great for fixed-length autosampler captures, e.g. the '
+             "MPC ONE Autosampler's flat 4 s takes). The cut lands where the "
+             "signal decays into the sample's own noise floor (adaptive, so a real "
+             'analog/dither floor is still removed), with a short click-free '
+             'fade-out (--trim-tail-fade). DB is a *ceiling* below peak that cuts '
+             'INTO the note when set high: bare/72 = "silence only" (keep all '
+             'audible decay); 45 trims into the natural release for a tighter '
+             'sample. By default a sample whose loop spans the trimmed tail (an '
+             "autosampler's whole-take loop) has that loop DROPPED so the result "
+             'is a clean one-shot — see --trim-tail-keep-loops. Runs before '
+             'single-cycle/reduce/resample so everything downstream sees the '
+             'shortened samples.')
+    ap.add_argument('--trim-tail-fade', type=float, default=5.0, metavar='MS',
+        help='With --trim-tail: fade-out length (ms) ending exactly at the new '
+             'sample end, to avoid a click (default: 5).')
+    ap.add_argument('--trim-tail-keep-loops', action='store_true',
+        help='With --trim-tail: never trim a sample that carries a loop whose end '
+             'lies in the tail — preserve the loop (and any silence inside it) by '
+             'skipping the trim for that sample, instead of dropping the loop and '
+             'shortening it. Use this when the input is percussion / drum-loop / '
+             'rhythmic material whose loop is musically meaningful and may legit- '
+             'imately contain trailing silence (e.g. a one-bar loop with space on '
+             'the last beat): trimming that silence would break the loop length. '
+             'Sustained one-shots (organ, pads, strings) do NOT need this — their '
+             'autosampler loop is just a whole-take default worth dropping.')
     ap.add_argument('--single-cycle', nargs='?', const='auto', default=None,
         metavar='auto|N',
         help='Turn each sample into a looped oscillator so the sampler plays it '
@@ -634,6 +662,18 @@ def main():
         print(f"  [LFO] {_n_synced} tempo-synced LFO(s) reproduced at "
               f"{args.lfo_sync_bpm:g} BPM (the XPM has no tempo; override with "
               f"--lfo-sync-bpm). E4XT can't tempo-follow; see docs/lfo_sync_rates.md.")
+
+    # ── Tail trim ───────────────────────────────────────────────────────────────
+    # Runs first (before single-cycle/reduce/resample) so the shortened samples
+    # flow through the rest of the pipeline at their real sizes.
+    if args.trim_tail is not None:
+        _thr_db = -abs(args.trim_tail)             # accept 60 or -60 → depth below peak
+        print(f"\n[{step_n}] Tail trim ({_thr_db:g} dB below peak)...")
+        step_n += 1
+        from processors.tail_trim import trim_tail_bank
+        for bank in source_banks:
+            trim_tail_bank(bank, thresh_db=_thr_db, fade_ms=args.trim_tail_fade,
+                           drop_full_loop=not args.trim_tail_keep_loops)
 
     # ── Single-cycle oscillator extraction ─────────────────────────────────────
     # Runs first so the shrunk samples flow through reduce/resample/fit/split with

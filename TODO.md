@@ -1,5 +1,24 @@
 # mpc2emu — Open Items
 
+## Auto-loop sustained samples (ENHANCEMENT — larger effort, OPEN 2026-07-24)
+
+Automatically place a **clean sustain loop** in the steady region of a sustained
+sample (organ, strings, pads, synth) so a held note sustains indefinitely on the
+target sampler — the classic autosampler follow-on to `--trim-tail`. Pairs with it:
+trim the dead tail, then loop the sustain. This is the feature behind the LoopAudi-
+tioneer / PyMusicLooper tools discussed 2026-07-24.
+
+Sketch: locate the steady-state sustain (reuse `single_cycle._sustain_start`),
+detect the fundamental period (reuse `single_cycle._detect_period` /
+`_refine_period`), search cross-correlation for the best loop-start/loop-end pair an
+integer number of periods apart, snap both to rising zero-crossings, optional short
+crossfade at the splice, write `loop_type=FORWARD` + `loop_start/end`. A new
+`processors/auto_loop.py` + `--auto-loop` flag; feeds every writer (E4B/KRZ carry
+loop points already). **Status:** not started — larger effort (DSP + per-writer
+verification + HW audition). Design notes in `docs/RESOLUTION_NOTES.md §AUTOLOOP`.
+
+**Blocked on:** nothing to start; needs HW audition of loop seams once drafted.
+
 ## K2000R "Object → Delete" LOCKUP (OPEN, 2026-06-25) — needs factory resets
 
 Deleting a program loaded from a converted KRZ locks up the K2000R (~2 factory-reset
