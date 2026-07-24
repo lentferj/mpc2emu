@@ -62,9 +62,11 @@ That mapping is reverse-engineered against real E4XT and K2000R hardware; the
 what transfers and how it was verified.
 
 **Vintage resampling** can optionally run every sample through a model of the
-EMU Emulator II (8-bit, 27.5 kHz, gritty) or Emax I (12-bit) signal path —
-anti-alias → decimate → gain-stage → truncate → dither → bandpass — for
-authentic lo-fi character rather than a clean bit-crush.
+EMU Emulator II (µ-law companded 8-bit, 27,777 Hz — quiet passages keep ~14-bit
+resolution, loud peaks and heavily transposed notes fall to true 8-bit grit) or
+Emax I (linear 12-bit, 27,500 Hz) signal path — anti-alias → decimate →
+gain-stage → quantize → bandpass — for authentic lo-fi character rather than a
+clean bit-crush.
 
 **Single-cycle synthesis** (`--single-cycle`) turns a sampled instrument into a
 synth: it extracts a short looped waveform from each sample so the sampler plays
@@ -775,8 +777,8 @@ Simulates the signal chain of two classic E-mu samplers:
 
 | Profile | Device | Bit depth | Sample rate | Character |
 |---|---|---|---|---|
-| `emulator2` | EMU Emulator II (1984) | 8-bit | 27,500 Hz | Hard truncation noise, RC anti-alias, slight DC offset |
-| `emax1` | EMU Emax I (1986) | 12-bit | 27,500 Hz | TPDF dither, cleaner noise floor |
+| `emulator2` | EMU Emulator II (1984) | 8-bit, µ-law companded | 27,777 Hz | µ-255 companding (~14-bit / ~84 dB on quiet passages, true 8-bit grit on loud peaks), RC anti-alias, slight DC offset |
+| `emax1` | EMU Emax I (1986) | 12-bit, linear | 27,500 Hz | TPDF dither, cleaner noise floor |
 
 Signal chain (6 stages):
 1. Anti-alias filter (1-pole RC for E2, 2-pole Butterworth for Emax)
@@ -788,8 +790,13 @@ Signal chain (6 stages):
    (common with modern WAV/SF2/SFZ libraries) loses far more resolution
    to the quantizer than the profile is meant to model, and ends up
    sounding noisier than the real hardware ever would.
-4. Requantisation + optional TPDF dither (now operating on a properly
-   gain-staged signal, so the output SNR matches the profile spec)
+4. Requantisation (now operating on a properly gain-staged signal, so the
+   output SNR matches the profile spec): the Emulator II's 8-bit storage is
+   **µ-law companded**, not linear — fine steps near zero, coarse steps
+   toward full scale, so quiet passages keep far more resolution than a
+   linear 8-bit truncation would give them, while loud peaks and heavily
+   transposed notes still fall to true 8-bit grit (its defining character).
+   Emax I quantizes linearly with TPDF dither instead.
 5. Bandpass coloring (output filter model, disable with `--no-bandpass`)
 6. Level restore: by default, each sample is scaled back down to its
    original peak level afterwards, so it keeps the loudness the patch was

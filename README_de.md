@@ -65,9 +65,12 @@ K2000R-Hardware reverse-engineered; die Abschnitte
 was übertragen wird und wie es verifiziert wurde.
 
 **Vintage-Resampling** kann optional jedes Sample durch ein Modell der
-Signalkette des EMU Emulator II (8 Bit, 27,5 kHz, rau) oder Emax I (12 Bit)
-laufen lassen — Anti-Alias → Dezimation → Gain-Staging → Truncation → Dither →
-Bandpass — für authentischen Lo-Fi-Charakter statt eines sauberen Bit-Crushes.
+Signalkette des EMU Emulator II (µ-law-companded 8 Bit, 27.777 Hz — bei leisen
+Passagen bleibt die Auflösung bei ~14 Bit, laute Spitzen und stark
+transponierte Noten fallen auf echte 8-Bit-Körnigkeit) oder Emax I (linear
+12 Bit, 27.500 Hz) laufen lassen — Anti-Alias → Dezimation → Gain-Staging →
+Quantisierung → Bandpass — für authentischen Lo-Fi-Charakter statt eines
+sauberen Bit-Crushes.
 
 **Single-Cycle-Synthese** (`--single-cycle`) verwandelt ein gesampeltes
 Instrument in einen Synthesizer: Aus jedem Sample wird eine kurze geloopte
@@ -811,8 +814,8 @@ Simuliert die Signalkette zweier klassischer E-mu-Sampler:
 
 | Profil | Gerät | Bit-Tiefe | Samplerate | Charakter |
 |---|---|---|---|---|
-| `emulator2` | EMU Emulator II (1984) | 8 Bit | 27.500 Hz | Hartes Truncation-Rauschen, RC-Filter, DC-Offset |
-| `emax1` | EMU Emax I (1986) | 12 Bit | 27.500 Hz | TPDF-Dither, saubereres Rauschen |
+| `emulator2` | EMU Emulator II (1984) | 8 Bit, µ-law-companded | 27.777 Hz | µ-255-Companding (~14 Bit / ~84 dB bei leisen Passagen, echte 8-Bit-Körnigkeit bei lauten Spitzen), RC-Filter, DC-Offset |
+| `emax1` | EMU Emax I (1986) | 12 Bit, linear | 27.500 Hz | TPDF-Dither, saubereres Rauschen |
 
 Signalkette (6 Stufen):
 1. Anti-Alias-Filter (1-polig RC für E2, 2-polig Butterworth für Emax)
@@ -825,8 +828,14 @@ Signalkette (6 Stufen):
    Libraries üblich), weit mehr Auflösung an den Quantisierer als das
    Profil eigentlich modellieren soll, und klingt am Ende rauschiger als
    die echte Hardware es je täte.
-4. Requantisierung + optionales TPDF-Dithering (arbeitet jetzt auf einem
-   korrekt ausgesteuerten Signal, sodass das Ausgangs-SNR der Profilvorgabe entspricht)
+4. Requantisierung (arbeitet jetzt auf einem korrekt ausgesteuerten Signal,
+   sodass das Ausgangs-SNR der Profilvorgabe entspricht): Der Emulator II
+   speichert seine 8 Bit **µ-law-companded**, nicht linear — feine Stufen
+   nahe Null, grobe Stufen Richtung Vollaussteuerung, sodass leise Passagen
+   deutlich mehr Auflösung behalten als eine lineare 8-Bit-Truncation
+   erlauben würde, während laute Spitzen und stark transponierte Noten
+   trotzdem auf echte 8-Bit-Körnigkeit fallen (sein prägender Charakter).
+   Der Emax I quantisiert stattdessen linear mit TPDF-Dither.
 5. Bandpass-Coloring (Ausgangsfiltermodell, deaktivierbar mit `--no-bandpass`)
 6. Pegel-Wiederherstellung: standardmäßig wird jedes Sample danach auf
    seinen ursprünglichen Spitzenpegel zurückskaliert, damit es die
