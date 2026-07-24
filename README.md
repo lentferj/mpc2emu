@@ -74,6 +74,14 @@ captures (e.g. the MPC ONE Autosampler's flat 4 s takes), where every note is
 followed by dead silence and a reverb tail worth removing. See
 [Tail Trim](#tail-trim) below.
 
+**Auto sustain-loop** (`--auto-loop`) places a clean, seamless forward loop in the
+steady part of each sustained sample (organ, strings, pads, choir, brass, analog
+synth) so a held note sustains indefinitely. The companion to `--trim-tail` (trim
+the dead tail, then loop the body). The seam is click-free by construction, and the
+loop length is **adaptive** — a steady tone gets a short RAM-cheap loop, a modulated
+tone (vibrato/tremolo/beating) gets a longer loop that spans whole modulation cycles
+so it sounds natural. See [Auto Sustain-Loop](#auto-sustain-loop) below.
+
 **Single-cycle synthesis** (`--single-cycle`) turns a sampled instrument into a
 synth: it extracts a short looped waveform from each sample so the sampler plays
 it as a static oscillator, and the hardware's own filter, envelopes and LFO shape
@@ -190,6 +198,9 @@ python convert.py /sfz/pianos/ --format e4b --reduce-key-zones 30 --iso
 
 # Autosampler captures: trim the dead tail + reverb off every note
 python convert.py /my/autosampled/ --from-samples --trim-tail --format e4b --iso
+
+# Autosampler captures: trim the tail, then loop the body so held notes sustain
+python convert.py /my/autosampled/ --from-samples --trim-tail --auto-loop --format e4b --iso
 ```
 
 ---
@@ -700,6 +711,59 @@ Runs first in the pipeline, before `--single-cycle` / `--reduce-*` /
 
 ---
 
+## Auto Sustain-Loop
+
+`--auto-loop[=auto|MS]` places a clean, seamless **forward sustain loop** in the
+steady region of each sustained sample, so a held note sustains indefinitely on the
+target sampler instead of playing once and stopping. It's the natural companion to
+`--trim-tail` — trim the fixed-length autosampler capture down to its body, then loop
+that body:
+
+```bash
+python convert.py /my/autosampled/ --from-samples --trim-tail --auto-loop --format e4b --iso
+```
+
+**Click-free by construction.** Both loop endpoints snap to rising zero-crossings,
+then an equal-power crossfade morphs the loop end into the samples that precede the
+loop start, ending exactly on the sample before it — so the wrap reproduces a
+continuous run of the original waveform (a synth's steep per-period edge included).
+Measured residual discontinuity is around −240 dB.
+
+**Adaptive "optimal" length.** Rather than a fixed length, mpc2emu measures how well
+the loop endpoints match across many candidate lengths (each a whole number of
+fundamental periods) and detects whether the tone carries a slow modulation:
+
+- a **steady** tone (little movement) takes the *shortest* transparent loop — cheap
+  on sample RAM and indistinguishable from the source;
+- a **modulated** tone (vibrato, tremolo, or detuned-oscillator beating) takes the
+  *longest* transparent loop up to a cap, so the loop spans a whole number of
+  modulation cycles and sounds natural rather than static.
+
+Pass a number (`--auto-loop 250`) to force a target length in milliseconds instead.
+
+**Best-effort and honest.** Already-looped, too-short, and unpitched samples are left
+alone. Solo/pure timbres (flute, cello, clean choir, analog synth) loop excellently;
+inherently hard material (a dense detuned string section, noisy analog) can't be
+looped transparently by anything — those get a longer crossfade and a
+`[LOW-QUALITY — audition]` flag, or are skipped above `--auto-loop-min-quality`.
+
+| Option | Effect |
+|---|---|
+| `--auto-loop [auto\|MS]` | Enable; adaptive length (default) or a forced target in ms |
+| `--auto-loop-xfade MS` | Crossfade length at the splice (default 25; grows for poor matches) |
+| `--auto-loop-max-ms MS` | Cap on the adaptive length for modulated tones (default 600) |
+| `--auto-loop-min-quality COST` | Skip samples whose best endpoint match is worse than COST (default 0.30; 0 = never skip) |
+| `--auto-loop-force` | Loop even already-looped / low-quality samples (replaces existing loops) |
+| `--auto-loop-trim` | Drop the audio after the loop end to save RAM (the sampler envelope shapes the release) |
+| `--auto-loop-dump-dir DIR` | Also export each looped sample as a WAV with its loop embedded (`smpl` chunk) for audition |
+
+`--auto-loop` runs after `--trim-tail` and before `--single-cycle` / `--resample`
+(which rescales the loop points). It's an *alternative* to `--single-cycle`: auto-loop
+keeps the full timbre and loops a musical chunk of it, whereas single-cycle collapses
+the sample to a tiny one-cycle oscillator.
+
+---
+
 ## Single-Cycle Synthesis
 
 `--single-cycle[=auto|N]` replaces each sample with a short, cleanly-looped slice
@@ -917,6 +981,7 @@ mpc2emu/
 │   ├── resampler.py             # Vintage resampler (EMU E2 / Emax I)
 │   ├── zone_reducer.py          # Key-zone / velocity-layer thinning; velocity-layer split (--split-velocity-layers)
 │   ├── single_cycle.py          # Single-cycle oscillator extraction + retune (--single-cycle)
+│   ├── auto_loop.py             # Seamless adaptive-length sustain loop (--auto-loop)
 │   ├── tail_trim.py             # Adaptive tail/silence removal (--trim-tail)
 │   └── loop_renderer.py         # Ping-pong → forward loop (bakes the bounce into PCM)
 └── tests/

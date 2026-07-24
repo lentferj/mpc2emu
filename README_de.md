@@ -78,6 +78,16 @@ fester Länge (z. B. die 4-Sekunden-Takes des MPC ONE Autosampler), bei denen
 auf jede Note digitale Stille und ein Reverb-Schwanz folgen, die es sich zu
 entfernen lohnt. Siehe [Tail Trim](#tail-trim) weiter unten.
 
+**Auto-Sustain-Loop** (`--auto-loop`) legt einen sauberen, nahtlosen Vorwärts-Loop
+in den stationären Teil jedes gehaltenen Samples (Orgel, Streicher, Pads, Chor,
+Bläser, Analogsynth), sodass eine gehaltene Note endlos klingt. Das Gegenstück zu
+`--trim-tail` (den toten Schwanz abschneiden, dann den Körper loopen). Der Übergang
+ist konstruktionsbedingt klickfrei, und die Loop-Länge ist **adaptiv** — ein
+stationärer Ton bekommt einen kurzen, RAM-sparenden Loop, ein modulierter Ton
+(Vibrato/Tremolo/Schwebung) einen längeren Loop, der ganze Modulationszyklen
+umfasst und dadurch natürlich klingt. Siehe [Auto-Sustain-Loop](#auto-sustain-loop)
+weiter unten.
+
 **Single-Cycle-Synthese** (`--single-cycle`) verwandelt ein gesampeltes
 Instrument in einen Synthesizer: Aus jedem Sample wird eine kurze geloopte
 Wellenform extrahiert, sodass der Sampler sie als statischen Oszillator spielt
@@ -195,6 +205,9 @@ python convert.py /sfz/pianos/ --format e4b --reduce-key-zones 30 --iso
 
 # Autosampler-Aufnahmen: toten Schwanz + Reverb jeder Note abschneiden
 python convert.py /my/autosampled/ --from-samples --trim-tail --format e4b --iso
+
+# Autosampler-Aufnahmen: Schwanz kürzen, dann Körper loopen für gehaltene Noten
+python convert.py /my/autosampled/ --from-samples --trim-tail --auto-loop --format e4b --iso
 ```
 
 ---
@@ -731,6 +744,62 @@ Läuft als Erstes in der Pipeline, vor `--single-cycle` / `--reduce-*` /
 
 ---
 
+## Auto-Sustain-Loop
+
+`--auto-loop[=auto|MS]` legt einen sauberen, nahtlosen **Vorwärts-Sustain-Loop** in
+den stationären Bereich jedes gehaltenen Samples, sodass eine gehaltene Note endlos
+klingt, statt einmal abzuspielen und zu stoppen. Das natürliche Gegenstück zu
+`--trim-tail` — die Autosampler-Aufnahme fester Länge auf ihren Körper kürzen und
+diesen dann loopen:
+
+```bash
+python convert.py /my/autosampled/ --from-samples --trim-tail --auto-loop --format e4b --iso
+```
+
+**Konstruktionsbedingt klickfrei.** Beide Loop-Endpunkte rasten auf steigende
+Nulldurchgänge ein, dann überblendet eine gleichlaute (equal-power) Kreuzblende das
+Loop-Ende in die Samples vor dem Loop-Start hinein und endet exakt auf dem Sample
+davor — der Übergang reproduziert also einen durchgehenden Ausschnitt der
+Originalwellenform (auch die steile Flanke eines Synth-Sägezahns). Die gemessene
+Rest-Unstetigkeit liegt bei etwa −240 dB.
+
+**Adaptive „optimale" Länge.** Statt einer festen Länge misst mpc2emu, wie gut die
+Loop-Endpunkte über viele Kandidatenlängen (jeweils eine ganze Zahl von Grundperioden)
+zusammenpassen, und erkennt, ob der Ton eine langsame Modulation trägt:
+
+- ein **stationärer** Ton (wenig Bewegung) bekommt den *kürzesten* transparenten Loop
+  — RAM-sparend und vom Original nicht zu unterscheiden;
+- ein **modulierter** Ton (Vibrato, Tremolo oder Schwebung verstimmter Oszillatoren)
+  bekommt den *längsten* transparenten Loop bis zu einer Obergrenze, sodass der Loop
+  eine ganze Zahl von Modulationszyklen umfasst und natürlich statt statisch klingt.
+
+Mit einer Zahl (`--auto-loop 250`) lässt sich stattdessen eine Ziellänge in
+Millisekunden erzwingen.
+
+**Ehrlich und best-effort.** Bereits geloopte, zu kurze und untonale Samples bleiben
+unangetastet. Solo-/reine Klangfarben (Flöte, Cello, sauberer Chor, Analogsynth)
+loopen hervorragend; inhärent schwieriges Material (ein dichter verstimmter
+Streichersatz, verrauschtes Analog) lässt sich von nichts transparent loopen — diese
+bekommen eine längere Kreuzblende und eine `[LOW-QUALITY — audition]`-Markierung oder
+werden oberhalb von `--auto-loop-min-quality` übersprungen.
+
+| Option | Wirkung |
+|---|---|
+| `--auto-loop [auto\|MS]` | Aktivieren; adaptive Länge (Standard) oder erzwungene Ziellänge in ms |
+| `--auto-loop-xfade MS` | Kreuzblendenlänge am Übergang (Standard 25; wächst bei schlechter Passung) |
+| `--auto-loop-max-ms MS` | Obergrenze der adaptiven Länge für modulierte Töne (Standard 600) |
+| `--auto-loop-min-quality COST` | Samples überspringen, deren beste Endpunkt-Passung schlechter als COST ist (Standard 0.30; 0 = nie) |
+| `--auto-loop-force` | Auch bereits geloopte / minderwertige Samples loopen (ersetzt bestehende Loops) |
+| `--auto-loop-trim` | Audio nach dem Loop-Ende verwerfen, um RAM zu sparen (die Sampler-Hüllkurve formt das Release) |
+| `--auto-loop-dump-dir DIR` | Jedes geloopte Sample zusätzlich als WAV mit eingebettetem Loop (`smpl`-Chunk) zum Probehören exportieren |
+
+`--auto-loop` läuft nach `--trim-tail` und vor `--single-cycle` / `--resample` (das
+die Loop-Punkte umskaliert). Es ist eine *Alternative* zu `--single-cycle`:
+Auto-Loop behält die volle Klangfarbe und loopt einen musikalischen Ausschnitt,
+während Single-Cycle das Sample auf einen winzigen Ein-Zyklus-Oszillator reduziert.
+
+---
+
 ## Single-Cycle-Synthese
 
 `--single-cycle[=auto|N]` ersetzt jedes Sample durch einen kurzen, sauber
@@ -960,6 +1029,7 @@ mpc2emu/
 │   ├── resampler.py             # Vintage Resampler
 │   ├── zone_reducer.py          # Key-Zonen-/Velocity-Layer-Ausdünnung; Velocity-Layer-Split (--split-velocity-layers)
 │   ├── single_cycle.py          # Single-Cycle-Oszillator-Extraktion + Nachstimmen (--single-cycle)
+│   ├── auto_loop.py             # Nahtloser Sustain-Loop adaptiver Länge (--auto-loop)
 │   ├── tail_trim.py             # Adaptives Entfernen von Schwanz/Stille (--trim-tail)
 │   └── loop_renderer.py         # Ping-Pong → Vorwärts-Loop (Bounce ins PCM eingebacken)
 └── tests/
