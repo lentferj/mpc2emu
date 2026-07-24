@@ -94,21 +94,29 @@ class VintageProfile:
     # DC offset (some E2 units had slight DC offset on output)
     dc_offset: float        # -1.0..+1.0, fraction of full scale; 0 = none
 
+    # µ-law companding (EMU Emulator II): 0 = off (linear quantize, e.g. Emax);
+    # 255 = µ-255 companded 8-bit storage (fine steps near zero → ~14-bit-quiet,
+    # coarse near full scale → true 8-bit grit on peaks).  See _mu_law_quantize.
+    mu_law: float = 0.0
+
 
 # EMU Emulator II (1984)
-# - 8-bit linear PCM, 27.5 kHz
+# - 8-bit *companded* storage (µ-255 companding of a ~12-bit signal — NOT linear
+#   PCM): ~14-bit effective resolution / ~84 dB dynamic range on quiet passages,
+#   degrading to true 8-bit grit on loud peaks and heavily transposed notes.
+# - Fixed 27,777 Hz sample rate (the EII cannot vary it).
 # - Simple RC anti-aliasing (one-pole, ~10 kHz)
-# - CEM5505 VCF in the signal path (modeled as gentle HF rolloff)
-# - Notoriously gritty quantization noise — NO dither
+# - CEM/SSM VCF in the signal path (modeled as gentle HF rolloff)
+# - Notoriously gritty on peaks — NO dither
 # - Output transformer adds slight low-end coloring
 EMULATOR_II = VintageProfile(
     name             = "emulator2",
-    display_name     = "EMU Emulator II (8-bit / 27.5 kHz)",
-    sample_rate      = 27500,
+    display_name     = "EMU Emulator II (8-bit µ-law / 27.777 kHz)",
+    sample_rate      = 27777,     # EII fixed rate (was wrongly 27500)
     bit_depth        = 8,
     aa_cutoff_hz     = 9500.0,    # Measured from E2 schematics
     aa_poles         = 1,
-    truncate         = True,      # E2 ADC truncates, no dither
+    truncate         = True,      # E2 companding quantizer truncates, no dither
     dither           = False,
     noise_floor_bits = 0.6,       # Extra DAC noise (roughly -43 dBFS)
     bp_enabled       = True,
@@ -116,6 +124,7 @@ EMULATOR_II = VintageProfile(
     bp_hi_hz         = 11000.0,   # CEM filter + output path HF loss
     bp_poles         = 1,
     dc_offset        = 0.002,     # Slight DC from unbalanced output stage
+    mu_law           = 255.0,     # µ-255 companding — the EII's defining character
 )
 
 # EMU Emax I (1986)
@@ -290,6 +299,54 @@ def _quantize(samples: list[float], bit_depth: int,
     return out
 
 
+def _mu_law_quantize(samples: list[float], bits: int, mu: float,
+                     truncate: bool, noise_floor_bits: float) -> list[float]:
+    """Quantize through a µ-law companded codec — the EMU Emulator II's storage
+    path (a ~12-bit signal companded into `bits`-bit storage, expanded on
+    playback), as opposed to the linear `_quantize` used by the 12-bit Emax.
+
+    The companding curve  c = sign(x)·ln(1+µ|x|)/ln(1+µ)  is quantized uniformly
+    in the *companded* domain, so the effective linear step is tiny near zero and
+    grows toward full scale: quiet passages keep ~14-bit resolution / ~84 dB
+    dynamic range while loud peaks (and heavily transposed notes) fall to true
+    8-bit grit.  That non-linear resolution shift is the EII's signature texture,
+    which plain linear 8-bit truncation cannot reproduce.
+
+    Gain-staging toward full scale (done by the caller before this) is what lets
+    the codec use its whole range, exactly as on the hardware.  DAC hiss
+    (`noise_floor_bits`) is added at the analog output, i.e. after expansion.
+    The EII does not dither, so there is no dither term here.
+    """
+    levels = 2 ** (bits - 1)               # companded-domain steps per side (8-bit → 128)
+    log1p_mu = math.log1p(mu)
+    noise_amp = (2 ** noise_floor_bits - 1) / levels if noise_floor_bits > 0 else 0.0
+    rng = random.Random(42)                # deterministic, matches _quantize
+
+    out = []
+    for x in samples:
+        # Compress: linear → companded domain [-1, 1]
+        x = 1.0 if x > 1.0 else -1.0 if x < -1.0 else x
+        s = -1.0 if x < 0.0 else 1.0
+        c = s * math.log1p(mu * abs(x)) / log1p_mu
+
+        # Quantize the companded value to `bits` (truncate, like the EII)
+        scaled = c * levels
+        q = math.floor(scaled) if truncate else math.floor(scaled + 0.5)
+        q = max(-levels, min(levels - 1, q))
+        cq = q / levels
+
+        # Expand: companded → linear   (inverse µ-law)
+        sc = -1.0 if cq < 0.0 else 1.0
+        lin = sc * math.expm1(abs(cq) * log1p_mu) / mu
+
+        # Analog DAC hiss at the output (signal-independent)
+        if noise_amp > 0.0:
+            lin += rng.gauss(0.0, noise_amp)
+        out.append(lin)
+
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Main resampler
 # ---------------------------------------------------------------------------
@@ -365,21 +422,32 @@ def resample_vintage(
     if gain != 1.0:
         signal = [x * gain for x in signal]
 
-    # --- Stage 4: Quantize + dither ---
+    # --- Stage 4: Quantize (µ-law companded for the EII, else linear) ---
     if verbose:
         noise_note = (f', +noise floor {profile.noise_floor_bits:.1f}b'
                       if profile.noise_floor_bits else '')
+        codec = (f'µ-{profile.mu_law:.0f} companded' if profile.mu_law
+                 else ('truncate' if profile.truncate else 'round'))
         print(f"      [4/6] Quantize to {profile.bit_depth}-bit "
-              f"({'truncate' if profile.truncate else 'round'}"
+              f"({codec}"
               f"{', +TPDF dither' if profile.dither else ''}"
               f"{noise_note})")
-    signal = _quantize(
-        signal,
-        profile.bit_depth,
-        profile.truncate,
-        profile.dither,
-        profile.noise_floor_bits,
-    )
+    if profile.mu_law:
+        signal = _mu_law_quantize(
+            signal,
+            profile.bit_depth,
+            profile.mu_law,
+            profile.truncate,
+            profile.noise_floor_bits,
+        )
+    else:
+        signal = _quantize(
+            signal,
+            profile.bit_depth,
+            profile.truncate,
+            profile.dither,
+            profile.noise_floor_bits,
+        )
 
     # --- Stage 5: Bandpass coloring ---
     if bandpass and profile.bp_enabled:
