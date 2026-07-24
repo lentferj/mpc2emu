@@ -15,9 +15,11 @@ venv/
 CLAUDE.md
 .claude/
 
-# Local test data, demo sources, and generated converter output (not distributable)
+# Local test data, demo sources, generated converter output, and personal
+# batch/analysis scripts (hardcoded local paths — not distributable)
 demo_sources/
 tests/
+tools/
 *.E4B
 *.KRZ
 *.e4b
