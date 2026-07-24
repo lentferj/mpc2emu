@@ -1,5 +1,37 @@
 # mpc2emu — Open Items
 
+## E4B resample pitch — RESOLVED + HW-CONFIRMED (2026-07-24)
+
+**DONE — hardware-confirmed on the E4XT.** EOS4 pitches from E3S1 **`[58-59]` =
+round(768·log2(rate/44100))** (1/64-semitone), NOT from `[54-57]`; we wrote it 0 →
+sub-44.1kHz samples played sharp by 44100/rate. `[18-21]` is a non-deterministic
+token (not pitch), left 0. Fix in `writers/e4b_writer._sample_header`. Full RE in
+`docs/RESOLUTION_NOTES.md §E4BRATE`. **Commit-ready.** (Kept here as a record; safe
+to delete.) Historical RE detail below.
+
+### (was) EOS4 ignores our sample-rate field — needs HW diff
+
+Any E4B sample stored **below the E4XT native 44.1 kHz** plays **sharp by exactly
+`src_rate/dst_rate`**. HW-confirmed on K2-01/02/03 autosampler banks
+(`K2_AUTOSAMP.iso`): plain (44100) and `--single-cycle` (~44–45 kHz, baked) are in
+tune; every `--resample` variant (emax1/emulator2 → 27500 Hz: E2/EX/E2SC/EXSC) is
++8.18 st (= 44100/27500 → C3 sounds G#3), whether looped or one-shot.
+
+**Not a resampling-quality bug and NOT fixable by upsampling** (that discards the
+RAM saving that is the point). The E4XT *does* honor low rates — EOS "Sample Rate
+Convert" (Sample Edit → Tools1 → SrCnv) lowers a sample's rate for "saving memory /
+increasing upward transposition range" and **keeps pitch** (4.0 manual p.211-212).
+So the bug is that `write_e4b` stores the rate **only at E3S1 `[54-57]`** — an
+offset taken from **emu3bm (EOS *3*)**, never HW-verified for EOS *4* — and EOS4
+reads the playback rate from a **different field** (candidates: `[58-59]`
+playback_rate or one of `parameters[6]` at `[70-93]`, all currently written 0).
+Plain works only because 44.1 kHz is EOS4's implicit default.
+
+**Status:** root-caused to the E4B writer's sample-rate field. KRZ/K2000 path is
+unaffected (different writer; K2000 honors rate via the `maxPitch` formula).
+**Blocked on:** a hardware artifact to diff — see `docs/RESOLUTION_NOTES.md §E4BRATE`
+for the SrCnv capture procedure and `tests/re_banks/diff_sample_rate_field.py`.
+
 ## Auto-loop sustained samples (ENHANCEMENT — larger effort, OPEN 2026-07-24)
 
 Automatically place a **clean sustain loop** in the steady region of a sustained

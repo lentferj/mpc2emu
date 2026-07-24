@@ -402,7 +402,18 @@ def _build_sample_header(sample: SampleData, sample_idx: int) -> bytes:
     # [50-53] loop_end_r = 0
 
     struct.pack_into('<I', hdr, 54, sample.sample_rate)  # [54-57] sample_rate u32
-    # [58-59] playback_rate = 0
+    # [58-59] pitch correction — HARDWARE-RE'd 2026-07-24 (RESOLUTION_NOTES §E4BRATE).
+    # EOS 4 does NOT derive playback pitch from [54-57] (that field is informational);
+    # it plays a sample at effective_rate = 44100 · 2^(f58/768), where f58 is a SIGNED
+    # 1/64-semitone offset here.  So a sample stored below 44.1 kHz with f58=0 plays
+    # SHARP by 44100/rate (e.g. 27500 → +8.18 st).  Setting f58 = round(768·log2(rate/
+    # 44100)) makes EOS play at the stored rate → in tune.  Verified against the E4XT's
+    # own Sample-Rate-Convert output (6 rates 11025-48000, ±1 unit / ≤3 cents); 44100
+    # → 0 so 44.1 kHz samples are byte-unchanged.  [18-21] stays 0 (a non-deterministic
+    # per-sample token EOS sets on modify, NOT pitch — verified it varies across saves).
+    if sample.sample_rate > 0 and sample.sample_rate != 44100:
+        f58 = int(round(768.0 * math.log2(sample.sample_rate / 44100.0)))
+        struct.pack_into('<h', hdr, 58, max(-32768, min(32767, f58)))
     struct.pack_into('<H', hdr, 60, options)             # [60-61] options
     struct.pack_into('<I', hdr, 62, STRUCT_SZ)           # [62-65] sample_data_offset_l = 92
     # [66-69] sample_data_offset_r = 0

@@ -16,6 +16,70 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 
 ---
 
+## §E4BRATE — EOS4 sample-rate field (how to fix the resample pitch bug)
+
+**Symptom.** E4B samples stored below 44.1 kHz play sharp by `src/dst` (27500 →
++8.18 st). See `TODO.md`. The E4XT honors low rates (SrCnv keeps pitch), so EOS4
+reads the playback rate from a field other than our E3S1 `[54-57]` (which came from
+emu3bm/EOS3). We currently write `[58-59]` playback_rate and `parameters[6]`
+(`[70-93]`) as 0.
+
+**RE procedure (hardware artifact — Jan).**
+1. Load `K2_AUTOSAMP` on the E4XT (from the ISO / ZuluSCSI). Note a **non-resampled**
+   sample's pitch — e.g. **S020** (a plain 44.1 kHz sample; plays A-something).
+2. Sample Edit key → select S020 → **Tools 1 (F2)** → **SrCnv (F4)** → enter a
+   **distinctive low rate (e.g. 22050)** → set filter (Smooth) → **OK**.
+   Confirm S020 **still plays the same pitch** (proves EOS keeps pitch on rate change).
+3. Save the bank back (new bank is fine). Hand the `.E4B` to Claude.
+
+**Diff.** `python3 tests/re_banks/diff_sample_rate_field.py <hw_bank>.E4B`
+— within the resaved (all-EOS4-authored) bank it diffs the SrCnv'd S020 (22050) vs
+an untouched neighbour (44100); the differing offset(s) holding `22050`
+(`0x5622`) is EOS4's real rate field. (SrCnv to 22050 also ~halves S020's PCM, so
+it is easy to identify even if `[54-57]` no longer carries the rate.)
+
+**Fix.** In `writers/e4b_writer` `_sample_header`, write `sample.sample_rate` into
+the field the diff reveals (keep `[54-57]` too, for EOS3 tools / our own parser).
+Then `resample_vintage` / `resample_to_rate` E4B output plays in tune at the reduced
+rate — no upsampling, RAM saving retained. Re-verify on HW, then update
+`docs/E4B_FORMAT.md` sample-header table with the corrected field.
+
+**RE PROGRESS 2026-07-24 — fields identified, encoding half-decoded.** Diffed the
+E4XT-resaved `B.010-K2_AUTOSAMP.E4B` (pulled from `HD0.img`, a **FAT32** ZuluSCSI
+image — `mcopy -i HD0.img ::/B.010-K2_AUTOSAMP.E4B out`) where **S020 = idx 20
+`P1 PL 19_A4` was SrCnv'd 44100 → 22050 and plays IN TUNE**. Against an untouched
+44.1 kHz neighbour (idx 19), the pitch-carrying fields — both **written 0 by our
+`_sample_header`** — are:
+  * `[54-57]` sample_rate — EOS4 *does* store the real rate (22050) but does NOT
+    pitch from it (our 27500 sets it too and plays sharp); informational/display.
+  * **`[58-59]`** (our "playback_rate"=0): EOS4 = `0xFD02` = **−766 signed** for the
+    2:1 drop. ≈ **−768 = −1 octave in 1/64-semitone units** (0.26 % off — see below).
+  * **`[18-21]`** (our "header"=0): EOS4 = `0xEB8B839C` (s32 −343178340) — a 32-bit
+    companion, encoding not yet solved from one point (not a clean cents/ratio/float).
+Both are non-zero ONLY on the converted sample (the 44.1 kHz neighbour has both 0),
+so together they are the sub-44.1-kHz pitch correction; leaving them 0 makes EOS4
+play at native rate → sharp by `native/rate`. NOTE EOS4 also grew every sample's
+PCM by +8/+12 bytes on resave (loop/format padding, not pitch).
+
+**SOLVED 2026-07-24 — fix implemented, pending HW confirm.** Jan SrCnv'd S018-S023
+to 11025/27500/22050/32000/33075/48000 (bank `B.011-K2_AUTOSAMP.E4B`). Fit
+(`tests/re_banks/fit_e4b_rate_fields.py`):
+  * **`[58-59]` (s16 LE) = round(768 · log2(rate / 44100))** — 768 = 64·12, i.e.
+    **1/64-semitone**. Fits all 6 points within ±2 (an exact fit uses base 44037,
+    but 44100 is the true f58=0 native — an untouched 45 kHz sample keeps f58=0 and
+    plays in tune, and 44100→0 leaves plain samples byte-unchanged). 48000 → +95
+    (positive above native). Deterministic (idx20=22050 gave −766 in BOTH B010/B011).
+  * **`[18-21]` — NOT pitch.** Same 22050 conversion gave `0xEB8B839C` in B010 but
+    `0x3B97FC3E` in B011 → non-deterministic per-sample token (checksum/id EOS sets
+    on modify). Left 0 (all our 44.1 kHz samples work with 0).
+Fix in `writers/e4b_writer._sample_header` (write f58 at offset 58 when rate≠44100).
+**DONE — HW-CONFIRMED on the E4XT 2026-07-24**: E2/EX/E2SC/EXSC play in tune; plain
+byte-unchanged. Commit-ready. (Also update `docs/E4B_FORMAT.md` sample-header table:
+`[58-59]` = pitch offset in 1/64-semitone, not "playback_rate"; `[18-21]` = opaque
+per-sample token, not "header".)
+
+---
+
 ## §AUTOLOOP — Auto sustain-loop for sustained samples (design)
 
 **Goal.** Set a clean forward sustain loop in the steady region so held notes
