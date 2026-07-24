@@ -402,6 +402,49 @@ bytes is currently understood:
 
 All other bytes are zero in mpc2emu's output.
 
+### 4.6 Sample chunk header (`E3S1` chunk body, 94 bytes)
+
+Layout confirmed from emu3bm's `struct emu3_sample` (92 bytes) plus the 2-byte
+`sample_idx` prefix EMU4/E4B adds in front of it:
+
+| Offset | Size | Field | Notes |
+|---|---|---|---|
+| `0:2`   | 2  | `sample_idx`   | **BE u16** |
+| `2:18`  | 16 | `name`         | sample name (+ trailing root-note text, see [§6.2](#62-name-encoding)) |
+| `22:26` | 4  | `start_l`      | LE u32, always `92` (= header size) |
+| `30:34` | 4  | `end_l`        | LE u32, `92 + pcm_bytes − 2` |
+| `38:42` | 4  | `loop_start_l` | LE u32, byte offset from struct start (`loop_start × 2 + 92`) |
+| `46:50` | 4  | `loop_end_l`   | LE u32, byte offset (`loop_end × 2 + 92`) |
+| `54:58` | 4  | `sample_rate`  | LE u32, Hz. **Informational only — EOS4 does NOT pitch from this field**, see below |
+| `58:60` | 2  | pitch offset   | **signed LE i16**, 1/64-semitone units — see below. Zero for an untouched 44.1 kHz sample |
+| `60:62` | 2  | `options`      | LE u16. `0x0020` = MONO_L; `0x0031` = MONO_L \| LOOP (forward; ping-pong is baked to forward upstream — EOS has no ping-pong mode) |
+| `62:66` | 4  | `sample_data_offset_l` | LE u32, always `92` |
+
+PCM data (16-bit LE) follows immediately at byte 94.
+
+**Pitch offset at `[58:60]` — hardware-RE'd 2026-07-24.** A sample stored below
+44.1 kHz plays **sharp by `44100 / stored_rate`** unless this field is set; the
+`sample_rate` field above is not used for playback pitch (EOS4 diverges here
+from EOS3's `emu3bm`, which this whole struct layout is otherwise sourced
+from). RE'd from hardware Sample-Rate-Convert captures (E4XT Sample Edit →
+Tools1 → SrCnv to 6 known rates, diffing the resaved bank's `E3S1` headers
+against an untouched 44.1 kHz sample in the same, EOS4-authored bank):
+
+```
+pitch_offset = round(768 · log2(rate / 44100))
+```
+
+Exact within ±2 units (≤3 cents) across the tested range (11025–48000 Hz);
+`768 = 64 × 12`, i.e. 1/64-semitone resolution. `mpc2emu` writes this whenever
+`sample_rate ≠ 44100` (`writers/e4b_writer.py`, `_sample_header`); a value of 0
+leaves an already-44.1 kHz sample byte-identical to before the fix.
+
+The companion field `[18:22]` (documented as `header = 0` above) was also
+found non-zero on a hardware-resaved, rate-converted sample, but is **not**
+pitch: the *same* rate conversion produced two different values across two
+separate hardware saves — a non-deterministic per-sample token (likely a
+checksum or edit-id), not signal. `mpc2emu` leaves it at 0.
+
 ---
 
 ## 5. Encoding conventions & hard-won lessons
