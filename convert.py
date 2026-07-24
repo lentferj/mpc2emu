@@ -28,69 +28,7 @@ Usage:
   python convert.py <input> [options]
   python convert.py <input> --info [--verbose]
   python convert.py --long-help                 # full README as a manual
-
-Options:
-  --info               Inspect input file(s) without converting
-  --verbose            Show per-zone detail with --info
-  --format FORMAT      Output: e4b | krz | talsmpl  (default: e4b)
-  --output-dir DIR     Output directory  (default: current directory)
-  --bank-size SIZE     Max bank size, e.g. 64MB / 65536K / 32 (bare = MB).
-    --max-bank-size      (alias)  Default 32 MB; E4XT max 128 MB, K2000 max 64 MB.
-  --max-preset-size SIZE  Cap each single preset/program (e.g. 8192K) so no one
-                       preset fills a whole bank; over-cap presets are thinned
-                       like an over-bank preset.  Default: no per-preset cap.
-  --bank-name NAME     Base name for output banks  (default: EMU_BANK)
-  --bank-start N       Number the output bank files B.NNN-NAME… starting at N,
-                       so they can be copied straight onto an existing E4XT
-                       volume (no --iso needed).  e.g. --bank-start 100
-  --overwrite          Overwrite existing output files without prompting
-                       (default: prompt before clobbering any existing file)
-  --wav-dir DIR        Extra directory for WAV sample search
-  --from-samples       Treat the input dir as a folder of WAVs (root note in the
-                       filename) → one auto-built multisample preset (also auto-
-                       detected for a WAV-only directory).
-  --middle-c {auto,C3,C4,C5}  Octave naming for filename root notes: which C =
-                       MIDI 60 (default auto — detect from embedded WAV roots).
-  --iso                Build a ZuluSCSI CD image (e4b → EMU3, krz → K2000 FAT16)
-  --hda                Build a ZuluSCSI SCSI hard disk image (.hda). e4b → E4XT
-                       EMU-fs/FAT disk; krz → K2000 FAT16 disk (HW-confirmed:
-                       loads from a ZuluSCSI HDx device).
-  --hda-size MB        HDA image size in MB. e4b default: auto (smallest 128 MB
-                       step that fits; max 14336). krz default: content + ~50%
-                       headroom to save onto (FAT16 max ~2047).
-  --hda-fs FS          E4B HDA filesystem: fat (EOS 4.7+, default, needs mtools)
-                       | emu (native EMU-fs, all EOS versions). Ignored for krz.
-  --add-to IMAGE       Append the bank(s) to an existing image in place, no
-                       rebuild / no emu3fs.  e4b → a .hda (FAT or EMU-fs); krz →
-                       a K2000 FAT16 CD (.iso) or hard disk (.hda), into BANKS/.
-  --folder NAME        With --add-to: target folder on the image (created if
-                       absent; default: root / Default Folder).
-  --on-duplicate {prompt,add-new,skip,overwrite}
-                       With --add-to, when a bank name already exists.
-  --floppy [KB]        Write each KRZ bank to a DOS FAT12 floppy image (.img)
-                       for a Gotek/FlashFloppy on the K2000R  [krz only;
-                       default 1440 = 1.44 MB].
-  --resample PROFILE   Vintage resampling: emulator2 | emax1
-  --no-bandpass        Skip bandpass coloring with --resample
-  --resample-keep-gain Keep the gain-staged "hot" level from --resample instead
-                       of restoring each sample's original level.
-  --max-sample-rate HZ Clean-downsample any sample above HZ down to HZ.  Buys
-                       K2000 up-pitch headroom + shrinks banks.  Defaults to
-                       24000 Hz for --format krz; pass 0 to disable.  No e4b
-                       default.
-  --reduce-key-zones PCT       Remove PCT% of per-voice key-zone samples,
-                               spreading survivors to fill the gaps (0-100)
-  --reduce-velocity-layers PCT Remove PCT% of per-preset velocity layers,
-                               spreading survivors to fill the gaps (0-100;
-                               independent of --reduce-key-zones)
-  --auto-fit           When a single preset is too big for one bank (or over
-                       --max-preset-size), auto-apply the least-lossy fitting
-                       reduction instead of failing (for batch/non-interactive
-                       runs; interactively you are prompted with sized options).
-  --lfo-sync-bpm BPM   Reference tempo for reproducing tempo-synced MPC LFOs as
-                       a fixed rate (default 120).  See docs/lfo_sync_rates.md.
-  --max-presets N      Max presets from SF2/GIG  (default: 64)
-  --jobs N             Parallel workers for resampling  (default: cpu_count-1)
+  python convert.py --help                      # full option reference
 
 When a single preset won't fit its bank, mpc2emu (in an interactive shell)
 prints sized suggestions — drop velocity layers / thin key zones / downsample —
