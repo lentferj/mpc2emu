@@ -80,6 +80,45 @@ per-sample token, not "header".)
 
 ---
 
+## §MPC39 — MPC Standalone 3.9.0 gzipped-JSON `.xpm` parser (how to fix)
+
+**What it is.** 3.9.0 hardware saves each `.xpm` as **gzip** (`1f 8b 08 …`).
+`gzip.decompress(raw)` yields a UTF-8 text header then a JSON body:
+
+```
+ACVS
+3.9.0.31
+SerialisableProgramData
+json
+Linux
+{ "data": { "version": 6, "name": "K2-01", "type": 1, "programPads": { … } } }
+```
+
+The header is line-delimited; the JSON starts at the first `{`.
+
+**Parser plan (`parsers/mpc39_parser.py`, register `.xpm` → dispatch by magic):**
+1. In `xpm_parser` (or the registry), sniff the first 3 bytes: if `1f 8b 08`,
+   `raw = gzip.decompress(raw)`. If the result begins with `ACVS`, hand off to the
+   new 3.9.0 JSON parser; else fall through to the existing XML path. (Keeps one
+   `.xpm` entry in `PARSERS` handling both old XML and new gzipped-JSON.)
+2. `body = raw[raw.index(b'{'):]`; `doc = json.loads(body)`.
+3. Walk `doc["data"]` → build `Bank`/`Preset`/`VoiceLayer`/`ZoneMapping`. Map the
+   keygroup/pad list (`programPads` and/or an instruments/keygroups array — RE
+   needed) to zones: sample ref, lo/hi key, lo/hi vel, root, tune, volume, pan,
+   plus filter/env/LFO where present (mirror the XML `xpm_parser` field mapping so
+   the two share the model-fill helpers). Samples resolve to the sidecar
+   `<name>_[ProgramData]/*.wav` via the existing `load_wav`.
+
+**RE still needed:** catalogue the JSON keys under `data` and confirm the
+key/velocity-zone and modulation layout. Dump: `python3 -c "import gzip,sys;
+sys.stdout.buffer.write(gzip.decompress(open('K2-01.xpm','rb').read()))"`.
+Reference programs: `/media/lentferj/3433-6435/SamplerExports/K2-0{1,2,3}.xpm`.
+
+**Until then:** `convert.py <name>_[ProgramData]/ --from-samples` converts the
+samples + auto-mapped zones (no program synth params).
+
+---
+
 ## §AUTOLOOP — Auto sustain-loop for sustained samples (design)
 
 **Goal.** Set a clean forward sustain loop in the steady region so held notes

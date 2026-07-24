@@ -32,6 +32,28 @@ unaffected (different writer; K2000 honors rate via the `maxPitch` formula).
 **Blocked on:** a hardware artifact to diff — see `docs/RESOLUTION_NOTES.md §E4BRATE`
 for the SrCnv capture procedure and `tests/re_banks/diff_sample_rate_field.py`.
 
+## MPC Standalone 3.9.0 `.xpm` — gzipped-JSON "ACVS" format unreadable (OPEN, 2026-07-24)
+
+Programs saved by **MPC Standalone firmware 3.9.0** (hardware — MPC ONE etc.) are
+**not** the XML `.xpm` `parsers/xpm_parser.py` expects. They are **gzip-compressed**
+(magic `1f 8b 08`); decompressed they start with a small text header
+`ACVS\n3.9.0.31\nSerialisableProgramData\njson\nLinux\n` followed by a large **JSON**
+document (`{"data":{"version":6,"name":...,"type":...,"programPads":{...}}}`).
+`xpm_parser` chokes with `not well-formed (invalid token): line 1, column 0`.
+
+**Impact:** these programs can only be converted today via their sidecar
+`<name>_[ProgramData]/` folder of note-named WAVs (`convert.py <dir> --from-samples`),
+which loses the program's synth params (filter/env/LFO/zones) — only the samples +
+auto-mapped key zones survive. Reference files: `/media/lentferj/3433-6435/
+SamplerExports/K2-0{1,2,3}.xpm` (+ their `_[ProgramData]` folders).
+
+**Status:** unresolved — needs a new parser (gunzip → strip header → parse JSON →
+map to the `Bank`/`Preset`/`VoiceLayer` model). Fix strategy in
+`docs/RESOLUTION_NOTES.md §MPC39`.
+
+**Blocked on:** RE of the 3.9.0 JSON schema (field→model mapping). Decompressed
+sample dumped at ~1 MB/program; keys under `data` need cataloguing.
+
 ## Auto-loop sustained samples (ENHANCEMENT — larger effort, OPEN 2026-07-24)
 
 Automatically place a **clean sustain loop** in the steady region of a sustained
