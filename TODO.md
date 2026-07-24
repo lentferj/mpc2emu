@@ -54,6 +54,33 @@ map to the `Bank`/`Preset`/`VoiceLayer` model). Fix strategy in
 **Blocked on:** RE of the 3.9.0 JSON schema (field→model mapping). Decompressed
 sample dumped at ~1 MB/program; keys under `data` need cataloguing.
 
+## MPC filter dropped at max cutoff (BUG, small — OPEN 2026-07-24)
+
+`parsers/pgm_parser.py:285` (`if f1_type ... and f1_freq < 100`) sets `filter_type=0`
+when an MPC pad's cutoff is fully open, so the pad **loses its resonance** (and any
+filter-envelope modulation) at max cutoff. Create the filter regardless of cutoff,
+carrying type + resonance. Check `parsers/xpm_parser.py` for the same pattern.
+Cross-ref: ConvertWithMoss commit `c7b9641` (#219-area) made exactly this fix
+(MPCModern + MPC2000 converters), also switching the cutoff scale `/99`→`/100`.
+**Status:** identified, not fixed. **Blocked on:** nothing (quick). Fix in
+`docs/RESOLUTION_NOTES.md §MPCFILT`.
+
+## Carry more instrument params: choke groups, one-shot, key-track, round-robin (ENHANCEMENT — OPEN 2026-07-24)
+
+Our model (`models/common.py`) doesn't carry several params many source formats
+provide (cf. ConvertWithMoss `6fcc346` #212, which added them to its neutral model):
+- **Exclusive / choke group** (highest value — closed hi-hat cutting an open one;
+  useful for MPC/SFZ drum kits → E4B/K2000 if the targets support a mute/exclusive
+  group). Not modelled.
+- **One-shot** as a first-class flag (we only infer it via a release-time heuristic
+  in `pgm_parser`; formats collapse it into "no loop").
+- **Amplitude key-tracking** (we have filter keytrack, not amp).
+- **Random / round-robin** play logic.
+Each = parse from source + map to the E4B/KRZ writer where expressible.
+**Status:** not started (larger, per-format). **Blocked on:** confirming which the
+E4XT/K2000 actually support (esp. exclusive groups). See `docs/RESOLUTION_NOTES.md
+§MODELPARAMS`.
+
 ## Auto-loop sustained samples (ENHANCEMENT — larger effort, OPEN 2026-07-24)
 
 Automatically place a **clean sustain loop** in the steady region of a sustained

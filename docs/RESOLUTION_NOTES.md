@@ -80,6 +80,49 @@ per-sample token, not "header".)
 
 ---
 
+## §MPCFILT — MPC filter dropped at max cutoff (how to fix)
+
+`parsers/pgm_parser.py` ~285:
+```python
+# CURRENT — drops the filter (type=0) when fully open, losing resonance:
+if f1_type in _PGM_FILTER_XPM and f1_freq < 100:
+    voice.filter_type      = _PGM_FILTER_XPM[f1_type]
+    voice.filter_cutoff    = min(1.0, f1_freq / 99.0)
+    voice.filter_resonance = min(1.0, f1_res / 100.0)
+else:
+    voice.filter_type   = 0
+    voice.filter_cutoff = 1.0
+```
+Fix: create the filter whenever `f1_type` is a real type, regardless of `f1_freq`:
+```python
+if f1_type in _PGM_FILTER_XPM:
+    voice.filter_type      = _PGM_FILTER_XPM[f1_type]
+    voice.filter_cutoff    = min(1.0, f1_freq / 100.0)   # /100 (was /99)
+    voice.filter_resonance = min(1.0, f1_res / 100.0)
+else:
+    voice.filter_type   = 0
+    voice.filter_cutoff = 1.0
+```
+Then grep `parsers/xpm_parser.py` for a `Cutoff >= 1.0 → skip filter` pattern and
+apply the same. Verify against a pad that has resonance (or a filter env) at max
+cutoff — it should now keep its bite. Cross-ref ConvertWithMoss `c7b9641`.
+
+## §MODELPARAMS — carry choke group / one-shot / key-track / round-robin (design)
+
+Add to `models/common.py`:
+- `ZoneMapping.exclusive_group: int = 0` (0 = none) — **choke/mute group**. Parse:
+  MPC (`<MuteGroup>` / choke), SFZ (`group=`/`off_by=`), SF2 (exclusiveClass). Write:
+  E4B/K2000 group field IF the hardware supports it — RE needed (E4XT "Group" and
+  K2000 keymap have a mute-group concept; confirm the byte before wiring the writer).
+- `SampleData.one_shot: bool = False` (first-class; today only `pgm_parser` infers it
+  as a full-length release). Maps to E4B/KRZ "play to end / ignore note-off" where
+  expressible.
+- `VoiceLayer.amp_keytrack: float = 0.0` (mirror the existing `filter_keytrack`).
+- Round-robin / random: a per-group play-logic enum; low priority (E4XT has no direct
+  round-robin, would need a mod-cord/random-source hack).
+Start with **exclusive_group** (drum kits benefit most). Cross-ref ConvertWithMoss
+`6fcc346` (#212) for the source-side mappings per format.
+
 ## §MPC39 — MPC Standalone 3.9.0 gzipped-JSON `.xpm` parser (how to fix)
 
 **What it is.** 3.9.0 hardware saves each `.xpm` as **gzip** (`1f 8b 08 …`).
