@@ -68,6 +68,12 @@ Emax I (linear 12-bit, 27,500 Hz) signal path — anti-alias → decimate →
 gain-stage → quantize → bandpass — for authentic lo-fi character rather than a
 clean bit-crush.
 
+**Tail trim** (`--trim-tail`) cleanly cuts the decaying tail and trailing
+silence off the end of each sample — built for fixed-length autosampler
+captures (e.g. the MPC ONE Autosampler's flat 4 s takes), where every note is
+followed by dead silence and a reverb tail worth removing. See
+[Tail Trim](#tail-trim) below.
+
 **Single-cycle synthesis** (`--single-cycle`) turns a sampled instrument into a
 synth: it extracts a short looped waveform from each sample so the sampler plays
 it as a static oscillator, and the hardware's own filter, envelopes and LFO shape
@@ -181,6 +187,9 @@ python convert.py /sfz/ --format e4b --resample emulator2 --jobs 8 --iso
 # Thin a densely multisampled library to fit vintage sample memory:
 # keep all velocity layers, but drop 30% of the per-key samples
 python convert.py /sfz/pianos/ --format e4b --reduce-key-zones 30 --iso
+
+# Autosampler captures: trim the dead tail + reverb off every note
+python convert.py /my/autosampled/ --from-samples --trim-tail --format e4b --iso
 ```
 
 ---
@@ -659,6 +668,38 @@ pin it down explicitly with `--middle-c C3`, `--middle-c C4`, or `--middle-c C5`
 
 ---
 
+## Tail Trim
+
+`--trim-tail[=DB]` cleanly cuts the decaying tail and trailing silence off the
+END of each sample — built for fixed-length autosampler captures (e.g. the MPC
+ONE Autosampler always records a flat 4 s per note, leaving dead silence plus
+the deep reverb tail after a much shorter note):
+
+```bash
+python convert.py /my/autosampled/ --from-samples --trim-tail --format e4b --iso
+```
+
+The cut point is **adaptive**, not a fixed dB line: it lands where the signal
+decays into the *sample's own* noise floor (so a real analog/dither floor —
+typically well above digital silence — is still found and removed), with a
+short click-free fade-out (`--trim-tail-fade`, default 5 ms). `DB` is a ceiling
+below peak that only bites when set high enough to deliberately cut into the
+natural release: bare / `72` = "silence only" (keep all audible decay); `45`
+trims further into the release for a tighter sample.
+
+**Loop handling.** Autosamplers often embed a loop spanning the *whole* fixed-
+length take (not a musical sustain loop). By default, trimming such a sample
+**drops that loop** so the result is a clean one-shot. Pass
+`--trim-tail-keep-loops` to instead skip trimming any sample whose loop end
+lies in the tail — use this for percussion / drum-loop material where the loop
+length is musically meaningful and legitimately may contain trailing silence
+(e.g. a one-bar loop with space on the last beat).
+
+Runs first in the pipeline, before `--single-cycle` / `--reduce-*` /
+`--resample`, so everything downstream sees the shortened samples.
+
+---
+
 ## Single-Cycle Synthesis
 
 `--single-cycle[=auto|N]` replaces each sample with a short, cleanly-looped slice
@@ -876,6 +917,7 @@ mpc2emu/
 │   ├── resampler.py             # Vintage resampler (EMU E2 / Emax I)
 │   ├── zone_reducer.py          # Key-zone / velocity-layer thinning; velocity-layer split (--split-velocity-layers)
 │   ├── single_cycle.py          # Single-cycle oscillator extraction + retune (--single-cycle)
+│   ├── tail_trim.py             # Adaptive tail/silence removal (--trim-tail)
 │   └── loop_renderer.py         # Ping-pong → forward loop (bakes the bounce into PCM)
 └── tests/
     └── re_banks/                # Hardware-RE helpers: test-bank generators

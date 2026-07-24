@@ -72,6 +72,12 @@ transponierte Noten fallen auf echte 8-Bit-Körnigkeit) oder Emax I (linear
 Quantisierung → Bandpass — für authentischen Lo-Fi-Charakter statt eines
 sauberen Bit-Crushes.
 
+**Tail Trim** (`--trim-tail`) schneidet das abklingende Ende und die
+Stille am Ende jedes Samples sauber ab — gebaut für Autosampler-Aufnahmen mit
+fester Länge (z. B. die 4-Sekunden-Takes des MPC ONE Autosampler), bei denen
+auf jede Note digitale Stille und ein Reverb-Schwanz folgen, die es sich zu
+entfernen lohnt. Siehe [Tail Trim](#tail-trim) weiter unten.
+
 **Single-Cycle-Synthese** (`--single-cycle`) verwandelt ein gesampeltes
 Instrument in einen Synthesizer: Aus jedem Sample wird eine kurze geloopte
 Wellenform extrahiert, sodass der Sampler sie als statischen Oszillator spielt
@@ -186,6 +192,9 @@ python convert.py /sfz/ --format e4b --resample emulator2 --jobs 8 --iso
 # Dicht gesampelte Library auf Vintage-Speichergrenzen ausdünnen:
 # alle Velocity-Layer behalten, aber 30% der Key-Zonen entfernen
 python convert.py /sfz/pianos/ --format e4b --reduce-key-zones 30 --iso
+
+# Autosampler-Aufnahmen: toten Schwanz + Reverb jeder Note abschneiden
+python convert.py /my/autosampled/ --from-samples --trim-tail --format e4b --iso
 ```
 
 ---
@@ -687,6 +696,41 @@ inkonsistent oder hat keine eingebetteten Grundtöne, lege es mit `--middle-c C3
 
 ---
 
+## Tail Trim
+
+`--trim-tail[=DB]` schneidet das abklingende Ende und die Stille am Ende jedes
+Samples sauber ab — gebaut für Autosampler-Aufnahmen mit fester Länge (z. B.
+nimmt der MPC ONE Autosampler pro Note stets 4 Sekunden auf, wodurch nach einer
+viel kürzeren Note digitale Stille plus der tiefe Reverb-Schwanz übrig bleiben):
+
+```bash
+python convert.py /my/autosampled/ --from-samples --trim-tail --format e4b --iso
+```
+
+Der Schnittpunkt ist **adaptiv**, keine feste dB-Linie: Er liegt dort, wo das
+Signal in das **eigene** Rauschen des Samples abklingt (sodass ein echter
+Analog-/Dither-Grundrauschpegel — typischerweise deutlich über digitaler
+Stille — trotzdem gefunden und entfernt wird), mit einem kurzen klickfreien
+Fade-out (`--trim-tail-fade`, Standard 5 ms). `DB` ist eine Obergrenze
+unterhalb des Spitzenpegels, die nur greift, wenn sie hoch genug gesetzt ist,
+um bewusst in das natürliche Release zu schneiden: bare / `72` = „nur Stille"
+(behält den gesamten hörbaren Abklang); `45` schneidet tiefer ins Release für
+ein strafferes Sample.
+
+**Loop-Behandlung.** Autosampler betten oft einen Loop ein, der den **gesamten**
+Take fester Länge umspannt (keinen musikalischen Sustain-Loop). Standardmäßig
+wird dieser Loop beim Trimmen eines solchen Samples **verworfen**, sodass das
+Ergebnis ein sauberer One-Shot ist. Mit `--trim-tail-keep-loops` wird
+stattdessen das Trimmen jedes Samples übersprungen, dessen Loop-Ende im
+Schwanz liegt — nützlich für Percussion-/Drum-Loop-Material, bei dem die
+Loop-Länge musikalisch bedeutsam ist und legitim Stille am Ende enthalten
+kann (z. B. ein Ein-Takt-Loop mit Pause auf dem letzten Schlag).
+
+Läuft als Erstes in der Pipeline, vor `--single-cycle` / `--reduce-*` /
+`--resample`, sodass alle nachfolgenden Schritte die gekürzten Samples sehen.
+
+---
+
 ## Single-Cycle-Synthese
 
 `--single-cycle[=auto|N]` ersetzt jedes Sample durch einen kurzen, sauber
@@ -916,6 +960,7 @@ mpc2emu/
 │   ├── resampler.py             # Vintage Resampler
 │   ├── zone_reducer.py          # Key-Zonen-/Velocity-Layer-Ausdünnung; Velocity-Layer-Split (--split-velocity-layers)
 │   ├── single_cycle.py          # Single-Cycle-Oszillator-Extraktion + Nachstimmen (--single-cycle)
+│   ├── tail_trim.py             # Adaptives Entfernen von Schwanz/Stille (--trim-tail)
 │   └── loop_renderer.py         # Ping-Pong → Vorwärts-Loop (Bounce ins PCM eingebacken)
 └── tests/
     └── re_banks/                # Hardware-RE-Helfer: Testbank-Generatoren
