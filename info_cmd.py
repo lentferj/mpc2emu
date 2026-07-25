@@ -144,6 +144,21 @@ def _fmt_note(midi: int) -> str:
     return f"{names[midi % 12]}{midi // 12 - 1}"
 
 
+def _fmt_zone_vpt(zone) -> str:
+    """Zone-level volume/pan/fine_tune suffix — empty when all three are the
+    default (the common case; most zones don't override the voice)."""
+    if zone.volume == 0.0 and zone.pan == 0.0 and zone.fine_tune == 0:
+        return ""
+    parts = []
+    if zone.volume:
+        parts.append(f"vol {zone.volume:+.1f}dB")
+    if zone.pan:
+        parts.append(f"pan {zone.pan:+.2f}")
+    if zone.fine_tune:
+        parts.append(f"tune {zone.fine_tune:+d}c")
+    return "  " + " ".join(parts)
+
+
 def _fmt_loop(sd: SampleData) -> str:
     if sd.loop_type == LoopType.NO_LOOP:
         return "no loop"
@@ -188,6 +203,13 @@ def print_bank_info(bank: Bank, source_path: Path,
         for p in bank.presets
         for v in p.voices
     )
+    zones_with_vpt = sum(
+        1
+        for p in bank.presets
+        for v in p.voices
+        for z in v.zones
+        if z.volume != 0.0 or z.pan != 0.0 or z.fine_tune != 0
+    )
     # Estimated E4B size (rough: sample data + 2 KB overhead per preset)
     est_e4b = total_sample_bytes + len(bank.presets) * 2048 + 512
 
@@ -202,7 +224,10 @@ def print_bank_info(bank: Bank, source_path: Path,
     print(f"  Bank name: {bank.name}")
     print(f"  Presets:   {len(bank.presets)}")
     print(f"  Samples:   {len(bank.samples)}")
-    print(f"  Zones:     {total_zones}")
+    zones_line = f"  Zones:     {total_zones}"
+    if zones_with_vpt:
+        zones_line += f"  ({zones_with_vpt} with custom vol/pan/tune)"
+    print(zones_line)
     print(f"  PCM data:  {_fmt_size(total_sample_bytes)}")
     print(f"  Est. E4B:  {_fmt_size(est_e4b)}")
 
@@ -245,9 +270,14 @@ def print_bank_info(bank: Bank, source_path: Path,
                                   f"key {_fmt_note(zone.lo_key)}–{_fmt_note(zone.hi_key)}"
                                   f"  vel {zone.lo_vel}–{zone.hi_vel}"
                                   f"  root {_fmt_note(zone.root_key)}"
-                                  f"  → {zone.sample_name}")
+                                  f"  → {zone.sample_name}"
+                                  f"{_fmt_zone_vpt(zone)}")
                     elif verbose:
-                        print(f"           ({len(voice.zones)} zones, use -vv for full list)")
+                        n_vpt = sum(1 for z in voice.zones
+                                   if z.volume != 0.0 or z.pan != 0.0 or z.fine_tune != 0)
+                        vpt_note = f", {n_vpt} with custom vol/pan/tune" if n_vpt else ""
+                        print(f"           ({len(voice.zones)} zones{vpt_note}, "
+                              f"use -vv for full list)")
 
     # ── Samples ──
     if bank.samples:
