@@ -90,8 +90,17 @@ _DEFAULT_MIN_MS   = 150.0    # loop floor (natural sustain; clears the EOS octav
 _DEFAULT_MAX_MS   = 2500.0   # loop cap (longer = more organic; more sample RAM)
 _DEFAULT_XFADE_MS = 25.0     # crossfade length (grows for poor matches)
 _DEFAULT_ACCEPT   = 0.06     # endpoint-cost "transparent" threshold
-_DEFAULT_MIN_QUAL = 0.30     # skip (unless forced) when best cost exceeds this
-_LOWQUAL_FLAG     = 0.15     # log a [LOW-QUALITY] audition flag above this
+_RESCUABLE        = 0.45     # pre-crossfade cost the cost-scaled crossfade can hide
+                             # (HW-auditioned: a 0.44-cost brass loop sounds seamless)
+_LEN_COST_PENALTY_MS = 2000.0  # length/cost trade: a longer loop is preferred, but
+                             # only worth ~+200 ms of length per +0.1 of match cost —
+                             # so a fast-beating synth goes long (short = repetitive),
+                             # yet a clean loop keeps its sweet spot instead of
+                             # reaching for a marginally-longer, much-worse-matching one
+_DEFAULT_MIN_QUAL = 0.45     # skip (unless forced) only when even the best match is
+                             # worse than the crossfade can rescue
+_LOWQUAL_FLAG     = 0.30     # advisory [LOW-QUALITY] flag (the raw cost OVER-predicts
+                             # badness once the crossfade is applied — keep it lenient)
 _MOD_STRENGTH     = 0.30     # amp-modulation autocorr peak to count as "modulated"
 _MOD_COV          = 0.05     # amp-envelope coeff-of-variation to count as "modulated"
 
@@ -286,17 +295,19 @@ def _find_loop(mono: list, sr: int, root: int, *, target_ms, min_ms, max_ms,
         results.sort(key=lambda r: r[1])
         S, cost, E = results[0]
     else:
-        min_cost = min(r[1] for r in results)
-        thr = max(accept, min_cost * 1.3)
-        ok = [r for r in results if r[1] <= thr] or [min(results, key=lambda r: r[1])]
-        # Prefer the LONGEST transparent loop.  A steady tone sounds identical at
-        # any length, but an evolving one (strings, ensembles, pads) needs the loop
-        # to be long enough to breathe — a short loop there sounds static/unnatural
-        # even when it's technically seamless.  For modulated tones every candidate
-        # is already beat-aligned, so the longest simply spans the most cycles.  The
-        # transparency threshold keeps it from a long loop that doesn't match;
-        # RAM-constrained users can force a shorter length with `--auto-loop MS`.
-        S, cost, E = max(ok, key=lambda r: r[2] - r[0])
+        # Prefer the LONGEST loop the crossfade can rescue.  A longer loop sounds
+        # more organic and less repetitive — a SHORT loop sounds "loopy"/static even
+        # at a low raw match cost (a fast-beating analog synth or an evolving pad
+        # gives itself away every few tenths of a second), which is worse to the ear
+        # than a long loop with a slightly-mismatched-but-crossfaded seam.  HW
+        # audition confirmed the raw cost over-predicts badness: a 0.44-cost brass
+        # loop with a long blend sounds seamless.  So keep the longest whose
+        # pre-crossfade cost is within `_RESCUABLE`; fall back to the best match only
+        # if nothing qualifies.  RAM-constrained users can force a length with
+        # `--auto-loop MS`, or `--auto-loop-min-quality 0` to never skip.
+        ok = [r for r in results if r[1] <= _RESCUABLE] or [min(results, key=lambda r: r[1])]
+        pen = _LEN_COST_PENALTY_MS / 1000.0 * sr
+        S, cost, E = max(ok, key=lambda r: (r[2] - r[0]) - pen * r[1])
     return {'S': S, 'E': E, 'p': p, 'cost': cost, 'conf': conf,
             'modulated': modulated}
 
