@@ -1,5 +1,31 @@
 # mpc2emu — Open Items
 
+## `--trim-start` needs re-verification against SLOW-attack material (OPEN, 2026-07-25)
+
+`processors/start_trim.py`'s onset detector was built and tuned against fast
+synth-attack material (a Behringer K2-MKII capture via the MPC ONE
+Autosampler, `~/temp/SamplerExports/K2-01_[ProgramData]`) — a two-stage
+coarse-then-refine scheme (see `_start_cut_frame` docstring) that landed
+within 2-4 ms of Jan's Audacity-measured onsets across 5 octaves (C1-C5) once
+two real bugs were fixed: (1) the coarse window degenerates to a 1-sample
+read at frame 0, so a single noise/dither spike right at the start could
+spuriously trigger and return cut=0, defeating the whole trim; (2) backing
+off by the *entire* coarse window (20 ms default) overshot consistently —
+these are fast transients, not gradual swells.
+
+**Not yet verified against genuinely SLOW-attack material** (bowed strings,
+pads, organ swells, anything with a multi-hundred-ms attack) — only fast
+synth/percussive-style onsets have been checked. The refine stage assumes the
+true onset sits inside the coarse window and can be localized with a short
+(3 ms default) re-scan; for a slow swell the "onset" is inherently fuzzy
+(there's no sharp transient to localize), so the coarse-crossing point itself
+— not the refine step — determines the cut, and that has never been checked
+against a real slow-attack capture or an Audacity-measured target.
+
+**Status:** open. **Blocked on:** test material with a genuinely slow attack
+(e.g. a bowed string or pad capture) + a visual/Audacity-measured target to
+compare against, the same way the fast-attack case was validated.
+
 ## E4B resample pitch — RESOLVED + HW-CONFIRMED (2026-07-24)
 
 **DONE — hardware-confirmed on the E4XT.** EOS4 pitches from E3S1 **`[58-59]` =
