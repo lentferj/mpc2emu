@@ -77,10 +77,11 @@ followed by dead silence and a reverb tail worth removing. See
 **Auto sustain-loop** (`--auto-loop`) places a clean, seamless forward loop in the
 steady part of each sustained sample (organ, strings, pads, choir, brass, analog
 synth) so a held note sustains indefinitely. The companion to `--trim-tail` (trim
-the dead tail, then loop the body). The seam is click-free by construction, and the
-loop length is **adaptive** — a steady tone gets a short RAM-cheap loop, a modulated
-tone (vibrato/tremolo/beating) gets a longer loop that spans whole modulation cycles
-so it sounds natural. See [Auto Sustain-Loop](#auto-sustain-loop) below.
+the dead tail, then loop the body). The seam is click-free by construction, the
+loop length is **adaptive** — it prefers the longest clean loop so the sustain sounds
+organic, snapped to whole modulation cycles when the tone beats/vibratos — and the
+loop points stay editable in the hardware's own loop editor. See
+[Auto Sustain-Loop](#auto-sustain-loop) below.
 
 **Single-cycle synthesis** (`--single-cycle`) turns a sampled instrument into a
 synth: it extracts a short looped waveform from each sample so the sampler plays
@@ -730,18 +731,23 @@ continuous run of the original waveform (a synth's steep per-period edge include
 Measured residual discontinuity is around −240 dB.
 
 **Adaptive "optimal" length.** Rather than a fixed length, mpc2emu measures how well
-the loop endpoints match across many candidate lengths (each a whole number of
-fundamental periods) and detects whether the tone carries a slow modulation:
-
-- a **steady** tone (little movement) takes the *shortest* transparent loop — cheap
-  on sample RAM and indistinguishable from the source;
-- a **modulated** tone (vibrato, tremolo, or detuned-oscillator beating) takes the
-  *longest* transparent loop up to a cap, and its length is snapped to a **whole
-  number of modulation cycles** — otherwise the beat/vibrato envelope jumps at the
-  seam once per loop, an audible rhythmic pulse even when the waveform splice itself
-  is click-free.
+the loop endpoints match across many candidate lengths and **prefers the longest
+clean loop** (up to `--auto-loop-max-ms`, default 2500), because a longer loop
+sounds organic and breathing whereas a short one sounds like a repeating snippet —
+this held up across auditioning on flute, choir, cello, strings and brass. When the
+tone carries a modulation (vibrato, tremolo, or detuned-oscillator beating) the
+length is **snapped to a whole number of modulation cycles**, so the beat/vibrato
+envelope matches at the seam instead of jumping once per loop (an audible rhythmic
+pulse even when the waveform splice itself is click-free).
 
 Pass a number (`--auto-loop 250`) to force a target length in milliseconds instead.
+
+**One exception — fast-beating analog synths.** A detuned 2-oscillator synth whose
+timbre *drifts* over time is the one case where a long loop can sound worse (it
+captures the drift, so the loop "resets" audibly), and no automatic metric can tell
+it apart from a cello or brass note with the same beat rate that sounds great long.
+For those, shorten the loop yourself — `--auto-loop-max-ms 800` for a whole synth
+bank, or a fixed `--auto-loop 700` — or leave it and fine-tune on the hardware.
 
 **Editable on hardware.** The loop is written as standard `loop_start`/`loop_end`
 points, so it's fully editable in the E4XT / K2000 loop editors. By default a short
@@ -760,8 +766,8 @@ looped transparently by anything — those get a longer crossfade and a
 |---|---|
 | `--auto-loop [auto\|MS]` | Enable; adaptive length (default) or a forced target in ms |
 | `--auto-loop-xfade MS` | Crossfade length at the splice (default 25; grows for poor matches) |
-| `--auto-loop-max-ms MS` | Cap on the adaptive length for modulated tones (default 600) |
-| `--auto-loop-min-quality COST` | Skip samples whose best endpoint match is worse than COST (default 0.30; 0 = never skip) |
+| `--auto-loop-max-ms MS` | Cap on the adaptive loop length (default 2500); shorten (e.g. 800) for fast-beating/drifting analog synths |
+| `--auto-loop-min-quality COST` | Skip samples whose best endpoint match is worse than COST (default 0.45; 0 = never skip) |
 | `--auto-loop-force` | Loop even already-looped / low-quality samples (replaces existing loops) |
 | `--auto-loop-trim` | Drop the audio after the loop end to save RAM (the sampler envelope shapes the release) |
 | `--auto-loop-no-crossfade` | Set loop points only, leaving the PCM pristine for free fine-tuning on hardware (no baked crossfade) |

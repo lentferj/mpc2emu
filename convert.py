@@ -459,25 +459,30 @@ def main():
              'brass, analog synth). The companion to --trim-tail (trim the dead '
              'tail, then loop the body) and an alternative to --single-cycle (which '
              'instead collapses each sample to a tiny oscillator). Length is '
-             'ADAPTIVE by default (bare/"auto"): a steady tone gets the shortest '
-             'transparent loop (RAM-cheap, sounds identical); a modulated tone '
-             '(vibrato/tremolo/detuned-oscillator beating) gets the longest '
-             'transparent loop up to a cap, spanning whole modulation cycles so it '
-             'sounds natural. Pass a number ("=250") to force a target length in '
-             'ms. Endpoints snap to zero-crossings with an equal-power crossfade, '
-             'so the wrap is click-free by construction. Already-looped / too-short '
-             '/ weak-match samples are left alone (see --auto-loop-*).')
+             'ADAPTIVE by default (bare/"auto"): it prefers the LONGEST clean loop '
+             '(up to --auto-loop-max-ms) so the sustain sounds organic rather than '
+             'a short repeating snippet; a modulated tone (vibrato/tremolo/detuned-'
+             'oscillator beating) is snapped to a whole number of modulation cycles '
+             'so the beat matches at the seam. Pass a number ("=250") to force a '
+             'target length in ms. TIP: a fast-beating/evolving analog SYNTH can '
+             'sound better with a shorter loop (a long one captures too much drift) '
+             '— use --auto-loop-max-ms or a fixed "=MS" for those. Endpoints snap to '
+             'zero-crossings with an equal-power crossfade, so the wrap is click-free '
+             'by construction. Already-looped / too-short / weak-match samples are '
+             'left alone (see --auto-loop-*).')
     ap.add_argument('--auto-loop-xfade', type=float, default=25.0, metavar='MS',
         help='With --auto-loop: crossfade length in ms at the loop splice '
              '(default 25; grows automatically when the endpoint match is poor).')
     ap.add_argument('--auto-loop-max-ms', type=float, default=2500.0, metavar='MS',
-        help='With --auto-loop (adaptive): cap on the loop length for modulated '
-             'tones (default 600). Longer = more natural but more sample RAM.')
-    ap.add_argument('--auto-loop-min-quality', type=float, default=0.30,
+        help='With --auto-loop (adaptive): cap on the loop length (default 2500). '
+             'Longer = more organic but more sample RAM; shorten it (e.g. 800) for '
+             'fast-beating/drifting analog synths that a long loop makes worse.')
+    ap.add_argument('--auto-loop-min-quality', type=float, default=0.45,
         metavar='COST',
         help='With --auto-loop: skip a sample whose best endpoint-match cost '
-             'exceeds COST (default 0.30) — leaves inherently hard material (dense '
-             'ensembles, noisy analog) unlooped rather than washy. 0 = never skip.')
+             'exceeds COST (default 0.45 — the level the crossfade can still hide) — '
+             'leaves inherently hard material (dense ensembles, noisy analog) '
+             'unlooped rather than washy. 0 = never skip.')
     ap.add_argument('--auto-loop-force', action='store_true',
         help='With --auto-loop: loop even already-looped samples (replacing the '
              'existing loop) and samples over the quality threshold.')

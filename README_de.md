@@ -82,11 +82,11 @@ entfernen lohnt. Siehe [Tail Trim](#tail-trim) weiter unten.
 in den stationären Teil jedes gehaltenen Samples (Orgel, Streicher, Pads, Chor,
 Bläser, Analogsynth), sodass eine gehaltene Note endlos klingt. Das Gegenstück zu
 `--trim-tail` (den toten Schwanz abschneiden, dann den Körper loopen). Der Übergang
-ist konstruktionsbedingt klickfrei, und die Loop-Länge ist **adaptiv** — ein
-stationärer Ton bekommt einen kurzen, RAM-sparenden Loop, ein modulierter Ton
-(Vibrato/Tremolo/Schwebung) einen längeren Loop, der ganze Modulationszyklen
-umfasst und dadurch natürlich klingt. Siehe [Auto-Sustain-Loop](#auto-sustain-loop)
-weiter unten.
+ist konstruktionsbedingt klickfrei, die Loop-Länge ist **adaptiv** — sie
+bevorzugt den längsten sauberen Loop, damit der Sustain organisch klingt, auf ganze
+Modulationszyklen gerundet, wenn der Ton schwebt/vibriert — und die Loop-Punkte
+bleiben im Loop-Editor der Hardware editierbar. Siehe
+[Auto-Sustain-Loop](#auto-sustain-loop) weiter unten.
 
 **Single-Cycle-Synthese** (`--single-cycle`) verwandelt ein gesampeltes
 Instrument in einen Synthesizer: Aus jedem Sample wird eine kurze geloopte
@@ -764,16 +764,24 @@ Originalwellenform (auch die steile Flanke eines Synth-Sägezahns). Die gemessen
 Rest-Unstetigkeit liegt bei etwa −240 dB.
 
 **Adaptive „optimale" Länge.** Statt einer festen Länge misst mpc2emu, wie gut die
-Loop-Endpunkte über viele Kandidatenlängen (jeweils eine ganze Zahl von Grundperioden)
-zusammenpassen, und erkennt, ob der Ton eine langsame Modulation trägt:
+Loop-Endpunkte über viele Kandidatenlängen zusammenpassen, und **bevorzugt den
+längsten sauberen Loop** (bis `--auto-loop-max-ms`, Standard 2500) — ein längerer
+Loop klingt organisch und atmend, ein kurzer wie ein sich wiederholender Schnipsel
+(bestätigt beim Abhören von Flöte, Chor, Cello, Streichern und Bläsern). Trägt der
+Ton eine Modulation (Vibrato, Tremolo oder Schwebung verstimmter Oszillatoren), wird
+die Länge auf eine **ganze Zahl von Modulationszyklen** gerundet, damit die
+Schwebungs-/Vibrato-Hüllkurve an der Nahtstelle passt, statt einmal pro Loop zu
+springen (ein hörbarer rhythmischer Puls, selbst wenn der Wellenform-Übergang
+klickfrei ist).
 
-- ein **stationärer** Ton (wenig Bewegung) bekommt den *kürzesten* transparenten Loop
-  — RAM-sparend und vom Original nicht zu unterscheiden;
-- ein **modulierter** Ton (Vibrato, Tremolo oder Schwebung verstimmter Oszillatoren)
-  bekommt den *längsten* transparenten Loop bis zu einer Obergrenze, und seine Länge
-  wird auf eine **ganze Zahl von Modulationszyklen** gerundet — sonst springt die
-  Schwebungs-/Vibrato-Hüllkurve an der Nahtstelle einmal pro Loop, ein hörbarer
-  rhythmischer Puls, selbst wenn der Wellenform-Übergang klickfrei ist.
+**Eine Ausnahme — schnell schwebende Analogsynths.** Ein verstimmter 2-Oszillator-
+Synth, dessen Klangfarbe mit der Zeit *driftet*, ist der eine Fall, in dem ein
+langer Loop schlechter klingen kann (er fängt die Drift ein, sodass der Loop hörbar
+„zurücksetzt"), und keine automatische Metrik kann ihn von einer Cello- oder
+Bläsernote mit derselben Schwebungsrate unterscheiden, die lang großartig klingt.
+Für solche: den Loop selbst verkürzen — `--auto-loop-max-ms 800` für eine ganze
+Synth-Bank oder ein festes `--auto-loop 700` — oder ihn lassen und auf der Hardware
+feinabstimmen.
 
 Mit einer Zahl (`--auto-loop 250`) lässt sich stattdessen eine Ziellänge in
 Millisekunden erzwingen.
@@ -796,8 +804,8 @@ werden oberhalb von `--auto-loop-min-quality` übersprungen.
 |---|---|
 | `--auto-loop [auto\|MS]` | Aktivieren; adaptive Länge (Standard) oder erzwungene Ziellänge in ms |
 | `--auto-loop-xfade MS` | Kreuzblendenlänge am Übergang (Standard 25; wächst bei schlechter Passung) |
-| `--auto-loop-max-ms MS` | Obergrenze der adaptiven Länge für modulierte Töne (Standard 600) |
-| `--auto-loop-min-quality COST` | Samples überspringen, deren beste Endpunkt-Passung schlechter als COST ist (Standard 0.30; 0 = nie) |
+| `--auto-loop-max-ms MS` | Obergrenze der adaptiven Loop-Länge (Standard 2500); verkürzen (z. B. 800) für schnell schwebende/driftende Analogsynths |
+| `--auto-loop-min-quality COST` | Samples überspringen, deren beste Endpunkt-Passung schlechter als COST ist (Standard 0.45; 0 = nie) |
 | `--auto-loop-force` | Auch bereits geloopte / minderwertige Samples loopen (ersetzt bestehende Loops) |
 | `--auto-loop-trim` | Audio nach dem Loop-Ende verwerfen, um RAM zu sparen (die Sampler-Hüllkurve formt das Release) |
 | `--auto-loop-no-crossfade` | Nur Loop-Punkte setzen, PCM unangetastet lassen — zur freien Feinabstimmung auf Hardware (keine eingebackene Kreuzblende) |

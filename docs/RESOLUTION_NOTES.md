@@ -203,8 +203,13 @@ single-cycle DSP; wired after `--trim-tail` in `convert.py`.
    - *steady* tone → integer-fundamental-period sweep.
    Keep the **LONGEST transparent** loop (was steady→shortest — wrong: a short loop on
    evolving material sounds static even when seamless).  Defaults `min_ms=150`,
-   `max_ms=1500` (raised from 80/600 for natural, breathing loops).  A few loop-START
-   candidates guard against a bad start.
+   `max_ms=2500` (raised from 80/600 for natural, breathing loops).  A few loop-START
+   candidates guard against a bad start.  A length/cost penalty (`_LEN_COST_PENALTY_MS
+   =2000`) trades length against splice quality so a marginally-longer loop cannot win
+   by degrading the seam.  Fast-beating/drifty analog synths are the one case where a
+   long loop over-captures drift → manual override with `--auto-loop MS` or
+   `--auto-loop-max-ms 800` (no metric auto-distinguishes drifty-wants-medium from
+   clean-wants-long; see [[project_autoloop]]).  Skip default `min_quality=0.45`.
 5. `loop_type=FORWARD`, `loop_start=S`, `loop_end=E` (inclusive). Round-trips through
    both E4B and KRZ writers (verified). Crossfade applied per channel (mono+stereo).
    **`crossfade=False` (`--auto-loop-no-crossfade`)** leaves the PCM pristine — loop
