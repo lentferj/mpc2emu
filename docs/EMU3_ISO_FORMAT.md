@@ -218,8 +218,8 @@ that go into the directory entry:
 ```python
 n_clusters = ceil(file_size / cluster_size)
 last_used  = file_size - (n_clusters - 1) * cluster_size
-brem       = last_used % BSIZE
-blks       = ceil(last_used / BSIZE)        # NOT floor!
+blks       = ceil(last_used / BSIZE)              # NOT floor!
+brem       = last_used - (blks - 1) * BSIZE        # bytes valid in the LAST block, 1..BSIZE
 ```
 
 ⚠ **The `blks` field must be a ceiling, not a floor — this was the single
@@ -234,6 +234,24 @@ the sample data or the chunk that the firmware checks last. The fix
 remainder — i.e. **a partially-filled final block still counts as a whole
 block** for loading purposes, with `brem` separately recording how many of
 its bytes are "real" data versus padding.
+
+⚠ **`brem` must never be written as 0 — the second hardest-won lesson,
+HW-confirmed 2026-07-25.** A naive `last_used % BSIZE` wraps to 0 whenever
+the last cluster's byte count is an *exact* multiple of `BSIZE` — none of
+the six reference images this format was reverse-engineered from happened
+to land on that exact case, so it went unnoticed until a real multi-bank
+build hit it: one bank in an 8-bank ISO had a last-cluster size that was an
+exact multiple of 512, its directory entry got `brem=0`, and it failed to
+load on the E4XT with `"end of file"` while its 7 siblings (all with
+nonzero `brem`) loaded fine. Every nonzero-`brem` file already relies on
+"`brem` = bytes valid in the *last* of the `blks` blocks", i.e.
+`(blks-1)*BSIZE + brem == last_used`; at `brem=0` that identity breaks by
+exactly one block (512 bytes short) instead of holding. Deriving `brem`
+from the ceiling `blks` (`last_used - (blks-1)*BSIZE`) instead of an
+independent modulo keeps it in `[1, BSIZE]` for every file size and leaves
+every already-HW-verified nonzero-`brem` case byte-for-byte unchanged — the
+fix only touches the exact-multiple case. See `_alloc()` in
+[`writers/iso_builder.py`](../writers/iso_builder.py).
 
 ---
 

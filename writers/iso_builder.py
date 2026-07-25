@@ -157,18 +157,31 @@ def _alloc(file_size: int, cluster_sz: int = CLUSTER_SIZE):
     Mirrors emu3fs emu3_set_fattrs():
       clusters = ceil(size / cluster_size)
       blks     = ceil(last_cluster_bytes / BSIZE)   ← emu3fs uses +1 when remainder > 0
-      brem     = last_cluster_bytes % BSIZE          ← bytes used in the last partial block
+      brem     = bytes valid in the LAST of those `blks` blocks, i.e.
+                 last_cluster_bytes - (blks-1)*BSIZE — always in [1, BSIZE]
 
     Using floor instead of ceil for blks causes "end of file" errors on E4XT:
     the hardware reads exactly blks blocks from the last cluster, so being 1 short
     leaves the final 512 bytes unread.
+
+    brem must NEVER be written as 0. A naive `last_cluster_bytes % BSIZE` wraps to
+    0 whenever the last cluster's byte count is an exact multiple of BSIZE — every
+    reference image this format was reverse-engineered from happened to avoid that
+    exact case, so it went unnoticed until a real build hit it (HW: "end of file"
+    loading a bank whose last cluster was exactly N*512 bytes, 2026-07-25). brem=0
+    is 512 bytes short of `blks*BSIZE - (BSIZE-brem)` = last_cluster_bytes under
+    the "brem = bytes valid in the last block" reading every other (nonzero-brem)
+    file already relies on — so an exact-multiple file was silently missing its
+    final block. Deriving brem from the ceiling `blks` instead of an independent
+    modulo keeps it in [1, BSIZE] for every file size, matching all the
+    already-HW-verified nonzero cases exactly (this only changes the brem==0 case).
     """
     if file_size == 0:
         return 1, 0, 0
     n_clust   = (file_size + cluster_sz - 1) // cluster_sz
     last_used = file_size - (n_clust - 1) * cluster_sz
-    brem      = last_used % BSIZE
-    blks      = last_used // BSIZE + (1 if brem else 0)  # ceil, like emu3fs
+    blks      = (last_used + BSIZE - 1) // BSIZE     # ceil, like emu3fs
+    brem      = last_used - (blks - 1) * BSIZE        # bytes valid in the last block, 1..BSIZE
     return n_clust, blks, brem
 
 
