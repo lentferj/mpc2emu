@@ -2413,3 +2413,95 @@ Gated behind general stereo support in the converter; HW confirm needed.
   `BASE_NOTE=12`); we index entries by raw MIDI note. Ours is HW-confirmed to play
   correctly, so this only matters if an external reader (incl. CWM) reads our files
   — verify whether it sees our zones shifted +12 before assuming interop.
+
+## §CWM19 — Input-parser feature-parity gaps found via ConvertWithMoss 19.1.0 (2026-07-25)
+
+TODO item: *"Input-parser feature-parity gaps found via ConvertWithMoss 19.1.0"*.
+Source: [ConvertWithMoss 19.1.0 release notes](https://github.com/git-moss/ConvertWithMoss/releases/tag/19.1.0)
+(`documentation/CHANGELOG.md` in `~/git-repos/ConvertWithMoss`, tag `19.1.0`,
+commit `6765c11`), read against our own `parsers/exs24_parser.py`,
+`parsers/sfz_parser.py`, `parsers/talsmpl_parser.py`, `parsers/sf2_parser.py`,
+`parsers/gig_parser.py` (all independent reimplementations — no CWM code copied,
+see file headers).
+
+### Fixes in 19.1.0 checked and confirmed NOT applicable (already correct here)
+
+- **EXS24 group panning read as unsigned/unscaled** (CWM: *Logic EXS24 — Fixed:
+  The panning of a group was read as an unsigned value and was not scaled*). We
+  don't parse group-level pan at all yet (see gap list below) — only zone-level
+  pan, which is already signed and scaled correctly: `exs24_parser.py:705`
+  (`pan = z['pan'] / 63.0`, `i8` read at `:576`).
+- **TAL reverse flag parsed as text bool instead of numeric** (CWM: *TAL Sampler
+  — Fixed: the sample "reverse" flag ... is stored numerically (0/1) ... but was
+  parsed as a true/false text boolean*). Ours already reads it numerically:
+  `talsmpl_parser.py:413` (`ms.get('reverse', '0') not in ('0', '0.0')`).
+- **TAL "disabled groups" only skipped for `enabled="0"`, not `"false"`** (CWM:
+  same fix text as the DecentSampler one, applied to TAL Sampler too). Doesn't
+  map cleanly onto our model: TAL's `sampleenabled{a-d}` is the 4-*layer*-slot
+  enable within one program (not a DecentSampler-style alternate-kit group), and
+  our corpus-verified format notes (`talsmpl_parser.py:71`, 1706-preset survey)
+  say TAL only ever writes `"0"`/`"1"` for these flags, never `"false"`. Already
+  numeric-checked correctly at `:357`.
+- **SFZ velocity range grown from the crossfade opcodes** (CWM: *SFZ — Fixed:
+  The velocity range was taken from the cross-fade opcodes, so it grew by the
+  width of the cross-fade with every conversion*). Ours reads `lovel`/`hivel`
+  directly (`sfz_parser.py:437-438`) and only *checks for the presence of*
+  `xfin_lovel`/`xfin_hivel`/`xfout_lovel`/`xfout_hivel` as a separate flag
+  (`:358-359`) — never reads the range from them.
+- **"Two filters differing only in their cutoff envelope treated as equal"**
+  (CWM: generic backend fix — could merge non-identical zones). We have no
+  zone-dedup / filter-equality-merge logic anywhere in the parsers, so this
+  failure mode can't occur.
+
+### Confirmed input-parser feature-parity gaps (not bugs — CWM extracts these, we don't yet)
+
+Ordered by rough usefulness; none are blocking anything, pick up independently:
+
+1. **EXS24 group-level volume/pan/tune offsets.** CWM 19.1.0 *New: Added support
+   for group volume, panning and tuning offsets* (Kontakt, DecentSampler, Logic
+   EXS24, Synclavier, TX16Wx, Waldorf Quantum/Iridium). We parse the EXS24 group
+   struct only for names (`exs24_parser.py` GROUP_V11, used for L/R stereo dedup,
+   see `:328-359`) and per-group envelopes (`:682-684`) — group pan/volume/tune
+   fields are never read, so a group-level offset is silently dropped (zones keep
+   only their own pan/volume/tune).
+2. **EXS24 Velocity → Filter Cutoff modulation.** CWM 19.1.0 *New: Implemented
+   Velocity -> Filter Cutoff Modulation (read/write)*. We read filter *keytrack*
+   (`exs24_parser.py:155,219-223`, itself unverified-scaling / no corpus example)
+   but nothing for a velocity→cutoff cord.
+3. **EXS24 one-shot playback flag (ignore note-off).** CWM 19.1.0 *New: Added
+   support for the one-shot playback mode* (EXS24 among ~15 formats). We have no
+   EXS24 field read for this — the only "oneshot" string in the file is an
+   unrelated audio-folder-name heuristic (`exs24_parser.py:387`, sample-file path
+   resolution, not a preset flag).
+4. **Choke / exclusive groups.** CWM 19.1.0 *New: Added support for exclusive
+   ('choke') groups* (EXS24 and SF2 among the formats we read; also Kontakt/DLS/
+   MPC1000/MPC60/Renoise/MV-8000/TAL — formats we don't read). Not present in
+   `parsers/exs24_parser.py` or `parsers/sf2_parser.py`, and no `Preset`/`Zone`
+   model field to hold it yet either.
+5. **Amplitude keyboard-tracking.** CWM 19.1.0 *New: Added support for amplitude
+   keyboard-tracking* (Akai S1000, DLS, Logic EXS24, Roland MV-8000/S-7xx, SFZ,
+   Synthstrom Deluge, Yamaha YSFC — EXS24 and SFZ are ours). We support *filter*
+   keytrack but not amp keytrack in either parser.
+6. **Envelope time keyboard-/velocity-scaling.** CWM 19.1.0 *New: Added support
+   for envelope time keyboard- and velocity-scaling* (Akai S1000, Ensoniq EPS/
+   ASR/Mirage, Logic EXS24, Reason NN-XT, Roland S-7xx, SoundFont 2, Yamaha YSFC
+   — EXS24 and SF2 are ours). Distinct from the envelope-slope ("curvature")
+   support we already have; this scales the *time* by key/velocity.
+7. **Per-instrument voice settings (polyphony, mono legato).** CWM 19.1.0 *New:
+   Added support for per-instrument voice settings* (Akai S1000, DecentSampler,
+   Disting EX, Ensoniq Mirage, Logic EXS24, Reason NN-XT, Roland S-7xx, SFZ,
+   Synthstrom Deluge, TAL Sampler — EXS24, SFZ, TAL are ours). No polyphony/
+   legato field read by any of our parsers.
+8. **Random play logic (vs. round-robin).** CWM 19.1.0 *New: Added support for a
+   random play logic next to round-robin* (Ableton, Akai MPC, DecentSampler,
+   Logic EXS24, Renoise, Yamaha YSFC — EXS24 is ours; falls back to round-robin
+   when a format can't express it). Not distinguished from round-robin in
+   `exs24_parser.py` today.
+
+### Not relevant
+
+- Roland ZEN-Core SVZ embedded-WAV fix, Waldorf Quantum/Iridium fixes, Elektron
+  Tonverk / Reason NN-XT / Omnisphere / Deluge / Disting EX / Polyend / Bliss /
+  1010music / TX16Wx fixes, and the new Kurzweil K2000/K2500/K2600 **reader** —
+  none are formats/directions we read or write (we *write* KRZ, CWM's new K2000
+  support is a *reader*; no overlap to exploit).

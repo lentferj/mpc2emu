@@ -1,5 +1,22 @@
 # mpc2emu — Open Items
 
+## Input-parser feature-parity gaps found via ConvertWithMoss 19.1.0 (ENHANCEMENT, OPEN 2026-07-25)
+
+Cross-referenced ConvertWithMoss's [19.1.0 release notes](https://github.com/git-moss/ConvertWithMoss/releases/tag/19.1.0)
+against our own EXS24/SFZ/TAL/SF2 parsers. **None of the fixes in that release are
+live bugs here** — spot-checked the analogous logic in each of our parsers and it
+already handles the case correctly (see `docs/RESOLUTION_NOTES.md §CWM19` for the
+per-item comparison). What's left is a short list of **input fields/features CWM's
+importers now extract that ours don't** — parity gaps, not correctness bugs.
+
+Low priority; no user-facing complaint driving this, just recorded so it isn't
+re-discovered from scratch next time CWM is cross-referenced.
+
+**Status:** open, unscheduled. **Blocked on:** nothing — pick up any item
+independently when there's a concrete need (a source file that actually uses the
+field) or spare cycles. Fix strategy / CWM source citations in
+`docs/RESOLUTION_NOTES.md §CWM19`.
+
 ## E4B resample pitch — RESOLVED + HW-CONFIRMED (2026-07-24)
 
 **DONE — hardware-confirmed on the E4XT.** EOS4 pitches from E3S1 **`[58-59]` =
