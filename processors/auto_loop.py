@@ -87,7 +87,7 @@ from processors.single_cycle import (
 
 # ── Tunables (defaults; the CLI overrides) ───────────────────────────────────
 _DEFAULT_MIN_MS   = 150.0    # loop floor (natural sustain; clears the EOS octave bug)
-_DEFAULT_MAX_MS   = 1500.0   # loop cap (longer = more natural; more sample RAM)
+_DEFAULT_MAX_MS   = 2500.0   # loop cap (longer = more organic; more sample RAM)
 _DEFAULT_XFADE_MS = 25.0     # crossfade length (grows for poor matches)
 _DEFAULT_ACCEPT   = 0.06     # endpoint-cost "transparent" threshold
 _DEFAULT_MIN_QUAL = 0.30     # skip (unless forced) when best cost exceeds this
@@ -108,29 +108,28 @@ def _windowed_rms(sig: list, win: int) -> list:
 
 
 def _steady_region(sig: list, sr: int, region: int) -> Tuple[int, int]:
-    """Sustained body [start, end): a long-window (80 ms) smoothed envelope finds
-    the attack-end and release-onset while IGNORING tremolo/beating dips."""
+    """Sustained body [start, end) from a long-window (80 ms) smoothed envelope.
+
+    start = end of the attack.  end = the LAST frame still at sustain level (scanned
+    from the tail), so only the final release/decay is excluded — mid-sustain tremolo
+    / swell / beating dips (which can be deep on a choir or pad: down to ~40 % of
+    peak) do NOT truncate the region.  An earlier "stop at the first dip below 45 %"
+    threw away seconds of loopable material on strongly-modulated sustains."""
     n = len(sig)
     env = _windowed_rms(sig, max(1, int(0.08 * sr)))
     peak = max(env) or 1e-9
-    pk = env.index(peak)
     start = 0
     for f in range(n):
         if env[f] >= 0.6 * peak:
             start = f
             break
     start = min(start, region)
-    end = n
-    run = 0
-    hold = int(0.04 * sr)
-    for f in range(pk, n):
-        if env[f] < 0.45 * peak:
-            run += 1
-            if run > hold:
-                end = f - run + 1
-                break
-        else:
-            run = 0
+    thr = 0.35 * peak
+    end = start + 1
+    for f in range(n - 1, start, -1):
+        if env[f] >= thr:
+            end = f + 1
+            break
     return start, end
 
 

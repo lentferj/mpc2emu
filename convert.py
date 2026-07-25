@@ -470,7 +470,7 @@ def main():
     ap.add_argument('--auto-loop-xfade', type=float, default=25.0, metavar='MS',
         help='With --auto-loop: crossfade length in ms at the loop splice '
              '(default 25; grows automatically when the endpoint match is poor).')
-    ap.add_argument('--auto-loop-max-ms', type=float, default=1500.0, metavar='MS',
+    ap.add_argument('--auto-loop-max-ms', type=float, default=2500.0, metavar='MS',
         help='With --auto-loop (adaptive): cap on the loop length for modulated '
              'tones (default 600). Longer = more natural but more sample RAM.')
     ap.add_argument('--auto-loop-min-quality', type=float, default=0.30,
