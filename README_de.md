@@ -72,10 +72,16 @@ transponierte Noten fallen auf echte 8-Bit-Körnigkeit) oder Emax I (linear
 Quantisierung → Bandpass — für authentischen Lo-Fi-Charakter statt eines
 sauberen Bit-Crushes.
 
+**Start Trim** (`--trim-start`) schneidet Stille am Anfang jedes Samples
+sauber ab — "Auto Trim Start" des MPC ONE Autosampler verschiebt nur die
+Wiedergabe-Startmarke innerhalb des MPC-Projekts, schneidet aber nicht die
+aufgenommenen WAV-Daten, daher ist die Stille nach dem Export/der Konvertierung
+wieder da. Siehe [Start Trim](#start-trim) weiter unten.
+
 **Tail Trim** (`--trim-tail`) schneidet das abklingende Ende und die
 Stille am Ende jedes Samples sauber ab — gebaut für Autosampler-Aufnahmen mit
 fester Länge (z. B. die 4-Sekunden-Takes des MPC ONE Autosampler), bei denen
-auf jede Note digitale Stille und ein Reverb-Schwanz folgen, die es sich zu
+auf jede Note digitale Stille und ein Reverb-Ende folgen, die es sich zu
 entfernen lohnt. Siehe [Tail Trim](#tail-trim) weiter unten.
 
 **Single-Cycle-Synthese** (`--single-cycle`) verwandelt ein gesampeltes
@@ -193,7 +199,7 @@ python convert.py /sfz/ --format e4b --resample emulator2 --jobs 8 --iso
 # alle Velocity-Layer behalten, aber 30% der Key-Zonen entfernen
 python convert.py /sfz/pianos/ --format e4b --reduce-key-zones 30 --iso
 
-# Autosampler-Aufnahmen: toten Schwanz + Reverb jeder Note abschneiden
+# Autosampler-Aufnahmen: totes Ende + Reverb jeder Note abschneiden
 python convert.py /my/autosampled/ --from-samples --trim-tail --format e4b --iso
 ```
 
@@ -696,12 +702,49 @@ inkonsistent oder hat keine eingebetteten Grundtöne, lege es mit `--middle-c C3
 
 ---
 
+## Start Trim
+
+`--trim-start[=DB]` schneidet Stille am ANFANG jedes Samples sauber ab.
+„Auto Trim Start" des MPC ONE Autosampler verschiebt nur die
+**Wiedergabe-Startmarke** innerhalb des MPC-Projekts — sie schneidet nicht die
+aufgenommenen WAV-Daten. Sobald das Sample exportiert (oder konvertiert) wird
+— ein XPM-Programm referenziert ohnehin nur die zugrundeliegende WAV-Datei —
+ist diese Marke weg und die hörbare Anfangsstille wieder da:
+
+```bash
+python convert.py /my/autosampled/ --from-samples --trim-start --format e4b --iso
+```
+
+Derselbe adaptive Detektor wie `--trim-tail`, nur am anderen Ende: Der
+Schnittpunkt liegt dort, wo das Signal zuerst aus dem **eigenen** Rauschen des
+Samples aufsteigt, mit einem kurzen klickfreien Fade-in (`--trim-start-fade`,
+Standard 5 ms). `DB` ist eine Obergrenze unterhalb des Spitzenpegels, die nur
+greift, wenn sie hoch genug gesetzt ist, um bewusst in den natürlichen Attack
+zu schneiden: bare / `72` = „nur Stille" (behält den gesamten hörbaren
+Einschwingvorgang); `45` schneidet tiefer in den Attack für ein strafferes
+Sample.
+
+**Loop-Behandlung.** Autosampler betten oft einen Loop ein, der den
+**gesamten** Take fester Länge umspannt und bei oder nahe Frame 0 beginnt.
+Standardmäßig wird dieser Loop beim Trimmen eines solchen Samples
+**verworfen**, sodass das Ergebnis ein sauberer One-Shot ist. Mit
+`--trim-start-keep-loops` wird das Trimmen stattdessen so begrenzt, dass es nie
+über den Loop-Start hinausschneidet — nützlich für Percussion-/Drum-Loop-
+Material, bei dem der Loop musikalisch bedeutsam ist und legitim nahe dem
+Sample-Anfang beginnen kann.
+
+Läuft als Allererstes in der Pipeline, vor `--trim-tail` / `--single-cycle` /
+`--reduce-*` / `--resample`, sodass alle nachfolgenden Schritte die gekürzten
+Samples sehen.
+
+---
+
 ## Tail Trim
 
 `--trim-tail[=DB]` schneidet das abklingende Ende und die Stille am Ende jedes
 Samples sauber ab — gebaut für Autosampler-Aufnahmen mit fester Länge (z. B.
 nimmt der MPC ONE Autosampler pro Note stets 4 Sekunden auf, wodurch nach einer
-viel kürzeren Note digitale Stille plus der tiefe Reverb-Schwanz übrig bleiben):
+viel kürzeren Note digitale Stille plus das tiefe Reverb-Ende übrig bleiben):
 
 ```bash
 python convert.py /my/autosampled/ --from-samples --trim-tail --format e4b --iso
@@ -722,7 +765,7 @@ Take fester Länge umspannt (keinen musikalischen Sustain-Loop). Standardmäßig
 wird dieser Loop beim Trimmen eines solchen Samples **verworfen**, sodass das
 Ergebnis ein sauberer One-Shot ist. Mit `--trim-tail-keep-loops` wird
 stattdessen das Trimmen jedes Samples übersprungen, dessen Loop-Ende im
-Schwanz liegt — nützlich für Percussion-/Drum-Loop-Material, bei dem die
+getrimmten Bereich liegt — nützlich für Percussion-/Drum-Loop-Material, bei dem die
 Loop-Länge musikalisch bedeutsam ist und legitim Stille am Ende enthalten
 kann (z. B. ein Ein-Takt-Loop mit Pause auf dem letzten Schlag).
 
@@ -960,7 +1003,8 @@ mpc2emu/
 │   ├── resampler.py             # Vintage Resampler
 │   ├── zone_reducer.py          # Key-Zonen-/Velocity-Layer-Ausdünnung; Velocity-Layer-Split (--split-velocity-layers)
 │   ├── single_cycle.py          # Single-Cycle-Oszillator-Extraktion + Nachstimmen (--single-cycle)
-│   ├── tail_trim.py             # Adaptives Entfernen von Schwanz/Stille (--trim-tail)
+│   ├── start_trim.py            # Adaptives Entfernen von Anfangsstille (--trim-start)
+│   ├── tail_trim.py             # Adaptives Entfernen von Endstille (--trim-tail)
 │   └── loop_renderer.py         # Ping-Pong → Vorwärts-Loop (Bounce ins PCM eingebacken)
 └── tests/
     └── re_banks/                # Hardware-RE-Helfer: Testbank-Generatoren
