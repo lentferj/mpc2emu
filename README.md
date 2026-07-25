@@ -5,10 +5,14 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 
 # mpc2emu
 
-Multi-format sampler converter with vintage resampling and ZuluSCSI output.
-Converts sample libraries between common sampler formats and produces
-ZuluSCSI-ready CD ISO images or native SCSI hard disk images for the
-EMU Emulator 4 / E4XT and Kurzweil K2000 series.
+A sampler-conversion toolkit for vintage hardware. Converts sample libraries
+between common formats — mapping the musical parameters (filter, envelopes,
+LFO, loops) onto each target's own synth engine, not just carrying over raw
+samples — with optional vintage resampling, adaptive sample cleanup (silence
+trim, seamless sustain loops, single-cycle synthesis), and automatic fitting
+to hardware memory limits. Produces ZuluSCSI-ready CD ISO images, SCSI hard
+disk images, and Gotek floppies for the EMU Emulator 4 / E4XT and Kurzweil
+K2000 series.
 
 > **See also:** [README_de.md](README_de.md) — German / Deutsche Version  
 > **Legal:** [DISCLAIMER.md](DISCLAIMER.md) · [LICENSE](LICENSE)
