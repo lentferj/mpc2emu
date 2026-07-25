@@ -67,7 +67,7 @@ How it works
 Best-effort by design: unpitched / too-short / already-looped samples are left
 alone (and reported); inherently hard material (a 20-player detuned string
 section never repeats cleanly) still gets a click-free best-effort loop with a
-longer crossfade, flagged low-quality for audition, and can be skipped with a
+longer crossfade, flagged as a weak match to audition, and can be skipped with a
 quality threshold.
 """
 
@@ -99,8 +99,12 @@ _LEN_COST_PENALTY_MS = 2000.0  # length/cost trade: a longer loop is preferred, 
                              # reaching for a marginally-longer, much-worse-matching one
 _DEFAULT_MIN_QUAL = 0.45     # skip (unless forced) only when even the best match is
                              # worse than the crossfade can rescue
-_LOWQUAL_FLAG     = 0.30     # advisory [LOW-QUALITY] flag (the raw cost OVER-predicts
-                             # badness once the crossfade is applied — keep it lenient)
+_LOWQUAL_FLAG     = 0.44     # advisory "weak match — audition" flag.  The raw cost
+                             # badly OVER-predicts badness once the cost-scaled
+                             # crossfade is applied — HW audition rated loops up to
+                             # cost 0.437 "very good" — so flag ONLY the razor's-edge
+                             # kept matches (0.44..0.45, one step from being skipped),
+                             # and only as "give it a listen", not "bad".
 _MOD_STRENGTH     = 0.30     # amp-modulation autocorr peak to count as "modulated"
 _MOD_COV          = 0.05     # amp-envelope coeff-of-variation to count as "modulated"
 
@@ -441,7 +445,7 @@ def auto_loop_bank(bank, *, target_ms: Optional[float] = None,
             flag = ''
             if info['lowqual']:
                 n_low += 1
-                flag = '  [LOW-QUALITY — audition]'
+                flag = '  [weak match — audition]'
             kind = 'mod' if info.get('modulated') else 'steady'
             trimmed = ', trimmed' if info['trimmed'] else ''
             print(f"    '{info['name']}': loop {info['loop']}f "
@@ -453,7 +457,7 @@ def auto_loop_bank(bank, *, target_ms: Optional[float] = None,
             _dump_loop(new_s, dump_dir, dumped)
 
     print(f"  Done: {n_ok}/{n} sample(s) looped"
-          + (f", {n_low} low-quality" if n_low else "")
+          + (f", {n_low} weak-match (audition)" if n_low else "")
           + f"; {n - n_ok} left unlooped.")
 
 

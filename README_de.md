@@ -789,7 +789,7 @@ Instrument feinabstimmen möchten.
 unangetastet. Solo-/reine Klangfarben (Flöte, Cello, sauberer Chor, Analogsynth)
 loopen hervorragend; inhärent schwieriges Material (ein dichter verstimmter
 Streichersatz, verrauschtes Analog) lässt sich von nichts transparent loopen — diese
-bekommen eine längere Kreuzblende und eine `[LOW-QUALITY — audition]`-Markierung oder
+bekommen eine längere Kreuzblende und eine `[weak match — audition]`-Hinweis oder
 werden oberhalb von `--auto-loop-min-quality` übersprungen.
 
 | Option | Wirkung |

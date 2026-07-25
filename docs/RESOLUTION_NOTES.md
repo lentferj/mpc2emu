@@ -214,7 +214,7 @@ single-cycle DSP; wired after `--trim-tail` in `convert.py`.
 **Knobs:** `--auto-loop [auto|MS]`, `--auto-loop-xfade MS` (grows automatically for
 poor matches), `--auto-loop-max-ms`, `--auto-loop-min-quality COST` (skip hard
 material), `--auto-loop-force`, `--auto-loop-trim` (drop audio past loop_end),
-`--auto-loop-dump-dir`. `[LOW-QUALITY — audition]` flag above cost 0.15.
+`--auto-loop-dump-dir`. `[weak match — audition]` advisory above cost 0.44 (the raw cost badly over-predicts badness once the crossfade is applied — HW audition rated loops up to 0.437 "very good").
 
 **Results (objective sweep, mellotron/VPO/prophet/K2).** Solo/pure timbres (flute,
 cello, clean choir, analog synth) → excellent (match <0.07, natural 300-600 ms

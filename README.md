@@ -754,7 +754,7 @@ instrument yourself.
 alone. Solo/pure timbres (flute, cello, clean choir, analog synth) loop excellently;
 inherently hard material (a dense detuned string section, noisy analog) can't be
 looped transparently by anything — those get a longer crossfade and a
-`[LOW-QUALITY — audition]` flag, or are skipped above `--auto-loop-min-quality`.
+`[weak match — audition]` advisory (a longer crossfade usually rescues it), or are skipped above `--auto-loop-min-quality`.
 
 | Option | Effect |
 |---|---|

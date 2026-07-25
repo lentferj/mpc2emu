@@ -466,7 +466,7 @@ def main():
              'sounds natural. Pass a number ("=250") to force a target length in '
              'ms. Endpoints snap to zero-crossings with an equal-power crossfade, '
              'so the wrap is click-free by construction. Already-looped / too-short '
-             '/ low-quality samples are left alone (see --auto-loop-*).')
+             '/ weak-match samples are left alone (see --auto-loop-*).')
     ap.add_argument('--auto-loop-xfade', type=float, default=25.0, metavar='MS',
         help='With --auto-loop: crossfade length in ms at the loop splice '
              '(default 25; grows automatically when the endpoint match is poor).')
