@@ -86,24 +86,20 @@ def _frame_energy(sig: list, channels: int) -> Tuple[list, int]:
     return e, n
 
 
-def _tail_cut_frame(energy: list, n: int, win: int, thresh_db: float,
-                    floor_margin_db: float) -> int:
-    """Frame index one past the last short-time-RMS window that counts as signal.
+def _windowed_ms(energy: list, n: int, win: int) -> Tuple[list, float, float]:
+    """Sliding-window mean-square (prefix sums, O(n)) ending at each frame.
 
-    A sliding-window RMS (prefix sums, O(n)) is used instead of per-sample level
-    so the dithered noise floor — whose individual samples spike well above a raw
-    dB line — does not read as "signal" and defeat the trim.
+    A sliding-window RMS is used instead of per-sample level so the dithered
+    noise floor — whose individual samples spike well above a raw dB line —
+    does not read as "signal" on its own. Shared by the tail- and start-trim
+    cut-point search (`_tail_cut_frame` / `processors.start_trim._start_cut_frame`),
+    which differ only in which direction they scan the result.
 
-    A window counts as signal if its RMS exceeds EITHER threshold:
-      • floor + `floor_margin_db`  — where audible decay meets the sample's own
-        noise floor (estimated as the 10th-percentile window RMS), so "silence
-        only" adapts to each recording's floor level;
-      • peak − |`thresh_db`|      — a fixed ceiling below peak that only bites
-        when set high, to cut deliberately into the natural release.
-    Returns n when nothing is below both (nothing to cut).
+    Returns (ms, peak_ms, floor_ms): the per-frame windowed mean-square, its
+    peak, and a robust noise-floor estimate (the `_FLOOR_PERCENTILE`-th
+    percentile window energy — robust to the loud body of the sample).
     """
     win = max(1, min(win, n))
-    # prefix[k] = sum(energy[0:k]); windowed mean-square over [f-win+1, f].
     prefix = [0.0] * (n + 1)
     acc = 0.0
     for f in range(n):
@@ -119,14 +115,35 @@ def _tail_cut_frame(energy: list, n: int, win: int, thresh_db: float,
         ms[f] = m
         if m > peak_ms:
             peak_ms = m
-    if peak_ms <= 0.0:
-        return n
+    floor_ms = sorted(ms)[min(n - 1, int(_FLOOR_PERCENTILE * n))] if n else 0.0
+    return ms, peak_ms, floor_ms
 
-    # Noise floor = low percentile of window energy (robust to the loud body).
-    floor_ms = sorted(ms)[min(n - 1, int(_FLOOR_PERCENTILE * n))]
+
+def _signal_threshold(peak_ms: float, floor_ms: float, thresh_db: float,
+                      floor_margin_db: float) -> float:
+    """The windowed mean-square level above which a window counts as signal.
+
+    A window counts as signal if its RMS exceeds EITHER threshold:
+      • floor + `floor_margin_db`  — where audible decay meets the sample's own
+        noise floor, so "silence only" adapts to each recording's floor level;
+      • peak − |`thresh_db`|      — a fixed ceiling below peak that only bites
+        when set high, to cut deliberately into the natural release/attack.
+    """
     thr_peak  = peak_ms * (10.0 ** (thresh_db / 10.0))         # power ratio → /10
     thr_floor = floor_ms * (10.0 ** (floor_margin_db / 10.0)) if floor_ms > 0 else 0.0
-    thresh_ms = max(thr_peak, thr_floor)
+    return max(thr_peak, thr_floor)
+
+
+def _tail_cut_frame(energy: list, n: int, win: int, thresh_db: float,
+                    floor_margin_db: float) -> int:
+    """Frame index one past the last short-time-RMS window that counts as signal.
+
+    Returns n when nothing exceeds the threshold (nothing to cut).
+    """
+    ms, peak_ms, floor_ms = _windowed_ms(energy, n, win)
+    if peak_ms <= 0.0:
+        return n
+    thresh_ms = _signal_threshold(peak_ms, floor_ms, thresh_db, floor_margin_db)
     for f in range(n - 1, -1, -1):
         if ms[f] > thresh_ms:
             return f + 1

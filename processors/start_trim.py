@@ -1,0 +1,206 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026  mpc2emu contributors
+#
+# This file is part of mpc2emu.
+# Original implementation. No third-party source code used.
+#
+# mpc2emu is free software: you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 2 of the License, or
+# (at your option) any later version.
+#
+# mpc2emu is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+"""
+Start trimming
+---------------
+Cleanly remove leading silence at the START of a sample.
+
+The MPC ONE Autosampler's "Auto Trim Start" only moves the pad's playback
+start MARKER in the MPC's own project — it does not cut the captured WAV
+data itself. Once the sample is exported as a bare WAV (which is all an XPM
+program actually references), that marker is gone and the audible lead-in
+silence is back. The companion to `processors.tail_trim` — same detector,
+opposite end.
+
+The transform walks FORWARD from the start to find the first frame whose
+level (max across channels) exceeds a threshold set relative to the
+sample's own peak, cuts everything before it, and applies a short linear
+fade-in over the first kept frames so the cut is click-free. It is
+loop-safe: a loop that starts inside the region being cut is either dropped
+(the common autosampler whole-take default) or protected, mirroring
+`tail_trim`'s handling of a loop that ends inside the trimmed tail — see
+`drop_full_loop`. Best-effort — a silent or immediately-loud sample is left
+untouched and reported.
+
+Pure Python (array + math), matching the rest of the DSP here — no numpy.
+"""
+
+from dataclasses import replace
+from typing import Tuple
+
+from models.common import SampleData, LoopType
+from processors.resampler import _pcm_to_float, _float_to_pcm
+from processors.tail_trim import _frame_energy, _windowed_ms, _signal_threshold
+
+
+# ── Defaults ────────────────────────────────────────────────────────────────
+# Same "silence only" philosophy as tail_trim: the cut is driven by where the
+# signal first rises out of the sample's own noise floor, not a fixed line.
+_DEFAULT_THRESH_DB       = -72.0   # dB below peak RMS; deep = floor term governs
+_DEFAULT_FLOOR_MARGIN_DB = 6.0     # cut where RMS rises above floor + this
+_DEFAULT_FADE_MS         = 5.0     # click-avoiding fade-in length
+_DEFAULT_RMS_MS          = 20.0    # short-time RMS window for onset detection
+_MIN_KEEP_FRAMES         = 32      # never trim a sample shorter than this
+
+
+def _start_cut_frame(energy: list, n: int, win: int, thresh_db: float,
+                     floor_margin_db: float) -> int:
+    """Frame index of the first short-time-RMS window that counts as signal.
+
+    Mirrors `tail_trim._tail_cut_frame` but scans forward: the window ending
+    at frame `f` may contain the true onset anywhere in `[f-win+1, f]`, so the
+    returned cut point backs up to the START of that window rather than `f`
+    itself — never clips into the attack. Returns 0 when nothing exceeds the
+    threshold anywhere (nothing to cut).
+    """
+    ms, peak_ms, floor_ms = _windowed_ms(energy, n, win)
+    if peak_ms <= 0.0:
+        return 0
+    thresh_ms = _signal_threshold(peak_ms, floor_ms, thresh_db, floor_margin_db)
+    for f in range(n):
+        if ms[f] > thresh_ms:
+            return max(0, f - win + 1)
+    return 0
+
+
+def _trim_start_sample(sample: SampleData, thresh_db: float, fade_ms: float,
+                       rms_ms: float = _DEFAULT_RMS_MS,
+                       drop_full_loop: bool = True,
+                       floor_margin_db: float = _DEFAULT_FLOOR_MARGIN_DB
+                       ) -> Tuple[SampleData, dict]:
+    """Trim the leading silence of one sample.
+
+    Returns (new_or_original_sample, info). On any no-op the ORIGINAL sample
+    is returned with info['trimmed'] = False and a reason.
+
+    Loop handling — a real sustain loop wholly inside the kept audio is never
+    touched (the cut only ever lands before it). A loop whose start sits
+    inside the region we're removing is a *full-length / default* loop (an
+    autosampler's whole-take loop typically starts at or near frame 0); with
+    `drop_full_loop` it is discarded so the trimmed sample is a clean
+    one-shot, otherwise the trim is clamped to protect it.
+    """
+    channels = max(1, sample.channels)
+    info = {'trimmed': False, 'reason': '', 'name': sample.name,
+            'orig_frames': (len(sample.data) // 2) // channels,
+            'new_frames': 0, 'cut_frames': 0, 'loop_dropped': False}
+
+    sig = _pcm_to_float(sample.data)
+    energy, n = _frame_energy(sig, channels)
+    info['orig_frames'] = n
+    if n <= _MIN_KEEP_FRAMES:
+        info['reason'] = 'too short'
+        return sample, info
+
+    win = max(1, int(round(rms_ms / 1000.0 * sample.sample_rate)))
+    cut = _start_cut_frame(energy, n, win, thresh_db, floor_margin_db)
+    if cut <= 0:
+        info['reason'] = 'nothing to trim'
+        return sample, info
+
+    # Loop handling (see docstring).
+    has_loop = (sample.loop_type != LoopType.NO_LOOP
+                and sample.loop_end > sample.loop_start)
+    drop_loop = False
+    if has_loop and sample.loop_start < cut:
+        # The loop starts inside the region we would trim.
+        if drop_full_loop:
+            drop_loop = True                       # discard the full-length loop
+        else:
+            cut = sample.loop_start                # protect it: never cut past loop_start
+            info['loop_guarded'] = True
+
+    cut = min(cut, n - _MIN_KEEP_FRAMES)
+    if cut <= 0:
+        info['reason'] = 'nothing to trim'
+        return sample, info
+
+    # Fade the first `fade` frames of the KEPT region up from zero so the new
+    # start is click-free regardless of where the cut lands.
+    fade = int(round(fade_ms / 1000.0 * sample.sample_rate))
+    fade = max(1, min(fade, n - cut - 1))
+    out = sig[cut * channels:]
+    for i in range(fade):
+        g = i / fade                                # ~0.0 → 1.0 across the fade
+        base = i * channels
+        for c in range(channels):
+            out[base + c] *= g
+
+    if drop_loop:
+        new = replace(sample, data=_float_to_pcm(out),
+                      loop_type=LoopType.NO_LOOP, loop_start=0, loop_end=0)
+        info['loop_dropped'] = True
+    elif has_loop:
+        new = replace(sample, data=_float_to_pcm(out),
+                      loop_start=sample.loop_start - cut,
+                      loop_end=sample.loop_end - cut)
+    else:
+        new = replace(sample, data=_float_to_pcm(out))
+    info.update(trimmed=True, new_frames=n - cut, cut_frames=cut)
+    return new, info
+
+
+def trim_start_bank(bank, *, thresh_db: float = _DEFAULT_THRESH_DB,
+                    fade_ms: float = _DEFAULT_FADE_MS,
+                    rms_ms: float = _DEFAULT_RMS_MS,
+                    drop_full_loop: bool = True) -> None:
+    """Trim the leading silence of every sample in `bank` (in place).
+
+    thresh_db:  cut point is just before the first short-time-RMS window
+                louder than this many dB below the sample's own peak RMS
+                (default -72, "silence only"). Higher (e.g. -40) trims
+                deeper into the natural attack; lower keeps more lead-in.
+    fade_ms:    click-avoiding fade-in ending at the new sample start.
+    rms_ms:     short-time RMS window used to detect the onset (default 20 ms).
+    drop_full_loop:  when a sample's loop starts inside the trimmed lead-in
+                (an autosampler whole-take loop), discard it (True) so the
+                result is a clean one-shot, or preserve it by clamping the
+                trim to the loop start (False).
+    """
+    n = len(bank.samples)
+    print(f"\n  Start trim (threshold {thresh_db:g} dB below peak RMS, "
+          f"fade {fade_ms:g} ms); samples: {n}")
+
+    n_trim = n_drop = 0
+    saved_frames = 0
+    for i, s in enumerate(bank.samples):
+        new_s, info = _trim_start_sample(s, thresh_db, fade_ms, rms_ms,
+                                         drop_full_loop)
+        bank.samples[i] = new_s
+        if info['trimmed']:
+            n_trim += 1
+            saved_frames += info['cut_frames']
+            sr = new_s.sample_rate or 1
+            shrink = (100.0 * info['cut_frames'] / info['orig_frames']
+                      if info['orig_frames'] else 0.0)
+            drop = '  [loop dropped]' if info['loop_dropped'] else (
+                   '  [loop kept]' if info.get('loop_guarded') else '')
+            if info['loop_dropped']:
+                n_drop += 1
+            print(f"    '{info['name']}': {info['orig_frames']} → "
+                  f"{info['new_frames']} f  (-{shrink:.1f}%, "
+                  f"cut {info['cut_frames'] / sr:.2f}s){drop}")
+        elif info['reason'] not in ('nothing to trim',):
+            print(f"    '{info['name']}': kept ({info['reason']})")
+
+    rate = bank.samples[0].sample_rate if bank.samples else 44100
+    print(f"  Done: trimmed {n_trim}/{n} sample(s); "
+          f"removed ~{saved_frames / (rate or 1):.1f}s of lead-in total"
+          + (f"; dropped {n_drop} full-length loop(s)." if n_drop else "."))

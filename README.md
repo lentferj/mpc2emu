@@ -68,11 +68,17 @@ Emax I (linear 12-bit, 27,500 Hz) signal path — anti-alias → decimate →
 gain-stage → quantize → bandpass — for authentic lo-fi character rather than a
 clean bit-crush.
 
+**Start trim** (`--trim-start`) cleanly cuts leading silence off the start of
+each sample — the MPC ONE Autosampler's "Auto Trim Start" only moves the pad's
+playback start marker inside the MPC project, it doesn't cut the captured WAV,
+so the silence is back once the sample is exported/converted. See
+[Start Trim](#start-trim) below.
+
 **Tail trim** (`--trim-tail`) cleanly cuts the decaying tail and trailing
 silence off the end of each sample — built for fixed-length autosampler
 captures (e.g. the MPC ONE Autosampler's flat 4 s takes), where every note is
 followed by dead silence and a reverb tail worth removing. See
-[Tail Trim](#tail-trim) below.
+[Tail Trim](#tail-trim) below. `--trim[=DB]` is shorthand for both at once.
 
 **Auto sustain-loop** (`--auto-loop`) places a clean, seamless forward loop in the
 steady part of each sustained sample (organ, strings, pads, choir, brass, analog
@@ -680,6 +686,39 @@ pin it down explicitly with `--middle-c C3`, `--middle-c C4`, or `--middle-c C5`
 
 ---
 
+## Start Trim
+
+`--trim-start[=DB]` cleanly cuts leading silence off the START of each sample.
+The MPC ONE Autosampler's "Auto Trim Start" only moves the pad's **playback
+start marker** inside the MPC project — it does not cut the captured WAV data.
+Once the sample is exported (or converted, since an XPM program only ever
+references the underlying WAV), that marker is gone and the audible lead-in
+silence is back:
+
+```bash
+python convert.py /my/autosampled/ --from-samples --trim-start --format e4b --iso
+```
+
+Same adaptive detector as `--trim-tail`, the opposite end: the cut lands where
+the signal first rises out of the *sample's own* noise floor, with a short
+click-free fade-in (`--trim-start-fade`, default 5 ms). `DB` is a ceiling below
+peak that only bites when set high enough to deliberately cut into the natural
+attack: bare / `72` = "silence only" (keep the full onset); `45` trims further
+into the attack for a tighter sample.
+
+**Loop handling.** Autosamplers often embed a loop spanning the *whole* fixed-
+length take, starting at or near frame 0. By default, trimming such a sample
+**drops that loop** so the result is a clean one-shot. Pass
+`--trim-start-keep-loops` to instead clamp the trim so it never cuts past a
+loop's start point — use this for percussion / drum-loop material where the
+loop is musically meaningful and may legitimately start near the sample start.
+
+Runs first of all in the pipeline, before `--trim-tail` / `--single-cycle` /
+`--reduce-*` / `--resample`, so everything downstream sees the shortened
+samples.
+
+---
+
 ## Tail Trim
 
 `--trim-tail[=DB]` cleanly cuts the decaying tail and trailing silence off the
@@ -998,6 +1037,7 @@ mpc2emu/
 │   ├── zone_reducer.py          # Key-zone / velocity-layer thinning; velocity-layer split (--split-velocity-layers)
 │   ├── single_cycle.py          # Single-cycle oscillator extraction + retune (--single-cycle)
 │   ├── auto_loop.py             # Seamless adaptive-length sustain loop (--auto-loop)
+│   ├── start_trim.py            # Adaptive lead-in/silence removal (--trim-start)
 │   ├── tail_trim.py             # Adaptive tail/silence removal (--trim-tail)
 │   └── loop_renderer.py         # Ping-pong → forward loop (bakes the bounce into PCM)
 └── tests/
