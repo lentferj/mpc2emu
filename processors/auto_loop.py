@@ -214,11 +214,16 @@ def _find_loop(mono: list, sr: int, root: int, *, target_ms, min_ms, max_ms,
     if pi < 2 or re - rs < min_ms / 1000.0 * sr + 2 * p + w:
         return None
 
-    # loop-start candidates: rising zero-crossings ~1 period apart near region start
-    S0 = max(rs, w) + pi
+    # loop-start candidates spread across the early sustain (~every 60 ms), so the
+    # search finds a good start at WHATEVER depth: some material matches best right
+    # after the attack, bright/evolving material (brass, ensembles) matches far
+    # better a few hundred ms in — and a deeper start also leaves more steady audio
+    # before loop-start for a long cost-scaled crossfade (which blends the loop end
+    # into that pre-roll, so it must be sustain, not the attack transient).
+    step = max(pi, int(0.06 * sr))
     Scands = []
-    for j in range(4):
-        Sc = _find_rising_zero(mono, S0 + j * pi, max(1, pi // 2))
+    for j in range(8):
+        Sc = _find_rising_zero(mono, rs + w + j * step, max(1, pi // 2))
         if (Sc - w >= 0 and re - Sc >= min_ms / 1000.0 * sr + 2 * p + w
                 and Sc not in Scands):
             Scands.append(Sc)
@@ -282,7 +287,7 @@ def _find_loop(mono: list, sr: int, root: int, *, target_ms, min_ms, max_ms,
         S, cost, E = results[0]
     else:
         min_cost = min(r[1] for r in results)
-        thr = max(accept, min_cost * 1.5)
+        thr = max(accept, min_cost * 1.3)
         ok = [r for r in results if r[1] <= thr] or [min(results, key=lambda r: r[1])]
         # Prefer the LONGEST transparent loop.  A steady tone sounds identical at
         # any length, but an evolving one (strings, ensembles, pads) needs the loop
@@ -333,11 +338,14 @@ def _auto_loop_sample(sample: SampleData, *, target_ms, xfade_ms, min_ms, max_ms
     out = list(flat)
     xf = 0
     if crossfade:
-        # crossfade length: >= 2 periods, longer when the match is poor, capped at
-        # the loop length / 3 and the available pre-roll.
-        xf = max(int(round(xfade_ms / 1000.0 * sample.sample_rate)), int(2 * p))
-        if cost > 0.1:
-            xf = max(xf, int(round(60.0 / 1000.0 * sample.sample_rate)))
+        # Crossfade length grows with the endpoint mismatch.  A clean loop needs
+        # almost none; a poorly-matching one (bright/evolving material — brass,
+        # ensembles) needs a long, gradual blend so the timbral seam is MORPHED
+        # across time instead of switched at one instant (which reads as an audible
+        # "loop end" even though the waveform is click-free).  >= 2 fundamental
+        # periods; capped at ~200 ms, the loop length / 3, and the pre-roll.
+        xf_ms = min(200.0, xfade_ms + cost * 500.0)
+        xf = max(int(round(xf_ms / 1000.0 * sample.sample_rate)), int(2 * p))
         xf = max(1, min(xf, L // 3, S))
         # Apply the equal-power crossfade on EVERY channel (period found on the mono
         # mix; the splice is identical per channel).  Ends exactly on frame S-1 so
