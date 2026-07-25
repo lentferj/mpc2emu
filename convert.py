@@ -488,6 +488,56 @@ def main():
              'the last beat): trimming that silence would break the loop length. '
              'Sustained one-shots (organ, pads, strings) do NOT need this — their '
              'autosampler loop is just a whole-take default worth dropping.')
+    ap.add_argument('--auto-loop', nargs='?', const='auto', default=None,
+        metavar='auto|MS',
+        help='Place a clean, seamless FORWARD sustain loop in each sample so held '
+             'notes sustain (sustained instruments: organ, strings, pads, choir, '
+             'brass, analog synth). The companion to --trim-tail (trim the dead '
+             'tail, then loop the body) and an alternative to --single-cycle (which '
+             'instead collapses each sample to a tiny oscillator). Length is '
+             'ADAPTIVE by default (bare/"auto"): it prefers the LONGEST clean loop '
+             '(up to --auto-loop-max-ms) so the sustain sounds organic rather than '
+             'a short repeating snippet; a modulated tone (vibrato/tremolo/detuned-'
+             'oscillator beating) is snapped to a whole number of modulation cycles '
+             'so the beat matches at the seam. Pass a number ("=250") to force a '
+             'target length in ms. TIP: a fast-beating/evolving analog SYNTH can '
+             'sound better with a shorter loop (a long one captures too much drift) '
+             '— use --auto-loop-max-ms or a fixed "=MS" for those. Endpoints snap to '
+             'zero-crossings with an equal-power crossfade, so the wrap is click-free '
+             'by construction. Already-looped / too-short / weak-match samples are '
+             'left alone (see --auto-loop-*).')
+    ap.add_argument('--auto-loop-xfade', type=float, default=25.0, metavar='MS',
+        help='With --auto-loop: crossfade length in ms at the loop splice '
+             '(default 25; grows automatically when the endpoint match is poor).')
+    ap.add_argument('--auto-loop-max-ms', type=float, default=2500.0, metavar='MS',
+        help='With --auto-loop (adaptive): cap on the loop length (default 2500). '
+             'Longer = more organic but more sample RAM; shorten it (e.g. 800) for '
+             'fast-beating/drifting analog synths that a long loop makes worse.')
+    ap.add_argument('--auto-loop-min-quality', type=float, default=0.45,
+        metavar='COST',
+        help='With --auto-loop: skip a sample whose best endpoint-match cost '
+             'exceeds COST (default 0.45 — the level the crossfade can still hide) — '
+             'leaves inherently hard material (dense ensembles, noisy analog) '
+             'unlooped rather than washy. 0 = never skip.')
+    ap.add_argument('--auto-loop-force', action='store_true',
+        help='With --auto-loop: loop even already-looped samples (replacing the '
+             'existing loop) and samples over the quality threshold.')
+    ap.add_argument('--auto-loop-trim', action='store_true',
+        help='With --auto-loop: drop the audio after the loop end to save RAM '
+             '(the recorded release tail is discarded; the sampler envelope shapes '
+             'the release). Default: keep the full sample, only add loop points.')
+    ap.add_argument('--auto-loop-no-crossfade', action='store_true',
+        help='With --auto-loop: do NOT bake a crossfade into the sample — set the '
+             'loop points only, leaving the PCM pristine. The endpoints are still '
+             'chosen at rising zero-crossings and (for modulated tones) beat-aligned, '
+             'so the raw loop is decent, and you can then FINE-TUNE it freely in the '
+             'E4XT / K2000 loop editor (a baked crossfade would otherwise lock the '
+             'loop to this exact position). Default: bake the crossfade for a '
+             'click-free result straight out of the box.')
+    ap.add_argument('--auto-loop-dump-dir', metavar='DIR', default=None,
+        help='With --auto-loop: also export each looped sample to DIR as a WAV '
+             'with its loop points embedded (smpl chunk), for audition in Audacity '
+             '/ a player / another sampler.')
     ap.add_argument('--single-cycle', nargs='?', const='auto', default=None,
         metavar='auto|N',
         help='Turn each sample into a looped oscillator so the sampler plays it '
@@ -547,6 +597,18 @@ def main():
         if not 0.0 <= opt_val <= 100.0:
             print(f"Error: {opt_name} must be between 0 and 100 (got {opt_val:.0f}).")
             sys.exit(1)
+
+    # --auto-loop: normalise 'auto' (adaptive) | positive-float target length (ms).
+    if args.auto_loop is not None and args.auto_loop != 'auto':
+        try:
+            al_ms = float(args.auto_loop)
+            if al_ms <= 0:
+                raise ValueError
+        except ValueError:
+            print("Error: --auto-loop takes 'auto' or a positive length in ms "
+                  f"(got {args.auto_loop!r}).")
+            sys.exit(1)
+        args.auto_loop = al_ms
 
     # --single-cycle: normalise 'auto' | positive int; fold keep-all into the trio.
     if args.single_cycle is not None and args.single_cycle != 'auto':
@@ -668,6 +730,24 @@ def main():
         for bank in source_banks:
             trim_tail_bank(bank, thresh_db=_thr_db, fade_ms=args.trim_tail_fade,
                            drop_full_loop=not args.trim_tail_keep_loops)
+
+    # ── Auto sustain-loop ───────────────────────────────────────────────────────
+    # After trim-tail (loop the trimmed body) and before single-cycle (which would
+    # otherwise overwrite the loop with its own oscillator) / reduce / resample
+    # (resample rescales the loop points).
+    if args.auto_loop is not None:
+        _al_ms = None if args.auto_loop == 'auto' else args.auto_loop
+        _al_lbl = 'auto length' if _al_ms is None else f'{_al_ms:g} ms'
+        print(f"\n[{step_n}] Auto sustain-loop ({_al_lbl})...")
+        step_n += 1
+        from processors.auto_loop import auto_loop_bank
+        for bank in source_banks:
+            auto_loop_bank(bank, target_ms=_al_ms, xfade_ms=args.auto_loop_xfade,
+                           max_ms=args.auto_loop_max_ms,
+                           min_quality=args.auto_loop_min_quality,
+                           force=args.auto_loop_force, trim=args.auto_loop_trim,
+                           crossfade=not args.auto_loop_no_crossfade,
+                           dump_dir=args.auto_loop_dump_dir, workers=args.jobs)
 
     # ── Single-cycle oscillator extraction ─────────────────────────────────────
     # Runs first so the shrunk samples flow through reduce/resample/fit/split with

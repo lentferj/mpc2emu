@@ -162,40 +162,82 @@ samples + auto-mapped zones (no program synth params).
 
 ---
 
-## §AUTOLOOP — Auto sustain-loop for sustained samples (design)
+## §AUTOLOOP — Auto sustain-loop (IMPLEMENTED, branch `autoloop`, 2026-07-25)
 
 **Goal.** Set a clean forward sustain loop in the steady region so held notes
-sustain on the target sampler. The autosampler follow-on to `--trim-tail`
-(`processors/tail_trim.py`): trim the dead tail (dropping the whole-take default
-loop), then place a *real* sustain loop. New `processors/auto_loop.py` +
-`--auto-loop` flag, run right after `--trim-tail` in `convert.py`.
+sustain. Autosampler follow-on to `--trim-tail` (trim the dead tail dropping the
+whole-take loop, then place a *real* sustain loop). `processors/auto_loop.py`
+(`auto_loop_bank` / `_auto_loop_sample` / `_find_loop`), pure Python, reuses the
+single-cycle DSP; wired after `--trim-tail` in `convert.py`.
 
-**Algorithm (reuse the single-cycle DSP — pure Python, no numpy):**
-1. `region = single_cycle._sustain_start(sig)` — skip the attack.
-2. `p, conf = single_cycle._detect_period(sig, region, sr, root0)` then
-   `p_float = _refine_period(...)` — fundamental period, root-note-primed.
-3. Choose a loop length = an **integer number of periods** (a few hundred ms, or
-   `--auto-loop-len`), so start and end are in phase.
-4. Cross-correlate candidate end points against the start window to pick the pair
-   with the best waveform match within the steady region; snap both to **rising
-   zero-crossings** (`single_cycle._find_rising_zero`).
-5. Optional short equal-power **crossfade** across the splice to kill any residual
-   seam (write the crossfaded samples into the loop tail).
-6. Set `loop_type=FORWARD`, `loop_start`, `loop_end` (inclusive — codebase
-   convention). Every writer already emits loop points (E4B `smpl`, KRZ
-   `sampleEnd`/loop bit).
+**As-built algorithm** (differs from the original sketch below in ways that matter):
 
-**Knobs:** `--auto-loop [MS]` (target loop length), `--auto-loop-xfade MS`,
-confidence log + `[LOW CONFIDENCE — audition]` flag like single-cycle.
+1. **Steady region** — `_steady_region`: a LONG-window (80 ms) smoothed RMS envelope
+   finds the attack-end and release-onset while IGNORING tremolo/beating dips. (The
+   original short-window "stop at first dip" cut modulated material to nothing.)
+2. **Period** — `single_cycle._detect_period` + `_refine_period`, root-primed, with a
+   **harmonic-lock fallback**: detected pitch > 2 octaves off the root ⇒ use the
+   root-note period, drop confidence (fixed a low-bass 0.49→0.15 case).
+3. **Seamless splice — click-free by CONSTRUCTION (the key insight).** Endpoints snap
+   to rising zero-crossings. The equal-power crossfade rewrites the last `xf` loop
+   samples `[E-xf+1..E]`, morphing from the loop-end content into the samples that
+   PRECEDE loop-start `[S-xf..S-1]`, with `t=i/(xf-1)` so `fo=0` at the last sample →
+   `out[E] = orig[S-1]` EXACTLY. The wrap `E→S` therefore reproduces the natural
+   waveform run `orig[S-1]→orig[S]`. Measured residual click ≈ **−240 dB** on all
+   material, synth sawtooth edges included. ⚠ Ending the crossfade at `orig[S]`
+   (off-by-one) DUPLICATES a sample = a real glitch — avoid. ⚠ Do NOT QC the seam
+   with jump/avg-step (it false-flags a synth's legitimate per-period edge as 70×);
+   QC with `|out[E]−orig[S−1]|` in dB below peak.
+4. **Adaptive length + BEAT ALIGNMENT** (refined 2026-07-25 after audition feedback —
+   loops were too short/static, and a detuned-synth loop pulsed "ding-ding-ding").
+   Splice quality is scored by `_match_cost` = normalised SSD of the two crossfade
+   windows (pre-end `[E-w+1..E]` vs pre-start `[S-w..S-1]`).  Length:
+   - *modulated* tone (vibrato / tremolo / detuned-oscillator BEATING; `_modulation`
+     returns the FUNDAMENTAL modulation period M) → candidate lengths are integer
+     multiples of M, so the envelope matches at the seam.  A fraction-of-a-beat error
+     is the audible ding — the loop-end zero-crossing search weights toward the exact
+     beat multiple (`score = cost + 0.5·|E−Et|/M`).  ⚠ the click-free crossfade holds
+     for ANY loop-end, but landing E on an exact non-zero-crossing beat multiple wrecks
+     the crossfade-window match (waveform-phase mismatch → high cost → wrongly skipped);
+     use a zero-crossing NEAR the beat, not exactly on it.
+   - *steady* tone → integer-fundamental-period sweep.
+   Keep the **LONGEST transparent** loop (was steady→shortest — wrong: a short loop on
+   evolving material sounds static even when seamless).  Defaults `min_ms=150`,
+   `max_ms=2500` (raised from 80/600 for natural, breathing loops).  A few loop-START
+   candidates guard against a bad start.  A length/cost penalty (`_LEN_COST_PENALTY_MS
+   =2000`) trades length against splice quality so a marginally-longer loop cannot win
+   by degrading the seam.  Fast-beating/drifty analog synths are the one case where a
+   long loop over-captures drift → manual override with `--auto-loop MS` or
+   `--auto-loop-max-ms 800` (no metric auto-distinguishes drifty-wants-medium from
+   clean-wants-long; see [[project_autoloop]]).  Skip default `min_quality=0.45`.
+5. `loop_type=FORWARD`, `loop_start=S`, `loop_end=E` (inclusive). Round-trips through
+   both E4B and KRZ writers (verified). Crossfade applied per channel (mono+stereo).
+   **`crossfade=False` (`--auto-loop-no-crossfade`)** leaves the PCM pristine — loop
+   points only, at the zero-crossing/beat-aligned positions — so the loop stays freely
+   fine-tunable in the E4XT/K2000 loop editor (a baked crossfade locks it in place).
 
-**Edge cases:** unpitched/noisy → best-effort, flag low confidence; already-looped
-(real sustain loop) → leave unless `--force`; percussion/one-shots → skip (pairs
-with `--trim-tail-keep-loops`, which protects loops).
+**Knobs:** `--auto-loop [auto|MS]`, `--auto-loop-xfade MS` (grows automatically for
+poor matches), `--auto-loop-max-ms`, `--auto-loop-min-quality COST` (skip hard
+material), `--auto-loop-force`, `--auto-loop-trim` (drop audio past loop_end),
+`--auto-loop-dump-dir`. `[weak match — audition]` advisory above cost 0.44 (the raw cost badly over-predicts badness once the crossfade is applied — HW audition rated loops up to 0.437 "very good").
 
-**Validation:** dump looped WAVs (`smpl` chunk) for audition like
-`single_cycle._dump_cycle`; **HW audition** the seam on E4XT + K2000 before
-declaring done (loop-click is the usual failure). Cross-ref the open-source prior
-art: LoopAuditioneer (autocorr loop search) and PyMusicLooper.
+**Results (objective sweep, mellotron/VPO/prophet/K2).** Solo/pure timbres (flute,
+cello, clean choir, analog synth) → excellent (match <0.07, natural 300-600 ms
+loops). Dense ensemble / noisy analog → inherently hard (0.2-0.55): longer crossfade
++ flag/skip. Audition renders (loop×6 flat) in `/home/lentferj/temp/autoloop_work/aud/`.
+
+**Still to do:** local audition (Audacity/VLC) then **HW audition** on E4XT + K2000
+before merge to main; possibly pitch-based vibrato detection (amp-envelope misses
+pure vibrato) and quality-threshold tuning. Prior art: LoopAuditioneer, PyMusicLooper.
+
+<details><summary>Original design sketch (superseded)</summary>
+
+1. `region = single_cycle._sustain_start(sig)`. 2. `_detect_period`/`_refine_period`.
+3. loop length = integer periods (a few hundred ms). 4. cross-correlate end points,
+snap to zero-crossings. 5. optional crossfade. 6. `loop_type=FORWARD`. The as-built
+version replaced (3)+(4) with the measured length sweep and made the crossfade the
+click-free primary mechanism rather than an optional touch-up.
+</details>
 
 ---
 

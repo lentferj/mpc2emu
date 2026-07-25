@@ -124,24 +124,30 @@ Each = parse from source + map to the E4B/KRZ writer where expressible.
 E4XT/K2000 actually support (esp. exclusive groups). See `docs/RESOLUTION_NOTES.md
 §MODELPARAMS`.
 
-## Auto-loop sustained samples (ENHANCEMENT — larger effort, OPEN 2026-07-24)
+## Auto-loop sustained samples — RESOLVED + HW-CONFIRMED (2026-07-25)
 
-Automatically place a **clean sustain loop** in the steady region of a sustained
-sample (organ, strings, pads, synth) so a held note sustains indefinitely on the
-target sampler — the classic autosampler follow-on to `--trim-tail`. Pairs with it:
-trim the dead tail, then loop the sustain. This is the feature behind the LoopAudi-
-tioneer / PyMusicLooper tools discussed 2026-07-24.
+**DONE — merged to main, hardware-confirmed on the E4XT.** Places a **clean
+sustain loop** in the steady region of a sustained sample (organ, strings,
+pads, choir, brass, analog synth) so a held note sustains indefinitely — the
+autosampler follow-on to `--trim-tail` (trim the dead tail, then loop the
+body). `processors/auto_loop.py` + `--auto-loop [auto|MS]` (and
+`--auto-loop-xfade/-max-ms/-min-quality/-force/-trim/-dump-dir`), wired after
+`--trim-tail` in the pipeline; loops round-trip through both E4B and KRZ
+writers.
 
-Sketch: locate the steady-state sustain (reuse `single_cycle._sustain_start`),
-detect the fundamental period (reuse `single_cycle._detect_period` /
-`_refine_period`), search cross-correlation for the best loop-start/loop-end pair an
-integer number of periods apart, snap both to rising zero-crossings, optional short
-crossfade at the splice, write `loop_type=FORWARD` + `loop_start/end`. A new
-`processors/auto_loop.py` + `--auto-loop` flag; feeds every writer (E4B/KRZ carry
-loop points already). **Status:** not started — larger effort (DSP + per-writer
-verification + HW audition). Design notes in `docs/RESOLUTION_NOTES.md §AUTOLOOP`.
+**As-built** (see `docs/RESOLUTION_NOTES.md §AUTOLOOP` for the details): click-free
+splice by CONSTRUCTION (equal-power crossfade ending exactly on the sample before
+loop-start → the wrap reproduces the natural waveform run; measured click ~-240 dB,
+synth sawtooth edges included). **Adaptive length**: prefers the LONGEST
+transparent loop so the sustain sounds organic, snapped to a whole number of
+modulation cycles when the tone beats/vibratos. Objective sweep + full local
+audition across the mellotron/VPO/prophet/K2 test set: solo/pure timbres
+(flute, cello, clean choir, analog synth) loop excellently (match <0.07);
+dense ensemble / noisy analog is inherently hard (0.2-0.55) and gets a longer
+crossfade + a `[weak match — audition]` advisory or a skip.
 
-**Blocked on:** nothing to start; needs HW audition of loop seams once drafted.
+Possible follow-ups (not blocking): pitch-based vibrato detection
+(amp-envelope misses pure vibrato); tuning the quality threshold.
 
 ## K2000R "Object → Delete" LOCKUP (OPEN, 2026-06-25) — needs factory resets
 
