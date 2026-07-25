@@ -56,34 +56,67 @@ from processors.tail_trim import _frame_energy, _windowed_ms, _signal_threshold
 _DEFAULT_THRESH_DB       = -72.0   # dB below peak RMS; deep = floor term governs
 _DEFAULT_FLOOR_MARGIN_DB = 6.0     # cut where RMS rises above floor + this
 _DEFAULT_FADE_MS         = 5.0     # click-avoiding fade-in length
-_DEFAULT_RMS_MS          = 20.0    # short-time RMS window for onset detection
+_DEFAULT_RMS_MS          = 20.0    # coarse short-time RMS window: robust onset region
+_REFINE_RMS_MS           = 3.0     # fine window: precise onset localization within it
 _MIN_KEEP_FRAMES         = 32      # never trim a sample shorter than this
 
 
 def _start_cut_frame(energy: list, n: int, win: int, thresh_db: float,
-                     floor_margin_db: float) -> int:
-    """Frame index of the first short-time-RMS window that counts as signal.
+                     floor_margin_db: float, refine_win: int = 1) -> int:
+    """Frame index of the true onset — the first sample where the signal
+    counts as louder than the noise floor.
 
-    Mirrors `tail_trim._tail_cut_frame` but scans forward: the window ending
-    at frame `f` may contain the true onset anywhere in `[f-win+1, f]`, so the
-    returned cut point backs up to the START of that window rather than `f`
-    itself — never clips into the attack. Returns 0 when nothing exceeds the
-    threshold anywhere (nothing to cut).
+    Two stages, both sharing `_windowed_ms`/`_signal_threshold` with
+    `tail_trim._tail_cut_frame` (same detector, opposite intent):
+
+    1. COARSE — a `win`-length window robustly finds the region where the
+       signal first rises out of the noise floor. A window this long rejects
+       a single noisy dither sample deciding the outcome on its own; critically,
+       `_windowed_ms` shrinks the window for frames near the very start (there's
+       no history yet), so a lone noise spike right at frame 0 gets read as its
+       OWN 1-sample "window" — plenty to spuriously exceed the threshold and
+       return cut=0, defeating the whole trim. Starting the coarse scan only
+       once a FULL window is available (`f >= win-1`) closes that hole.
+    2. REFINE — the coarse window `[coarse-win+1, coarse]` only bounds the
+       onset; it doesn't locate it; backing off by the *entire* coarse window
+       overshoots by the same margin every time (real-world MPC ONE Autosampler
+       captures: a consistent ~20 ms of extra kept silence, i.e. exactly the
+       default coarse window — these are fast synth/percussive attacks, not
+       gradual swells, so the windowed average only crosses the threshold once
+       the transient is already most of the way through the window). A short
+       `refine_win`-length re-scan of just that bounded region localizes the
+       true onset precisely, at the same absolute threshold.
+
+    Returns 0 when nothing exceeds the threshold anywhere (nothing to cut).
     """
     ms, peak_ms, floor_ms = _windowed_ms(energy, n, win)
     if peak_ms <= 0.0:
         return 0
     thresh_ms = _signal_threshold(peak_ms, floor_ms, thresh_db, floor_margin_db)
-    for f in range(n):
+
+    coarse = None
+    for f in range(min(win - 1, n - 1), n):
         if ms[f] > thresh_ms:
-            return max(0, f - win + 1)
-    return 0
+            coarse = f
+            break
+    if coarse is None:
+        return 0
+
+    lo = max(0, coarse - win + 1)
+    rwin = max(1, min(refine_win, coarse + 1 - lo))
+    sub_n = coarse + 1 - lo
+    r_ms, _, _ = _windowed_ms(energy[lo:coarse + 1], sub_n, rwin)
+    for i in range(min(rwin - 1, sub_n - 1), sub_n):
+        if r_ms[i] > thresh_ms:
+            return lo + max(0, i - rwin + 1)
+    return lo
 
 
 def _trim_start_sample(sample: SampleData, thresh_db: float, fade_ms: float,
                        rms_ms: float = _DEFAULT_RMS_MS,
                        drop_full_loop: bool = True,
-                       floor_margin_db: float = _DEFAULT_FLOOR_MARGIN_DB
+                       floor_margin_db: float = _DEFAULT_FLOOR_MARGIN_DB,
+                       refine_ms: float = _REFINE_RMS_MS
                        ) -> Tuple[SampleData, dict]:
     """Trim the leading silence of one sample.
 
@@ -110,7 +143,8 @@ def _trim_start_sample(sample: SampleData, thresh_db: float, fade_ms: float,
         return sample, info
 
     win = max(1, int(round(rms_ms / 1000.0 * sample.sample_rate)))
-    cut = _start_cut_frame(energy, n, win, thresh_db, floor_margin_db)
+    rwin = max(1, int(round(refine_ms / 1000.0 * sample.sample_rate)))
+    cut = _start_cut_frame(energy, n, win, thresh_db, floor_margin_db, rwin)
     if cut <= 0:
         info['reason'] = 'nothing to trim'
         return sample, info
