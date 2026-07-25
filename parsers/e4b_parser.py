@@ -269,6 +269,13 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     v_transpose      = vpar[34] - 256 if vpar[34] > 127 else vpar[34]
     v_coarse_tune    = vpar[35] - 256 if vpar[35] > 127 else vpar[35]
     v_fine_tune      = round((vpar[36] - 256 if vpar[36] > 127 else vpar[36]) * 100 / 64)
+    # Per-voice Volume/Pan (hardware-RE'd 2026-07-26, see writers/e4b_writer.py
+    # _build_voice): vpar[54] = Volume (signed byte, dB), vpar[55] = Pan
+    # (signed byte, -64=full-L..+63=full-R). Only meaningful for a
+    # single-zone voice — a multi-zone voice ignores these and uses each
+    # zone's own absolute value instead (see the zone loop below).
+    v_volume         = float(vpar[54] - 256 if vpar[54] > 127 else vpar[54])
+    v_pan            = max(-1.0, min(1.0, (vpar[55] - 256 if vpar[55] > 127 else vpar[55]) / 64.0))
     chorus_amount    = vpar[42] / 127.0   # Chorus Amount: 0-127 -> 0.0-1.0 (see _build_voice)
     filter_byte      = vpar[58]
     filter_cutoff    = vpar[60] / 255.0
@@ -417,6 +424,26 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
         sample_idx = struct.unpack_from('>H', entry, 10)[0]
         root_key   = entry[14]
         sname      = idx_to_name.get(sample_idx, '')
+        if n_zones > 1:
+            # Multi-zone voice: each zone's ABSOLUTE fine-tune/volume/pan,
+            # read directly from its own entry — NOT a delta on top of the
+            # voice's vpar[36]/[54]/[55] (that model was tried and disproven
+            # 2026-07-26: a hardware differential save with genuinely
+            # asymmetric zone volumes still wrote vpar[54]=0, and a from-
+            # scratch bank built by this exact writer/parser pair confirmed
+            # the front panel displays each zone's raw entry value, not a
+            # voice+delta sum). vpar[36]/[54]/[55] are ignored here — the
+            # writer leaves them at 0 for a multi-zone voice (see
+            # writers/e4b_writer.py._build_voice).
+            zone_fine_tune = round(struct.unpack_from('>h', entry, 12)[0] * 100.0 / 64.0)
+            zone_volume    = float(entry[15] - 256 if entry[15] > 127 else entry[15])
+            zone_pan       = max(-1.0, min(1.0, (entry[16] - 256 if entry[16] > 127 else entry[16]) / 64.0))
+        else:
+            # Single-zone voice: the voice's own vpar[36]/[54]/[55]
+            # (hardware-confirmed 2026-07-26, see writers/e4b_writer.py).
+            zone_fine_tune = v_fine_tune
+            zone_volume    = v_volume
+            zone_pan       = v_pan
         zones.append(ZoneMapping(
             sample_name = sname,
             lo_key      = lo_key,
@@ -426,7 +453,9 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
             root_key    = root_key,
             transpose   = v_transpose,
             coarse_tune = v_coarse_tune,
-            fine_tune   = v_fine_tune,
+            fine_tune   = zone_fine_tune,
+            volume      = zone_volume,
+            pan         = zone_pan,
         ))
 
     voice = VoiceLayer(

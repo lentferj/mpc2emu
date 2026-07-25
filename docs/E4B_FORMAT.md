@@ -197,7 +197,8 @@ multi-voice banks:
 | `38`    | Non-Transpose flag  | `0x01` = pitch fixed (does not follow key), `0x00` = key-tracking. Confirmed from `B.010-Voices_RevEng.E4B` |
 | `42`    | Chorus Amount       | Voice/Tuning page; UI `0–100%` → `0–127` linear (`round(pct/100×127)`), `0` = off. Hardware-confirmed 2026-06-08 |
 | `51`    | `0x80`              | constant |
-| `54`    | volume              | **signed** dB (`−12 dB` → `0xF4`, `0` = unity). Hardware-RE'd 2026-06-13 (`RE_SUITE` ZONE BASE vol-12); supersedes the earlier "amplitude gain" guess |
+| `54`    | volume              | **signed** dB (`−12 dB` → `0xF4`, `0` = unity). Hardware-RE'd 2026-06-13 (`RE_SUITE` ZONE BASE vol-12); supersedes the earlier "amplitude gain" guess. Written since 2026-07-26 — previously documented here but left hardcoded at `0x00` in the writer. **Only meaningful for a single-zone voice** — see [§4.5](#45-secondary-zone-table--zone-entry-22-bytes) |
+| `55`    | pan                 | **signed** byte, `−64`=full-L … `0`=centre … `+63`=full-R. Hardware-confirmed 2026-07-26 via a 7-voice differential save (`B.012 "Vce VolPan"`): front-panel Pan `+63/−64/+32/−32` → this byte exactly, every other voice/zone byte unchanged. **Only meaningful for a single-zone voice** — see [§4.5](#45-secondary-zone-table--zone-entry-22-bytes) |
 | `58`    | VCF filter type     | see [§4.4](#44-filter-type-mapping-xpm--e4b) |
 | `60`    | VCF cutoff          | `0`≈57 Hz … `255`=20 kHz, exponential curve |
 | `61`    | VCF Q / resonance   | `0`–`127`, linear |
@@ -388,8 +389,7 @@ sources; the MPC Vocal-formant types now map to the E4XT Vocal filters (`0x50`/
 
 ### 4.5 Secondary zone table — zone entry (22 bytes)
 
-Each entry maps a key/velocity range to a sample. Only a subset of the 22
-bytes is currently understood:
+Each entry maps a key/velocity range to a sample.
 
 | Offset | Size | Field | Notes |
 |---|---|---|---|
@@ -398,9 +398,45 @@ bytes is currently understood:
 | `6`     | 1 | `lo_vel`     | MIDI velocity 0–127 |
 | `9`     | 1 | `hi_vel`     | MIDI velocity 0–127 |
 | `10:12` | 2 | `sample_idx` | **BE u16**, 1-based — see [§5.3](#53-sample-index-is-a-2-byte-be-u16-not-a-single-byte) |
+| `12:14` | 2 | `fine_tune`  | Signed **BE i16**, 1/64-semitone units. **Multi-zone voices only** — see below |
 | `14`    | 1 | `root_key`   | MIDI note — playback root, overrides the sample's own root note |
+| `15`    | 1 | `volume`     | Signed byte, dB. **Multi-zone voices only** — see below |
+| `16`    | 1 | `pan`        | Signed byte, −64..+63. **Multi-zone voices only** — see below |
 
 All other bytes are zero in mpc2emu's output.
+
+**`[12:14]`/`[15]`/`[16]` are the zone's ABSOLUTE fine-tune/volume/pan, used
+only when a voice has MULTIPLE sample zones — not a delta on top of the
+voice's `vpar[36]`/`[54]`/`[55]` (§4.1).** A single-zone voice instead
+writes its one zone's value directly into `vpar[36]`/`[54]`/`[55]` and
+leaves these three bytes zero. Three-stage hardware investigation
+(2026-07-26), all writing to the SD card as `HD0.img` and byte-diffed:
+
+1. Decoded by [ConvertWithMoss](https://github.com/git-moss/ConvertWithMoss)
+   (PR #220, commit `7ce000f`) from 76057 zones across the E-mu Producer
+   Series CD-ROMs, as an offset on top of the voice's own settings.
+2. `B.012 "Vce VolPan"` (7 *single-zone* voices, distinct front-panel
+   Volume/Pan each) appeared to disprove it entirely — every zone entry
+   stayed zero, `vpar[54]`/`[55]` matched the front-panel values exactly.
+3. `B.013 "MultiSZpVce"` (**one voice, 7 sample zones**, each given a
+   distinct Volume/Pan/Fine-tune) showed the zone entries ARE used for a
+   multi-zone voice, matching CWM's offsets exactly — but its own zone
+   volumes were already asymmetric (`+10, 0, 0, −96, 0, 0, 0`; a midpoint
+   would be −43) and the firmware still wrote `vpar[54]=0`, not a
+   composed baseline. That ruled out a delta model on its own, but every
+   *test* built here up to that point had, by design, symmetric zone
+   values (min = −max) — so the representative always landed on exactly
+   0, and "delta from a nonzero voice value" vs. "absolute value, voice
+   field simply unused" were still numerically indistinguishable in every
+   case tried.
+4. A dedicated `ASYMTEST` bank (one voice, two zones with deliberately
+   ASYMMETRIC absolute values — `0`/`0`/`0` and `80c`/`20dB`/`+1.0`, giving
+   a clearly nonzero midpoint of `+26`/`+10dB`/`+32`) — built by mpc2emu's
+   own writer with the delta model still implemented — settled it: the
+   E4XT displayed each zone's RAW entry bytes directly (the delta values,
+   `−26`/`−10`/`−32` and `+25`/`+10`/`+32`), not the intended absolute
+   values reconstructed via voice+delta. Confirms the absolute model; the
+   delta model (as briefly implemented 2026-07-26) was wrong.
 
 ### 4.6 Sample chunk header (`E3S1` chunk body, 94 bytes)
 

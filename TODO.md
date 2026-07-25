@@ -1,5 +1,55 @@
 # mpc2emu — Open Items
 
+## E4B per-zone fine-tune/volume/pan (multi-zone voices) — RESOLVED + HW-CONFIRMED (2026-07-26)
+
+**DONE — hardware-confirmed on the E4XT, four-stage investigation, one
+wrong turn corrected.** Chased as a ConvertWithMoss PR #220 cross-reference
+(commit `7ce000f`, 2026-07-25) claiming the E4B secondary zone entry
+carries fine-tune/volume/pan at `[12:14]`/`[15]`/`[16]` for a multi-zone
+voice (a normal multisampled instrument — several keygroups/velocity
+layers sharing one voice, which is what `xpm_parser.py`/`sfz_parser.py`
+already build today via "lane allocation").
+
+1. `B.012 "Vce VolPan"` (7 *single-zone* voices, distinct front-panel
+   Volume/Pan each) — every zone entry stayed zero; `vpar[54]`/`[55]`
+   (whole-voice) matched exactly. `vpar[54]` had already been hardware-RE'd
+   2026-06-13, just never wired into the writer (hardcoded `0x00`);
+   `vpar[55]` (Pan) was new.
+2. `B.013 "MultiSZpVce"` (**one voice, 7 sample zones**) — zone entries ARE
+   used for multi-zone voices, matching CWM's offsets. Its zone volumes
+   were already asymmetric (`+10,0,0,-96,0,0,0`) yet `vpar[54]` stayed `0`
+   — a first hint against a delta model, but every symmetric test built
+   here up to that point (by design, min = -max) also landed on a
+   representative of exactly 0, so "delta from a nonzero voice value" and
+   "absolute value, voice unused" remained indistinguishable.
+3. **First implementation attempt used a delta model** (voice value =
+   range midpoint of its zones, each zone entry = its own delta from that)
+   — internally consistent, passed every synthetic round-trip test, but
+   WRONG. `ASYMTEST` (one voice, two zones with deliberately ASYMMETRIC
+   values so the midpoint was nonzero, `+26`/`+10dB`/`+32`) — built by
+   mpc2emu's own writer — showed the E4XT displaying the RAW delta bytes
+   per zone, not the reconstructed absolute values. Jan caught the testing
+   gap ("did we ever test a nonzero voice baseline?") before this shipped.
+4. **Corrected to the simpler, now fully-evidenced absolute model:** a
+   single-zone voice writes its value into `vpar[36]`/`[54]`/`[55]` (zone
+   entry stays zero); a multi-zone voice leaves `vpar[36]`/`[54]`/`[55]`
+   at zero and writes each zone's ABSOLUTE fine-tune/volume/pan directly
+   into its own zone entry. Re-confirmed on hardware through this exact
+   writer: `ZONEOFFSET` (5 single-zone voices), `MULTIZONE` (1 voice/3
+   zones), `MULTIVOICE` (3 voices, DIFFERENT zone counts 3/4/2 — the
+   voice-packing boundary case), and `ASYMTEST` all matched exactly.
+
+See `docs/E4B_FORMAT.md` §4.1 (`vpar[54]`/`[55]`) and §4.5 (zone entry) for
+the full writeup, including the disproven delta model kept as a documented
+dead end so it isn't tried again.
+
+**Implemented** in `writers/e4b_writer.py` (`_build_voice`/`_zone_entry`)
+and `parsers/e4b_parser.py`. Verified: synthetic round-trip covering a
+single-zone voice and a 3-zone voice with deliberately asymmetric absolute
+values; real WAV-folder conversion with no source volume/pan/tune data
+round-trips to all-zero bytes (no regression). Existing test suite
+(11 tests) passes.
+
 ## `--trim-start` needs re-verification against SLOW-attack material (OPEN, 2026-07-25)
 
 `processors/start_trim.py`'s onset detector was built and tuned against fast

@@ -49,7 +49,8 @@ Voice block = 284 fixed bytes + N_zones × 22 bytes:
     vpar[35]  Coarse Tune       (signed byte semitones, −72..+24; repitches/stretches sample)
     vpar[36]  Fine Tune         (signed byte, 1/64-semitone units −64..+63 ≈ ±1 st)
     vpar[38]  Non-Transpose flag  (0=key-tracking on, 1=pitch fixed — confirmed B.010-Voices_RevEng.E4B)
-    vpar[54]  amplitude gain  (0x00 = max, higher = quieter)
+    vpar[54]  Volume       (signed byte, dB; 0=unity — hardware-confirmed 2026-07-26)
+    vpar[55]  Pan          (signed byte, −64=full-L..0=centre..+63=full-R — hardware-confirmed 2026-07-26)
     vpar[58]  VCF filter type  (0x00=4PLP, 0x01=2PLP, 0x02=6PLP,
                                  0x08=2HP, 0x09=4HP, 0x10=2BP, 0x11=4BP)
     vpar[60]  VCF cutoff frequency  (0≈57 Hz, 255=20 kHz, exponential)
@@ -73,7 +74,13 @@ Voice block = 284 fixed bytes + N_zones × 22 bytes:
       [9]  hi_vel
       [10:12] sample_idx (BE u16, 1-indexed — EOS supports up to 1000
               samples/bank (S000-S999), so this can't be a single byte)
+      [12:14] fine_tune, signed BE i16, 1/64-semitone (used only for a
+              MULTI-zone voice — single-zone voices use vpar[36] instead
+              and leave this zero; hardware-confirmed 2026-07-26, see
+              _zone_entry / _build_voice)
       [14] root_note
+      [15] volume, signed byte, dB (multi-zone only, else vpar[54])
+      [16] pan, signed byte, -64..+63 (multi-zone only, else vpar[55])
     terminated by an entry with lo_key(1) > hi_key(0)
   Voice-level velocity range mirrors the zone range: vpar[18]=lo_vel,
   vpar[21]=hi_vel — confirmed byte-for-byte against Jan's hand-fixed
@@ -426,7 +433,23 @@ def _build_sample_header(sample: SampleData, sample_idx: int) -> bytes:
 # Zone entry (22 bytes, secondary zone table)
 # ---------------------------------------------------------------------------
 
-def _zone_entry(zone: ZoneMapping, sample_idx: int) -> bytes:
+def _zone_entry(zone: ZoneMapping, sample_idx: int, write_absolute: bool = False) -> bytes:
+    """22-byte secondary zone entry.
+
+    Decoded by ConvertWithMoss (git-moss/ConvertWithMoss #220, commit
+    7ce000f) from the E-mu Producer Series CD-ROMs:
+      [12:14] fine-tune, signed BE i16, 1/64-semitone
+      [15]    volume, signed byte, dB
+      [16]    panning, signed byte, -64..+63
+
+    NOT a delta on top of the voice's own vpar[36]/[54]/[55] — that was
+    tried and disproven 2026-07-26. These are the zone's ABSOLUTE value,
+    used only for a MULTI-zone voice; a single-zone voice instead writes
+    its one zone's value into vpar[36]/[54]/[55] and leaves this entry at
+    zero (`write_absolute=False`, the default) — see `_build_voice` for the
+    hardware evidence (B.012 single-zone, B.013 + a from-first-principles
+    ASYMTEST bank multi-zone, all through this exact writer).
+    """
     entry = bytearray(ZONE_ENTRY)
     entry[2]  = min(127, zone.lo_key)
     entry[5]  = min(127, zone.hi_key)
@@ -439,6 +462,11 @@ def _zone_entry(zone: ZoneMapping, sample_idx: int) -> bytes:
     # our earlier single-byte write at [11] only "worked" because every test
     # bank happened to stay under 256 samples (high byte [10] read as 0).
     struct.pack_into('>H', entry, 10, min(0xFFFF, sample_idx))
+    if write_absolute:
+        ft_64 = max(-32768, min(32767, round(zone.fine_tune * 64.0 / 100.0)))
+        struct.pack_into('>h', entry, 12, ft_64)
+        entry[15] = max(-128, min(127, round(zone.volume))) & 0xFF
+        entry[16] = max(-64,  min(63,  round(zone.pan * 64.0))) & 0xFF
     entry[14] = min(127, zone.root_key)
     return bytes(entry)
 
@@ -582,6 +610,35 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
     # P012 V2 == P011 V2 (KT) in every byte except vpar[38]=0x01.
     # Earlier "B.025 special format" (no zones, vpar[16]=sidx) was wrong.
 
+    # ── per-voice tuning/volume/pan ─────────────────────────────────────────
+    # transpose/coarse_tune have no per-zone storage at all (unlike fine_tune/
+    # volume/pan below), so they're always taken from a representative zone
+    # regardless of zone count.  fine_tune in ZoneMapping is cents; convert
+    # to 64ths.
+    _tp  = next((z.transpose    for z in voice.zones if getattr(z, 'transpose',    0)), 0)
+    _ct  = next((z.coarse_tune  for z in voice.zones if getattr(z, 'coarse_tune',  0)), 0)
+    # fine_tune/volume/pan: NOT a voice-value + per-zone-delta composition —
+    # that model was tried and DISPROVEN 2026-07-26 (an asymmetric multi-zone
+    # test, both B.013 hand-built on hardware and an ASYMTEST bank built by
+    # this exact writer, showed the front panel displays/stores each zone's
+    # RAW ABSOLUTE value, not a delta from any voice-level representative;
+    # B.013's real zone volumes were already asymmetric — [+10,0,0,-96,0,0,0]
+    # — yet the firmware still wrote vpar[54]=0, not their midpoint).
+    # The real, much simpler rule (see `_zone_entry`):
+    #   exactly 1 zone  -> its value goes to vpar[36]/[54]/[55]; its own zone
+    #                       entry stays zero (matches B.012).
+    #   2+ zones        -> vpar[36]/[54]/[55] stay zero; EACH zone writes its
+    #                       own absolute value into its own zone entry.
+    _multi = len(voice.zones) > 1
+    if _multi:
+        _ft = _vol = _pan = 0.0
+    else:
+        _z0 = voice.zones[0] if voice.zones else None
+        _ft  = _z0.fine_tune if _z0 else 0.0
+        _vol = _z0.volume    if _z0 else 0.0
+        _pan = _z0.pan       if _z0 else 0.0
+    _ft_64 = max(-64, min(63, round(_ft * 64.0 / 100.0)))
+
     # ── zone table ────────────────────────────────────────────────────────
     zones_raw = bytearray()
     voice_lo_vel, voice_hi_vel = 127, 0
@@ -590,7 +647,7 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
         idx = sample_name_to_idx.get(zone.sample_name, 0)
         if idx < 1:
             continue
-        zones_raw += _zone_entry(zone, idx)
+        zones_raw += _zone_entry(zone, idx, write_absolute=_multi)
         voice_lo_vel = min(voice_lo_vel, zone.lo_vel)
         voice_hi_vel = max(voice_hi_vel, zone.hi_vel)
         voice_lo_key = min(voice_lo_key, zone.lo_key)
@@ -629,14 +686,10 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
     #   vpar[34] = Key Transpose (semitones, −24..+24): keyboard pitch offset
     #   vpar[35] = Coarse Tune  (semitones, −72..+24): repitches/stretches sample
     #   vpar[36] = Fine Tune    (1/64-semitone units, −64..+63): ~1.56 cents/unit
-    # Tuning is per-instrument (= per-voice) for XPM/SFZ, so take it from a
-    # representative zone.  fine_tune in ZoneMapping is cents; convert to 64ths.
-    _tp = next((z.transpose    for z in voice.zones if getattr(z, 'transpose',    0)), 0)
-    _ct = next((z.coarse_tune  for z in voice.zones if getattr(z, 'coarse_tune',  0)), 0)
-    _ft = next((z.fine_tune    for z in voice.zones if getattr(z, 'fine_tune',    0)), 0)
+    # _tp/_ct/_ft/_ft_64/_vol/_pan computed above, before the zone loop.
     vpar[34] = max(-128, min(127, int(_tp))) & 0xFF
     vpar[35] = max(-128, min(127, int(_ct))) & 0xFF
-    vpar[36] = max(-64,  min(63,  round(_ft * 64 / 100))) & 0xFF
+    vpar[36] = _ft_64 & 0xFF
     vpar[38] = 0x01 if voice.non_transpose else 0x00
     # vpar[42] = Chorus Amount (Voice/Tuning page). Hardware-confirmed 2026-06-08:
     # UI 0-100% maps linearly to 0-127 (round(pct/100*127)); verified against
@@ -644,7 +697,20 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
     # 25/50/75/100% -> 32/64/95/127 sweep on a hand-edited E4XT save. 0 = off.
     vpar[42] = min(127, round(max(0.0, min(1.0, voice.chorus_amount)) * 127))
     vpar[51] = 0x80
-    vpar[54] = 0x00
+    # vpar[54] = Volume (Voice page), vpar[55] = Pan (Voice page) — both
+    # HARDWARE-CONFIRMED 2026-07-26 via a 7-voice differential save (B.012
+    # "Vce VolPan", one zone per voice): front-panel Volume +10/-96/+5/-50 ->
+    # vpar[54] exactly; Pan +63/-64/+32/-32 -> vpar[55] exactly. Signed byte;
+    # Volume in dB (0 = unity, matches ZoneMapping's -96..+12 dB convention
+    # exactly — -96 was one of the test values); Pan -64=full-L..0=centre..
+    # +63=full-R. (Earlier vpar[54] comment "0x00 = max, higher = quieter"
+    # was an untested guess predating this confirmation.)
+    # ONLY meaningful for a single-zone voice (_vol/_pan are pre-set to 0.0
+    # above when the voice has 2+ zones — see the per-zone entries instead;
+    # a second hardware test showed this is NOT a voice-value + per-zone-
+    # delta composition, the multi-zone case simply doesn't use these bytes).
+    vpar[54] = max(-128, min(127, round(_vol))) & 0xFF
+    vpar[55] = max(-64,  min(63,  round(_pan * 64.0))) & 0xFF
     vpar[58] = _XPM_FILTER_TYPE.get(voice.filter_type, 0x00)
     vpar[60] = min(255, round(voice.filter_cutoff * 255))
     vpar[61] = min(127, round(voice.filter_resonance * 127))
