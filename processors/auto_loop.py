@@ -42,22 +42,27 @@ How it works
    (detected pitch > 2 octaves off the root) is treated as a detection failure and
    falls back to the root-note period, so the loop stays integer-periodic.
 
-3. **Adaptive loop length (the "optimal length").**  Candidate lengths are an
-   integer number of fundamental periods spanning ``min_ms``..``max_ms``; each is
-   scored by how well its two crossfade windows match (endpoint cost).  A *steady*
-   tone (little amplitude modulation) takes the SHORTEST transparent loop — cheap
-   and indistinguishable; a *modulated* tone (vibrato / tremolo / detuned-oscillator
-   beating) takes the LONGEST transparent loop up to the cap, so the loop spans a
-   whole number of modulation cycles and sounds natural rather than static.  A few
-   loop-start candidates are tried so one bad start can't spoil the search.
+3. **Adaptive loop length + beat alignment (the "optimal length").**  A tone with
+   vibrato / tremolo / detuned-oscillator BEATING must loop a whole number of
+   modulation cycles, or the modulation envelope jumps at the seam once per loop —
+   an audible rhythmic "ding", even though the waveform splice is click-free.  So
+   the candidate loop lengths are integer multiples of the detected modulation
+   period (``_modulation``) for a modulated tone, or integer fundamental periods for
+   a steady one.  Each candidate's loop-end is a rising zero-crossing near the
+   target, chosen to balance splice quality against beat alignment; the LONGEST
+   transparent loop is kept, because an evolving tone (strings, ensembles, pads)
+   needs length to breathe — a short loop there sounds static even when seamless.  A
+   few loop-start candidates are tried so one bad start can't spoil the search.
 
-4. **Seamless splice.**  Both endpoints snap to rising zero-crossings, then an
-   equal-power crossfade morphs the last ``xfade`` loop samples from the loop-end
-   content into the samples that PRECEDE the loop-start, ending exactly on the
-   sample before loop-start.  The wrap loop_end→loop_start therefore reproduces a
-   continuous run of the original waveform (no duplicated sample, no click — a
-   synth's steep per-period edge included), and the crossfade hides the residual
-   timbre difference over the join.
+4. **Seamless splice.**  An equal-power crossfade morphs the last ``xfade`` loop
+   samples from the loop-end content into the samples that PRECEDE the loop-start,
+   ending exactly on the sample before loop-start.  The wrap loop_end→loop_start
+   therefore reproduces a continuous run of the original waveform (no duplicated
+   sample, no click — a synth's steep per-period edge included), and the crossfade
+   hides the residual timbre difference over the join.  The crossfade can be turned
+   OFF (``crossfade=False``) to leave the PCM pristine — loop points only, at the
+   zero-crossing / beat-aligned positions — so the loop can be fine-tuned freely in
+   the hardware's own loop editor without a baked crossfade locking its position.
 
 Best-effort by design: unpitched / too-short / already-looped samples are left
 alone (and reported); inherently hard material (a 20-player detuned string
@@ -81,8 +86,8 @@ from processors.single_cycle import (
 
 
 # ── Tunables (defaults; the CLI overrides) ───────────────────────────────────
-_DEFAULT_MIN_MS   = 80.0     # steady-tone loop floor (also clears the EOS octave bug)
-_DEFAULT_MAX_MS   = 600.0    # modulated-tone loop cap
+_DEFAULT_MIN_MS   = 150.0    # loop floor (natural sustain; clears the EOS octave bug)
+_DEFAULT_MAX_MS   = 1500.0   # loop cap (longer = more natural; more sample RAM)
 _DEFAULT_XFADE_MS = 25.0     # crossfade length (grows for poor matches)
 _DEFAULT_ACCEPT   = 0.06     # endpoint-cost "transparent" threshold
 _DEFAULT_MIN_QUAL = 0.30     # skip (unless forced) when best cost exceeds this
@@ -129,10 +134,14 @@ def _steady_region(sig: list, sr: int, region: int) -> Tuple[int, int]:
     return start, end
 
 
-def _modulation(sig: list, sr: int, rs: int, re: int) -> Tuple[float, float]:
-    """(strength 0..1, cov): does the sustain carry a slow amplitude modulation
-    (vibrato / tremolo / beating)?  strength = normalised autocorr peak of the
-    low-rate amplitude envelope; cov = its coefficient of variation."""
+def _modulation(sig: list, sr: int, rs: int, re: int) -> Tuple[int, float, float]:
+    """Detect a slow amplitude modulation (vibrato / tremolo / detuned-oscillator
+    beating) in the sustain.  Returns (period_frames, strength 0..1, cov):
+      period_frames — the FUNDAMENTAL modulation period (the beat/vibrato cycle),
+                      so an integer multiple of it aligns the envelope at a loop seam;
+      strength      — normalised autocorr peak of the low-rate amplitude envelope;
+      cov           — the envelope's coefficient of variation.
+    period_frames is 0 when no modulation is found."""
     hop = max(1, int(0.002 * sr))
     win = hop * 2
     env = []
@@ -143,10 +152,10 @@ def _modulation(sig: list, sr: int, rs: int, re: int) -> Tuple[float, float]:
         i += hop
     n = len(env)
     if n < 8:
-        return 0.0, 0.0
+        return 0, 0.0, 0.0
     mean = sum(env) / n
     if mean <= 1e-9:
-        return 0.0, 0.0
+        return 0, 0.0, 0.0
     cov = math.sqrt(sum((e - mean) ** 2 for e in env) / n) / mean
     e = [x - mean for x in env]
     e0 = sum(x * x for x in e) + 1e-12
@@ -154,16 +163,21 @@ def _modulation(sig: list, sr: int, rs: int, re: int) -> Tuple[float, float]:
     lo = max(1, int(env_sr / 25.0))          # 25 Hz
     hi = min(n // 2, int(env_sr / 1.5))       # 1.5 Hz
     if hi <= lo:
-        return 0.0, cov
-    strength = 0.0
-    for lag in range(lo, hi + 1):
-        s = 0.0
-        for j in range(n - lag):
-            s += e[j] * e[j + lag]
-        r = s / e0
-        if r > strength:
-            strength = r
-    return strength, cov
+        return 0, 0.0, cov
+    vals = [sum(e[j] * e[j + lag] for j in range(n - lag)) / e0
+            for lag in range(lo, hi + 1)]
+    gmax = max(vals)
+    if gmax <= 0.0:
+        return 0, 0.0, cov
+    # FUNDAMENTAL modulation period = the smallest-lag strong local peak (a faster
+    # component would appear as a harmonic at a shorter lag; the true beat/vibrato
+    # cycle is the one whose integer multiples explain the envelope).
+    lagsel = lo + vals.index(gmax)
+    for k in range(1, len(vals) - 1):
+        if vals[k] >= 0.8 * gmax and vals[k] >= vals[k - 1] and vals[k] >= vals[k + 1]:
+            lagsel = lo + k
+            break
+    return lagsel * hop, gmax, cov
 
 
 def _match_cost(sig: list, S: int, E: int, w: int) -> float:
@@ -212,51 +226,80 @@ def _find_loop(mono: list, sr: int, root: int, *, target_ms, min_ms, max_ms,
     if not Scands:
         return None
 
-    k_min = max(2, int(round(min_ms / 1000.0 * sr / p)))
-    k_room = int((re - max(Scands) - w - 2 * p) / p)
-    k_max = max(k_min, min(int(max_ms / 1000.0 * sr / p), k_room))
+    # Modulation drives the candidate lengths.  A tone with vibrato / tremolo /
+    # detuned-oscillator BEATING must loop a whole number of modulation cycles, or
+    # the beat envelope jumps at every loop point — an audible rhythmic pulse
+    # ("ding-ding-ding") even when the waveform splice itself is click-free.
+    M, strength, cov = _modulation(mono, sr, rs, re)
+    modulated = M > 0 and strength > _MOD_STRENGTH and cov > _MOD_COV
+    min_frames = min_ms / 1000.0 * sr
+    max_frames = max_ms / 1000.0 * sr
+    room = re - max(Scands) - w - 2 * p
     if target_ms:
-        ks = [max(1, int(round(target_ms / 1000.0 * sr / p)))]
-    elif k_max - k_min <= 30:
-        ks = list(range(k_min, k_max + 1))
+        targets = [max(1.0, target_ms / 1000.0 * sr)]
+    elif modulated:
+        # integer multiples of the beat/vibrato period (envelope phase); the E-search
+        # + crossfade below handle the waveform phase within each.
+        jmin = max(1, int(math.ceil(min_frames / M)))
+        jmax = max(jmin, min(int(max_frames / M), int(room / M)))
+        js = (list(range(jmin, jmax + 1)) if jmax - jmin <= 24
+              else sorted({int(round(jmin + (jmax - jmin) * i / 23)) for i in range(24)}))
+        targets = [j * M for j in js]
     else:
-        ks = sorted({int(round(k_min + (k_max - k_min) * i / 29)) for i in range(30)})
+        # steady tone: integer-period sweep (fundamental phase + crossfade suffice).
+        k_min = max(2, int(round(min_frames / p)))
+        k_max = max(k_min, min(int(max_frames / p), int(room / p)))
+        ks = (list(range(k_min, k_max + 1)) if k_max - k_min <= 30
+              else sorted({int(round(k_min + (k_max - k_min) * i / 29)) for i in range(30)}))
+        targets = [k * p for k in ks]
 
-    results = []          # (S, k, cost, E)
+    results = []          # (S, cost, E)
     for S in Scands:
-        for k in ks:
-            Et = S + int(round(k * p))
+        for T in targets:
+            Et = S + int(round(T))
             best_e = None
-            for E in range(int(Et - p / 2), int(Et + p / 2) + 1):
+            # search rising zero-crossings near the target (steady: waveform-phase
+            # splice; modulated: also weight toward the EXACT beat multiple so the
+            # modulation envelope matches at the seam — otherwise the beat "jumps"
+            # once per loop, the audible "ding"). A wider window on modulated gives
+            # a choice of zero-crossings to balance splice quality vs beat alignment.
+            span = int(p) if modulated else int(p / 2)
+            for E in range(Et - span, Et + span + 1):
                 if E >= re - 1 or E + 1 >= n or E <= S + pi:
                     continue
                 if not (mono[E - 1] < 0.0 <= mono[E]):
                     continue
                 cst = _match_cost(mono, S, E, w)
-                if best_e is None or cst < best_e[0]:
-                    best_e = (cst, E)
+                score = cst + (0.5 * abs(E - Et) / M if modulated else 0.0)
+                if best_e is None or score < best_e[0]:
+                    best_e = (score, cst, E)
             if best_e:
-                results.append((S, k, best_e[0], best_e[1]))
+                results.append((S, best_e[1], best_e[2]))
     if not results:
         return None
 
-    strength, cov = _modulation(mono, sr, rs, re)
-    modulated = strength > _MOD_STRENGTH and cov > _MOD_COV
     if target_ms:
-        results.sort(key=lambda r: r[2])
-        S, k, cost, E = results[0]
+        results.sort(key=lambda r: r[1])
+        S, cost, E = results[0]
     else:
-        min_cost = min(r[2] for r in results)
+        min_cost = min(r[1] for r in results)
         thr = max(accept, min_cost * 1.5)
-        ok = [r for r in results if r[2] <= thr] or [min(results, key=lambda r: r[2])]
-        S, k, cost, E = (max(ok, key=lambda r: r[1]) if modulated
-                         else min(ok, key=lambda r: r[1]))
+        ok = [r for r in results if r[1] <= thr] or [min(results, key=lambda r: r[1])]
+        # Prefer the LONGEST transparent loop.  A steady tone sounds identical at
+        # any length, but an evolving one (strings, ensembles, pads) needs the loop
+        # to be long enough to breathe — a short loop there sounds static/unnatural
+        # even when it's technically seamless.  For modulated tones every candidate
+        # is already beat-aligned, so the longest simply spans the most cycles.  The
+        # transparency threshold keeps it from a long loop that doesn't match;
+        # RAM-constrained users can force a shorter length with `--auto-loop MS`.
+        S, cost, E = max(ok, key=lambda r: r[2] - r[0])
     return {'S': S, 'E': E, 'p': p, 'cost': cost, 'conf': conf,
             'modulated': modulated}
 
 
 def _auto_loop_sample(sample: SampleData, *, target_ms, xfade_ms, min_ms, max_ms,
-                      accept, min_quality, force, trim) -> Tuple[SampleData, dict]:
+                      accept, min_quality, force, trim,
+                      crossfade=True) -> Tuple[SampleData, dict]:
     """Place a seamless forward sustain loop in one sample.  On any no-op the
     ORIGINAL sample is returned with info['ok'] = False and a reason."""
     ch = max(1, sample.channels)
@@ -287,26 +330,31 @@ def _auto_loop_sample(sample: SampleData, *, target_ms, xfade_ms, min_ms, max_ms
         info['reason'] = f'quality {cost:.2f} > {min_quality:.2f}'
         return sample, info
 
-    # crossfade length: >= 2 periods, longer when the match is poor, capped at the
-    # loop length / 3 and the available pre-roll.
     L = E - S + 1
-    xf = max(int(round(xfade_ms / 1000.0 * sample.sample_rate)), int(2 * p))
-    if cost > 0.1:
-        xf = max(xf, int(round(60.0 / 1000.0 * sample.sample_rate)))
-    xf = max(1, min(xf, L // 3, S))
-
-    # Apply the equal-power crossfade on EVERY channel (period found on the mono
-    # mix; the splice is identical per channel).  Ends exactly on frame S-1 so the
-    # wrap E->S is a continuous run of the original waveform.
     out = list(flat)
-    for i in range(xf):
-        t = i / (xf - 1) if xf > 1 else 1.0
-        fo = math.cos(0.5 * math.pi * t)
-        fi = math.sin(0.5 * math.pi * t)
-        for c in range(ch):
-            ie = (E - xf + 1 + i) * ch + c
-            isr = (S - xf + i) * ch + c
-            out[ie] = fo * flat[ie] + fi * flat[isr]
+    xf = 0
+    if crossfade:
+        # crossfade length: >= 2 periods, longer when the match is poor, capped at
+        # the loop length / 3 and the available pre-roll.
+        xf = max(int(round(xfade_ms / 1000.0 * sample.sample_rate)), int(2 * p))
+        if cost > 0.1:
+            xf = max(xf, int(round(60.0 / 1000.0 * sample.sample_rate)))
+        xf = max(1, min(xf, L // 3, S))
+        # Apply the equal-power crossfade on EVERY channel (period found on the mono
+        # mix; the splice is identical per channel).  Ends exactly on frame S-1 so
+        # the wrap E->S is a continuous run of the original waveform.
+        for i in range(xf):
+            t = i / (xf - 1) if xf > 1 else 1.0
+            fo = math.cos(0.5 * math.pi * t)
+            fi = math.sin(0.5 * math.pi * t)
+            for c in range(ch):
+                ie = (E - xf + 1 + i) * ch + c
+                isr = (S - xf + i) * ch + c
+                out[ie] = fo * flat[ie] + fi * flat[isr]
+    # else: leave the PCM PRISTINE — set loop points only, so the loop can be freely
+    # fine-tuned on the hardware (E4XT / K2000 loop editors) without a baked crossfade
+    # locking it to this position.  The endpoints are already at rising zero-crossings
+    # and (for modulated tones) beat-aligned, so the raw seam is decent on its own.
 
     end_frame = E
     if trim and (E + 1) * ch < len(out):        # drop everything past the loop end
@@ -330,28 +378,32 @@ def auto_loop_bank(bank, *, target_ms: Optional[float] = None,
                    min_ms: float = _DEFAULT_MIN_MS, max_ms: float = _DEFAULT_MAX_MS,
                    accept: float = _DEFAULT_ACCEPT,
                    min_quality: float = _DEFAULT_MIN_QUAL,
-                   force: bool = False, trim: bool = False,
+                   force: bool = False, trim: bool = False, crossfade: bool = True,
                    dump_dir: Optional[str] = None,
                    workers: Optional[int] = None) -> None:
     """Place a seamless forward sustain loop in every sample of `bank` (in place).
 
-    target_ms:   fixed loop length; None = adaptive (steady→short, modulated→long).
+    target_ms:   fixed loop length; None = adaptive (longest transparent, beat-aligned).
     xfade_ms:    crossfade length (grows automatically for poor matches).
     min_ms/max_ms: adaptive-length bounds.
     min_quality: skip a sample whose best endpoint cost exceeds this (unless force).
     force:       loop even already-looped / low-quality samples.
     trim:        drop audio after loop_end (saves RAM; the release tail is lost).
+    crossfade:   bake a click-free crossfade into the PCM (default); False leaves the
+                 PCM pristine (loop points only) for free fine-tuning on hardware.
     dump_dir:    also export each looped sample as a WAV (smpl loop embedded).
     """
     if workers is None:
         workers = max(1, (os.cpu_count() or 2) - 1)
     n = len(bank.samples)
     lbl = 'auto' if target_ms is None else f'{target_ms:g} ms'
-    print(f"\n  Auto sustain-loop (length: {lbl}, xfade {xfade_ms:g} ms); "
+    xflbl = f'xfade {xfade_ms:g} ms' if crossfade else 'no crossfade (pristine PCM)'
+    print(f"\n  Auto sustain-loop (length: {lbl}, {xflbl}); "
           f"samples: {n}  (workers: {workers})")
 
     kw = dict(target_ms=target_ms, xfade_ms=xfade_ms, min_ms=min_ms, max_ms=max_ms,
-              accept=accept, min_quality=min_quality, force=force, trim=trim)
+              accept=accept, min_quality=min_quality, force=force, trim=trim,
+              crossfade=crossfade)
     results = [None] * n
     if workers == 1 or n <= 1:
         for i, s in enumerate(bank.samples):

@@ -470,7 +470,7 @@ def main():
     ap.add_argument('--auto-loop-xfade', type=float, default=25.0, metavar='MS',
         help='With --auto-loop: crossfade length in ms at the loop splice '
              '(default 25; grows automatically when the endpoint match is poor).')
-    ap.add_argument('--auto-loop-max-ms', type=float, default=600.0, metavar='MS',
+    ap.add_argument('--auto-loop-max-ms', type=float, default=1500.0, metavar='MS',
         help='With --auto-loop (adaptive): cap on the loop length for modulated '
              'tones (default 600). Longer = more natural but more sample RAM.')
     ap.add_argument('--auto-loop-min-quality', type=float, default=0.30,
@@ -485,6 +485,14 @@ def main():
         help='With --auto-loop: drop the audio after the loop end to save RAM '
              '(the recorded release tail is discarded; the sampler envelope shapes '
              'the release). Default: keep the full sample, only add loop points.')
+    ap.add_argument('--auto-loop-no-crossfade', action='store_true',
+        help='With --auto-loop: do NOT bake a crossfade into the sample — set the '
+             'loop points only, leaving the PCM pristine. The endpoints are still '
+             'chosen at rising zero-crossings and (for modulated tones) beat-aligned, '
+             'so the raw loop is decent, and you can then FINE-TUNE it freely in the '
+             'E4XT / K2000 loop editor (a baked crossfade would otherwise lock the '
+             'loop to this exact position). Default: bake the crossfade for a '
+             'click-free result straight out of the box.')
     ap.add_argument('--auto-loop-dump-dir', metavar='DIR', default=None,
         help='With --auto-loop: also export each looped sample to DIR as a WAV '
              'with its loop points embedded (smpl chunk), for audition in Audacity '
@@ -677,6 +685,7 @@ def main():
                            max_ms=args.auto_loop_max_ms,
                            min_quality=args.auto_loop_min_quality,
                            force=args.auto_loop_force, trim=args.auto_loop_trim,
+                           crossfade=not args.auto_loop_no_crossfade,
                            dump_dir=args.auto_loop_dump_dir, workers=args.jobs)
 
     # ── Single-cycle oscillator extraction ─────────────────────────────────────
