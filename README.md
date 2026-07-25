@@ -736,10 +736,19 @@ fundamental periods) and detects whether the tone carries a slow modulation:
 - a **steady** tone (little movement) takes the *shortest* transparent loop — cheap
   on sample RAM and indistinguishable from the source;
 - a **modulated** tone (vibrato, tremolo, or detuned-oscillator beating) takes the
-  *longest* transparent loop up to a cap, so the loop spans a whole number of
-  modulation cycles and sounds natural rather than static.
+  *longest* transparent loop up to a cap, and its length is snapped to a **whole
+  number of modulation cycles** — otherwise the beat/vibrato envelope jumps at the
+  seam once per loop, an audible rhythmic pulse even when the waveform splice itself
+  is click-free.
 
 Pass a number (`--auto-loop 250`) to force a target length in milliseconds instead.
+
+**Editable on hardware.** The loop is written as standard `loop_start`/`loop_end`
+points, so it's fully editable in the E4XT / K2000 loop editors. By default a short
+crossfade is baked into the PCM for a click-free result out of the box; pass
+`--auto-loop-no-crossfade` to leave the audio pristine (loop points only, at
+zero-crossing / beat-aligned positions) if you'd rather fine-tune the loop on the
+instrument yourself.
 
 **Best-effort and honest.** Already-looped, too-short, and unpitched samples are left
 alone. Solo/pure timbres (flute, cello, clean choir, analog synth) loop excellently;
@@ -755,6 +764,7 @@ looped transparently by anything — those get a longer crossfade and a
 | `--auto-loop-min-quality COST` | Skip samples whose best endpoint match is worse than COST (default 0.30; 0 = never skip) |
 | `--auto-loop-force` | Loop even already-looped / low-quality samples (replaces existing loops) |
 | `--auto-loop-trim` | Drop the audio after the loop end to save RAM (the sampler envelope shapes the release) |
+| `--auto-loop-no-crossfade` | Set loop points only, leaving the PCM pristine for free fine-tuning on hardware (no baked crossfade) |
 | `--auto-loop-dump-dir DIR` | Also export each looped sample as a WAV with its loop embedded (`smpl` chunk) for audition |
 
 `--auto-loop` runs after `--trim-tail` and before `--single-cycle` / `--resample`

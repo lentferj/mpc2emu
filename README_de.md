@@ -770,11 +770,20 @@ zusammenpassen, und erkennt, ob der Ton eine langsame Modulation trägt:
 - ein **stationärer** Ton (wenig Bewegung) bekommt den *kürzesten* transparenten Loop
   — RAM-sparend und vom Original nicht zu unterscheiden;
 - ein **modulierter** Ton (Vibrato, Tremolo oder Schwebung verstimmter Oszillatoren)
-  bekommt den *längsten* transparenten Loop bis zu einer Obergrenze, sodass der Loop
-  eine ganze Zahl von Modulationszyklen umfasst und natürlich statt statisch klingt.
+  bekommt den *längsten* transparenten Loop bis zu einer Obergrenze, und seine Länge
+  wird auf eine **ganze Zahl von Modulationszyklen** gerundet — sonst springt die
+  Schwebungs-/Vibrato-Hüllkurve an der Nahtstelle einmal pro Loop, ein hörbarer
+  rhythmischer Puls, selbst wenn der Wellenform-Übergang klickfrei ist.
 
 Mit einer Zahl (`--auto-loop 250`) lässt sich stattdessen eine Ziellänge in
 Millisekunden erzwingen.
+
+**Auf Hardware editierbar.** Der Loop wird als Standard-`loop_start`/`loop_end`-Punkte
+geschrieben und ist somit in den Loop-Editoren des E4XT / K2000 voll editierbar.
+Standardmäßig wird eine kurze Kreuzblende in die PCM eingebacken (klickfrei ab Werk);
+mit `--auto-loop-no-crossfade` bleibt das Audio unangetastet (nur Loop-Punkte, an
+Nulldurchgangs-/beat-ausgerichteten Positionen), falls Sie den Loop lieber selbst am
+Instrument feinabstimmen möchten.
 
 **Ehrlich und best-effort.** Bereits geloopte, zu kurze und untonale Samples bleiben
 unangetastet. Solo-/reine Klangfarben (Flöte, Cello, sauberer Chor, Analogsynth)
@@ -791,6 +800,7 @@ werden oberhalb von `--auto-loop-min-quality` übersprungen.
 | `--auto-loop-min-quality COST` | Samples überspringen, deren beste Endpunkt-Passung schlechter als COST ist (Standard 0.30; 0 = nie) |
 | `--auto-loop-force` | Auch bereits geloopte / minderwertige Samples loopen (ersetzt bestehende Loops) |
 | `--auto-loop-trim` | Audio nach dem Loop-Ende verwerfen, um RAM zu sparen (die Sampler-Hüllkurve formt das Release) |
+| `--auto-loop-no-crossfade` | Nur Loop-Punkte setzen, PCM unangetastet lassen — zur freien Feinabstimmung auf Hardware (keine eingebackene Kreuzblende) |
 | `--auto-loop-dump-dir DIR` | Jedes geloopte Sample zusätzlich als WAV mit eingebettetem Loop (`smpl`-Chunk) zum Probehören exportieren |
 
 `--auto-loop` läuft nach `--trim-tail` und vor `--single-cycle` / `--resample` (das

@@ -188,18 +188,28 @@ single-cycle DSP; wired after `--trim-tail` in `convert.py`.
    (off-by-one) DUPLICATES a sample = a real glitch — avoid. ⚠ Do NOT QC the seam
    with jump/avg-step (it false-flags a synth's legitimate per-period edge as 70×);
    QC with `|out[E]−orig[S−1]|` in dB below peak.
-4. **Adaptive "optimal" length** (the user's main ask — chosen by MEASURED endpoint
-   match, not envelope-autocorr alone): candidate lengths = integer fundamental
-   periods spanning `min_ms..max_ms`, each scored by `_match_cost` = normalised SSD
-   between the two crossfade windows (pre-end `[E-w+1..E]` vs pre-start `[S-w..S-1]`).
-   Try a few loop-START zero-crossings so one bad start can't spoil it. Then:
-   *steady* tone (weak amp modulation) → the SHORTEST transparent loop (RAM-cheap,
-   sounds identical); *modulated* tone (vibrato/tremolo/detuned-oscillator beating,
-   detected via amp-envelope autocorr strength+cov) → the LONGEST transparent loop up
-   to the cap, so it spans whole modulation cycles and sounds natural. "Transparent"
-   = cost ≤ `accept` (or 1.5× the best achievable).
+4. **Adaptive length + BEAT ALIGNMENT** (refined 2026-07-25 after audition feedback —
+   loops were too short/static, and a detuned-synth loop pulsed "ding-ding-ding").
+   Splice quality is scored by `_match_cost` = normalised SSD of the two crossfade
+   windows (pre-end `[E-w+1..E]` vs pre-start `[S-w..S-1]`).  Length:
+   - *modulated* tone (vibrato / tremolo / detuned-oscillator BEATING; `_modulation`
+     returns the FUNDAMENTAL modulation period M) → candidate lengths are integer
+     multiples of M, so the envelope matches at the seam.  A fraction-of-a-beat error
+     is the audible ding — the loop-end zero-crossing search weights toward the exact
+     beat multiple (`score = cost + 0.5·|E−Et|/M`).  ⚠ the click-free crossfade holds
+     for ANY loop-end, but landing E on an exact non-zero-crossing beat multiple wrecks
+     the crossfade-window match (waveform-phase mismatch → high cost → wrongly skipped);
+     use a zero-crossing NEAR the beat, not exactly on it.
+   - *steady* tone → integer-fundamental-period sweep.
+   Keep the **LONGEST transparent** loop (was steady→shortest — wrong: a short loop on
+   evolving material sounds static even when seamless).  Defaults `min_ms=150`,
+   `max_ms=1500` (raised from 80/600 for natural, breathing loops).  A few loop-START
+   candidates guard against a bad start.
 5. `loop_type=FORWARD`, `loop_start=S`, `loop_end=E` (inclusive). Round-trips through
    both E4B and KRZ writers (verified). Crossfade applied per channel (mono+stereo).
+   **`crossfade=False` (`--auto-loop-no-crossfade`)** leaves the PCM pristine — loop
+   points only, at the zero-crossing/beat-aligned positions — so the loop stays freely
+   fine-tunable in the E4XT/K2000 loop editor (a baked crossfade locks it in place).
 
 **Knobs:** `--auto-loop [auto|MS]`, `--auto-loop-xfade MS` (grows automatically for
 poor matches), `--auto-loop-max-ms`, `--auto-loop-min-quality COST` (skip hard
