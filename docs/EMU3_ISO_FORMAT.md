@@ -173,6 +173,22 @@ type (u8)        EMU3_FTYPE_STD = 0x81
 props[5]         b'\x00E4B0'                                ← EIV/E4XT marker
 ```
 
+> **`props[5]` is not a reliable E4B/EIII tag on real-world media** —
+> confirmed true for some commercial discs (e.g. `Post Industrial Cybr-Sound
+> Depot.iso`, every bank entry) but **false for others**: every bank entry on
+> `E-MU Formula 4000 Series Vol. 5 – Protozoa.iso` has `props` all-zero,
+> despite unambiguously real EMU3-filesystem bank content. Those entries turn
+> out not to be E4B at all — their bank bytes start with `EMULATOR 3X ` /
+> `EMU SI-32 v3 `, i.e. EIII/ESI-format banks sharing the same EMU3
+> filesystem (per `emu3fs`'s own README, EIII/ESI/EIV all share it). Scanned
+> across 161 real EMU3 images: 459 E4B banks, 1028 EIII-format banks, 30
+> fixed-id ROM/system files — `props` was not a reliable way to tell any of
+> these apart. The only reliable classifier for a dir-content entry is
+> magic-sniffing the bank body itself (`FORM`...`E4B0` vs `EMULATOR`/`EMU `
+> prefix), not this field. mpc2emu is E4B-only and always writes this marker
+> itself, so it never needs to *read* `props` to classify — this only matters
+> for anyone reading EMU3 images in the wild rather than ones mpc2emu wrote.
+
 `build_iso()` only ever fills the first dir-content block — with one E4B
 file per CD image (the normal case), 16 slots is more than enough. Block 1
 (the padding block right after the superblock) carries a single non-zero

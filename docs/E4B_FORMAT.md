@@ -50,6 +50,23 @@ convention rather than standard IFF — both are essential for the file to load
 in real hardware and in the reference loader (emu.tools e-xplorer); see
 [§6.1](#61-form-size-quirk).
 
+> **`TOC1` is optional, not just "not trusted."** mpc2emu always writes one,
+> and `e4b_parser._walk_chunks` never depends on it being present (it never
+> looks at offset 12 specifically) — but at least one real commercial disc
+> (`PlatinumPhattCD1/HipHopKickSnrHat`, Producer Series Vol. 8 CD 1) goes
+> straight from `FORM <size> E4B0` to `E4Ma` with no `TOC1` chunk at all. Any
+> reader that assumes `TOC1` always exists will break on real-world media.
+>
+> **`EMSt` is not always the single last chunk of the file — "mega-banks"
+> exist.** At least one commercial disc (`PlatinumPhattCD1/MoPhattPerc&Kits`,
+> same CD) is several originally-separate sub-banks concatenated into one
+> file: it contains a `TOC1` and an `EMSt` *mid-stream*, followed by more real
+> `E4P1`/`E3S1` content afterward. `e4b_parser._walk_chunks`'s caller tolerates
+> this by construction (it filters for the sample/preset tags and ignores
+> everything else, `EMSt` included, all the way to `form_size`) — but a reader
+> that stops at the first `EMSt` will silently drop the rest of the file. This
+> holds per logical sub-bank, not necessarily per physical file.
+
 This maps directly onto the in-memory model in
 [`models/common.py`](../models/common.py):
 
@@ -116,6 +133,17 @@ One entry per chunk that follows `E4Ma` onward (in mpc2emu's writer: one
 | `14:30` | 16 | `name`        | space-padded ASCII (16 bytes, see [§6.2](#62-name-encoding)) |
 | `30`    | 1  | `0x00`        | null |
 | `31`    | 1  | MIDI program  | `0x00` = "any" in mpc2emu's output |
+
+> **`data_size` can disagree with a chunk's own physical header — uniformly,
+> across an entire file, regardless of parity.** At least one real bank
+> (`B.030-1V-2V-3V.E4B`) has all 22 TOC entries with a physical chunk size
+> exactly 2 bytes larger than the TOC's `data_size` (e.g. `E4Ma`: TOC says
+> 256, physical header says 258) — this is *not* the odd-size word-alignment
+> padding above (that's 0-or-1 byte, only when `size` is odd; here every
+> affected size is *even*). Trusting the TOC's `data_size` for a chunk's byte
+> extent grafts 2 stale/wrong bytes onto whatever's read. `e4b_parser.py`
+> never trusts TOC1 offsets for this reason — always derive a chunk's extent
+> from its own physical header, never from the TOC entry.
 
 ### 2.3 E4Ma multimap (256 bytes)
 
@@ -186,7 +214,7 @@ multi-voice banks:
 | Offset | Field | Notes |
 |---|---|---|
 | `2:4`   | zone-table trailer offset | BE u16, **relative to this voice's own start**; equals `VOICE_FIXED + n_zones × ZONE_ENTRY`. This is how the E4XT locates the start of the *next* voice — see [§5.1](#51-voice-packing-no-gapterminator-between-voices) |
-| `4`     | `n_zones`           | zone count; E4XT reads exactly this many secondary-zone entries |
+| `4`     | `n_zones`           | zone count; E4XT reads exactly this many secondary-zone entries. **Redundant/display-only — see caveat below** |
 | `7`     | `0x64`              | constant observed in working voices |
 | `17`    | `0x7F`              | constant (max value, possibly a redundant/legacy velocity field) |
 | `18`    | voice `lo_vel`      | mirrors the voice's aggregate zone velocity range — see [§5.2](#52-voice-level-velocity-range-mirrors-the-zone-range) |
@@ -202,6 +230,15 @@ multi-voice banks:
 | `58`    | VCF filter type     | see [§4.4](#44-filter-type-mapping-xpm--e4b) |
 | `60`    | VCF cutoff          | `0`≈57 Hz … `255`=20 kHz, exponential curve |
 | `61`    | VCF Q / resonance   | `0`–`127`, linear |
+
+> **A voice's real zone count can only be trusted from `vpar[2:4]`
+> (`trailer_off`), not `vpar[4]`.** At least three real banks have at least
+> one voice where the single-byte `vpar[4]` undercounts the real zone table
+> relative to `(vpar[2:4] − VOICE_FIXED) / ZONE_ENTRY`. `e4b_parser._parse_voice`
+> derives `n_zones` from `vpar[2:4]` exclusively and never reads `vpar[4]` at
+> all — a reader that trusts `vpar[4]` instead will silently drop the
+> tail-end zones (and their referenced samples) on affected files. Treat
+> `vpar[2:4]` as authoritative and `vpar[4]` as redundant/display-only.
 
 The amplitude envelope is **not** in `vpar` — it lives in the primary zone
 table at `PZT[0:12]` (see [§4.2](#42-primary-zone-table-64-bytes-voice110174)).

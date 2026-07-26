@@ -1,5 +1,43 @@
 # mpc2emu — Open Items
 
+## Heads up: ConvertWithMoss has 3 open PRs adding E-mu formats (not yet merged/HW-verified, 2026-07-26)
+
+Flagged by Jan; worth tracking since they overlap mpc2emu's own E-mu RE work:
+
+- **[PR #220](https://github.com/git-moss/ConvertWithMoss/pull/220)** — E4B
+  (Emulator IV/E4X/E4XT/E4K/e-Synth/e-6400) read+write, including reading
+  banks straight out of `.iso`/`.img`/`.hda` EOS-filesystem images. Says it
+  "handles older bank formats lacking EMSt chunks and oversized FORM
+  sizes" — consistent with the mega-bank/optional-TOC1 quirks above. States
+  it validated against **mpc2emu's own reference parser**, and against a
+  hardware-created third-party bank (198 presets/1980 zones) with
+  byte-identical PCM reconstruction. Zone-entry byte offsets described
+  (fine-tune `[12:14]` BE i16, volume `[15]`, pan `[16]`, absolute-not-delta
+  within a multi-zone voice) match what's already confirmed + shipped here
+  (see the entry above this file's very first one). Not yet hardware-tested
+  by its own author.
+- **[PR #230](https://github.com/git-moss/ConvertWithMoss/pull/230)** —
+  E-mu Emulator III / EIIIX / ESI-32/2000/4000 (E3B) read+write — the format
+  this project has deliberately stayed out of scope of. Claims 3 corrections
+  to `emu3bm` (the same C reference dagargo/emu3bm project this project's
+  docs already cite): empty keymap slots are holes, not list-end markers;
+  ESI variants pack flag bits into the upper bits of a zone's sample index
+  (needs masking); filter-type storage exists only on ESI, not EIIIX (always
+  lowpass there). Validated against 22 commercial CD-ROMs, 3,424 presets /
+  8,073 samples, byte-identical PCM. Not hardware-verified.
+- **[PR #231](https://github.com/git-moss/ConvertWithMoss/pull/231)** —
+  stacked on #230/#220: reads EIII banks directly from `.iso`/`.img`/`.hda`
+  images, reusing the EOS filesystem code from #220 (same shared filesystem
+  as emu3fs documents). Notes disk-geometry variants (2 vs 6 root blocks;
+  256 KB vs 1 MB clusters) and a one-frame loop-end correction.
+
+None of this needs action here — mpc2emu doesn't do EIII and CWM doesn't
+(yet) do KRZ — but the emu3bm corrections in #230 and the disk-geometry
+variants in #231 could be useful cross-references if EIII or wider EMU3
+disk-geometry support ever comes up, and #220's independent validation
+against `e4b_parser.py` is a nice confirmation this project's E4B model
+is solid from an outside perspective.
+
 ## E4B per-zone fine-tune/volume/pan (multi-zone voices) — RESOLVED + HW-CONFIRMED (2026-07-26)
 
 **DONE — hardware-confirmed on the E4XT, four-stage investigation, one
