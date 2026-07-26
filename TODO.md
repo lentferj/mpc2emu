@@ -1,5 +1,26 @@
 # mpc2emu — Open Items
 
+## E4B `loop_end` off-by-one fix needs hardware re-confirmation (OPEN, 2026-07-26)
+
+**Context:** cross-referencing ConvertWithMoss's independent E4B reader (PR #220
+commit `2ccefea`) found `loop_end_l` stores the frame *before* the true
+inclusive last loop frame, not the frame itself. Fixed in both
+`writers/e4b_writer.py` and `parsers/e4b_parser.py` together (kept as exact
+inverses, so mpc2emu's own write→parse round-trip is unaffected) — see
+`docs/RESOLUTION_NOTES.md §E4BREAD` for the full writeup and verification
+already done (synthetic round-trip + on-disk byte check + existing test
+suite, all passing).
+
+**Status:** code fix applied, verified in software only. **Not yet
+hardware-confirmed** — the change shifts every future looped E4B export's
+on-disk loop point by exactly 1 frame (≈23 µs at 44.1 kHz), which is below
+what the prior `--auto-loop` by-ear hardware confirmation could have caught
+(that confirmation validated the crossfade construction, which this change
+doesn't touch — only the on-disk encoding of the same frame index moved).
+**Blocked on:** a hardware A/B on the E4XT — e.g. re-run a loop-heavy bank
+(the `--auto-loop` test set, or `AMPENV_SETME`/`PINGPONG`-style RE banks)
+through this path before/after the fix and confirm no regression.
+
 ## Heads up: ConvertWithMoss has 3 open PRs adding E-mu formats (not yet merged/HW-verified, 2026-07-26)
 
 Flagged by Jan; worth tracking since they overlap mpc2emu's own E-mu RE work:

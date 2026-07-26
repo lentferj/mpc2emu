@@ -396,7 +396,10 @@ def _build_sample_header(sample: SampleData, sample_idx: int) -> bytes:
                 and sample.loop_end > sample.loop_start)
     if has_loop:
         lsl = sample.loop_start * 2 + STRUCT_SZ
-        lel = sample.loop_end   * 2 + STRUCT_SZ
+        # loop_end_l stores the frame BEFORE the true inclusive last loop
+        # frame (`sample.loop_end`), not loop_end itself — see the matching
+        # `+1` in e4b_parser._parse_sample_body / RESOLUTION_NOTES.md §E4BLOOPEND.
+        lel = (sample.loop_end - 1) * 2 + STRUCT_SZ
         options = 0x0031   # MONO_L | bit4 | LOOP (forward; ping-pong maps here)
     else:
         lsl = STRUCT_SZ

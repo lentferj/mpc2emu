@@ -487,13 +487,30 @@ Layout confirmed from emu3bm's `struct emu3_sample` (92 bytes) plus the 2-byte
 | `22:26` | 4  | `start_l`      | LE u32, always `92` (= header size) |
 | `30:34` | 4  | `end_l`        | LE u32, `92 + pcm_bytes − 2` |
 | `38:42` | 4  | `loop_start_l` | LE u32, byte offset from struct start (`loop_start × 2 + 92`) |
-| `46:50` | 4  | `loop_end_l`   | LE u32, byte offset (`loop_end × 2 + 92`) |
+| `46:50` | 4  | `loop_end_l`   | LE u32, byte offset. Stores the frame **before** the true inclusive last loop frame: `(loop_end − 1) × 2 + 92`. See caveat below |
 | `54:58` | 4  | `sample_rate`  | LE u32, Hz. **Informational only — EOS4 does NOT pitch from this field**, see below |
 | `58:60` | 2  | pitch offset   | **signed LE i16**, 1/64-semitone units — see below. Zero for an untouched 44.1 kHz sample |
 | `60:62` | 2  | `options`      | LE u16. `0x0020` = MONO_L; `0x0031` = MONO_L \| LOOP (forward; ping-pong is baked to forward upstream — EOS has no ping-pong mode) |
 | `62:66` | 4  | `sample_data_offset_l` | LE u32, always `92` |
 
 PCM data (16-bit LE) follows immediately at byte 94.
+
+> **`loop_end_l` off-by-one, cross-referenced 2026-07-26.** Applied following
+> [ConvertWithMoss](https://github.com/git-moss/ConvertWithMoss) (PR #220,
+> commit `2ccefea`), whose independent E4B reader measured the PCM amplitude
+> step at the loop seam across a real commercial corpus: reading the raw
+> `(loop_end_l − 92) / 2` value directly as the last loop frame left a
+> nonzero-amplitude discontinuity at the seam in many cases; adding `+1`
+> (capped at `numFrames − 1`) eliminated seams stepping by more than a third
+> of the peak amplitude and raised the clean-seam share from 78% to 95%.
+> `writers/e4b_writer.py` and `parsers/e4b_parser.py` both encode/decode this
+> `-1`/`+1` consistently, so mpc2emu's own write→parse round-trip is still an
+> exact identity — this only changes the *absolute* frame a loop_end value
+> resolves to, which matters when reading a **third-party** `.e4b` (registered
+> as an input format in `parsers/registry.py`). Not yet independently
+> re-confirmed on mpc2emu's own hardware rig; the 1-frame (≈23 µs at 44.1 kHz)
+> shift is below the threshold Jan's by-ear auto-loop HW confirmation could
+> have caught either way.
 
 **Pitch offset at `[58:60]` — hardware-RE'd 2026-07-24.** A sample stored below
 44.1 kHz plays **sharp by `44100 / stored_rate`** unless this field is set; the

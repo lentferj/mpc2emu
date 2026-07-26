@@ -217,11 +217,21 @@ def _parse_sample_body(body: bytes) -> tuple:
     STRUCT_SZ = 92
     pcm = body[SAMP_HDR:]
 
+    n_frames = len(pcm) // 2   # 16-bit mono
+
     has_loop = bool(options & 0x0001)
     if has_loop:
         loop_type  = LoopType.FORWARD
         loop_start = (loop_start_l - STRUCT_SZ) // 2
-        loop_end   = (loop_end_l   - STRUCT_SZ) // 2
+        # On-disk loop_end_l stores the frame BEFORE the true inclusive last
+        # loop frame — e4b_writer._build_sample_header encodes the matching
+        # `-1` so this stays an exact inverse of our own output. Cross-
+        # referenced against ConvertWithMoss's independent E4B reader (PR
+        # #220 commit 2ccefea), which measured the loop-seam amplitude step
+        # across a real commercial corpus and found this +1 correction takes
+        # clean seams from 78% to 95% and eliminates seams stepping by more
+        # than a third of the peak amplitude.
+        loop_end   = min((loop_end_l - STRUCT_SZ) // 2 + 1, max(0, n_frames - 1))
     else:
         loop_type  = LoopType.NO_LOOP
         loop_start = 0
@@ -410,6 +420,21 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
         # Decay1 level byte = sustain (levels are full-scale).
         filter_env_sustain = max(0.0, min(1.0, _fenv_level_inv(fenv_raw[5])))
 
+    # Voice-level key/velocity window — vpar[14]/[17] (key), vpar[18]/[21]
+    # (velocity), hardware-RE'd 2026-06-14 (writers/e4b_writer.py, RE_SUITE2
+    # VOICE KEYWIN). mpc2emu's own writer always sets this to the min/max of
+    # the voice's own zones, so intersecting is a no-op on our own output —
+    # but real-world commercial banks commonly leave the ZONE entry wide open
+    # at 0-127 and do the actual key/velocity split at the VOICE level only
+    # (cross-referenced against ConvertWithMoss's independent E4B reader,
+    # PR #220 commit ead0e07, validated against 76057 real zones). Without
+    # this intersection, such a voice's samples all map across the whole
+    # keyboard/velocity range instead of their real window.
+    voice_key_lo = vpar[14]
+    voice_key_hi = vpar[17]
+    voice_vel_lo = vpar[18]
+    voice_vel_hi = vpar[21]
+
     # Secondary zone table starts at VOICE_FIXED
     zones = []
     for i in range(n_zones):
@@ -417,10 +442,15 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
         entry = data[off:off + ZONE_ENTRY]
         if len(entry) < ZONE_ENTRY:
             break
-        lo_key     = entry[2]
-        hi_key     = entry[5]
-        lo_vel     = entry[6]
-        hi_vel     = entry[9]
+        lo_key = max(voice_key_lo, entry[2])
+        hi_key = min(voice_key_hi, entry[5])
+        lo_vel = max(voice_vel_lo, entry[6])
+        hi_vel = min(voice_vel_hi, entry[9])
+        if lo_key > hi_key or lo_vel > hi_vel:
+            # Voice and zone windows don't overlap at all — a dead zone
+            # (malformed/leftover entry); skip rather than emit an inverted
+            # range downstream writers don't expect.
+            continue
         sample_idx = struct.unpack_from('>H', entry, 10)[0]
         root_key   = entry[14]
         sname      = idx_to_name.get(sample_idx, '')

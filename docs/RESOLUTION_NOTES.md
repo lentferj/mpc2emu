@@ -2547,3 +2547,74 @@ Ordered by rough usefulness; none are blocking anything, pick up independently:
   1010music / TX16Wx fixes, and the new Kurzweil K2000/K2500/K2600 **reader** —
   none are formats/directions we read or write (we *write* KRZ, CWM's new K2000
   support is a *reader*; no overlap to exploit).
+
+---
+
+## §E4BREAD — E4B reading gaps found via ConvertWithMoss's independent E4B reader (FIXED 2026-07-26)
+
+**Context:** `parsers/e4b_parser.parse_e4b` is registered as an input format
+(`parsers/registry.py`) — not just this project's own round-trip validation
+oracle — because the sibling `VinSamLib` project (a librarian GUI built on
+top of mpc2emu) reads real third-party/commercial `.e4b` files through it.
+Cross-referencing ConvertWithMoss's independent E4B reader (PR #220,
+`format/emu/emulator4/Emulator4Detector.java`) surfaced two real gaps in that
+reading path — both now fixed.
+
+### 1. Zone key/velocity range not intersected with the voice-level window
+
+**Symptom:** many real hardware/commercial presets leave a voice's *zone*
+entry wide open at 0-127 (key and velocity) and do the actual split at the
+*voice* level instead (`vpar[14]`/`[17]` key, `vpar[18]`/`[21]` velocity —
+see `docs/E4B_FORMAT.md` §4.1, hardware-RE'd 2026-06-14). `_parse_voice` read
+`lo_key`/`hi_key`/`lo_vel`/`hi_vel` straight from the zone entry only and
+never consulted the voice window, so such a voice's sample mapped across the
+whole keyboard/velocity range instead of its real one.
+
+**Fix** (`parsers/e4b_parser.py`, in the zone loop of `_parse_voice`):
+intersect each zone's range with the voice window —
+`lo_key=max(vpar[14], entry.lo_key)`, `hi_key=min(vpar[17], entry.hi_key)`,
+same pattern for velocity. If the intersection is empty (`lo > hi`), the zone
+is dropped rather than emitting an inverted range (mirrors CWM's own
+early-exit — commit `ead0e07`, cross-referenced against 76057 real zones from
+the E-mu Producer Series CD-ROMs).
+
+**Why this is safe for mpc2emu's own output:** `writers/e4b_writer.py`
+(`_build_voice`) always sets the voice window to the min/max of the voice's
+*own* zones, so the intersection is a no-op there by construction — verified
+with a synthetic multi-zone round-trip (two zones, disjoint key ranges,
+unaffected after the fix). Only third-party-authored files where a zone is
+genuinely wider than the voice window are affected.
+
+### 2. `loop_end_l` off-by-one
+
+**Symptom:** CWM's reader (commit `2ccefea`) found the on-disk `loop_end_l`
+field stores the frame *before* the true last loop frame, not the true last
+frame itself — measured empirically by checking the PCM amplitude step at the
+loop seam across a real commercial corpus: reading the raw value directly
+left many seams with a step over a third of peak amplitude; adding `+1`
+(capped at `numFrames−1`) eliminated all of those and raised the clean-seam
+share from 78% to 95%.
+
+Our own `parsers/e4b_parser.py`/`writers/e4b_writer.py` pair previously
+treated the on-disk value as `loop_end` directly — an exact inverse of each
+other, so our own write→parse round-trip was unaffected by this convention
+either way, but reading a **third-party** file's loop point through
+`e4b_parser` alone would land one frame short of the model's documented
+"inclusive last loop frame" convention (`processors/loop_renderer.py`).
+
+**Fix:** both sides updated together, keeping them exact inverses —
+- `writers/e4b_writer.py._build_sample_header`: `lel = (loop_end - 1) * 2 + STRUCT_SZ`
+- `parsers/e4b_parser.py._parse_sample_body`: `loop_end = min((loop_end_l - STRUCT_SZ) // 2 + 1, n_frames - 1)`
+
+Verified: (a) mpc2emu's own write→parse round-trip is still an exact identity
+(loop_end in == loop_end out); (b) the on-disk byte now encodes `loop_end - 1`
+as expected; (c) `test_pipeline.py`'s existing PINGPONG round-trip and
+`tests/test_krz_writer.py` (9 tests) still pass.
+
+**Not yet independently re-confirmed on mpc2emu's own hardware rig** — the
+shift is 1 frame (≈23 µs at 44.1 kHz), below what Jan's by-ear `--auto-loop`
+hardware confirmation could have caught either way (that confirmation
+validated the crossfade *construction*, which is untouched by this change —
+only the on-disk encoding of the already-correct frame index moved). If a
+future HW A/B is ever warranted, compare a loop-heavy bank read-modify-written
+through this path before/after the fix.
