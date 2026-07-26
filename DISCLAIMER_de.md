@@ -26,11 +26,13 @@ Design-Entscheidungen stammen allesamt vom menschlichen Autor.
 
 **Das Reverse Engineering beruht auf umfangreicher praktischer menschlicher
 Arbeit** — dem Teil, den keine KI leisten kann:
-- alle Tests und Verifikation auf **echter E-mu-E4XT-Hardware** (per ZuluSCSI);
-  jedes „hardware-bestätigte" Ergebnis stammt daher, dass der Autor Bänke auf dem
-  echten Instrument geladen und das Funktionieren der Presets geprüft hat;
-- Erstellen der **maßgeblichen RE-Referenzen** durch Formatieren von Disks auf
-  der echten Hardware und Bereitstellung der Images zur Analyse;
+- alle Tests und Verifikation auf **echter E-mu-E4XT- und Kurzweil-K2000R-
+  Hardware** (per ZuluSCSI / Gotek); jedes „hardware-bestätigte" Ergebnis stammt
+  daher, dass der Autor Bänke auf dem echten Instrument geladen und das
+  Funktionieren der Presets geprüft hat (E4XT-EOS-4.x-Bänke/-ISO/-HDD sowie
+  K2000-KRZ-Filter, -Hüllkurven, -LFO und die FAT16-CD/-Festplatte/-Floppy);
+- Erstellen der **maßgeblichen RE-Referenzen** durch Disk-Saves/Formatieren auf
+  der echten Hardware und SysEx-Probes, dann Bereitstellung der Images zur Analyse;
 - **akustischer A/B-Vergleich** konvertierter Presets mit den Originalen auf
   echter Hardware und Bereitstellung der Messwerte, die die Klangtreue-Arbeit
   antrieben (LFO-Raten, Filterverhalten, Tuning, Hüllkurven …);

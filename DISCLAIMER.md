@@ -24,11 +24,13 @@ ZuluSCSI CD/HDD output, append-to-existing-image, the Windows/pure-Python goal,
 
 **The reverse engineering rests on extensive hands-on human work** — the part no
 AI can do:
-- all testing and verification on **real E-mu E4XT hardware** (via ZuluSCSI);
-  every "hardware-confirmed" result in this project came from the author loading
-  banks on the actual instrument and checking that presets play;
-- producing the **authoritative RE references** by formatting disks on the real
-  hardware and supplying the images for analysis;
+- all testing and verification on **real E-mu E4XT and Kurzweil K2000R hardware**
+  (via ZuluSCSI / Gotek); every "hardware-confirmed" result in this project came
+  from the author loading banks on the actual instrument and checking that
+  presets play (E4XT EOS 4.x banks/ISO/HDD, and K2000 KRZ filters, envelopes,
+  LFO, and the FAT16 CD/hard-disk/floppy media);
+- producing the **authoritative RE references** by saving/formatting disks on the
+  real hardware and running SysEx probes, then supplying the images for analysis;
 - **aural A/B comparison** of converted presets against the originals on real
   hardware, and providing the measurements that drove the fidelity work (LFO
   rates, filter behaviour, tuning, envelopes, …);
