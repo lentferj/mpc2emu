@@ -359,6 +359,27 @@ it never emits an inverted (silent) range. Verified: a 4-voice full-range drum
 kit reduced 50 % → 2 voices, **zero inverted ranges** (was producing 64>63); a
 real 8-zone key chain still redistributes to a clean ordered 0–127 cover.
 
+**CR-19 `thin_velocity_layers()` entangled key/velocity presets — DONE
+2026-07-27.** Found via VinSamLib (downstream project, see TODO history):
+`velocity_layer_pct=30` on a preset with one voice per (key-zone × velocity-
+layer) cell shrank total voice count by ~30% but left the distinct velocity-
+BAND count unchanged, because the `len(preset.voices) > 1` branch thinned
+individual voices by index-spacing without first grouping them by their own
+velocity band — when several voices share a band (one per key zone), even-
+spacing almost always leaves a survivor in every band. Fixed by grouping
+`preset.voices` into `(voice_lo, voice_hi)` bands first (mirroring
+`_thin_velocity_bands_in_voice`'s zone-grouping, one level up), thinning at
+the band-group level via `_thin_and_redistribute`, then applying each
+surviving band's (possibly widened) range to every voice in it. Verified
+against the real repro file
+(`.../Kirk.Hunter.Virtuoso.Series.Strings1.E4/KH Violins/B.003-2_8Violins128MB.e4b`,
+preset `8VnEsHdMrcFat/SL`): 5 → 4 distinct bands at `keep_pct=70` (was 5 → 5).
+Also spot-checked the CR-6 code paths still hold through the new grouping: a
+synthetic overlapping-band case (all `hi_vel=127`, like the real file) kept
+original ranges via the CR-6 guard; a synthetic contiguous 3-band/2-voices-
+per-band case widened survivors correctly (3 → 2 bands, gap split at the
+midpoint, both voices in each surviving band updated).
+
 **CR-7 / 7b / 7c sample-name collisions — DONE 2026-06-11.**
 - **CR-7** `bank_splitter.TargetBank.add_preset`: dedup now keys on
   `(name, len(data), hash(data))`. A genuine duplicate (same name+PCM) is shared;

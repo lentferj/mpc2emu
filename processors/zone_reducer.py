@@ -181,8 +181,13 @@ def thin_velocity_layers(preset: Preset, keep_pct: float) -> int:
 
     Velocity layering has two representations in the model, so we thin whichever
     one this preset uses:
-      - **Separate VoiceLayer objects** per layer (SFZ / SF2 / GIG) → thin the
-        voices, propagating each survivor's new velocity range to its zones.
+      - **Separate VoiceLayer objects** per layer (SFZ / SF2 / GIG) → group the
+        voices by their own velocity band first (several voices can share a
+        band when each key zone gets its own voice within it — e.g. one voice
+        per key-zone x velocity-layer cell), then thin at the band level,
+        propagating each surviving band's new velocity range to every voice in
+        it. This mirrors `_thin_velocity_bands_in_voice`'s zone-grouping, one
+        level up.
       - **One voice carrying several velocity bands as zones** (XPM keygroups)
         → thin the bands within that voice (see `_thin_velocity_bands_in_voice`).
     """
@@ -195,15 +200,24 @@ def thin_velocity_layers(preset: Preset, keep_pct: float) -> int:
         def voice_hi(v: VoiceLayer) -> int:
             return max((z.hi_vel for z in v.zones), default=127)
 
-        def set_voice_range(v: VoiceLayer, lo: int, hi: int) -> None:
-            for z in v.zones:
-                z.lo_vel = lo
-                z.hi_vel = hi
+        from collections import OrderedDict
+        bands: "OrderedDict[tuple, list]" = OrderedDict()
+        for v in preset.voices:
+            bands.setdefault((voice_lo(v), voice_hi(v)), []).append(v)
 
-        preset.voices = _thin_and_redistribute(
-            preset.voices, keep_pct,
-            get_lo=voice_lo, get_hi=voice_hi, set_range=set_voice_range,
+        def set_band_range(band: List[VoiceLayer], lo: int, hi: int) -> None:
+            for v in band:
+                for z in v.zones:
+                    z.lo_vel = lo
+                    z.hi_vel = hi
+
+        kept_bands = _thin_and_redistribute(
+            list(bands.values()), keep_pct,
+            get_lo=lambda band: min(voice_lo(v) for v in band),
+            get_hi=lambda band: max(voice_hi(v) for v in band),
+            set_range=set_band_range,
         )
+        preset.voices = [v for band in kept_bands for v in band]
         return before - len(preset.voices)
 
     if preset.voices:
