@@ -2416,9 +2416,9 @@ program-side modulation handling:
   our own writer, not applicable:** `writers/krz_writer.py._env_time_byte`
   floors every written time byte at `3` (`max(3, ...)`), so `_fill_env` never
   emits a literal on-disk time of `0` — the ambiguous (0-time, 0-level) case
-  this PR fixes can't occur in mpc2emu's own output. This only matters to a
-  *reader* of third-party KRZ programs, which mpc2emu doesn't have registered
-  as an input format (`parsers/registry.py` has no `.krz` entry).
+  this PR fixes can't occur in mpc2emu's own output. It matters to a *reader*
+  of third-party KRZ programs, which mpc2emu didn't have at the time this
+  note was written — see §KRZ-READER below, which added exactly that.
 
 ### 1. Per-sample gain (`Soundfilehead.volumeAdjust`) — DONE + HW-CONFIRMED (2026-07-23)
 
@@ -2484,6 +2484,11 @@ spread. *Trade-off:* our current per-band split-layer approach is HW-verified; t
 multi-table form is not. Decision + HW confirm required before touching a working
 path — keep as a design item, not a drive-by change.
 
+**Read side done (2026-07-27, §KRZ-READER below):** `parsers/krz_parser.py`
+decodes native `Level[8]` multi-table keymaps (real third-party content uses
+them — 15-30 keymaps in the local corpus, depending on how it's counted).
+This item is about the *writer* still never emitting them; unaffected.
+
 ### 4. Stereo / multi-root sample objects — broader feature
 
 We emit mono, single-`Soundfilehead` samples. The multi-header generalization
@@ -2507,6 +2512,163 @@ Gated behind general stereo support in the converter; HW confirm needed.
   `BASE_NOTE=12`); we index entries by raw MIDI note. Ours is HW-confirmed to play
   correctly, so this only matters if an external reader (incl. CWM) reads our files
   — verify whether it sees our zones shifted +12 before assuming interop.
+
+## §KRZ-READER — KRZ added as a source format (2026-07-27)
+
+TODO item: *"KRZ was write-only; add it as an input format"* — prompted by
+Jan asking how much effort it'd take, given ConvertWithMoss shipped a KRZ
+reader in the preceding ~10 days partly credited to this project's own
+hardware RE (see §KRZ-CWM above and `dea9dbb` in ConvertWithMoss).
+
+**Done.** `parsers/krz_parser.py`, `parse_krz(path) -> Bank`, wired into
+`parsers/registry.py` (`'.krz'`). Structural template: `parsers/e4b_parser.py`
+(self-contained binary reader, in-memory PCM, numeric-id→name resolution,
+per-object `try/except` + `[WARN]`, never fatal).
+
+**Why cheaper than a normal new-format reader:** the container walk already
+existed as a diagnostic tool (`tests/re_banks/krz_reader.py`, promoted into
+the new module since `tests/` is gitignored and can't be imported from
+shipping code) and was corpus-verified against 577 real files (zero
+container/segment failures) *before* any model-building code was written.
+The format is documented at byte level in `docs/KRZ_FORMAT.md`, and the DSP
+decoders (filter/cutoff/resonance/envelopes) are inverses of encoders this
+project already hardware-RE'd in `krz_writer.py` — this was mostly a
+model-construction job, not a reverse-engineering one.
+
+**Scope implemented, all in one pass** (the original 3-phase estimate
+collapsed once the container proved solid):
+- Samples: PCM extraction with BE→LE byteswap, loop points, per-sample gain
+  (`Soundfilehead.volumeAdjust`), sample-rate reconstruction snapped to
+  standard rates (see finding below).
+- Keymaps: the full method bitfield (compacted keymaps, i8 tuning, per-entry
+  volAdj — the writer only ever emits one variant, `0x13`; real content uses
+  12 different ones, see corpus counts in the KRZ-as-source-format plan) and
+  the native `Level[8]` multi-velocity-table mechanism the writer never uses.
+- Programs: key/velocity geometry, filter type (many-to-one reverse map,
+  same "canonical representative" approach as `e4b_parser.py`'s own filter
+  table), cutoff/resonance, amp + filter envelopes (a *reducer*, not a strict
+  inverse — see below), LFO1, and the AMPENV Natural-mode gate.
+- Orphan recovery: keymaps no program references, and samples no keymap
+  references, are recovered into synthetic presets rather than silently
+  dropped (real pure sample-pool banks exist in the corpus).
+- ROM/absent samples (K2000 built-in waveforms, ids < 200, no PCM in the
+  file) are dropped with one summarized `[WARN]` per bank, never per-zone;
+  an all-ROM program-only bank gets a plain `[INFO]` rather than looking
+  like a parse failure.
+
+**Corpus findings that shaped the design** (577 local `.KRZ` files,
+`tools/krz_corpus_check.py`):
+
+- **CAL keymap-slot resolves in mpc2emu's favor, not CWM's.** `CAL[7,8]` is
+  the sole keymap-id carrier in **0 of 33,866** program layers; `CAL[11,12]`
+  alone in 30,483; both set (disagreeing) in 948. CWM's `KurzweilProgram.java`
+  reads `[7,8]` first, so it misreads those 948. `krz_parser.py` reads
+  `CAL[11:13]` only, matching the writer and `docs/KRZ_FORMAT.md` §4.2. This
+  **closes** doc-only reconciliation item 5 above (partially — the hash-decode
+  half of that item is still open, we still don't emit type-28 FX objects so
+  it doesn't bite our own output).
+- **Entry-index base evidence favors mpc2emu's convention, not conclusively.**
+  Root-inside-zone check over 8,010 multisample entry-runs: `note = i` 39.6%
+  vs CWM's `note = i+12` 26.4%. Recorded in `docs/KRZ_FORMAT.md` §3.2 and
+  `TODO.md`; **not** closed outright — wants an aural/HW check.
+- **PCM-extent recovery needed a hard ceiling, found by testing against
+  synthetic writer output, not the real corpus.** The first implementation
+  floored the extent at `sampleEnd + 1`, reasoning `sampleEnd` is always
+  inclusive-last-frame. That overshoots by one word whenever two samples are
+  packed with zero gap (common for the writer's own tightly-packed output),
+  silently stealing one PCM word from the next sample. Fixed by making the
+  next sample's start (or PCM-region end) a hard ceiling the floor can never
+  exceed, with loop points defensively clamped afterward. Caught by building
+  `tests/test_krz_roundtrip.py`, not by the corpus sweep (which only flags
+  invariant *violations*, and the original bug happened not to trip one for
+  most files — 24 of 583 local files had visibly out-of-range loop points
+  before the fix, all self-authored test/demo banks with tight packing).
+- **Sample-rate snapping** — `samplePeriod` is an integer nanosecond value,
+  so `1e9/period` doesn't invert exactly (a written 44100 Hz reads back as
+  44099/44098 depending on rounding direction). Snapped to the nearest
+  standard rate within ±2 Hz, matching ConvertWithMoss's approach.
+- **Pre-existing writer bug found by actually round-tripping real content
+  (KRZ→KRZ→KRZ, not just synthetic fixtures), 2026-07-27: the up-pitch
+  ceiling was measured from the wrong root.** `_build_keymap_entries`
+  computed `ceiling = _compute_max_pitch(sample.sample_rate, r_sample)`, using
+  the sample's own physical `root_note` — but the hardware's actual total
+  pitch shift at key `K` is `(K - r_sample)*100` [auto-transpose] `+ tuning`,
+  and since `tuning = 100*(r_sample - r_zone) + fine_tune`, that total
+  algebraically reduces to `(K - r_zone)*100 + fine_tune`. So the ceiling —
+  which bounds how far *above the sample's actual playback rate* the K2000's
+  48kHz internal engine can stretch it — must be measured from `r_zone`
+  (`zone.root_key`), not `r_sample`. Whenever a zone deliberately retunes
+  (`root_key != sample.root_note`), the old check mis-flagged perfectly safe
+  assignments as over-ceiling and silently dropped the sample from the
+  keymap. Found via Patchman `PMVOL098.KRZ` (`2000 Series v114`, "Lo Fi Kicks
+  1"): a genuine drum map where each key gets its own sample at an
+  independently chosen pitch (`entry.tuning` cancels the normal per-key
+  auto-transpose entirely) — parsed correctly by `krz_parser.py`, but
+  re-encoding that Bank back to KRZ dropped 4 of the kit's 45 samples, which
+  the reader then correctly (if confusingly) recovered as an orphan preset on
+  the next parse, one new orphan compounding with every generation. **This
+  bug was not specific to KRZ-sourced content** — any source format producing
+  a deliberately retuned zone (`root_key != root_note`) would have hit it when
+  converting *to* KRZ. Fixed by measuring the ceiling from `r_zone`
+  (`writers/krz_writer.py:392`). Verified: `PMVOL098.KRZ` is now stable
+  gen1→gen2→gen3 (`Lo Fi Kicks 1`, 45 samples, no orphan preset); the existing
+  HW-confirmed `tests/test_krz_writer.py` suite is unaffected (its fixtures
+  never exercise `root_key != root_note`, so `r_zone == r_sample` there and
+  the fix is a no-op for every case that was already HW-verified).
+
+**Known remaining limitation (not fixed, documented 2026-07-27): `_coverage_
+remap_voices` / `_voices_stacked` are not idempotent across repeated KRZ→KRZ→
+KRZ generations.** `tools/krz_to_krz_check.py` (parse → write → parse → write
+→ parse, 3 generations) found 10 of 593 local files where gen2→gen3 zone/
+preset counts drift — all of them this project's own synthetic multi-voice
+octave-slice pad-stack test/demo banks (`JRSLO*`, `K2KFEATDEMO*`,
+`krz_staging/VPO_BRASSACC|BRASSNOR|VIOLINKS`, `SCSYNTH_01`), **zero real
+commercial-library files** (all 12 Patchman files that were unstable before
+the ceiling fix are now stable). Root cause: `_coverage_remap_voices` (§7.3's
+already-documented lossy octave-slice rebuild) regroups samples by root
+differently when applied a second time to its own previous output, so a
+second re-encode can leave a different subset of samples referenced by no
+keymap; `krz_parser.py`'s orphan recovery correctly rescues them each time,
+but that means a new tiny recovery preset can appear every generation instead
+of the set settling. Not chased further: a real user's KRZ→other-format
+conversion only round-trips through the writer once, so this only bites
+KRZ→KRZ→KRZ chains of this specific stacked-pad content, and doesn't affect
+any real library found in the local corpus. Would need `_coverage_remap_
+voices` made idempotent (or gated off on Bank input that is *already* a
+coverage-remap's own output) to close for good.
+- **`filter_cutoff` is not a shared frequency scale**, confirmed while writing
+  `tests/test_krz_roundtrip.py`: the KRZ writer maps 0..1 onto a *linear
+  semitone* scale (`_cutoff_byte`), while the reader decodes through E4B's
+  *log-Hz* scale (`hz_to_e4b_cutoff`, for consistency with every other
+  parser). Both are internally correct; they're just different curves, so a
+  round-tripped cutoff value legitimately doesn't come back unchanged. A
+  follow-up (not done here) would route `_cutoff_byte` through Hz too,
+  making writer and parser exact inverses.
+
+**Shared codecs moved to `models/common.py`** (the CR-13/CR-18 pattern —
+single home for writer+parser math instead of "kept in sync by comment"):
+`krz_cutoff_byte_to_hz`, `krz_reson_byte_to_01`, `krz_env_byte_to_seconds`,
+`KRZ_ENV_TIME_GRID`, `KRZ_RELEASE_FACTOR`. `writers/krz_writer.py` now
+imports these instead of keeping its own copies.
+
+**Verification:** `tests/test_krz_roundtrip.py` (write_krz → parse_krz,
+geometry + DSP, deliberately dodging three writer-side structural rewrites —
+hole-filling, layer-capping, the up-pitch ceiling — that would fail a naive
+round-trip for the wrong reason); `tools/krz_corpus_check.py` (584 local
+files, zero exceptions, model invariants); `tests/test_krz_writer.py`'s
+`test_write_read_roundtrip`/`test_sample_gain` rewritten to call `parse_krz`
+directly instead of shelling out to the old reader and regex-scraping stdout
+— this rewrite is what surfaced a **pre-existing, previously-uncaught writer/
+fixture issue**: both tests' fixtures assigned zones to key ranges beyond
+their sample's up-pitch ceiling (root+1 semitone at 44.1kHz), which the
+writer correctly refuses (delete-lockup avoidance), silently leaving that
+voice's keymap empty — invisible to the old byte-regex assertions, which
+never checked keymap sample-id fidelity. Fixed by giving each test fixture's
+samples a `root_note` that covers their widest assigned zone.
+
+`tests/re_banks/krz_reader.py` reduced to a thin CLI pretty-printer importing
+the container walk from `parsers/krz_parser.py`, with the same `CAL[7,8]` bug
+fixed in its display code.
 
 ## §CWM19 — Input-parser feature-parity gaps found via ConvertWithMoss 19.1.0 (2026-07-25)
 

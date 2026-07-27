@@ -1,5 +1,122 @@
 # mpc2emu — Open Items
 
+## KRZ->KRZ->KRZ: coverage-remap not idempotent across generations (OPEN, low priority, 2026-07-27)
+
+**Found via `tools/krz_to_krz_check.py`** (parse → write → parse → write →
+parse, checking gen2 vs gen3 for a fixed point) while adding KRZ as a source
+format. 10 of 593 local `.KRZ` files drift in preset/zone count between the
+2nd and 3rd generation — all of them this project's own synthetic multi-voice
+octave-slice pad-stack test/demo banks (`JRSLO*`, `K2KFEATDEMO*`,
+`krz_staging/VPO_BRASSACC|BRASSNOR|VIOLINKS`, `SCSYNTH_01`). **Zero real
+commercial-library files are affected** — the 12 Patchman files that WERE
+unstable here are now fixed (see the up-pitch-ceiling bug below).
+
+**Root cause:** `writers/krz_writer._coverage_remap_voices()` (the octave-
+slice-stack rebuild, §7.3 of `docs/KRZ_FORMAT.md`) regroups samples by root
+note differently when it's handed its OWN previous output a second time, so
+a second re-encode can leave a different subset of samples unreferenced by
+any keymap. `parsers/krz_parser.py`'s orphan recovery correctly rescues them
+each time, but that means a new tiny recovery preset can appear every
+generation instead of the set settling to a fixed point.
+
+**Status:** documented, not fixed — a real user's conversion only passes
+through the writer once (KRZ→E4B, or any format→KRZ), so this only bites a
+repeated KRZ→KRZ→KRZ chain of this specific stacked-pad content, which no
+real library in the local corpus exercises. **Blocked on:** deciding whether
+`_coverage_remap_voices` is worth making idempotent (or gating off when its
+input is already coverage-remapped output) — a design question, not a quick
+fix. Full root-cause writeup: `docs/RESOLUTION_NOTES.md` §KRZ-READER.
+
+## VinSamLib real-hardware confirmation batch ready — testing PENDING (2026-07-27)
+
+**Not a code task — a tracking note for real E4XT/K2000R testing Jan is
+doing separately, tomorrow.** `VinSamLib/tests/manual_hw_convert_matrix.py`
+(a sibling project's own script) built a 16-image batch under
+`~/temp/VinSamLib_Test/` — 12 E4B `.hda` images (resample profiles,
+bandpass/gain isolation, key-zone/velocity-layer reduction at two
+aggressiveness levels, one combined case) and 4 K2000 Gotek `.img`
+floppies (plain KRZ conversion, both resample profiles, max-sample-rate
+limiting) — each generated through VinSamLib's real GUI code paths, not
+just `build/convert.py` in isolation. `00_MANIFEST.txt` in that same
+directory documents exactly what's on each image and what to check for
+by ear/by eye on real hardware.
+
+This batch is also the intended real-hardware verification vehicle for
+the two open bugs directly above/below this entry
+(`thin_key_zones()`/`thin_velocity_layers()` band-grouping) — images
+#08-12 on the E4XT specifically exercise the reduce paths, with the
+known `thin_key_zones()` no-op already disclosed in the manifest itself
+rather than hidden, so testing isn't blocked on that fix landing first.
+
+**Status:** images built and spot-verified in software (re-parsed,
+zone/format checks passed); **real hardware confirmation not yet
+done**. **Blocked on:** Jan's own hardware session (E4XT + K2000R via
+ZuluSCSI/Gotek), scheduled for the day after this entry was written.
+
+## `thin_key_zones()` is a no-op for E4B presets where each voice already carries only one zone (OPEN, 2026-07-27)
+
+**Found via VinSamLib** (same downstream project as the just-fixed
+`thin_velocity_layers()` band-grouping bug above — this is that bug's
+mirror image on the other axis), while generating a batch of real
+hardware-confirmation E4XT images
+(`tests/manual_hw_convert_matrix.py`).
+
+**Symptom:** `reduce_key_zones_pct=30` and `=60` on a real, densely
+multisampled E4B preset both print `removed 0 key zone(s)` — no
+reduction at all, at any requested percentage.
+
+**Reproduced against the same file/preset as the velocity-layer bug:**
+`/home/lentferj/Dokumente/SYNTHS/E4XT/E4Bs/Kirk.Hunter.Virtuoso.Series.Strings1.E4/KH Violins/B.003-2_8Violins128MB.e4b`,
+preset `8VnEsHdMrcFat/SL` (index 0) — parsed via `parsers/e4b_parser.py`,
+this preset's 78 voices each carry **exactly one zone** (the full
+45-key-zone × 5-velocity-band grid is represented as 78 separate
+single-zone voices, not as a few voices each holding many zones).
+
+**Root cause:** `thin_key_zones(voice, keep_pct)`
+(`processors/zone_reducer.py`) only thins the zones *within one voice*
+— it groups `voice.zones` by velocity band, then thins each band's key
+zones independently. That's exactly right for the XPM-keygroup
+representation it was written for (one voice packs many zones, several
+velocity bands each with several key splits). But when a voice has only
+one zone (this E4B preset's representation), `before = len(voice.zones)
+== 1` for every voice, so every call trivially returns `removed = 0` —
+there is nothing to thin *within* a single-zone voice, because the real
+key-zone variation lives *across* voices instead, the same place the
+velocity-layer variation was hiding before the last fix.
+
+**This is the same architectural gap as the velocity-layer bug, on the
+other axis:** `reduce_bank()`'s `key_zone_pct` branch
+(`processors/zone_reducer.py`, the `for voice in preset.voices:
+thin_key_zones(voice, ...)` loop) has no equivalent to the
+just-added voice-grouping-by-velocity-band step — it never groups
+voices by their *key* position to thin across them when a voice's own
+zone list has nothing to offer.
+
+**Proposed fix:** mirror the velocity-layer fix, on the key axis. When
+thinning key zones, for a preset whose voices already carry ≤1 zone
+each (or more generally, whenever thinning *within* a voice removes
+nothing), group `preset.voices` by velocity band first (reusing the
+grouping helper the velocity fix just introduced), then thin **across
+the voices within each band** by key position — analogous to
+`_thin_and_redistribute` already being applied to *voices* for the
+velocity case, just keyed on `(voice's own key range)` instead of
+velocity range, and applied independently within each velocity-band
+group so key-thinning doesn't interleave across different velocity
+layers. `thin_key_zones()` itself (the "many zones in one voice" case)
+should stay as-is; the new path is only needed alongside it for the
+"one zone per voice" representation.
+
+**Status:** open, not yet fixed. **Blocked on:** nothing — self-
+contained change to `processors/zone_reducer.py`, same file and same
+session as the velocity-layer fix; the repro above (real file, real
+preset index, `removed 0 key zone(s)` at any percentage) is enough to
+verify a fix against. VinSamLib's own hardware-confirmation manifest
+(`tests/manual_hw_convert_matrix.py` in the VinSamLib repo, rows 08/09)
+already documents this as a known caveat rather than hiding it, pending
+this fix.
+
+---
+
 ## E4B `loop_end` off-by-one fix needs hardware re-confirmation (OPEN, 2026-07-26)
 
 **Context:** cross-referencing ConvertWithMoss's independent E4B reader (PR #220
@@ -58,6 +175,38 @@ variants in #231 could be useful cross-references if EIII or wider EMU3
 disk-geometry support ever comes up, and #220's independent validation
 against `e4b_parser.py` is a nice confirmation this project's E4B model
 is solid from an outside perspective.
+
+## Personal action: tell CWM about two KRZ reader discrepancies (OPEN, 2026-07-27)
+
+**Not a code task — Jan wants to raise this with ConvertWithMoss himself,**
+personally, rather than have it filed automatically. Context: CWM added a
+Kurzweil KRZ reader in the last ~10 days (`cf4a49f`..`c905467`,
+2026-07-21..27, mostly Douglas Carmichael), explicitly crediting mpc2emu's
+hardware RE for the DSP layer (`dea9dbb` commit body;
+`documentation/design/KURZWEIL_FORMAT.md:141-145` in their repo). While
+scoping mpc2emu's own KRZ *reader* (see the KRZ-as-source-format plan), two
+corpus checks against 577 local `.KRZ` files turned up discrepancies with
+CWM's implementation:
+
+- **Keymap id: `CAL[7,8]` is never the sole carrier.** Over 33,866 program
+  layers, `CAL[11,12]` alone carries the id in 30,483; `CAL[7,8]` alone
+  carries it in **zero**. Both are set (and disagree) in 948 layers. CWM's
+  `KurzweilProgram.java` reads `[7,8]` first, falling back to `[11,12]` only
+  when `[7,8]` is zero — so it misreads those 948 layers. mpc2emu's own docs
+  (`docs/KRZ_FORMAT.md` §4.2, CAL`[11:13]`) and hardware RE
+  (`writers/krz_writer.py:776-782`, HW-confirmed against ROM #183/#193/#194)
+  already had this right.
+- **Note base is `i`, not `i+12`.** CWM's `KurzweilKeymap.getNoteOfEntry()`
+  uses `12 + round((basePitch + i*centsPerEntry)/100)`. A root-inside-zone
+  check across 8,010 multisample entry-runs favors `note = i` (39.6%) over
+  `note = i + 12` (26.4%) — consistent with mpc2emu's own convention, though
+  **not conclusive enough to call this settled** without an aural/hardware
+  check on real K2000 content.
+
+**Status:** evidence gathered and recorded in `docs/KRZ_FORMAT.md`; **Jan
+will reach out to the CWM project (Douglas Carmichael / Jürgen Moßgraber)
+personally** with these two findings once convenient. **Blocked on:** Jan's
+own outreach — nothing further needed from this project's side.
 
 ## E4B per-zone fine-tune/volume/pan (multi-zone voices) — RESOLVED + HW-CONFIRMED (2026-07-26)
 
@@ -439,9 +588,16 @@ fidelity we don't yet emit. Fix recipes in `docs/RESOLUTION_NOTES.md` §KRZ-CWM.
 - **Doc-only:** our `hash >> 10` object-type decode mislabels the FX/song/QA
   objects (types > 42 use the 8-bit `hash >> 8` decode when the 0x8000 bit is
   clear). We never emit them, so this only matters for a future reader — noted in
-  `docs/KRZ_FORMAT.md` §2.2. Also verify the entry-index base: CWM places entry
-  `i` at note `i+12`; we index entries by raw MIDI note (ours is HW-confirmed to
-  play, so this only bites an external reader of our files).
+  `docs/KRZ_FORMAT.md` §2.2.
+- **Entry-index base — evidence gathered, not HW-closed (2026-07-27).** While
+  building `parsers/krz_parser.py` (KRZ-as-source-format), checked CWM's claim
+  that entry `i` sits at note `i+12` against 577 local `.KRZ` files: a
+  root-inside-zone test over 8,010 multisample entry-runs favors `note = i`
+  (39.6%) over `note = i+12` (26.4%) — i.e. **mpc2emu's own convention (raw MIDI
+  note) looks right, CWM's `BASE_NOTE=12` looks wrong**. Software evidence only;
+  not conclusive enough to close without an aural/HW check on real K2000
+  content (see the parser's verification plan). See also the CAL-keymap-slot
+  finding below, and the personal-outreach item further up this file.
 
 ---
 

@@ -22,12 +22,27 @@ banks, a large corpus of commercial soundsets, and the KurzFiler source (see
 
 > **Implementation reference:** the canonical, always-up-to-date version of this
 > layout lives in [`writers/krz_writer.py`](../writers/krz_writer.py)
-> (serialization) and [`writers/iso_builder.py`](../writers/iso_builder.py) /
+> (serialization), [`parsers/krz_parser.py`](../parsers/krz_parser.py) (KRZ as
+> a *source* format — added 2026-07-27, see below), and
+> [`writers/iso_builder.py`](../writers/iso_builder.py) /
 > [`writers/fat16.py`](../writers/fat16.py) (media). Where they disagree with
 > this document, trust the code (and file an issue). The reverse-engineering
 > methodology and hardware-session logs are in
 > [`docs/re_procedures/krz_program_re.md`](re_procedures/krz_program_re.md) and
 > [`docs/re_procedures/krz_paramid.md`](re_procedures/krz_paramid.md).
+
+> **KRZ as a source format (2026-07-27):** `parsers/krz_parser.py` reads real
+> `.KRZ` files into the common `Bank` model — container walk promoted from the
+> project's diagnostic reader (`tests/re_banks/krz_reader.py`), corpus-checked
+> against 577 local files (zero container/segment failures) before being
+> written. It decodes samples/PCM, keymaps (including compacted keymaps and
+> the native multi-velocity-table form real content actually uses — the
+> writer never emits either), program geometry, and DSP (filter/envelopes/LFO)
+> as the inverse of the writer's encoders, plus recovery presets for keymaps
+> or samples no program object references (pure sample-pool banks). See §2.2
+> and §3.2 below for two points where building it surfaced corpus evidence
+> disagreeing with ConvertWithMoss's independent reader, and §7.6 for its
+> known lossiness.
 
 > **Endianness:** everything in a `.KRZ` file is **big-endian** (the K-series is
 > a Motorola 68000 platform). This is the opposite of the E4B format and of
@@ -147,6 +162,17 @@ the whole block to a 4-byte boundary before computing `blocksize`.
 > distinguish FX / song / QA-bank objects should adopt the conditional decode
 > rather than our unconditional `>> 10`. This is unreconciled against hardware.
 
+> **CAL keymap-slot — corpus-settled 2026-07-27.** `krz_writer.py` keeps
+> `CAL[7,8]` at zero and writes the keymap id only to `CAL[11:13]` (§4.2
+> below), HW-confirmed against ROM #183/#193/#194. ConvertWithMoss's
+> `KurzweilProgram.java` reads `CAL[7,8]` first, falling back to `CAL[11,12]`
+> only when `[7,8]` is zero. Checked against 577 local `.KRZ` files / 33,866
+> program layers while building `krz_parser.py`: `CAL[7,8]` is the **sole**
+> keymap-id carrier in **zero** layers; `CAL[11,12]` alone carries it in
+> 30,483; both are set (and disagree) in 948. So CWM's fallback order
+> misreads those 948 layers — `krz_parser.py` reads `CAL[11:13]` only. (Jan
+> plans to raise this with the CWM project personally — see `TODO.md`.)
+
 ### 2.3 End marker & PCM region
 
 After the last object, `write_krz()` writes `int32 = 0` (the object-section
@@ -218,6 +244,22 @@ Two hardware-confirmed encoding subtleties:
   tail. For a one-shot both `sampleLoopStart` and `sampleEnd` collapse onto the
   PCM end.
 
+> **Reader notes (`krz_parser.py`, 2026-07-27).** Two things a reader needs
+> that the writer doesn't:
+> - **PCM extent recovery.** Since `sampleEnd` is the loop end, not the PCM
+>   end, the true extent is recovered from the *next* sample's start offset in
+>   the shared PCM region (this also correctly captures a post-loop decay
+>   tail). Whether a given `sampleEnd` is inclusive-last-frame or already
+>   exclusive turns out to be **mixed in the wild** for tightly-packed,
+>   zero-gap samples (corpus-checked); the reader treats the next sample's
+>   start as a hard ceiling it never reads past, and clamps loop points
+>   defensively rather than ever stealing bytes from a neighboring sample.
+> - **Sample-rate snapping.** `samplePeriod` is an integer nanosecond value,
+>   so `1e9/period` doesn't invert exactly back to a round number (e.g. a
+>   written 44100 Hz can read back as 44099). The reader snaps to the nearest
+>   of the standard rates (8000/11025/16000/22050/24000/32000/44100/48000/
+>   96000) within ±2 Hz, matching ConvertWithMoss's approach.
+
 ### 3.2 Keymap object (`KKeymap`)
 
 Written by `_write_keymap_object()` / `_build_keymap_entries()`. One keymap per
@@ -253,6 +295,17 @@ voice. Body layout after the object name:
 | Offset | Size | Field | Notes |
 |---|---|---|---|
 | `0:2` | 2 | `tuning`   | BE **i16** cents — a **constant per-zone fine offset** `100·(R_sample − R_zone) + fine_tune`, usually 0. The K2000 already transposes each key from the sample rootkey + `centsPerEntry`; the tuning field must **not** re-encode the per-key shift (the old `100·(root−12−key)` double-counted it and drove high keys to −72 semitones → silent). A constant offset means mpc2emu assumes **100 % chromatic key-tracking**; the field can also express *partial* tracking per key as `round((keyTracking − 1)·(note − R_sample)·100) + fine_tune` (KurzFiler/CWM form) — a drum map cancels tracking entirely with `keyTracking = 0`. Not yet mapped (see TODO). |
+
+> **Entry-index base — corpus evidence, not HW-closed (2026-07-27).**
+> ConvertWithMoss's `KurzweilKeymap.getNoteOfEntry()` computes
+> `note = 12 + round((basePitch + i·centsPerEntry)/100)`. Checked entry `i`
+> against the referenced sample's own `rootkey` across 8,010 multisample
+> entry-runs in 577 local files (does the root fall inside the run's key
+> span?): `note = i` (mpc2emu's own convention, `krz_parser._note_of_entry`)
+> scores 39.6%, `note = i+12` scores 26.4%. Software evidence favors
+> mpc2emu's convention over CWM's `+12`, but this is **not conclusive** —
+> it wants an aural/hardware check on real K2000 content before the
+> corresponding `TODO.md` item is closed for good.
 | `2:4` | 2 | `sampleID` | BE u16, the referenced Sample object id |
 | `4`   | 1 | `SSNr`     | subsample index = `1` |
 
@@ -263,7 +316,15 @@ Two hardware-driven rules baked into `_build_keymap_entries()`:
   that are not assigned the over-stretched sample (HW-confirmed 2026-06-21:
   stretching one sample far past its ceiling makes the K2000 **drop keytracking
   for the entire keymap**). To extend the range, downsample via
-  `--max-sample-rate` (raises the ceiling).
+  `--max-sample-rate` (raises the ceiling). **The ceiling is measured from the
+  zone's effective root (`r_zone` = `zone.root_key`), not the sample's own
+  physical `root_note`** (fixed 2026-07-27) — a zone whose `root_key` differs
+  from its sample's recorded root (deliberate retuning; a drum map that cancels
+  keytracking via a large per-entry `tuning` offset is the clearest real-world
+  case, found via real Patchman content while building `krz_parser.py`) has its
+  *actual* total pitch shift measured from `r_zone`, not `r_sample` — checking
+  against `r_sample` could reject a perfectly safe assignment as "over-ceiling"
+  and silently drop the sample.
 - **No empty keys (delete-lockup avoidance).** Every one of the 128 keys **must**
   reference a valid sample. A keymap with `sampleId = 0` holes **locks up the
   K2000 on `Master → Delete`** (corrupts state; HW-confirmed 2026-06-24). The
@@ -595,6 +656,33 @@ mod-wheel→filter, LFO→amp tremolo) still need disk-save calibration.
   on load/save). The RAM map (decoded separately for a future MIDI-transfer mode
   and the K2000 remote project) does **not** describe `.KRZ` bytes — see
   `krz_program_re.md` §11.
+
+### 7.6 Reader-side lossiness (`krz_parser.py`)
+
+- **K2000 ROM samples (object id < 200) can't be recovered.** Real soundsets
+  routinely reference the device's built-in ROM waveforms; their PCM isn't in
+  the file. `krz_parser.py` drops those zones and prints one summarized
+  `[WARN]` per bank rather than one per zone; a bank left with zero samples
+  (program-only banks, ~16% of the local corpus) gets a plain `[INFO]` instead
+  of looking like a parse failure.
+- **AMPENV "Natural" mode is not decoded.** When `ENC(0x20)[1] == 1` the
+  hardware ignores the ENV bytes and plays the sample's own envelope instead;
+  the reader leaves `amp_env` at the model default rather than decoding
+  meaningless bytes.
+- **Envelope decode is a reducer, not the writer's exact inverse.** `_fill_env`
+  always writes a fixed Att1/Att2/Att3/Dec1/Rel1/Rel2/Rel3 shape; real content
+  uses all seven stages arbitrarily, so the reader recovers peak/decay/
+  sustain/release generically (see `krz_parser._decode_env`) rather than
+  assuming that specific shape.
+- **`filter_cutoff` does not round-trip its 0..1 value.** The writer maps it
+  onto a *linear semitone* scale; the reader decodes through E4B's *log-Hz*
+  cutoff scale (`hz_to_e4b_cutoff`) for consistency with every other parser.
+  Both are correct on their own terms, but they are different curves — see
+  the "filter_cutoff is not a shared frequency scale" finding recorded during
+  the reader's construction. A follow-up (not yet done) would route
+  `krz_writer._cutoff_byte` through Hz too, making the two exact inverses.
+- **Stereo samples are read as their left/mono channel only** (mpc2emu's
+  internal model is mono); this is the read-side mirror of §7.5's "mono only."
 
 ---
 

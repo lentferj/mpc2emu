@@ -21,7 +21,7 @@
 """
 mpc2emu — Multi-format Sampler Converter
 =========================================
-INPUT:   .e4b  .xpm  .pgm  .set  .img  .talsmpl  .sfz  .sf2  .exs  .gig
+INPUT:   .e4b  .xpm  .pgm  .set  .img  .talsmpl  .sfz  .sf2  .exs  .gig  .krz
 OUTPUT:  e4b   krz   talsmpl
 
 Usage:
@@ -318,7 +318,7 @@ def main():
     )
     ap.add_argument('input',
         help='Input file or directory '
-             '(.e4b .xpm .pgm .set .img .talsmpl .sfz .sf2 .exs .gig)')
+             '(.e4b .xpm .pgm .set .img .talsmpl .sfz .sf2 .exs .gig .krz)')
     ap.add_argument('--long-help', action=_LongHelpAction,
         help='Print the full README (long-form manual) and exit')
     ap.add_argument('--info',    action='store_true',
@@ -884,6 +884,20 @@ def main():
     if args.hda and (args.format == 'krz' or
                      (args.format == 'e4b' and (args.hda_size is None or args.hda_size <= 14 * 1024))):
         planned.append(str(out_dir / f"{bank_name}.hda"))
+
+    # .krz (and .e4b) are now both input AND output extensions, so a directory
+    # run over an output dir would re-ingest its own products next time. Catch
+    # the more immediate case: this run's own inputs would be clobbered.
+    _in_resolved = {str(Path(p).resolve()) for p in input_files}
+    _out_resolved = {str(Path(p).resolve()) for p in planned}
+    _clobbered = sorted(_in_resolved & _out_resolved)
+    if _clobbered:
+        print(f"\n  [ERROR] {len(_clobbered)} output path(s) are also input file(s) "
+              f"— choose an --output-dir outside the input directory:")
+        for p in _clobbered:
+            print(f"    {p}")
+        sys.exit(1)
+
     if not _confirm_overwrite(planned, args.overwrite):
         print("\nAborted — no files written. Re-run with --overwrite to skip this check.")
         sys.exit(1)

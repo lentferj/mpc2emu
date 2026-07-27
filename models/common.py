@@ -199,6 +199,48 @@ def lfo_pitch_depth_to_amount(cents: float) -> float:
     return max(-1.0, min(1.0, cents / LFO_PITCH_FULL_CENTS))
 
 
+# ── KRZ (K2000) scalar codecs ───────────────────────────────────────────────
+# Shared by writers/krz_writer.py and parsers/krz_parser.py so the two stay
+# exact inverses (CR-13/CR-18 pattern: single home, not "kept in sync by
+# comment"). All HW-confirmed via krz_program_re.md; see docs/KRZ_FORMAT.md §4.
+
+def krz_cutoff_byte_to_hz(b: int) -> float:
+    """K2000 HOB0[1] signed-semitone cutoff byte -> Hz.
+    Inverse of krz_writer._cutoff_byte: Hz = 440 * 2**((s-9)/12), s in -48..79."""
+    s = b - 256 if b >= 128 else b
+    return 440.0 * (2.0 ** ((s - 9) / 12.0))
+
+
+def krz_reson_byte_to_01(b: int) -> float:
+    """K2000 HOB1[1] resonance byte (dB*2, 0..48 = 0..24 dB) -> 0.0-1.0.
+    Inverse of krz_writer._reson_byte."""
+    return max(0.0, min(1.0, b / 48.0))
+
+
+# K2000 envelope-time display grid (seconds per editor step); env time byte =
+# steps(seconds) + 3. Shared with krz_writer._ENV_TIME_GRID.
+KRZ_ENV_TIME_GRID = [(0, 2, 0.02), (2, 5, 0.04), (5, 10, 0.10),
+                     (10, 15, 0.50), (15, 25, 1.0), (25, 60, 5.0)]
+
+# KRZ-only release-time correction (krz_writer._KRZ_RELEASE_FACTOR): the shared
+# MPC value->seconds curve under-reads the K2000's displayed release by this
+# roughly-constant factor (2.63 s displayed / 1.39 s curve, AlphaPad #200).
+KRZ_RELEASE_FACTOR = 1.9
+
+
+def krz_env_byte_to_seconds(b: int) -> float:
+    """K2000 ENV/ENC time byte -> seconds (inverse of krz_writer._env_time_byte,
+    which walks KRZ_ENV_TIME_GRID accumulating steps = seconds/step_size)."""
+    steps = max(0, b - 3)
+    remaining = float(steps)
+    for lo, hi, st in KRZ_ENV_TIME_GRID:
+        seg_steps = (hi - lo) / st
+        if remaining <= seg_steps:
+            return lo + remaining * st
+        remaining -= seg_steps
+    return KRZ_ENV_TIME_GRID[-1][1]   # beyond the grid -> clamp at 60s
+
+
 @dataclass
 class SampleData:
     """Raw PCM sample with metadata."""

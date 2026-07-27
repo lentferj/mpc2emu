@@ -84,7 +84,8 @@ import math
 import struct
 from typing import List, Tuple
 
-from models.common import Bank, Preset, SampleData, VoiceLayer, LoopType
+from models.common import (Bank, Preset, SampleData, VoiceLayer, LoopType,
+                          KRZ_ENV_TIME_GRID, KRZ_RELEASE_FACTOR)
 from processors.loop_renderer import bake_alternating_loop
 
 
@@ -387,9 +388,20 @@ def _build_keymap_entries(voice: VoiceLayer,
         # pitch, and the rest of the keymap keytracks correctly.  (To extend the
         # playable range upward, downsample the sample via --max-sample-rate, which
         # raises the ceiling — the same fix used for the KRZ floppy banks.)
+        #
+        # The ceiling must be evaluated against r_zone (the zone's EFFECTIVE
+        # root), not r_sample: the hardware's actual total pitch shift at key K
+        # is (K - r_sample)*100 [auto-transpose] + tuning = (K - r_zone)*100 +
+        # fine_tune (substitute tuning above) — i.e. r_zone, not r_sample, is
+        # what the 48kHz internal engine limit is measured from. Using r_sample
+        # here mis-flagged deliberately retuned zones (r_zone != r_sample, e.g.
+        # a drum map that cancels keytracking via a large per-entry tuning
+        # offset — found 2026-07-27 building krz_parser.py, real Patchman
+        # content) as over-ceiling even though their true shift is nowhere near
+        # it, silently dropping the sample from the keymap.
         hi_key = zone.hi_key
         if sample is not None:
-            ceiling = _compute_max_pitch(sample.sample_rate, r_sample) // 100
+            ceiling = _compute_max_pitch(sample.sample_rate, r_zone) // 100
             hi_key = min(hi_key, ceiling)
 
         for key in range(zone.lo_key, hi_key + 1):
@@ -571,8 +583,7 @@ _TPL_LAYER = [
 ]
 
 # K2000 envelope-time display grid (s per editor step); env time byte = steps+3.
-_ENV_TIME_GRID = [(0, 2, 0.02), (2, 5, 0.04), (5, 10, 0.10),
-                  (10, 15, 0.50), (15, 25, 1.0), (25, 60, 5.0)]
+# CR-KRZ: now lives in models.common (single home shared with krz_parser.py).
 # LFO shape name -> K2000 file byte.  All 26 shapes probed live on K2000R 2026-06-17:
 # 0=Sine 1=+Sine 2=Square 3=+Square 4=Triangle 5=+Triangle
 # 6=Rise S 7=+Rise 8=Fall S 9=+Fall 10-25=step patterns (3/4/5/6/7/8/10/12 Step ± unipolar)
@@ -596,7 +607,7 @@ _K2_CS_LFO1 = 114      # control-source code for LFO1
 def _env_steps(seconds: float) -> float:
     t = max(0.0, min(60.0, seconds))
     s = 0.0
-    for lo, hi, st in _ENV_TIME_GRID:
+    for lo, hi, st in KRZ_ENV_TIME_GRID:
         if t <= lo:
             break
         s += (min(t, hi) - lo) / st
@@ -635,7 +646,8 @@ _REL1_TIME_FRAC = 0.8     # fraction of the release time spent reaching the knee
 # curve 1.39 s vs the MPC AMPENV display 2.63 s (Jan, 2026-06-24). Scaling here
 # (KRZ-writer only) avoids lengthening every E4B/E4XT envelope; the proper global
 # recalibration of the shared curve is a deferred TODO (needs a by-ear E4B check).
-_KRZ_RELEASE_FACTOR = 1.9   # = 2.63 / 1.39
+# CR-KRZ: now lives in models.common as KRZ_RELEASE_FACTOR (shared w/ krz_parser.py).
+_KRZ_RELEASE_FACTOR = KRZ_RELEASE_FACTOR   # = 2.63 / 1.39
 
 
 def _fill_env(b: bytearray, env) -> None:
