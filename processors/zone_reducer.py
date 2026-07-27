@@ -137,6 +137,74 @@ def thin_key_zones(voice: VoiceLayer, keep_pct: float) -> int:
     return before - len(voice.zones)
 
 
+def _thin_key_zones_across_voices(preset: Preset, keep_pct: float) -> int:
+    """
+    Mirror of `thin_velocity_layers`'s voice-grouping fix (CR-19), on the KEY
+    axis instead of velocity: when a preset's key-zone variation lives ACROSS
+    voices rather than within one voice's zone list (e.g. the E4B parser's
+    native shape — one voice per key-zone x velocity-layer cell, so every
+    voice carries exactly one zone and `thin_key_zones` has nothing to thin),
+    group `preset.voices` by velocity band first (so key-thinning doesn't
+    interleave different velocity layers), then thin ACROSS the voices within
+    each band by key position. Returns the number of voices removed.
+    """
+    if len(preset.voices) <= 1:
+        return 0
+
+    def voice_lo_vel(v: VoiceLayer) -> int:
+        return min((z.lo_vel for z in v.zones), default=0)
+
+    def voice_hi_vel(v: VoiceLayer) -> int:
+        return max((z.hi_vel for z in v.zones), default=127)
+
+    def voice_lo_key(v: VoiceLayer) -> int:
+        return min((z.lo_key for z in v.zones), default=0)
+
+    def voice_hi_key(v: VoiceLayer) -> int:
+        return max((z.hi_key for z in v.zones), default=127)
+
+    def set_voice_key_range(v: VoiceLayer, lo: int, hi: int) -> None:
+        for z in v.zones:
+            z.lo_key = lo
+            z.hi_key = hi
+
+    from collections import OrderedDict
+    vel_bands: "OrderedDict[tuple, list]" = OrderedDict()
+    for v in preset.voices:
+        vel_bands.setdefault((voice_lo_vel(v), voice_hi_vel(v)), []).append(v)
+
+    before = len(preset.voices)
+    new_voices: List[VoiceLayer] = []
+    for band_voices in vel_bands.values():
+        new_voices += _thin_and_redistribute(
+            band_voices, keep_pct,
+            get_lo=voice_lo_key, get_hi=voice_hi_key,
+            set_range=set_voice_key_range,
+        )
+    preset.voices = new_voices
+    return before - len(preset.voices)
+
+
+def thin_key_zones_for_preset(preset: Preset, keep_pct: float) -> int:
+    """
+    Reduce `preset`'s key zones to ~keep_pct%, handling both representations
+    (mirrors `thin_velocity_layers` on the other axis):
+      - **Many-zone voices** (XPM keygroups): thin WITHIN each voice via
+        `thin_key_zones` — correct for that representation.
+      - **One-zone-per-voice** (E4B parser's native shape): thinning within a
+        voice removes nothing (there's only ever 1 zone to "keep"), so instead
+        thin ACROSS the voices via `_thin_key_zones_across_voices`.
+    Returns the number of zones (or, in the cross-voice case, voices — the
+    same thing when each voice carries exactly one zone) removed.
+    """
+    if any(len(v.zones) > 1 for v in preset.voices):
+        removed = 0
+        for voice in preset.voices:
+            removed += thin_key_zones(voice, keep_pct)
+        return removed
+    return _thin_key_zones_across_voices(preset, keep_pct)
+
+
 def _thin_velocity_bands_in_voice(voice: VoiceLayer, keep_pct: float) -> int:
     """
     Reduce a *single voice*'s distinct velocity BANDS to ~keep_pct%.
@@ -267,8 +335,7 @@ def reduce_bank(bank: Bank, key_zone_pct: float = 0.0,
         if velocity_layer_pct > 0:
             removed_voices += thin_velocity_layers(preset, 100.0 - velocity_layer_pct)
         if key_zone_pct > 0:
-            for voice in preset.voices:
-                removed_zones += thin_key_zones(voice, 100.0 - key_zone_pct)
+            removed_zones += thin_key_zones_for_preset(preset, 100.0 - key_zone_pct)
 
     removed_samples = _prune_unused_samples(bank)
     print(f"  '{bank.name}': removed {removed_voices} velocity layer(s), "

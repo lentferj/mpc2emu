@@ -380,6 +380,33 @@ original ranges via the CR-6 guard; a synthetic contiguous 3-band/2-voices-
 per-band case widened survivors correctly (3 → 2 bands, gap split at the
 midpoint, both voices in each surviving band updated).
 
+**CR-20 `thin_key_zones()` no-op for one-zone-per-voice presets — DONE
+2026-07-27.** Found via VinSamLib (same downstream project as CR-19, same
+session): CR-19's mirror image on the KEY axis. `reduce_key_zones_pct=30`/`60`
+on the same real repro preset (`8VnEsHdMrcFat/SL`, 78 voices, each carrying
+**exactly one zone** — the E4B parser's native shape for a densely
+multisampled instrument) printed `removed 0 key zone(s)` at any percentage.
+Root cause: `thin_key_zones(voice, keep_pct)` only thins zones *within one
+voice* — correct for the XPM-keygroup representation it was written for (one
+voice packs many zones across several velocity bands), but a no-op when
+`len(voice.zones) == 1` for every voice, because the real key-zone variation
+lives *across* voices instead — the exact same architectural gap CR-19 fixed
+on the velocity axis, just transposed. Fixed by adding
+`_thin_key_zones_across_voices()` (groups `preset.voices` by velocity band
+first, then thins ACROSS the voices within each band by key position via
+`_thin_and_redistribute`, keyed on each voice's own key range instead of
+velocity range — mirrors CR-19's voice-grouping-by-band exactly, just on the
+other axis) and a new dispatcher `thin_key_zones_for_preset()` that picks
+between the existing within-voice `thin_key_zones()` (when any voice carries
+`>1` zone — the XPM case) and the new across-voice path (when every voice
+carries `<=1` zone — the E4B case). `reduce_bank()`'s `key_zone_pct` branch
+now calls the dispatcher once per preset instead of `thin_key_zones()` per
+voice. Verified: old code confirmed to reproduce `removed 0` on the real
+file; new code removes 23/46 voices at `reduce_key_zones_pct=30`/`60`
+respectively (matches the requested percentage exactly, mirroring CR-19's
+verification). The pre-existing multi-zone-per-voice (XPM) case is
+unaffected — same code path, same behavior, regression-tested directly.
+
 **CR-7 / 7b / 7c sample-name collisions — DONE 2026-06-11.**
 - **CR-7** `bank_splitter.TargetBank.add_preset`: dedup now keys on
   `(name, len(data), hash(data))`. A genuine duplicate (same name+PCM) is shared;
