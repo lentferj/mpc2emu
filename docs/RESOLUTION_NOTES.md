@@ -2368,6 +2368,37 @@ TODO item: *"KRZ: fidelity gaps found via ConvertWithMoss cross-reference"*.
 Source: a full byte-level diff of ConvertWithMoss's KurzFiler-derived
 `format/kurzweil/*.java` against `writers/krz_writer.py`. Ordered easiest-first.
 
+**Update 2026-07-27 — PR #232 changes the "nothing to learn on the program
+side" conclusion below.** At the time of the original 2026-07-22 diff, CWM's
+KRZ writer only emitted a flat default program. [PR #232](
+https://github.com/git-moss/ConvertWithMoss/pull/232) (merged) adds real
+program-side modulation handling:
+
+- **Velocity(AttVel=100)→cutoff on the F1 filter page**, read+write, claimed
+  round-trip-verified against a real K2000-saved FM-bass program. Their depth
+  scale: `MAX_VELOCITY_MODULATION_CENTS = 9600` (8 octaves) — a candidate
+  value for our own still-blocked "Modulation routings" depth calibration
+  (see `TODO.md`, filter Src2=`HOB0[7]`; our own unconfirmed estimate there
+  is a *different* number, ±10800 ct, sourced from the general F-page
+  Src-Depth range in the manual rather than measured). Worth a disk-save
+  cross-check of both numbers before trusting either — **not wired into
+  `krz_writer.py`**, since this needs our own hardware confirmation, and it's
+  unclear from the PR description alone whether their "one F1 modulation
+  source" model maps directly onto the *two* independent slots our own RE
+  documented (Src1=`HOB0[5]`/depth`[6]` for ENV2, Src2=`HOB0[7]` for
+  velocity/mod-wheel) or whether real K2000 programs only ever populate one
+  of the two at a time in practice.
+- **Envelope "unused stage" semantics**: a K2000 envelope stage with *both*
+  zero time and zero level is unused on the device and holds the previous
+  stage's level, rather than decaying to silence — CWM's reader was treating
+  it literally and producing silent FM-bass conversions. **Checked against
+  our own writer, not applicable:** `writers/krz_writer.py._env_time_byte`
+  floors every written time byte at `3` (`max(3, ...)`), so `_fill_env` never
+  emits a literal on-disk time of `0` — the ambiguous (0-time, 0-level) case
+  this PR fixes can't occur in mpc2emu's own output. This only matters to a
+  *reader* of third-party KRZ programs, which mpc2emu doesn't have registered
+  as an input format (`parsers/registry.py` has no `.krz` entry).
+
 ### 1. Per-sample gain (`Soundfilehead.volumeAdjust`) — DONE + HW-CONFIRMED (2026-07-23)
 
 `volumeAdjust` (Soundfilehead byte 2) and `altVolumeAdjust` (byte 3) are signed

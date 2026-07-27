@@ -349,7 +349,14 @@ looped else 0xF0`), and MPC Velocity→Filter was ignored, muting Cutoff=0 basse
   Control-source CODES all known from the manual (doc §17e). **Remaining blocker for
   implementing any of these: the depth byte↔(cents/dB) calibration** — needs HW
   (disk-save or audio-rig at known displayed values; the F1 Src-depth range is
-  ±10800 ct but the byte curve isn't pinned).
+  ±10800 ct but the byte curve isn't pinned). **New candidate lead (2026-07-27):**
+  ConvertWithMoss [PR #232](https://github.com/git-moss/ConvertWithMoss/pull/232)
+  (merged) independently implemented KRZ velocity(AttVel=100)→cutoff read+write
+  with a round-trip they claim reproduces a real K2000-saved program, using
+  `MAX_VELOCITY_MODULATION_CENTS = 9600` (8 octaves) for the F1-page depth byte —
+  a different number from our own unconfirmed ±10800 ct estimate above. Worth a
+  disk-save cross-check against this value before trusting either. Not yet used
+  here — still needs our own HW confirmation per project convention.
 - **Mod-wheel → vibrato depth** and **mod-wheel → filter** (very common in sources). NOT mapped.
 - **Velocity → filter cutoff** (`velocity_to_filter`): partially mapped 2026-06-16 —
   folded into the static effective cutoff (`min(1, cutoff + velocity_to_filter)`),
