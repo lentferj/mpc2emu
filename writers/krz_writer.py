@@ -399,7 +399,7 @@ def _build_keymap_entries(voice: VoiceLayer,
         # offset — found 2026-07-27 building krz_parser.py, real Patchman
         # content) as over-ceiling even though their true shift is nowhere near
         # it, silently dropping the sample from the keymap.
-        hi_key = zone.hi_key
+        hi_key = min(zone.hi_key, NUM_KEYS - 1)   # defensive: never index past the 128-key buffer
         if sample is not None:
             ceiling = _compute_max_pitch(sample.sample_rate, r_zone) // 100
             hi_key = min(hi_key, ceiling)
@@ -978,11 +978,21 @@ def _coverage_remap_voices(voices, samples_by_name):
         nv.zones = []
         lo = 0
         for r in roots:
+            if lo > NUM_KEYS - 1:
+                break   # keyboard already fully covered by earlier slices
             entries = by_root[r]
             ceil, z = entries[li % len(entries)]
             zz = copy.copy(z)
             zz.lo_key = lo
-            zz.hi_key = max(lo, ceil)
+            # Defensive clamp to the hardware's actual 0..127 key range: ceil
+            # (a per-root up-pitch ceiling, unrelated to zone.hi_key) is not
+            # otherwise bounded, so a legitimate high root_note + low sample
+            # rate combination can push it to 128+, overflowing the fixed
+            # 128-key keymap-entries buffer in _build_keymap_entries (found
+            # via a VinSamLib KRZ->KRZ crash, 2026-07-27: struct.error at
+            # offset 640 = 128*KEYMAP_ENTRY_SIZE, i.e. exactly one key past
+            # the valid range).
+            zz.hi_key = min(NUM_KEYS - 1, max(lo, ceil))
             nv.zones.append(zz)
             lo = ceil + 1
         new_voices.append(nv)

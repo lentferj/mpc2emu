@@ -2663,6 +2663,66 @@ KRZ→KRZ→KRZ chains of this specific stacked-pad content, and doesn't affect
 any real library found in the local corpus. Would need `_coverage_remap_
 voices` made idempotent (or gated off on Bank input that is *already* a
 coverage-remap's own output) to close for good.
+
+**CR-21 two real crash bugs found via VinSamLib re-processing real
+commercial content — DONE 2026-07-27.** VinSamLib's own black-box testing
+of "reprocess an existing KRZ preset through mpc2emu" (parse → optionally
+resample/reduce → write back) against a real Kurzweil SynthExpanse file
+crashed with `struct.error: pack_into requires a buffer of at least 645
+bytes for packing 5 bytes at offset 640 (actual buffer size is 640)` at
+`writers/krz_writer.py._build_keymap_entries`, raised from
+`_write_keymap_object`. This looked at first like it might invalidate the
+idempotency entry's "zero real commercial files affected" conclusion (a
+ONE-pass crash, not a multi-generation drift) — turned out to be two
+separate, independent bugs:
+
+1. **`parsers/krz_parser.py` fabricated a phantom 0-length `SampleData`.**
+   The repro file is `.../Kurzweil K2000 SynthExpanse/SynthExpanse/Disk1/
+   SYNTHEX_1.KRZ` — a multi-disk soundset. Two of its sample headers
+   (`Prodigy ShortBas`, `Sprinkle`) have `has_data=True` (flags bit 0x40
+   set) but a `sampleStart` word offset (783170) that lies entirely
+   outside *this file's* own PCM region (690058 words) — the sample's
+   real PCM is on a different disk in the set, not present here. The old
+   `_extract_pcm` sliced `data[start_byte:end_byte]` with `start_byte`
+   past `len(data)`, which Python silently returns as an empty `bytes`
+   object rather than raising — so a 0-length `SampleData` got created
+   and fed downstream instead of being treated as unavailable. Fixed:
+   `_get_sample` now checks `h.start_w >= pcm_words` and treats it exactly
+   like ROM/absent (same `n_rom` counter, same summarized `[WARN]`,
+   `used_sample_ids` still marked so it isn't ALSO offered to orphan-sample
+   recovery).
+2. **`_coverage_remap_voices` had no upper clamp on `hi_key`.** Once (1)'s
+   phantom sample was excluded, the specific reported preset ("Phase
+   Dist") no longer had any zones at all and stopped reaching
+   `_coverage_remap_voices` — but the buffer-overflow mechanism itself is
+   a real, separate, general bug independent of phantom data. The function
+   computes `zz.hi_key = max(lo, ceil)` where `ceil =
+   _compute_max_pitch(sample_rate, root) // 100` — a per-root up-pitch
+   ceiling that is **not otherwise bounded**, unlike
+   `_build_keymap_entries`'s own zone-level ceiling check (`hi_key =
+   min(zone.hi_key, ceiling)`, which can only ever *reduce* `hi_key` below
+   a well-formed zone's own value). A legitimate high `root_note` combined
+   with a low sample rate pushes `ceil` past 127 (e.g. root=127 @ 8000 Hz
+   → ceil=158), and the resulting `hi_key >= 128` overflows the fixed
+   `bytearray(NUM_KEYS * KEYMAP_ENTRY_SIZE)` = 640-byte keymap-entries
+   buffer at exactly `key=128` → `offset=640` — matching VinSamLib's error
+   message byte-for-byte. **Reproduced independently with plain synthetic
+   data** (3 samples at roots 40/70/127, all at 8000 Hz, no phantom/corrupt
+   data involved) — confirmed the OLD code crashes with the identical
+   message, confirming this is the true general mechanism, not merely a
+   symptom of (1). Fixed by clamping `zz.hi_key = min(NUM_KEYS - 1,
+   max(lo, ceil))`, plus a matching defensive clamp on the zone-level path
+   in `_build_keymap_entries` (`hi_key = min(zone.hi_key, NUM_KEYS - 1)`
+   before the ceiling `min()`, cheap insurance now that this writer is
+   exposed to arbitrary third-party content via `krz_parser.py` rather
+   than only MPC-sourced conversions).
+
+Verified: `tests/test_krz_writer.py::test_coverage_remap_ceiling_overflow`
+(the synthetic repro, asserting no `struct.error`); the exact real-world
+preset no longer crashes and the file's other 53 presets parse/write
+cleanly; full 589-file local corpus sweep and 3-generation KRZ→KRZ→KRZ
+sweep both show **zero exceptions** (the idempotency drift above is
+unrelated and unchanged at the same 10-file count).
 - **`filter_cutoff` is not a shared frequency scale**, confirmed while writing
   `tests/test_krz_roundtrip.py`: the KRZ writer maps 0..1 onto a *linear
   semitone* scale (`_cutoff_byte`), while the reader decodes through E4B's

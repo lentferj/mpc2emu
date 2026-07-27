@@ -27,6 +27,36 @@ real library in the local corpus exercises. **Blocked on:** deciding whether
 input is already coverage-remapped output) — a design question, not a quick
 fix. Full root-cause writeup: `docs/RESOLUTION_NOTES.md` §KRZ-READER.
 
+**Risk-assessment update (2026-07-27):** VinSamLib separately found a real
+`struct.error` crash re-processing a single real commercial preset through
+`_coverage_remap_voices()` in ONE pass (no repeated generations needed),
+which looked at first like it might mean this "low priority" framing was
+wrong. Root-caused as **two separate bugs, both now fixed**, neither of
+which changes this entry's risk assessment:
+1. `parsers/krz_parser.py` was fabricating a phantom 0-length `SampleData`
+   for a sample whose `start_w` pointed outside the file's own PCM region
+   (the source file is a multi-disk soundset, "SynthExpanse/**Disk1**" —
+   the sample's real PCM lives on a different disk). Fixed: treated like
+   ROM/absent, same as any other unavailable sample.
+2. `_coverage_remap_voices()` computed `zz.hi_key = max(lo, ceil)` with
+   **no clamp** to the hardware's 0..127 key range — unlike
+   `_build_keymap_entries`'s zone-level ceiling check (which can only
+   ever *reduce* `hi_key`), this path can push it to 128+ for a
+   legitimate high-root/low-rate combination, overflowing the fixed
+   128-key keymap buffer. This is the actual crash mechanism, reproduced
+   independently with plain synthetic data (no phantom sample needed) —
+   confirmed by matching VinSamLib's exact `struct.error` message. Fixed
+   with a `min(NUM_KEYS - 1, ...)` clamp (+ matching defensive clamp in
+   `_build_keymap_entries`). Regression test:
+   `tests/test_krz_writer.py::test_coverage_remap_ceiling_overflow`.
+Verified: full 589-file local corpus + 3-generation KRZ→KRZ→KRZ sweep both
+show **zero exceptions** after these fixes (previously already zero
+exceptions before finding this, since no real corpus file happened to
+trigger the ceiling≥128 condition — VinSamLib's report was the first real
+trigger found). The *idempotency drift* this entry describes is a
+genuinely separate, cosmetic, non-crashing issue — confirmed still present
+at the same 10-file count, unrelated to either bug above.
+
 ## VinSamLib real-hardware confirmation batch ready — testing PENDING (2026-07-27)
 
 **Not a code task — a tracking note for real E4XT/K2000R testing Jan is

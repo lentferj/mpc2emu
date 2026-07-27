@@ -585,6 +585,16 @@ def parse_krz(path: str) -> Bank:
         if h is None or not h.has_data:
             n_rom += 1
             return None
+        if h.start_w >= pcm_words:
+            # start_w points entirely outside this file's own PCM region --
+            # seen in multi-disk soundsets (e.g. "SynthExpanse/Disk1/...")
+            # whose sample headers reference PCM that actually lives on a
+            # different disk image. has_data is set, but the bytes simply
+            # aren't here; treat like ROM rather than fabricating a phantom
+            # 0-length SampleData (which corrupted writer math downstream --
+            # found via a VinSamLib KRZ->KRZ crash, 2026-07-27).
+            n_rom += 1
+            return None
         end_w = extents.get(key, h.start_w)
         pcm = _extract_pcm(data, osize, h, end_w)
         candidate = s['name'][:MAX_NAME]
