@@ -53,9 +53,9 @@ mpc2emu is a converter for sampler instruments. It **reads** a wide range of
 sampler and library formats — Akai MPC keygroups (`.xpm`) and binary drum
 programs (`.pgm` — MPC 500/1000/2500, MPC 2000/2000XL, and MPC 60), SFZ v1/v2,
 SoundFont 2, GigaSampler / GigaStudio (uncompressed), Logic EXS24 (classic and
-v1.1), TAL-Sampler, EMU E4B banks, and even a plain folder of root-note-named
-WAVs — and **writes** EMU E4B (Emulator 4 / E4XT / EOS 4.x), Kurzweil KRZ
-(K2000 / K2500 / K2600), and TAL-Sampler presets.
+v1.1), TAL-Sampler, EMU E4B banks, Kurzweil KRZ banks, and even a plain folder
+of root-note-named WAVs — and **writes** EMU E4B (Emulator 4 / E4XT / EOS
+4.x), Kurzweil KRZ (K2000 / K2500 / K2600), and TAL-Sampler presets.
 
 **It maps the musical parameters, not just the raw samples.** Filter
 type / cutoff / resonance, the amplitude and filter envelopes, the LFO, and the
@@ -125,6 +125,7 @@ library (`mtools` is optional, only for one E4B HDA filesystem path).
 | Format | Extension | Description |
 |---|---|---|
 | EMU E4B | `.e4b` / `.E4B` | EMU Emulator 4 / E4XT bank — import for resampling / re-export |
+| Kurzweil KRZ | `.krz` / `.KRZ` | Kurzweil K2000/K2500/K2600 bank — import for resampling / re-export; K2000 ROM-referenced samples are skipped (no PCM in the file) |
 | Akai MPC Keygroup | `.xpm` | MPC 2.x / MPC X / Live / One (XML) |
 | Akai MPC drum program | `.pgm` | MPC 500/1000/2500, **MPC 2000/2000XL** (`.WAV`) and MPC 60 (12-bit `.SND`) |
 | Akai MPC60 SET / floppy | `.set` / `.img` | MPC 60 RAM set; `.img` = FAT12 floppy (SET auto-extracted) |
@@ -223,7 +224,7 @@ python convert.py <input> [options]
 
 Positional:
   input               File or directory
-                      (.e4b .xpm .pgm .set .img .talsmpl .sfz .sf2 .exs .gig)
+                      (.e4b .krz .xpm .pgm .set .img .talsmpl .sfz .sf2 .exs .gig)
 
 Info mode:
   --info              Inspect input file(s) without converting
@@ -1026,7 +1027,8 @@ mpc2emu/
 │   ├── sf2_parser.py           # SoundFont 2
 │   ├── exs24_parser.py         # Logic EXS24 (LE classic + v1.1; stereo de-dup)
 │   ├── gig_parser.py           # GigaSampler / GigaStudio
-│   └── e4b_parser.py           # EMU E4B import (inverse of e4b_writer)
+│   ├── e4b_parser.py           # EMU E4B import (inverse of e4b_writer)
+│   └── krz_parser.py           # Kurzweil KRZ import (inverse of krz_writer)
 ├── writers/
 │   ├── e4b_writer.py           # EMU E4B (FORM size + EMSt; filter, loops, zones)
 │   ├── krz_writer.py           # Kurzweil KRZ
