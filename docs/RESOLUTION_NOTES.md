@@ -455,17 +455,20 @@ code and pass with it; the full existing suite (`tests/test_zone_reducer.py`)
 still passes unchanged, confirming the default/uniform-weight path is
 unaffected.
 
-**Not yet re-confirmed on real E4XT hardware with the fix applied** — the
-original bug WAS hardware-confirmed (that's how it was found); the fix
-itself has only been verified against the real corpus file in software so
-far. Low regression risk (it only changes which of the *already-valid*
-bands survive, not how any individual band's zones/samples are built), but
-per project convention this should get one more hardware pass before being
-called fully closed. Also worth noting: the VinSamLib hardware-test images
-already staged on the SD card (this session, rows 08-12) were extracted
-from VinSamLib's own pre-built `.hda` files, built with the pre-fix
-mpc2emu — they still reflect the old buggy thinning and would need
-rebuilding downstream (in VinSamLib) to pick up this fix.
+**Hardware-confirmed 2026-07-28.** Rebuilt the exact repro case (the real
+file, `velocity_layer_pct=75.0`, the fixed code) as a standalone bank
+(`11_reduce_velocity_75_FIXED.e4b` → `CD1-VL75FIX.iso`) and loaded it on
+the real E4XT: plays across the full keyboard (C2-D8 in MPC-One octave
+numbering), not just the previous 4-key silent-everywhere-else sliver.
+Heavy aliasing at the pitch-shifted extremes is expected and correct for a
+75% velocity-layer reduction (fewer samples stretched further), not a
+regression. Closed.
+
+Also worth noting: the VinSamLib hardware-test images already staged on
+the SD card earlier this session (rows 08-12, as part of the consolidated
+batch) were extracted from VinSamLib's own pre-built `.hda` files, built
+with the pre-fix mpc2emu — they still reflect the old buggy thinning and
+would need rebuilding downstream (in VinSamLib) to pick up this fix.
 
 **CR-7 / 7b / 7c sample-name collisions — DONE 2026-06-11.**
 - **CR-7** `bank_splitter.TargetBank.add_preset`: dedup now keys on

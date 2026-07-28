@@ -1,6 +1,6 @@
 # mpc2emu — Open Items
 
-## zone_reducer: aggressive reduce_velocity_layers_pct collapses KEY coverage too — ROOT-CAUSED + FIXED (2026-07-28)
+## zone_reducer: aggressive reduce_velocity_layers_pct collapses KEY coverage too — RESOLVED + HW-CONFIRMED (2026-07-28)
 
 Found via real E4XT hardware confirmation of VinSamLib's own HW test matrix
 (row 11, `reduce_velocity_layers_pct=75.0` on the Kirk Hunter Strings
@@ -32,15 +32,18 @@ range (up from 22, and genuinely complete this time). Two new regression
 tests added to `tests/test_zone_reducer.py`; full existing suite still
 passes.
 
-**Not yet hardware-re-confirmed with the fix applied** (the original bug
-was hardware-confirmed; the fix itself is only software-verified so far).
-Low regression risk -- it only changes *which* already-valid bands survive,
-not how any band's own zones/samples are built -- but should get one more
-real-E4XT pass before this is called fully closed. Also: the VinSamLib
-images already staged on the SD card this session (rows 08-12) were
-extracted from VinSamLib's own pre-built `.hda` files (built before this
-fix existed) -- they still reflect the old buggy thinning and would need
-rebuilding downstream in VinSamLib to pick up the corrected behavior.
+**Hardware-confirmed 2026-07-28.** Rebuilt the exact repro case (real file,
+75% reduction, fixed code) as `CD1-VL75FIX.iso` and loaded it on the real
+E4XT: plays across the full keyboard (C2-D8, MPC-One octave numbering),
+not just the previous 4-key silent-everywhere-else sliver. Heavy aliasing
+at the pitch-shifted extremes is expected/correct for a 75% reduction, not
+a regression. Closed.
+
+Also: the VinSamLib images already staged on the SD card this session
+(rows 08-12, part of the consolidated batch) were extracted from
+VinSamLib's own pre-built `.hda` files (built before this fix existed) --
+they still reflect the old buggy thinning and would need rebuilding
+downstream in VinSamLib to pick up the corrected behavior.
 
 
 ## New E4B `vpar` fields found via live-SysEx parameter hunting (2026-07-28) — features to consider
