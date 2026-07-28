@@ -2919,3 +2919,143 @@ validated the crossfade *construction*, which is untouched by this change —
 only the on-disk encoding of the already-correct frame index moved). If a
 future HW A/B is ever warranted, compare a loop-heavy bank read-modify-written
 through this path before/after the fix.
+
+---
+
+## §EIII — E-mu Emulator IIIX/ESI writer+parser (design notes, 2026-07-28)
+
+**Not a bug fix** — this is the "how it works" companion for the new EIII
+support (`writers/eiii_writer.py`, `parsers/eiii_parser.py`,
+`docs/EIII_FORMAT.md`). See `TODO.md` → "EIII writer needs hardware
+confirmation on the E4XT" for what's still open (just the hardware step —
+everything below is settled/implemented).
+
+### Model mapping: VoiceLayer -> linked EIII preset chain
+
+EIII presets hold only one primary-layer set of note zones (a preset can
+add a *secondary* layer for a 2-layer velocity/crossfade split, and can
+`link` to another preset to stack further layers). mpc2emu's `Preset`
+already models "more than 2 layers" as an arbitrary list of `VoiceLayer`s.
+Rather than trying to pack the first two voices into primary/secondary and
+`link` the rest (asymmetric, more code, and ConvertWithMoss's own Creator
+doesn't do this either — it never uses the secondary slot), every
+`VoiceLayer` becomes its own EIII preset, chained via `link` in order. A
+voice's velocity extent (min `lo_vel`/max `hi_vel` across its zones) is
+written into that linked preset's *primary* velocity-range field.
+
+**Parser bug found and fixed while writing the round-trip test**
+(`tests/test_eiii_roundtrip.py`): the read side initially mirrored
+ConvertWithMoss's `Detector.parseLayers`, which only applies a preset's
+velocity-range fields when **both** the primary and secondary layers are
+populated (a guard against stray leftover range bytes on presets whose
+secondary layer was never filled in — see its comment). But that gate means
+a primary-only, link-chained preset's velocity range — exactly the
+technique both this writer and ConvertWithMoss's own Creator use to stack
+more than 2 layers — was silently ignored on read. Fixed in
+`parsers/eiii_parser._parse_layers` by applying each layer's own range
+unconditionally (`_apply_velocity_range` already no-ops on an unrestricted
+range, so this is safe); documented as an intentional divergence from
+ConvertWithMoss's Detector in a code comment. This is very likely a genuine
+gap in ConvertWithMoss's own round-trip too (not verified against their
+code directly — inferred from reading `Emulator3Detector.java`).
+
+### Deliberately NOT translated (no hardware calibration exists)
+
+- **Per-zone LFO** (rate/delay/variation/shape, bytes 9-11/36-39/45): byte
+  positions are documented (from emu3bm/ConvertWithMoss) but their value
+  scales have never been hardware-calibrated, and ConvertWithMoss's own
+  Creator/Detector don't read or write them either. Left at 0 (silent/
+  unrouted) on write; not decoded on read.
+- **Filter key-tracking / velocity-to-cutoff** (`VoiceLayer.filter_keytrack`,
+  `.velocity_to_filter`): these mpc2emu fields are EOS/E4XT mod-cord amounts,
+  calibrated against E4XT hardware (`models.common.key_track_to_filter_amount`
+  = 0.713 oct/oct at cord amount 1.0, `velocity_filter_depth_to_amount` = 9120
+  cents at full scale) — that calibration is meaningless for EIII's
+  differently-scaled, differently-shaped DSP, and no EIII hardware
+  calibration exists. Writing a guessed conversion risked shipping filters
+  that audibly mistrack on real hardware, which is strictly worse than
+  leaving tracking neutral. `writers/eiii_writer.py` writes byte `0`
+  (literal neutral under the format's own documented -127..127 scale) for
+  `ZONE_VCF_TRACKING`, **not** ConvertWithMoss's `NO_VCF_TRACKING = 0x40`
+  constant — that constant round-trips to ~full positive tracking through
+  ConvertWithMoss's own Detector formula (`byte/127.0*2.0`), which looks like
+  a latent inconsistency in their code between the Creator's bypass value and
+  the Detector's inverse (see the `_ZONE_TRACKING_NEUTRAL` comment in the
+  writer for the arithmetic). mpc2emu's writer+parser pair is self-consistent
+  under the documented scale regardless of which reading of ConvertWithMoss's
+  constant is "right".
+
+### Real-world validation (read side)
+
+`parsers/eiii_parser.py` was run read-only (no assertions beyond "doesn't
+crash, structure looks sane") against every EIII/EIIIX/ESI bank identifiable
+by its 16-byte header magic across 17 commercial E4XT library CD-ROM `.iso`
+images in Jan's local collection
+(`/home/lentferj/Dokumente/SYNTHS/E4XT/{*.ISO,ISO-Images/*.iso}`) — banks
+were located by scanning each ISO's raw bytes for the three identifier
+strings (`EMULATOR THREE `, `EMULATOR 3X    `, `EMU SI-32 v3   `) and slicing
+from each match to the next (or a 130 MB cap), since these commercial disc
+images don't need their EMU3/ISO9660 filesystem parsed to locate bank
+boundaries this way. **Result: 1118 banks, 19,040 presets, 33,614 samples,
+250,236 zones, zero parse failures.** Spot-checked decoded PCM (peak/RMS,
+e.g. a "STRANGELOVE" bank from the Depeche Mode/Alan Wilder EIII CD-ROM
+decoding to a plausible layered stereo pad with sane sample rates and loop
+points; an "OrbitPercMasterX" bank — the same "Orbit Presets" library
+ConvertWithMoss's own format doc cites for the ESI sample-index-flag finding
+— decoding to real-looking drum one-shots) confirms plausible, not
+necessarily byte-perfect, decoding; this is corpus-scale structural
+validation, not a hardware playback test. The one-off scan script isn't
+checked in (ad hoc, paths are Jan's local collection) — re-derive from this
+note if needed again.
+
+### Bank-format scope
+
+Only `EMULATOR_3X` (`.e3x`) and `ESI_32_V3` (`.esi`) are write targets
+(`writers.eiii_writer.BANK_FORMATS`), matching ConvertWithMoss's own
+`Emulator3CreatorUI` (`EMULATOR_THREE`'s compact, address-biased layout is
+explicitly excluded from its `TARGET_FORMATS` too). `EMULATOR_THREE`
+(`.e3b`) is read-only (`writers.eiii_writer.ALL_BANK_FORMATS`, used by
+`parsers/eiii_parser.py`) — validated structurally by 34 real `.e3b` banks
+in the corpus above, all parsed cleanly.
+
+### Hardware confirmation — DONE 2026-07-28 (E4XT, via its EIII compatibility loader)
+
+First real hardware attempt found and fixed a bug before ever reaching the
+per-preset checklist: the E4XT reported the loaded bank as `Type: E4BANK` /
+"Unknown file type" instead of recognizing it as EIII content. **Not an
+EIII bank-format bug at all** — the EIII byte layout was fine. Root cause
+was one level down, in the shared EMU3 filesystem wrapper:
+`writers/iso_builder.py`'s dir-content entry `props[5]` field was hardcoded
+to `\x00E4B0` (the E4B marker) for every bank unconditionally, harmless
+while this project only ever wrote E4B, but wrong now that `.e3x` banks
+share the same builder (`docs/EIII_FORMAT.md`'s own "bank-format-agnostic"
+claim turned out to need one more layer of nuance).
+
+Checked against 5 real commercial EMU3-filesystem discs
+(`docs/EMU3_ISO_FORMAT.md` §2.4, read directly with a throwaway inspection
+script against `/home/lentferj/Dokumente/SYNTHS/E4XT/ISO-Images/`, known-good
+media Jan pointed at): E4B entries always carry `props = \x00E4B0`
+(`Post Industrial Cybr-Sound Depot.iso`, every bank); EIII entries always
+carry all-zero, across all three on-disk variants (`E-MU Formula 4000 Series
+Vol. 5 – Protozoa.iso`: `EMULATOR 3X`/`EMU SI-32 v3` entries; `Vol. 1 –
+Emulator Standards.iso`: `EMULATOR THREE` entries) — a clean, consistent,
+never-mixed pattern. Since the E4XT's own file browser evidently reads this
+field to label a catalog entry (not just a third-party reader classifying
+someone else's disc, which was the narrower claim the field was originally
+documented under), writing the wrong marker actively misidentifies the bank.
+
+Fixed: new `_bank_props(path)` in `writers/iso_builder.py` peeks at each
+bank's own first 4 bytes (`FORM` -> E4B marker, anything else -> all-zero)
+when building a dir-content entry, wired into both write paths (`_dircon_block`,
+used by `build_iso`/`build_emu_hdd`, and the inline entry-write in
+`emu_hdd_append`). Keeps the module's bank-format-agnostic design intact —
+no caller needs to pass a type flag. Verified E4B output is byte-identical
+to before (still `\x00E4B0`); new regression test
+`tests/test_iso_builder_props.py` (direct `_bank_props()` cases + an
+end-to-end `build_iso()` check for both formats).
+
+`EIIITEST.iso` regenerated with the fix and copied onto the ZuluSCSI SD card
+as `CD1-EIIITEST.iso`, replacing the mis-tagged one. **Reloaded on the E4XT
+and hardware-confirmed 2026-07-28** by Jan: the props fix resolved the
+misidentification and the bank now loads correctly as EIII content. This
+closes the EIII hardware-confirmation TODO item.

@@ -50,7 +50,7 @@ Directory entry (emu3_dentry, 32 bytes):
   union (14 bytes):
     folder: block_list[7] (LE s16, -1 = free)
     file:   start_cluster, clusters, blks, bytes (LE u16 each)
-            type (u8), props[5] ('\0E4B0' for EIV/E4XT)
+            type (u8), props[5] ('\0E4B0' for E4B; all-zero for EIII -- see _bank_props)
             blks = ceil(last_cluster_bytes / 512)  ← MUST be ceiling, not floor.
             Using floor causes "end of file" at ~99% on E4XT (confirmed fix:
             matches emu3fs emu3_set_fattrs() which increments blocks when
@@ -283,12 +283,37 @@ def _root_block(dir_name: str, dircon_blocks, dtype: int = EMU3_DTYPE_1) -> byte
     return _folder_entry(dir_name, dircon_blocks, dtype) + b'\x00' * (BSIZE - 32)
 
 
+def _bank_props(path: str) -> bytes:
+    """EMU3 dir-content entry props[5] marker.
+
+    Confirmed against real hardware-written media (2026-07-28, 5 commercial
+    discs incl. Post Industrial Cybr-Sound Depot, E-MU Formula 4000 Vol.5
+    Protozoa, Vol.1 Emulator Standards): E4B bank entries (body starts
+    `FORM`...`E4B0`) carry `\\x00E4B0` here; EIII-family entries (all three
+    on-disk variants -- `EMULATOR THREE `, `EMULATOR 3X   `, `EMU SI-32 v3  `)
+    carry all-zero, regardless of which EIII variant. Hardcoding `\\x00E4B0`
+    unconditionally (the previous behavior) made the E4XT's own file browser
+    report EIII banks as "E4BANK" / "Unknown file type" instead of loading
+    them via its EIII compatibility loader -- found via real hardware testing
+    of `writers/eiii_writer.py`'s first output. Peeking at the bank's own
+    first bytes (rather than trusting the caller or the file extension) keeps
+    this module's "bank-format-agnostic" design intact.
+    """
+    try:
+        with open(path, 'rb') as f:
+            head = f.read(4)
+    except OSError:
+        head = b''
+    return b'\x00E4B0' if head == b'FORM' else b'\x00\x00\x00\x00\x00'
+
+
 def _dircon_block(files: List[dict]) -> bytes:
     """
     One 512-byte dir-content block containing up to 16 file entries.
-    files: list of dicts with keys: name, start_cluster, clusters, blks, brem,
-           and optionally 'slot' (the per-folder 2-digit id byte, 0-99).  When
-           'slot' is absent the entry index is used (CD: ≤16 banks → same value).
+    files: list of dicts with keys: name, path, start_cluster, clusters, blks,
+           brem, and optionally 'slot' (the per-folder 2-digit id byte, 0-99).
+           When 'slot' is absent the entry index is used (CD: <=16 banks ->
+           same value).
     """
     block = bytearray(BSIZE)
     for i, f in enumerate(files[:EMU3_ENTRIES_PER_BLOCK]):
@@ -302,7 +327,7 @@ def _dircon_block(files: List[dict]) -> bytes:
         struct.pack_into('<H', block, off+22, f['blks'])
         struct.pack_into('<H', block, off+24, f['brem'])
         block[off+26] = EMU3_FTYPE_STD
-        block[off+27:off+32] = b'\x00E4B0'   # props: EIV/E4XT marker
+        block[off+27:off+32] = _bank_props(f['path'])
     return bytes(block)
 
 
@@ -941,7 +966,7 @@ def emu_hdd_append(image: str, e4b_files: List[str], folder: str = None,
             struct.pack_into('<H', meta, eo+22, blks)
             struct.pack_into('<H', meta, eo+24, brem)
             meta[eo+26] = EMU3_FTYPE_STD
-            meta[eo+27:eo+32] = b'\x00E4B0'
+            meta[eo+27:eo+32] = _bank_props(path)
             existing[name] = eo
             pending.append((free, path))
             added += 1

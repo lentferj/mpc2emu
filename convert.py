@@ -22,7 +22,8 @@
 mpc2emu — Multi-format Sampler Converter
 =========================================
 INPUT:   .e4b  .xpm  .pgm  .set  .img  .talsmpl  .sfz  .sf2  .exs  .gig  .krz
-OUTPUT:  e4b   krz   talsmpl
+         .e3x  .esi  .e3b
+OUTPUT:  e4b   krz   talsmpl   eiii
 
 Usage:
   python convert.py <input> [options]
@@ -43,6 +44,12 @@ envelopes and LFO1 vibrato are mapped onto the K2000 #199 template.  A program
 with more than 3 UNIQUE (split) layers becomes a K2000 "drum program" — PLAY IT
 ON A DRUM CHANNEL; stacked/unison layers are thinned to 3 (any channel).  Each
 preset prints a [layers] note.  Full byte reference: docs/KRZ_FORMAT.md.
+
+EIII (Emulator IIIX/ESI) output: one linked EIII preset per voice/layer,
+cutoff/resonance/filter-envelope and amp envelope are mapped from the source;
+also natively loadable by the E4XT (its backward-compatibility loader) —
+use --format eiii --iso/--hda to build E4XT-loadable media. Not yet
+hardware-confirmed. Full byte reference: docs/EIII_FORMAT.md.
 
 Examples:
   python convert.py Piano.sf2 --info
@@ -67,6 +74,7 @@ from parsers.registry        import PARSERS, INPUT_EXTS   # CR-17: shared table
 from parsers.talsmpl_parser  import write_talsmpl
 from writers.e4b_writer      import write_e4b
 from writers.krz_writer      import write_krz
+from writers.eiii_writer     import write_eiii
 from writers.iso_builder     import build_iso, build_iso_9660
 from writers.hda_builder     import build_hda_fat, build_hda_emu, auto_hda_size_mb
 from writers.bank_splitter   import split_into_banks, print_split_summary
@@ -347,9 +355,14 @@ def main():
         help='Number output bank files B.NNN-NAME… starting at N so they can be '
              'copied straight onto an existing E4XT volume (e.g. 100 → '
              'B.100-NAME_01.E4B); no --iso needed')
-    ap.add_argument('--format', choices=['e4b','krz','talsmpl'], default='e4b',
+    ap.add_argument('--format', choices=['e4b','krz','talsmpl','eiii'], default='e4b',
         help='Output format (default: e4b). e4b = EMU Emulator 4 / E4XT, '
-             'krz = Kurzweil K2000/K2500/K2600, talsmpl = TAL-Sampler.')
+             'krz = Kurzweil K2000/K2500/K2600, talsmpl = TAL-Sampler, '
+             'eiii = E-mu Emulator IIIX/ESI (also loaded natively by the E4XT).')
+    ap.add_argument('--eiii-variant', choices=['e3x','esi'], default='e3x',
+        help="With --format eiii: 'e3x' (Emulator IIIX, default — also read "
+             "by the E4XT's backward-compatibility loader and by the ESI "
+             "samplers) or 'esi' (ESI-32/2000/4000's own identifier).")
     ap.add_argument('--iso',  action='store_true',
         help='Build a ZuluSCSI CD image (e4b → EMU3 filesystem, krz → K2000 FAT16)')
     ap.add_argument('--floppy', nargs='?', const='1440', choices=['720', '1440'],
@@ -583,8 +596,8 @@ def main():
         if args.trim_tail is None:
             args.trim_tail = args.trim
 
-    _hw_limits = {'e4b': 128, 'krz': 64}
-    _hw_names  = {'e4b': 'E4XT', 'krz': 'K2000'}
+    _hw_limits = {'e4b': 128, 'krz': 64, 'eiii': 128}
+    _hw_names  = {'e4b': 'E4XT', 'krz': 'K2000', 'eiii': 'EIIIX/ESI'}
     _hw_max = _hw_limits.get(args.format)
     if _hw_max and args.bank_size > _hw_max:
         print(f"  [WARN] --bank-size {args.bank_size:.0f} MB exceeds the "
@@ -643,6 +656,7 @@ def main():
         'e4b':     'EMU Emulator 4 / E4XT',
         'krz':     'Kurzweil K2000 / K2500 / K2600',
         'talsmpl': 'TAL-Sampler',
+        'eiii':    'E-mu Emulator IIIX / ESI',
     }
 
     input_files = collect_input_files(input_path)
@@ -853,7 +867,7 @@ def main():
     # A preset is never split across banks, so one too big for a bank must be
     # thinned/downsampled to fit.  Offer sized suggestions (or hard-fail a batch
     # run) BEFORE the split so no unloadable bank is ever written silently.
-    if args.format in ('e4b', 'krz'):
+    if args.format in ('e4b', 'krz', 'eiii'):
         fit_oversized_presets(source_banks, args.format, args.bank_size,
                               auto_fit=args.auto_fit,
                               max_preset_bytes=args.max_preset_size)
@@ -868,7 +882,12 @@ def main():
     print_split_summary(source_banks, output_banks, args.bank_size)
 
     # ── Write bank files ──────────────────────────────────────────────────────
-    ext = '.E4B' if args.format == 'e4b' else '.KRZ'
+    if args.format == 'e4b':
+        ext = '.E4B'
+    elif args.format == 'eiii':
+        ext = '.E3X' if args.eiii_variant == 'e3x' else '.ESI'
+    else:
+        ext = '.KRZ'
 
     def _bank_path(i: int, bank) -> str:
         # --bank-start adds the EOS B.NNN- volume prefix (B.100-NAME_01.E4B, …);
@@ -882,7 +901,8 @@ def main():
     if args.iso:
         planned.append(str(out_dir / f"{bank_name}.iso"))
     if args.hda and (args.format == 'krz' or
-                     (args.format == 'e4b' and (args.hda_size is None or args.hda_size <= 14 * 1024))):
+                     (args.format in ('e4b', 'eiii')
+                      and (args.hda_size is None or args.hda_size <= 14 * 1024))):
         planned.append(str(out_dir / f"{bank_name}.hda"))
 
     # .krz (and .e4b) are now both input AND output extensions, so a directory
@@ -908,7 +928,12 @@ def main():
     for i, bank in enumerate(output_banks):
         out_path = _bank_path(i, bank)
         try:
-            (write_e4b if args.format == 'e4b' else write_krz)(bank, out_path)
+            if args.format == 'e4b':
+                write_e4b(bank, out_path)
+            elif args.format == 'eiii':
+                write_eiii(bank, out_path, variant=args.eiii_variant)
+            else:
+                write_krz(bank, out_path)
             out_paths.append(out_path)
         except Exception as e:
             print(f"  [ERROR] {bank.name}{ext}: {e}")
@@ -928,7 +953,11 @@ def main():
                 k2000_disk_append(args.add_to, out_paths, args.folder, args.on_duplicate)
             except Exception as e:
                 print(f"  [ADD] ERROR: {e}")
-        elif args.format == 'e4b':
+        elif args.format in ('e4b', 'eiii'):
+            # EIII banks live on the same EOS/EMU-fs filesystem as E4B —
+            # iso_builder/hda_builder are bank-content-agnostic (they just
+            # stream whatever file they're given), so the E4B append path
+            # works unchanged for EIII.
             from writers.hda_builder import detect_hda_fs, fat_hda_append
             from writers.iso_builder import emu_hdd_append
             try:
@@ -969,8 +998,8 @@ def main():
         # the only CD form every K2000 OS reads (ISO 9660 needs OS v3.87+, and even
         # then the K2000's reader is picky).  See writers/iso_builder.build_k2000_disk.
         from writers.iso_builder import build_k2000_disk
-        iso_fn = build_iso if args.format == 'e4b' else build_k2000_disk
-        iso_label = "EMU3" if args.format == 'e4b' else "K2000 FAT16"
+        iso_fn = build_iso if args.format in ('e4b', 'eiii') else build_k2000_disk
+        iso_label = "EMU3" if args.format in ('e4b', 'eiii') else "K2000 FAT16"
         print(f"\n[ISO] Building ZuluSCSI CD image(s) ({iso_label})...")
         total = sum(Path(p).stat().st_size for p in out_paths)
         if total <= 650 * 1024 * 1024:
@@ -1002,8 +1031,11 @@ def main():
             build_k2000_disk(out_paths, hda_path, bank_name, size_mb=hda_size)
             print(f"  → Copy to the ZuluSCSI SD card as HDx-{bank_name}.hda "
                   f"(x = a free SCSI ID)")
-        elif args.format == 'e4b':
-            # default: auto-size to the smallest 128 MB step that fits the banks.
+        elif args.format in ('e4b', 'eiii'):
+            # EIII banks share E4B's EOS/EMU-fs disk-image path (both
+            # builders are bank-content-agnostic — see the --add-to note
+            # above). default: auto-size to the smallest 128 MB step that
+            # fits the banks.
             hda_size = args.hda_size or auto_hda_size_mb(out_paths, args.hda_fs)
             if hda_size > 14 * 1024:
                 print(f"\n[HDA] ERROR: --hda-size {hda_size} MB exceeds "

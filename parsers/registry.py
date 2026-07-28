@@ -26,6 +26,7 @@ from parsers.sf2_parser      import parse_sf2
 from parsers.exs24_parser    import parse_exs24
 from parsers.gig_parser      import parse_gig
 from parsers.krz_parser      import parse_krz
+from parsers.eiii_parser     import parse_eiii
 
 
 PARSERS = {
@@ -43,6 +44,9 @@ PARSERS = {
                                     max_instruments=kw.get('max_presets', 32),
                                     max_samples=kw.get('max_samples', 512)),
     '.krz':     lambda p, w, **kw: parse_krz(str(p)),
+    '.e3x':     lambda p, w, **kw: parse_eiii(str(p)),
+    '.esi':     lambda p, w, **kw: parse_eiii(str(p)),
+    '.e3b':     lambda p, w, **kw: parse_eiii(str(p)),
 }
 
 INPUT_EXTS = set(PARSERS.keys())

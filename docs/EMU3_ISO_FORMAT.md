@@ -162,7 +162,7 @@ needs one (all E4B files are written into a single flat "Default Folder").
 Up to 16 file entries per 512-byte block (`32 bytes × 16 = 512`):
 
 ```
-name[16]         space-padded ASCII, derived from the E4B filename's stem
+name[16]         space-padded ASCII, derived from the bank filename's stem
 unknown (u8)     0x00
 id (u8)          sequential file id (0, 1, 2, …)
 start_cluster    LE u16 — first cluster of the file's data
@@ -170,24 +170,44 @@ clusters         LE u16 — total clusters allocated to the file
 blks             LE u16 — blocks used in the LAST cluster   ⚠ see §4.1
 brem             LE u16 — bytes used in the last block of the last cluster
 type (u8)        EMU3_FTYPE_STD = 0x81
-props[5]         b'\x00E4B0'                                ← EIV/E4XT marker
+props[5]         b'\x00E4B0' for an E4B bank; all-zero for EIII/ESI — see below
 ```
 
-> **`props[5]` is not a reliable E4B/EIII tag on real-world media** —
-> confirmed true for some commercial discs (e.g. `Post Industrial Cybr-Sound
-> Depot.iso`, every bank entry) but **false for others**: every bank entry on
-> `E-MU Formula 4000 Series Vol. 5 – Protozoa.iso` has `props` all-zero,
-> despite unambiguously real EMU3-filesystem bank content. Those entries turn
-> out not to be E4B at all — their bank bytes start with `EMULATOR 3X ` /
-> `EMU SI-32 v3 `, i.e. EIII/ESI-format banks sharing the same EMU3
-> filesystem (per `emu3fs`'s own README, EIII/ESI/EIV all share it). Scanned
-> across 161 real EMU3 images: 459 E4B banks, 1028 EIII-format banks, 30
-> fixed-id ROM/system files — `props` was not a reliable way to tell any of
-> these apart. The only reliable classifier for a dir-content entry is
+> **`props[5]` must match the bank's actual format — the E4XT reads it to
+> label the file, confirmed on real hardware 2026-07-28.** Originally this
+> project hardcoded `b'\x00E4B0'` unconditionally (mpc2emu was E4B-only), on
+> the theory (below) that the field wasn't reliably read by anything.
+> Scanned across 161 real EMU3 images at the time: 459 E4B banks (all
+> `props = \x00E4B0`, e.g. every entry on `Post Industrial Cybr-Sound
+> Depot.iso`) vs. 1028 EIII-format banks (all `props` all-zero, e.g. every
+> entry on `E-MU Formula 4000 Series Vol. 5 – Protozoa.iso` and `Vol. 1 –
+> Emulator Standards.iso`, across all three on-disk EIII variants —
+> `EMULATOR THREE `, `EMULATOR 3X   `, `EMU SI-32 v3  `), 30 fixed-id
+> ROM/system files. The pattern is consistent and reliable: **E4B ⇒
+> `\x00E4B0`, EIII/ESI ⇒ all-zero**, never mixed on any real disc found.
+>
+> Once `writers/eiii_writer.py` started placing `.e3x` banks on the same
+> EMU3-filesystem image via this same `iso_builder.py` (`docs/EIII_FORMAT.md`),
+> the old unconditional `\x00E4B0` became actively wrong: the E4XT's own file
+> browser reported the EIII bank as **`Type: E4BANK`** / "Unknown file type"
+> instead of loading it through its EIII compatibility loader — i.e. the
+> E4XT's *own firmware* does read this field when labeling a catalog entry,
+> even though it apparently isn't required for a *third-party reader*
+> classifying banks on someone else's disc (see the original analysis below).
+> Fixed: `_bank_props()` now peeks at each bank's own first 4 bytes
+> (`FORM` → E4B; anything else → all-zero) when building a dir-content entry,
+> so `iso_builder.py` stays bank-format-agnostic in implementation while
+> getting this field right.
+>
+> The original reading-side analysis, still true for that narrower claim:
+> when *importing* third-party EMU3 images, `props` alone isn't a fully
+> reliable classifier by itself in every corner (some real-world entries
+> plausibly use other values this scan didn't happen to sample) — the only
+> unconditionally reliable classifier for *reading* an unknown bank is
 > magic-sniffing the bank body itself (`FORM`...`E4B0` vs `EMULATOR`/`EMU `
-> prefix), not this field. mpc2emu is E4B-only and always writes this marker
-> itself, so it never needs to *read* `props` to classify — this only matters
-> for anyone reading EMU3 images in the wild rather than ones mpc2emu wrote.
+> prefix), which is what `parsers/e4b_parser.py` / `parsers/eiii_parser.py`
+> already do. This section is about what to *write*, where the pattern above
+> is exactly what real hardware-authored media (and now the E4XT itself) expects.
 
 `build_iso()` only ever fills the first dir-content block — with one E4B
 file per CD image (the normal case), 16 slots is more than enough. Block 1

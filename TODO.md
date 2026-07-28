@@ -1,5 +1,12 @@
 # mpc2emu — Open Items
 
+## Follow-up: EIII/E3B import for VinSamLib (OPEN, 2026-07-28)
+
+Requested by Jan once EIII/EIIIX/ESI output was confirmed working on real
+E4XT hardware — **now done** (2026-07-28, see `docs/RESOLUTION_NOTES.md`
+§EIII "Hardware confirmation"). Unblocked: port EIII/E3B import to
+`../VinSamLib` (separate repo), on its own branch there too.
+
 ## KRZ->KRZ->KRZ: coverage-remap not idempotent across generations (OPEN, low priority, 2026-07-27)
 
 **Found via `tools/krz_to_krz_check.py`** (parse → write → parse → write →
@@ -106,7 +113,7 @@ doesn't touch — only the on-disk encoding of the same frame index moved).
 (the `--auto-loop` test set, or `AMPENV_SETME`/`PINGPONG`-style RE banks)
 through this path before/after the fix and confirm no regression.
 
-## Heads up: ConvertWithMoss has 3 open PRs adding E-mu formats (not yet merged/HW-verified, 2026-07-26)
+## ConvertWithMoss's E-mu format PRs (2026-07-26, #230/#231 now merged 2026-07-28)
 
 Flagged by Jan; worth tracking since they overlap mpc2emu's own E-mu RE work:
 
@@ -123,26 +130,29 @@ Flagged by Jan; worth tracking since they overlap mpc2emu's own E-mu RE work:
   (see the entry above this file's very first one). Not yet hardware-tested
   by its own author.
 - **[PR #230](https://github.com/git-moss/ConvertWithMoss/pull/230)** —
-  E-mu Emulator III / EIIIX / ESI-32/2000/4000 (E3B) read+write — the format
-  this project has deliberately stayed out of scope of. Claims 3 corrections
-  to `emu3bm` (the same C reference dagargo/emu3bm project this project's
-  docs already cite): empty keymap slots are holes, not list-end markers;
-  ESI variants pack flag bits into the upper bits of a zone's sample index
-  (needs masking); filter-type storage exists only on ESI, not EIIIX (always
-  lowpass there). Validated against 22 commercial CD-ROMs, 3,424 presets /
-  8,073 samples, byte-identical PCM. Not hardware-verified.
+  E-mu Emulator III / EIIIX / ESI-32/2000/4000 (E3B) read+write. **Merged**
+  (`41835fd`), and now the basis of this project's own EIII support — see
+  "EIII writer needs hardware confirmation on the E4XT" above. Its 3
+  corrections to `emu3bm` (empty keymap/sample-table slots are holes not
+  list-end markers; ESI variants pack flag bits into the upper bits of a
+  zone's sample index; filter-type storage exists only on ESI, not EIIIX)
+  are all incorporated into `writers/eiii_writer.py`/`parsers/eiii_parser.py`.
+  Its own claimed validation (22 commercial CD-ROMs, 3,424 presets / 8,073
+  samples) is now exceeded by this project's independent read-only run (1118
+  banks / 19,040 presets — see above); still not hardware-verified by either
+  project.
 - **[PR #231](https://github.com/git-moss/ConvertWithMoss/pull/231)** —
-  stacked on #230/#220: reads EIII banks directly from `.iso`/`.img`/`.hda`
-  images, reusing the EOS filesystem code from #220 (same shared filesystem
-  as emu3fs documents). Notes disk-geometry variants (2 vs 6 root blocks;
-  256 KB vs 1 MB clusters) and a one-frame loop-end correction.
+  **Merged** (`3952110`), stacked on #230/#220: reads EIII banks directly
+  from `.iso`/`.img`/`.hda` images, reusing the EOS filesystem code from
+  #220. Not needed here — this project already builds EMU3/EOS images for
+  E4B (`writers/iso_builder.py`/`writers/hda_builder.py`), and those
+  builders are bank-content-agnostic, so they carry `.e3x` files unchanged;
+  no direct-image-read path was needed. Its noted disk-geometry variants (2
+  vs 6 root blocks; 256 KB vs 1 MB clusters) could be a useful cross-
+  reference if EMU3 disk-geometry support ever needs to widen.
 
-None of this needs action here — mpc2emu doesn't do EIII and CWM doesn't
-(yet) do KRZ — but the emu3bm corrections in #230 and the disk-geometry
-variants in #231 could be useful cross-references if EIII or wider EMU3
-disk-geometry support ever comes up, and #220's independent validation
-against `e4b_parser.py` is a nice confirmation this project's E4B model
-is solid from an outside perspective.
+#220's independent validation against `e4b_parser.py` remains a nice
+confirmation this project's E4B model is solid from an outside perspective.
 
 ## Personal action: tell CWM about two KRZ reader discrepancies (OPEN, 2026-07-27)
 
