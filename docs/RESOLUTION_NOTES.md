@@ -2920,6 +2920,105 @@ only the on-disk encoding of the already-correct frame index moved). If a
 future HW A/B is ever warranted, compare a loop-heavy bank read-modify-written
 through this path before/after the fix.
 
+## §E4BREAD2 — Two more E4B reading gaps found via ConvertWithMoss PR #242 (FIXED 2026-07-28)
+
+**Context:** ConvertWithMoss PR #242 (independent E4B reader, commit
+`054972c7`) made two more claims about `Emulator4Detector.java` that this
+project's own `documentation/design/E4B_FORMAT.md` (their doc, built partly
+from mpc2emu's own RE work) had gotten wrong. Per the standing project rule,
+both were checked against real local third-party `.e4b` content **before**
+touching any code — see the corpus numbers below. Both turned out to be real,
+independent of CWM's own corpus.
+
+### 1. Amp/filter envelope: only stage 1 of each pair was read
+
+**Symptom:** the 6-stage PZT (Attack1/Attack2/Decay1/Decay2/Release1/
+Release2, bytes 0-11 amp / 14-25 filter) had only stage 1 of each pair read
+(`_fenv_rate_inv(pzt[0])` for attack, `pzt[4]` for decay, `pzt[8]` for
+release, `pzt[5]`'s LEVEL for sustain) since CR-5 (2026-06-10). CWM's PR
+claims this is the same envelope as the Emulator X, and that decay1 is
+frequently a *plateau* (holds at attack2's peak) with the real decay-to-
+sustain motion happening in decay2 alone — reading decay1's level as
+"sustain" makes a voice that should decay over many seconds instead "sustain
+forever" at (near-)full volume, matching the classic "Nylon Guitar" bug
+class (a plucked instrument that rings and fades vs. one that holds the pick
+attack's level indefinitely).
+
+**Corpus-checked before fixing** (141 local third-party `.e4b` files,
+32,558 voices): stage-2 has a nonzero *time* in only ~1-2% of voices
+(attack2 1.1%, decay2 1.6%, release2 0.2% — usually negligible on its own),
+but where decay1's and decay2's *levels* differ sharply (0.9% of voices,
+`|Δ| >= 50` out of 127), it's concentrated in one-shot SFX material: every
+sampled example came from one `ProRec "Hollywood"` sound-effects bank
+(`WALKER C1`, `DARTH VADER`, `LASER`, `X-WING`, …) where decay1 = byte 126
+(near-full, ~31ms — read alone as "sustain at 99%") and decay2 = byte 118
+(the *real* ~29.4 SECOND decay to silence). Old read: `attack=0.031 decay=
+0.031 sustain=0.992 release=4.6`. Real envelope per the raw bytes:
+`attack=5.8 decay=29.5 sustain=0.0 release=4.6` — a completely different,
+audible envelope shape.
+
+**Fix** (`parsers/e4b_parser.py`, both amp and filter envelope decode): sum
+both stages' TIMES per pair (`attack = attack1_s + attack2_s`, same for
+decay/release) and read **sustain from decay2's level**, not decay1's. For
+mpc2emu's 4-stage `Envelope` model (no separate hold field), this is
+provably equivalent to CWM's hold+decay split regardless of whether decay1
+is a true plateau: `hold + decay = (plateau ? d1_time : 0) + (plateau ?
+d2_time : d1_time+d2_time) = d1_time + d2_time` either way — so no plateau
+detection is actually needed for our model, just an unconditional sum.
+A stage-2 rate byte of exactly `0` contributes **true zero** seconds, not
+the continuous rate curve's ~31ms floor (`env_rate_to_seconds(0) == 0.031`,
+but `writers/e4b_writer.py`'s `env_seconds_to_rate(0.0) == 0` — byte 0 is a
+deliberate "unused" encoding) — this keeps the ~98%+ of voices with a real
+single-stage envelope byte-for-byte unchanged from the original CR-5
+behavior; only genuine two-stage envelopes are affected.
+
+**Verified:** corpus sweep before/after shows **0 crashes**, the exact
+"Hollywood" repro now decodes to the envelope above; new regression tests
+`tests/test_e4b_parser.py::test_single_stage_envelope_unchanged` (the common
+case, unaffected), `test_two_stage_envelope_combines` (synthetic two-stage
+case matching CWM's model), `test_stage2_zero_byte_contributes_true_zero`,
+`test_real_world_hollywood_sfx_repro` (exact byte repro) — all 4 confirmed to
+fail against the pre-fix code and pass with it.
+
+### 2. Sample loop fields: right-channel-only samples read the wrong (stale) field
+
+**Symptom:** the E4B sample struct is the Emulator III's, which stores every
+position (start/end/loop-start/loop-end) **twice** — once per channel, at
+offsets 22/30/38/46 (left) and 26/34/42/50 (right). A sample object holding
+only its **right** channel (options bit `0x0020` clear) keeps its real
+positions in the second field of each pair and leaves the first with a stale
+value that doesn't address this sample at all. `parsers/e4b_parser.py`
+always read the left/first field unconditionally.
+
+**Corpus-checked before fixing:** of 7,460 sample objects across the same
+141 files, 88 (1.2%) have the option-clear ("right channel") flag, 73 of
+those are looped. Reading the **left** field gives an in-range loop point
+for 67/73 (91.8%) — but for the other 6 (all in a `"Preview Vol.2"` bank),
+it's **negative** (e.g. `loop_start = -40`), an outright invalid value that
+can't be right by construction. Reading the **right** field instead gives a
+valid, in-range loop point for **all 73/73 (100%)**.
+
+**Fix:** `_parse_sample_body` now picks the loop-field offset based on the
+options bit: `38/46` when bit `0x0020` is set (left/mono — the overwhelming
+majority, and everything mpc2emu's own writer ever emits), `42/50` when
+clear (right-channel-only). The now-unused `end`/`end_l` field (read but
+never actually consulted anywhere in the parser — `n_frames` comes from the
+PCM length, not this field) was removed rather than also branched, since
+nothing reads it.
+
+**Verified:** full corpus re-check after the fix: **0 invalid loop points**
+across all 7,460 samples (down from 6). New regression tests
+`tests/test_e4b_parser.py::test_stereo_right_channel_loop_fields` (exact
+repro: a deliberately-stale negative left field vs. a valid right field) and
+`test_stereo_left_channel_loop_fields_unchanged` (confirms the overwhelmingly
+common left/mono case is untouched) — both confirmed to fail against the
+pre-fix code and pass with it.
+
+**Not related to full stereo support** — mpc2emu's `SampleData`/parser
+remain mono-only by design (each E3S1 chunk is still read as one independent
+mono sample); this fix only corrects which loop-point *field* is trusted for
+a mono-per-object sample, it doesn't add channel-pairing/joining.
+
 ---
 
 ## §EIII — E-mu Emulator IIIX/ESI writer+parser (design notes, 2026-07-28)

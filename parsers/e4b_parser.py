@@ -208,11 +208,26 @@ def _parse_sample_body(body: bytes) -> tuple:
     display_name = _decode_name(body[2:18])
     base_name, root_note = _decode_root_and_name(display_name)
 
-    end_l        = struct.unpack_from('<I', body, 30)[0]
-    loop_start_l = struct.unpack_from('<I', body, 38)[0]
-    loop_end_l   = struct.unpack_from('<I', body, 46)[0]
     sample_rate  = struct.unpack_from('<I', body, 54)[0]
     options      = struct.unpack_from('<H', body, 60)[0]
+
+    # The E4B sample struct is the Emulator III's, which stores every position
+    # TWICE (once per channel: start/end/loop-start/loop-end at offsets
+    # 22/30/38/46 for the left channel, 26/34/42/50 for the right). A sample
+    # object holding only its RIGHT channel (options bit 0x0020 clear) keeps
+    # its real positions in the SECOND field of each pair and leaves the first
+    # with a stale value that doesn't address this sample at all — reading the
+    # left field unconditionally can produce an outright invalid loop point.
+    # Cross-referenced against ConvertWithMoss PR #242; corpus-checked
+    # 2026-07-28 against 141 local third-party .e4b files: 6 of 73 looped
+    # "right-channel-only" samples have a negative (nonsensical) loop_start
+    # under the unconditional left-field read, all valid once read via the
+    # correct field per this bit.
+    has_left_channel = bool(options & 0x0020)
+    loop_start_off = 38 if has_left_channel else 42
+    loop_end_off   = 46 if has_left_channel else 50
+    loop_start_l = struct.unpack_from('<I', body, loop_start_off)[0]
+    loop_end_l   = struct.unpack_from('<I', body, loop_end_off)[0]
 
     STRUCT_SZ = 92
     pcm = body[SAMP_HDR:]
@@ -392,15 +407,44 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     lfo2_variation = pzt[53] / 127.0
     lfo2_sync      = (pzt[54] == 0x01)
 
-    # CR-5: amp envelope (PZT[0:12]) — inverse of _build_voice's 6-stage write.
-    # Without this, parsed voices fell back to the dataclass defaults, so
-    # E4B→E4B (re-bank/resample/zone-reduce) silently discarded the source amp
-    # envelope.  Attack1/Decay1/Release1 rates at PZT[0]/[4]/[8]; sustain level
-    # at PZT[5].
-    env_attack  = _fenv_rate_inv(pzt[0])
-    env_decay   = _fenv_rate_inv(pzt[4])
-    env_release = _fenv_rate_inv(pzt[8])
-    env_sustain = max(0.0, min(1.0, _fenv_level_inv(pzt[5])))
+    # CR-5 / CWM PR #242 cross-reference (2026-07-28): amp envelope (PZT[0:12])
+    # — inverse of _build_voice's 6-stage write. The 6 (rate,level) stages are
+    # Attack1/Attack2/Decay1/Decay2/Release1/Release2 (bytes 0-11), the SAME
+    # envelope shape as the Emulator X per ConvertWithMoss's independent RE.
+    # Attack1-only was CR-5's original fix (without it, parsed voices fell
+    # back to dataclass defaults, silently discarding the source envelope on
+    # E4B→E4B re-bank/resample/zone-reduce) — but reading only stage 1 of each
+    # pair drops the second stage entirely. Corpus-checked against 141 local
+    # third-party .e4b files (32,558 voices) before applying this: the second
+    # stage has a nonzero TIME in only ~1-2% of voices (attack2 1.1%, decay2
+    # 1.6%, release2 0.2%) — usually negligible — but where decay2's LEVEL
+    # differs sharply from decay1's (0.9% of voices, concentrated in one-shot
+    # SFX content — e.g. a "ProRec Hollywood" bank's laser/explosion/dialogue
+    # hits), decay1 alone reports "holds near-full forever" when the real
+    # envelope decays to silence over decay1+decay2's combined time (one
+    # measured case: decay1 rate byte 0 = 31ms read as the whole decay, vs.
+    # the real decay2 tail of 29.4s) — exactly the "Nylon Guitar"-style bug
+    # ConvertWithMoss also found (their corpus: 52% benefit from combining
+    # decay1+decay2, 8% would otherwise "sustain forever"). Fixed: sum each
+    # pair's two stage TIMES (attack1+attack2, decay1+decay2, release1+
+    # release2) and read SUSTAIN from decay2's level (not decay1's) — for our
+    # 4-stage Envelope model (no separate hold field), summing both decay
+    # sub-stages is equivalent to CWM's hold+decay split, since a plateau
+    # (decay1 holding at attack2's level) or a true decay both need the SAME
+    # total decay1+decay2 duration to reach whatever decay2's level is.
+    # A stage byte of 0 is a deliberate "unused/instant" encoding (matches
+    # writers/e4b_writer.py's env_seconds_to_rate(0.0) == 0), not literally
+    # 0.031s (the continuous rate curve's floor) — so the second stage of
+    # each pair only contributes real time when its own byte is nonzero,
+    # keeping single-stage envelopes (the vast majority) byte-for-byte
+    # unchanged from the original CR-5 behavior.
+    def _stage2_seconds(rate_byte: int) -> float:
+        return 0.0 if rate_byte == 0 else _fenv_rate_inv(rate_byte)
+
+    env_attack  = _fenv_rate_inv(pzt[0]) + _stage2_seconds(pzt[2])
+    env_decay   = _fenv_rate_inv(pzt[4]) + _stage2_seconds(pzt[6])
+    env_release = _fenv_rate_inv(pzt[8]) + _stage2_seconds(pzt[10])
+    env_sustain = max(0.0, min(1.0, _fenv_level_inv(pzt[7])))
 
     # Depth/sign from the cord amount (0 when the FilterEnv→Filter cord is 0).
     filter_env_amount = cord_byte_to_amount(cord_amt)
@@ -414,11 +458,12 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     else:
         # Read the env SHAPE even when amount==0 (§O: e4b_writer always writes the
         # filter-env shape), so the source curve survives an E4B→E4B repack.
-        filter_env_attack  = _fenv_rate_inv(fenv_raw[0])
-        filter_env_decay   = _fenv_rate_inv(fenv_raw[4])
-        filter_env_release = _fenv_rate_inv(fenv_raw[8])
-        # Decay1 level byte = sustain (levels are full-scale).
-        filter_env_sustain = max(0.0, min(1.0, _fenv_level_inv(fenv_raw[5])))
+        # Same 2-stage-pair combination as the amp envelope above.
+        filter_env_attack  = _fenv_rate_inv(fenv_raw[0]) + _stage2_seconds(fenv_raw[2])
+        filter_env_decay   = _fenv_rate_inv(fenv_raw[4]) + _stage2_seconds(fenv_raw[6])
+        filter_env_release = _fenv_rate_inv(fenv_raw[8]) + _stage2_seconds(fenv_raw[10])
+        # Decay2 level byte = sustain (levels are full-scale).
+        filter_env_sustain = max(0.0, min(1.0, _fenv_level_inv(fenv_raw[7])))
 
     # Voice-level key/velocity window — vpar[14]/[17] (key), vpar[18]/[21]
     # (velocity), hardware-RE'd 2026-06-14 (writers/e4b_writer.py, RE_SUITE2

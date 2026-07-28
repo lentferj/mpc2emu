@@ -1,5 +1,28 @@
 # mpc2emu — Open Items
 
+## E4B amp-envelope 2-stage combination fix needs hardware re-confirmation (OPEN, 2026-07-28)
+
+**Context:** cross-referencing ConvertWithMoss PR #242 (independent E4B
+reader) found `parsers/e4b_parser.py` only read stage 1 of each PZT envelope
+pair (Attack1/Decay1/Release1), discarding the second stage entirely. For a
+small but real fraction of local third-party content (0.9% of 32,558
+voices) this made a voice that should decay to silence over many seconds
+read as "holds near-full forever" instead (a `ProRec "Hollywood"` SFX bank,
+verified byte-for-byte before fixing). Fixed in both amp and filter envelope
+decode — see `docs/RESOLUTION_NOTES.md` §E4BREAD2 for the full
+corpus-validation writeup, root-cause math, and regression tests
+(`tests/test_e4b_parser.py`).
+
+**Status:** code fix applied and corpus-validated (0 crashes across 141
+local files re-parsed before/after). **Not yet hardware-confirmed** — this
+changes AUDIBLE decay/sustain/release timing for any third-party E4B
+content with a genuine two-stage envelope (unlike the 1-frame loop_end_l
+shift above, this is a real, potentially noticeable timing change).
+**Blocked on:** converting a real bank containing a two-stage envelope
+(e.g. the Hollywood SFX bank found above) through to E4B/KRZ/EIII and
+confirming on the E4XT that the decay/release now sound like the intended
+long fade rather than a held sustain.
+
 ## Follow-up: EIII/E3B import for VinSamLib (OPEN, 2026-07-28)
 
 Requested by Jan once EIII/EIIIX/ESI output was confirmed working on real
