@@ -1,5 +1,33 @@
 # mpc2emu — Open Items
 
+## New E4B `vpar` fields found via live-SysEx parameter hunting (2026-07-28) — features to consider
+
+While chasing `VOLENV_DEPTH`'s byte offset for the sustain-level item below,
+did a broader live-SysEx hunt (method + full findings in
+`docs/RESOLUTION_NOTES.md` §E4BPARAMHUNT) that found several previously-
+unknown `vpar` bytes, now documented in `docs/E4B_FORMAT.md` §4.1/§4.2.
+None of these are read or written by mpc2emu yet — logged here as
+candidate features/gaps, not bugs:
+
+- **Assign Group** (`vpar[27]`) — likely the "choke group" field already
+  flagged as missing in the instrument-params TODO item below.
+- **Glide Rate/Curve** (`vpar[37]`/`[53]`) — portamento, not modeled at all.
+- **Realtime Xfade Low/LowFade/High/HighFade** (`vpar[22:25]`) — name
+  suggests a round-robin/realtime key-crossfade zone, also flagged as
+  missing in that same TODO item; meaning not yet cross-checked against
+  the manual.
+- **Auxiliary Envelope** (`PZT[28:40]`, a third full envelope generator
+  alongside amp/filter) — entirely unmodeled; would need its own
+  `Envelope` slot on `VoiceLayer` plus a decision on which XPM/SFZ/etc.
+  source concept (if any) it should carry.
+- **Voice Delay, Sample Start Offset, Chorus Width/X, Solo mode, Latch
+  Mode, Filter Gen Params 1-8** — all now located, none modeled or judged
+  for priority yet.
+
+**Status:** offsets found and documented; whether/which of these are worth
+implementing as mpc2emu features is an open product decision, not a
+technical blocker.
+
 ## E4B amp-envelope 2-stage combination fix — RESOLVED + HW-CONFIRMED (2026-07-28)
 
 **Context:** cross-referencing ConvertWithMoss PR #242 (independent E4B

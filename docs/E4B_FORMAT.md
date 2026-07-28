@@ -216,20 +216,41 @@ multi-voice banks:
 | `2:4`   | zone-table trailer offset | BE u16, **relative to this voice's own start**; equals `VOICE_FIXED + n_zones × ZONE_ENTRY`. This is how the E4XT locates the start of the *next* voice — see [§5.1](#51-voice-packing-no-gapterminator-between-voices) |
 | `4`     | `n_zones`           | zone count; E4XT reads exactly this many secondary-zone entries. **Redundant/display-only — see caveat below** |
 | `7`     | `0x64`              | constant observed in working voices |
-| `17`    | `0x7F`              | constant (max value, possibly a redundant/legacy velocity field) |
+| `17`    | voice `hi_key`      | writer sets this to the voice's high key. Often reads as `0x7F` in single-full-range voices, which is why earlier notes called it "constant" |
 | `18`    | voice `lo_vel`      | mirrors the voice's aggregate zone velocity range — see [§5.2](#52-voice-level-velocity-range-mirrors-the-zone-range) |
 | `21`    | voice `hi_vel`      | ditto |
-| `25`    | `0x7F`              | constant |
+| `22`    | Realtime Xfade Low       | live SysEx `E4_GEN_RT_LOW` (id 53); found 2026-07-28 via live-parameter diff against a hardware-saved bank, see `docs/RESOLUTION_NOTES.md` §E4BPARAMHUNT. Meaning/purpose not yet cross-checked against the manual (name suggests a real-time/round-robin key-crossfade zone, currently unmodeled by mpc2emu) |
+| `23`    | Realtime Xfade LowFade   | `E4_GEN_RT_LOWFADE` (id 54) |
+| `24`    | Realtime Xfade HighFade  | `E4_GEN_RT_HIGHFADE` (id 56) |
+| `25`    | Realtime Xfade High      | `E4_GEN_RT_HIGH` (id 55) — **aliases the byte previously called "`0x7F` constant"**: that value is just this field's common default (no realtime crossfade), not a true structural constant |
+| `27`    | Assign Group (choke group) | `E4_VOICE_ASSIGN_GROUP` (id 66), `0–23`. Likely the "choke group" field noted as a gap in `TODO.md`'s instrument-params item |
+| `28:30` | Voice Delay              | `E4_VOICE_DELAY` (id 61), `0–10000` ms. **Big-endian 16-bit word** (confirmed: 500 ms → bytes `0x01 0xF4`) — unlike the live protocol's 7-bit MIDI-safe pairs, the file just uses a plain 16-bit BE int |
+| `33`    | Sample Start Offset      | `E4_VOICE_START_OFFSET` (id 62), `0–127` |
 | `34`    | coarse transpose    | **signed** semitones (`+12` → `0x0C`). Hardware-RE'd 2026-06-13 (`RE_SUITE` ZONE BASE tp+12) |
 | `36`    | fine tune           | **signed** cents (`+50` → `0x32`). Hardware-RE'd 2026-06-13 (`RE_SUITE` ZONE BASE ft+50c) |
+| `37`    | Glide Rate               | `E4_VOICE_GLIDE_RATE` (id 63), `0–127` sec/oct — portamento, currently unmodeled by mpc2emu |
 | `38`    | Non-Transpose flag  | `0x01` = pitch fixed (does not follow key), `0x00` = key-tracking. Confirmed from `B.010-Voices_RevEng.E4B` |
+| `39`    | Solo mode                | `E4_VOICE_SOLO` (id 65), `0–8` — see `VOICE_SOLO_MODES` in eosremote |
+| `41:44` | Chorus Width (provisional) | `E4_VOICE_CHORUS_WIDTH` (id 59), `-128..0`. Found via the live-SysEx dump-offset formula + a value search, **not yet independently confirmed by a clean file diff** (unlike the rest of this table) — treat with lower confidence until re-verified |
 | `42`    | Chorus Amount       | Voice/Tuning page; UI `0–100%` → `0–127` linear (`round(pct/100×127)`), `0` = off. Hardware-confirmed 2026-06-08 |
+| `44`    | Chorus X (initial ITD)   | `E4_VOICE_CHORUS_X` (id 60), `-32..32` ms |
+| `50`    | Latch Mode               | `E4_VOICE_LATCHMODE` (id 67), `0`=off/`1`=on |
 | `51`    | `0x80`              | constant |
+| `53`    | Glide Curve              | `E4_VOICE_GLIDE_CURVE` (id 64), `0–8` (`0`=linear .. `8`=most exponential) |
 | `54`    | volume              | **signed** dB (`−12 dB` → `0xF4`, `0` = unity). Hardware-RE'd 2026-06-13 (`RE_SUITE` ZONE BASE vol-12); supersedes the earlier "amplitude gain" guess. Written since 2026-07-26 — previously documented here but left hardcoded at `0x00` in the writer. **Only meaningful for a single-zone voice** — see [§4.5](#45-secondary-zone-table--zone-entry-22-bytes) |
 | `55`    | pan                 | **signed** byte, `−64`=full-L … `0`=centre … `+63`=full-R. Hardware-confirmed 2026-07-26 via a 7-voice differential save (`B.012 "Vce VolPan"`): front-panel Pan `+63/−64/+32/−32` → this byte exactly, every other voice/zone byte unchanged. **Only meaningful for a single-zone voice** — see [§4.5](#45-secondary-zone-table--zone-entry-22-bytes) |
+| `57`    | Amp Envelope Depth       | `E4_VOICE_VOLENV_DEPTH` (id 68), `0–16` raw = **−96 dB to −48 dB in 3 dB steps** (per the EOS manual, p.340: "maximum amount of attenuation from the amplifier envelope generator"). Directly relevant to `docs/RESOLUTION_NOTES.md` §E4BLEVEL (the amp-envelope sustain dB-law finding) — this is the field that sets the depth of that dB range; mpc2emu's writer never touches it, so it stays at whatever the source/template carries (commonly `0` = −96 dB, matching the calibration measurement) |
 | `58`    | VCF filter type     | see [§4.4](#44-filter-type-mapping-xpm--e4b) |
 | `60`    | VCF cutoff          | `0`≈57 Hz … `255`=20 kHz, exponential curve |
-| `61`    | VCF Q / resonance   | `0`–`127`, linear |
+| `61`    | VCF Q / resonance   | `0`–`127`, linear. **Also aliases `E4_VOICE_FKEY_XFORM`** (live id 84, "meaning varies by filter type" per eosremote's own notes) — confirmed by diff: baseline `0` (matching `filter_resonance=0.0`) became the test value after editing `FKEY_XFORM` remotely |
+| `62`    | Filter Gen Param 1  | `E4_VOICE_FILT_GEN_PARM1` (id 85) |
+| `63`    | Filter Gen Param 2  | id 86 |
+| `64`    | Filter Gen Param 3  | id 87 |
+| `65`    | Filter Gen Param 4  | id 88 |
+| `66`    | Filter Gen Param 5  | id 89 |
+| `67`    | Filter Gen Param 6  | id 90 |
+| `68`    | Filter Gen Param 7  | id 91 |
+| `69`    | Filter Gen Param 8  | id 92 — all 8 are "filter-type dependent" per eosremote's own param table (their exact meaning shifts with `vpar[58]`, same caveat as `vpar[61]` above); confirmed only as *existing at these offsets*, not decoded per filter type |
 
 > **A voice's real zone count can only be trusted from `vpar[2:4]`
 > (`trailer_off`), not `vpar[4]`.** At least three real banks have at least
@@ -248,9 +269,18 @@ width — a separate byte from the Chorus Amount at `vpar[42]`).
 
 ### 4.2 Primary zone table (64 bytes, `voice[110:174]`)
 
-A 4×16-byte block holding two **6-stage envelopes**, identical in structure:
-the **amplitude envelope** at `PZT[0:12]` and the **filter envelope** at
-`PZT[14:26]`. Each stage is a `rate`/`level` byte pair.
+A 4×16-byte block holding **three 6-stage envelopes** (per the EOS manual,
+p.256: "There are three envelope generators per voice, all of them are the
+rate/level type") — the **amplitude envelope** at `PZT[0:12]`, the **filter
+envelope** at `PZT[14:26]`, and the **auxiliary envelope** at `PZT[28:40]`
+(the third generator, general-purpose/LFO2-driven — mpc2emu does not read or
+write it; found 2026-07-28 via live SysEx parameter probing + diff against a
+hardware-saved bank, see `docs/RESOLUTION_NOTES.md` §E4BPARAMHUNT). Each is a
+uniform **14-byte record**: 12 data bytes (6 rate/level stage pairs) followed
+by a 2-byte `0x03 0x00` constant marker — i.e. amp env is `PZT[0:14]`
+(`[12:14]`=marker), filter env `PZT[14:28]` (`[26:28]`=marker), aux env
+`PZT[28:42]` (`[40:42]`=marker). `PZT[42:64]` holds LFO1/LFO2 (below). Each
+envelope's 12 data bytes are 6 `rate`/`level` stage pairs.
 
 **Amplitude envelope — `PZT[0:12]`** (hardware-confirmed 2026-06-08 from
 `AMPENV_SETME.E4B`; decay byte isolated via the `AMP_DECAY_CAL.E4B` sweep where
@@ -277,6 +307,30 @@ only `PZT[4]` varies):
 | Decay 2   | `[20]`/`[21]` | rate / level (default level `0x7F` = +100%) |
 | Release 1 | `[22]`/`[23]` | rate / level (default rate `20`) |
 | Release 2 | `[24]`/`[25]` | rate / level |
+
+**Auxiliary envelope — `PZT[28:40]`** (general-purpose, LFO2-driven per the
+manual; found 2026-07-28 via live SysEx probing, not yet used/written by
+mpc2emu). **Byte order differs from amp/filter env above**: those are grouped
+by phase name (Atk1, Atk2, Dcy1, Dcy2, Rls1, Rls2); the aux envelope instead
+follows the live editor protocol's raw segment-id order (`SEG0..SEG5` =
+Atk1, Dcy1, Rls1, Atk2, Dcy2, Rls2) — confirmed by setting each of the 12
+live parameter ids (`E4_VOICE_AENV_SEG0_RATE`..`SEG5_TGTLVL`, ids 117-128) to
+a distinct value and diffing a hardware-saved bank:
+
+| Stage (playback order per the manual) | Offsets | Meaning |
+|---|---|---|
+| Attack 1  | `[28]`/`[29]` | rate / level |
+| Decay 1   | `[30]`/`[31]` | rate / level (default level `0x7F` = +100%, i.e. this "decay" is a plateau by default — matches the standard-ADSR convention of the "2" levels equalling the "1" levels) |
+| Release 1 | `[32]`/`[33]` | rate / level (default level `0x7E` ≈ +99%) |
+| Attack 2  | `[34]`/`[35]` | rate / level (default level `0x7F` = +100%) |
+| Decay 2   | `[36]`/`[37]` | rate / level (default rate `20`) |
+| Release 2 | `[38]`/`[39]` | rate / level |
+
+Level bytes use the same `round(pct × 127/100)` encoding as amp/filter env
+(confirmed: live value 71% → byte 90, 72%→91, 73%→93, 74%→94, 75%→95,
+76%→97 — all exact matches for `round(pct×1.27)`) — likely carries the same
+hardware dB-law miscalibration as the amp envelope (see `docs/
+RESOLUTION_NOTES.md` §E4BLEVEL), unconfirmed for this specific envelope.
 
 Both envelopes use the standard-ADSR mapping (per the EOS manual: "set the '2'
 levels = the '1' levels and the '2' rates to 0") — Attack rises to full, Decay

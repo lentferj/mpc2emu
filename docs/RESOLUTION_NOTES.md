@@ -3163,6 +3163,120 @@ Needs a decision before implementing, not just a formula.
 
 ---
 
+## §E4BPARAMHUNT — Live-SysEx parameter hunting: a new, fast method for finding unknown `vpar` bytes (2026-07-28)
+
+**Context:** while chasing the `E4_VOICE_VOLENV_DEPTH` byte for §E4BLEVEL,
+realized the sibling `../eosremote` project's editor-protocol SysEx could
+be used far more generally — to hunt down *any* currently-unknown `vpar`
+byte, not just this one field. This section documents the method (reusable
+for future RE) and the full batch of findings from doing it once.
+
+### The method
+
+1. **Set live parameters to distinctive values, don't touch the front
+   panel.** `EosBridge.set_parameters([(preset_select, N), (voice_select,
+   0)])` then `set_parameters([(param_id, distinctive_value)])`, confirmed
+   immediately via `get_parameter` readback. No notes, no bank rebuild.
+2. **Save the whole bank to disk once** (a normal front-panel action — RAM
+   edits are already "live"/permanent per EOS's own model; there's no
+   scripted "save" in the documented protocol, confirmed by grepping
+   `eos.messages.Command` for anything save-related — none exists). One
+   save captures every preset/voice touched in step 1, however many there
+   are — this is what makes batching worthwhile.
+3. **Extract the saved bank from the SD card's `HD0.img`.** It turned out
+   to be a **plain FAT32 image** (`file` reports `DOS/MBR boot sector...
+   OEM-ID "mkfs.fat"`), not the EMU-fs used by CD images/other HDD setups —
+   readable directly with **mtools** (`mdir -i HD0.img :: ` /
+   `mcopy -i HD0.img "::B.0NN-name.E4B" out.e4b`), no custom reader needed.
+4. **Diff the extracted file against a known-clean baseline**, not a raw
+   value search. This distinction mattered a lot in practice — see below.
+
+### Value-search vs. diff: value-search produces false positives on
+### common/small-range parameters
+
+First pass searched the saved file for each parameter's raw test value
+(e.g. is byte `92` present near this voice's data). This worked cleanly for
+**wide-range parameters with distinctive test values** (`VOLENV_DEPTH=16`,
+`FILT_GEN_PARM1-8=201..208`, `FKEY_XFORM=66` — each a single, unambiguous
+match) — but produced **multiple candidate offsets, or an implausible
+non-monotonic ordering, for small-range parameters** (`GLIDE_CURVE` 0-8,
+`SOLO` 0-8, `LATCHMODE` 0-1): a value like `1`, `3`, or `4` is common enough
+elsewhere in the voice block that several unrelated bytes coincidentally
+match. **Switching to a direct byte-diff against an untouched baseline
+voice/preset resolved every one of these instantly** — exactly one byte
+differs, unambiguously, regardless of how "common" its value is. Recommend
+diff-first for any future hunt; value-search is only reliable as a quick
+first pass for wide-range/distinctive values.
+
+**A related trap: some "found" bytes were really something else entirely,
+correlating with preset *index*, not the tested parameter** — e.g. two
+bytes that read `0`/`48` in preset 0 and `N`/`48+N` in preset N, for every
+N tested, regardless of which parameter was assigned to that preset. These
+were something structural (likely a creation-order/slot counter), not
+noise to fix, but a reminder to sanity-check that a "changed" byte's new
+value actually matches the specific test value set for *that* parameter,
+not just "changed at all."
+
+### Findings
+
+All confirmed via the diff method except where noted. `vpar` offsets below
+use the established convention (`voice[0:110]`=vpar, PZT starts at
+voice-relative 110) — verified to hold for E4XT-native-saved files too (not
+just mpc2emu's own writer output) by checking `vpar[2:4]` (`trailer_off`)
+lands on a value that divides out to a whole `n_zones`.
+
+See `docs/E4B_FORMAT.md` §4.1's `vpar` table for the full writeup of each
+field (`vpar[22]`=RT_LOW, `[23]`=RT_LOWFADE, `[24]`=RT_HIGHFADE, `[25]`=
+RT_HIGH — this last one **aliases** the previously-documented "`0x7F`
+constant"; `[27]`=Assign Group/choke group; `[28:30]`=Voice Delay, a
+big-endian 16-bit word unlike the live protocol's own 7-bit MIDI pairs;
+`[33]`=Sample Start Offset; `[37]`=Glide Rate; `[39]`=Solo mode;
+`[41:44]`=Chorus Width, **provisional, not diff-confirmed**; `[44]`=Chorus
+X; `[50]`=Latch Mode; `[53]`=Glide Curve; `[57]`=Amp Envelope Depth (the
+original target — see §E4BLEVEL); `[61]`=VCF Q/resonance, **also aliases**
+`FKEY_XFORM`; `[62:70]`=Filter Gen Params 1-8).
+
+**Also found, documented in `docs/E4B_FORMAT.md` §4.2 instead of the `vpar`
+table:** a third envelope generator, the **Auxiliary Envelope**, at
+`PZT[28:40]` — mpc2emu doesn't read or write this at all currently. Its
+12 data bytes are ordered by the live protocol's raw `SEG0..SEG5` numbering
+(Atk1, Dcy1, Rls1, Atk2, Dcy2, Rls2), **not** the amp/filter envelopes'
+phase-grouped file order (Atk1, Atk2, Dcy1, Dcy2, Rls1, Rls2) — a genuine
+structural difference between how this third envelope is packed vs. the
+other two, confirmed by setting all 12 live ids to distinct values and
+reading back the exact byte sequence. Its level bytes go through the same
+`round(pct×127/100)` encoding as amp/filter envelope, so likely carries the
+same dB-law miscalibration as §E4BLEVEL — unconfirmed for this specific
+envelope, not yet acted on.
+
+**Independently re-confirmed** (found via this method, already documented
+elsewhere from earlier static-file RE): `LFO2` Lag0/Lag1 at `PZT[57]`/
+`PZT[59]` — matches `docs/E4B_FORMAT.md` §4.2's existing entry exactly,
+now confirmed via a second, independent method (live SysEx vs. the
+original static commercial-bank analysis).
+
+### A useful side-discovery for `../eosremote`, not mpc2emu
+
+While hunting, found that the OLD-format SysEx dump (`dump_preset_old`)
+lays out parameters **uniformly, 2 bytes per id, in strict ascending id
+order** — `dump_offset = 98 + (param_id − 53) × 2` — verified across a wide
+span (ids 53 through 116, crossing the `voice.general`/`.tuning`/`.mode`/
+`.amp`/`.filter`/`.lfo` group boundaries without exception, including
+right through the `vpar`/PZT structural boundary at id 70). This resolves
+eosremote's own long-standing "voice data layout not yet fully
+cross-checked" TODO for at least this section of the old dump format —
+logged in `../eosremote/docs/RESOLUTION_NOTES.md` and `../eosremote/TODO.md`
+instead of here, since it's their protocol layer, not mpc2emu's file
+format. **Caveat proven by the Aux Envelope finding above: the dump's own
+id-ascending order does NOT necessarily match the file's internal byte
+order** (the file groups envelope stages by phase name or `SEG` number
+depending on which envelope; the dump doesn't) — so the dump-offset formula
+is a fast way to test whether a parameter *exists* and read back its
+current value, but the real file offset still needs an independent diff
+against a saved file, not an assumption ported over from the dump.
+
+---
+
 ## §EIII — E-mu Emulator IIIX/ESI writer+parser (design notes, 2026-07-28)
 
 **Not a bug fix** — this is the "how it works" companion for the new EIII
