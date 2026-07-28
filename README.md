@@ -53,9 +53,10 @@ mpc2emu is a converter for sampler instruments. It **reads** a wide range of
 sampler and library formats — Akai MPC keygroups (`.xpm`) and binary drum
 programs (`.pgm` — MPC 500/1000/2500, MPC 2000/2000XL, and MPC 60), SFZ v1/v2,
 SoundFont 2, GigaSampler / GigaStudio (uncompressed), Logic EXS24 (classic and
-v1.1), TAL-Sampler, EMU E4B banks, Kurzweil KRZ banks, and even a plain folder
-of root-note-named WAVs — and **writes** EMU E4B (Emulator 4 / E4XT / EOS
-4.x), Kurzweil KRZ (K2000 / K2500 / K2600), and TAL-Sampler presets.
+v1.1), TAL-Sampler, EMU E4B banks, Kurzweil KRZ banks, E-mu Emulator
+IIIX/ESI banks, and even a plain folder of root-note-named WAVs — and
+**writes** EMU E4B (Emulator 4 / E4XT / EOS 4.x), Kurzweil KRZ (K2000 / K2500
+/ K2600), E-mu Emulator IIIX/ESI, and TAL-Sampler presets.
 
 **It maps the musical parameters, not just the raw samples.** Filter
 type / cutoff / resonance, the amplitude and filter envelopes, the LFO, and the
@@ -126,6 +127,7 @@ library (`mtools` is optional, only for one E4B HDA filesystem path).
 |---|---|---|
 | EMU E4B | `.e4b` / `.E4B` | EMU Emulator 4 / E4XT bank — import for resampling / re-export |
 | Kurzweil KRZ | `.krz` / `.KRZ` | Kurzweil K2000/K2500/K2600 bank — import for resampling / re-export; K2000 ROM-referenced samples are skipped (no PCM in the file) |
+| E-mu Emulator IIIX/ESI | `.e3x` / `.esi` / `.e3b` | Emulator IIIX, ESI-32/2000/4000, and the compact Emulator III (`.e3b`, read-only) |
 | Akai MPC Keygroup | `.xpm` | MPC 2.x / MPC X / Live / One (XML) |
 | Akai MPC drum program | `.pgm` | MPC 500/1000/2500, **MPC 2000/2000XL** (`.WAV`) and MPC 60 (12-bit `.SND`) |
 | Akai MPC60 SET / floppy | `.set` / `.img` | MPC 60 RAM set; `.img` = FAT12 floppy (SET auto-extracted) |
@@ -143,6 +145,7 @@ library (`mtools` is optional, only for one E4B HDA filesystem path).
 |---|---|---|
 | EMU E4B | `.E4B` | EMU Emulator 4 / E4XT / E4K (EOS 4.x) |
 | Kurzweil KRZ | `.KRZ` | Kurzweil K2000 / K2500 / K2600 |
+| E-mu Emulator IIIX/ESI | `.E3X` / `.ESI` | Emulator IIIX, ESI-32/2000/4000 — also loads natively on the E4XT (its own backward-compatibility loader) |
 | TAL-Sampler | `.talsmpl` | TAL-Sampler VST/AU |
 
 ---
@@ -167,8 +170,9 @@ cd mpc2emu
 
 ```bash
 # NOTE: output defaults to --format e4b (EMU E4B). The examples below pass it
-# explicitly; use --format krz (Kurzweil K2000) or --format talsmpl (TAL-Sampler)
-# to change it. Note --hda works for e4b + krz, and --floppy is krz-only.
+# explicitly; use --format krz (Kurzweil K2000), --format eiii (E-mu Emulator
+# IIIX/ESI), or --format talsmpl (TAL-Sampler) to change it. Note --hda works
+# for e4b + krz + eiii, and --floppy is krz-only.
 
 # Inspect a file without converting
 python convert.py Piano.sf2 --info
@@ -191,6 +195,9 @@ python convert.py MyPreset.talsmpl --format e4b
 
 # SFZ library to Kurzweil KRZ
 python convert.py /sfz/pianos/ --format krz
+
+# SFZ library to E-mu Emulator IIIX -- also loads natively on the E4XT
+python convert.py /sfz/pianos/ --format eiii --iso
 
 # GIG file to E4B (limit to 16 instruments)
 python convert.py Orchestra.gig --format e4b --max-presets 16 --hda
@@ -224,14 +231,19 @@ python convert.py <input> [options]
 
 Positional:
   input               File or directory
-                      (.e4b .krz .xpm .pgm .set .img .talsmpl .sfz .sf2 .exs .gig)
+                      (.e4b .krz .e3x .esi .e3b .xpm .pgm .set .img .talsmpl
+                       .sfz .sf2 .exs .gig)
 
 Info mode:
   --info              Inspect input file(s) without converting
   --verbose           Show per-zone detail with --info
 
 Output:
-  --format FORMAT     e4b | krz | talsmpl  (default: e4b)
+  --format FORMAT     e4b | krz | eiii | talsmpl  (default: e4b)
+  --eiii-variant V    With --format eiii: e3x (Emulator IIIX, default — also
+                      read by the E4XT's backward-compatibility loader and
+                      by the ESI samplers) | esi (ESI-32/2000/4000's own
+                      identifier)
   --output-dir DIR    Output directory  (default: current directory)
                       (alias: --out-dir)
   --overwrite         Overwrite existing output files without prompting
@@ -252,14 +264,16 @@ Output:
                       needed (e.g. 100 → B.100-NAME_01.E4B, B.101-NAME_02.E4B …)
 
 ZuluSCSI images:
-  --iso               Build CD image(s) for ZuluSCSI  (e4b → EMU3, krz → K2000 FAT16)
-  --hda               Build SCSI hard disk image (.hda) for ZuluSCSI  (e4b + krz)
-                      e4b → E4XT EMU-fs/FAT disk; krz → K2000 FAT16 disk
+  --iso               Build CD image(s) for ZuluSCSI  (e4b/eiii → EMU3, krz → K2000 FAT16)
+  --hda               Build SCSI hard disk image (.hda) for ZuluSCSI  (e4b + krz + eiii)
+                      e4b/eiii → E4XT EMU-fs/FAT disk (eiii banks share the
+                      E4B EOS/EMU-fs disk-image path unchanged — it's
+                      bank-content-agnostic); krz → K2000 FAT16 disk
                       (HW-confirmed — loads from a ZuluSCSI HDx device)
   --hda-size MB       Hard disk image size in MB
-                      e4b default: auto — smallest 128 MB step that fits; max 14336
+                      e4b/eiii default: auto — smallest 128 MB step that fits; max 14336
                       krz default: content + ~50% headroom to save onto (FAT16 max ~2047)
-  --hda-fs FS         E4B HDA filesystem: fat | emu  (default: fat; ignored for krz)
+  --hda-fs FS         E4B/EIII HDA filesystem: fat | emu  (default: fat; ignored for krz)
                       fat — FAT16 image in EOS's native layout (MBR partition
                             at LBA 63, 32 KB clusters), read by EOS 4.7+ (needs
                             the `mtools` package); banks B.NNN-NAME.E4B in the
@@ -994,10 +1008,14 @@ shell mpc2emu prints sized suggestions — drop velocity layers → thin key zon
 downsample, least-lossy first — and applies your choice. With `--auto-fit` it
 does this automatically. A batch run without `--auto-fit` prints the suggestions
 and exits non-zero, so an oversized / unloadable bank is never silently written.
-This works for both E4B (128 MB E4XT) and KRZ (64 MB K2000) output.
+This works for E4B (128 MB E4XT), KRZ (64 MB K2000), and EIII (128 MB
+EIIIX/ESI) output.
 
-Per-bank hardware limits: max **1000 samples** and **1000 presets** per bank;
-max bank size **128 MB** (E4XT) / **64 MB** (K2000).
+Per-bank hardware limits: max **1000 samples** and **1000 presets** per bank
+for E4B/KRZ; max bank size **128 MB** (E4XT) / **64 MB** (K2000). EIIIX/ESI
+banks cap out at **999 samples / 256 presets** per bank (`docs/EIII_FORMAT.md`)
+— the writer enforces this defensively, but the `--auto-fit` pre-split fitting
+assistant above doesn't yet know about the tighter 256-preset ceiling.
 
 ---
 
@@ -1028,10 +1046,12 @@ mpc2emu/
 │   ├── exs24_parser.py         # Logic EXS24 (LE classic + v1.1; stereo de-dup)
 │   ├── gig_parser.py           # GigaSampler / GigaStudio
 │   ├── e4b_parser.py           # EMU E4B import (inverse of e4b_writer)
-│   └── krz_parser.py           # Kurzweil KRZ import (inverse of krz_writer)
+│   ├── krz_parser.py           # Kurzweil KRZ import (inverse of krz_writer)
+│   └── eiii_parser.py          # E-mu Emulator IIIX/ESI/EIII import (inverse of eiii_writer)
 ├── writers/
 │   ├── e4b_writer.py           # EMU E4B (FORM size + EMSt; filter, loops, zones)
 │   ├── krz_writer.py           # Kurzweil KRZ
+│   ├── eiii_writer.py          # E-mu Emulator IIIX/ESI
 │   ├── iso_builder.py          # EMU3 filesystem image for ZuluSCSI CD emulation
 │   ├── hda_builder.py          # SCSI hard disk image (.hda) for ZuluSCSI
 │   ├── fat12.py                # FAT12 floppy image (K2000R Gotek / FlashFloppy)

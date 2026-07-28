@@ -48,8 +48,8 @@ preset prints a [layers] note.  Full byte reference: docs/KRZ_FORMAT.md.
 EIII (Emulator IIIX/ESI) output: one linked EIII preset per voice/layer,
 cutoff/resonance/filter-envelope and amp envelope are mapped from the source;
 also natively loadable by the E4XT (its backward-compatibility loader) —
-use --format eiii --iso/--hda to build E4XT-loadable media. Not yet
-hardware-confirmed. Full byte reference: docs/EIII_FORMAT.md.
+use --format eiii --iso/--hda to build E4XT-loadable media.
+Hardware-confirmed on the E4XT. Full byte reference: docs/EIII_FORMAT.md.
 
 Examples:
   python convert.py Piano.sf2 --info
@@ -58,6 +58,7 @@ Examples:
   python convert.py Orchestra.gig --format e4b --hda --hda-size 200
   python convert.py Pad.xpm --format krz --floppy --auto-fit
   python convert.py Big.xpm --format krz --max-preset-size 8192K --auto-fit --iso
+  python convert.py /sfz/pianos/ --format eiii --iso
   python convert.py /sfz/ --reduce-key-zones 30 --reduce-velocity-layers 50 --iso
 """
 
