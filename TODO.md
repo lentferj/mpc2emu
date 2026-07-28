@@ -38,6 +38,27 @@ the envelope RATE curve (`AMP_DECAY_CAL.E4B` -> `ENV_RATE_A`/`ENV_RATE_K`).
 Affects every E4B preset written with a partial (non-0%/100%) sustain
 level; scope and severity unknown until the curve is measured.
 
+**First calibration attempt (2026-07-28) was inconclusive and does not
+count as data.** Tried a live SysEx-driven sweep via the sibling
+`../eosremote` project (edit Dcy1/Dcy2 Level directly on a resident
+preset, no bank rebuild needed) instead of a file-based bank. Two problems,
+both logged in `../eosremote/docs/RESOLUTION_NOTES.md` §15 /
+`../eosremote/TODO.md`: (1) the script edited a preset via `PRESET_SELECT`
+without ever sending a real Program Change, so — per eosremote's own §14 —
+none of the edits were ever actually audible; every note in the "sweep"
+silently kept playing the already-active preset instead. (2) the E4XT
+crashed (front-panel "Gen Trap error", recovered by power-cycling) during
+a follow-up diagnostic; root cause not yet identified, but implicates
+sending unthrottled plain MIDI channel messages (note on/off) alongside a
+long burst of SysEx. **Next attempt should either fix the live-automation
+script to call `send_program_change` before every note (per eosremote
+§14/§15), or fall back to a file-based multi-key sweep bank (one preset,
+9 voices each covering a single key with a different sustain%, same
+proven mechanism as the §E4BREAD2/§E4BLEVEL listen-test banks) — the
+latter avoids the crash-risk live-automation path entirely.** Either way,
+proceed cautiously: this hardware has now demonstrably crashed once under
+scripted SysEx traffic.
+
 ## Follow-up: EIII/E3B import for VinSamLib (OPEN, 2026-07-28)
 
 Requested by Jan once EIII/EIIIX/ESI output was confirmed working on real
