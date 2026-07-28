@@ -56,9 +56,10 @@ mpc2emu ist ein Konverter für Sampler-Instrumente. Er **liest** eine breite
 Palette von Sampler- und Bibliotheksformaten — Akai MPC Keygroups (`.xpm`) und
 binäre Drum-Programme (`.pgm` — MPC 500/1000/2500, MPC 2000/2000XL und MPC 60),
 SFZ v1/v2, SoundFont 2, GigaSampler / GigaStudio (unkomprimiert), Logic EXS24
-(klassisch und v1.1), TAL-Sampler, EMU-E4B-Bänke, Kurzweil-KRZ-Bänke und sogar
-einen einfachen Ordner mit grundton-benannten WAVs — und **schreibt** EMU E4B
-(Emulator 4 / E4XT / EOS 4.x), Kurzweil KRZ (K2000 / K2500 / K2600) und
+(klassisch und v1.1), TAL-Sampler, EMU-E4B-Bänke, Kurzweil-KRZ-Bänke, E-mu
+Emulator IIIX/ESI-Bänke und sogar einen einfachen Ordner mit
+grundton-benannten WAVs — und **schreibt** EMU E4B (Emulator 4 / E4XT / EOS
+4.x), Kurzweil KRZ (K2000 / K2500 / K2600), E-mu Emulator IIIX/ESI und
 TAL-Sampler-Presets.
 
 **Er überträgt die musikalischen Parameter, nicht nur die rohen Samples.**
@@ -136,6 +137,7 @@ E4B-HDA-Dateisystem-Pfad nötig).
 |---|---|---|
 | EMU E4B | `.e4b` / `.E4B` | EMU Emulator 4 / E4XT Bank — Import zum Resampling / Re-Export |
 | Kurzweil KRZ | `.krz` / `.KRZ` | Kurzweil K2000/K2500/K2600 Bank — Import zum Resampling / Re-Export; K2000-ROM-referenzierte Samples werden übersprungen (keine PCM-Daten in der Datei) |
+| E-mu Emulator IIIX/ESI | `.e3x` / `.esi` / `.e3b` | Emulator IIIX, ESI-32/2000/4000 sowie der kompakte Emulator III (`.e3b`, nur lesend) |
 | Akai MPC Keygroup | `.xpm` | MPC 2.x / MPC X / Live / One (XML) |
 | Akai MPC Drum-Programm | `.pgm` | MPC 500/1000/2500, **MPC 2000/2000XL** (`.WAV`) und MPC 60 (12-Bit `.SND`) |
 | Akai MPC60 SET / Floppy | `.set` / `.img` | MPC-60-RAM-Set; `.img` = FAT12-Floppy (SET automatisch extrahiert) |
@@ -153,6 +155,7 @@ E4B-HDA-Dateisystem-Pfad nötig).
 |---|---|---|
 | EMU E4B | `.E4B` | EMU Emulator 4 / E4XT / E4K (EOS 4.x) |
 | Kurzweil KRZ | `.KRZ` | Kurzweil K2000 / K2500 / K2600 |
+| E-mu Emulator IIIX/ESI | `.E3X` / `.ESI` | Emulator IIIX, ESI-32/2000/4000 — wird vom E4XT auch nativ geladen (über dessen eigenen Abwärtskompatibilitäts-Loader) |
 | TAL-Sampler | `.talsmpl` | TAL-Sampler VST/AU |
 
 ---
@@ -177,9 +180,9 @@ cd mpc2emu
 
 ```bash
 # HINWEIS: Die Ausgabe ist standardmäßig --format e4b (EMU E4B). Die Beispiele
-# unten geben es explizit an; mit --format krz (Kurzweil K2000) oder
-# --format talsmpl (TAL-Sampler) änderst du das. --hda gibt es für e4b + krz,
-# --floppy nur für krz.
+# unten geben es explizit an; mit --format krz (Kurzweil K2000), --format eiii
+# (E-mu Emulator IIIX/ESI) oder --format talsmpl (TAL-Sampler) änderst du das.
+# --hda gibt es für e4b + krz + eiii, --floppy nur für krz.
 
 # Datei prüfen ohne Konvertierung
 python convert.py Piano.sf2 --info
@@ -199,6 +202,9 @@ python convert.py MyPreset.talsmpl --format e4b
 
 # SFZ-Bibliothek → Kurzweil KRZ
 python convert.py /sfz/pianos/ --format krz
+
+# SFZ-Bibliothek → E-mu Emulator IIIX -- wird vom E4XT auch nativ geladen
+python convert.py /sfz/pianos/ --format eiii --iso
 
 # GIG-Datei → E4B (max. 16 Instrumente)
 python convert.py Orchestra.gig --format e4b --max-presets 16 --hda
@@ -239,7 +245,11 @@ Info-Modus:
   --verbose           Zonen-Details mit --info anzeigen
 
 Ausgabe:
-  --format FORMAT     e4b | krz | talsmpl  (Standard: e4b)
+  --format FORMAT     e4b | krz | eiii | talsmpl  (Standard: e4b)
+  --eiii-variant V    Bei --format eiii: e3x (Emulator IIIX, Standard — wird
+                      auch vom Abwärtskompatibilitäts-Loader des E4XT und von
+                      ESI-Samplern gelesen) | esi (eigene Kennung von
+                      ESI-32/2000/4000)
   --output-dir DIR    Ausgabeverzeichnis  (Standard: aktuelles Verzeichnis)
                       (Alias: --out-dir)
   --overwrite         Vorhandene Ausgabedateien ohne Nachfrage überschreiben
@@ -260,14 +270,16 @@ Ausgabe:
                       können — kein --iso nötig (z. B. 100 → B.100-NAME_01.E4B …)
 
 ZuluSCSI-Images:
-  --iso               CD-Image(s) für ZuluSCSI erzeugen  (e4b → EMU3, krz → K2000 FAT16)
-  --hda               SCSI-Festplatten-Image (.hda) erzeugen  (e4b + krz)
-                      e4b → E4XT EMU-fs/FAT-Disk; krz → K2000-FAT16-Disk
+  --iso               CD-Image(s) für ZuluSCSI erzeugen  (e4b/eiii → EMU3, krz → K2000 FAT16)
+  --hda               SCSI-Festplatten-Image (.hda) erzeugen  (e4b + krz + eiii)
+                      e4b/eiii → E4XT EMU-fs/FAT-Disk (eiii-Bänke teilen sich
+                      unverändert denselben E4B-EOS/EMU-fs-Disk-Image-Pfad —
+                      der ist bankinhalt-agnostisch); krz → K2000-FAT16-Disk
                       (HW-bestätigt — lädt von einem ZuluSCSI-HDx-Gerät)
   --hda-size MB       Größe des HDA-Images in MB
-                      e4b-Standard: auto — kleinste 128-MB-Stufe, die passt; max 14336
+                      e4b/eiii-Standard: auto — kleinste 128-MB-Stufe, die passt; max 14336
                       krz-Standard: Inhalt + ~50% Reserve zum Speichern (FAT16 max ~2047)
-  --hda-fs FS         E4B-HDA-Dateisystem: fat | emu  (Standard: fat; für krz ignoriert)
+  --hda-fs FS         E4B/EIII-HDA-Dateisystem: fat | emu  (Standard: fat; für krz ignoriert)
                       fat — FAT16-Image im nativen EOS-Layout (MBR-Partition bei
                             LBA 63, 32-KB-Cluster), von EOS 4.7+ lesbar (benötigt
                             'mtools'); Bänke B.NNN-NAME.E4B im Stammverzeichnis.
@@ -1050,10 +1062,15 @@ heruntersampeln, verlustärmste zuerst — und wendet deine Wahl an. Mit
 `--auto-fit` geschieht das automatisch. Ein Batch-Lauf ohne `--auto-fit` gibt die
 Vorschläge aus und endet mit einem Exit-Code ungleich null, sodass niemals
 stillschweigend eine übergroße / nicht ladbare Bank geschrieben wird. Das
-funktioniert für E4B (128 MB E4XT) und KRZ (64 MB K2000).
+funktioniert für E4B (128 MB E4XT), KRZ (64 MB K2000) und EIII (128 MB
+EIIIX/ESI).
 
-Hardware-Grenzen je Bank: max. **1000 Samples** und **1000 Presets** pro Bank;
-maximale Bankgröße **128 MB** (E4XT) / **64 MB** (K2000).
+Hardware-Grenzen je Bank: max. **1000 Samples** und **1000 Presets** pro Bank
+für E4B/KRZ; maximale Bankgröße **128 MB** (E4XT) / **64 MB** (K2000).
+EIIIX/ESI-Bänke sind auf **999 Samples / 256 Presets** pro Bank begrenzt
+(`docs/EIII_FORMAT.md`) — der Writer setzt das defensiv durch, aber der
+`--auto-fit`-Einpass-Assistent oben kennt die engere 256-Preset-Grenze noch
+nicht.
 
 ---
 
@@ -1084,10 +1101,12 @@ mpc2emu/
 │   ├── exs24_parser.py         # Logic EXS24 (LE klassisch + v1.1; Stereo-Deduplizierung)
 │   ├── gig_parser.py           # GigaSampler / GigaStudio
 │   ├── e4b_parser.py           # EMU-E4B-Import (Umkehrung von e4b_writer)
-│   └── krz_parser.py           # Kurzweil-KRZ-Import (Umkehrung von krz_writer)
+│   ├── krz_parser.py           # Kurzweil-KRZ-Import (Umkehrung von krz_writer)
+│   └── eiii_parser.py          # E-mu Emulator IIIX/ESI/EIII-Import (Umkehrung von eiii_writer)
 ├── writers/
 │   ├── e4b_writer.py           # EMU E4B (FORM-Größe + EMSt; Filter, Loops, Zonen)
 │   ├── krz_writer.py           # Kurzweil KRZ
+│   ├── eiii_writer.py          # E-mu Emulator IIIX/ESI
 │   ├── iso_builder.py          # EMU3-Filesystem-Image für ZuluSCSI-CD-Emulation
 │   ├── hda_builder.py          # SCSI-Festplatten-Image (.hda)
 │   ├── fat12.py                # FAT12-Floppy-Image (K2000R Gotek / FlashFloppy)
@@ -1170,6 +1189,7 @@ Open-Source-Referenzprojekte informiert wurden:
 | `mpc60_parser.py` | [ConvertWithMoss](https://github.com/git-moss/ConvertWithMoss) — `format/akai/mpc60` (MPC60-SET-Layout + 12-Bit-Entpackung); gegen den Referenz-Decoder *Akai MPC60 to WAV* verifiziert | LGPL-3.0 | Jürgen Moßgraber |
 | `e4b_writer.py` | Reverse Engineering aus E4XT-Hardware-Bänken (JL AnalogBank, FltEnvTest, FLTTYPES-Reihe, AMPENV_SETME + AMP_DECAY_CAL Amp-Hüllkurven-/Decay-Bänke sowie die Chorus-Amount-`vpar[42]`-Lesungen/Sweep), kommerziellen EOS-CD-ROMs plus dem ProRec-/Rob-Papen-/Kirk-Hunter-Bank-Korpus zur Parameter-Analyse, `struct emu3_sample` aus [emu3bm](https://github.com/dagargo/emu3bm) (E3S1-Feldlayout) und [Phils E4-Format-Notizen](http://www.philizound.co.uk/freebies/software/emu-reorder/emu-reorder.html) | — | Originalcode |
 | `iso_builder.py` | EMU3-Filesystem-Struktur aus [emu3fs](https://github.com/dagargo/emu3fs) (GPL-2.0-or-later), Referenz-Images verifiziert; `blks`-Ceiling-Formel aus `emu3_set_fattrs()` in [emu3bm](https://github.com/dagargo/emu3bm) | GPL-2.0-or-later | David García Goñi |
+| `eiii_writer.py`, `eiii_parser.py` | EIII/EIIIX/ESI-Bankstruktur ursprünglich reverse-engineered von [emu3bm](https://github.com/dagargo/emu3bm), unabhängig erneut verifiziert und korrigiert (leere Keymap-/Sample-Table-Slots, ESI-Sample-Index-Flag-Bits, EIII/EIIIX-fester Tiefpassfilter) von [ConvertWithMoss](https://github.com/git-moss/ConvertWithMoss) gegen 22 kommerzielle CD-ROMs — siehe `docs/EIII_FORMAT.md`. Kein Quellcode von beiden übernommen; unabhängig gegen das eigene Datenmodell dieses Projekts neu implementiert. Lese-Seite zusätzlich nur-lesend gegen 1118 echte EIII/EIIIX/ESI-Bänke validiert (siehe `docs/RESOLUTION_NOTES.md` §EIII). | GPL-2.0-or-later / LGPL-3.0 | David García Goñi / Jürgen Moßgraber |
 
 ---
 
