@@ -47,7 +47,7 @@ listen-control bank with the exact WALKER C1 raw bytes patched onto a plain
 held sine tone (bypassing our own parser entirely) genuinely fades to
 silence on a real E4XT, matching the new interpretation. Closed.
 
-## E4B amp-envelope sustain LEVEL byte is exponential/dB-law, not linear — WRITER FIXED, parser scope still open (2026-07-28)
+## E4B amp-envelope sustain LEVEL byte is exponential/dB-law, not linear — WRITER FIXED + HW-CONFIRMED, parser scope still open (2026-07-28)
 
 **Context:** found while hardware-confirming the §E4BREAD2 envelope fix. A
 calibration preset with `sustain=0.5` (linearly encoded as PZT level byte
@@ -70,7 +70,7 @@ amplitude)** — confirms the bug's magnitude exactly (matches the "needed
 to crank the volume" symptom). Full data table, fit, and the inverted fix
 formula in `docs/RESOLUTION_NOTES.md` §E4BLEVEL.
 
-**Status: writer fixed 2026-07-28, not yet hardware-confirmed.**
+**Status: writer fixed AND hardware-confirmed 2026-07-28.**
 `models/common.py` gained `env_sustain_to_byte()` (inverts the measured
 curve; both endpoints 0.0/1.0 special-cased to exact byte 0/127, avoiding
 a ~0.3 dB artifact from curve-fit noise at the edges) and
@@ -92,10 +92,15 @@ sustain field only:**
   `--info`). Fixing the parser too would change interpretation of every
   third-party E4B ever converted, not just new output — needs its own
   explicit decision, not a default "fix both sides" assumption.
-- **Not yet hardware-confirmed**: no bank built with the corrected writer
-  has been played back on the E4XT yet to verify a "linear 50%" input
-  really does sound like half volume now. Next step before closing this
-  item.
+
+**Hardware-confirmed** via `tests/re_banks/gen_hw_confirm_batch.py`
+(`HWCONFIRM.E4B`, keys 48-52 = sustain 0/25/50/75/100%, normal writer path)
+recorded on the real E4XT and narrowband-measured against the 100% key's
+own plateau: **0%→0%, 25%→22.7%, 50%→45.6%, 75%→67.3%, 100%→100%** — an
+approximately linear response, night-and-day from the pre-fix behavior
+(a "linear 50%" target used to measure at 0.47% actual amplitude). Small
+residual deviations are consistent with the calibration curve's own ~2 dB
+fit residual, not a broken mechanism. Closed.
 
 **Aside — the live-SysEx calibration attempt that was abandoned first:**
 three rounds of live parameter-edit automation via the sibling
@@ -200,7 +205,7 @@ ZuluSCSI/Gotek), scheduled for the day after this entry was written.
 
 ---
 
-## E4B `loop_end` off-by-one fix needs hardware re-confirmation (OPEN, 2026-07-26)
+## E4B `loop_end` off-by-one fix — RESOLVED + HW-CONFIRMED (2026-07-28)
 
 **Context:** cross-referencing ConvertWithMoss's independent E4B reader (PR #220
 commit `2ccefea`) found `loop_end_l` stores the frame *before* the true
@@ -211,15 +216,15 @@ inverses, so mpc2emu's own write→parse round-trip is unaffected) — see
 already done (synthetic round-trip + on-disk byte check + existing test
 suite, all passing).
 
-**Status:** code fix applied, verified in software only. **Not yet
-hardware-confirmed** — the change shifts every future looped E4B export's
-on-disk loop point by exactly 1 frame (≈23 µs at 44.1 kHz), which is below
-what the prior `--auto-loop` by-ear hardware confirmation could have caught
-(that confirmation validated the crossfade construction, which this change
-doesn't touch — only the on-disk encoding of the same frame index moved).
-**Blocked on:** a hardware A/B on the E4XT — e.g. re-run a loop-heavy bank
-(the `--auto-loop` test set, or `AMPENV_SETME`/`PINGPONG`-style RE banks)
-through this path before/after the fix and confirm no regression.
+**Status:** code fix applied, verified in software, and **hardware-confirmed
+2026-07-28** via `tests/re_banks/gen_hw_confirm_batch.py` — a 100 Hz sine
+looped over exactly 20 whole periods (44.1 kHz → 441 samples/cycle, an
+integer, so any loop-point error would show as a phase discontinuity at
+the seam), held for 9s (~45 loop repeats) on the real E4XT and recorded.
+Direct waveform check at every loop-boundary crossing found the
+sample-to-sample delta there (0.0011-0.0018) *smaller* than the typical
+mid-cycle variation elsewhere in the same recording (0.0083) — i.e. no
+discontinuity, a clean seamless loop. Closed.
 
 ## ConvertWithMoss's E-mu format PRs (2026-07-26, #230/#231 now merged 2026-07-28)
 

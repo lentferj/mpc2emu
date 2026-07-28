@@ -2912,13 +2912,15 @@ Verified: (a) mpc2emu's own write→parse round-trip is still an exact identity
 as expected; (c) `test_pipeline.py`'s existing PINGPONG round-trip and
 `tests/test_krz_writer.py` (9 tests) still pass.
 
-**Not yet independently re-confirmed on mpc2emu's own hardware rig** — the
-shift is 1 frame (≈23 µs at 44.1 kHz), below what Jan's by-ear `--auto-loop`
-hardware confirmation could have caught either way (that confirmation
-validated the crossfade *construction*, which is untouched by this change —
-only the on-disk encoding of the already-correct frame index moved). If a
-future HW A/B is ever warranted, compare a loop-heavy bank read-modify-written
-through this path before/after the fix.
+**Hardware-confirmed 2026-07-28** via `tests/re_banks/gen_hw_confirm_batch.py`
+— a 100 Hz sine looped over exactly 20 whole periods (44.1 kHz → 441
+samples/cycle, an exact integer, so any 1-frame loop-point error would
+introduce a phase discontinuity right at the seam), held for 9s (~45 loop
+repeats) on the real E4XT and recorded. Checked the actual waveform at
+every loop-boundary crossing directly (not just by ear): the
+sample-to-sample delta there (0.0011–0.0018) was *smaller* than the
+typical mid-cycle delta elsewhere in the same recording (0.0083) — no
+discontinuity, a clean seamless loop with the fix applied.
 
 ## §E4BREAD2 — Two more E4B reading gaps found via ConvertWithMoss PR #242 (FIXED 2026-07-28)
 
@@ -3031,7 +3033,7 @@ remain mono-only by design (each E3S1 chunk is still read as one independent
 mono sample); this fix only corrects which loop-point *field* is trusted for
 a mono-per-object sample, it doesn't add channel-pairing/joining.
 
-## §E4BLEVEL — Amp-envelope sustain LEVEL byte may not be linear amplitude on real hardware (OPEN, found 2026-07-28)
+## §E4BLEVEL — Amp-envelope sustain LEVEL byte is exponential/dB-law on real hardware — WRITER FIXED + HW-CONFIRMED (2026-07-28)
 
 **Context:** while building the §E4BREAD2 listen-control bank above, a
 second calibration reference preset ("SIMPLE REF") was included: an
@@ -3160,6 +3162,30 @@ third-party E4B files' *existing* sustain bytes) should also switch to this
 curve — that would change how mpc2emu interprets every third-party preset's
 sustain level, a much bigger blast radius than fixing our own writer.
 Needs a decision before implementing, not just a formula.
+
+**HARDWARE-CONFIRMED 2026-07-28.** `models/common.py:env_sustain_to_byte()`
+implements the inverted-fit formula above (both endpoints special-cased to
+exact byte 0/127); `writers/e4b_writer.py`'s amp-envelope sustain encoding
+now calls it. Built `tests/re_banks/gen_hw_confirm_batch.py` ->
+`HWCONFIRM.E4B`, 5 keys (48-52) at sustain 0/25/50/75/100% through the
+*normal* (now-fixed) writer path, played and recorded on the real E4XT,
+narrowband-measured against the 100% key's own plateau:
+
+| target% | measured% |
+|--------:|----------:|
+|     0.0 |      0.0  |
+|    25.0 |     22.7  |
+|    50.0 |     45.6  |
+|    75.0 |     67.3  |
+|   100.0 |    100.0  |
+
+Approximately linear, night-and-day from the pre-fix measurement (a
+"linear 50%" target used to measure at 0.47% actual amplitude — see the
+measurement above). Small residual deviations (25→22.7, 50→45.6, 75→67.3,
+all slightly under target) are consistent with the calibration curve's own
+~2 dB fit residual, not evidence the fix is broken. Writer-side fix closed;
+the parser-scope and filter-envelope-scope questions above remain open by
+deliberate choice, not oversight.
 
 ---
 
