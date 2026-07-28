@@ -56,9 +56,10 @@ mpc2emu ist ein Konverter für Sampler-Instrumente. Er **liest** eine breite
 Palette von Sampler- und Bibliotheksformaten — Akai MPC Keygroups (`.xpm`) und
 binäre Drum-Programme (`.pgm` — MPC 500/1000/2500, MPC 2000/2000XL und MPC 60),
 SFZ v1/v2, SoundFont 2, GigaSampler / GigaStudio (unkomprimiert), Logic EXS24
-(klassisch und v1.1), TAL-Sampler, EMU-E4B-Bänke und sogar einen einfachen
-Ordner mit grundton-benannten WAVs — und **schreibt** EMU E4B (Emulator 4 /
-E4XT / EOS 4.x), Kurzweil KRZ (K2000 / K2500 / K2600) und TAL-Sampler-Presets.
+(klassisch und v1.1), TAL-Sampler, EMU-E4B-Bänke, Kurzweil-KRZ-Bänke und sogar
+einen einfachen Ordner mit grundton-benannten WAVs — und **schreibt** EMU E4B
+(Emulator 4 / E4XT / EOS 4.x), Kurzweil KRZ (K2000 / K2500 / K2600) und
+TAL-Sampler-Presets.
 
 **Er überträgt die musikalischen Parameter, nicht nur die rohen Samples.**
 Filtertyp / Cutoff / Resonanz, die Amplituden- und Filterhüllkurven, der LFO und
@@ -134,6 +135,7 @@ E4B-HDA-Dateisystem-Pfad nötig).
 | Format | Endung | Beschreibung |
 |---|---|---|
 | EMU E4B | `.e4b` / `.E4B` | EMU Emulator 4 / E4XT Bank — Import zum Resampling / Re-Export |
+| Kurzweil KRZ | `.krz` / `.KRZ` | Kurzweil K2000/K2500/K2600 Bank — Import zum Resampling / Re-Export; K2000-ROM-referenzierte Samples werden übersprungen (keine PCM-Daten in der Datei) |
 | Akai MPC Keygroup | `.xpm` | MPC 2.x / MPC X / Live / One (XML) |
 | Akai MPC Drum-Programm | `.pgm` | MPC 500/1000/2500, **MPC 2000/2000XL** (`.WAV`) und MPC 60 (12-Bit `.SND`) |
 | Akai MPC60 SET / Floppy | `.set` / `.img` | MPC-60-RAM-Set; `.img` = FAT12-Floppy (SET automatisch extrahiert) |
@@ -230,7 +232,7 @@ python convert.py <eingabe> [optionen]
 
 Eingabe:
   input               Datei oder Verzeichnis
-                      (.e4b .xpm .pgm .set .img .talsmpl .sfz .sf2 .exs .gig)
+                      (.e4b .krz .xpm .pgm .set .img .talsmpl .sfz .sf2 .exs .gig)
 
 Info-Modus:
   --info              Datei(en) analysieren ohne zu konvertieren
@@ -1081,7 +1083,8 @@ mpc2emu/
 │   ├── sf2_parser.py           # SoundFont 2
 │   ├── exs24_parser.py         # Logic EXS24 (LE klassisch + v1.1; Stereo-Deduplizierung)
 │   ├── gig_parser.py           # GigaSampler / GigaStudio
-│   └── e4b_parser.py           # EMU-E4B-Import (Umkehrung von e4b_writer)
+│   ├── e4b_parser.py           # EMU-E4B-Import (Umkehrung von e4b_writer)
+│   └── krz_parser.py           # Kurzweil-KRZ-Import (Umkehrung von krz_writer)
 ├── writers/
 │   ├── e4b_writer.py           # EMU E4B (FORM-Größe + EMSt; Filter, Loops, Zonen)
 │   ├── krz_writer.py           # Kurzweil KRZ
