@@ -1,6 +1,6 @@
 # mpc2emu — Open Items
 
-## E4B amp-envelope 2-stage combination fix needs hardware re-confirmation (OPEN, 2026-07-28)
+## E4B amp-envelope 2-stage combination fix — RESOLVED + HW-CONFIRMED (2026-07-28)
 
 **Context:** cross-referencing ConvertWithMoss PR #242 (independent E4B
 reader) found `parsers/e4b_parser.py` only read stage 1 of each PZT envelope
@@ -13,15 +13,30 @@ decode — see `docs/RESOLUTION_NOTES.md` §E4BREAD2 for the full
 corpus-validation writeup, root-cause math, and regression tests
 (`tests/test_e4b_parser.py`).
 
-**Status:** code fix applied and corpus-validated (0 crashes across 141
-local files re-parsed before/after). **Not yet hardware-confirmed** — this
-changes AUDIBLE decay/sustain/release timing for any third-party E4B
-content with a genuine two-stage envelope (unlike the 1-frame loop_end_l
-shift above, this is a real, potentially noticeable timing change).
-**Blocked on:** converting a real bank containing a two-stage envelope
-(e.g. the Hollywood SFX bank found above) through to E4B/KRZ/EIII and
-confirming on the E4XT that the decay/release now sound like the intended
-long fade rather than a held sustain.
+**Status:** code fix applied, corpus-validated (0 crashes across 141 local
+files re-parsed before/after), and **hardware-confirmed 2026-07-28** — a
+listen-control bank with the exact WALKER C1 raw bytes patched onto a plain
+held sine tone (bypassing our own parser entirely) genuinely fades to
+silence on a real E4XT, matching the new interpretation. Closed.
+
+## E4B amp-envelope sustain LEVEL byte may not be linear amplitude on real hardware (OPEN, found 2026-07-28)
+
+**Context:** found while hardware-confirming the item above. A calibration
+preset with `sustain=0.5` (linearly encoded as PZT level byte 64 by
+`models/common.py:env_level_to_byte`) was audible on the E4XT but far
+quieter than "half volume" — needed the hardware volume knob raised from
+~45% to 100% to hear the sustain clearly, more attenuation than a linear
+0.5 amplitude ratio (~−6 dB) should cause. Likely the EOS envelope level
+byte maps through a non-linear (dB/exponential-VCA-law) curve rather than
+the straight-line percentage our writer assumes. Full writeup and
+hypothesis in `docs/RESOLUTION_NOTES.md` §E4BLEVEL.
+
+**Status:** identified, not yet root-caused or fixed. **Blocked on:** a
+calibration sweep bank (several distinct sustain levels, e.g. 10/25/50/
+75/90%) measured on real E4XT output — the same method used to calibrate
+the envelope RATE curve (`AMP_DECAY_CAL.E4B` -> `ENV_RATE_A`/`ENV_RATE_K`).
+Affects every E4B preset written with a partial (non-0%/100%) sustain
+level; scope and severity unknown until the curve is measured.
 
 ## Follow-up: EIII/E3B import for VinSamLib (OPEN, 2026-07-28)
 

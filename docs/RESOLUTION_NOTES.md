@@ -2980,6 +2980,18 @@ case matching CWM's model), `test_stage2_zero_byte_contributes_true_zero`,
 `test_real_world_hollywood_sfx_repro` (exact byte repro) — all 4 confirmed to
 fail against the pre-fix code and pass with it.
 
+**HARDWARE-CONFIRMED 2026-07-28.** Built a listen-control bank
+(`tests/re_banks/gen_e4bread2_listen_test.py`) that patches the *exact* raw
+WALKER C1 PZT bytes (Attack1 0/127, Attack2 0/127, Decay1 0/126, Decay2
+118/0, Release1 60/0, Release2 0/0) onto a plain 40s held sine tone —
+bypassing mpc2emu's own parser entirely, so this tests the E4XT's actual
+hardware behavior with zero dependency on whether our fix is right.
+Loaded via a ZuluSCSI CD image (`writers/iso_builder.build_iso`) and played
+on a real E4XT: **the tone genuinely fades to silence** over the held note
+(matching the NEW decay≈29.5s/sustain=0.0 reading), not "holds near-full
+forever" (the old, buggy reading). Fix confirmed correct on real hardware —
+closing the open TODO item.
+
 ### 2. Sample loop fields: right-channel-only samples read the wrong (stale) field
 
 **Symptom:** the E4B sample struct is the Emulator III's, which stores every
@@ -3018,6 +3030,60 @@ pre-fix code and pass with it.
 remain mono-only by design (each E3S1 chunk is still read as one independent
 mono sample); this fix only corrects which loop-point *field* is trusted for
 a mono-per-object sample, it doesn't add channel-pairing/joining.
+
+## §E4BLEVEL — Amp-envelope sustain LEVEL byte may not be linear amplitude on real hardware (OPEN, found 2026-07-28)
+
+**Context:** while building the §E4BREAD2 listen-control bank above, a
+second calibration reference preset ("SIMPLE REF") was included: an
+ordinary envelope through the normal write path, `Envelope(attack=0.5,
+decay=2.0, sustain=0.5, release=1.0)`. `models/common.py:env_level_to_byte`
+encodes the 0.5 sustain fraction **linearly**: `pct=50 -> round(50*127/100)
+= byte 64`, and the parser's inverse (`env_byte_to_level`) reads byte 64
+back as `0.504` — self-consistent in software, confirmed by round-tripping
+the written file through `parse_e4b` before the hardware test.
+
+**Symptom (hardware-observed):** on a real E4XT, this preset's sustained
+portion (after the 0.5s attack, in the middle of the 2s decay-then-hold) was
+audible but far quieter than "half volume" — the listener had to raise the
+E4XT's own output volume knob from ~45% to 100% (more than doubling the
+gain) to hear the sustain clearly. A linear amplitude ratio of 0.5 is only
+about −6 dB, which should not require anywhere near a 2x+ gain boost to
+become clearly audible.
+
+**Hypothesis:** the EOS envelope LEVEL byte (0-127, used for every
+non-terminal stage target — Decay1's level *as read by the old, pre-E4BREAD2
+parser*, and both Decay1/Decay2 sustain targets under the new one) likely
+does not map linearly onto output amplitude the way `env_level_to_byte`
+assumes. Plausible explanations, most likely first:
+  - The byte feeds an exponential/dB-law VCA stage internally (common in
+    envelope-generator hardware — a linear control value produces an
+    exponential *voltage* response), so "50% of the level byte range" is a
+    much larger attenuation in dB than 50% of linear amplitude would be.
+  - The level scale is itself already a dB or other non-linear percentage
+    in the EOS UI, and `env_level_to_byte`'s straight `pct * 127/100` is
+    the wrong codec for anything except the two endpoints (0% and 100%,
+    which are unaffected either way — this is why every other envelope
+    stage in the writer that targets "full" or "silence" is unaffected;
+    only genuine partial-sustain presets would sound wrong).
+
+**Scope:** every E4B preset mpc2emu writes with a sustain level strictly
+between 0% and 100% is potentially affected — this is a writer-side
+calibration gap, independent of the §E4BREAD2 parser fix above (which reads
+existing third-party bytes; this is about what byte value we *write* for a
+given intended sustain fraction). Filter-envelope sustain uses the same
+`_fenv_level` codec and would carry the same risk if `filter_env_amount` is
+ever turned up (currently written inert/amount-0 by default, so not
+audible today, but the byte would still be wrong if that changes).
+
+**Needed before a fix can be written:** a calibration sweep, the same
+method used for the rate curve (`AMP_DECAY_CAL.E4B`, 6 measured points ->
+`ENV_RATE_A`/`ENV_RATE_K` in `models/common.py`). Build a bank with several
+presets at distinct sustain levels (e.g. 10/25/50/75/90%), hold each on the
+E4XT, and measure actual output level (RMS via audio interface, or at least
+consistent volume-knob-matching by ear against a linear-dB reference tone)
+to fit the real byte->amplitude curve. Until that data exists, do not guess
+at a replacement formula — `env_level_to_byte`/`env_byte_to_level` stay as
+they are (self-consistent, just possibly hardware-miscalibrated).
 
 ---
 
