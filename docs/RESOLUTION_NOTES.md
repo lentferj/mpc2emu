@@ -3075,15 +3075,71 @@ given intended sustain fraction). Filter-envelope sustain uses the same
 ever turned up (currently written inert/amount-0 by default, so not
 audible today, but the byte would still be wrong if that changes).
 
-**Needed before a fix can be written:** a calibration sweep, the same
-method used for the rate curve (`AMP_DECAY_CAL.E4B`, 6 measured points ->
-`ENV_RATE_A`/`ENV_RATE_K` in `models/common.py`). Build a bank with several
-presets at distinct sustain levels (e.g. 10/25/50/75/90%), hold each on the
-E4XT, and measure actual output level (RMS via audio interface, or at least
-consistent volume-knob-matching by ear against a linear-dB reference tone)
-to fit the real byte->amplitude curve. Until that data exists, do not guess
-at a replacement formula — `env_level_to_byte`/`env_byte_to_level` stay as
-they are (self-consistent, just possibly hardware-miscalibrated).
+**MEASURED 2026-07-28.** Live SysEx parameter-edit automation was tried
+first (`tests/re_banks/run_amp_level_cal_sweep.py`, via the sibling
+`../eosremote` project) and abandoned after three rounds of incoherent,
+non-monotonic results plus one device crash — see the "live automation"
+TODO entry and `../eosremote/docs/RESOLUTION_NOTES.md` §14/§15. Switched to
+a **file-based bank** instead: `tests/re_banks/gen_amp_level_cal.py` builds
+`AMPLVLCAL.E4B`, one preset with 9 voices, each covering exactly one key
+(MIDI 48-56) with `Envelope(attack=0.01, decay=0.15, sustain=i/8, release=
+0.3)` for `i=0..8` — i.e. the *normal* write path (same mechanism that
+already HW-confirmed the §E4BREAD2 fix cleanly, no live parameter edits at
+all). Loaded via a ZuluSCSI CD image exactly like the §E4BREAD2 listen
+bank; played back with plain Note On/Off (`tests/re_banks/
+play_amp_level_cal_notes.py`, MIDI only, no SysEx) while recording
+`system:capture_15/16` (the E4XT's audio-in feed) via `ffmpeg -f jack`.
+
+Measured plateau level per note, in dB relative to that note's own attack
+peak (`analyze_envelope_recording.py --mode level --fixed-hold 2.3` — the
+`--fixed-hold` option was added because the quiet notes fall below the
+note-segmenter's gate before the actual note-off, so the plateau window
+must be taken from a known fixed duration after the peak, not from the
+gate-detected region end):
+
+| target% | measured dB | measured% (linear) |
+|--------:|------------:|--------------------:|
+|     0.0 |      -55.4  |  0.2  (noise floor) |
+|    12.5 |      -55.4  |  0.2  (noise floor) |
+|    25.0 |      -55.4  |  0.2  (noise floor) |
+|    37.5 |      -50.9  |  0.3 |
+|    50.0 |      -42.8  |  0.7 |
+|    62.5 |      -32.8  |  2.3 |
+|    75.0 |      -21.0  |  8.9 |
+|    87.5 |       -8.1  | 39.6 |
+|   100.0 |       -0.05 | 99.5 |
+
+The 37.5-100% points fit a straight line in dB (constant dB per percentage
+point — i.e. the byte really is exponential/dB-law in amplitude, confirming
+the hypothesis above) extremely well:
+
+**`measured_dB ≈ 0.846 × target_pct − 84.13`** (least-squares fit,
+`R² = 0.995`, residuals within ~2 dB across all 6 points). The 0/12.5/25%
+points are all pinned at the same floor and likely represent "at or below
+the recording's noise floor" rather than 3 independently resolved data
+points — consistent with the same exponential curve extrapolated further
+down (predicted -84 dB at 0%, i.e. inaudibly quiet, not literally silent).
+
+**Implied fix**, not yet applied — inverting the fit to solve for the byte
+value (0-100 sustain%) that a **linear** intended amplitude fraction
+`frac` (0.0-1.0) should actually be written as:
+`sustain_pct = (20*log10(frac) + 84.13) / 0.846`. Sanity check: `frac=1.0`
+→ 99.4% (≈100%, correct); **`frac=0.5` → 92.4%** (not 50% — confirms the
+"half volume" bug's magnitude: to sound like true half-amplitude, the
+written byte needs to be ~92%, not 50%). This would replace
+`env_level_to_byte`/`env_byte_to_level` in `models/common.py` for the
+**amplitude-envelope sustain field only** — NOT the rate fields (already
+separately calibrated and confirmed correct), and NOT necessarily the
+filter-envelope sustain (same codec today, but filter env is written
+inert/amount-0 by default — needs its own decision, see Scope above).
+
+**Not yet decided: whether/how to apply this to the parser too.** The
+writer-fix question (what byte to WRITE for an intended fraction) is
+separate from whether the PARSER's `env_byte_to_level` (used to interpret
+third-party E4B files' *existing* sustain bytes) should also switch to this
+curve — that would change how mpc2emu interprets every third-party preset's
+sustain level, a much bigger blast radius than fixing our own writer.
+Needs a decision before implementing, not just a formula.
 
 ---
 

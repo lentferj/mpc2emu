@@ -19,45 +19,42 @@ listen-control bank with the exact WALKER C1 raw bytes patched onto a plain
 held sine tone (bypassing our own parser entirely) genuinely fades to
 silence on a real E4XT, matching the new interpretation. Closed.
 
-## E4B amp-envelope sustain LEVEL byte may not be linear amplitude on real hardware (OPEN, found 2026-07-28)
+## E4B amp-envelope sustain LEVEL byte is exponential/dB-law, not linear — MEASURED, fix not yet applied (2026-07-28)
 
-**Context:** found while hardware-confirming the item above. A calibration
-preset with `sustain=0.5` (linearly encoded as PZT level byte 64 by
-`models/common.py:env_level_to_byte`) was audible on the E4XT but far
-quieter than "half volume" — needed the hardware volume knob raised from
-~45% to 100% to hear the sustain clearly, more attenuation than a linear
-0.5 amplitude ratio (~−6 dB) should cause. Likely the EOS envelope level
-byte maps through a non-linear (dB/exponential-VCA-law) curve rather than
-the straight-line percentage our writer assumes. Full writeup and
-hypothesis in `docs/RESOLUTION_NOTES.md` §E4BLEVEL.
+**Context:** found while hardware-confirming the §E4BREAD2 envelope fix. A
+calibration preset with `sustain=0.5` (linearly encoded as PZT level byte
+64 by `models/common.py:env_level_to_byte`) was audible on the E4XT but
+far quieter than "half volume" — needed the hardware volume knob raised
+from ~45% to 100% to hear the sustain clearly.
 
-**Status:** identified, not yet root-caused or fixed. **Blocked on:** a
-calibration sweep bank (several distinct sustain levels, e.g. 10/25/50/
-75/90%) measured on real E4XT output — the same method used to calibrate
-the envelope RATE curve (`AMP_DECAY_CAL.E4B` -> `ENV_RATE_A`/`ENV_RATE_K`).
-Affects every E4B preset written with a partial (non-0%/100%) sustain
-level; scope and severity unknown until the curve is measured.
+**Root-caused and measured 2026-07-28** via a file-based 9-key sweep bank
+(`tests/re_banks/gen_amp_level_cal.py` -> `AMPLVLCAL.E4B`, normal write
+path, no live parameter edits) recorded on the real E4XT. Fits a clean
+exponential/dB-law curve: **`measured_dB ≈ 0.846 × target_pct − 84.13`**
+(R²=0.995). A "linear 50%" target byte measures at only **-42.8 dB
+(0.7% actual amplitude)** — confirms the bug's magnitude exactly (matches
+the "needed to crank the volume" symptom). Full data table, fit, and the
+inverted fix formula in `docs/RESOLUTION_NOTES.md` §E4BLEVEL.
 
-**First calibration attempt (2026-07-28) was inconclusive and does not
-count as data.** Tried a live SysEx-driven sweep via the sibling
-`../eosremote` project (edit Dcy1/Dcy2 Level directly on a resident
-preset, no bank rebuild needed) instead of a file-based bank. Two problems,
-both logged in `../eosremote/docs/RESOLUTION_NOTES.md` §15 /
-`../eosremote/TODO.md`: (1) the script edited a preset via `PRESET_SELECT`
-without ever sending a real Program Change, so — per eosremote's own §14 —
-none of the edits were ever actually audible; every note in the "sweep"
-silently kept playing the already-active preset instead. (2) the E4XT
-crashed (front-panel "Gen Trap error", recovered by power-cycling) during
-a follow-up diagnostic; root cause not yet identified, but implicates
-sending unthrottled plain MIDI channel messages (note on/off) alongside a
-long burst of SysEx. **Next attempt should either fix the live-automation
-script to call `send_program_change` before every note (per eosremote
-§14/§15), or fall back to a file-based multi-key sweep bank (one preset,
-9 voices each covering a single key with a different sustain%, same
-proven mechanism as the §E4BREAD2/§E4BLEVEL listen-test banks) — the
-latter avoids the crash-risk live-automation path entirely.** Either way,
-proceed cautiously: this hardware has now demonstrably crashed once under
-scripted SysEx traffic.
+**Status:** root cause confirmed, curve fit measured. **Not yet applied.**
+Two open decisions before writing code: (1) whether to fix just the
+writer (`env_level_to_byte`, so mpc2emu's own output sounds correct) or
+also the parser (`env_byte_to_level`, which would change how mpc2emu
+interprets every third-party E4B's existing sustain byte — much bigger
+blast radius); (2) whether the filter-envelope sustain (same codec today)
+needs the same fix, given `filter_env_amount` is written inert/0 by
+default so it's not currently audible.
+
+**Aside — the live-SysEx calibration attempt that was abandoned first:**
+three rounds of live parameter-edit automation via the sibling
+`../eosremote` project produced incoherent, non-monotonic results (and one
+device crash, "Gen Trap error", recovered by power-cycling) before this
+file-based approach worked cleanly on the first try. See
+`../eosremote/docs/RESOLUTION_NOTES.md` §14/§15 and `../eosremote/TODO.md`
+for what went wrong there (`PRESET_SELECT` isn't "select for playback";
+the crash's exact trigger is still unconfirmed) — useful context for
+anyone tempted to script eosremote against real hardware again, but not
+relevant to the (now-resolved) calibration data itself.
 
 ## Follow-up: EIII/E3B import for VinSamLib (OPEN, 2026-07-28)
 
