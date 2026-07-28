@@ -407,6 +407,66 @@ respectively (matches the requested percentage exactly, mirroring CR-19's
 verification). The pre-existing multi-zone-per-voice (XPM) case is
 unaffected — same code path, same behavior, regression-tested directly.
 
+**CR-21 `thin_velocity_layers()` picks a tiny outlier band as the sole
+survivor at aggressive reduction — DONE 2026-07-28.** Found via real E4XT
+hardware confirmation of VinSamLib's own test matrix (row 11,
+`reduce_velocity_layers_pct=75.0` on the same `8VnEsHdMrcFat/SL` preset
+CR-19/20 already used): 78 voices collapsed to **1 surviving voice, covering
+only MIDI keys 63-66** — everywhere else on the keyboard silent on real
+hardware, confirmed not sample corruption (the one surviving sample played
+fine, intact PCM).
+
+**Root cause:** the real preset's 5 velocity bands are wildly uneven in
+size — `1 / 36 / 1 / 20 / 20` voices respectively (by `lo_vel` 0/1/9/50/86).
+`_thin_and_redistribute`'s `keep_count == 1` special case picked
+`ordered[n // 2]` — the **middle band by sorted-index position**, with zero
+regard for how many voices (how much keyboard coverage) each band actually
+represents. Sorted by `lo_vel`, the middle index (2 of 5) lands exactly on
+the `vel[9-127]` band — a single stray voice covering 4 keys, almost
+certainly a one-off fix-up sample in the original commercial patch, not a
+real velocity layer. **Row 10 (`keep_pct=60`, keep 3 of 5 bands) wasn't
+visibly broken but was equally miscalculated** — the evenly-spaced index
+selection at `keep_count=3` picks indices `{0, 2, 4}`, which happens to
+include *both* tiny 1-voice bands plus one legitimate 20-voice band
+(1+1+20=22, matching the reported "78→22") — it only looked reasonable by
+coincidence.
+
+**Fix:** `_thin_and_redistribute` gained an optional `get_weight` parameter
+(default `None` = the exact original uniform-index behavior, byte-for-byte,
+so `thin_key_zones`/`_thin_velocity_bands_in_voice`/CR-19/CR-20's existing
+call sites are untouched). When a weight function is given,
+`keep_count == 1` picks the *heaviest* item (ties broken by proximity to the
+middle index, preserving the old behavior when bands are evenly sized), and
+`keep_count > 1` selects by evenly-spaced **cumulative weight** position
+instead of raw index (falling back to greedily filling any collision from
+one item's weight dominating the total). `thin_velocity_layers` now passes
+`get_weight=len` for the multi-voice/band case, weighting each band by its
+voice count.
+
+**Verified** against the real repro file: 75% reduction now keeps the
+36-voice band (80 distinct keys, range 48-127) instead of the 1-voice/4-key
+outlier; 40% reduction now keeps 41 voices spanning the full 0-127 range
+(up from 22, and with genuinely complete coverage this time, not by luck).
+New regression tests `test_thin_velocity_layers_uneven_band_sizes_dont_pick_
+outlier` (synthetic, exact 1/36/1/20/20 shape) and
+`test_thin_velocity_layers_real_e4b_75pct_keyboard_coverage` (the real file,
+the exact reported percentage) both confirmed to fail against the pre-fix
+code and pass with it; the full existing suite (`tests/test_zone_reducer.py`)
+still passes unchanged, confirming the default/uniform-weight path is
+unaffected.
+
+**Not yet re-confirmed on real E4XT hardware with the fix applied** — the
+original bug WAS hardware-confirmed (that's how it was found); the fix
+itself has only been verified against the real corpus file in software so
+far. Low regression risk (it only changes which of the *already-valid*
+bands survive, not how any individual band's zones/samples are built), but
+per project convention this should get one more hardware pass before being
+called fully closed. Also worth noting: the VinSamLib hardware-test images
+already staged on the SD card (this session, rows 08-12) were extracted
+from VinSamLib's own pre-built `.hda` files, built with the pre-fix
+mpc2emu — they still reflect the old buggy thinning and would need
+rebuilding downstream (in VinSamLib) to pick up this fix.
+
 **CR-7 / 7b / 7c sample-name collisions — DONE 2026-06-11.**
 - **CR-7** `bank_splitter.TargetBank.add_preset`: dedup now keys on
   `(name, len(data), hash(data))`. A genuine duplicate (same name+PCM) is shared;

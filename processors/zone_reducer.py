@@ -36,7 +36,7 @@ distance this introduces is spread evenly across both sides of each gap
 rather than dumped entirely onto one neighbor.
 """
 
-from typing import Callable, List, TypeVar
+from typing import Callable, List, Optional, TypeVar
 from models.common import Bank, Preset, VoiceLayer
 
 T = TypeVar('T')
@@ -50,6 +50,7 @@ def _thin_and_redistribute(
     set_range: Callable[[T, int, int], None],
     full_lo: int = 0,
     full_hi: int = 127,
+    get_weight: Optional[Callable[[T], float]] = None,
 ) -> List[T]:
     """
     Keep ~keep_pct% of `items`, evenly spaced across the lo..hi range
@@ -60,6 +61,23 @@ def _thin_and_redistribute(
     Each gap is split at the midpoint between the two surviving neighbors'
     *original* boundary values — not the already-stretched ones — so a chain
     of removals doesn't compound onto a single survivor.
+
+    `get_weight` (optional): when `items` are themselves GROUPS of unequal
+    size (e.g. `thin_velocity_layers`'s velocity bands, each holding a
+    different number of underlying voices), plain index-based "keep every
+    Nth" selection can pick a tiny outlier group purely because of its
+    sorted position — found 2026-07-28 on a real commercial preset where a
+    single stray 1-voice band (covering only 4 keys) got selected as the
+    sole survivor at 75% reduction, silencing the rest of the keyboard,
+    because it happened to sort into the middle position among 5 bands of
+    wildly different sizes (1/36/1/20/20 voices). When `get_weight` is
+    given, selection is done by evenly-spaced CUMULATIVE WEIGHT position
+    instead of raw index, so a group's size (not just its sort position)
+    determines whether it's representative enough to survive. Omitted
+    (the default), this is byte-for-byte the original uniform-index
+    behavior — existing callers (plain key-zone/single-voice velocity-band
+    thinning, where every item already represents one zone/voice) are
+    unaffected.
     """
     n = len(items)
     keep_count = max(1, min(n, round(n * keep_pct / 100.0)))
@@ -68,13 +86,46 @@ def _thin_and_redistribute(
 
     ordered = sorted(items, key=get_lo)
 
-    if keep_count == 1:
-        keep_idx = [n // 2]
+    if get_weight is None:
+        if keep_count == 1:
+            keep_idx = [n // 2]
+        else:
+            # Evenly spaced index selection (nearest-neighbor downsampling) —
+            # guarantees index 0 and n-1 are always kept.
+            keep_idx = sorted({round(i * (n - 1) / (keep_count - 1))
+                               for i in range(keep_count)})
     else:
-        # Evenly spaced index selection (nearest-neighbor downsampling) —
-        # guarantees index 0 and n-1 are always kept.
-        keep_idx = sorted({round(i * (n - 1) / (keep_count - 1))
-                           for i in range(keep_count)})
+        weights = [max(get_weight(it), 1e-9) for it in ordered]
+        total_weight = sum(weights)
+        if keep_count == 1:
+            # Prefer the heaviest item; among near-ties, prefer the one
+            # closest to the middle index (matches the uniform-weight
+            # n//2 behavior when every band is roughly the same size).
+            max_w = max(weights)
+            candidates = [i for i, w in enumerate(weights) if w >= max_w * 0.9]
+            keep_idx = [min(candidates, key=lambda i: abs(i - n // 2))]
+        else:
+            cum = [0.0]
+            for w in weights:
+                cum.append(cum[-1] + w)
+            keep_idx_set = {0, n - 1}
+            for k in range(1, keep_count - 1):
+                target = k * total_weight / (keep_count - 1)
+                i = 0
+                while i < n - 1 and cum[i + 1] <= target:
+                    i += 1
+                keep_idx_set.add(i)
+            # Collisions can leave fewer than keep_count distinct indices
+            # when one item's weight dominates the total -- greedily fill
+            # the remaining slots with the heaviest not-yet-kept items.
+            if len(keep_idx_set) < keep_count:
+                remaining = sorted((i for i in range(n) if i not in keep_idx_set),
+                                   key=lambda i: -weights[i])
+                for i in remaining:
+                    keep_idx_set.add(i)
+                    if len(keep_idx_set) == keep_count:
+                        break
+            keep_idx = sorted(keep_idx_set)
     kept = [ordered[i] for i in keep_idx]
 
     orig_lo = [get_lo(it) for it in kept]
@@ -284,6 +335,7 @@ def thin_velocity_layers(preset: Preset, keep_pct: float) -> int:
             get_lo=lambda band: min(voice_lo(v) for v in band),
             get_hi=lambda band: max(voice_hi(v) for v in band),
             set_range=set_band_range,
+            get_weight=len,  # weight by voice count -- see _thin_and_redistribute's docstring
         )
         preset.voices = [v for band in kept_bands for v in band]
         return before - len(preset.voices)

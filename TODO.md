@@ -1,5 +1,48 @@
 # mpc2emu — Open Items
 
+## zone_reducer: aggressive reduce_velocity_layers_pct collapses KEY coverage too — ROOT-CAUSED + FIXED (2026-07-28)
+
+Found via real E4XT hardware confirmation of VinSamLib's own HW test matrix
+(row 11, `reduce_velocity_layers_pct=75.0` on the Kirk Hunter Strings
+preset "8VnEsHdMrcFat/SL" -- the same preset the earlier `efe130c`
+zone-reducer fix used). At 40% reduction (row 10), voice count goes
+78 -> 22, spread reasonably across the keyboard. At 75% (row 11), voice
+count collapsed to just **1 surviving voice**, covering **only MIDI keys
+63-66** (a 4-semitone sliver) -- everywhere else on the keyboard had zero
+zones. Confirmed on real E4XT hardware: silence everywhere except that
+one narrow range, where the lone remaining sample (real, intact PCM,
+715664 bytes/44.1kHz/16-bit -- not corrupted) played fine.
+
+**Root cause (see `docs/RESOLUTION_NOTES.md` CR-21 for the full writeup):**
+this preset's 5 velocity bands are wildly uneven -- 1/36/1/20/20 voices.
+`_thin_and_redistribute`'s `keep_count==1` case picked the band at the
+*middle sorted-index position*, with no regard for how many voices/keys it
+actually covers -- which landed exactly on the 1-voice/4-key outlier band.
+Row 10's "looks fine" 78->22 result was equally miscalculated (evenly-spaced
+indices {0,2,4} happened to include both tiny outlier bands plus one real
+20-voice band) -- it just wasn't visibly broken by luck.
+
+**Fixed:** `_thin_and_redistribute` gained an optional per-item weight
+(default unweighted, so existing key-zone/single-voice callers are
+byte-for-byte unaffected); `thin_velocity_layers` now weights each band by
+its voice count when selecting survivors. Verified against the real repro
+file: 75% reduction now keeps the 36-voice band (80 keys, range 48-127)
+instead of the outlier; 40% now keeps 41 voices spanning the *full* 0-127
+range (up from 22, and genuinely complete this time). Two new regression
+tests added to `tests/test_zone_reducer.py`; full existing suite still
+passes.
+
+**Not yet hardware-re-confirmed with the fix applied** (the original bug
+was hardware-confirmed; the fix itself is only software-verified so far).
+Low regression risk -- it only changes *which* already-valid bands survive,
+not how any band's own zones/samples are built -- but should get one more
+real-E4XT pass before this is called fully closed. Also: the VinSamLib
+images already staged on the SD card this session (rows 08-12) were
+extracted from VinSamLib's own pre-built `.hda` files (built before this
+fix existed) -- they still reflect the old buggy thinning and would need
+rebuilding downstream in VinSamLib to pick up the corrected behavior.
+
+
 ## New E4B `vpar` fields found via live-SysEx parameter hunting (2026-07-28) — features to consider
 
 While chasing `VOLENV_DEPTH`'s byte offset for the sustain-level item below,
