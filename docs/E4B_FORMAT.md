@@ -231,7 +231,7 @@ multi-voice banks:
 | `37`    | Glide Rate               | `E4_VOICE_GLIDE_RATE` (id 63), `0–127` sec/oct — portamento, currently unmodeled by mpc2emu |
 | `38`    | Non-Transpose flag  | `0x01` = pitch fixed (does not follow key), `0x00` = key-tracking. Confirmed from `B.010-Voices_RevEng.E4B` |
 | `39`    | Solo mode                | `E4_VOICE_SOLO` (id 65), `0–8` — see `VOICE_SOLO_MODES` in eosremote |
-| `41:44` | Chorus Width (provisional) | `E4_VOICE_CHORUS_WIDTH` (id 59), `-128..0`. Found via the live-SysEx dump-offset formula + a value search, **not yet independently confirmed by a clean file diff** (unlike the rest of this table) — treat with lower confidence until re-verified |
+| `41`    | Chorus Width             | `E4_VOICE_CHORUS_WIDTH` (id 59), **signed byte**, `-128..0`. Confirmed by clean file diff: test value `-100` → byte `156` (two's-complement of a single signed byte) |
 | `42`    | Chorus Amount       | Voice/Tuning page; UI `0–100%` → `0–127` linear (`round(pct/100×127)`), `0` = off. Hardware-confirmed 2026-06-08 |
 | `44`    | Chorus X (initial ITD)   | `E4_VOICE_CHORUS_X` (id 60), `-32..32` ms |
 | `50`    | Latch Mode               | `E4_VOICE_LATCHMODE` (id 67), `0`=off/`1`=on |

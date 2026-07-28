@@ -3231,10 +3231,14 @@ RT_HIGH — this last one **aliases** the previously-documented "`0x7F`
 constant"; `[27]`=Assign Group/choke group; `[28:30]`=Voice Delay, a
 big-endian 16-bit word unlike the live protocol's own 7-bit MIDI pairs;
 `[33]`=Sample Start Offset; `[37]`=Glide Rate; `[39]`=Solo mode;
-`[41:44]`=Chorus Width, **provisional, not diff-confirmed**; `[44]`=Chorus
-X; `[50]`=Latch Mode; `[53]`=Glide Curve; `[57]`=Amp Envelope Depth (the
-original target — see §E4BLEVEL); `[61]`=VCF Q/resonance, **also aliases**
-`FKEY_XFORM`; `[62:70]`=Filter Gen Params 1-8).
+`[41]`=Chorus Width, a signed byte (`-100` → `156`, two's complement);
+`[44]`=Chorus X; `[50]`=Latch Mode; `[53]`=Glide Curve; `[57]`=Amp
+Envelope Depth (the original target — see §E4BLEVEL); `[61]`=VCF
+Q/resonance, **also aliases** `FKEY_XFORM`; `[62:70]`=Filter Gen Params
+1-8). **Every field in this list is now confirmed by a clean diff against
+an untouched baseline** — the last one (Chorus Width) was closed out by
+re-diffing a file already on disk from an earlier round, no further
+hardware needed.
 
 **Also found, documented in `docs/E4B_FORMAT.md` §4.2 instead of the `vpar`
 table:** a third envelope generator, the **Auxiliary Envelope**, at
