@@ -3521,3 +3521,109 @@ as `CD1-EIIITEST.iso`, replacing the mis-tagged one. **Reloaded on the E4XT
 and hardware-confirmed 2026-07-28** by Jan: the props fix resolved the
 misidentification and the bank now loads correctly as EIII content. This
 closes the EIII hardware-confirmation TODO item.
+
+## §CWM-LFOVOL — SFZ/SF2 volume LFO (tremolo) reading, read-side only (2026-07-28)
+
+**Context:** cross-referencing ConvertWithMoss PRs
+[#216](https://github.com/git-moss/ConvertWithMoss/pull/216)/[#233](https://github.com/git-moss/ConvertWithMoss/pull/233)/[#239](https://github.com/git-moss/ConvertWithMoss/pull/239)/[#240](https://github.com/git-moss/ConvertWithMoss/pull/240)
+(see `TODO.md` for the summary). Both `parsers/sfz_parser.py` and
+`parsers/sf2_parser.py` already read pitch-LFO (vibrato) and filter-LFO into
+`VoiceLayer.lfo1_*`/`lfo2_*`, but neither read a volume-LFO (tremolo).
+
+### Format shapes differ
+
+- **SFZ v1** treats `pitchlfo_*`, `fillfo_*`, `amplfo_*` as three fully
+  independent oscillators (v2 equivalents: `lfo0N_pitch`/`lfo0N_cutoff`/
+  `lfo0N_gain` opcodes on arbitrary-numbered LFO blocks). Three oscillators
+  don't fit mpc2emu's two hardware-matched LFO slots.
+- **SF2** (`Generator.java` in CWM, confirmed via `git show 5e868c6`) has
+  generator id `13 = MOD_LFO_TO_VOLUME` (unit: centibels, i.e. 0.1 dB) living
+  on the *same* "Mod LFO" oscillator as generator `5 = modLfoToPitch` and
+  `10 = modLfoToFilterFc` — SF2's own convention already collapses
+  pitch+filter+volume onto one oscillator, which maps naturally onto
+  `lfo1_*` with no fallback logic needed (unlike SFZ).
+
+### Model additions (`models/common.py`)
+
+```python
+LFO_VOLUME_FULL_DB = 24.0   # NOT hardware-calibrated -- see below
+
+def lfo_volume_depth_to_amount(db: float) -> float:
+    return max(0.0, min(1.0, abs(db) / LFO_VOLUME_FULL_DB))
+```
+
+Plus `lfo1_to_volume`/`lfo2_to_volume: float = 0.0` fields on `VoiceLayer`.
+
+`LFO_VOLUME_FULL_DB` follows the precedent of `LFO_PITCH_FULL_CENTS = 1593.0`
+(hardware-measured via MOD_DEPTH_CAL on the E4XT, 2026-06-12) but **has no
+equivalent measurement** — there's no tremolo-depth calibration bank on
+record. 24 dB is a plausible placeholder (a full-swing tremolo audibly
+silencing a sound), not a measured value. Flag this if it ever needs to be
+precise.
+
+### SFZ fallback logic (`parsers/sfz_parser.py`)
+
+```python
+a_depth = _f('amplfo_depth') or _f('lfo03_gain') or _f('lfo02_gain') or _f('lfo01_gain')
+a_freq  = _f('amplfo_freq')  or _f('lfo03_freq') or _f('lfo02_freq') or _f('lfo01_freq')
+if a_depth:
+    if not lfo2_claimed:
+        params['lfo2_rate']      = a_freq if a_freq else 5.0
+        params['lfo2_shape']     = _sfz_lfo_wave(merged.get('lfo02_wave'))
+        params['lfo2_to_volume'] = lfo_volume_depth_to_amount(a_depth)
+    elif not p_depth:   # LFO1 only free if no pitch-LFO already claimed it
+        params['lfo1_rate']      = a_freq if a_freq else 5.0
+        params['lfo1_shape']     = _sfz_lfo_wave(merged.get('lfo01_wave'))
+        params['lfo1_to_volume'] = lfo_volume_depth_to_amount(a_depth)
+```
+
+Claims LFO2 if the filter-LFO block hasn't already claimed it; else claims
+LFO1 if the pitch-LFO block hasn't; else the tremolo data is dropped
+(no third slot to put it in, and overwriting an existing pitch/filter LFO
+would be worse than losing the tremolo).
+
+### SF2 addition (`parsers/sf2_parser.py`)
+
+```python
+mod_volume_cb = ig_dict.get(13, {}).get('amt', 0)
+if mod_pitch or mod_cutoff or mod_volume_cb:
+    ...
+    if mod_volume_cb:
+        voice.lfo1_to_volume = lfo_volume_depth_to_amount(mod_volume_cb / 10.0)
+```
+
+Centibels -> dB is `/10.0`.
+
+### Verification
+
+New `tests/test_lfo_volume.py` (plain-python `check()`/`main()`, matching
+project convention — no pytest): depth<->amount conversion (0 dB -> 0.0,
+full-depth -> 1.0, sign-independence, clamping); SFZ claims-LFO2 (no filter
+LFO present); SFZ falls-back-to-LFO1 (filter LFO already on LFO2, no pitch
+LFO); SFZ drops-when-both-slots-taken (pitch on LFO1, filter on LFO2). All
+pass. SF2 path verified only by `python3 -c "from parsers.sf2_parser import
+parse_sf2"` (imports cleanly) plus structural review against the
+already-working pitch/filter reading pattern — no binary SF2 fixture was
+built, since no existing SF2 test file exists to extend.
+
+### Writer side: deliberately NOT wired (open, blocked)
+
+Neither `writers/e4b_writer.py` nor `writers/krz_writer.py` has a
+hardware-confirmed "LFO->Volume" mod-destination byte documented anywhere
+(`docs/E4B_FORMAT.md`, `docs/KRZ_FORMAT.md`) — `e4b_writer.py`'s
+`_extra_cords` list only routes LFO1 to Filter-Freq (`0x38`)/Filter-Q
+(`0x39`)/Pitch (`0x30`); `krz_writer.py` only wires `lfo1_to_pitch` via
+`CAL[21]`/`CAL[22]`. Checked ConvertWithMoss's own
+`Emulator4Constants.java` for a matching destination constant
+(`grep -n "VOLUME|0x36|AMP_"` — no hits): their own Emulator4/Kurzweil
+writers don't implement LFO->Volume output either, only for SFZ/SF2/DLS/
+DecentSampler targets, which don't need a byte-level hardware destination.
+Guessing a destination byte risks misrouting modulation onto some other,
+unintended parameter in a real E4B/KRZ file — worse than the read-only gap
+this closes. Blocked on: live-SysEx parameter-hunting (same method as
+§E4BPARAMHUNT) to find the real E4B cord-destination byte for Volume, and
+the equivalent K2000 `CAL[]` byte, before either writer can consume these
+new `lfo1_to_volume`/`lfo2_to_volume` fields.
+
+Also noted, bigger and out of scope here: `parsers/gig_parser.py` has no
+LFO support at all (pitch, filter, or volume).

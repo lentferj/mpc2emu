@@ -211,6 +211,14 @@ _MPC_LFO_RATE_B = 9.195
 # at 25/50/75/100 %, giving a full-scale of 1593 c (σ=8) — i.e. ±16 semitones,
 # NOT the ±1 octave previously assumed.  See RESOLUTION_NOTES §19.
 LFO_PITCH_FULL_CENTS = 1593.0
+# Full-scale dB swing for an LFO→volume cord at amount=100% (±1.0). UNCONFIRMED
+# on hardware (no MOD_DEPTH_CAL-style measurement exists for this cord, unlike
+# LFO_PITCH_FULL_CENTS above) — added 2026-07-28 cross-referencing
+# ConvertWithMoss PR #240 (tremolo support for SFZ/SF2/DLS/DecentSampler,
+# sources express depth directly in dB). Chosen as a plausible "full tremolo"
+# swing pending real calibration; flag alongside any future MOD_DEPTH_CAL-style
+# hardware test.
+LFO_VOLUME_FULL_DB = 24.0
 
 
 def lfo_rate_byte_to_hz(byte: int) -> float:
@@ -243,6 +251,14 @@ def lfo_knob_to_hz(knob01: float) -> float:
 def lfo_pitch_depth_to_amount(cents: float) -> float:
     """Map an LFO→pitch depth in cents to an EOS mod-cord amount (-1..+1)."""
     return max(-1.0, min(1.0, cents / LFO_PITCH_FULL_CENTS))
+
+
+def lfo_volume_depth_to_amount(db: float) -> float:
+    """Map an LFO→volume (tremolo) depth in dB to an EOS mod-cord amount
+    (0..1 — always positive: a tremolo swings symmetrically down from the
+    zone's own volume, there's no "negative" direction). See
+    LFO_VOLUME_FULL_DB for calibration status."""
+    return max(0.0, min(1.0, abs(db) / LFO_VOLUME_FULL_DB))
 
 
 # ── KRZ (K2000) scalar codecs ───────────────────────────────────────────────
@@ -387,9 +403,11 @@ class VoiceLayer:
     lfo1_to_pitch: float = 0.0       # LFO1 → Pitch   (cord 02, mod[10])
     lfo1_to_filter: float = 0.0      # LFO1 → Filter-Freq (0x60→0x38)
     lfo1_to_filter_q: float = 0.0    # LFO1 → Filter-Q    (0x60→0x39)
+    lfo1_to_volume: float = 0.0      # LFO1 → Volume (tremolo); 0.0-1.0 depth
     lfo2_to_pitch: float = 0.0       # LFO2 → Pitch       (0x68→0x30)
     lfo2_to_filter: float = 0.0      # LFO2 → Filter-Freq (0x68→0x38)
     lfo2_to_filter_q: float = 0.0    # LFO2 → Filter-Q    (0x68→0x39)
+    lfo2_to_volume: float = 0.0      # LFO2 → Volume (tremolo); 0.0-1.0 depth
     # Mod-wheel→LFO-depth gating (MPC <KeygroupWheelToLfo>, 0.0-1.0).  On the E4XT
     # this is a cascaded cord ModWheel(0x11) → CordN-Amount(0xA8+N), splitting each
     # LFO→dest cord into a static part D*(1-wheel) and a wheel-added part D*wheel

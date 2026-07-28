@@ -1,5 +1,50 @@
 # mpc2emu — Open Items
 
+## SFZ/SF2 parsers: volume LFO (tremolo) not read — RESOLVED, read-side only (2026-07-28)
+
+Cross-referencing ConvertWithMoss PRs
+[#216](https://github.com/git-moss/ConvertWithMoss/pull/216)/[#233](https://github.com/git-moss/ConvertWithMoss/pull/233)/[#239](https://github.com/git-moss/ConvertWithMoss/pull/239)/[#240](https://github.com/git-moss/ConvertWithMoss/pull/240):
+neither `parsers/sfz_parser.py` nor `parsers/sf2_parser.py` read an
+LFO->Volume (tremolo) modulation, only LFO->Pitch (vibrato) and LFO->Filter.
+SFZ v1 carries this as `amplfo_depth`/`amplfo_freq` (a third, independent
+oscillator alongside `pitchlfo_*`/`fillfo_*`); SF2 carries it as generator id
+13 `modLfoToVolume` (centibels), sharing the *same* "Mod LFO" oscillator as
+generators 5 (`modLfoToPitch`) and 10 (`modLfoToFilterFc`) — that's SF2's own
+convention, not a mpc2emu simplification.
+
+**Fixed (read side):** added `lfo1_to_volume`/`lfo2_to_volume` fields to
+`VoiceLayer` (`models/common.py`), plus `LFO_VOLUME_FULL_DB = 24.0` and
+`lfo_volume_depth_to_amount()`. `LFO_VOLUME_FULL_DB` is **not**
+hardware-calibrated (no MOD_DEPTH_CAL-style measurement exists for a tremolo
+depth, unlike `LFO_PITCH_FULL_CENTS`) — treat it as a reasonable placeholder
+until/unless it matters.
+
+- `sf2_parser.py` reads generator 13 into the existing Mod-LFO block (already
+  feeds `lfo1_*`) — no fallback logic needed, it's the same oscillator.
+- `sfz_parser.py` reads `amplfo_depth`/`amplfo_freq` (v1) or
+  `lfoNN_gain`/`lfoNN_freq` (v2) and, since the model only has two LFO slots
+  (matching E4B/EOS's real 2-LFO hardware) but SFZ can specify three
+  independent LFOs, claims LFO2 if free, else LFO1 if free, else **drops**
+  the tremolo rather than overwriting an existing pitch/filter LFO.
+
+Verified via `tests/test_lfo_volume.py` (new): depth<->amount conversion,
+SFZ claims-LFO2, SFZ falls-back-to-LFO1, SFZ drops-when-both-taken. SF2 path
+verified only by import/structural review — no binary SF2 fixture was built
+(no existing SF2 test file to extend).
+
+**Not wired into either writer (E4B or KRZ) — deliberately.** Neither format
+has a hardware-confirmed "LFO->Volume" mod-destination byte in
+`docs/E4B_FORMAT.md`/`docs/KRZ_FORMAT.md`, and ConvertWithMoss's own
+Emulator4/Kurzweil writers don't implement one either (checked
+`Emulator4Constants.java` — no VOLUME/AMP destination constant). Writing a
+guessed destination byte risks misrouting modulation in a real hardware file.
+Blocked on: RE'ing the real E4B/K2000 LFO->Volume cord-destination byte
+(live-SysEx parameter-hunt method, same as used for the E4B sustain-byte and
+`vpar` finds this session) before a writer can act on these new fields.
+
+Also open, bigger, separate: `parsers/gig_parser.py` has **zero** LFO support
+of any kind (no pitch, filter, or volume) — not touched here.
+
 ## KRZ: unused decay stage read as silent sustain — RESOLVED (2026-07-28)
 
 Cross-referencing ConvertWithMoss PR #232 (fixed 2026-07-27, same bug in

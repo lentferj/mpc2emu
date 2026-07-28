@@ -67,7 +67,7 @@ from typing import Optional, List, Tuple, Dict
 
 from models.common import (
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType,
-    cents_to_filter_env_amount, lfo_pitch_depth_to_amount,
+    cents_to_filter_env_amount, lfo_pitch_depth_to_amount, lfo_volume_depth_to_amount,
 )
 from parsers.xpm_parser import _safe_name
 
@@ -446,13 +446,21 @@ def parse_sf2(sf2_path: str, max_presets: int = 64) -> Bank:
                         return 8.176 * 2 ** (c / 1200.0) if c is not None else None
                     mod_pitch  = ig_dict.get(5,  {}).get('amt', 0)
                     mod_cutoff = ig_dict.get(10, {}).get('amt', 0)
-                    if mod_pitch or mod_cutoff:
+                    # modLfoToVolume (13, centibels -> dB) -- tremolo, shares
+                    # the Mod-LFO oscillator with pitch/filter above (the
+                    # format's own convention, not a mpc2emu simplification).
+                    # Added 2026-07-28 cross-referencing ConvertWithMoss PR
+                    # #240 -- see docs/RESOLUTION_NOTES.md.
+                    mod_volume_cb = ig_dict.get(13, {}).get('amt', 0)
+                    if mod_pitch or mod_cutoff or mod_volume_cb:
                         voice.lfo1_shape     = 'triangle'
                         voice.lfo1_rate      = _abs_cents_hz(22) or 8.176
                         if mod_pitch:
                             voice.lfo1_to_pitch  = lfo_pitch_depth_to_amount(mod_pitch)
                         if mod_cutoff:
                             voice.lfo1_to_filter = cents_to_filter_env_amount(mod_cutoff)
+                        if mod_volume_cb:
+                            voice.lfo1_to_volume = lfo_volume_depth_to_amount(mod_volume_cb / 10.0)
                     vib_pitch = ig_dict.get(6, {}).get('amt', 0)
                     if vib_pitch:
                         voice.lfo2_shape    = 'triangle'

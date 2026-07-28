@@ -50,7 +50,7 @@ from typing import Optional, Dict, Any
 from models.common import (
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType,
     cents_to_filter_env_amount, lfo_pitch_depth_to_amount, hz_to_e4b_cutoff,
-    velocity_filter_depth_to_amount, key_track_to_filter_amount,
+    lfo_volume_depth_to_amount, velocity_filter_depth_to_amount, key_track_to_filter_amount,
     cap_voices_by_coverage,
 )
 from parsers.xpm_parser import load_wav, _safe_name
@@ -211,10 +211,30 @@ def _sfz_voice_params(merged: dict) -> dict:
         params['lfo1_to_pitch'] = lfo_pitch_depth_to_amount(p_depth)
     f_depth = _f('fillfo_depth') or _f('lfo02_cutoff') or _f('lfo01_cutoff')
     f_freq  = _f('fillfo_freq')  or _f('lfo02_freq')   or _f('lfo01_freq')
+    lfo2_claimed = bool(f_depth)
     if f_depth:
         params['lfo2_rate']      = f_freq if f_freq else 5.0
         params['lfo2_shape']     = _sfz_lfo_wave(merged.get('lfo02_wave'))
         params['lfo2_to_filter'] = cents_to_filter_env_amount(f_depth)
+    # Volume LFO (tremolo, v1 amplfo_*/v2 lfo0N_gain). SFZ treats this as an
+    # independent oscillator from the filter LFO, but the model only carries
+    # two LFO slots (matching E4B/EOS's actual 2-LFO hardware) -- reuse LFO2
+    # (free unless a filter LFO is also present, in which case fall back to
+    # LFO1 if that's free instead; if both slots are already claimed by pitch
+    # and filter, the tremolo has nowhere to go and is dropped rather than
+    # silently overwriting one of them). Added 2026-07-28 cross-referencing
+    # ConvertWithMoss PR #240 -- see docs/RESOLUTION_NOTES.md.
+    a_depth = _f('amplfo_depth') or _f('lfo03_gain') or _f('lfo02_gain') or _f('lfo01_gain')
+    a_freq  = _f('amplfo_freq')  or _f('lfo03_freq') or _f('lfo02_freq') or _f('lfo01_freq')
+    if a_depth:
+        if not lfo2_claimed:
+            params['lfo2_rate']      = a_freq if a_freq else 5.0
+            params['lfo2_shape']     = _sfz_lfo_wave(merged.get('lfo02_wave'))
+            params['lfo2_to_volume'] = lfo_volume_depth_to_amount(a_depth)
+        elif not p_depth:
+            params['lfo1_rate']      = a_freq if a_freq else 5.0
+            params['lfo1_shape']     = _sfz_lfo_wave(merged.get('lfo01_wave'))
+            params['lfo1_to_volume'] = lfo_volume_depth_to_amount(a_depth)
     return params
 
 
