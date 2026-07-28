@@ -3097,41 +3097,61 @@ note-segmenter's gate before the actual note-off, so the plateau window
 must be taken from a known fixed duration after the peak, not from the
 gate-detected region end):
 
+First pass used broadband RMS and pinned the bottom 3 points (0/12.5/25%)
+at an identical -55.4 dB floor — re-checked by re-recording the same bank
+at 75% hardware output volume (up from ~50%): the low points got **more**
+negative (-67.7 dB), not less, which is the signature of a fixed recording
+noise floor (interface self-noise) becoming relatively quieter as the
+signal-carrying peak grows with output volume — i.e. those 3 points were
+below the recording chain's broadband noise floor, not real measurements,
+and the volume knob can't fix that (broadband noise floor is independent
+of it, self-normalized dB-to-peak measurement cancels out any actual gain
+change).
+
+**Fixed by switching to a narrowband measurement** at the test tone's own
+220 Hz (`analyze envelope via FFT bandpass ±15 Hz around 220 Hz`, using a
+long ~1.9s window for good frequency resolution, referenced against the
+100%-target note's own plateau rather than each note's short attack
+transient) — this rejects broadband hiss outside the tone's own frequency
+and recovered clean, monotonic data all the way down to 0%:
+
 | target% | measured dB | measured% (linear) |
 |--------:|------------:|--------------------:|
-|     0.0 |      -55.4  |  0.2  (noise floor) |
-|    12.5 |      -55.4  |  0.2  (noise floor) |
-|    25.0 |      -55.4  |  0.2  (noise floor) |
-|    37.5 |      -50.9  |  0.3 |
-|    50.0 |      -42.8  |  0.7 |
-|    62.5 |      -32.8  |  2.3 |
-|    75.0 |      -21.0  |  8.9 |
-|    87.5 |       -8.1  | 39.6 |
-|   100.0 |       -0.05 | 99.5 |
+|     0.0 |     -99.73  |  0.001 |
+|    12.5 |     -90.27  |  0.003 |
+|    25.0 |     -70.61  |  0.029 |
+|    37.5 |     -58.55  |  0.118 |
+|    50.0 |     -46.49  |  0.474 |
+|    62.5 |     -35.20  |  1.737 |
+|    75.0 |     -23.11  |  6.992 |
+|    87.5 |     -10.22  | 30.847 |
+|   100.0 |       0.00  |100.000 (reference) |
 
-The 37.5-100% points fit a straight line in dB (constant dB per percentage
-point — i.e. the byte really is exponential/dB-law in amplitude, confirming
-the hypothesis above) extremely well:
+All 9 points fit a straight line in dB (i.e. the byte really is
+exponential/dB-law in amplitude, confirming the hypothesis above)
+extremely well:
 
-**`measured_dB ≈ 0.846 × target_pct − 84.13`** (least-squares fit,
-`R² = 0.995`, residuals within ~2 dB across all 6 points). The 0/12.5/25%
-points are all pinned at the same floor and likely represent "at or below
-the recording's noise floor" rather than 3 independently resolved data
-points — consistent with the same exponential curve extrapolated further
-down (predicted -84 dB at 0%, i.e. inaudibly quiet, not literally silent).
+**`measured_dB ≈ 1.010 × target_pct − 98.74`** (least-squares fit over all
+9 points, `R² = 0.996`; fitting only the 25-100% subset tightens further
+to `dB ≈ 0.948×pct − 94.15`, `R² = 0.9996` — both describe essentially the
+same curve, and either is usable for a fix). This **supersedes** the
+first-pass partial fit above (`0.846×pct − 84.13`) — same shape, corrected
+slope/intercept now that the low end is real data instead of noise floor.
 
 **Implied fix**, not yet applied — inverting the fit to solve for the byte
 value (0-100 sustain%) that a **linear** intended amplitude fraction
 `frac` (0.0-1.0) should actually be written as:
-`sustain_pct = (20*log10(frac) + 84.13) / 0.846`. Sanity check: `frac=1.0`
-→ 99.4% (≈100%, correct); **`frac=0.5` → 92.4%** (not 50% — confirms the
-"half volume" bug's magnitude: to sound like true half-amplitude, the
-written byte needs to be ~92%, not 50%). This would replace
-`env_level_to_byte`/`env_byte_to_level` in `models/common.py` for the
-**amplitude-envelope sustain field only** — NOT the rate fields (already
-separately calibrated and confirmed correct), and NOT necessarily the
-filter-envelope sustain (same codec today, but filter env is written
-inert/amount-0 by default — needs its own decision, see Scope above).
+`sustain_pct = (20*log10(frac) + 98.74) / 1.010`. Sanity check: `frac=1.0`
+→ 100.0% (exact, by construction — it's the reference point);
+**`frac=0.5` → 92.9%** (not 50% — confirms the "half volume" bug's
+magnitude: to sound like true half-amplitude, the written byte needs to be
+~93%, not 50%); `frac=0.1` (−20 dB) → 78.0%; `frac=0.01` (−40 dB) → 58.2%.
+This would replace `env_level_to_byte`/`env_byte_to_level` in
+`models/common.py` for the **amplitude-envelope sustain field only** — NOT
+the rate fields (already separately calibrated and confirmed correct), and
+NOT necessarily the filter-envelope sustain (same codec today, but filter
+env is written inert/amount-0 by default — needs its own decision, see
+Scope above).
 
 **Not yet decided: whether/how to apply this to the parser too.** The
 writer-fix question (what byte to WRITE for an intended fraction) is

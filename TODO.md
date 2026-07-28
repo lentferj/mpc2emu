@@ -29,12 +29,18 @@ from ~45% to 100% to hear the sustain clearly.
 
 **Root-caused and measured 2026-07-28** via a file-based 9-key sweep bank
 (`tests/re_banks/gen_amp_level_cal.py` -> `AMPLVLCAL.E4B`, normal write
-path, no live parameter edits) recorded on the real E4XT. Fits a clean
-exponential/dB-law curve: **`measured_dB ≈ 0.846 × target_pct − 84.13`**
-(R²=0.995). A "linear 50%" target byte measures at only **-42.8 dB
-(0.7% actual amplitude)** — confirms the bug's magnitude exactly (matches
-the "needed to crank the volume" symptom). Full data table, fit, and the
-inverted fix formula in `docs/RESOLUTION_NOTES.md` §E4BLEVEL.
+path, no live parameter edits) recorded on the real E4XT. First pass
+(broadband RMS) pinned the bottom 3 of 9 points at an identical noise-floor
+value; re-recording at higher hardware volume made them look *worse*, not
+better — the signature of a fixed recording-noise floor, not real
+measurements. Switched to a narrowband measurement at the test tone's own
+220 Hz, which recovered clean monotonic data across the **full** 0-100%
+range. Fits an excellent exponential/dB-law curve:
+**`measured_dB ≈ 1.010 × target_pct − 98.74`** (R²=0.996, all 9 points). A
+"linear 50%" target byte measures at only **-46.5 dB (0.47% actual
+amplitude)** — confirms the bug's magnitude exactly (matches the "needed
+to crank the volume" symptom). Full data table, fit, and the inverted fix
+formula in `docs/RESOLUTION_NOTES.md` §E4BLEVEL.
 
 **Status:** root cause confirmed, curve fit measured. **Not yet applied.**
 Two open decisions before writing code: (1) whether to fix just the
