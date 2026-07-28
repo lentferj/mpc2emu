@@ -2510,6 +2510,20 @@ program-side modulation handling:
   of third-party KRZ programs, which mpc2emu didn't have at the time this
   note was written — see §KRZ-READER below, which added exactly that.
 
+  **UPDATE 2026-07-28: this bit us too, now that the reader exists.** A
+  second CWM cross-check (post-#232 merge) found `krz_parser._decode_env`
+  had the *exact same* bug the note above flagged as "not applicable" —
+  applicable now that §KRZ-READER shipped a real reader after this note was
+  written, and apparently missed in that work. Confirmed against the local
+  201-file corpus: **30.6% of 7228 voices** read `sustain==0.0` before the
+  fix (silent/held-forever presets), dropping to 1.6% after — a much larger
+  real-world impact than CWM's own "FM bass" framing suggested. Fixed the
+  same way: `seg[6]==0 and seg[7]==0` (raw decay bytes) → `sustain=1.0`
+  (holds at the attack peak) instead of the literal `level/peak=0`. New
+  regression test `test_decode_env_unused_decay_stage_holds_peak` in
+  `tests/test_krz_roundtrip.py`. Full writeup in `docs/KRZ_FORMAT.md` §4.4.
+  Not yet hardware-confirmed on a real K2000/K2000R.
+
 ### 1. Per-sample gain (`Soundfilehead.volumeAdjust`) — DONE + HW-CONFIRMED (2026-07-23)
 
 `volumeAdjust` (Soundfilehead byte 2) and `altVolumeAdjust` (byte 3) are signed

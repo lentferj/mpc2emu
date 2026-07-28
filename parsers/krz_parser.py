@@ -417,7 +417,16 @@ def _decode_env(seg: bytes) -> Envelope:
         attack = sum(t for t, _ in att)
 
     decay = dec[0]
-    sustain = max(0.0, min(1.0, dec[1] / peak)) if peak else 0.0
+    # A stage whose raw time AND level bytes are both 0 is unused on the
+    # device and holds the level of the PREVIOUS stage (the attack peak) --
+    # read literally, this looks like an instant decay to silence. Found via
+    # ConvertWithMoss PR #232 (2026-07-27): K2000 programs that leave decay
+    # unused (e.g. FM basses sustaining at the attack level, fading only via
+    # the release stages) were converted to silent presets before this check.
+    if seg[6] == 0 and seg[7] == 0:
+        sustain = 1.0  # holds at the attack peak, i.e. 100% of `peak`
+    else:
+        sustain = max(0.0, min(1.0, dec[1] / peak)) if peak else 0.0
 
     release = 0.0
     for t, l in rel:

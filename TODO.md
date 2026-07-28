@@ -1,5 +1,26 @@
 # mpc2emu — Open Items
 
+## KRZ: unused decay stage read as silent sustain — RESOLVED (2026-07-28)
+
+Cross-referencing ConvertWithMoss PR #232 (fixed 2026-07-27, same bug in
+their Kurzweil reader) found `parsers/krz_parser._decode_env` read a
+decay stage with raw time AND level bytes both `0` — the device's own
+"unused, hold the previous (attack) stage's level" convention — literally
+as `sustain = level/peak = 0`, converting the preset to hold at silence.
+Real corpus impact (201 local `.KRZ` files, 7228 voices): the fix drops
+voices reading `sustain==0.0` from **30.6% to 1.6%** — a much bigger scale
+than CWM's own writeup suggested (they cited specific "FM bass" examples).
+Fixed by checking the raw bytes directly (`seg[6]==0 and seg[7]==0`) and
+setting `sustain=1.0` (holds at the attack peak) in that case; the attack
+and release stage loops already handled a mid-sequence `(0,0)` stage
+correctly without needing the same explicit check (see
+`docs/KRZ_FORMAT.md` §4.4 for the full writeup). New regression test
+`test_decode_env_unused_decay_stage_holds_peak` added to
+`tests/test_krz_roundtrip.py`; full existing suite still passes.
+
+**Not yet hardware-confirmed** — verified against the real corpus and a
+synthetic unit test, not yet played back on a real K2000/K2000R.
+
 ## zone_reducer: aggressive reduce_velocity_layers_pct collapses KEY coverage too — RESOLVED + HW-CONFIRMED (2026-07-28)
 
 Found via real E4XT hardware confirmation of VinSamLib's own HW test matrix

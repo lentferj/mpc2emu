@@ -500,6 +500,23 @@ the release before encoding, compensating a known under-read of the MPC's
 displayed release by the shared value→seconds curve (a proper global
 recalibration is a deferred TODO).
 
+**A stage whose raw time AND level bytes are both `0` is unused on the
+device and holds the level of the *previous* stage**, not a literal decay
+to silence — cross-referenced from ConvertWithMoss PR #232 (2026-07-27) and
+confirmed against the local 201-file KRZ corpus: many real factory/
+commercial programs leave the decay stage unused (the envelope sustains at
+the attack peak, fading only via the release stages — e.g. FM basses whose
+naturally-decaying sample needs no additional envelope decay). Reading the
+`(0, 0)` decay stage literally computed `sustain = level/peak = 0`,
+converting **30.6% of all 7228 voices in the local corpus** to a silent
+preset before this was fixed in `krz_parser._decode_env` (now 1.6%,
+matching genuinely-zero-sustain programs). The attack and release stage
+loops already handle a mid-sequence `(0, 0)` stage correctly on their own
+(an unused attack stage just contributes ~0 extra time without prematurely
+signaling "peak reached"; an unused release stage's `level<=0` naturally
+means "already at the end" either way) — only the single-stage decay/
+sustain read needed the explicit check.
+
 ### 4.5 LFO segment (0x14)
 
 `_patch_layer` sets, on the LFO1 segment (`seg 0x14`):
