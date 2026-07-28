@@ -125,6 +125,52 @@ def env_byte_to_level(b: int) -> float:
     return (b if b < 128 else b - 256) / 127.0
 
 
+# ── Amp-envelope SUSTAIN: linear fraction -> byte, hardware-compensated ────
+# Hardware-measured 2026-07-28 (docs/RESOLUTION_NOTES.md §E4BLEVEL): the
+# amp-envelope Decay1/Decay2 "Level%" target is NOT linear amplitude on the
+# E4XT -- it's an exponential/dB-law response, ~1 dB of attenuation per
+# percentage point below 100%. Writing `env_level_to_byte(frac*100)`
+# directly (as if pct% == frac of full amplitude) plays far quieter than
+# intended: a "linear 50%" target measured at -46.5 dB (0.47% actual
+# amplitude) on real hardware, not -6 dB/50%.
+#
+# Measured via a 9-point sweep bank (tests/re_banks/gen_amp_level_cal.py),
+# narrowband-analyzed against the test tone's own frequency to reject
+# recording noise floor: measured_dB = ENV_LEVEL_DB_SLOPE*pct +
+# ENV_LEVEL_DB_INTERCEPT, R²=0.996 across the full 0-100% range.
+#
+# Writer-only fix (CR-2026-07-28): only `env_sustain_to_byte` compensates
+# for this curve, used for the amp-envelope sustain target specifically.
+# `env_level_to_byte`/`env_byte_to_level` above are UNCHANGED and still
+# used as-is for the Attack/Release endpoints (100%/0%, unaffected by the
+# curve at either end) and by the parser (reading third-party files'
+# existing sustain bytes is a separate, not-yet-decided scope -- see TODO).
+ENV_LEVEL_DB_SLOPE = 1.010
+ENV_LEVEL_DB_INTERCEPT = -98.74
+
+
+def env_sustain_to_byte(frac: float) -> int:
+    """Intended LINEAR amplitude fraction (0.0-1.0) → amp-envelope sustain
+    byte, pre-compensated so the E4XT actually plays back at `frac` of full
+    amplitude (see module-level comment above for the calibration).
+
+    Both endpoints are special-cased to the exact byte `env_level_to_byte`
+    already gives for 0%/100% (0 and 127) rather than running them through
+    the fitted curve -- the least-squares fit doesn't pass exactly through
+    (100%, 0 dB) (off by ~0.3 dB there), and frac=1.0 should mean "same as
+    the true full-scale endpoint" the Attack/Release stages already use,
+    not an artifact of curve-fit noise at the edge."""
+    frac = max(0.0, min(1.0, frac))
+    if frac <= 0.0:
+        return 0
+    if frac >= 1.0:
+        return env_level_to_byte(100.0)
+    db = 20 * math.log10(frac)
+    pct = (db - ENV_LEVEL_DB_INTERCEPT) / ENV_LEVEL_DB_SLOPE
+    pct = max(0.0, min(100.0, pct))
+    return env_level_to_byte(pct)
+
+
 # ── Signed mod-cord amount codec (±1.0 <-> signed byte stored unsigned) ─────
 # CR-13/CR-18: was inlined ~5× across the E4B writer/parser.
 def cord_amount_to_byte(amount: float) -> int:

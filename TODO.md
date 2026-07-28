@@ -19,7 +19,7 @@ listen-control bank with the exact WALKER C1 raw bytes patched onto a plain
 held sine tone (bypassing our own parser entirely) genuinely fades to
 silence on a real E4XT, matching the new interpretation. Closed.
 
-## E4B amp-envelope sustain LEVEL byte is exponential/dB-law, not linear — MEASURED, fix not yet applied (2026-07-28)
+## E4B amp-envelope sustain LEVEL byte is exponential/dB-law, not linear — WRITER FIXED, parser scope still open (2026-07-28)
 
 **Context:** found while hardware-confirming the §E4BREAD2 envelope fix. A
 calibration preset with `sustain=0.5` (linearly encoded as PZT level byte
@@ -42,14 +42,32 @@ amplitude)** — confirms the bug's magnitude exactly (matches the "needed
 to crank the volume" symptom). Full data table, fit, and the inverted fix
 formula in `docs/RESOLUTION_NOTES.md` §E4BLEVEL.
 
-**Status:** root cause confirmed, curve fit measured. **Not yet applied.**
-Two open decisions before writing code: (1) whether to fix just the
-writer (`env_level_to_byte`, so mpc2emu's own output sounds correct) or
-also the parser (`env_byte_to_level`, which would change how mpc2emu
-interprets every third-party E4B's existing sustain byte — much bigger
-blast radius); (2) whether the filter-envelope sustain (same codec today)
-needs the same fix, given `filter_env_amount` is written inert/0 by
-default so it's not currently audible.
+**Status: writer fixed 2026-07-28, not yet hardware-confirmed.**
+`models/common.py` gained `env_sustain_to_byte()` (inverts the measured
+curve; both endpoints 0.0/1.0 special-cased to exact byte 0/127, avoiding
+a ~0.3 dB artifact from curve-fit noise at the edges) and
+`writers/e4b_writer.py`'s amp-envelope sustain encoding now calls it
+instead of the plain linear `env_level_to_byte`. Existing tests
+(`tests/test_e4b_parser.py`) still pass — expected, since only the
+writer's *encode* side changed. **Deliberately scoped to the amp-envelope
+sustain field only:**
+- **Filter-envelope sustain is UNCHANGED** (same `_fenv_level(sus)` linear
+  codec as before) — it's written inert/`filter_env_amount=0` by default
+  so not currently audible, and applying the same fix there is a separate,
+  not-yet-made decision.
+- **The parser (`env_byte_to_level`) is UNCHANGED.** This is the important
+  remaining open question: mpc2emu's own future E4B output will now sound
+  correct, but reading an *existing* third-party E4B's sustain byte still
+  assumes the old linear mapping — meaning mpc2emu currently **under-reads
+  how loud a third-party preset's sustain really is** wherever that byte
+  is non-trivial (e.g. carried through to KRZ/EIII conversion, or shown in
+  `--info`). Fixing the parser too would change interpretation of every
+  third-party E4B ever converted, not just new output — needs its own
+  explicit decision, not a default "fix both sides" assumption.
+- **Not yet hardware-confirmed**: no bank built with the corrected writer
+  has been played back on the E4XT yet to verify a "linear 50%" input
+  really does sound like half volume now. Next step before closing this
+  item.
 
 **Aside — the live-SysEx calibration attempt that was abandoned first:**
 three rounds of live parameter-edit automation via the sibling

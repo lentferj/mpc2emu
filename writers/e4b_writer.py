@@ -110,7 +110,7 @@ from typing import List
 from models.common import (Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            LoopType, lfo_rate_hz_to_byte,
                            env_seconds_to_rate, env_rate_to_seconds,
-                           env_level_to_byte, cord_amount_to_byte)
+                           env_level_to_byte, env_sustain_to_byte, cord_amount_to_byte)
 from processors.loop_renderer import bake_alternating_loop
 
 
@@ -489,6 +489,7 @@ def _zone_entry(zone: ZoneMapping, sample_idx: int, write_absolute: bool = False
 _fenv_level   = env_level_to_byte
 _fenv_rate    = env_seconds_to_rate
 _fenv_seconds = env_rate_to_seconds
+_fenv_sustain = env_sustain_to_byte  # amp-envelope sustain only -- see models.common
 
 
 # Primary zone table template (64 bytes) — regular key-tracking voice.
@@ -763,7 +764,12 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
     # AMP_DECAY_CAL.E4B sweep (only PZT[4] varies); rate→time fit calibrated
     # below (_ENV_RATE_A/_ENV_RATE_K).
     pzt = bytearray(_PRIMARY_ZONE_TMPL)
-    sus = _fenv_level(max(0.0, min(1.0, voice.env_sustain)) * 100.0)
+    # Sustain uses _fenv_sustain (NOT _fenv_level): the amp-envelope Level%
+    # target is exponential/dB-law on real hardware, not linear amplitude
+    # (hardware-measured 2026-07-28, docs/RESOLUTION_NOTES.md §E4BLEVEL) --
+    # a naive linear encoding plays far quieter than intended. Attack/Release
+    # below stay on _fenv_level since 100%/0% are unaffected endpoints.
+    sus = _fenv_sustain(voice.env_sustain)
     pzt[0] = min(127, _fenv_rate(voice.env_attack)); pzt[1] = _fenv_level(100.0)  # Atk1 → full
     pzt[2] = 0;                                      pzt[3] = _fenv_level(100.0)  # Atk2 hold full
     pzt[4] = min(127, _fenv_rate(voice.env_decay));  pzt[5] = sus                 # Dcy1 → sustain
