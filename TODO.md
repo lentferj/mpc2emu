@@ -955,6 +955,23 @@ via `VERIFY_emu.hda`:**
 
 ### Enhancements (no behaviour change)
 
+**Parser performance pass — DONE 2026-07-29 (every change byte-identical).**
+Benchmarked all input parsers over real files; the cost was not spread out but
+concentrated in a handful of per-sample Python loops. Full writeup in
+`docs/RESOLUTION_NOTES.md` §PARSERPERF.
+- **`_stereo_to_mono` was 99.5% of XPM/SFZ/EXS24 parse time** (40M `struct`
+  calls for 31 samples) — now `audioop` + `array` fallback. Reached by six
+  parsers via `load_wav`, so this one fix carries xpm/sfz/exs24/pgm/talsmpl/
+  sampledir. Supersedes CR-16's "avoided audioop" note above.
+- **AIFF 24-/32-bit downscale**: both are "keep the top two bytes as a BE
+  int16" (the sign correction and the arithmetic shift cancel — proof in the
+  docstring), so a strided copy + one byteswap replaces an unpack/pack loop.
+- **KRZ `_extract_pcm`**: per-byte-pair swap loop → `array.byteswap()`.
+- **O(n²) sample dedup** in `sf2_parser`/`gig_parser`: `{s.name for s in
+  bank.samples}` was rebuilt for *every zone*; now an incremental set.
+- **De-duplicated** gig's second stereo-downmix copy into the shared helper
+  (CR-13/CR-17 lesson: duplicated codecs drift).
+
 **DONE 2026-06-11:** CR-13, CR-14, CR-15, CR-17, and the CR-18 cord-builder —
 fixed & pipeline-verified (details in `docs/RESOLUTION_NOTES.md §CR`).
 
@@ -970,7 +987,13 @@ fixed & pipeline-verified (details in `docs/RESOLUTION_NOTES.md §CR`).
   - **#4 ISO/HDA:** copy embedded files in 1 MB chunks + pad separately (was
     read-whole-file then build a 2nd padded copy).
   - *(Avoided `audioop` — byte-identical to the manual loops but deprecated/
-    removed in Python 3.13.)*
+    removed in Python 3.13.)* **Superseded 2026-07-29 — see "Parser
+    performance pass" below.** CR-16 optimized only the *gig* decode and left
+    `xpm_parser._stereo_to_mono` a per-frame `struct` loop; profiling later
+    showed that one function was **99.5%** of XPM/SFZ/EXS24 parse time, since
+    all six sample-loading parsers reach it through `load_wav`. `audioop` is
+    now used there *with* a byte-identical `array` fallback, which answers the
+    3.13 objection instead of paying 100x for it.
 - **CR-18 — DONE 2026-06-12.**
   - **#1 `Envelope` dataclass — DONE.** `VoiceLayer` now stores `amp_env` and
     `filter_env` as `Envelope(attack, decay, sustain, release)` with

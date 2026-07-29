@@ -3739,3 +3739,105 @@ string normalization in an inner loop, not the algorithm itself.**
   bytes §EIII deliberately leaves alone (no hardware calibration).
 - EIII **floppy disk sets** (their #237): `ALL_BANK_FORMATS` covers
   SCSI/hard-disk bank files only, not raw floppy memory dumps.
+
+## §PARSERPERF — Parser performance pass: the cost was four Python loops, not the algorithms (2026-07-29)
+
+**Context:** general "optimize the input parsers" sweep. Benchmarked every
+parser over real files first rather than guessing, which turned out to
+matter — the cost was not spread across the parsers at all.
+
+### The measurement that decided everything
+
+Throughput over real corpus files, before any change:
+
+| fmt   | files | MB    | secs  | MB/s  |
+|-------|------:|------:|------:|------:|
+| xpm   | 20    | 20.5  | 87.59 | 0.2   |
+| sfz   | 25    | 0.3   | 38.68 | 0.0   |
+| exs24 | 10    | 0.4   | 27.67 | 0.0   |
+| krz   | 20    | 23.6  | 1.41  | 16.8  |
+| e4b   | 19    | 129.1 | 0.29  | 445.7 |
+| sf2   | 25    | 13.4  | 0.05  | 259.2 |
+| gig   | 8     | 2.1   | 0.01  | 262.2 |
+
+`e4b` parsed 129 MB in 0.29 s while `xpm` needed 87 s for 20 files. The
+split is exactly "does this parser load external WAVs": xpm/sfz/exs24 do,
+the others read a self-contained bank. A `cProfile` of one XPM
+(`45 Cosmos.Keygroup.xpm`, 24.6 s) put **`_stereo_to_mono` at 24.46 s —
+99.5%**, with 27M `unpack_from` + 13.5M `pack_into` calls for 31 samples.
+
+**Lesson worth keeping:** the throughput column is what exposed this. A
+per-format "seconds" number alone looks like "xpm files are just bigger";
+MB/s made a 2000x spread obvious.
+
+### Fixes (each verified byte-identical, see below)
+
+1. **`_stereo_to_mono`** (`parsers/xpm_parser.py`) — per-frame struct loop
+   → `audioop.tomono(raw, 2, 0.5, 0.5)`, with a pure-`array` fallback.
+   Reached by **six** parsers through `load_wav` (xpm, sfz, exs24, pgm,
+   talsmpl, sampledir), so one fix carries every sample-loading format.
+   Measured on 400k frames: struct 127 ms, array 43 ms, audioop 1.3 ms.
+
+2. **AIFF 24-bit and 32-bit downscale** — both collapse to *"take the top
+   two bytes of each big-endian sample as a signed 16-bit value"*. Proof
+   for 24-bit: with `b0 < 0x80` the old `(b0<<16|b1<<8|b2) >> 8` is plainly
+   `b0<<8|b1`; with `b0 >= 0x80` the `-0x1000000` sign correction and the
+   flooring `>> 8` cancel to exactly `(b0<<8|b1) - 0x10000`, which *is* the
+   big-endian int16. Same argument for 32-bit with `>> 16`. So no
+   arithmetic is needed — a strided byte copy plus one `byteswap`. Unified
+   as `_be_high2_to_le16(raw, stride)`. (`gig_parser` had already found
+   this for its own 24-bit path in CR-16 #1; this generalizes it.)
+
+3. **KRZ `_extract_pcm`** — the BE→LE swap was a per-byte-pair Python
+   loop over the bank's entire sample pool; now `array.byteswap()`.
+   `frombytes`/`tobytes` are exact inverses on the same host, so the net
+   effect is "swap adjacent byte pairs" on any endianness.
+
+4. **O(n²) sample dedup** — `sf2_parser` and `gig_parser` both did
+   `if sd.name not in {s.name for s in bank.samples}`, rebuilding a set of
+   *every* sample name once per zone. Now an incrementally maintained set.
+
+5. **De-duplication** — `gig_parser` carried its own stereo downmix; it now
+   calls the shared one (CR-13/CR-17: duplicated codecs have drifted here
+   before). Its `import array` became unused and was dropped.
+
+### The audioop decision (reverses CR-16)
+
+CR-16 (2026-06-11) explicitly *avoided* `audioop` — "byte-identical to the
+manual loops but deprecated/removed in Python 3.13". That call is reversed
+here, deliberately:
+
+- CR-16 optimized only the gig decode path and left `_stereo_to_mono` as a
+  struct loop. It could not have known that function would turn out to be
+  99.5% of three formats' runtime.
+- The 3.13 objection is *answered*, not ignored: the import is
+  `try/except`, and the `array` fallback is byte-identical, so on 3.13+ the
+  code keeps working and merely loses the speedup (43 ms vs 1.3 ms — still
+  ~3x better than the 127 ms it replaced).
+
+**Why audioop was deprecated** (PEP 594, "Removing dead batteries"): the
+module exists mainly for a-LAW/u-LAW/ADPCM telephony codecs and was
+dropped as a cluster with `sunau`/`aifc`/`sndhdr`/`chunk`/`ossaudiodev`;
+it was unmaintained, and being hand-written C doing pointer arithmetic on
+caller-supplied buffers it had a history of overflow fixes. **None of that
+rationale touches `tomono`**, which is trivial fixed-point arithmetic with
+no format parsing — it is not deprecated for being wrong. Verified equal to
+`(l + r) >> 1` across an exhaustive sign/parity/clipping matrix.
+
+If the 3.13 cliff is ever hit, the options are `pip install audioop-lts`
+(a maintained drop-in that reinstalls the `audioop` module name, so the
+`try/except` picks it up with no code change) or taking on numpy — which
+this project has so far deliberately avoided as a dependency.
+
+### Equivalence method (reusable)
+
+`scratchpad/verify2.py`: `git worktree add --detach` a pristine checkout of
+`HEAD`, run **both** the old and new parser in separate subprocesses over
+the same real files, and compare a SHA-256 over the whole parsed `Bank` —
+every sample's full PCM plus every zone/voice field. That catches drift the
+unit tests would not, since it hashes decoded audio rather than structure.
+Plus targeted equivalence tests for each rewritten function against the
+original implementation, including adversarial byte patterns
+(`0x00/0x7F/0x80/0xFF`), the 24-bit sign boundary, and odd-length buffers
+(the old loops left a trailing partial frame as zero — the replacements
+reproduce that exactly).
