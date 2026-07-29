@@ -63,12 +63,50 @@ def stereo_to_mono(raw: bytes) -> tuple:
     return mono.tobytes(), 1
 
 
-def ensure_mono(sample) -> None:
-    """Downmix `sample` in place if it is stereo. For writers whose target
-    format mpc2emu does not yet emit stereo for -- explicit and logged at the
-    call site, rather than silently assuming every sample is mono."""
-    if getattr(sample, 'channels', 1) == 2:
+def pick_channel(raw: bytes, side: str) -> tuple:
+    """Take ONE side of interleaved 16-bit LE stereo. Returns `(pcm, 1)`.
+
+    An alternative to summing that matters more than it looks: measured over
+    95 real stereo E4B samples the two sides are largely DEcorrelated (median
+    Pearson r = 0.107, many negative), because they are genuine room
+    recordings rather than a detuned duplicate of one source. Summing
+    decorrelated -- let alone anti-phase -- channels cancels signal; on the
+    worst samples measured the difference signal carried 1.9x the energy of
+    the sum. Picking a side keeps that side's full level and room character.
+    """
+    a = array.array('h')
+    a.frombytes(raw[:len(raw) // 4 * 4])
+    if sys.byteorder == 'big':
+        a.byteswap()
+    one = a[0::2] if side == 'left' else a[1::2]
+    if sys.byteorder == 'big':
+        one.byteswap()
+    return one.tobytes(), 1
+
+
+def to_mono(sample, method: str = 'mix') -> bool:
+    """Reduce `sample` to mono in place. `method` is 'mix' (average both
+    sides), 'left' or 'right'. Returns True if anything changed.
+
+    Used both as a deliberate size reduction (halves a sample; see the
+    vintage-fit options in convert.py) and defensively by writers whose
+    target format mpc2emu cannot yet emit stereo for.
+    """
+    if getattr(sample, 'channels', 1) != 2:
+        return False
+    if method in ('left', 'right'):
+        sample.data, sample.channels = pick_channel(sample.data, method)
+    else:
         sample.data, sample.channels = stereo_to_mono(sample.data)
+    return True
+
+
+def ensure_mono(sample) -> None:
+    """Downmix `sample` in place if it is stereo, by averaging. For writers
+    whose target format mpc2emu does not yet emit stereo for -- explicit and
+    logged at the call site, rather than silently assuming every sample is
+    mono."""
+    to_mono(sample, 'mix')
 
 
 class LoopType(IntEnum):

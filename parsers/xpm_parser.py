@@ -347,8 +347,7 @@ def _load_aiff(aiff_path: str, name: str) -> Optional[SampleData]:
         print(f"  [WARN] Unsupported AIFF bit depth {sample_size}: {aiff_path}")
         return None
 
-    if channels == 2 and not PRESERVE_STEREO:
-        raw, channels = _stereo_to_mono(raw)
+    # Stereo preserved -- see the note in load_wav.
 
     # Loop from INST + MARK
     loop_type  = LoopType.NO_LOOP
@@ -408,18 +407,20 @@ def load_wav(wav_path: str, name: str) -> Optional[SampleData]:
             print(f"  [WARN] Unsupported bit depth {bit_depth} in {wav_path}, skipping")
             return None
 
-        # Stereo -> mono downmix (kept as-is when PRESERVE_STEREO)
-        if channels == 2 and not PRESERVE_STEREO:
-            raw, channels = _stereo_to_mono(raw)
+        # Stereo is PRESERVED here: the parser's job is a faithful read.
+        # Reducing to mono is an explicit choice made later (convert.py
+        # --mono), alongside the other vintage-fit reductions, or forced by
+        # a writer whose format mpc2emu cannot emit stereo for.
 
         # Read loop points from SMPL chunk (wave module ignores this).
         # Clamp loop_end to actual loaded frame count — the SMPL chunk uses the
         # nominal WAV header frame count which can differ from what wave.readframes
         # actually delivers.
-        n_actual = len(raw) // (2 * (1 if channels == 1 else 2))  # frames before mono-mix
-        # Frames after any downmix.  With PRESERVE_STEREO the data is still
-        # interleaved, so a frame is 2 bytes PER CHANNEL -- loop points are in
-        # frames either way and must not shift when stereo is kept.
+        n_actual = len(raw) // (2 * (1 if channels == 1 else 2))
+        # Frame count, channel-aware: a frame is 2 bytes PER CHANNEL, and the
+        # data stays interleaved here because the parser preserves stereo.
+        # Loop points are in FRAMES either way, so they must not shift with
+        # the channel count.
         n_frames_loaded = len(raw) // (2 * max(1, channels))
         loop_type_raw = LoopType.NO_LOOP
         loop_start    = 0
@@ -486,10 +487,10 @@ def _apply_slice(sd: SampleData, slice_start: int, slice_end: int,
     placeholder loop (`_is_full_sample_loop`), which it drops to a one-shot — so we
     only discard the embedded loop when it is full-sample (and <Loop> off), keeping
     genuine tail/sustain loops (Annenberg one-shot vs Bass-MS20's tail loop).
-    Units are mono 16-bit here (2 bytes/frame).  Verified against the MPC
-    3.7 manual + measured WAV frame counts — see docs/RESOLUTION_NOTES.md."""
-    # 2 bytes per channel per frame: load_wav delivers mono normally, but
-    # interleaved stereo under PRESERVE_STEREO.
+    Units are FRAMES here.  Verified against the MPC 3.7 manual + measured
+    WAV frame counts — see docs/RESOLUTION_NOTES.md."""
+    # 2 bytes per channel per frame: load_wav preserves the source's channel
+    # count, so a stereo sample's frame is 4 bytes, not 2.
     bytes_per_frame = 2 * max(1, getattr(sd, 'channels', 1))
     n_frames = len(sd.data) // bytes_per_frame
 
@@ -587,18 +588,6 @@ def _convert_8_to_16(raw: bytes) -> tuple:
     out = bytearray(len(raw) * 2)
     out[1::2] = raw.translate(_FLIP_SIGN8)
     return bytes(out), 16
-
-
-# Opt-in stereo passthrough (convert.py --stereo).  Default False keeps every
-# existing conversion byte-identical: sources are downmixed to mono as they
-# always were.  When True, load_wav keeps interleaved stereo and the E4B
-# writer emits a real stereo sample; the KRZ/EIII writers still downmix at
-# their own entry points, so only the E4B path actually carries it through.
-#
-# Off by default deliberately: stereo DOUBLES every sample, and an E4B bank
-# is capped at 128 MB, so flipping this silently would push existing banks
-# over the limit and change the output of every conversion.
-PRESERVE_STEREO = False
 
 
 # Canonical implementation lives in models.common so writers can reach it

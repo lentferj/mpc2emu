@@ -447,16 +447,26 @@ def main():
              'this shorthand for that side (e.g. --trim --trim-tail 45 keeps the '
              'default 72 dB start trim but trims deeper into the tail). See '
              '--trim-start / --trim-tail for the full behaviour.')
-    ap.add_argument('--stereo', action='store_true',
-        help='Keep stereo samples in stereo instead of downmixing them to mono. '
-             'Only the E4B writer emits stereo (one sample object carrying both '
-             'channels, which is how real E-mu banks store it — 23.6%% of the '
-             'sample objects in a 473-bank corpus are stereo this way); the KRZ '
-             'and EIII writers still downmix, since their stereo encodings are '
-             'documented but not implemented. OFF by default because stereo '
-             'DOUBLES every sample and an E4B bank is capped at 128 MB, so a '
-             'library that fits today may not with --stereo. Reading a stereo '
-             'E4B is always correct regardless of this flag.')
+    ap.add_argument('--mono', nargs='?', const='mix', default=None,
+        choices=['mix', 'left', 'right'], metavar='mix|left|right',
+        help='Reduce stereo samples to mono. Stereo sources are otherwise KEPT '
+             'in stereo (one E4B sample object carrying both channels, which is '
+             'how real E-mu banks store it — 23.6%% of the sample objects in a '
+             '473-bank corpus are stereo this way). This HALVES a stereo '
+             'sample, making it the biggest single win in the vintage-fit '
+             'family alongside --reduce-key-zones / --reduce-velocity-layers / '
+             '--max-sample-rate, and it is what keeps a stereo library inside '
+             'the 128 MB bank cap. bare/mix averages both sides; left or right '
+             'PICKS one side instead. Prefer a side when the sides are '
+             'decorrelated: across 95 real stereo E-mu samples the two sides '
+             'had a median Pearson correlation of only 0.107 and some were '
+             'anti-phase, so averaging cancels signal (on the worst, the '
+             'difference carried 1.9x the energy of the sum). Averaging suits a '
+             'coherent narrow image; picking a side suits wide or fake '
+             '(detuned-duplicate) stereo. KRZ and EIII output is mono either '
+             "way — those formats' stereo encodings are documented but not "
+             'implemented yet. Reading a stereo E4B is always correct '
+             'regardless of this flag.')
     ap.add_argument('--trim-start', nargs='?', const=72.0, type=float, default=None,
         metavar='DB',
         help='Cleanly cut leading silence off the START of each sample. The MPC '
@@ -713,9 +723,6 @@ def main():
     step_n += 1
     import parsers.xpm_parser as _xpm
     _xpm.SYNC_BPM = args.lfo_sync_bpm          # tempo for synced-LFO rate
-    _xpm.PRESERVE_STEREO = args.stereo         # keep stereo instead of downmixing
-    if args.stereo:
-        print("  Stereo passthrough ON (E4B output only; KRZ/EIII still downmix)")
     if sample_dir:
         from parsers.sampledir_parser import parse_sample_dir
         _off = None if args.middle_c == 'auto' else {'C3': 2, 'C4': 1, 'C5': 0}[args.middle_c]
@@ -792,6 +799,32 @@ def main():
                               keep_amp=args.single_cycle_keep_amp,
                               dump_dir=args.single_cycle_dump_dir,
                               workers=args.jobs)
+
+    # ── Stereo -> mono reduction ──────────────────────────────────────────────
+    # Part of the vintage-fit family: halves every stereo sample, which is the
+    # largest single saving available and usually what keeps a stereo library
+    # inside the 128 MB bank cap.  Runs BEFORE resample/fit/split so everything
+    # downstream sees the halved sizes.  Sources are otherwise kept in stereo —
+    # the parsers read faithfully and this is the explicit place that decides
+    # to throw a channel away.
+    if args.mono is not None:
+        from models.common import to_mono
+        _method = {'mix': 'averaging both sides',
+                   'left': 'keeping the LEFT side',
+                   'right': 'keeping the RIGHT side'}[args.mono]
+        print(f"\n[{step_n}] Stereo -> mono ({_method})...")
+        step_n += 1
+        for bank in source_banks:
+            _saved = 0
+            _n = 0
+            for s in bank.samples:
+                _before = len(s.data)
+                if to_mono(s, args.mono):
+                    _n += 1
+                    _saved += _before - len(s.data)
+            if _n:
+                print(f"  {_n} stereo sample(s) -> mono, "
+                      f"{_saved / 1_048_576:.1f} MB saved")
 
     # ── Reduce ────────────────────────────────────────────────────────────────
     if args.reduce_key_zones > 0 or args.reduce_velocity_layers > 0:
