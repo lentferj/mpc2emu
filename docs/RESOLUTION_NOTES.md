@@ -4416,3 +4416,82 @@ Kept short deliberately — the exploration is done, this is confirmation:
 5. **Pan** on a stereo voice: does it balance the existing image, or collapse
    it? (TODO question 3, still unanswered.)
 6. Loop behaviour on a looped stereo sample — both sides must loop in sync.
+
+## §MONO — Stereo is the default; mono is a vintage-fit reduction (2026-07-29)
+
+**Context:** the first cut of the stereo work shipped `--stereo` as an opt-in
+passthrough, defaulting to the old mono downmix. Jan rejected that framing on
+two counts, both right: stereo input should default to stereo output, and
+"reduce to mono" belongs with the other memory-fit options rather than being
+the default behaviour you opt out of.
+
+### Resulting split of responsibility
+
+- **Parsers are faithful.** `load_wav` preserves the source's channel count
+  unconditionally. Reading is the parser's job.
+- **Reduction is explicit.** `--mono [mix|left|right]` sits in the vintage-fit
+  family (`--reduce-key-zones`, `--reduce-velocity-layers`,
+  `--max-sample-rate`) and runs before resample/fit/split so everything
+  downstream sees the halved sizes. Halving a stereo sample is the single
+  largest saving available and is usually what keeps a stereo library inside
+  the 128 MB bank cap.
+- **Writers that cannot emit stereo downmix at entry** (`ensure_mono` in
+  `krz_writer`/`eiii_writer`) and say so, so nothing silently mis-measures
+  interleaved PCM as mono.
+
+### Why `left`/`right` exist, and why they are not exotic
+
+EOS's own Stereo→Mono is *"sums both sides, then divides by two"* (manual
+p.~10095), which `stereo_to_mono` matches exactly. But summing is only safe
+when the sides are coherent. Measured across **95 real stereo E-mu samples**:
+
+| L/R correlation | count |
+|---|---:|
+| r > 0.95 (detuned duplicate, "fake stereo") | 0 |
+| 0.5 < r ≤ 0.95 (wide) | 38 |
+| r ≤ 0.5 (decorrelated) | 57 |
+
+Median r = **0.107**, some negative. These are genuine room recordings of
+string sections, not fake stereo. Summing decorrelated — let alone anti-phase —
+content cancels signal. The degenerate case is exact: averaging `(100, -100)`
+gives `0`.
+
+(The original argument for channel-pick was the opposite one: EOS's manual
+mono→stereo *"duplicates the sample on both sides and slightly detunes them"*,
+so summing THAT back comb-filters. That is a real hazard but does not occur in
+this corpus — nobody used that Sample Edit utility on these banks. The
+justification survives inverted: wide real stereo cancels for a different
+reason than fake stereo does.)
+
+### `--mono auto` / "pick the best channel" — investigated and REJECTED
+
+Worth recording so it is not re-proposed. Measured per-channel RMS, peak,
+clipping and correlation over **247 real stereo samples**:
+
+| signal an auto-picker would use | corpus reality |
+|---|---|
+| dead / near-silent channel (>20 dB asymmetry) | **0** (max 7.1 dB) |
+| highly correlated, so averaging is safe (r > 0.9) | **0** (median 0.076) |
+| RMS asymmetry as a tiebreak | median **1.05 dB** |
+| one-sided clipping | 78 flagged, but at counts of 1/0 — a single peak
+  touching full scale, not clipping; the metric was too naive to trust |
+
+Every branch either never fires or decides on ~1 dB, so `auto` would collapse
+to "pick the marginally louder side" while presenting itself as a judgement.
+Not built. **Caveat on scope:** this corpus is dominated by one vendor's string
+libraries. Drum machines, synth patches and genuinely fake-stereo material
+could well contain dead channels and r > 0.95 pairs, so the negative result is
+about *this* corpus, not about the idea in general. If it is revisited, base it
+on the two objective rules (dead channel, real clipping via run-length
+detection) and follow `_choose_repair_candidate`'s pattern: only override the
+baseline when decisively better.
+
+### What was built instead: an advisory
+
+Since r > 0.9 never occurs, averaging is usually the lossy choice here. So
+`--mono mix` measures `channel_correlation` per sample *before* reducing it and
+warns below 0.3 (well clear of the 0.076 median), naming the worst case and
+pointing at `--mono left/right`. The user keeps the decision and the risk stops
+being invisible — better than a heuristic guessing on their behalf.
+`channel_correlation` is windowed to 20k frames to keep it off the critical
+path.

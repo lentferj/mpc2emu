@@ -200,6 +200,12 @@ remains is a 6-point bench checklist in §E4BSTEREO: does it load, does it
 play in stereo, is the channel ORDER right, does it cost one voice or two,
 what does pan do to a stereo voice, do both sides loop in sync.
 
+**Default is now stereo-in/stereo-out** (2026-07-29, Jan's call): parsers
+preserve channels and `--mono [mix|left|right]` is a vintage-fit reduction
+rather than the default. `--mono auto` was investigated and rejected on the
+data — see `docs/RESOLUTION_NOTES.md` §MONO — replaced by a correlation
+advisory that warns when averaging would cancel signal.
+
 **Channel order can be settled without hardware** — four real stereo samples
 are exported to `~/temp/stereo_audition/` as stereo WAVs; if L/R were
 swapped they play mirrored, which is audible on a familiar library.
