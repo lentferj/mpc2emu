@@ -160,6 +160,27 @@ def _read_smpl_root(wav_bytes: bytes):
     return None
 
 
+def _read_smpl_pitch_fraction_cents(wav_bytes: bytes):
+    """Return the WAV `smpl` chunk's MIDIPitchFraction (fine-tune below the
+    unity note) as cents, or None if absent. Layout: MIDIPitchFraction
+    immediately follows MIDIUnityNote → chunk+8+16, a u32 fraction of a
+    semitone (0 = none, 0xFFFFFFFF = just under +100 cents). Previously not
+    read at all -- only the whole-semitone MIDIUnityNote was, so embedded
+    fine-tune silently rounded to the nearest semitone (cross-referenced
+    against ConvertWithMoss PR #254, which found the same gap)."""
+    pos = 12
+    while pos + 8 <= len(wav_bytes):
+        tag = wav_bytes[pos:pos+4]
+        sz  = struct.unpack_from('<I', wav_bytes, pos+4)[0]
+        if tag == b'smpl':
+            if pos + 8 + 20 <= len(wav_bytes):
+                frac = struct.unpack_from('<I', wav_bytes, pos + 8 + 16)[0]
+                return round(frac / 4294967296.0 * 100.0)
+            return None
+        pos += 8 + sz + (sz & 1)
+    return None
+
+
 # ---------------------------------------------------------------------------
 # AIFF / AIFF-C loader
 # ---------------------------------------------------------------------------
@@ -400,6 +421,7 @@ def load_wav(wav_path: str, name: str) -> Optional[SampleData]:
         # parser uses this as the playback root when RootNote=0 (the MPC unset
         # sentinel) instead of the keygroup low note — see _read_smpl_root.
         smpl_root = _read_smpl_root(raw_file)
+        smpl_fine_cents = _read_smpl_pitch_fraction_cents(raw_file)
         return SampleData(
             name        = safe_name,
             data        = raw,
@@ -410,6 +432,7 @@ def load_wav(wav_path: str, name: str) -> Optional[SampleData]:
             loop_start  = loop_start,
             loop_end    = loop_end,
             root_note   = smpl_root if smpl_root is not None else 60,
+            fine_tune   = smpl_fine_cents if smpl_fine_cents is not None else 0,
         )
     except Exception as e:
         print(f"  [ERROR] Could not load WAV {wav_path}: {e}")
