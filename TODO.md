@@ -1,5 +1,57 @@
 # mpc2emu — Open Items
 
+## SF2 static filter + zone gain/tune now reach the E4B/KRZ writers — needs hardware A/B (OPEN, 2026-07-29)
+
+`parsers/sf2_parser.py` previously read **no** static filter and **no**
+preset-level generators, so every SF2 import arrived with the filter wide
+open and zone gain/tune at defaults. As of `ea74e45` it reads gen 8/9
+(`initialFilterFc`/`initialFilterQ`) and gens 17/48/51/52 (pan,
+attenuation, coarse, fine) including the preset global-zone offsets — see
+`docs/RESOLUTION_NOTES.md` §EIII-CWM.
+
+**Why this is a writer-side concern despite being a read-side change:**
+those fields are *already* consumed by both writers (`e4b_writer._build_voice`
+writes `vpar[58]/[60]/[61]` from `filter_type`/`filter_cutoff`/
+`filter_resonance`, and `vpar[36]/[54]/[55]` or the zone-entry bytes from
+`fine_tune`/`volume`/`pan`; `krz_writer._patch_layer` maps the filter onto
+the K2000 4POLE LOPASS and folds `fine_tune` into the keymap tuning). So
+converted output **changes audibly** for any SF2 source that carries a
+filter or non-default zone gain — a bank that used to render wide-open now
+renders with the SF2's intended cutoff/Q.
+
+That is the *correct* behaviour and matches every other reader we have,
+but it is **not hardware-confirmed**: the whole path was validated only
+against file-level expectations plus the system GM soundfont (3 of 20
+presets carry a real filter), never played on an E4XT or K2000R.
+
+Two specific things the mapping could get wrong, neither yet measured:
+
+- **Q normalization.** `filter_resonance = q_cb / 960.0` uses the
+  generator's full legal 0–960 centibel (0–96 dB) range from the spec.
+  That's a *software format* range, not an E4XT-measured one — unlike our
+  hardware-calibrated cutoff/mod constants in `models/common.py`. If SF2
+  banks in practice only ever use a fraction of that range, imported
+  resonance will read systematically too low.
+- **Filter type / slope.** SF2 defines one fixed 2-pole (12 dB/oct)
+  resonant lowpass, mapped to XPM type `1` (LP12). On E4B that becomes
+  `vpar[58]=0x01` (2PLP), an exact slope match. On KRZ it does **not**:
+  `krz_writer._k2_filter_plan` sends XPM type 1 to Alg 16 1-pole LOPASS
+  (6 dB/oct, fixed -3 dB resonance) because the K2000 has no 2-pole
+  option — Alg 1 is 4-pole/24 dB. So an SF2 filter renders half as steep
+  on K2000 and loses Q control. That mapping predates this change and is
+  a reasonable pick between 6 and 24 dB, but SF2 is the first source
+  format to hit it routinely, so it is worth an ear before assuming
+  24 dB/oct wouldn't sound closer.
+
+**Status:** OPEN — read side shipped and corpus/file verified; the
+writer path it now feeds is unverified on hardware.
+**Blocked on:** an A/B on real hardware — convert one filter-carrying SF2
+(e.g. a `default-GM.sf2` preset that has gen 8 set) to both `.E4B` and
+`.KRZ`, play against the SF2 rendered in a soft sampler, and check the
+cutoff/Q land in the right place. If Q reads consistently thin, calibrate
+`q_cb` against a measured range the way `FILTER_ENV_FULL_CENTS` and
+`VEL_FILTER_FULL_CENTS` were done (see `docs/RESOLUTION_NOTES.md` §19).
+
 ## SFZ/SF2 parsers: volume LFO (tremolo) not read — RESOLVED, read-side only (2026-07-28)
 
 Cross-referencing ConvertWithMoss PRs
