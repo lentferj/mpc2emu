@@ -447,6 +447,16 @@ def main():
              'this shorthand for that side (e.g. --trim --trim-tail 45 keeps the '
              'default 72 dB start trim but trims deeper into the tail). See '
              '--trim-start / --trim-tail for the full behaviour.')
+    ap.add_argument('--stereo', action='store_true',
+        help='Keep stereo samples in stereo instead of downmixing them to mono. '
+             'Only the E4B writer emits stereo (one sample object carrying both '
+             'channels, which is how real E-mu banks store it — 23.6%% of the '
+             'sample objects in a 473-bank corpus are stereo this way); the KRZ '
+             'and EIII writers still downmix, since their stereo encodings are '
+             'documented but not implemented. OFF by default because stereo '
+             'DOUBLES every sample and an E4B bank is capped at 128 MB, so a '
+             'library that fits today may not with --stereo. Reading a stereo '
+             'E4B is always correct regardless of this flag.')
     ap.add_argument('--trim-start', nargs='?', const=72.0, type=float, default=None,
         metavar='DB',
         help='Cleanly cut leading silence off the START of each sample. The MPC '
@@ -703,6 +713,9 @@ def main():
     step_n += 1
     import parsers.xpm_parser as _xpm
     _xpm.SYNC_BPM = args.lfo_sync_bpm          # tempo for synced-LFO rate
+    _xpm.PRESERVE_STEREO = args.stereo         # keep stereo instead of downmixing
+    if args.stereo:
+        print("  Stereo passthrough ON (E4B output only; KRZ/EIII still downmix)")
     if sample_dir:
         from parsers.sampledir_parser import parse_sample_dir
         _off = None if args.middle_c == 'auto' else {'C3': 2, 'C4': 1, 'C5': 0}[args.middle_c]
