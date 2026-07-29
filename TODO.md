@@ -187,9 +187,27 @@ fidelity loss in the pipeline that is not a hardware limit.
 
 **Still open:** KRZ stereo (second `Soundfilehead`, `numHeaders`) and EIII
 stereo (`OPTION_CHANNEL_RIGHT` + the RIGHT half of each position pair). Both
-encodings are already documented; neither is implemented. Question 3 below
-(pan interaction) is also still unanswered, and now applies to the E4B
-writer that ships stereo.
+encodings are already documented; neither is implemented.
+
+**Hardware confirmation still required for the WRITE side** — the offline
+evidence is strong but not conclusive (§E4BSTEREO "Offline confirmation
+round"): our header reproduces E-mu's own bytes on 509 real stereo samples
+for every field that carries meaning, and the fields that differ differ
+identically for mono, which is hardware-confirmed. The EOS manual (p.93)
+independently confirms one-object-per-stereo-sample, that right-side
+parameters are ignored, and implies one stereo sample = ONE voice. What
+remains is a 6-point bench checklist in §E4BSTEREO: does it load, does it
+play in stereo, is the channel ORDER right, does it cost one voice or two,
+what does pan do to a stereo voice, do both sides loop in sync.
+
+**Channel order can be settled without hardware** — four real stereo samples
+are exported to `~/temp/stereo_audition/` as stereo WAVs; if L/R were
+swapped they play mirrored, which is audible on a familiar library.
+
+**ConvertWithMoss has the same decode bug** (`Emulator4Detector` hardcodes
+1 channel and reads both blocks as one mono region) and downmixes on write,
+so there is no second implementation to check against — and this is
+reportable upstream if Jan wants to.
 
 **Blocked on / open questions before implementing:**
 

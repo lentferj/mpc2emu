@@ -4333,3 +4333,86 @@ because sample ordering varies (semantic content is identical). Byte-level
 A/B of full conversions is therefore meaningless until that is fixed; use a
 content digest. Worth a separate look, since reproducible output would make
 every future regression check far cheaper.
+
+### Offline confirmation round (2026-07-29) — what raised confidence short of hardware
+
+Asked how certain the stereo work is without a hardware re-check. Four
+independent offline checks, in rough order of how much they moved the needle:
+
+**1. Round-trip against E-mu's own bytes (strongest).** Parse a real stereo
+sample, re-encode its header with `e4b_writer`, diff field by field against
+the original. Over **509 real stereo samples**:
+
+| field group | agreement |
+|---|---|
+| block layout (`start_l/r`, `end_l/r`) | **509/509 (100%)** |
+| loop fields, **looped** samples | **180/180 (100%)** |
+| loop fields, unlooped samples | 0/329 — leftover values EOS ignores with the loop bit clear |
+
+This is close to a closed loop: the decode must be right for the encode to
+regenerate E-mu's bytes. Four other fields differ (`pitch`, `options` bit
+`0x08`, `dataOff_l/r`) — but they differ **identically for mono**, and mono
+E4B output is hardware-confirmed, so EOS demonstrably tolerates them.
+(`0x08` is set on 97.4% of mono and 97.9% of stereo samples; we have never
+written it, mono included.)
+
+**2. A false alarm worth recording.** A mono-vs-stereo differential over all
+94 header bytes flagged bytes 73-93 (`parameters[6]`, documented `{0…0}`) as
+varying in stereo but constant in mono — i.e. a field we might be failing to
+write. It is **uninitialised buffer padding**: only 5.75% of stereo samples
+have anything there, 100% of mono have zeros, the values decode as smooth
+audio ramps, and 88 of them are literally byte-copies of the sample's own PCM
+found elsewhere in the same sample. Writing zeros is correct. Recorded so the
+next person does not re-investigate it.
+
+**3. EOS 4.0 manual, p.93 "Combine L/R into Stereo".** Independently confirms
+the corpus RE: left/right samples are *"combined into a **single stereo
+sample**"* (one object, not two linked ones), *"Program parameters for the new
+stereo sample are taken from the left sample. **The right side parameters are
+ignored**"* (so mirroring the left loop points onto the right, as the writer
+does, is safe), and *"when this function is disabled, each sample is placed in
+a **separate voice**"* — implying a combined stereo sample occupies **one**
+voice, so no change is needed to voice-count or preset-size accounting.
+
+Also p.~10095: EOS's own Stereo→Mono *"sums both sides of the stereo sample,
+then divides by two"* — exactly the `(l + r) >> 1` in `models.common.
+stereo_to_mono`, now validated against the manufacturer's own definition.
+
+**4. ConvertWithMoss cross-check — no corroboration available, because they
+have the same bug.** `Emulator4Detector` hardcodes
+`DefaultAudioMetadata(1, …)` and takes the whole PCM region as one mono block,
+exactly as mpc2emu did. They handle the right-channel-only loop-field case
+(their PR #242, which we adopted) but never noticed the both-channels case.
+Their Creator downmixes on write (`isStereo ? mixToMono(wavData) : wavData`).
+So this finding is novel and there is no second implementation to check
+channel ORDER against.
+
+### Residual risk, honestly
+
+- **Channel order (L/R vs R/L) is the one thing offline work cannot settle.**
+  It rests on two prior independent RE efforts naming the first block left:
+  emu3bm's `struct emu3_sample` (`start_l` before `start_r`) and the EIII's
+  `SAMPLE_START_LEFT = 0x14` before `_RIGHT = 0x18`. Low risk, and the failure
+  mode is a mirrored image rather than corruption. Four real stereo samples
+  are exported as stereo WAVs to `~/temp/stereo_audition/` so it can be
+  settled by ear on a familiar library, no hardware needed.
+- **The write side is not hardware-proven.** Every meaningful field matches
+  E-mu across 509 samples, but this project's own history (the voice-count
+  trailer, the silent-KRZ bug, the ISO `props[5]` marker) is a standing
+  reminder that byte-correct files can still fail on the device.
+
+### Hardware checklist (when a bench session happens)
+
+Kept short deliberately — the exploration is done, this is confirmation:
+
+1. Load a `--stereo` bank on the E4XT. Does it load without "Unknown file
+   type" / IFF complaints?
+2. Does a stereo voice play **in stereo** (not one side, not mono-summed)?
+3. **Channel order**: play a sample whose sides differ audibly; confirm left
+   is left. (Or settle this beforehand from the exported WAVs.)
+4. **Voice cost**: does one stereo sample consume one voice or two? The manual
+   implies one (p.93); confirm against the polyphony counter, because it feeds
+   `--max-preset-size` and the voice-limit logic.
+5. **Pan** on a stereo voice: does it balance the existing image, or collapse
+   it? (TODO question 3, still unanswered.)
+6. Loop behaviour on a looped stereo sample — both sides must loop in sync.
