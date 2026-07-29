@@ -372,24 +372,31 @@ def _normalize_token(text: str) -> str:
     return ''.join(c.lower() for c in text if c.isalnum())
 
 
-def _repair_affinity(preset_name: str, target_names: List[str]) -> float:
-    """Fraction of target sample names carrying one of the preset name's
-    distinctive words (e.g. 'KeyBass Sft' <-> 'SoftKeyBassA0')."""
-    if not target_names:
-        return 0.0
+def _preset_tokens(preset_name: str) -> set:
+    """The distinctive words of a preset name, used to tie it to its samples
+    ('KeyBass Sft' <-> 'SoftKeyBassA0'). Empty when the name is all generic
+    or numeric, in which case affinity scoring is skipped entirely."""
     tokens = set()
     for word in preset_name.replace(':', ' ').replace('/', ' ').replace('-', ' ').split(' '):
         token = _normalize_token(word)
         if len(token) >= 3 and token not in _GENERIC_TOKENS and not token.isdigit():
             tokens.add(token)
-    if not tokens:
+    return tokens
+
+
+def _repair_affinity(tokens: set, normalized_target_names: List[str]) -> float:
+    """Fraction of target sample names carrying one of the preset name's
+    distinctive words. Both the tokens and the normalized sample names are
+    precomputed by the callers -- a bank has only a few hundred distinct
+    sample names but scores thousands of (preset, candidate) pairs against
+    them, so normalizing per call dominated the whole repair pass."""
+    if not tokens or not normalized_target_names:
         return 0.0
     matched = 0
-    for name in target_names:
-        normalized = _normalize_token(name)
+    for normalized in normalized_target_names:
         if any(tok in normalized for tok in tokens):
             matched += 1
-    return matched / len(target_names)
+    return matched / len(normalized_target_names)
 
 
 def _collect_zone_pairs(data: bytes, preset_offset: int) -> set:
@@ -426,9 +433,9 @@ def _collect_zone_pairs(data: bytes, preset_offset: int) -> set:
 
 
 def _score_repair_candidate(candidate: Tuple[bool, int], roots: List[int], stored: List[int],
-                             lows: List[int], sample_names: Dict[int, str],
+                             lows: List[int], normalized_names: Dict[int, str],
                              parsed_notes: Dict[int, Tuple[int, int, bool]],
-                             preset_name: str) -> Tuple[int, int, int, float]:
+                             tokens: set) -> Tuple[int, int, int, float]:
     """-> (hits, parseable, distinct_roots_hit, affinity)."""
     as_is, page = candidate
     hits = 0
@@ -437,9 +444,10 @@ def _score_repair_candidate(candidate: Tuple[bool, int], roots: List[int], store
     target_names = []
     for i in range(len(roots)):
         slot = stored[i] if as_is else lows[i] + page * 256
-        name = sample_names.get(slot)
-        if name is not None:
-            target_names.append(name)
+        if tokens:
+            normalized = normalized_names.get(slot)
+            if normalized is not None:
+                target_names.append(normalized)
         note = parsed_notes.get(slot)
         if note is None:
             continue
@@ -447,7 +455,7 @@ def _score_repair_candidate(candidate: Tuple[bool, int], roots: List[int], store
         if _note_matches(roots[i], note):
             hits += 1
             hit_roots.add(roots[i])
-    return hits, parseable, len(hit_roots), _repair_affinity(preset_name, target_names)
+    return hits, parseable, len(hit_roots), _repair_affinity(tokens, target_names)
 
 
 def _choose_repair_candidate(candidates: List[Tuple[bool, int]],
@@ -523,8 +531,10 @@ def _resolve_repair_per_zone(stored: List[int], lows: List[int],
 
 
 def _resolve_preset_repair(data: bytes, preset_offset: int, sample_names: Dict[int, str],
+                            normalized_names: Dict[int, str],
                             parsed_notes: Dict[int, Tuple[int, int, bool]],
                             max_slot: int) -> Dict[int, int]:
+    max_page = (max_slot - 1) // 256
     pair_set = _collect_zone_pairs(data, preset_offset)
     if not pair_set:
         return {}
@@ -535,10 +545,16 @@ def _resolve_preset_repair(data: bytes, preset_offset: int, sample_names: Dict[i
     lows   = [(s - 1) % 256 + 1 for s in stored]
     as_is_feasible = all(s in sample_names for s in stored)
 
+    # Provable no-op: a bank of <=256 samples (max_page 0) whose every stored
+    # index resolves has lows == stored throughout, so the only candidate is
+    # the stored interpretation itself. Skips the scoring pass outright for
+    # the many small banks in which truncation cannot have happened.
+    if as_is_feasible and max_page == 0:
+        return {}
+
     candidates: List[Tuple[bool, int]] = []
     if as_is_feasible:
         candidates.append((True, 0))
-    max_page = (max_slot - 1) // 256
     for page in range(max_page + 1):
         feasible = True
         identical = as_is_feasible
@@ -546,6 +562,7 @@ def _resolve_preset_repair(data: bytes, preset_offset: int, sample_names: Dict[i
             slot = lows[i] + page * 256
             if slot not in sample_names:
                 feasible = False
+                break          # infeasible pages are discarded regardless of `identical`
             if slot != stored[i]:
                 identical = False
         if feasible and not identical:
@@ -554,8 +571,13 @@ def _resolve_preset_repair(data: bytes, preset_offset: int, sample_names: Dict[i
     if not candidates:
         return _resolve_repair_per_zone(stored, lows, sample_names, max_page)
 
-    preset_name = _decode_name(data, preset_offset)
-    scores = [_score_repair_candidate(c, roots, stored, lows, sample_names, parsed_notes, preset_name)
+    # No page was feasible, so the stored interpretation is unopposed: every
+    # branch of _choose_repair_candidate returns it. Skip the scoring pass.
+    if len(candidates) == 1 and candidates[0][0]:
+        return {}
+
+    tokens = _preset_tokens(_decode_name(data, preset_offset))
+    scores = [_score_repair_candidate(c, roots, stored, lows, normalized_names, parsed_notes, tokens)
               for c in candidates]
     chosen = _choose_repair_candidate(candidates, scores, num_pairs)
     winner = candidates[chosen]
@@ -578,13 +600,19 @@ def _resolve_bank_repairs(data: bytes, preset_offsets: List[int],
     if not sample_names:
         return repairs
     max_slot = max(sample_names)
+    # Both derived views of the sample names are built once per bank: the
+    # scoring pass looks them up thousands of times across (preset, candidate)
+    # pairs, and recomputing either per lookup dominated the whole pass.
     parsed_notes = {}
+    normalized_names = {}
     for slot, name in sample_names.items():
         note = _parse_note_name(name)
         if note is not None:
             parsed_notes[slot] = note
+        normalized_names[slot] = _normalize_token(name)
     for preset_offset in preset_offsets:
-        mapping = _resolve_preset_repair(data, preset_offset, sample_names, parsed_notes, max_slot)
+        mapping = _resolve_preset_repair(data, preset_offset, sample_names,
+                                          normalized_names, parsed_notes, max_slot)
         if mapping:
             repairs[preset_offset] = mapping
     return repairs
