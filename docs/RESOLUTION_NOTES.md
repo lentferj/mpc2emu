@@ -3627,3 +3627,115 @@ new `lfo1_to_volume`/`lfo2_to_volume` fields.
 
 Also noted, bigger and out of scope here: `parsers/gig_parser.py` has no
 LFO support at all (pitch, filter, or volume).
+
+## §EIII-CWM — Five reader gaps found cross-referencing ConvertWithMoss (FIXED 2026-07-29)
+
+**Context:** ConvertWithMoss landed ~38 commits in 48 h, nearly one per
+format it supports. Reviewed the subset touching formats mpc2emu also
+reads (the rest — Kontakt, Roland, Tonverk, 1010music, QPAT, YSFC, Korg,
+Deluge, Renoise, TX16Wx, Ensoniq, Maschine, DLS, NN-XT, DecentSampler,
+Disting — are formats we don't touch). Four of their PRs revealed real
+gaps on our side; the rest we either already handled correctly or had
+deliberately diverged from. Commits `ea74e45`/`d0ed2cc`/`ad4c80e`/
+`6c463c4` plus our own follow-up `5900560`.
+
+**Checkpoint for the next round:** the last CWM commit reviewed is
+`9443b635` (2026-07-29). Diff from there rather than a `--since` window.
+
+### What was already right (no action)
+
+Worth recording, since re-checking these each round is wasted effort:
+
+- **EIII parked-filter / tracking-neutral byte** (their #245): already
+  fixed here independently, and `writers/eiii_writer.py` carries the
+  `_ZONE_TRACKING_NEUTRAL` note explaining why we write `0` rather than
+  their `NO_VCF_TRACKING = 0x40` — see §EIII.
+- **E4B envelope decay1/decay2 + channel-paired loop** (their #242):
+  already fixed, same "Nylon Guitar" case — see §E4BREAD2.
+- **Volume LFO / tremolo** (their #240): already read — see §CWM-LFOVOL.
+- **Sample-file root-note priority** (their #281): `sampledir_parser.py`
+  already prefers the embedded `smpl` root over the filename.
+- **TAL volume default** (their #276): already written unconditionally.
+- Their EXS24 (#261) and SFZ (#278) fixes are **writer-side**; mpc2emu
+  has no EXS24 or SFZ writer, so they don't apply.
+
+### The four fixes
+
+1. **SF2 static filter + preset-level generators** (their #255). Gen 8
+   `initialFilterFc` / gen 9 `initialFilterQ` were never read — every
+   other reader we have models a static filter, SF2 alone didn't. And a
+   preset zone with no gen 41 is SF2's *global zone*, whose generators
+   are additive offsets over every instrument zone beneath it (spec
+   §8.1.3); only gen 41 itself was being read. Also picked up gen 48/51/52
+   (attenuation, coarse, fine) into the `ZoneMapping` fields that already
+   existed for them.
+
+2. **EIII filter bypass** (their #248). The bypass test compared the
+   cutoff byte to `0xEF` exactly — our own writer's `DEFAULT_CUTOFF`.
+   Every byte from `0xD5` up is already past 20 kHz, so third-party banks
+   parking the filter elsewhere got a spurious filter object. Now tested
+   against `E4B_CUTOFF_MAX_HZ`. Corpus check: 130,473 zones qualify as
+   inaudible-with-zero-Q, and **69,981 of them (>half) used a byte other
+   than `0xEF`** and were mis-read.
+
+3. **EIII truncated sample indices** (their #252). See
+   `docs/EIII_FORMAT.md` for the format-level writeup. Mastering-tool
+   artifact of specific library CD-ROMs, *not* a hardware/format bug —
+   which is why it survived 25+ years unreported. Ported their
+   `Emulator3SampleIndexRepair.java` faithfully (same scoring
+   thresholds); the thresholds are what stop it mis-repairing a correct
+   preset, so they are not to be "simplified" without re-running the
+   corpus.
+
+4. **WAV `smpl` MIDIPitchFraction** (their #254). Only `MIDIUnityNote`
+   was read, so embedded fine-tune rounded to the nearest semitone.
+
+### Corpus validation method (reusable)
+
+The EIII work was validated by scanning **1118 real EIII/EIIIX/ESI banks**
+out of 22 commercial CD-ROM `.iso` images in Jan's collection
+(`~/Dokumente/SYNTHS/E4XT/{*.ISO,ISO-Images/*.iso}`), located by scanning
+raw bytes for the three identifier strings and slicing to the next match
+— the same technique §EIII used. Result: **4144 sample-index references
+repaired across 771 presets, zero parse failures.**
+
+A **decision-branch census** (instrumenting `_choose_repair_candidate`)
+answered whether any of the heuristic is dead weight:
+
+```
+3073  kept stored (no repair)
+ 495  gate: decisive (pitch ladder)      395 of them decisive-only
+ 219  gate: affinity_decisive (name only)
+ 137  gate: perfect_small (<=2 zones)
+  30  via affinity override (pitch too weak)
+ 200  repairs REQUIRED a non-pitch gate
+```
+
+So the preset-name affinity machinery carries ~30 % of repaired presets;
+deleting it to shorten the port would have silently lost 200 repairs.
+**Don't strip it.**
+
+Spot-check that the repairs are real rather than merely plausible: an
+`apo:PlusDXep` preset resolves to `C3Yamaha` F0/C1/Gx1/Dx2/Gx2/Dx3/A3/D4/
+Gx4/Cx5/G5 and `TinePiano` G2/G3/G4 — an ascending ladder matching the
+zones' own keys — where the stored indices pointed at unrelated `OB 1 G1`
+and `B3LoDistSlow*` samples.
+
+### Performance note
+
+The faithful port was profiled afterwards (`5900560`): `_repair_affinity`
+was **63 % of the whole repair pass**, because sample-name normalization
+ran per (preset × candidate) instead of once per bank — 37,470 calls on a
+bank holding 738 distinct names. Hoisting that, plus two provable no-op
+short-circuits, cut the pass ~1.8× with byte-identical output (re-verified
+at 4144/771 over the full corpus). General lesson, third time in this
+project: **the hot spot in a ported heuristic is almost always repeated
+string normalization in an inner loop, not the algorithm itself.**
+
+### Not fixed — reference only
+
+- EIII per-zone **vibrato** (their #284) and **chorus-as-detuned-voice**
+  (their #285): not modelled by mpc2emu; would need the per-zone LFO
+  bytes §EIII deliberately leaves alone (no hardware calibration).
+- EIII **floppy disk sets** (their #237): `ALL_BANK_FORMATS` covers
+  SCSI/hard-disk bank files only, not raw floppy memory dumps.
