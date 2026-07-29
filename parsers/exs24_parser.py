@@ -116,6 +116,12 @@ from models.common import (
 from parsers.xpm_parser import load_wav, _safe_name
 
 
+# Fallback audio-file index, memoized per .exs parent directory — see the
+# comment at its use site in parse_exs24. Keyed (not global) so files in
+# different folders resolve exactly as they did when each built its own.
+_AUDIO_INDEX_CACHE: dict = {}
+
+
 # Chunk type identifiers (classic little-endian)
 CHUNK_ZONE   = 0x01000100
 CHUNK_GROUP  = 0x02000100
@@ -378,9 +384,22 @@ def _parse_exs_v11(p: Path, data: bytes,
     # format resolve to a parallel copy in another (e.g. several Logic packs ship
     # the .exs pointing at .aif while a sibling WAV/ folder holds the same stems
     # as .wav — load_wav handles both WAV and AIFF).
-    _audio_index: dict = {}
-    _stem_index:  dict = {}
-    _index_built = [False]
+    # The index is derived purely from `p.parent`'s ancestors, so every .exs
+    # in one folder builds a byte-for-byte identical one -- but the closure is
+    # per-parse_exs24 call, so converting a folder of N presets re-walked the
+    # same (80k-file-bounded) tree N times. Profiling put that scan at 97% of
+    # exs24 parse time. Memoized per parent directory rather than globally, so
+    # .exs files in different folders still get their own index and resolve
+    # exactly as before.
+    _cache_key = str(p.parent.resolve())
+    _cached = _AUDIO_INDEX_CACHE.get(_cache_key)
+    if _cached is not None:
+        _audio_index, _stem_index = _cached
+        _index_built = [True]
+    else:
+        _audio_index: dict = {}
+        _stem_index:  dict = {}
+        _index_built = [False]
     # Match audio-ish folder names by substring (covers WAV/Audio/Samples but
     # also pack-specific names like "XS_SINGLE_SOUNDS", "XS_DRUM_HITS").
     _AUDIO_KEYWORDS = ('wav', 'aif', 'audio', 'sample', 'sampler', 'sound',
@@ -421,6 +440,11 @@ def _parse_exs_v11(p: Path, data: bytes,
                         break
                 if count > 80000:
                     break
+            # Publish for the next .exs in this same folder. Bounded FIFO so a
+            # deep recursive convert over many folders can't grow without limit.
+            if len(_AUDIO_INDEX_CACHE) >= 16:
+                _AUDIO_INDEX_CACHE.pop(next(iter(_AUDIO_INDEX_CACHE)))
+            _AUDIO_INDEX_CACHE[_cache_key] = (_audio_index, _stem_index)
         # Prefer .wav over .aif when both exist (same decoded result, but WAV
         # avoids parsing overhead): exact .wav match → same-stem .wav twin →
         # exact AIFF match → stem AIFF fallback (load_wav handles both).
