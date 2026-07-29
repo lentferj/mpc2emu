@@ -146,8 +146,13 @@ def parse_sample_dir(dir_path: str, wav_dir: Optional[str] = None,
     for i, (root, sd) in enumerate(placed):
         lo = 0 if i == 0 else (roots[i - 1] + root) // 2 + 1
         hi = 127 if i == n - 1 else (root + roots[i + 1]) // 2
+        # fine_tune must be carried onto the ZONE: every writer reads
+        # ZoneMapping.fine_tune, never SampleData.fine_tune, so a WAV `smpl`
+        # chunk's MIDIPitchFraction (read by load_wav) was silently dropped
+        # one function after being parsed.
         zones.append(ZoneMapping(sample_name=sd.name, lo_key=lo, hi_key=hi,
-                                 lo_vel=0, hi_vel=127, root_key=root))
+                                 lo_vel=0, hi_vel=127, root_key=root,
+                                 fine_tune=sd.fine_tune))
         print(f"   {sd.name:18s} root={root:3d}  keys {lo:3d}-{hi:3d}")
 
     bank.presets = [Preset(name=(p.name[:16] or 'Samples'), voices=[VoiceLayer(zones=zones)])]

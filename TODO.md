@@ -1,6 +1,6 @@
 # mpc2emu — Open Items
 
-## sampledir_parser: WAV smpl-chunk fine-tune read but never reaches the zone (BUG, OPEN, 2026-07-29)
+## sampledir_parser: WAV smpl-chunk fine-tune read but never reaches the zone (FIXED, 2026-07-29)
 
 Found from the VinSamLib side while checking whether `6c463c4` (`load_wav()`
 now reads a WAV `smpl` chunk's `MIDIPitchFraction` into `SampleData.fine_tune`)
@@ -30,8 +30,10 @@ pipeline (`build/sampledir_import.import_sample_dir()` → E4B write): the
 written file's zone-table fine-tune byte decodes to 0 cents, not ~50.
 
 **Fix:** pass `fine_tune=sd.fine_tune` into the `ZoneMapping(...)` call above.
-**Status:** OPEN — not fixed. **Blocked on:** nothing; one-line change,
-same file the fix that exposed this landed in.
+**Status: FIXED** — reproduced exactly as reported (`SampleData.fine_tune == 50`
+but `ZoneMapping.fine_tune == 0`), then fixed and verified one step further than
+the report: a written E4B now round-trips back to 50 cents, so the value reaches
+the FILE, not just the model.
 
 ## Stereo samples are downmixed to mono — a mpc2emu limit, NOT a format limit (OPEN, 2026-07-29)
 
