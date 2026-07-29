@@ -564,24 +564,39 @@ def _apply_slice(sd: SampleData, slice_start: int, slice_end: int,
         sd.loop_end   = 0
 
 
+# unsigned-8 -> signed-8 sign flip, for the bulk 8->16 conversion below.
+# (Same table `gig_parser` uses for its own 8-bit path, CR-16 #1.)
+_FLIP_SIGN8 = bytes((i ^ 0x80) for i in range(256))
+
+
 def _convert_24_to_16(raw: bytes, channels: int) -> tuple:
-    n_samples = len(raw) // 3
-    out = bytearray(n_samples * 2)
-    for i in range(n_samples):
-        b0, b1, b2 = raw[i*3], raw[i*3+1], raw[i*3+2]
-        val = (b2 << 16 | b1 << 8 | b0)
-        if val >= 0x800000:
-            val -= 0x1000000
-        val16 = val >> 8
-        struct.pack_into('<h', out, i * 2, val16)
+    """Little-endian signed 24-bit -> signed 16-bit.
+
+    Dropping the LOW byte of an LE 24-bit sample IS the 16-bit value: with
+    `b2 < 0x80` the old `(b2<<16|b1<<8|b0) >> 8` is plainly `b2<<8|b1`, and
+    with `b2 >= 0x80` the `-0x1000000` sign correction and the flooring
+    `>> 8` cancel to exactly `(b2<<8|b1) - 0x10000`. Bytes 1 and 2 are
+    already in little-endian order, so unlike the big-endian AIFF variant
+    (`_be_high2_to_le16`) this needs no byteswap -- just a strided copy.
+
+    This was 87% of SFZ/EXS24 parse time; those formats' sample sets are
+    predominantly 24-bit WAV, so they saw none of the stereo-downmix win.
+    """
+    n = len(raw) // 3
+    out = bytearray(n * 2)
+    out[0::2] = raw[1:n * 3:3]      # mid byte  -> LE low
+    out[1::2] = raw[2:n * 3:3]      # high byte -> LE high
     return bytes(out), 16
 
 
 def _convert_8_to_16(raw: bytes) -> tuple:
+    """Unsigned 8-bit -> signed 16-bit, i.e. `(b - 128) * 256`.
+
+    As little-endian int16 that is low byte 0 and high byte `b ^ 0x80`, so
+    it is a zero fill interleaved with one bulk `bytes.translate`.
+    """
     out = bytearray(len(raw) * 2)
-    for i, b in enumerate(raw):
-        val = (b - 128) * 256
-        struct.pack_into('<h', out, i * 2, val)
+    out[1::2] = raw.translate(_FLIP_SIGN8)
     return bytes(out), 16
 
 
