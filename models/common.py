@@ -21,10 +21,54 @@
 Common data models for MPC -> EMU E4B conversion.
 Internal representation decoupled from both source and target formats.
 """
+import array
 import math
+import sys
+import warnings
 from dataclasses import dataclass, field
 from typing import List, Optional
 from enum import IntEnum
+
+# Stereo->mono downmix accelerator. See docs/RESOLUTION_NOTES.md §PARSERPERF
+# for why `audioop` is used despite PEP 594 (it is ~100x a per-frame struct
+# loop, and this ran at 99.5% of three parsers' time) and why the pure-`array`
+# fallback below keeps Python 3.13+ working with byte-identical output.
+try:
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', DeprecationWarning)
+        import audioop as _audioop
+except ImportError:                                  # Python 3.13+
+    _audioop = None
+
+
+def stereo_to_mono(raw: bytes) -> tuple:
+    """Downmix interleaved 16-bit LE stereo to mono, averaging with a floor
+    (`(l + r) >> 1`). Returns `(pcm, 1)` so callers can assign both the data
+    and the new channel count.
+
+    Canonical home: parsers read it (via `xpm_parser`) and writers that cannot
+    emit stereo call it at their entry point, so there is exactly one downmix
+    in the project (CR-13/CR-17: duplicated codecs have drifted here before).
+    """
+    raw = raw[:len(raw) // 4 * 4]
+    if _audioop is not None and sys.byteorder == 'little':
+        return _audioop.tomono(raw, 2, 0.5, 0.5), 1
+    a = array.array('h')
+    a.frombytes(raw)
+    if sys.byteorder == 'big':          # stored little-endian, read natively
+        a.byteswap()
+    mono = array.array('h', [(l + r) >> 1 for l, r in zip(a[0::2], a[1::2])])
+    if sys.byteorder == 'big':          # emit little-endian
+        mono.byteswap()
+    return mono.tobytes(), 1
+
+
+def ensure_mono(sample) -> None:
+    """Downmix `sample` in place if it is stereo. For writers whose target
+    format mpc2emu does not yet emit stereo for -- explicit and logged at the
+    call site, rather than silently assuming every sample is mono."""
+    if getattr(sample, 'channels', 1) == 2:
+        sample.data, sample.channels = stereo_to_mono(sample.data)
 
 
 class LoopType(IntEnum):

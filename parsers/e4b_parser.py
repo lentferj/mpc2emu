@@ -223,21 +223,68 @@ def _parse_sample_body(body: bytes) -> tuple:
     # "right-channel-only" samples have a negative (nonsensical) loop_start
     # under the unconditional left-field read, all valid once read via the
     # correct field per this bit.
-    has_left_channel = bool(options & 0x0020)
-    loop_start_off = 38 if has_left_channel else 42
-    loop_end_off   = 46 if has_left_channel else 50
-    loop_start_l = struct.unpack_from('<I', body, loop_start_off)[0]
-    loop_end_l   = struct.unpack_from('<I', body, loop_end_off)[0]
+    has_left_channel  = bool(options & 0x0020)
+    has_right_channel = bool(options & 0x0040)
+    is_stereo = has_left_channel and has_right_channel
 
     STRUCT_SZ = 92
-    pcm = body[SAMP_HDR:]
 
-    n_frames = len(pcm) // 2   # 16-bit mono
+    if is_stereo:
+        # BOTH channel bits set = one object carrying both channels, with the
+        # two PCM blocks stored SEQUENTIALLY (all of left, then all of right)
+        # and addressed by the L/R halves of each position pair. Corpus-RE'd
+        # 2026-07-29 over 473 local .E4B files: 4803 of 20383 sample objects
+        # (23.6%) are stereo this way, e.g. "24SldUpStC1" with
+        # startL=92 endL=154458 / startR=154460 endR=308826 over 308736 PCM
+        # bytes -- two equal 154368-byte blocks, and per-channel loop points
+        # (lsL=104 is 12 bytes into left, lsR=154472 is 12 bytes into right).
+        #
+        # Previously this whole region was read as ONE mono block, so a
+        # stereo sample imported at double length and played left-then-right.
+        start_l, start_r = struct.unpack_from('<II', body, 22)
+        end_l,   end_r   = struct.unpack_from('<II', body, 30)
+        loop_start_l = struct.unpack_from('<I', body, 38)[0]
+        loop_end_l   = struct.unpack_from('<I', body, 46)[0]
+
+        # A position `p` addresses body offset `p + 2` (the 2-byte sample_idx
+        # prefix sits in front of the 92-byte header); `end` is inclusive of
+        # its own 2-byte frame.
+        left  = body[start_l + 2: end_l + 4]
+        right = body[start_r + 2: end_r + 4]
+        n_frames = min(len(left), len(right)) // 2
+        # mpc2emu's internal PCM is INTERLEAVED (every processor computes
+        # frames as len(data) // (2 * channels)), so de-planarise here.
+        inter = bytearray(n_frames * 4)
+        inter[0::4] = left[0:n_frames * 2:2]
+        inter[1::4] = left[1:n_frames * 2:2]
+        inter[2::4] = right[0:n_frames * 2:2]
+        inter[3::4] = right[1:n_frames * 2:2]
+        pcm = bytes(inter)
+        channels = 2
+        loop_base = start_l
+    else:
+        # A sample object holding only its RIGHT channel (bit 0x0020 clear)
+        # keeps its real positions in the SECOND field of each pair and leaves
+        # the first with a stale value that doesn't address this sample at all
+        # — reading the left field unconditionally can produce an outright
+        # invalid loop point. Cross-referenced against ConvertWithMoss PR #242;
+        # corpus-checked 2026-07-28 against 141 local third-party .e4b files:
+        # 6 of 73 looped "right-channel-only" samples have a negative
+        # (nonsensical) loop_start under the unconditional left-field read, all
+        # valid once read via the correct field per this bit.
+        loop_start_off = 38 if has_left_channel else 42
+        loop_end_off   = 46 if has_left_channel else 50
+        loop_start_l = struct.unpack_from('<I', body, loop_start_off)[0]
+        loop_end_l   = struct.unpack_from('<I', body, loop_end_off)[0]
+        pcm = body[SAMP_HDR:]
+        n_frames = len(pcm) // 2   # 16-bit mono
+        channels = 1
+        loop_base = STRUCT_SZ
 
     has_loop = bool(options & 0x0001)
     if has_loop:
         loop_type  = LoopType.FORWARD
-        loop_start = (loop_start_l - STRUCT_SZ) // 2
+        loop_start = (loop_start_l - loop_base) // 2
         # On-disk loop_end_l stores the frame BEFORE the true inclusive last
         # loop frame — e4b_writer._build_sample_header encodes the matching
         # `-1` so this stays an exact inverse of our own output. Cross-
@@ -246,7 +293,7 @@ def _parse_sample_body(body: bytes) -> tuple:
         # across a real commercial corpus and found this +1 correction takes
         # clean seams from 78% to 95% and eliminates seams stepping by more
         # than a third of the peak amplitude.
-        loop_end   = min((loop_end_l - STRUCT_SZ) // 2 + 1, max(0, n_frames - 1))
+        loop_end   = min((loop_end_l - loop_base) // 2 + 1, max(0, n_frames - 1))
     else:
         loop_type  = LoopType.NO_LOOP
         loop_start = 0
@@ -256,7 +303,7 @@ def _parse_sample_body(body: bytes) -> tuple:
         name        = base_name,
         data        = bytes(pcm),
         sample_rate = sample_rate,
-        channels    = 1,
+        channels    = channels,
         bit_depth   = 16,
         loop_type   = loop_type,
         loop_start  = loop_start,

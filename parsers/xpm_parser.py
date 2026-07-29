@@ -29,37 +29,15 @@ Older MPC formats (PGM) are binary and handled separately (not yet implemented).
 import array
 import math
 import os
-import sys
-import warnings
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Optional
 import wave
 import struct
 
-# Stereo->mono downmix accelerator.  CR-16 (2026-06-11) deliberately avoided
-# `audioop` because it is deprecated since 3.11 and REMOVED in 3.13 — but it
-# also optimized only the *gig* decode path and left `_stereo_to_mono` below
-# as a per-frame `struct` loop.  Profiling later showed that loop is **99.5%
-# of XPM/SFZ/EXS24 parse time** (all six sample-loading parsers reach it via
-# `load_wav`): 87 s to parse 20 XPMs, 40M struct calls for 31 samples.
-#
-# So CR-16's objection is answered rather than ignored: `audioop` is used
-# only when present, and `_stereo_to_mono` carries a pure-`array` fallback
-# that is byte-identical (verified against an exhaustive sign/parity matrix),
-# so on Python 3.13+ the code keeps working and merely loses the speedup.
-# Measured on 400k frames: struct loop 127 ms, array fallback 43 ms,
-# audioop 1.3 ms.
-try:
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore', DeprecationWarning)
-        import audioop as _audioop
-except ImportError:                                  # Python 3.13+
-    _audioop = None
-
 from models.common import (
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType, lfo_knob_to_hz,
-    cap_voices_by_coverage,
+    cap_voices_by_coverage, stereo_to_mono,
 )
 
 
@@ -607,27 +585,10 @@ def _convert_8_to_16(raw: bytes) -> tuple:
     return bytes(out), 16
 
 
-def _stereo_to_mono(raw: bytes) -> tuple:
-    """Downmix interleaved 16-bit LE stereo to mono, averaging with a floor
-    (`(l + r) >> 1`, matching the original per-frame `(l + r) // 2`).
-
-    `audioop.tomono(raw, 2, 0.5, 0.5)` computes exactly that, negatives and
-    clipping included (verified against an exhaustive sign/parity matrix),
-    at C speed; the `array` path below is the byte-identical fallback for
-    Python 3.13+ where audioop is gone. Both drop a trailing partial frame,
-    as the original loop did.
-    """
-    raw = raw[:len(raw) // 4 * 4]
-    if _audioop is not None and sys.byteorder == 'little':
-        return _audioop.tomono(raw, 2, 0.5, 0.5), 1
-    a = array.array('h')
-    a.frombytes(raw)
-    if sys.byteorder == 'big':          # stored little-endian, read natively
-        a.byteswap()
-    mono = array.array('h', [(l + r) >> 1 for l, r in zip(a[0::2], a[1::2])])
-    if sys.byteorder == 'big':          # emit little-endian
-        mono.byteswap()
-    return mono.tobytes(), 1
+# Canonical implementation lives in models.common so writers can reach it
+# without importing a parser; kept under the old private name because
+# gig_parser and this module's own call sites use it.
+_stereo_to_mono = stereo_to_mono
 
 
 def _safe_name(name: str, maxlen: int = 16, tail: bool = False) -> str:
