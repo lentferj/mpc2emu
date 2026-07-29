@@ -56,7 +56,6 @@ References:
   - Giga format notes from jimcraiglive.com and linuxsampler wiki
 """
 
-import array
 import struct
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -64,7 +63,7 @@ from typing import Dict, List, Optional, Tuple
 from models.common import (
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType
 )
-from parsers.xpm_parser import _safe_name
+from parsers.xpm_parser import _safe_name, _stereo_to_mono
 
 # CR-16: unsigned-8 → signed-8 sign-flip table (bulk `bytes.translate`).
 _FLIP_SIGN8 = bytes((i ^ 0x80) for i in range(256))
@@ -406,12 +405,19 @@ def _extract_waves(riff: _RiffWalker, max_samples: int = 512
             bit_depth = 16
 
         if channels == 2:
-            # E4B supports only mono samples; downmix L+R to mono.
-            arr = array.array('h', raw_data)
-            n   = len(arr) // 2
-            mono = array.array('h', ((arr[i*2] + arr[i*2+1]) >> 1 for i in range(n)))
-            raw_data = mono.tobytes()
-            channels = 1
+            # Downmix L+R because *mpc2emu's* model and writers are mono --
+            # NOT because the targets are. E4B/EOS and the EIII carry stereo
+            # via per-channel option bits (0x0020 left / 0x0040 right) and a
+            # second set of start/end/loop positions, and the K2000 via a
+            # second Soundfilehead; see e4b_parser._parse_sample and
+            # docs/KRZ_FORMAT.md §7.5. Tracked as a real fidelity gap in
+            # TODO.md ("stereo samples are downmixed").
+            #
+            # Shares xpm_parser's implementation rather than keeping a second
+            # copy of the same `(l + r) >> 1` (CR-13/CR-17: duplicated codecs
+            # have drifted here before); that one is audioop-accelerated with
+            # a byte-identical array fallback.
+            raw_data, channels = _stereo_to_mono(raw_data)
 
         loop_type  = LoopType.NO_LOOP
         loop_start = 0
@@ -471,6 +477,9 @@ def parse_gig(gig_path: str, max_instruments: int = 32,
     print(f"  Found {len(waves)} waves")
 
     bank = Bank(name=_safe_name(p.stem))
+    # Names already appended to bank.samples. Rebuilding this as a set
+    # comprehension per zone made the dedup check O(zones x samples).
+    banked_names: set = set()
 
     # Instrument list
     lins = riff.find_list('lins')
@@ -557,7 +566,8 @@ def parse_gig(gig_path: str, max_instruments: int = 32,
                     sd.loop_start = l0['start']
                     sd.loop_end   = l0['end']
 
-                if sd.name not in {s.name for s in bank.samples}:
+                if sd.name not in banked_names:
+                    banked_names.add(sd.name)
                     bank.samples.append(sd)
 
                 # 3prg — Giga articulation (envelope)
