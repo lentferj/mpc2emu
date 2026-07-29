@@ -1036,6 +1036,50 @@ def _get_text(elem, tag: str, default: str = '') -> str:
     return default
 
 
+# First-occurrence file index per search directory, for _find_wav's slow
+# paths.  Bounded FIFO so converting many unrelated trees can't grow it
+# without limit.
+_DIR_INDEX_CACHE: dict = {}
+
+
+def _dir_first_occurrence_index(search_dir: Path):
+    """`({name: path}, {lowercased_name: (position, path)})` for everything
+    under `search_dir`, recording the FIRST occurrence of each in `rglob`
+    traversal order.
+
+    Replaces repeated `rglob` calls: `rglob(name)` and `rglob('*')` walk the
+    tree in the same order, so the first entry with a given name in the full
+    walk is the same path `rglob(name)` would have returned.  The recorded
+    position lets the case-insensitive fallback reproduce "first match in
+    traversal order" rather than "first matching candidate".
+
+    One deliberate behaviour change: a sample name containing glob
+    metacharacters (`[`, `?`, `*`) was previously interpreted as a PATTERN by
+    `rglob`, so e.g. `Bass[12].wav` could resolve to `Bass1.wav`.  Lookups
+    here are literal, which is what the caller means.
+    """
+    key = str(search_dir)
+    cached = _DIR_INDEX_CACHE.get(key)
+    if cached is not None:
+        return cached
+    by_name: dict = {}
+    by_lower: dict = {}
+    try:
+        for pos, entry in enumerate(search_dir.rglob('*')):
+            name = entry.name
+            if name not in by_name:
+                by_name[name] = entry
+            lowered = name.lower()
+            if lowered not in by_lower:
+                by_lower[lowered] = (pos, entry)
+    except OSError:
+        pass
+    if len(_DIR_INDEX_CACHE) >= 8:
+        _DIR_INDEX_CACHE.pop(next(iter(_DIR_INDEX_CACHE)))
+    _DIR_INDEX_CACHE[key] = (by_name, by_lower)
+    return by_name, by_lower
+
+
 def _find_wav(sample_name: str, search_dir: Path) -> Optional[Path]:
     """Search for a WAV file by name in the given directory and subdirectories."""
     basename = Path(sample_name).name
@@ -1051,15 +1095,28 @@ def _find_wav(sample_name: str, search_dir: Path) -> Optional[Path]:
         if candidate.exists():
             return candidate
 
-    # Recursive search by name
+    # Slow paths: the sample is not sitting directly in `search_dir`.  Both
+    # the by-name search and the case-insensitive sweep used to walk the whole
+    # tree *per lookup* (`rglob(name)` once per candidate name, then a full
+    # `rglob('*')`), so an XPM referencing N missing samples paid N tree
+    # walks.  One walk now builds a first-occurrence index that answers both,
+    # memoized per directory.
+    by_name, by_lower = _dir_first_occurrence_index(search_dir)
+
+    # By exact name, candidates in priority order (same order as before).
     for name in names:
-        for p in search_dir.rglob(name):
-            return p
+        hit = by_name.get(name)
+        if hit is not None:
+            return hit
 
-    # Case-insensitive fallback across all candidates
+    # Case-insensitive fallback.  The old loop returned the FIRST entry in
+    # traversal order matching any candidate, which is not necessarily the
+    # first candidate — so pick by recorded traversal position, not by
+    # candidate order, to keep the same answer.
     lower_names = {n.lower() for n in names}
-    for p in search_dir.rglob('*'):
-        if p.name.lower() in lower_names:
-            return p
-
-    return None
+    best = None
+    for ln in lower_names:
+        entry = by_lower.get(ln)
+        if entry is not None and (best is None or entry[0] < best[0]):
+            best = entry
+    return best[1] if best is not None else None
