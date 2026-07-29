@@ -296,6 +296,9 @@ def parse_sf2(sf2_path: str, max_presets: int = 64) -> Bank:
           f"{shdr_cnt-1} samples")
 
     bank = Bank(name=_safe_name(p.stem))
+    # Names already appended to bank.samples. Rebuilding this as a set
+    # comprehension per zone made the dedup check O(zones x samples).
+    banked_names: set = set()
 
     # Pre-extract all samples from the smpl pool
     sample_objects: Dict[int, SampleData] = {}
@@ -395,7 +398,8 @@ def parse_sf2(sf2_path: str, max_presets: int = 64) -> Bank:
                 sd = _get_sample(samp_idx)
                 if sd is None:
                     continue
-                if sd.name not in {s.name for s in bank.samples}:
+                if sd.name not in banked_names:
+                    banked_names.add(sd.name)
                     bank.samples.append(sd)
 
                 # Key/vel range
