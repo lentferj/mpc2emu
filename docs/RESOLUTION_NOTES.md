@@ -4249,3 +4249,87 @@ codebase uses** — the operative table is the full MPC 0–29 enum in
 `_XPM_FILTER_TYPE`. Behaviour was always correct; the docstring on the
 canonical field that six parsers write into was not, and it briefly sent this
 crosscheck down a false trail.
+## §E4BSTEREO — E4B stereo samples: layout RE'd from the corpus, decode bug fixed, write side implemented (2026-07-29)
+
+**Context:** Jan pushed back on a code comment claiming "E4B supports only
+mono samples" — *"I can sample in stereo on the hardware"*. He was right;
+the comment was wrong about the format and right only about mpc2emu.
+Investigating it turned up a live decode bug, not merely a missing feature.
+
+### The layout, read off real banks rather than guessed
+
+Scanned every `E3S1` object in **473 local `.E4B` files (20,383 samples)**:
+
+| `options & 0x0060` | meaning | count | share |
+|---|---|---:|---:|
+| `0x20` | LEFT only (mono) | 15,492 | 76.0% |
+| `0x40` | RIGHT only | 88 | 0.4% |
+| `0x60` | **BOTH — stereo in one object** | **4,803** | **23.6%** |
+
+So a stereo sample is **one object with both channel bits set**, not two
+linked L/R objects. The E3S1 struct is the Emulator III's and stores every
+position twice — start/end/loop-start/loop-end at 22/30/38/46 (left) and
+26/34/42/50 (right) — and the two channels sit in **sequential PCM blocks**,
+not interleaved. From `24SldUpStC1`:
+
+```
+startL=92     endL=154458      startR=154460   endR=308826    pcm=308736
+loopSL=104    loopEL=154448    loopSR=154472   loopER=308816
+```
+
+`startR == endL + 2`, the two blocks are equal (154,368 B each) and together
+span exactly the PCM, and the loop offsets are identical *relative to each
+channel's own base*. A position `p` addresses body offset `p + 2` (the
+2-byte `sample_idx` sits in front of the 92-byte header) and `end` is
+inclusive of its own frame.
+
+### The bug this exposed
+
+`e4b_parser` read that whole region as ONE mono block, so a stereo sample
+imported at **double length and played left-then-right**. Roughly a quarter
+of the corpus. Fixed by de-planarising to mpc2emu's interleaved internal
+form with `channels = 2`.
+
+The model needed no change: `resampler`, `start_trim`, `tail_trim`,
+`auto_loop` and `loop_renderer` all already compute frames as
+`len(data) // (2 * channels)`. **Only the parsers never set it** — the
+plumbing was there the whole time, which is why this was much smaller than
+the TODO estimated.
+
+### Write side
+
+`e4b_writer` now emits stereo: both channel bits, the L/R start/end and
+loop pairs, `sample_data_offset_r`, and PCM de-interleaved to planar on the
+way out. Written samples reproduce the corpus shape exactly (`startL=92`,
+`startR = endL + 2`, equal blocks, equal per-channel loop offsets).
+
+`krz_writer`/`eiii_writer` cannot emit stereo yet, so they now call
+`ensure_mono` **explicitly** at entry and log it. This mattered: no writer
+looked at `channels` at all, so once the parser produced stereo, interleaved
+PCM would have been measured as mono and written at double length and wrong
+pitch.
+
+### Why `--stereo` is opt-in
+
+Reading stereo correctly is a bug fix and always on. *Keeping* it is a flag,
+because stereo doubles every sample against a 128 MB bank cap — silently
+enabling it would change every existing conversion and could push libraries
+that fit today over the limit.
+
+### Verification
+
+- Mono cannot regress: the mono decode paths (including the right-only
+  special case) are untouched, and over 25 real banks **all 10 mono-only
+  banks parse byte-identically** while exactly the 15 stereo-containing
+  banks change. Mono writer output is byte-identical to `main`.
+- Round-trip: a synthetic stereo sample with deliberately different L and R
+  survives write→parse bit-exact, no channel swap, loop preserved.
+- End-to-end: a stereo WAV (L 220 Hz / R 330 Hz) through
+  `load_wav → E4B → parse` returns both channels bit-exact.
+
+**Found while verifying, not yet fixed:** E4B output is **nondeterministic**
+— two runs of the *same* code over the same input differ in 13 M bytes
+because sample ordering varies (semantic content is identical). Byte-level
+A/B of full conversions is therefore meaningless until that is fixed; use a
+content digest. Worth a separate look, since reproducible output would make
+every future regression check far cheaper.

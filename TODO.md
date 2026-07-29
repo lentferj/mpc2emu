@@ -141,7 +141,7 @@ but `ZoneMapping.fine_tune == 0`), then fixed and verified one step further than
 the report: a written E4B now round-trips back to 50 cents, so the value reaches
 the FILE, not just the model.
 
-## Stereo samples are downmixed to mono — a mpc2emu limit, NOT a format limit (OPEN, 2026-07-29)
+## Stereo samples — E4B DONE (read+write), KRZ/EIII still downmix (PARTIAL, 2026-07-29)
 
 Raised by Jan: *"I can sample in stereo on the hardware"* — correct, and
 mpc2emu throws that away. Every source stereo sample is downmixed to mono
@@ -173,18 +173,36 @@ mpc2emu throws that away. Every source stereo sample is downmixed to mono
 recorded information discarded, silently. This is the single largest
 fidelity loss in the pipeline that is not a hardware limit.
 
-**Status:** OPEN, not started. The comment claiming "E4B supports only mono
-samples" was corrected in `395bc0f`; the downmix itself is unchanged.
+**Status: PARTIAL — the E4B path is done on branch `stereoE2E`.**
+
+- **Fixed (bug):** `e4b_parser` read a stereo object's two channel blocks as
+  ONE mono block, so stereo samples imported at double length and played
+  left-then-right — ~23.6% of the local corpus. Layout RE'd from 473 banks;
+  see `docs/RESOLUTION_NOTES.md` §E4BSTEREO. Always on, it is a bug fix.
+- **Done (feature):** `e4b_writer` emits stereo, and `--stereo` carries
+  stereo from source WAVs through to E4B output. Opt-in, because stereo
+  doubles every sample against the 128 MB bank cap.
+- **Safe:** `krz_writer`/`eiii_writer` now downmix explicitly at entry and
+  say so, instead of mis-measuring interleaved PCM as mono.
+
+**Still open:** KRZ stereo (second `Soundfilehead`, `numHeaders`) and EIII
+stereo (`OPTION_CHANNEL_RIGHT` + the RIGHT half of each position pair). Both
+encodings are already documented; neither is implemented. Question 3 below
+(pan interaction) is also still unanswered, and now applies to the E4B
+writer that ships stereo.
 
 **Blocked on / open questions before implementing:**
 
-1. **How EOS actually lays out a stereo sample** — one object carrying both
-   channels (the duplicate L/R position fields suggest one object with two
-   PCM regions) or two linked objects, one flagged L and one flagged R (the
-   existence of "right-channel-only" objects in the corpus suggests this).
-   Decide by dumping a stereo sample recorded on the E4XT itself and reading
-   its E3S1 header — cheap, and Jan has the hardware.
-2. **Model change.** `SampleData.channels` exists but nothing honours it;
+1. ~~**How EOS actually lays out a stereo sample**~~ — **ANSWERED** from the
+   corpus without needing hardware: ONE object with both channel bits
+   (`0x0020 | 0x0040`) carrying two SEQUENTIAL PCM blocks, addressed by the
+   L/R halves of each position pair, with per-channel loop points.
+   4803 of 20383 objects across 473 banks. See §E4BSTEREO.
+2. ~~**Model change.**~~ **NOT NEEDED** — the processors already honour
+   `channels` (`resampler`, `start_trim`, `tail_trim`, `auto_loop`,
+   `loop_renderer` all compute frames as `len(data) // (2 * channels)`); only
+   the parsers never set it. Original concern, kept for the record:
+   `SampleData.channels` exists but nothing honours it;
    `data` is assumed interleaved-free mono 16-bit throughout the processors
    (resampler, auto-loop, trim, single-cycle all index frames as `data[i*2]`).
    Stereo would touch all of them, so scope this deliberately — possibly
