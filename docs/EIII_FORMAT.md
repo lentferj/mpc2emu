@@ -216,6 +216,29 @@ or `0x8000` on ~5% of zones). `parsers/eiii_parser.py` masks with
 `ZONE_SAMPLE_INDEX_MASK = 0x3FFF` when reading; `writers/eiii_writer.py`
 never sets these bits.
 
+**Truncated sample numbers on the library CD-ROMs.** Some E-mu library
+CD-ROM banks (Formula 4000, the General MIDI volume, a few classic-volume
+banks) were mastered through a tool chain that wrote a zone's 16-bit sample
+index through 8 bits: the low byte is the true sample slot modulo 256, the
+high byte is zero or stale garbage. A preset whose samples sit above slot
+256 then plays completely unrelated material (an "OBX Strings" preset
+playing basketball-bounce samples, per ConvertWithMoss's own writeup). This
+is a mastering-tool artifact of specific commercial discs, **not** a
+hardware or format bug — real EIII/EIIIX hardware reads the full 16-bit
+index correctly, which is presumably why it was never reported as a known
+issue over 25+ years: the affected presets are a small fraction of any
+given bank (running the repair below over mpc2emu's own 1118-bank corpus:
+4,144 of 251,697 zone→sample references repaired, across 771 presets, 0
+parse failures — a similar scale to ConvertWithMoss's own 4,756/821 over
+their 8-CD-ROM set), and E-mu's library CD-ROMs have had no support channel
+to surface it through. `parsers/eiii_parser.py`
+repairs this per preset (`_resolve_bank_repairs` and friends), inferring
+the correct page from the note names E-mu sample names carry
+("OBXStringD2"), the preset name occurring in the target sample names, and
+page feasibility against the sample table — a preset whose evidence is
+ambiguous keeps its stored indices. Ported from ConvertWithMoss's
+`Emulator3SampleIndexRepair.java` (PR #252, GPL-3), same scoring thresholds.
+
 **Filter type.** Only the ESI samplers store a filter type (19 types encoded
 in the upper 5 bits of byte 45). The EIII and EIIIX have a single fixed
 4-pole low-pass filter — scanning the reference library CD-ROMs shows their

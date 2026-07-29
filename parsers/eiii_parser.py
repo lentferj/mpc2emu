@@ -50,6 +50,7 @@ rather than anything EIII-specific:
 """
 
 import math
+import re
 import struct
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -202,10 +203,16 @@ class _ZoneExtra:
 
 def _parse_zone(data: bytes, offset: int, key_lo: int, key_hi: int,
                  samples_by_index: Dict[int, SampleData],
-                 extra_samples: Dict[str, SampleData]) -> Optional[Tuple[ZoneMapping, _ZoneExtra]]:
-    sample_index = _get_u16(data, offset + ZONE_SAMPLE_INDEX) & ZONE_SAMPLE_INDEX_MASK
-    if sample_index == 0:
+                 extra_samples: Dict[str, SampleData],
+                 index_repairs: Dict[int, int]) -> Optional[Tuple[ZoneMapping, _ZoneExtra]]:
+    stored_index = _get_u16(data, offset + ZONE_SAMPLE_INDEX) & ZONE_SAMPLE_INDEX_MASK
+    if stored_index == 0:
         return None
+    # See "Truncated 8-bit zone sample index repair" above: index_repairs
+    # remaps a stored index whose high byte was lost in mastering to the
+    # sample slot it actually refers to; empty for the overwhelming majority
+    # of presets, which keep their stored index unchanged.
+    sample_index = index_repairs.get(stored_index, stored_index)
     sample = samples_by_index.get(sample_index)
     if sample is None:
         return None
@@ -295,9 +302,298 @@ def _apply_velocity_range(data: bytes, preset_offset: int, layer: int,
         z.hi_vel = high
 
 
+# ---------------------------------------------------------------------------
+# Truncated 8-bit zone sample index repair
+# ---------------------------------------------------------------------------
+# Some E-mu library CD-ROM banks (Formula 4000, the General MIDI volume, a
+# few classic-volume banks) were mastered through an 8-bit tool chain: a
+# zone's 16-bit sample index was written with the low byte as the true slot
+# modulo 256 and the high byte zero or stale garbage. A preset whose samples
+# sit above slot 256 then plays completely unrelated material. This is a
+# mastering-tool artifact of specific commercial discs, not a hardware or
+# format bug -- real EIII/EIIIX hardware reads the full 16-bit index
+# correctly, which is why it never surfaced as a "known issue": the affected
+# presets are a small fraction of any given bank and E-mu's library CD-ROMs
+# have had no support channel for 30 years.
+#
+# Run against mpc2emu's own 1118-bank real-world corpus (see this module's
+# docstring): 4,144 of 251,697 zone->sample references repaired across 771
+# presets, 0 parse failures -- a similar scale to ConvertWithMoss's own
+# 4,756/821 over their 8-CD-ROM set.
+#
+# Ported from ConvertWithMoss's Emulator3SampleIndexRepair.java (PR #252,
+# GPL-3 -- de.mossgrabers.convertwithmoss.format.emu.emulator3, "Written by
+# Jürgen Moßgraber"), which infers the repair per preset from: the note
+# names E-mu sample names carry ("OBXStringD2"), the preset name occurring
+# in the target sample names ("Oct 3 All" -> "Oct 3 All E4"), and the
+# feasibility of each 256-slot "page" against the sample table. A preset
+# whose evidence is ambiguous keeps its stored indices -- ported faithfully
+# (same scoring thresholds) rather than simplified, since the thresholds are
+# what keep this from mis-repairing an already-correct preset.
+
+_NOTE_UPPER_RE = re.compile(r'([A-G])\s?([#bx])?\s?(-?\d)\s*$')
+_NOTE_LOWER_RE = re.compile(r'([a-g])([#bx])?(-?\d)$')
+_GENERIC_TOKENS = {'loop', 'wave', 'the', 'and', 'link', 'new', 'old', 'big', 'low', 'high'}
+_PITCH_CLASSES = {'A': 9, 'B': 11, 'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7}
+
+
+def _parse_note_name(name: str) -> Optional[Tuple[int, int, bool]]:
+    """Parse a trailing note name off a sample name (e.g. 'OBXStringD2',
+    'DRhodes F#4 Hard') -> (pitch_class 0-11, octave, has_accidental)."""
+    stripped = name.rstrip()
+    m = _NOTE_UPPER_RE.search(stripped)
+    if not m:
+        m = _NOTE_LOWER_RE.search(stripped)
+        if not m:
+            return None
+    pitch_class = _PITCH_CLASSES[m.group(1).upper()]
+    accidental = m.group(2)
+    if accidental is not None:
+        pitch_class = pitch_class - 1 if accidental == 'b' else pitch_class + 1
+    return (pitch_class + 12) % 12, int(m.group(3)), accidental is not None
+
+
+def _note_matches(key: int, note: Tuple[int, int, bool]) -> bool:
+    """E-mu names are sloppy (accidental sometimes dropped, octave numbering
+    follows both the C3=60 and C4=60 convention), so pitch class must match
+    exactly (or one semitone flat when no accidental was written) and the
+    octave within roughly one."""
+    pitch_class, octave, has_accidental = note
+    key_pitch_class = key % 12
+    if pitch_class != key_pitch_class and (has_accidental or (pitch_class + 1) % 12 != key_pitch_class):
+        return False
+    for base in (1, 2):
+        if abs(pitch_class + (octave + base) * 12 - key) <= 13:
+            return True
+    return False
+
+
+def _normalize_token(text: str) -> str:
+    return ''.join(c.lower() for c in text if c.isalnum())
+
+
+def _repair_affinity(preset_name: str, target_names: List[str]) -> float:
+    """Fraction of target sample names carrying one of the preset name's
+    distinctive words (e.g. 'KeyBass Sft' <-> 'SoftKeyBassA0')."""
+    if not target_names:
+        return 0.0
+    tokens = set()
+    for word in preset_name.replace(':', ' ').replace('/', ' ').replace('-', ' ').split(' '):
+        token = _normalize_token(word)
+        if len(token) >= 3 and token not in _GENERIC_TOKENS and not token.isdigit():
+            tokens.add(token)
+    if not tokens:
+        return 0.0
+    matched = 0
+    for name in target_names:
+        normalized = _normalize_token(name)
+        if any(tok in normalized for tok in tokens):
+            matched += 1
+    return matched / len(target_names)
+
+
+def _collect_zone_pairs(data: bytes, preset_offset: int) -> set:
+    """Distinct (original_key, stored_sample_index) pairs used anywhere in a
+    preset's zone table -- a pair repeated across note zones is one piece
+    of evidence, not many."""
+    pairs = set()
+    if preset_offset + PRESET_SIZE > len(data):
+        return pairs
+    num_note_zones = data[preset_offset + PRESET_NUM_NOTE_ZONES]
+    note_zone_offset = preset_offset + PRESET_SIZE
+    zones_offset = note_zone_offset + num_note_zones * NOTE_ZONE_SIZE
+
+    max_zone = -1
+    for note_zone_index in range(num_note_zones):
+        nz = note_zone_offset + note_zone_index * NOTE_ZONE_SIZE
+        if nz + NOTE_ZONE_SIZE > len(data):
+            break
+        for field in (NOTE_ZONE_PRIMARY, NOTE_ZONE_SECONDARY):
+            zone_index = data[nz + field]
+            if zone_index != UNUSED:
+                max_zone = max(max_zone, zone_index)
+
+    for zone_index in range(max_zone + 1):
+        zone = zones_offset + zone_index * ZONE_SIZE
+        if zone + ZONE_SIZE > len(data):
+            break
+        stored = _get_u16(data, zone + ZONE_SAMPLE_INDEX) & ZONE_SAMPLE_INDEX_MASK
+        if stored == 0:
+            continue
+        root = data[zone + ZONE_ORIGINAL_KEY] + KEY_OFFSET
+        pairs.add((root, stored))
+    return pairs
+
+
+def _score_repair_candidate(candidate: Tuple[bool, int], roots: List[int], stored: List[int],
+                             lows: List[int], sample_names: Dict[int, str],
+                             parsed_notes: Dict[int, Tuple[int, int, bool]],
+                             preset_name: str) -> Tuple[int, int, int, float]:
+    """-> (hits, parseable, distinct_roots_hit, affinity)."""
+    as_is, page = candidate
+    hits = 0
+    parseable = 0
+    hit_roots = set()
+    target_names = []
+    for i in range(len(roots)):
+        slot = stored[i] if as_is else lows[i] + page * 256
+        name = sample_names.get(slot)
+        if name is not None:
+            target_names.append(name)
+        note = parsed_notes.get(slot)
+        if note is None:
+            continue
+        parseable += 1
+        if _note_matches(roots[i], note):
+            hits += 1
+            hit_roots.add(roots[i])
+    return hits, parseable, len(hit_roots), _repair_affinity(preset_name, target_names)
+
+
+def _choose_repair_candidate(candidates: List[Tuple[bool, int]],
+                              scores: List[Tuple[int, int, int, float]], num_pairs: int) -> int:
+    """The stored (as-is) interpretation is the baseline (index 0, present
+    only when feasible) and is only replaced by a decisively better page."""
+    baseline = scores[0]
+    best = 0
+    for i in range(1, len(scores)):
+        if scores[i][0] > scores[best][0]:
+            best = i
+
+    # When every pitch score is weak and the stored names are pitched but all
+    # mismatch, a candidate carrying the preset's own name in most zones
+    # outranks a lone chance hit.
+    if scores[best][0] < 3 and baseline[0] == 0 and baseline[1] >= 2:
+        affine = 0
+        unique = True
+        for i in range(1, len(scores)):
+            if scores[i][3] > scores[affine][3]:
+                affine, unique = i, True
+            elif i != affine and scores[i][3] == scores[affine][3]:
+                unique = False
+        if scores[affine][3] >= 0.5 and (unique or len(candidates) == 1):
+            best = affine
+
+    if best == 0:
+        return 0
+
+    hits, parseable, distinct_roots, affinity_best = scores[best]
+    baseline_hits, _, _, affinity_base = baseline
+
+    # A baseline whose sample names carry the preset's own name is never overridden.
+    if affinity_base > affinity_best:
+        return 0
+
+    # Hits must span 3+ distinct root keys -- a single repeated root matching
+    # a chromatic ladder by chance is one hit, not many -- unless the preset
+    # name itself vouches for the target family.
+    decisive = (hits >= 3 and (distinct_roots >= 3 or affinity_best > affinity_base)
+                and hits >= baseline_hits + 2
+                and hits * 10 >= 6 * max(parseable, 1)
+                and hits >= 2 * max(baseline_hits, 1))
+
+    # Tiny presets: a perfect score is decisive only when the stored names
+    # are pitched but mismatch -- an unpitched stored target (percussion) may
+    # simply be correct and beyond the reach of the pitch test.
+    perfect_small = (num_pairs <= 2 and hits == num_pairs and parseable == num_pairs
+                     and baseline_hits == 0 and baseline[1] >= 1)
+
+    # The preset name vouching for a candidate whose pitch is unreadable,
+    # while the stored names are pitched and all mismatch, is decisive too.
+    affinity_decisive = (baseline_hits == 0 and baseline[1] >= 2
+                          and affinity_best >= 0.5 and affinity_base == 0)
+
+    return best if (decisive or perfect_small or affinity_decisive) else 0
+
+
+def _resolve_repair_per_zone(stored: List[int], lows: List[int],
+                              sample_names: Dict[int, str], max_page: int) -> Dict[int, int]:
+    """No single page interpretation fits every zone of the preset: repair
+    zone-by-zone, moving only the indices that don't already resolve."""
+    mapping = {}
+    for i in range(len(stored)):
+        if stored[i] in sample_names:
+            continue
+        for page in range(max_page + 1):
+            slot = lows[i] + page * 256
+            if slot in sample_names:
+                mapping[stored[i]] = slot
+                break
+    return mapping
+
+
+def _resolve_preset_repair(data: bytes, preset_offset: int, sample_names: Dict[int, str],
+                            parsed_notes: Dict[int, Tuple[int, int, bool]],
+                            max_slot: int) -> Dict[int, int]:
+    pair_set = _collect_zone_pairs(data, preset_offset)
+    if not pair_set:
+        return {}
+    ordered = sorted(pair_set)
+    num_pairs = len(ordered)
+    roots  = [p[0] for p in ordered]
+    stored = [p[1] for p in ordered]
+    lows   = [(s - 1) % 256 + 1 for s in stored]
+    as_is_feasible = all(s in sample_names for s in stored)
+
+    candidates: List[Tuple[bool, int]] = []
+    if as_is_feasible:
+        candidates.append((True, 0))
+    max_page = (max_slot - 1) // 256
+    for page in range(max_page + 1):
+        feasible = True
+        identical = as_is_feasible
+        for i in range(num_pairs):
+            slot = lows[i] + page * 256
+            if slot not in sample_names:
+                feasible = False
+            if slot != stored[i]:
+                identical = False
+        if feasible and not identical:
+            candidates.append((False, page))
+
+    if not candidates:
+        return _resolve_repair_per_zone(stored, lows, sample_names, max_page)
+
+    preset_name = _decode_name(data, preset_offset)
+    scores = [_score_repair_candidate(c, roots, stored, lows, sample_names, parsed_notes, preset_name)
+              for c in candidates]
+    chosen = _choose_repair_candidate(candidates, scores, num_pairs)
+    winner = candidates[chosen]
+    if winner[0]:  # as-is wins -> no repair needed
+        return {}
+    mapping = {}
+    for i in range(num_pairs):
+        slot = lows[i] + winner[1] * 256
+        if slot != stored[i]:
+            mapping[stored[i]] = slot
+    return mapping
+
+
+def _resolve_bank_repairs(data: bytes, preset_offsets: List[int],
+                           sample_names: Dict[int, str]) -> Dict[int, Dict[int, int]]:
+    """For every preset (by its byte offset) that needs it, a mapping from
+    its stored (masked) zone sample index to the resolved slot. Presets
+    whose stored indices are kept are absent from the result."""
+    repairs: Dict[int, Dict[int, int]] = {}
+    if not sample_names:
+        return repairs
+    max_slot = max(sample_names)
+    parsed_notes = {}
+    for slot, name in sample_names.items():
+        note = _parse_note_name(name)
+        if note is not None:
+            parsed_notes[slot] = note
+    for preset_offset in preset_offsets:
+        mapping = _resolve_preset_repair(data, preset_offset, sample_names, parsed_notes, max_slot)
+        if mapping:
+            repairs[preset_offset] = mapping
+    return repairs
+
+
 def _parse_layers(data: bytes, preset_offset: int,
                    samples_by_index: Dict[int, SampleData],
-                   extra_samples: Dict[str, SampleData]) -> List[VoiceLayer]:
+                   extra_samples: Dict[str, SampleData],
+                   index_repairs: Dict[int, int]) -> List[VoiceLayer]:
     num_note_zones = data[preset_offset + PRESET_NUM_NOTE_ZONES]
     if num_note_zones == 0:
         return []
@@ -331,7 +627,7 @@ def _parse_layers(data: bytes, preset_offset: int,
             if zone_off + ZONE_SIZE > len(data):
                 continue
             result = _parse_zone(data, zone_off, key_lo + KEY_OFFSET, key_hi + KEY_OFFSET,
-                                  samples_by_index, extra_samples)
+                                  samples_by_index, extra_samples, index_repairs)
             if result is not None:
                 found.append(result)
 
@@ -375,7 +671,8 @@ def _parse_layers(data: bytes, preset_offset: int,
 
 def _parse_preset_chain(data: bytes, fmt: BankFormat, head_index: int,
                          samples_by_index: Dict[int, SampleData],
-                         extra_samples: Dict[str, SampleData]) -> Optional[Preset]:
+                         extra_samples: Dict[str, SampleData],
+                         repairs_by_offset: Dict[int, Dict[int, int]]) -> Optional[Preset]:
     voices: List[VoiceLayer] = []
     visited = set()
     preset_name: Optional[str] = None
@@ -387,7 +684,8 @@ def _parse_preset_chain(data: bytes, fmt: BankFormat, head_index: int,
             break
         if preset_name is None:
             preset_name = _decode_name(data, offset)
-        voices.extend(_parse_layers(data, offset, samples_by_index, extra_samples))
+        index_repairs = repairs_by_offset.get(offset, {})
+        voices.extend(_parse_layers(data, offset, samples_by_index, extra_samples, index_repairs))
         link = _get_u16(data, offset + PRESET_LINK)
         idx = (link - 1) if (0 < link <= fmt.max_presets and link - 1 != idx) else None
 
@@ -415,6 +713,11 @@ def parse_eiii(path: str) -> Bank:
     sample_area_start = fmt.preset_area_offset + 1 + preset_area_size
 
     samples_by_index: Dict[int, SampleData] = {}
+    # Raw (pre-dedup-suffix) names by 1-based slot, for the sample-index
+    # repair heuristic below -- it pattern-matches against E-mu's own
+    # embedded note/preset names, which our `used_names` de-duplication
+    # suffixing would corrupt.
+    raw_sample_names: Dict[int, str] = {}
     used_names: set = set()
     for i in range(fmt.max_samples):
         entry = _get_u32(data, fmt.sample_table_offset + i * 4)
@@ -424,6 +727,7 @@ def parse_eiii(path: str) -> Bank:
         raw = _parse_sample(data, address, i + 1)
         if raw is None:
             continue
+        raw_sample_names[i + 1] = raw.name
         name = raw.name
         suffix = 1
         while name in used_names:
@@ -437,15 +741,23 @@ def parse_eiii(path: str) -> Bank:
             loop_end=raw.loop_end, root_note=60)
 
     linked = set()
+    preset_offsets: List[int] = []
     for i in range(fmt.max_presets):
         if not _preset_present(data, fmt, i):
             continue
         offset = _preset_offset(data, fmt, i)
         if offset < 0:
             continue
+        preset_offsets.append(offset)
         link = _get_u16(data, offset + PRESET_LINK)
         if 0 < link <= fmt.max_presets and link - 1 != i:
             linked.add(link - 1)
+
+    repairs_by_offset = _resolve_bank_repairs(data, preset_offsets, raw_sample_names)
+    if repairs_by_offset:
+        n_refs = sum(len(m) for m in repairs_by_offset.values())
+        print(f"  EIII: repaired {n_refs} truncated zone sample index reference(s) "
+              f"across {len(repairs_by_offset)} preset(s)")
 
     # Zones whose ZONE_FLAG_DISABLE_LOOP overrides a looped sample get a
     # synthesized unlooped SampleData (see _parse_zone) collected here.
@@ -455,7 +767,7 @@ def parse_eiii(path: str) -> Bank:
     for i in range(fmt.max_presets):
         if not _preset_present(data, fmt, i) or i in linked:
             continue
-        preset = _parse_preset_chain(data, fmt, i, samples_by_index, extra_samples)
+        preset = _parse_preset_chain(data, fmt, i, samples_by_index, extra_samples, repairs_by_offset)
         if preset is not None:
             presets.append(preset)
 
