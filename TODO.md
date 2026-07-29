@@ -1,5 +1,38 @@
 # mpc2emu — Open Items
 
+## sampledir_parser: WAV smpl-chunk fine-tune read but never reaches the zone (BUG, OPEN, 2026-07-29)
+
+Found from the VinSamLib side while checking whether `6c463c4` (`load_wav()`
+now reads a WAV `smpl` chunk's `MIDIPitchFraction` into `SampleData.fine_tune`)
+actually benefits the folder-of-WAVs import path, which that commit's own
+message calls out as the main beneficiary ("the smpl chunk is the only tuning
+metadata a sample carries" there).
+
+**It doesn't reach a written file.** `parsers/sampledir_parser.py`'s
+`parse_sample_dir()` builds each preset zone as:
+
+```python
+zones.append(ZoneMapping(sample_name=sd.name, lo_key=lo, hi_key=hi,
+                         lo_vel=0, hi_vel=127, root_key=root))
+```
+
+— never copying `sd.fine_tune` across. Every writer (`e4b_writer.py`,
+`krz_writer.py`, `eiii_writer.py`) reads `zone.fine_tune`
+(`ZoneMapping.fine_tune`), not `sample.fine_tune`, so the value `load_wav()`
+correctly populates is silently dropped one function later.
+
+**Verified with a synthetic WAV** (`smpl` chunk: `MIDIUnityNote=60`,
+`MIDIPitchFraction=0x80000000` → +50 cents, same fraction `6c463c4`'s own
+round-trip note uses): `parse_sample_dir()` on a one-file folder gives
+`SampleData.fine_tune == 50` but `ZoneMapping.fine_tune == 0`. Confirmed
+downstream too, through VinSamLib's real `File > Import Sample Folder...`
+pipeline (`build/sampledir_import.import_sample_dir()` → E4B write): the
+written file's zone-table fine-tune byte decodes to 0 cents, not ~50.
+
+**Fix:** pass `fine_tune=sd.fine_tune` into the `ZoneMapping(...)` call above.
+**Status:** OPEN — not fixed. **Blocked on:** nothing; one-line change,
+same file the fix that exposed this landed in.
+
 ## Stereo samples are downmixed to mono — a mpc2emu limit, NOT a format limit (OPEN, 2026-07-29)
 
 Raised by Jan: *"I can sample in stereo on the hardware"* — correct, and
