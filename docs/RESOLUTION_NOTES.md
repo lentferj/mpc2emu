@@ -3740,7 +3740,7 @@ string normalization in an inner loop, not the algorithm itself.**
 - EIII **floppy disk sets** (their #237): `ALL_BANK_FORMATS` covers
   SCSI/hard-disk bank files only, not raw floppy memory dumps.
 
-## §PARSERPERF — Parser performance pass: the cost was four Python loops, not the algorithms (2026-07-29)
+## §PARSERPERF — Parser performance pass: the cost was a handful of per-sample loops and two directory walks, not the algorithms (2026-07-29)
 
 **Context:** general "optimize the input parsers" sweep. Benchmarked every
 parser over real files first rather than guessing, which turned out to
@@ -3800,6 +3800,40 @@ MB/s made a 2000x spread obvious.
 5. **De-duplication** — `gig_parser` carried its own stereo downmix; it now
    calls the shared one (CR-13/CR-17: duplicated codecs have drifted here
    before). Its `import array` became unused and was dropped.
+
+6. **`_convert_24_to_16`** — a *second*, separate 24-bit path for **WAV**
+   (little-endian) alongside the big-endian AIFF one in #2. Missed on the
+   first pass, and re-measuring caught it: after #1 landed, `sfz`/`exs24`
+   had not improved at all, because their sample sets are predominantly
+   24-bit WAV and never reached the downmix. It was **87%** of their parse
+   time. Same reduction, but for LE the two high bytes are already in
+   order, so it needs no byteswap — a pure strided copy. `_convert_8_to_16`
+   went the same way (`bytes.translate` sign flip, zero-interleaved).
+
+7. **`exs24_parser._find_indexed`** — a different *class* of hotspot: not
+   PCM at all but filesystem tree-walking, at **97%** of exs24 parse time.
+   The fallback audio index (for packs keeping WAV/AIFF in a sibling folder)
+   walks up to 8 ancestor levels and 80k files, and the closure is per
+   `parse_exs24` call — so converting a folder of N presets re-walked the
+   same tree N times. Memoized per parent directory (bounded FIFO); the
+   index derives purely from those ancestors, so it is identical by
+   construction for any two `.exs` in one folder.
+
+8. **`xpm_parser._find_wav`** — the same cliff, latent rather than measured:
+   both slow paths walked the whole tree *per lookup* (`rglob(name)` per
+   candidate, then a full `rglob('*')`), so an XPM referencing N missing
+   samples paid N walks. One walk now builds a first-occurrence index
+   answering both, memoized per directory.
+
+   Two traps worth recording. The case-insensitive fallback returned the
+   first entry in **traversal** order matching any candidate, *not* the
+   first candidate — so the index records traversal position and selects by
+   it; a naive candidate-order rewrite silently picks a different file when
+   a `.wav` and a `.WAV` twin live in different folders. And `rglob(name)`
+   treated the sample name as a **glob pattern**, so `Bass[12].wav` could
+   resolve to `Bass1.wav`; lookups are now literal, which is what the caller
+   means. That is a deliberate, Jan-confirmed behaviour change — the one
+   place in this pass that is not strictly input-for-input identical.
 
 ### The audioop decision (reverses CR-16)
 

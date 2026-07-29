@@ -955,10 +955,11 @@ via `VERIFY_emu.hda`:**
 
 ### Enhancements (no behaviour change)
 
-**Parser performance pass — DONE 2026-07-29 (every change byte-identical).**
-Benchmarked all input parsers over real files; the cost was not spread out but
-concentrated in a handful of per-sample Python loops. Full writeup in
-`docs/RESOLUTION_NOTES.md` §PARSERPERF.
+**Parser performance pass — DONE 2026-07-29.** Benchmarked all input parsers
+over real files; the cost was not spread out but concentrated in a handful of
+per-sample Python loops plus two repeated directory walks. Every change is
+byte-identical **except** the `_find_wav` glob-vs-literal fix noted at the end,
+which is intentional. Full writeup in `docs/RESOLUTION_NOTES.md` §PARSERPERF.
 - **`_stereo_to_mono` was 99.5% of XPM/SFZ/EXS24 parse time** (40M `struct`
   calls for 31 samples) — now `audioop` + `array` fallback. Reached by six
   parsers via `load_wav`, so this one fix carries xpm/sfz/exs24/pgm/talsmpl/
@@ -971,6 +972,15 @@ concentrated in a handful of per-sample Python loops. Full writeup in
   bank.samples}` was rebuilt for *every zone*; now an incremental set.
 - **De-duplicated** gig's second stereo-downmix copy into the shared helper
   (CR-13/CR-17 lesson: duplicated codecs drift).
+- **WAV 24-bit** (`_convert_24_to_16`, the little-endian twin of the AIFF
+  path) was a *second* missed loop — 87% of SFZ/EXS24 time. Caught only by
+  re-measuring after the first fix, when those two formats showed no gain.
+- **Directory walks**, a different class of hotspot: `exs24._find_indexed`
+  (97% of exs24 time) and `xpm._find_wav` both re-walked whole trees per
+  lookup; now a first-occurrence index memoized per directory.
+- **One deliberate behaviour change** (Jan-confirmed): `_find_wav` matched
+  sample names as glob *patterns*, so `Bass[12].wav` could resolve to
+  `Bass1.wav`. Lookups are now literal.
 
 **DONE 2026-06-11:** CR-13, CR-14, CR-15, CR-17, and the CR-18 cord-builder —
 fixed & pipeline-verified (details in `docs/RESOLUTION_NOTES.md §CR`).
