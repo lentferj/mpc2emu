@@ -47,13 +47,22 @@ Key generator IDs (subset we use):
   1   endAddrsOffset
   4   startloopAddrsOffset
   5   endloopAddrsOffset
+  8   initialFilterFc   (cents, absolute; 13500 = ~20kHz = filter off)
+  9   initialFilterQ    (centibels, 0-960 = 0-96dB)
   17  pan          (-500..+500 permil, 0=center)
   41  instrument   (preset gen → instrument index)
   43  keyRange     (lo=byte0, hi=byte1)
   44  velRange
+  48  initialAttenuation (centibels, more positive = quieter)
+  51  coarseTune   (semitones)
+  52  fineTune     (cents)
   53  sampleID     (instrument gen → sample index)
   54  sampleModes  (bit 0 = loop, bit 1 = ping-pong)
   58  overridingRootKey (MIDI note, 255=use sample header)
+
+Preset-level generators (in a preset zone with no gen 41) are the SF2
+"global zone" and apply as ADDITIVE offsets on top of every instrument
+zone under that preset (spec §8.1.3) -- see `global_pg_dict` below.
 
 References:
   - "SoundFont 2.04 File Specification" (E-mu / Creative)
@@ -68,6 +77,7 @@ from typing import Optional, List, Tuple, Dict
 from models.common import (
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType,
     cents_to_filter_env_amount, lfo_pitch_depth_to_amount, lfo_volume_depth_to_amount,
+    hz_to_e4b_cutoff,
 )
 from parsers.xpm_parser import _safe_name
 
@@ -342,6 +352,24 @@ def parse_sf2(sf2_path: str, max_presets: int = 64) -> Bank:
         p_bag_start = ph['bag_index']
         p_bag_end   = phdrs[pi+1]['bag_index']
 
+        # SF2's preset "global zone" is a pbag with no gen 41 (instrument
+        # reference); per spec it must be FIRST if present. Its generators
+        # apply as additive offsets on top of every instrument zone in this
+        # preset. mpc2emu previously dropped these entirely -- the loop
+        # below `continue`s any bag without a valid gen 41 -- cross-
+        # referenced against ConvertWithMoss's SF2 preset-generator fix
+        # (PR #255), which found the same gap.
+        global_pg_dict: dict = {}
+        if p_bag_end > p_bag_start:
+            g_start = pbags[p_bag_start]['gen_index']
+            g_end   = pbags[p_bag_start+1]['gen_index'] if p_bag_start+1 < pbag_cnt else pgen_cnt
+            first_pg_dict = _gens_to_dict(pgens[g_start:g_end])
+            if 41 not in first_pg_dict:
+                global_pg_dict = first_pg_dict
+
+        def _global(gen_id: int, default: int = 0) -> int:
+            return global_pg_dict.get(gen_id, {}).get('amt', default)
+
         for pb_idx in range(p_bag_start, p_bag_end):
             pg_start = pbags[pb_idx]['gen_index']
             pg_end   = pbags[pb_idx+1]['gen_index'] if pb_idx+1 < pbag_cnt else pgen_cnt
@@ -381,9 +409,22 @@ def parse_sf2(sf2_path: str, max_presets: int = 64) -> Bank:
                 if root < 0 or root > 127:
                     root = sd.root_note
 
-                # Pan: gen 17, range -500..+500 permil
-                pan_permil = ig_dict.get(17, {}).get('amt', 0)
+                # Pan: gen 17, range -500..+500 permil, additive with the
+                # preset global zone.
+                pan_permil = ig_dict.get(17, {}).get('amt', 0) + _global(17)
                 pan = max(-1.0, min(1.0, pan_permil / 500.0))
+
+                # Attenuation (gen 48, centibels, more positive = quieter) and
+                # tune (gen 51 coarseTune semitones, gen 52 fineTune cents) --
+                # additive with the preset global zone. Previously not read
+                # at all despite ZoneMapping already carrying volume/
+                # coarse_tune/fine_tune fields for exactly this (unrelated to
+                # SampleData.fine_tune, which is the sample's own intrinsic
+                # pitch_corr byte used only by the resampler).
+                attn_cb   = ig_dict.get(48, {}).get('amt', 0) + _global(48)
+                volume_db = max(-96.0, min(12.0, -attn_cb / 10.0))
+                coarse    = ig_dict.get(51, {}).get('amt', 0) + _global(51)
+                fine      = ig_dict.get(52, {}).get('amt', 0) + _global(52)
 
                 # Loop mode: gen 54 (sampleModes).  CR-8: SF2 has NO ping-pong —
                 # 1=loop continuous → FORWARD, 3=loop-then-remainder-on-release →
@@ -403,6 +444,9 @@ def parse_sf2(sf2_path: str, max_presets: int = 64) -> Bank:
                     hi_vel      = hi_v,
                     root_key    = root,
                     pan         = pan,
+                    volume      = volume_db,
+                    coarse_tune = coarse,
+                    fine_tune   = fine,
                 )
                 voice.zones.append(zone)
 
@@ -421,6 +465,31 @@ def parse_sf2(sf2_path: str, max_presets: int = 64) -> Bank:
                     sus_cb = ig_dict.get(37, {}).get('amt', 0)
                     voice.env_sustain = max(0.0, min(1.0, 1.0 - sus_cb / 1440.0))
                     voice.env_release = _tc(38, 0.5)
+
+                    # Static filter: gen 8 initialFilterFc (cents), gen 9
+                    # initialFilterQ (centibels). Both additive with the
+                    # preset global zone; the SF2 2.04 spec's own inherent
+                    # default for an unspecified filterFc is 13500 cents
+                    # (~20kHz -> filter fully open/inaudible), so the filter
+                    # is only modeled when the combined value falls below
+                    # that. Previously never read at all -- every other
+                    # reader we have (GIG/EIII/EXS24/KRZ/E4B/SFZ) models a
+                    # static filter; SF2 silently didn't. Cross-referenced
+                    # against ConvertWithMoss PR #255, which found the same
+                    # gap.
+                    _SF2_FC_OFF_CENTS = 13500.0
+                    fc_inst  = ig_dict.get(8, {}).get('amt', None)
+                    fc_cents = (fc_inst if fc_inst is not None else _SF2_FC_OFF_CENTS) + _global(8)
+                    if fc_cents < _SF2_FC_OFF_CENTS:
+                        hz = 8.176 * 2.0 ** (fc_cents / 1200.0)
+                        voice.filter_type   = 1  # LP12: SF2 defines a fixed 2-pole (-12dB/oct) resonant lowpass
+                        voice.filter_cutoff = hz_to_e4b_cutoff(hz)
+                        q_cb = ig_dict.get(9, {}).get('amt', 0) + _global(9)
+                        # 0-960 centibels (0-96dB) is the full legal range of
+                        # the generator per spec; normalized against that
+                        # (not a hardware-measured constant -- this is a
+                        # software format spec, not RE'd hardware).
+                        voice.filter_resonance = max(0.0, min(1.0, q_cb / 960.0))
 
                     # Filter envelope: the modulation envelope drives the cutoff
                     # via modEnvToFilterFc.  SF2 2.04 mod-env gens:
