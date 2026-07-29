@@ -54,7 +54,7 @@ import struct
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from models.common import Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType, Envelope, hz_to_e4b_cutoff
+from models.common import Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType, Envelope, hz_to_e4b_cutoff, E4B_CUTOFF_MAX_HZ
 from writers.eiii_writer import (
     BankFormat, ALL_BANK_FORMATS,
     NAME_LENGTH, PRESET_SIZE, NOTE_ZONE_SIZE, ZONE_SIZE, SAMPLE_HEADER_SIZE,
@@ -235,17 +235,25 @@ def _parse_zone(data: bytes, offset: int, key_lo: int, key_hi: int,
     extra.non_transpose = bool(flags & ZONE_FLAG_NON_TRANSPOSE)
 
     cutoff = data[offset + ZONE_VCF_CUTOFF]
+    cutoff_hz = _cutoff_frequency(cutoff)
     resonance = data[offset + ZONE_VCF_Q] & 0x7F
     env_amount = data[offset + ZONE_VCF_ENVELOPE_AMOUNT]
-    # Bypass state as written by eiii_writer.py: DEFAULT_CUTOFF, zero Q,
-    # zero envelope amount. (Unlike ConvertWithMoss's own Detector, this
-    # does not additionally gate on cutoff==0xFF/key-tracking==0 — see
-    # eiii_writer.py's _ZONE_TRACKING_NEUTRAL note on why that check is
-    # unreliable there.)
-    has_filter = not (cutoff == 0xEF and resonance == 0 and env_amount == 0)
+    # Bypass state: cutoff at/above the inaudible ceiling (20kHz, matching
+    # E4B_CUTOFF_MAX_HZ -- the writer's own DEFAULT_CUTOFF=0xEF is 45213 Hz,
+    # comfortably past it, but so is every byte from 0xD5 up per
+    # eiii_writer._CUTOFF_FREQUENCY), combined with zero Q and zero envelope
+    # amount so a static or animated near-Nyquist resonance sweep is still
+    # modeled. Previously gated on cutoff==0xEF exactly, which only matched
+    # our own writer's convention -- a real/library-mastered EIII bank using
+    # any other high byte as its "filter off" value produced a spurious
+    # filter object (a filter that "cannot be heard": ConvertWithMoss #248,
+    # same finding). (Unlike ConvertWithMoss's own Detector, this still does
+    # not additionally gate on key-tracking==0 — see eiii_writer.py's
+    # _ZONE_TRACKING_NEUTRAL note on why that check is unreliable there.)
+    has_filter = not (cutoff_hz >= E4B_CUTOFF_MAX_HZ and resonance == 0 and env_amount == 0)
     extra.filter_type = 1 if has_filter else 0
     if has_filter:
-        extra.filter_cutoff = hz_to_e4b_cutoff(_cutoff_frequency(cutoff))
+        extra.filter_cutoff = hz_to_e4b_cutoff(cutoff_hz)
         extra.filter_resonance = max(0.0, min(1.0, resonance / 127.0))
         extra.filter_env_amount = max(0.0, min(1.0, env_amount / 127.0))
         extra.filter_env = _parse_envelope(data, offset + ZONE_VCF_ENVELOPE)
