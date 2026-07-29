@@ -1,5 +1,59 @@
 # mpc2emu — Open Items
 
+## Stereo samples are downmixed to mono — a mpc2emu limit, NOT a format limit (OPEN, 2026-07-29)
+
+Raised by Jan: *"I can sample in stereo on the hardware"* — correct, and
+mpc2emu throws that away. Every source stereo sample is downmixed to mono
+(`xpm_parser._stereo_to_mono`, reached by all six sample-loading parsers via
+`load_wav`, plus `gig_parser`), and every parser hardcodes
+`SampleData(channels=1)` even though the field exists.
+
+**All three targets support stereo; we simply never emit it:**
+
+- **E4B / EOS.** The E3S1 sample struct is the Emulator III's and stores every
+  position *twice*, once per channel: start/end/loop-start/loop-end at offsets
+  22/30/38/46 (left) and 26/34/42/50 (right), with `options` bit `0x0020` =
+  left and `0x0040` = right. `parsers/e4b_parser._parse_sample` **already
+  decodes right-channel-only objects** — it has to, because reading the left
+  field unconditionally yields nonsensical loop points (6 of 73 looped
+  right-channel-only samples in the local corpus). `writers/e4b_writer.py`
+  hardcodes `0x0020`/`0x0031` (MONO_L).
+- **EIII / ESI.** Same lineage, explicit constants already in
+  `writers/eiii_writer.py`: `OPTION_CHANNEL_LEFT = 0x0020`,
+  `OPTION_CHANNEL_RIGHT = 0x0040`, `OPTION_STEREO = LEFT | RIGHT`, and
+  `SAMPLE_{START,END,LOOP_START,LOOP_END}_{LEFT,RIGHT}`. The writer sets
+  `options = OPTION_CHANNEL_LEFT` and writes `0` to every RIGHT field.
+- **K2000 / KRZ.** `numHeaders` + one `Soundfilehead` per channel; see
+  `docs/KRZ_FORMAT.md` §3.1/§7.5, which already documents exactly what a
+  stereo sample would need (`numHeaders = 1`, `flags` bit 0 set, second
+  `Soundfilehead`).
+
+**Cost of the gap:** a stereo capture converts to a mono preset — half the
+recorded information discarded, silently. This is the single largest
+fidelity loss in the pipeline that is not a hardware limit.
+
+**Status:** OPEN, not started. The comment claiming "E4B supports only mono
+samples" was corrected in `395bc0f`; the downmix itself is unchanged.
+
+**Blocked on / open questions before implementing:**
+
+1. **How EOS actually lays out a stereo sample** — one object carrying both
+   channels (the duplicate L/R position fields suggest one object with two
+   PCM regions) or two linked objects, one flagged L and one flagged R (the
+   existence of "right-channel-only" objects in the corpus suggests this).
+   Decide by dumping a stereo sample recorded on the E4XT itself and reading
+   its E3S1 header — cheap, and Jan has the hardware.
+2. **Model change.** `SampleData.channels` exists but nothing honours it;
+   `data` is assumed interleaved-free mono 16-bit throughout the processors
+   (resampler, auto-loop, trim, single-cycle all index frames as `data[i*2]`).
+   Stereo would touch all of them, so scope this deliberately — possibly
+   "carry stereo through to the writer, but keep processors mono-only and
+   downmix when a processor is requested."
+3. **Zone/pan interaction.** A stereo sample plus a per-zone pan setting is
+   ambiguous; check what EOS does with pan on a stereo voice before choosing.
+
+Not blocked on anything external — this is our own work, just not small.
+
 ## SF2 static filter + zone gain/tune now reach the E4B/KRZ writers — needs hardware A/B (OPEN, 2026-07-29)
 
 `parsers/sf2_parser.py` previously read **no** static filter and **no**
