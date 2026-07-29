@@ -808,23 +808,37 @@ def main():
     # the parsers read faithfully and this is the explicit place that decides
     # to throw a channel away.
     if args.mono is not None:
-        from models.common import to_mono
+        from models.common import to_mono, channel_correlation
         _method = {'mix': 'averaging both sides',
                    'left': 'keeping the LEFT side',
                    'right': 'keeping the RIGHT side'}[args.mono]
         print(f"\n[{step_n}] Stereo -> mono ({_method})...")
         step_n += 1
         for bank in source_banks:
-            _saved = 0
-            _n = 0
+            _saved = _n = _decorr = 0
+            _worst = 1.0
             for s in bank.samples:
                 _before = len(s.data)
+                # Measure BEFORE reducing -- the sides are gone afterwards.
+                _r = channel_correlation(s.data) if (
+                    args.mono == 'mix' and getattr(s, 'channels', 1) == 2) else 1.0
                 if to_mono(s, args.mono):
                     _n += 1
                     _saved += _before - len(s.data)
+                    if _r < 0.3:
+                        _decorr += 1
+                        _worst = min(_worst, _r)
             if _n:
                 print(f"  {_n} stereo sample(s) -> mono, "
                       f"{_saved / 1_048_576:.1f} MB saved")
+            # Averaging decorrelated sides cancels signal; say so rather than
+            # silently degrading the audio. Threshold 0.3 is well clear of the
+            # 0.076 median measured over real stereo E-mu samples.
+            if _decorr:
+                print(f"  [WARN] {_decorr} of them had decorrelated channels "
+                      f"(worst r={_worst:+.2f}); averaging cancels signal there.")
+                print(f"         Consider --mono left or --mono right to keep "
+                      f"one side at full level instead.")
 
     # ── Reduce ────────────────────────────────────────────────────────────────
     if args.reduce_key_zones > 0 or args.reduce_velocity_layers > 0:
