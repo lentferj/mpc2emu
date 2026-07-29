@@ -85,7 +85,8 @@ import struct
 from typing import List, Tuple
 
 from models.common import (Bank, Preset, SampleData, VoiceLayer, LoopType,
-                          KRZ_ENV_TIME_GRID, KRZ_RELEASE_FACTOR)
+                          KRZ_ENV_TIME_GRID, KRZ_RELEASE_FACTOR, ensure_mono
+)
 from processors.loop_renderer import bake_alternating_loop
 
 
@@ -1051,6 +1052,18 @@ def write_krz(bank: Bank, output_path: str) -> None:
     n_baked = sum(1 for s in bank.samples if s.loop_type == LoopType.ALTERNATING)
     if n_baked:
         print(f"  Baked {n_baked} ping-pong loop(s) into PCM as forward loops")
+
+    # The K2000 stores stereo as a second Soundfilehead (docs/KRZ_FORMAT.md
+    # §3.1/§7.5); mpc2emu does not emit that yet, so downmix EXPLICITLY here.
+    # Without this every length below (num_words, the sample-pool cursor,
+    # sampleEnd) would read interleaved stereo as mono and write a
+    # double-length, wrong-pitched sample. Tracked in TODO.md.
+    n_stereo = sum(1 for s in samples if getattr(s, 'channels', 1) == 2)
+    if n_stereo:
+        for s in samples:
+            ensure_mono(s)
+        print(f"  Downmixed {n_stereo} stereo sample(s) to mono "
+              f"(KRZ stereo output not implemented)")
 
     # --- Object ID assignment (user range 200-999) ---
     base_id = 200

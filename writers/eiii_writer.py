@@ -57,7 +57,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from models.common import Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType
+from models.common import Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType, ensure_mono
 from processors.loop_renderer import bake_alternating_loop
 
 
@@ -737,6 +737,18 @@ def write_eiii(bank: Bank, output_path: str, variant: str = 'e3x') -> None:
 
     print(f"Writing EIII ({bank_format.device_name}): {output_path}")
     print(f"  {len(bank.presets)} preset(s), {len(bank.samples)} sample(s)")
+
+    # The EIII carries stereo via OPTION_CHANNEL_RIGHT plus the RIGHT half of
+    # every position pair (constants already defined above); mpc2emu writes
+    # OPTION_CHANNEL_LEFT and zeroes the RIGHT fields, so downmix EXPLICITLY
+    # here rather than letting interleaved PCM be measured as mono. Tracked
+    # in TODO.md.
+    n_stereo = sum(1 for s in bank.samples if getattr(s, 'channels', 1) == 2)
+    if n_stereo:
+        for s in bank.samples:
+            ensure_mono(s)
+        print(f"  Downmixed {n_stereo} stereo sample(s) to mono "
+              f"(EIII stereo output not implemented)")
 
     # ── samples: prepare PCM once per bank-level SampleData ────────────────
     used_names: set = set()

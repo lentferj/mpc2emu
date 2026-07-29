@@ -332,6 +332,24 @@ def _build_emst() -> bytes:
 # E3S1 sample chunk body
 # ---------------------------------------------------------------------------
 
+def _interleaved_to_planar(data: bytes) -> bytes:
+    """Interleaved 16-bit stereo (mpc2emu's internal form) -> the E4B's
+    PLANAR layout: the whole left channel, then the whole right.
+
+    Corpus-RE'd 2026-07-29 (docs/RESOLUTION_NOTES.md §E4BSTEREO): a real
+    stereo E3S1 object addresses two sequential blocks through the L/R
+    halves of its start/end pairs, e.g. startL=92 endL=154458 /
+    startR=154460 endR=308826. Strided slicing, so no per-frame loop.
+    """
+    n = len(data) // 4
+    out = bytearray(n * 4)
+    out[0:n * 2:2]        = data[0:n * 4:4]     # left  low byte
+    out[1:n * 2:2]        = data[1:n * 4:4]     # left  high byte
+    out[n * 2::2]         = data[2:n * 4:4]     # right low byte
+    out[n * 2 + 1::2]     = data[3:n * 4:4]     # right high byte
+    return bytes(out)
+
+
 def _build_sample_header(sample: SampleData, sample_idx: int) -> bytes:
     """The 94-byte E3S1 sample header (the PCM is written separately).
 
@@ -367,6 +385,14 @@ def _build_sample_header(sample: SampleData, sample_idx: int) -> bytes:
     n_bytes   = len(sample.data)   # WAV = LE; E4XT reads LE — written as-is
     STRUCT_SZ = 92                 # sizeof(struct emu3_sample)
 
+    # Stereo: one object carries BOTH channels as two sequential PCM blocks,
+    # each addressed by its own half of the start/end pairs, with the channel
+    # bits 0x0020|0x0040 both set. Corpus-RE'd over 473 local banks (23.6% of
+    # sample objects are stereo this way) — see RESOLUTION_NOTES §E4BSTEREO.
+    is_stereo   = getattr(sample, 'channels', 1) == 2
+    chan_bytes  = n_bytes // 2 if is_stereo else n_bytes   # bytes per channel
+    start_r     = STRUCT_SZ + chan_bytes if is_stereo else 0
+
     hdr = bytearray(SAMP_HDR)
 
     # --- EMU4_E3S1_OFFSET prefix (2 bytes) ---
@@ -376,9 +402,12 @@ def _build_sample_header(sample: SampleData, sample_idx: int) -> bytes:
     hdr[2:18] = _name16(_sample_display_name(sample))  # [2-17] name + root note
     # [18-21] header = 0 (already zero from bytearray init)
     struct.pack_into('<I', hdr, 22, STRUCT_SZ)      # [22-25] start_l = 92
-    # [26-29] start_r = 0 (mono)
-    end_l = STRUCT_SZ + n_bytes - 2
+    end_l = STRUCT_SZ + chan_bytes - 2
     struct.pack_into('<I', hdr, 30, end_l)          # [30-33] end_l
+    if is_stereo:
+        struct.pack_into('<I', hdr, 26, start_r)            # [26-29] start_r
+        struct.pack_into('<I', hdr, 34, start_r + chan_bytes - 2)  # [34-37] end_r
+    # else [26-29]/[34-37] stay 0 (mono)
 
     # Loop points (in bytes from struct start).
     # EOS 4.x has exactly ONE loop type: a forward loop, toggled On/Off at the
@@ -405,11 +434,17 @@ def _build_sample_header(sample: SampleData, sample_idx: int) -> bytes:
         lsl = STRUCT_SZ
         lel = end_l
         options = 0x0020   # MONO_L, no loop
+    if is_stereo:
+        options |= 0x0040          # left | RIGHT = stereo in one object
 
     struct.pack_into('<I', hdr, 38, lsl)            # [38-41] loop_start_l
-    # [42-45] loop_start_r = 0
     struct.pack_into('<I', hdr, 46, lel)            # [46-49] loop_end_l
-    # [50-53] loop_end_r = 0
+    if is_stereo:
+        # Per-channel loop points: the same frame offsets, rebased onto the
+        # right block (lsR - startR == lsL - startL in every corpus sample).
+        struct.pack_into('<I', hdr, 42, lsl - STRUCT_SZ + start_r)  # [42-45]
+        struct.pack_into('<I', hdr, 50, lel - STRUCT_SZ + start_r)  # [50-53]
+    # else [42-45]/[50-53] stay 0 (mono)
 
     struct.pack_into('<I', hdr, 54, sample.sample_rate)  # [54-57] sample_rate u32
     # [58-59] pitch correction — HARDWARE-RE'd 2026-07-24 (RESOLUTION_NOTES §E4BRATE).
@@ -426,7 +461,9 @@ def _build_sample_header(sample: SampleData, sample_idx: int) -> bytes:
         struct.pack_into('<h', hdr, 58, max(-32768, min(32767, f58)))
     struct.pack_into('<H', hdr, 60, options)             # [60-61] options
     struct.pack_into('<I', hdr, 62, STRUCT_SZ)           # [62-65] sample_data_offset_l = 92
-    # [66-69] sample_data_offset_r = 0
+    if is_stereo:
+        struct.pack_into('<I', hdr, 66, start_r)         # [66-69] ..._offset_r
+    # else [66-69] stays 0 (mono)
     # [70-93] parameters[6] = 0
 
     return bytes(hdr)
@@ -1046,7 +1083,11 @@ def write_e4b(bank: Bank, output_path: str) -> None:
             f.write(SAMP_TAG)
             f.write(struct.pack('>I', blen))   # IFF chunk size
             f.write(sample_headers[i])
-            f.write(s.data)                     # PCM streamed — never copied
+            # PCM streamed — never copied. Stereo is de-interleaved to the
+            # E4B's planar (all-left-then-all-right) layout first; that copy
+            # is unavoidable and only affects stereo samples.
+            f.write(_interleaved_to_planar(s.data)
+                    if getattr(s, 'channels', 1) == 2 else s.data)
             if blen & 1:
                 f.write(b'\x00')               # IFF word-align pad
         f.write(emst_chunk)
