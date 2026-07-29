@@ -230,7 +230,7 @@ multi-voice banks:
 | `36`    | fine tune           | **signed** cents (`+50` → `0x32`). Hardware-RE'd 2026-06-13 (`RE_SUITE` ZONE BASE ft+50c) |
 | `37`    | Glide Rate               | `E4_VOICE_GLIDE_RATE` (id 63), `0–127` sec/oct — portamento, currently unmodeled by mpc2emu |
 | `38`    | Non-Transpose flag  | `0x01` = pitch fixed (does not follow key), `0x00` = key-tracking. Confirmed from `B.010-Voices_RevEng.E4B` |
-| `39`    | Solo mode                | `E4_VOICE_SOLO` (id 65), `0–8` — see `VOICE_SOLO_MODES` in eosremote |
+| `39`    | Solo mode                | `E4_VOICE_SOLO` (id 65), `0–8` — see `VOICE_SOLO_MODES` in eosed |
 | `41`    | Chorus Width             | `E4_VOICE_CHORUS_WIDTH` (id 59), **signed byte**, `-128..0`. Confirmed by clean file diff: test value `-100` → byte `156` (two's-complement of a single signed byte) |
 | `42`    | Chorus Amount       | Voice/Tuning page; UI `0–100%` → `0–127` linear (`round(pct/100×127)`), `0` = off. Hardware-confirmed 2026-06-08 |
 | `44`    | Chorus X (initial ITD)   | `E4_VOICE_CHORUS_X` (id 60), `-32..32` ms |
@@ -242,7 +242,7 @@ multi-voice banks:
 | `57`    | Amp Envelope Depth       | `E4_VOICE_VOLENV_DEPTH` (id 68), `0–16` raw = **−96 dB to −48 dB in 3 dB steps** (per the EOS manual, p.340: "maximum amount of attenuation from the amplifier envelope generator"). Directly relevant to `docs/RESOLUTION_NOTES.md` §E4BLEVEL (the amp-envelope sustain dB-law finding) — this is the field that sets the depth of that dB range; mpc2emu's writer never touches it, so it stays at whatever the source/template carries (commonly `0` = −96 dB, matching the calibration measurement) |
 | `58`    | VCF filter type     | see [§4.4](#44-filter-type-mapping-xpm--e4b) |
 | `60`    | VCF cutoff          | `0`≈57 Hz … `255`=20 kHz, exponential curve |
-| `61`    | VCF Q / resonance   | `0`–`127`, linear. **Also aliases `E4_VOICE_FKEY_XFORM`** (live id 84, "meaning varies by filter type" per eosremote's own notes) — confirmed by diff: baseline `0` (matching `filter_resonance=0.0`) became the test value after editing `FKEY_XFORM` remotely |
+| `61`    | VCF Q / resonance   | `0`–`127`, linear. **Also aliases `E4_VOICE_FKEY_XFORM`** (live id 84, "meaning varies by filter type" per eosed's own notes) — confirmed by diff: baseline `0` (matching `filter_resonance=0.0`) became the test value after editing `FKEY_XFORM` remotely |
 | `62`    | Filter Gen Param 1  | `E4_VOICE_FILT_GEN_PARM1` (id 85) |
 | `63`    | Filter Gen Param 2  | id 86 |
 | `64`    | Filter Gen Param 3  | id 87 |
@@ -250,7 +250,7 @@ multi-voice banks:
 | `66`    | Filter Gen Param 5  | id 89 |
 | `67`    | Filter Gen Param 6  | id 90 |
 | `68`    | Filter Gen Param 7  | id 91 |
-| `69`    | Filter Gen Param 8  | id 92 — all 8 are "filter-type dependent" per eosremote's own param table (their exact meaning shifts with `vpar[58]`, same caveat as `vpar[61]` above); confirmed only as *existing at these offsets*, not decoded per filter type |
+| `69`    | Filter Gen Param 8  | id 92 — all 8 are "filter-type dependent" per eosed's own param table (their exact meaning shifts with `vpar[58]`, same caveat as `vpar[61]` above); confirmed only as *existing at these offsets*, not decoded per filter type |
 
 > **A voice's real zone count can only be trusted from `vpar[2:4]`
 > (`trailer_off`), not `vpar[4]`.** At least three real banks have at least

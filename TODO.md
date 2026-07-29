@@ -268,13 +268,13 @@ fit residual, not a broken mechanism. Closed.
 
 **Aside — the live-SysEx calibration attempt that was abandoned first:**
 three rounds of live parameter-edit automation via the sibling
-`../eosremote` project produced incoherent, non-monotonic results (and one
+`../eosed` project produced incoherent, non-monotonic results (and one
 device crash, "Gen Trap error", recovered by power-cycling) before this
 file-based approach worked cleanly on the first try. See
-`../eosremote/docs/RESOLUTION_NOTES.md` §14/§15 and `../eosremote/TODO.md`
+`../eosed/docs/RESOLUTION_NOTES.md` §14/§15 and `../eosed/TODO.md`
 for what went wrong there (`PRESET_SELECT` isn't "select for playback";
 the crash's exact trigger is still unconfirmed) — useful context for
-anyone tempted to script eosremote against real hardware again, but not
+anyone tempted to script eosed against real hardware again, but not
 relevant to the (now-resolved) calibration data itself.
 
 ## Follow-up: EIII/E3B import for VinSamLib (OPEN, 2026-07-28)

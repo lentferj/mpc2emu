@@ -3156,9 +3156,9 @@ audible today, but the byte would still be wrong if that changes).
 
 **MEASURED 2026-07-28.** Live SysEx parameter-edit automation was tried
 first (`tests/re_banks/run_amp_level_cal_sweep.py`, via the sibling
-`../eosremote` project) and abandoned after three rounds of incoherent,
+`../eosed` project) and abandoned after three rounds of incoherent,
 non-monotonic results plus one device crash — see the "live automation"
-TODO entry and `../eosremote/docs/RESOLUTION_NOTES.md` §14/§15. Switched to
+TODO entry and `../eosed/docs/RESOLUTION_NOTES.md` §14/§15. Switched to
 a **file-based bank** instead: `tests/re_banks/gen_amp_level_cal.py` builds
 `AMPLVLCAL.E4B`, one preset with 9 voices, each covering exactly one key
 (MIDI 48-56) with `Envelope(attack=0.01, decay=0.15, sustain=i/8, release=
@@ -3269,7 +3269,7 @@ deliberate choice, not oversight.
 ## §E4BPARAMHUNT — Live-SysEx parameter hunting: a new, fast method for finding unknown `vpar` bytes (2026-07-28)
 
 **Context:** while chasing the `E4_VOICE_VOLENV_DEPTH` byte for §E4BLEVEL,
-realized the sibling `../eosremote` project's editor-protocol SysEx could
+realized the sibling `../eosed` project's editor-protocol SysEx could
 be used far more generally — to hunt down *any* currently-unknown `vpar`
 byte, not just this one field. This section documents the method (reusable
 for future RE) and the full batch of findings from doing it once.
@@ -3362,7 +3362,7 @@ elsewhere from earlier static-file RE): `LFO2` Lag0/Lag1 at `PZT[57]`/
 now confirmed via a second, independent method (live SysEx vs. the
 original static commercial-bank analysis).
 
-### A useful side-discovery for `../eosremote`, not mpc2emu
+### A useful side-discovery for `../eosed`, not mpc2emu
 
 While hunting, found that the OLD-format SysEx dump (`dump_preset_old`)
 lays out parameters **uniformly, 2 bytes per id, in strict ascending id
@@ -3370,9 +3370,9 @@ order** — `dump_offset = 98 + (param_id − 53) × 2` — verified across a wi
 span (ids 53 through 116, crossing the `voice.general`/`.tuning`/`.mode`/
 `.amp`/`.filter`/`.lfo` group boundaries without exception, including
 right through the `vpar`/PZT structural boundary at id 70). This resolves
-eosremote's own long-standing "voice data layout not yet fully
+eosed's own long-standing "voice data layout not yet fully
 cross-checked" TODO for at least this section of the old dump format —
-logged in `../eosremote/docs/RESOLUTION_NOTES.md` and `../eosremote/TODO.md`
+logged in `../eosed/docs/RESOLUTION_NOTES.md` and `../eosed/TODO.md`
 instead of here, since it's their protocol layer, not mpc2emu's file
 format. **Caveat proven by the Aux Envelope finding above: the dump's own
 id-ascending order does NOT necessarily match the file's internal byte
