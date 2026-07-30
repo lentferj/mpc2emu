@@ -58,6 +58,14 @@ raises a message naming the real format instead of an opaque XML error.
 `sliceInfo`'s), adopted on their authority since no local file exercises it.
 **Still missing vs CWM:** `direction` (reverse), Track/Project payloads,
 `samples[].metadata.tune`, pitch-bend range.
+
+**Corrected 2026-07-30 from the official MPC v3.9 User Guide:** the JSON's
+`{value0, value1}` wrappers are **slots, not articulations** — MPC 3 has TWO
+filters (with Blend and Parallel/Serial controls) and TWO LFOs. So taking
+`value0` means taking Filter 1 / LFO 1, which is defensible rather than
+arbitrary. **Dropped:** Filter 2 + blend + serial routing, and LFO 2 — the
+latter is cheap to add, since `VoiceLayer` already has `lfo2_*` fields the XML
+path fills. See §MPC3XPM.
 See `docs/RESOLUTION_NOTES.md` §MPC3XPM.
 
 ## sampledir_parser: WAV smpl-chunk fine-tune read but never reaches the zone (FIXED, 2026-07-29)

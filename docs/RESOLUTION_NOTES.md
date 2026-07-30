@@ -3998,14 +3998,15 @@ the values were all defaults, so a wrong scale factor on, say, the filter
 envelope would not have shown up. Anything beyond auto-sampler output should
 be re-checked against a real file before being trusted.
 
-**Articulations, concretely.** Every keygroup carries `filterData.value0` AND
-`value1`, and in all 71 they DIFFER (`value0.filterType = 2`,
-`value1.filterType = 0`). `_v0()` takes `value0`. That is harmless here —
-cutoff is at maximum with zero resonance and zero envelope amount, so both map
-to an audibly wide-open filter (`_XPM_FILTER_TYPE` sends type 2 to a 2-pole LP,
-and type 0 is itself documented as "4PLP wide open (bypass-like)") — but it is
-an unverified assumption that `value0` is the *active* articulation. A program
-that genuinely uses articulation switching would need this revisited.
+**The two filter slots, concretely.** Every keygroup carries
+`filterData.value0` AND `value1`, and in all 71 they DIFFER
+(`value0.filterType = 2`, `value1.filterType = 0`). These are **Filter 1 and
+Filter 2** (see the manual correction above), and `_v0()` takes Filter 1.
+Harmless in these files — cutoff is at maximum with zero resonance and zero
+envelope amount, so both map to an audibly wide-open filter
+(`_XPM_FILTER_TYPE` sends type 2 to a 2-pole LP, and type 0 is itself
+documented as "4PLP wide open (bypass-like)") — but a program that actually
+uses Filter 2, or blends the pair, converts with only the first.
 
 ### Is MPC 3 a new container, or a new model? Both, partly.
 
@@ -4033,9 +4034,22 @@ works and is not a hack.
 **Genuinely restructured:**
 - Synth parameters moved from 66 flat instrument tags into nested
   `synthSection` (`filterData` / `ampEnvelope` / `filterEnvelope` / `lfoData`).
-- **Every synth scalar is per-articulation**, `{value0, value1}`. MPC 3 has two
-  articulations per keygroup where XML had one value. A model change, not
-  serialisation.
+- **`{value0, value1}` wrappers are SLOTS, not articulations** — corrected
+  2026-07-30 against the official *MPC Standalone OS User Guide v3.9*, which
+  is unambiguous (p. ~8838): *"The Filters tab features **two filters** which
+  can be run in either parallel or series configuration, with a **blend**
+  control"*, plus `Filter 1/2 Type` fields, a `Blend` knob and a
+  `Parallel/Serial` toggle — exactly the JSON's `filterData.value0/value1`,
+  `filterBlend` and `filterSerialRouting`. Likewise `lfoData.value0/value1`
+  are **LFO 1 and LFO 2** (the manual's "Tap LFO to cycle between the LFO 1
+  and LFO 2 controls"), and a layer's `lfoFilterCutOff: {value0, value1}` is
+  that LFO's depth *into each of the two filters* ("To Filter 1/2").
+  Envelope stages carry only `value0`, consistent with there being one amp
+  and one filter envelope. So MPC 3 gained a **dual filter and a second
+  LFO**, which is a real model change — but nothing to do with articulations.
+  (Articulations do exist in MPC 3, as drum rudiments/flams with up to four
+  per pad selected by pad quadrant, which is what `quadrantEnabled` relates
+  to — a separate feature.)
 - Slice parameters went flat → nested `sliceInfo`, with
   `layerLoopModeOverridesSliceLoopMode` arbitrating between the layer's loop
   and the slice's.
@@ -4051,9 +4065,23 @@ works and is not a hack.
 
 **Consequence for this implementation.** Translating to the XML tree is sound
 for the *sample-playback subset*, which is all mpc2emu converts. Its ceiling is
-now known rather than assumed: it structurally cannot express oscillator
-layers (they arrive as a layer with no sample), articulation switching (we take
-`value0`), or anything in the extended list above.
+now known rather than assumed. `_v0()` taking `value0` means we take **Filter 1
+and LFO 1** — a defensible choice, since mpc2emu models one filter, rather than
+the arbitrary pick it looked like before this correction. What is dropped:
+
+- **Filter 2**, and with it `filterBlend` and `filterSerialRouting`. A program
+  using both filters converts with only the first.
+- **LFO 2** — and this one is cheap to fix, because `VoiceLayer` already has
+  `lfo2_rate` / `lfo2_shape` / `lfo2_to_pitch` fields that the XML path fills
+  from a second LFO block. Mapping `lfoData.value1` onto them is a small,
+  well-founded improvement.
+- **Oscillator layers** (they arrive as a layer with no sample) and the
+  extended per-layer fields listed above.
+
+Two more facts from the manual worth recording: a keygroup holds **up to eight
+samples** (p. ~1915) — matching the 8 layer slots measured per keygroup, of
+which the auto-sampler fills one — and a keygroup track holds **up to 128
+keygroups**.
 
 ### Loops (implemented 2026-07-30, following ConvertWithMoss)
 
