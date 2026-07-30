@@ -59,6 +59,17 @@ raises a message naming the real format instead of an opaque XML error.
 **Still missing vs CWM:** `direction` (reverse), Track/Project payloads,
 `samples[].metadata.tune`, pitch-bend range.
 
+**Read the full official MPC v3.9 User Guide** — see §MPC3XPM "Full sweep".
+Implemented from it: **AD-mode envelopes now import with sustain 0** (the
+manual is explicit that AD mode decays to zero with no sustain, so reading
+`Sustain` regardless inverted the behaviour), and **LFO 2 is mapped** to the
+`lfo2_*` fields `VoiceLayer` already had. Next candidates, in value order:
+envelope **Hold/Delay** (E4B envelopes are 6-stage, so the target can hold
+them — needs a model change), **Filter 2** + blend + serial routing,
+`pitchEnvelope`, `direction` (reverse), and Track/Project payloads.
+**Unverified:** whether MPC 3's `filterType` integers still match MPC 2's
+ordering — the manual defers to a glossary that does not extract cleanly.
+
 **Corrected 2026-07-30 from the official MPC v3.9 User Guide:** the JSON's
 `{value0, value1}` wrappers are **slots, not articulations** — MPC 3 has TWO
 filters (with Blend and Parallel/Serial controls) and TWO LFOs. So taking

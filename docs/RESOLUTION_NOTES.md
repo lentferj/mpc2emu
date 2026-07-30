@@ -4117,3 +4117,69 @@ and the existing MPC rule already honoured.
 `SerialisableTrackData` / `SerialisableProjectData` payloads (they extract
 `data.program` and `data.tracks[].program` filtered to `type == 1`; we reject
 both), `samples[].metadata.tune`, and pitch-bend range.
+
+### Full sweep of the official MPC v3.9 User Guide (2026-07-30)
+
+Read the whole *MPC Standalone OS User Guide v3.9* (37 MB PDF → 21,651 lines
+of `pdftotext -layout`) looking for anything implementable. It is the same
+class of authority for MPC work that the EOS manual is for E4XT work, and it
+corrected one thing I had already documented wrongly (see the `{value0,
+value1}` = filter/LFO **slots** correction above).
+
+**Confirmed structural facts** (previously inferred):
+
+- A keygroup holds **up to eight samples** — matching the 8 layer slots
+  measured per keygroup, of which the auto-sampler fills exactly one.
+- A keygroup track holds **up to 128 keygroups**.
+- **Oscillators are a per-layer Sample/OSC switch**: *"Drum and Keygroup
+  tracks can now use oscillators as a sound generator per layer instead of
+  samples"* — confirming the `oscillatorType` reading exactly.
+
+**Envelopes are DAHDSR, not ADSR.** The controls are *Delay, Attack, Hold,
+Decay, Sustain, Release*, and the JSON carries all of them plus `AttackCurve`,
+`DecayCurve`, `ReleaseCurve`, `TimeScaling`, `tempoSync`, `Looped`, `OneShot`,
+`VelocityToAttack`, `DecayStart` and a `Type`. There are also **four**
+envelopes per keygroup — `ampEnvelope`, `filterEnvelope`, `pitchEnvelope`,
+`auxEnvelope` — where mpc2emu models two.
+
+*Implemented from this:* **AD-mode envelopes now import with sustain 0.** The
+manual is explicit that in AD mode the level *"will gradually drop to zero"*
+with no sustain segment, so reading `Sustain` regardless would import an AD
+envelope as a full-level hold — the opposite of what it does. `AD` is a
+per-envelope flag, so amp and filter are handled independently.
+
+*Implemented from this:* **LFO 2 is mapped.** The manual confirms two LFOs
+(*"Tap LFO to cycle between the LFO 1 and LFO 2 controls"*), and `VoiceLayer`
+already had `lfo2_*` fields the XML path never filled. `lfoData.value1` now
+becomes an `<LFO2>` block (routed to pitch, which is what `lfo2_*` models).
+XML programs never contain one, so their behaviour is untouched.
+
+**Worth implementing next, in rough value order:**
+
+1. **Envelope Hold and Delay.** E4B envelopes are 6-stage, so the target can
+   represent more than our 4-stage `Envelope` dataclass carries. Needs a model
+   change, which is why it is not done here — but it is a real fidelity gain
+   for any program that uses them, and the data is already parsed.
+2. **Filter 2**, with `filterBlend` and `filterSerialRouting`. A program using
+   both filters currently converts with only Filter 1.
+3. **`pitchEnvelope`** — EOS has a routable aux envelope, so there is a
+   plausible target.
+4. **`direction`** → reversed playback (ConvertWithMoss does this).
+5. **Track/Project payloads** — CWM extracts `data.program` and
+   `data.tracks[].program` filtered to `type == 1`; we reject both, so a
+   keygroup program living inside an MPC 3 track or project file is
+   unreachable.
+6. Envelope **curves** (`AttackCurve`/`DecayCurve`/`ReleaseCurve`, default
+   0.375) and `tempoSync`/`TimeScaling`, which would change the seconds
+   conversion when not `None`/0.5.
+
+**Deliberately not pursued:** the filter-type enumeration. The manual defers
+to *Appendix > Glossary > Filter*, whose layout does not extract cleanly from
+the PDF, so whether MPC 3's `filterType` integers still match MPC 2's ordering
+(which `_XPM_FILTER_TYPE` encodes) is **unverified**. It did not matter for
+the local files — every filter is at maximum cutoff with zero resonance, i.e.
+audibly bypassed either way — but it is the obvious thing to check before
+trusting a converted program that actually uses a filter.
+
+The extracted text is kept out of the repo (it is a 37 MB copyrighted manual);
+re-derive with `pdftotext -layout` from the vendor PDF if needed again.

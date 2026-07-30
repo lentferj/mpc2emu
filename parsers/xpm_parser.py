@@ -742,14 +742,25 @@ def _mpc3_to_xml(data) -> 'ET.Element':
         put('FilterEnvAmt',    filt.get('filterEnvelopeAmount', 0.0))
         put('FilterKeytrack',  filt.get('filterKeytrack', 0.0))
         put('VelocityToFilter', filt.get('filterVelocity', 0.0))
-        # Envelopes — {'Attack': {'value0': x}, ...}
+        # Envelopes — {'Attack': {'value0': x}, ...}.
+        # MPC 3 envelopes are DAHDSR (Delay, Attack, Hold, Decay, Sustain,
+        # Release) and can run in AD mode, where there is no sustain segment
+        # at all: the level decays to zero after the attack (manual: "the
+        # volume will gradually drop to zero over the set duration").  The
+        # model here is ADSR, so AD mode is expressed as sustain 0 --
+        # otherwise an AD envelope would import as a full-level hold, which
+        # is the opposite of what it does.  Delay and Hold are dropped; see
+        # the gap list in docs/RESOLUTION_NOTES.md §MPC3XPM.
+        def env_sustain(env):
+            return 0.0 if _v0(env.get('AD'), False) else _v0(env.get('Sustain'), 1.0)
+
         put('VolumeAttack',  _v0(amp.get('Attack')))
         put('VolumeDecay',   _v0(amp.get('Decay')))
-        put('VolumeSustain', _v0(amp.get('Sustain'), 1.0))
+        put('VolumeSustain', env_sustain(amp))
         put('VolumeRelease', _v0(amp.get('Release')))
         put('FilterAttack',  _v0(fenv.get('Attack')))
         put('FilterDecay',   _v0(fenv.get('Decay')))
-        put('FilterSustain', _v0(fenv.get('Sustain'), 1.0))
+        put('FilterSustain', env_sustain(fenv))
         put('FilterRelease', _v0(fenv.get('Release')))
         # LFO — lfoFilterCutOff is itself per-articulation.
         put('LfoPitch',  lfo.get('lfoPitch', 0.0))
@@ -760,6 +771,19 @@ def _mpc3_to_xml(data) -> 'ET.Element':
             lfo.get('lfoWaveformType', 0), 'Sine')
         ET.SubElement(lfo_el, 'Sync').text  = str(lfo.get('lfoSync', 0))
         ET.SubElement(lfo_el, 'Reset').text = str(lfo.get('lfoReset', True))
+
+        # MPC 3 has a SECOND LFO (manual: "Tap LFO to cycle between the LFO 1
+        # and LFO 2 controls"), which MPC 2.x had no equivalent of.  VoiceLayer
+        # already carries lfo2_* fields, so emit it in a parallel <LFO2> block
+        # the reader below picks up; XML programs never contain one, so their
+        # behaviour is unchanged.
+        lfo2 = (ss.get('lfoData') or {}).get('value1') or {}
+        if lfo2:
+            l2 = ET.SubElement(ie, 'LFO2')
+            ET.SubElement(l2, 'Rate').text  = str(lfo2.get('lfoRate', 0.5))
+            ET.SubElement(l2, 'Type').text  = _MPC3_LFO_SHAPES.get(
+                lfo2.get('lfoWaveformType', 0), 'Sine')
+            ET.SubElement(l2, 'Pitch').text = str(lfo2.get('lfoPitch', 0.0))
 
         layers_el = ET.SubElement(ie, 'Layers')
         for lidx, lay in enumerate(layers):
@@ -1005,6 +1029,20 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
             filter_env_sustain=filt_sus, filter_env_release=filt_rel,
             filter_keytrack=filt_keytrk, velocity_to_filter=filt_velamt,
         )
+        # MPC 3 second LFO (<LFO2>, emitted only by the JSON converter — an
+        # MPC 2.x XML program never has one, so this is inert there).  Routed
+        # to pitch only, which is what VoiceLayer's lfo2_* models.
+        lfo2_block = instrument.find('LFO2')
+        if lfo2_block is not None:
+            _l2_pitch = max(-1.0, min(1.0,
+                            float(_get_text(lfo2_block, 'Pitch', '0.0'))))
+            if abs(_l2_pitch) > 0.001:
+                pdict.update(
+                    lfo2_rate=lfo_knob_to_hz(float(_get_text(lfo2_block, 'Rate', '0.5'))),
+                    lfo2_shape=_xpm_lfo_shape(_get_text(lfo2_block, 'Type', 'Sine')),
+                    lfo2_to_pitch=_l2_pitch,
+                )
+
         if lfo_active:
             # Full LFO depth + wheel_to_lfo → writer splits into static + wheel-
             # gated cords (faithful KeygroupWheelToLfo gating).
