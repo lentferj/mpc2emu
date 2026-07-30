@@ -59,6 +59,16 @@ raises a message naming the real format instead of an opaque XML error.
 **Still missing vs CWM:** `direction` (reverse), Track/Project payloads,
 `samples[].metadata.tune`, pitch-bend range.
 
+**Parameter verification plan: `docs/re_procedures/mpc3_xpm_params.md`** — a
+checklist of ~25 items across five groups (confirm what is assumed / verify
+what we read / decide what we drop / cover non-auto-sampler shapes /
+hardware-free cross-checks), with `tests/re_banks/mpc3_xpm_diff.py` as the
+executable lever. Because MPC 3 programs are gzip+JSON rather than binary,
+the one-parameter-at-a-time differential needs no byte hunting: change one
+control, export, diff. **Highest priority is A1**, the `filterType`
+enumeration — until that is confirmed, a converted program that actually uses
+a filter cannot be trusted.
+
 **Read the full official MPC v3.9 User Guide** — see §MPC3XPM "Full sweep".
 Implemented from it: **AD-mode envelopes now import with sustain 0** (the
 manual is explicit that AD mode decays to zero with no sustain, so reading
