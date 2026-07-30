@@ -52,6 +52,12 @@ articulation switching should be re-checked against a real file. See the
 
 The X11-pixmap guard landed with it: a `.xpm` that is neither gzip nor XML now
 raises a message naming the real format instead of an opaque XML error.
+
+**Loops implemented** following ConvertWithMoss's two-tier scheme
+(`layerLoopModeOverridesSliceLoopMode` picks between the layer's loop and
+`sliceInfo`'s), adopted on their authority since no local file exercises it.
+**Still missing vs CWM:** `direction` (reverse), Track/Project payloads,
+`samples[].metadata.tune`, pitch-bend range.
 See `docs/RESOLUTION_NOTES.md` §MPC3XPM.
 
 ## sampledir_parser: WAV smpl-chunk fine-tune read but never reaches the zone (FIXED, 2026-07-29)

@@ -4006,3 +4006,86 @@ to an audibly wide-open filter (`_XPM_FILTER_TYPE` sends type 2 to a 2-pole LP,
 and type 0 is itself documented as "4PLP wide open (bypass-like)") — but it is
 an unverified assumption that `value0` is the *active* articulation. A program
 that genuinely uses articulation switching would need this revisited.
+
+### Is MPC 3 a new container, or a new model? Both, partly.
+
+Asked directly, and worth answering with the schemas rather than an impression.
+Comparing a classic XML `.xpm` against a 3.9.0.31 JSON one:
+
+|  | XML (MPC 2.x) | JSON (MPC 3.x) |
+|---|---|---|
+| instrument-level fields | 66 **flat** tags | 39 keys, synth params **nested** in `synthSection` |
+| layer-level fields | 28 | 42 |
+
+17 layer concepts appear in **both** schemas: `sampleName`, `rootNote`, `pan`,
+`volume`, `loopStart`, `loopEnd`, `sampleStart`, `sampleEnd`, `direction`,
+`offset`, `mute`, `active`, `pitch`, `sliceIndex`, `sampleFile`, `loop`,
+`loopCrossfadeLength`.
+
+**Core model preserved.** Program → keygroups (`lowNote`/`highNote`) → layers
+(sample, root, velocity, tune, pan, volume) is unchanged, and `rootNote` is
+1-based in *both*. That is why translating the JSON into the XML element tree
+works and is not a hack.
+
+**Renames only:** `TuneCoarse`→`coarseTune`, `VelStart`→`velocityStart`,
+`LoopTune`→`loopFineTune`.
+
+**Genuinely restructured:**
+- Synth parameters moved from 66 flat instrument tags into nested
+  `synthSection` (`filterData` / `ampEnvelope` / `filterEnvelope` / `lfoData`).
+- **Every synth scalar is per-articulation**, `{value0, value1}`. MPC 3 has two
+  articulations per keygroup where XML had one value. A model change, not
+  serialisation.
+- Slice parameters went flat → nested `sliceInfo`, with
+  `layerLoopModeOverridesSliceLoopMode` arbitrating between the layer's loop
+  and the slice's.
+
+**Genuinely extended** — no XML ancestor:
+- **`oscillatorType` / `Mode` / `Params` / `SubTypeName` / `StartPhase` /
+  `Decay`**: an MPC 3 layer can be a *synth oscillator* rather than a sample.
+  Dormant in the local files (all 568 layer slots are `oscillatorType = 0`,
+  sample mode) but structurally new.
+- Per-layer randomisation (`offsetRandom`, `panRandom`, `pitchRandom`,
+  `volumeRandom`), `keyTrackEnable`, `quadrantEnabled`, `playbackOffset`,
+  slice increment/cycle/seed.
+
+**Consequence for this implementation.** Translating to the XML tree is sound
+for the *sample-playback subset*, which is all mpc2emu converts. Its ceiling is
+now known rather than assumed: it structurally cannot express oscillator
+layers (they arrive as a layer with no sample), articulation switching (we take
+`value0`), or anything in the extended list above.
+
+### Loops (implemented 2026-07-30, following ConvertWithMoss)
+
+MPC 3 carries **two** loop descriptions plus a flag choosing between them,
+where MPC 2.x had one implicit loop running to the Pad End:
+
+- `layerLoopModeOverridesSliceLoopMode` true → the layer's `loopMode`,
+  `loopStart`, `loopEnd`, `loopCrossfadeLength`
+- otherwise → `sliceInfo`'s `LoopMode`, `LoopStart`, `End`,
+  `LoopCrossfadeLength`
+- a loop counts only when `mode > 0` **and** its end `> 0`
+- `offset` shifts the play start on top of `sampleStart`
+
+Taken from `MPCModernDetector.readJsonSampleZone()` and **assumed correct** —
+none of the local files exercise it (all auto-sampler output, `loop: false`
+throughout), so this is adopted on ConvertWithMoss's authority rather than
+verified against hardware output.
+
+MPC 2.x has no explicit loop END, so `_apply_slice` always looped to the slice
+end. It now takes an optional `slice_loop_end` (0 = old behaviour, so the XML
+path is untouched) fed by a new `SliceLoopEnd` tag that only the JSON converter
+emits.
+
+Verified on synthesised programs covering both tiers: layer-tier forward
+(1000-6000), slice-tier forward (2000-5000), alternating (500-7000), no loop,
+and the discriminating case — override flag OFF while layer loop data IS set,
+where the slice tier must win and correctly yields no loop. The three real
+files are byte-identical before and after the change; their 6/13/13 looped
+samples come from the WAVs' own `smpl` chunks, which the auto-sampler writes
+and the existing MPC rule already honoured.
+
+**Still not implemented** (CWM does these): `direction` → reversed playback,
+`SerialisableTrackData` / `SerialisableProjectData` payloads (they extract
+`data.program` and `data.tracks[].program` filtered to `type == 1`; we reject
+both), `samples[].metadata.tune`, and pitch-bend range.

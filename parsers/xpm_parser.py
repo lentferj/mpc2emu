@@ -491,14 +491,17 @@ def _is_full_sample_loop(loop_start: int, loop_end: int, n_frames: int) -> bool:
 
 def _apply_slice(sd: SampleData, slice_start: int, slice_end: int,
                  slice_loop: int, slice_loop_start: int,
-                 loop_on: bool = True) -> None:
+                 loop_on: bool = True, slice_loop_end: int = 0) -> None:
     """Apply MPC Pad-Start/End + Pad-Loop slice playback to a loaded sample.
 
     `slice_start`/`slice_end` are sample frames (Pad Start / Pad End); when set
     they trim the audio to that window.  `slice_loop` is the Pad-Loop enum
     (0=Off, 1=Forward, 2=Reverse, 3=Alternating); when on, the loop runs from the
     Loop Position (`slice_loop_start`) to the Pad End — rebased to the trimmed
-    slice.  `loop_on` is the layer's <Loop> master toggle.  The MPC reads the WAV
+    slice.  `slice_loop_end` is an explicit loop END in frames: MPC 2.x has no
+    such field (its loop always runs to the Pad End) so it stays 0 there and the
+    old behaviour is unchanged, but MPC 3.x does carry one -- see _mpc3_to_xml.
+    `loop_on` is the layer's <Loop> master toggle.  The MPC reads the WAV
     `smpl` loop directly and plays it as a forward loop, EXCEPT a full-sample
     placeholder loop (`_is_full_sample_loop`), which it drops to a one-shot — so we
     only discard the embedded loop when it is full-sample (and <Loop> off), keeping
@@ -515,7 +518,10 @@ def _apply_slice(sd: SampleData, slice_start: int, slice_end: int,
             if loop_pos >= n_frames - 1:
                 loop_pos = 0
             sd.loop_start = loop_pos
-            sd.loop_end = n_frames - 1
+            sd.loop_end = (min(slice_loop_end, n_frames - 1)
+                           if 0 < slice_loop_end else n_frames - 1)
+            if sd.loop_end <= sd.loop_start:
+                sd.loop_end = n_frames - 1
             sd.loop_type = LoopType.ALTERNATING if slice_loop == 3 else LoopType.FORWARD
         elif (not loop_on
               and _is_full_sample_loop(sd.loop_start, sd.loop_end, n_frames)):
@@ -542,7 +548,8 @@ def _apply_slice(sd: SampleData, slice_start: int, slice_end: int,
         if not (0 <= loop_pos < n_frames - 1):
             loop_pos = 0
         sd.loop_start = loop_pos
-        sd.loop_end   = n_frames - 1
+        _le = slice_loop_end - trim_start if 0 < slice_loop_end else 0
+        sd.loop_end   = min(_le, n_frames - 1) if _le > loop_pos else n_frames - 1
         sd.loop_type  = LoopType.ALTERNATING if slice_loop == 3 else LoopType.FORWARD
     elif sd.loop_type != LoopType.NO_LOOP and sd.loop_start >= trim_end:
         # Case 3: No XPM loop, but WAV smpl loop starts BEYOND the attack slice.
@@ -773,11 +780,36 @@ def _mpc3_to_xml(data) -> 'ET.Element':
             lput('Pan',        lay.get('pan', 0.5))
             lput('TuneCoarse', lay.get('coarseTune', 0))
             lput('TuneFine',   lay.get('fineTune', 0))
-            lput('Loop',       'True' if lay.get('loop') else 'False')
-            lput('SliceStart',     lay.get('sampleStart', 0))
+            # Loops.  MPC 3 carries TWO loop descriptions and a flag choosing
+            # between them, which MPC 2.x had no equivalent of; this follows
+            # ConvertWithMoss's MPCModernDetector, taken as correct in the
+            # absence of a test file that exercises it (all three local 3.9
+            # files are auto-sampler output with loop=false throughout).
+            #   layerLoopModeOverridesSliceLoopMode -> use the LAYER's
+            #     loopMode/loopStart/loopEnd/loopCrossfadeLength
+            #   otherwise                           -> use sliceInfo's
+            #     LoopMode/LoopStart/End/LoopCrossfadeLength
+            # A loop counts only when mode > 0 AND its end > 0.
+            slice_info = lay.get('sliceInfo') or {}
+            if lay.get('layerLoopModeOverridesSliceLoopMode'):
+                lmode  = int(lay.get('loopMode', 0) or 0)
+                lstart = int(lay.get('loopStart', 0) or 0)
+                lend   = int(lay.get('loopEnd', 0) or 0)
+            else:
+                lmode  = int(slice_info.get('LoopMode', 0) or 0)
+                lstart = int(slice_info.get('LoopStart', 0) or 0)
+                lend   = int(slice_info.get('End', 0) or 0)
+            has_loop = lmode > 0 and lend > 0
+            # `offset` shifts the play start on top of sampleStart (CWM does
+            # the same); MPC 2.x folded it into SliceStart.
+            start = int(lay.get('offset', 0) or 0) + int(lay.get('sampleStart', 0) or 0)
+
+            lput('Loop',       'True' if (has_loop or lay.get('loop')) else 'False')
+            lput('SliceStart',     start)
             lput('SliceEnd',       lay.get('sampleEnd', 0))
-            lput('SliceLoop',      1 if lay.get('loop') else 0)
-            lput('SliceLoopStart', lay.get('loopStart', 0))
+            lput('SliceLoop',      lmode if has_loop else 0)
+            lput('SliceLoopStart', lstart)
+            lput('SliceLoopEnd',   lend if has_loop else 0)
     return root
 
 
@@ -1030,19 +1062,21 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
             slice_end    = int(_get_text(layer, 'SliceEnd',   '0'))
             slice_loop   = int(_get_text(layer, 'SliceLoop',  '0'))
             slice_lstart = int(_get_text(layer, 'SliceLoopStart', '0'))
+            slice_lend   = int(_get_text(layer, 'SliceLoopEnd', '0'))
             # <Loop> is the MPC layer's master loop toggle — its authority over any
             # embedded WAV `smpl` loop (the MPC ignores the WAV loop when False).
             # Absent → default True to preserve legacy WAV-smpl-loop behaviour.
             loop_on      = _get_text(layer, 'Loop', 'True').strip().lower() == 'true'
             cache_key = (sample_name, slice_start, slice_end, slice_loop,
-                         slice_lstart, loop_on)
+                         slice_lstart, loop_on, slice_lend)
 
             if cache_key not in sample_cache:
                 wav_path = _find_wav(sample_name, wav_dir)
                 if wav_path:
                     sd = load_wav(str(wav_path), sample_name)
                     if sd:
-                        _apply_slice(sd, slice_start, slice_end, slice_loop, slice_lstart, loop_on)
+                        _apply_slice(sd, slice_start, slice_end, slice_loop,
+                                     slice_lstart, loop_on, slice_lend)
                         # Deduplicate truncated names within this XPM.
                         base = sd.name
                         n = _name_count.get(base, 0)
