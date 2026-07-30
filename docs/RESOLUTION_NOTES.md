@@ -3875,3 +3875,59 @@ original implementation, including adversarial byte patterns
 (`0x00/0x7F/0x80/0xFF`), the 24-bit sign boundary, and odd-length buffers
 (the old loops left a trailing partial frame as zero — the replacements
 reproduce that exactly).
+
+## §MPC3XPM — MPC 3.x `.xpm` is gzip+JSON, not XML (found 2026-07-30)
+
+**Context:** routine check of ConvertWithMoss for MPC work in the last three
+months. Two relevant landings: `58933a2c` (2026-05-18) added JSON `.xpm`
+reading and merged their two MPC detectors into "Akai MPC Modern"; `bfbc82c4`
+and `30177c27` (both 2026-07-30) added MPC 3 `.xty` track-file *writing* and
+fixed its filter scaling.
+
+### The container
+
+An MPC 3.x `.xpm` is **gzip-compressed**. Decompressed, it starts with five
+plain-text lines and then a JSON document:
+
+| line | value (observed) | meaning |
+|---|---|---|
+| 0 | `ACVS` | magic; CWM rejects anything else |
+| 1 | `3.9.0.31` | MPC firmware/app version |
+| 2 | `SerialisableProgramData` | payload kind — also `SerialisableTrackData`, `SerialisableProjectData` |
+| 3 | `json` | encoding; CWM rejects anything else |
+| 4 | `Linux` | host OS |
+
+Payload shape (from `K2-01.xpm`): `data.version = 6`, `data.name`,
+`data.type`, `data.programPads.pads` (128 entries), plus `customQLinks`,
+`transpose`, `midiKillGroup`, `chainID` and ~40 more keys.
+
+### Detection
+
+CWM sniffs the first five bytes for `<?xml` and falls through to the JSON
+reader otherwise. mpc2emu should do the same, but the cheaper and more
+robust test is the **gzip magic** `1f 8b`, since a classic XPM is plain text
+and an MPC3 one is always compressed.
+
+Worth adding at the same time: 101 files in Jan's tree ending `.xpm` are **X11
+pixmaps** (`/* XPM */`), an unrelated image format sharing the extension. They
+currently reach the XML parser and fail with a confusing error;
+`collect_input_files()` globs `*.xpm` so a user pointing mpc2emu at the wrong
+folder hits this. A magic-byte check should skip them with a clear message.
+
+### Why this matters now
+
+Three MPC 3.9 files already sit in `~/temp/SamplerExports/`, exported from
+Jan's own MPC, and they are **completely unreadable** — `parse_xpm()` raises
+`ParseError` at line 1 column 0 rather than degrading. Any MPC running 3.x
+firmware produces these, so the classic XML path is on its way to being the
+legacy case.
+
+### Not applicable: their cutoff fix
+
+`30177c27` also states *"Cutoff 24000ct is Max… resulting values were too
+high. Also fixed in XPM reading/writing"*. That is their **writer's**
+normalized↔cents conversion (`MathUtils.normalizeCutoff`). mpc2emu reads the
+XPM `Cutoff` element as an already-normalized `0.0–1.0` float straight into
+`VoiceLayer.filter_cutoff` (its own 0–1 domain) and never converts through
+cents, so there is no equivalent scaling bug to inherit. Recorded so it is not
+re-checked.

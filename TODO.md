@@ -1,5 +1,42 @@
 # mpc2emu — Open Items
 
+## MPC 3.x writes gzip+JSON `.xpm` — mpc2emu cannot read them at all (OPEN, 2026-07-30)
+
+Found by checking ConvertWithMoss for MPC-related work over the last 3 months.
+Their `58933a2c` (2026-05-18) added *"support to read JSON based .xpm files"*
+and merged their Keygroup/Project detectors into one "Akai MPC Modern".
+
+**MPC 3.x changed the container.** A modern `.xpm` is no longer XML: it is
+**gzip-compressed**, with a 5-line plain-text header followed by JSON —
+
+```
+ACVS
+3.9.0.31
+SerialisableProgramData        (or SerialisableTrackData / ...ProjectData)
+json
+Linux
+{ "data": { "version": 6, "name": "...", "programPads": { "pads": {128}, ... } } }
+```
+
+`parsers/xpm_parser.parse_xpm()` calls `xml.etree.ElementTree` directly, so it
+raises `ParseError: not well-formed (invalid token): line 1, column 0` — the
+file is not partially read, it is completely unreadable.
+
+**Already present in Jan's library:** 3 files
+(`~/temp/SamplerExports/K2-0{1,2,3}.xpm`, header `ACVS / 3.9.0.31 /
+SerialisableProgramData / json / Linux`), i.e. exported from his own MPC. So
+this is a live gap, not a hypothetical one. The other 564 `.xpm` in the
+library are classic XML and unaffected. (101 more are X11 pixmaps — same
+extension, unrelated format; worth a magic-byte guard so they are skipped
+with a clear message rather than an XML error.)
+
+**Status:** OPEN, not started. **Blocked on:** nothing — the container is
+plain `gzip` + `json`, both stdlib. The work is mapping the JSON program
+structure onto `Bank`/`Preset`/`VoiceLayer`/`ZoneMapping`, for which
+ConvertWithMoss's `MPCModernDetector.readJsonPresetFile()` is the reference
+(GPL-3; read for structure, reimplement — same rule as every other borrowed
+format). See `docs/RESOLUTION_NOTES.md` §MPC3XPM.
+
 ## sampledir_parser: WAV smpl-chunk fine-tune read but never reaches the zone (FIXED, 2026-07-29)
 
 Found from the VinSamLib side while checking whether `6c463c4` (`load_wav()`
