@@ -639,6 +639,154 @@ def _safe_name(name: str, maxlen: int = 16, tail: bool = False) -> str:
 
 
 # ---------------------------------------------------------------------------
+# MPC 3.x JSON program (gzip + ACVS container)
+# ---------------------------------------------------------------------------
+# MPC 3.x stopped writing XML.  A modern .xpm is GZIP-compressed and holds five
+# plain-text header lines followed by a JSON document:
+#
+#     ACVS
+#     3.9.0.31                    <- MPC app/firmware version
+#     SerialisableProgramData     <- also ...TrackData / ...ProjectData
+#     json
+#     Linux
+#     { "data": { "version": 6, "name": ..., "drum": {"instruments": [...]}, ...
+#
+# Rather than re-implement the whole mapping (envelopes, filter, LFO, and the
+# lane allocation that splits overlapping layers into parallel voices), the
+# JSON program is converted into the SAME element tree the XML path already
+# understands and handed to the existing parser.  One mapping, one set of
+# hardware-calibrated curves, no drift.  See docs/RESOLUTION_NOTES.md §MPC3XPM.
+
+MPC3_MAGIC = b'\x1f\x8b'          # gzip; a classic XPM is plain '<?xml'
+
+
+def is_mpc3_xpm(path) -> bool:
+    """True if `path` is an MPC 3.x (gzip+JSON) program rather than XML."""
+    try:
+        with open(path, 'rb') as fh:
+            return fh.read(2) == MPC3_MAGIC
+    except OSError:
+        return False
+
+
+def _mpc3_read(path):
+    """Return (header_lines, data_dict) from an MPC 3.x .xpm."""
+    import gzip as _gzip, json as _json
+    with _gzip.open(path, 'rt', encoding='utf-8', errors='replace') as g:
+        header = [g.readline().rstrip('\n') for _ in range(5)]
+        if header[0] != 'ACVS':
+            raise ValueError(f"not an MPC 3 program (magic {header[0]!r})")
+        if header[3] != 'json':
+            raise ValueError(f"unsupported MPC 3 encoding {header[3]!r}")
+        payload = _json.load(g)
+    kind = header[2]
+    if kind != 'SerialisableProgramData':
+        raise ValueError(f"unsupported MPC 3 payload {kind!r} "
+                          f"(only SerialisableProgramData is a program)")
+    return header, payload.get('data', {})
+
+
+def _v0(node, default=0.0):
+    """MPC 3 wraps many scalars as {'value0': x} (one entry per articulation);
+    take the first."""
+    if isinstance(node, dict):
+        return node.get('value0', default)
+    return default if node is None else node
+
+
+def _mpc3_to_xml(data) -> 'ET.Element':
+    """Build the MPC 2.x element tree this module already parses from an
+    MPC 3.x JSON program."""
+    root = ET.Element('MPCVObject')
+    prog = ET.SubElement(root, 'Program')
+    prog.set('type', 'Keygroup')
+    ET.SubElement(prog, 'ProgramName').text = str(data.get('name', ''))
+
+    # MPC 3 keeps the keygroup list under 'drum' even for a keygroup program
+    # (type 1); 'keygroup' holds only program-global settings.
+    instruments = (data.get('drum') or {}).get('instruments') or []
+    insts_el = ET.SubElement(prog, 'Instruments')
+
+    for idx, inst in enumerate(instruments):
+        layers = [l for l in (inst.get('layersv') or [])
+                  if l.get('sampleName') and l.get('active', True)]
+        if not layers:
+            continue
+        ie = ET.SubElement(insts_el, 'Instrument')
+        ie.set('number', str(idx + 1))
+        ss = inst.get('synthSection') or {}
+        filt = _v0(ss.get('filterData'), {}) or {}
+        amp = ss.get('ampEnvelope') or {}
+        fenv = ss.get('filterEnvelope') or {}
+        lfo = _v0(ss.get('lfoData'), {}) or {}
+
+        def put(tag, val):
+            ET.SubElement(ie, tag).text = str(val)
+
+        put('LowNote',  inst.get('lowNote', 0))
+        put('HighNote', inst.get('highNote', 127))
+        put('TuneCoarse', inst.get('coarseTune', 0))
+        put('TuneFine',   inst.get('fineTune', 0))
+        put('IgnoreBaseNote', 'True' if inst.get('ignoreBaseNote') else 'False')
+        # Filter — MPC 3 keeps the same normalised 0-1 domain as MPC 2.
+        put('FilterType',      filt.get('filterType', 0))
+        put('Cutoff',          filt.get('filterCutoff', 1.0))
+        put('Resonance',       filt.get('filterResonance', 0.0))
+        put('FilterEnvAmt',    filt.get('filterEnvelopeAmount', 0.0))
+        put('FilterKeytrack',  filt.get('filterKeytrack', 0.0))
+        put('VelocityToFilter', filt.get('filterVelocity', 0.0))
+        # Envelopes — {'Attack': {'value0': x}, ...}
+        put('VolumeAttack',  _v0(amp.get('Attack')))
+        put('VolumeDecay',   _v0(amp.get('Decay')))
+        put('VolumeSustain', _v0(amp.get('Sustain'), 1.0))
+        put('VolumeRelease', _v0(amp.get('Release')))
+        put('FilterAttack',  _v0(fenv.get('Attack')))
+        put('FilterDecay',   _v0(fenv.get('Decay')))
+        put('FilterSustain', _v0(fenv.get('Sustain'), 1.0))
+        put('FilterRelease', _v0(fenv.get('Release')))
+        # LFO — lfoFilterCutOff is itself per-articulation.
+        put('LfoPitch',  lfo.get('lfoPitch', 0.0))
+        put('LfoCutoff', _v0(lfo.get('lfoFilterCutOff')))
+        lfo_el = ET.SubElement(ie, 'LFO')
+        ET.SubElement(lfo_el, 'Rate').text  = str(lfo.get('lfoRate', 0.5))
+        ET.SubElement(lfo_el, 'Type').text  = _MPC3_LFO_SHAPES.get(
+            lfo.get('lfoWaveformType', 0), 'Sine')
+        ET.SubElement(lfo_el, 'Sync').text  = str(lfo.get('lfoSync', 0))
+        ET.SubElement(lfo_el, 'Reset').text = str(lfo.get('lfoReset', True))
+
+        layers_el = ET.SubElement(ie, 'Layers')
+        for lidx, lay in enumerate(layers):
+            le = ET.SubElement(layers_el, 'Layer')
+            le.set('number', str(lidx + 1))
+
+            def lput(tag, val):
+                ET.SubElement(le, tag).text = str(val)
+
+            lput('SampleName', lay.get('sampleName', ''))
+            lput('VelStart',   lay.get('velocityStart', 0))
+            lput('VelEnd',     lay.get('velocityEnd', 127))
+            lput('RootNote',   lay.get('rootNote', 0))
+            # volume is {'gainCoefficient': linear, 'controlValue': .., 'law': ..}
+            vol = lay.get('volume')
+            lput('Volume', vol.get('gainCoefficient', 1.0)
+                 if isinstance(vol, dict) else (1.0 if vol is None else vol))
+            lput('Pan',        lay.get('pan', 0.5))
+            lput('TuneCoarse', lay.get('coarseTune', 0))
+            lput('TuneFine',   lay.get('fineTune', 0))
+            lput('Loop',       'True' if lay.get('loop') else 'False')
+            lput('SliceStart',     lay.get('sampleStart', 0))
+            lput('SliceEnd',       lay.get('sampleEnd', 0))
+            lput('SliceLoop',      1 if lay.get('loop') else 0)
+            lput('SliceLoopStart', lay.get('loopStart', 0))
+    return root
+
+
+# MPC 3 lfoWaveformType -> the <Type> strings _xpm_lfo_shape() already maps.
+_MPC3_LFO_SHAPES = {0: 'Sine', 1: 'Triangle', 2: 'Saw Up', 3: 'Saw Down',
+                    4: 'Square', 5: 'SampHold', 6: 'Random'}
+
+
+# ---------------------------------------------------------------------------
 # XPM parser
 # ---------------------------------------------------------------------------
 
@@ -659,10 +807,25 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
     else:
         wav_dir = Path(wav_dir).resolve()
 
-    print(f"Parsing XPM: {xpm_path}")
-
-    tree = ET.parse(str(xpm_path))
-    root = tree.getroot()
+    # An MPC 3.x program is gzip+JSON, not XML — convert it to the element
+    # tree this parser already understands (see _mpc3_to_xml). A file ending
+    # .xpm that is neither is almost always an X11 pixmap, which shares the
+    # extension; say so plainly instead of failing with an XML error.
+    if is_mpc3_xpm(xpm_path):
+        header, data = _mpc3_read(str(xpm_path))
+        print(f"Parsing XPM (MPC {header[1]} JSON): {xpm_path}")
+        root = _mpc3_to_xml(data)
+    else:
+        with open(xpm_path, 'rb') as _fh:
+            _head = _fh.read(16)
+        if _head[:1] != b'<':
+            raise ValueError(
+                f"{xpm_path.name} is not an MPC program — it starts with "
+                f"{_head[:8]!r}. Files ending .xpm are also X11 pixmaps "
+                f"(/* XPM */), an unrelated image format.")
+        print(f"Parsing XPM: {xpm_path}")
+        tree = ET.parse(str(xpm_path))
+        root = tree.getroot()
 
     bank = Bank(name=_safe_name(xpm_path.stem))
     preset = Preset(

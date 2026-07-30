@@ -1,6 +1,6 @@
 # mpc2emu — Open Items
 
-## MPC 3.x writes gzip+JSON `.xpm` — mpc2emu cannot read them at all (OPEN, 2026-07-30)
+## MPC 3.x writes gzip+JSON `.xpm` — IMPLEMENTED (2026-07-30)
 
 Found by checking ConvertWithMoss for MPC-related work over the last 3 months.
 Their `58933a2c` (2026-05-18) added *"support to read JSON based .xpm files"*
@@ -30,12 +30,21 @@ library are classic XML and unaffected. (101 more are X11 pixmaps — same
 extension, unrelated format; worth a magic-byte guard so they are skipped
 with a clear message rather than an XML error.)
 
-**Status:** OPEN, not started. **Blocked on:** nothing — the container is
-plain `gzip` + `json`, both stdlib. The work is mapping the JSON program
-structure onto `Bank`/`Preset`/`VoiceLayer`/`ZoneMapping`, for which
-ConvertWithMoss's `MPCModernDetector.readJsonPresetFile()` is the reference
-(GPL-3; read for structure, reimplement — same rule as every other borrowed
-format). See `docs/RESOLUTION_NOTES.md` §MPC3XPM.
+**Status: IMPLEMENTED.** `parse_xpm()` sniffs the gzip magic and converts the
+JSON program into the SAME element tree the XML path already parses
+(`_mpc3_to_xml`), so the envelope/filter/LFO curves and the lane allocation
+that splits overlapping layers into parallel voices are reused rather than
+duplicated — one mapping, no drift.
+
+Verified against all three real 3.9.0.31 files: every key range, root note and
+velocity range matches the JSON exactly, and all 71 root notes independently
+agree with the note number in each sample's own filename (the JSON `rootNote`
+is 1-based, like MPC 2.x XML). A full conversion of `K2-01.xpm` produces a
+7.06 MB E4B with 21 zones covering keys 0-127 and PCM in every sample.
+
+The X11-pixmap guard landed with it: a `.xpm` that is neither gzip nor XML now
+raises a message naming the real format instead of an opaque XML error.
+See `docs/RESOLUTION_NOTES.md` §MPC3XPM.
 
 ## sampledir_parser: WAV smpl-chunk fine-tune read but never reaches the zone (FIXED, 2026-07-29)
 

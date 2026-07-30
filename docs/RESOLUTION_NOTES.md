@@ -3931,3 +3931,47 @@ XPM `Cutoff` element as an already-normalized `0.0–1.0` float straight into
 `VoiceLayer.filter_cutoff` (its own 0–1 domain) and never converts through
 cents, so there is no equivalent scaling bug to inherit. Recorded so it is not
 re-checked.
+
+### Implementation (2026-07-30)
+
+Rather than write a second mapping, `parse_xpm()` detects the gzip magic and
+runs `_mpc3_to_xml()`, which builds the **MPC 2.x element tree** from the JSON
+and hands it to the existing parser. Everything downstream — the
+hardware-measured envelope curve, the filter-type table, the LFO sync
+divisions, and the lane allocation that splits overlapping layers into
+parallel voices — is reused unchanged. One mapping to maintain, and MPC 3
+files cannot drift away from MPC 2 behaviour.
+
+Field mapping (JSON → the XML tag the parser reads):
+
+| JSON | XML tag |
+|---|---|
+| `drum.instruments[i].lowNote` / `.highNote` | `LowNote` / `HighNote` |
+| `.coarseTune` / `.fineTune` / `.ignoreBaseNote` | `TuneCoarse` / `TuneFine` / `IgnoreBaseNote` |
+| `.synthSection.filterData.value0.*` | `FilterType`, `Cutoff`, `Resonance`, `FilterEnvAmt`, `FilterKeytrack`, `VelocityToFilter` |
+| `.synthSection.ampEnvelope.{Attack,Decay,Sustain,Release}.value0` | `Volume*` |
+| `.synthSection.filterEnvelope.*` | `Filter{Attack,Decay,Sustain,Release}` |
+| `.synthSection.lfoData.value0.*` | `LfoPitch`, `LfoCutoff`, `LFO/{Rate,Type,Sync,Reset}` |
+| `.layersv[j].sampleName` / `rootNote` / `velocityStart` / `velocityEnd` | `SampleName` / `RootNote` / `VelStart` / `VelEnd` |
+| `.layersv[j].volume.gainCoefficient` / `pan` | `Volume` / `Pan` |
+| `.layersv[j].loop` / `loopStart` / `sampleStart` / `sampleEnd` | `Loop` / `SliceLoopStart` / `SliceStart` / `SliceEnd` |
+
+Three things worth knowing for the next person:
+
+- **The keygroup list lives under `drum`, not `keygroup`**, even for a keygroup
+  program (`type = 1`). `data.keygroup` holds only program-global settings
+  (`numKeygroups`, pitch-bend range, mod links). Looking under `keygroup` for
+  the instruments finds nothing.
+- **Many scalars are wrapped per-articulation** as `{"value0": x}` — envelope
+  stages, filter blocks, LFO blocks, `lfoFilterCutOff`. `_v0()` takes the
+  first; multi-articulation programs would need more.
+- **`rootNote` is 1-based**, exactly as in MPC 2.x XML, so the existing
+  `raw_root - 1` conversion applies unchanged. Confirmed independently: all 71
+  roots across the three test files match the note number in each sample's own
+  filename after the -1.
+
+**Not yet handled:** `SerialisableTrackData` / `SerialisableProjectData`
+payloads (rejected with a clear message — they are tracks/projects, not
+programs), multi-articulation programs beyond `value0`, and MPC 3's `.xty`
+track files, which are a separate format ConvertWithMoss only recently began
+writing.
