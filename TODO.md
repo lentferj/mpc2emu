@@ -42,6 +42,14 @@ agree with the note number in each sample's own filename (the JSON `rootNote`
 is 1-based, like MPC 2.x XML). A full conversion of `K2-01.xpm` produces a
 7.06 MB E4B with 21 zones covering keys 0-127 and PCM in every sample.
 
+**Validation is narrow, though** — those three are MPC Auto Sampler output:
+one layer per keygroup, full-range velocity, no loops, no filter/LFO in use,
+every per-layer tune/volume/pan at default. The structure is well covered; the
+parameter scales are only covered *structurally*, since every value was a
+default. A program using velocity layers, loops, real filter settings or
+articulation switching should be re-checked against a real file. See the
+"Validation scope" note in §MPC3XPM.
+
 The X11-pixmap guard landed with it: a `.xpm` that is neither gzip nor XML now
 raises a message naming the real format instead of an opaque XML error.
 See `docs/RESOLUTION_NOTES.md` §MPC3XPM.

@@ -3975,3 +3975,34 @@ payloads (rejected with a clear message — they are tracks/projects, not
 programs), multi-articulation programs beyond `value0`, and MPC 3's `.xty`
 track files, which are a separate format ConvertWithMoss only recently began
 writing.
+
+### Validation scope — narrow, and worth stating plainly
+
+The three local 3.9.0.31 files are **hardware-created by the MPC Auto Sampler**
+(Jan, 2026-07-30), which produces a deliberately minimal program: *"just
+samples, keyzones and amp env, no filter or anything."* Measured across all
+71 keygroups in them:
+
+| exercised | not exercised |
+|---|---|
+| key ranges, root notes (1-based), velocity ranges | velocity-split layers (all 71 are `0-127`) |
+| one layer per keygroup | multi-layer keygroups, layer crossfade |
+| amp envelope | filter envelope, LFO routing (all at defaults) |
+| sample name → file resolution | loops (`loop: false` throughout) |
+| `type = 1` keygroup programs | drum programs, `SerialisableTrackData`/`ProjectData` |
+| | per-layer tune / volume / pan (all at defaults) |
+
+So the container handling, the keygroup/layer walk and the tag mapping are
+well covered, but **the parameter-heavy paths are only covered structurally**:
+the values were all defaults, so a wrong scale factor on, say, the filter
+envelope would not have shown up. Anything beyond auto-sampler output should
+be re-checked against a real file before being trusted.
+
+**Articulations, concretely.** Every keygroup carries `filterData.value0` AND
+`value1`, and in all 71 they DIFFER (`value0.filterType = 2`,
+`value1.filterType = 0`). `_v0()` takes `value0`. That is harmless here —
+cutoff is at maximum with zero resonance and zero envelope amount, so both map
+to an audibly wide-open filter (`_XPM_FILTER_TYPE` sends type 2 to a 2-pole LP,
+and type 0 is itself documented as "4PLP wide open (bypass-like)") — but it is
+an unverified assumption that `value0` is the *active* articulation. A program
+that genuinely uses articulation switching would need this revisited.
