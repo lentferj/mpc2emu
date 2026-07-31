@@ -297,6 +297,33 @@ E4XT_VOL_MEASURED_FLOOR_DB = -22.90   # what B = -30 actually delivers
 E4XT_PAN_FULL_BYTE = 32.0
 
 
+# Measured 2026-08-01: panning the E4XT makes it LOUDER. Total output power
+# rises ~4.5 dB from centre to hard, fitted as 4.54 * |pan|^0.75 (max residual
+# 0.50 dB), and the curve is identical at every volume (spread 0.00/0.00/0.21 dB
+# across 0/-6/-12 dB) and unchanged by the filter. So one curve does describe
+# it -- which is what makes compensation possible at all.
+_E4XT_PAN_EXCESS_K = 4.54
+_E4XT_PAN_EXCESS_P = 0.75
+
+
+def e4xt_pan_excess_db(pan: float) -> float:
+    """How much LOUDER the E4XT plays a voice at this pan than at centre.
+
+    Subtract this from a voice's volume to hold total power constant across
+    pan -- a constant-power law, which is roughly what SFZ and SF2 assume, so
+    it restores the balance a source author actually heard.
+
+    This is a ONE-WAY transformation and deliberately not applied by the
+    writer. Baking it into the volume byte makes it indistinguishable from a
+    volume the user set deliberately, so the parser could not undo it and an
+    E4B->E4B round-trip would drift further on every pass. It therefore belongs
+    with `--mono`, `--resample` and `--trim-start` -- opt-in changes to the
+    material -- rather than with the cutoff and gain corrections, which fix a
+    mapping and round-trip exactly.
+    """
+    return _E4XT_PAN_EXCESS_K * (abs(max(-1.0, min(1.0, pan))) ** _E4XT_PAN_EXCESS_P)
+
+
 def e4xt_pan_byte(pan: float) -> int:
     """Our -1.0 (L) .. +1.0 (R) -> the vpar[55] / zone entry[16] byte."""
     return int(max(-64, min(63, round(max(-1.0, min(1.0, pan)) * E4XT_PAN_FULL_BYTE))))

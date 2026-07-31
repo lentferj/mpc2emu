@@ -447,6 +447,17 @@ def main():
              'this shorthand for that side (e.g. --trim --trim-tail 45 keeps the '
              'default 72 dB start trim but trims deeper into the tail). See '
              '--trim-start / --trim-tail for the full behaviour.')
+    ap.add_argument('--pan-law', choices=['hardware', 'constant-power'],
+        default='hardware',
+        help="How panning should affect LOUDNESS on the E4XT (--format e4b only). "
+             "The E4XT plays a panned voice LOUDER -- measured ~+4.5 dB from centre "
+             "to hard, and identical at every volume. 'hardware' (default) leaves "
+             "that alone, so a converted preset behaves exactly like one panned on "
+             "the front panel. 'constant-power' subtracts the excess from each "
+             "voice's volume so loudness stays put across pan, which is roughly "
+             "what SFZ and SF2 assume and so restores the balance the source author "
+             "heard. Note it is ONE-WAY: the correction becomes part of the volume "
+             "byte and cannot be undone by re-reading the bank.")
     ap.add_argument('--mono', nargs='?', const='mix', default=None,
         choices=['mix', 'left', 'right'], metavar='mix|left|right',
         help='Reduce stereo samples to mono. Stereo sources are otherwise KEPT '
@@ -807,6 +818,32 @@ def main():
     # downstream sees the halved sizes.  Sources are otherwise kept in stereo —
     # the parsers read faithfully and this is the explicit place that decides
     # to throw a channel away.
+    # Pan-loudness compensation. E4B only -- the law was measured on an E4XT
+    # and says nothing about the K2000 or EIII. Applied HERE rather than in the
+    # writer on purpose: it alters the material (the volume byte) rather than
+    # correcting a mapping, so it cannot be inverted on read-back and belongs
+    # with --mono/--resample/--trim-start, not with the cutoff and gain
+    # corrections that round-trip exactly.
+    if args.pan_law == 'constant-power' and args.format == 'e4b':
+        from models.common import e4xt_pan_excess_db
+        print(f"\n[{step_n}] Pan law -> constant power "
+              f"(subtracting the E4XT's pan loudness excess)...")
+        step_n += 1
+        for bank in source_banks:
+            _n = 0
+            _max = 0.0
+            for preset in bank.presets:
+                for voice in preset.voices:
+                    for zone in voice.zones:
+                        ex = e4xt_pan_excess_db(zone.pan)
+                        if ex > 0.01:
+                            zone.volume -= ex
+                            _n += 1
+                            _max = max(_max, ex)
+            if _n:
+                print(f"    {bank.name}: {_n} panned zone(s) attenuated, "
+                      f"up to {_max:.1f} dB")
+
     if args.mono is not None:
         from models.common import to_mono, channel_correlation
         _method = {'mix': 'averaging both sides',

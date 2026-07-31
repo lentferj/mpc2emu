@@ -94,55 +94,40 @@ half the range: anything past ±0.5 collapsed to hard-panned, so a preset at
 model; the panel really does show ±64, which is precisely why panel agreement
 could never have caught this.
 
-### The pan LEVEL law — measured, not compensated (decision pending)
+### The pan LEVEL law — measured, and now a user choice (2026-08-01)
 
-Panning changes total output level. Measured from the verified sweep:
+Panning the E4XT makes it louder: **+2.88 dB at pan 0.5, +4.32 dB at 1.0**,
+fitted as `4.54 · |pan|^0.75`. The prerequisite for compensating it is
+satisfied — the excess curve is **identical at every volume** (spread
+0.00 / 0.00 / 0.21 dB across 0, −6 and −12 dB) and **unchanged by the filter**
+(+2.83 / +4.22 half-closed), so one curve does describe it.
 
-| pan | total power vs centre |
-|-----|----------------------|
-| ±0.3 | +1.6 dB |
-| ±0.6 | +3.2 / +3.6 dB |
-| ±1.0 | +4.3 / +4.5 dB |
+**Exposed as `--pan-law {hardware,constant-power}`, defaulting to
+`hardware`** — i.e. current behaviour is unchanged unless asked for.
 
-Fitted: **excess_dB ≈ 4.54 · |pan|^0.75** (max residual 0.50 dB). A
-constant-power law would give +0.00 dB throughout, so the E4XT's is neither
-constant-power nor constant-gain.
+The default is not a preference, it follows from what the correction *is*.
+The cutoff and gain fixes correct a **mapping**: the source names a value, the
+hardware wasn't delivering it, and parser and writer stay exact inverses, so
+they are always-on and round-trip cleanly. Pan compensation is different — it
+alters the **material**, subtracting the excess from each voice's volume byte,
+where it becomes indistinguishable from a volume the user set deliberately.
+The parser cannot undo it, so an E4B→E4B pass would drift further every time.
+That puts it with `--mono`, `--resample` and `--trim-start`: opt-in, one-way,
+applied in the pipeline rather than in the writer.
 
-**Not compensated, and this one is a judgement call rather than an oversight.**
-The cutoff and gain corrections were unambiguous: the source names a *value*
-(Hz, dB) and the hardware was not delivering it. Pan is different — the source
-names a *position*, and since the ×32 fix that position now IS delivered
-correctly (monotonic, symmetric, verified). What differs is a side-effect on a
-*second* parameter.
+`constant-power` is the right choice when source fidelity matters — SFZ and
+SF2 assume roughly constant power, so a hard-panned voice otherwise arrives
+~4.5 dB hotter than its author intended relative to a centred one. `hardware`
+is right when the converted preset should behave like one panned on the front
+panel.
 
-Compensating means silently modifying the volume byte to hold total power
-constant across pan. That is right if the aim is fidelity to source formats,
-most of which (SFZ, SF2) use a roughly constant-power law — a hard-panned
-voice currently arrives ~4.5 dB louder than the source intended relative to a
-centred one. It is wrong if the aim is to reproduce what the E4XT does, since
-a user setting that pan on the front panel would hear exactly this.
+E4B only; the law was measured on an E4XT and says nothing about the K2000 or
+EIII.
 
-**Two things must be settled before implementing:**
-
-1. **Jan's call on which fidelity is wanted** — source intent, or hardware
-   behaviour.
-2. **Whether the excess is independent of volume and filter.** It was measured
-   at 0 dB with the filter open, at one voice. If the excess varies with the
-   voice's own volume setting, a single curve cannot compensate it and the
-   whole approach fails.
-
-**Bank prepared 2026-07-31** — `tests/re_banks/gen_pan_fidelity_bank.py`,
-staged at `~/temp/pan_fidelity/` (43 points), waiting on a card window:
-
-| preset | settles |
-|--------|---------|
-| `P_PANVOL` | **the prerequisite** — pan × volume matrix, 3 pans at each of 3 volumes. If the excess curve differs between volume groups, no single correction can work and the question closes by arithmetic |
-| `P_PANFLT` | whether the excess belongs to the pan control or the output stage behind it |
-| `P_GAINXPO` | the ~2 dB gain discrepancy — the same 13 gains on transposing vs non-transposing keys. Key and velocity are already ruled out, so transposition is the last structural difference between the two datasets |
-| `P_CHORUS` | `vpar[42]`, the last claim still resting on panel-vs-byte evidence |
-
-**Status:** law measured and fitted; implementation deliberately withheld.
-**Blocked on:** Jan's fidelity call, plus `P_PANVOL` for feasibility.
+**Verified in software** (pan 0.5 → −3.07 dB, pan 1.0 → −4.6 dB written).
+**Not yet verified on hardware**: predicted residual is ±0.25 dB, derived from
+the verified pan-excess and gain laws, but the combined effect has not been
+played. Wants a bank.
 
 **Chorus (`vpar[42]`) MEASURED 2026-08-01 — and it is correct.** Amount maps
 linearly to detune depth: spectral width 0.45 / 4.55 / 9.09 / 13.64 / 19.09 Hz
