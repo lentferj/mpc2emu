@@ -4550,7 +4550,18 @@ path.
 ## §E4BFILTCAL — Cutoff, resonance and zone-gain measured on the E4XT (2026-07-31)
 
 Measured with the second open-HW-RE bank, driven and captured by
-`tests/re_banks/hw_measure.py`. The material is **white noise**, chosen after
+`tests/re_banks/hw_measure.py`.
+
+**Where the tap is, and why it matters.** Recording is from the JACK
+*hardware capture* ports (`system:capture_15/16`), which is the E4XT's feed
+into the interface. On this rig those same ports also feed an EQ whose output
+goes through Sonarworks room correction to the monitors — so the recorder and
+the monitoring chain are parallel taps on one source, and the measurement sits
+upstream of both. Recording the EQ's or Sonarworks' *output* instead would
+convolve every reading with a room-correction curve: spectra would tilt, every
+−3 dB corner would move, resonance peaks would change height, and a
+verification pass would reproduce the same error and read as a confirmation.
+Verified before trusting any of the numbers below. The material is **white noise**, chosen after
 the first attempt used a 110 Hz harmonic saw that ran out of content at
 2.6 kHz and left most of the cutoff range unmeasurable.
 
