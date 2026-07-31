@@ -1,5 +1,41 @@
 # mpc2emu — Open Items
 
+## Combined open-HW-RE bank ready for the E4XT — testing PENDING (2026-07-31)
+
+**Not a code task — a bench-session vehicle.** One bank + ISO covering every
+open hardware-RE item that can be settled on the E4XT, so a single session
+closes all of them instead of one per trip.
+
+Built by `tests/re_banks/gen_open_hw_re_bank.py` into
+`~/temp/open_hw_re/` — `OPENHWRE_01.E4B` (6.28 MB), `OPENHWRE.iso`, and
+`MANIFEST.md` with **31 test points across 6 presets** and empty **Done** /
+**Remarks** columns to fill in during the session. Each preset is one open
+item; each key is one data point, from C3 upward.
+
+| Preset | Covers |
+|--------|--------|
+| `P1STIMAGE` | §E4BSTEREO 1–3: does a stereo bank load, play in stereo, and in the right channel order |
+| `P2STPAN` | §E4BSTEREO 5: does zone pan balance a stereo image or collapse it |
+| `P3STVOICES` | §E4BSTEREO 4: does one stereo sample cost one voice or two |
+| `P4ENVTIME` | "XPM envelope-time curve under-reads vs MPC display" — the deferred `_xpm_env_to_seconds` recalibration |
+| `P5FLTGAIN` | "SF2 static filter + zone gain/tune — needs hardware A/B" |
+| `P6TRIMATK` | "`--trim-start` needs re-verification against SLOW-attack material" — was blocked on material, synthesised here |
+
+**P1 is the priority**: channel order is the only item no amount of offline
+work can settle — it rests entirely on emu3bm and the EIII naming the first
+PCM block left. Its material is deliberately asymmetric (tone-left-only,
+tone-right-only, A4-left/E5-right, plus a pre-summed mono reference), so a
+mono-sum, a swapped pair and a one-side-only bug each sound *different* and a
+failure names itself rather than just failing.
+
+Verified in software before shipping: the bank re-parses to 6 presets / 11
+samples / 31 zones with 5 stereo + 6 mono, and each stereo sample's per-channel
+content measures as designed (440 Hz left + silence, silence + 440 Hz right,
+440 Hz left + 659 Hz right).
+
+**Status:** built and software-verified; **no hardware confirmation yet.**
+**Blocked on:** Jan's E4XT bench session.
+
 ## MPC 3.x writes gzip+JSON `.xpm` — IMPLEMENTED (2026-07-30)
 
 Found by checking ConvertWithMoss for MPC-related work over the last 3 months.
