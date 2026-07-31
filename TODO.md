@@ -137,9 +137,18 @@ against `vpar[54]` established only that the **front panel displays** what we
 write — never that the audio matches. Same trap as §E4BLEVEL. Full table in
 `docs/RESOLUTION_NOTES.md` §E4BFILTCAL.
 
-**Status:** measured and root-caused; **fix not written**. **Blocked on:**
-nothing — derive the inverse law from the 13-point table and apply it in
-`_zone_entry`, then re-measure to confirm.
+**RESOLVED + HW-VERIFIED 2026-07-31.** The law is almost exactly linear
+(~0.767 dB per byte unit), not the curve the first ladder suggested — that
+dataset was contaminated. Applied in `e4b_writer` and inverted in
+`e4b_parser`; replayed on the E4XT at 7 points, **max error 0.34 dB** against
+6.5 dB uncorrected.
+
+**Still open, and worth someone's curiosity:** the two gain datasets disagree
+by ~2 dB in the middle while agreeing at both endpoints, and the two obvious
+explanations were measured and eliminated — level depends on neither key
+(±0.00 dB across C1–C6) nor velocity (+0.00 dB, 5→125). The shipped law is
+the one that verifies on hardware, but *why* the first one differed is
+unknown.
 
 ## E4B cutoff position → Hz is wrong above ~0.3 (OPEN, 2026-07-31)
 
@@ -159,10 +168,16 @@ No change needed there.
 
 Full tables in `docs/RESOLUTION_NOTES.md` §E4BFILTCAL.
 
-**Status:** measured, unfixed. **Blocked on:** nothing — re-derive
-`E4B_CUTOFF_MIN_HZ`/`MAX_HZ` (or replace the single exponential with the
-fitted curve plus a bypass endpoint), then re-measure. A denser sweep is cheap
-now that the harness exists.
+**RESOLVED + HW-VERIFIED 2026-07-31.** The writer now converts the shared
+nominal position to the frequency it means and asks for the position the E4XT
+actually renders there; the parser inverts it. Replayed at 10 points from
+150 Hz to 12 kHz: **10/10 pass**, every reachable request within ±14%, both
+clamped keys identical, bypass confirmed.
+
+**Known limit:** the fit covers positions 0.0–0.9 only, so the honest
+reachable range is 126 Hz – 2920 Hz with bypass above 7.6 kHz; a 3–4 kHz
+request clamps rather than being extrapolated. Filling in 0.9–1.0 needs one
+more sweep.
 
 ## MPC 3.x writes gzip+JSON `.xpm` — IMPLEMENTED (2026-07-30)
 

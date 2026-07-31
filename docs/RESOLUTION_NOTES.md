@@ -4644,5 +4644,33 @@ read 50% on the panel and measured −46 dB. Two independent parameters have now
 shown the same pattern, so *"the panel agrees"* should not be recorded as
 hardware confirmation of a level law again — only a measurement counts.
 
-**Status:** measured, not yet fixed. Both the cutoff constants and the zone
-gain law want re-deriving from these tables.
+### Both corrections are now HARDWARE-VERIFIED (2026-07-31)
+
+Fixed in `writers/e4b_writer.py`, inverted in `parsers/e4b_parser.py` so the
+two stay exact inverses, and replayed on the E4XT through a bank built the way
+a real conversion builds one — so a pass means *measured == requested*, with
+no correction arithmetic at analysis time.
+
+| ladder | result |
+|--------|--------|
+| **Cutoff**, 10 points 150 Hz–12 kHz | **10/10 pass**, every reachable request within ±14%; the two clamped keys read identically, bypass confirmed |
+| **Gain**, 7 points 0 to −18 dB | **7/7 pass**, max error **0.34 dB** (was 6.5 dB uncorrected) |
+
+**Two false starts on the way, both worth remembering.**
+
+*The correction was applied twice.* `convert.py` re-parses an E4B to build an
+ISO, and the parser still read `vpar[60]/255` as a nominal position after the
+writer began emitting a corrected byte. That broke the writer/parser inverse
+property for every E4B→E4B conversion, not just the test bank — and it only
+surfaced because the verification bank checked the *output*, independently of
+the arithmetic that produced it.
+
+*The first gain fit was contaminated.* It measured a strongly curved law; the
+truth is almost exactly linear (~0.767 dB per byte unit, residual 0.33 dB).
+Two candidate confounds were then measured directly and **both came back
+flat** — output level does not depend on key (±0.00 dB across C1–C6 with a
+non-transposing voice) and does not depend on velocity (+0.00 dB from 5 to
+125). **So the reason the two datasets disagree by ~2 dB in the middle, while
+agreeing at both endpoints, is still unexplained.** The linear law is the one
+that verifies on hardware, so it is the one in the code; that is a stronger
+claim than understanding the discrepancy, and the discrepancy stays open.
