@@ -26,7 +26,6 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 | item | note |
 |------|------|
 | **KRZ stereo** | mono in both directions; the format side is already RE'd, so this is implementation |
-| **Cutoff: design freq or −3 dB corner?** | E-mu's spec documents a closed-form byte→Hz curve that disagrees with our measurement 3× — because they describe different quantities. Which should we target? |
 | **Normalised-knob cutoff sources** | XPM/TAL/PGM dump a raw 0–1 knob into a field that means Hz — and the E4XT calibration made the mismatch bite |
 | **Bank sizing ignores stereo voice cost** | a stereo sample costs 2 voices and there is a ~32/note limit; the estimator knows neither |
 | **Corpus scan may count sampler OS files as banks** | see below |
@@ -50,40 +49,51 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 
 ---
 
-## Cutoff: design frequency or −3 dB corner? (OPEN, 2026-08-01)
+## Cutoff: design frequency vs −3 dB corner — SETTLED, no change needed (2026-08-01)
 
-Found by cross-referencing the sibling project **eosed**, which transcribed
-E-mu's own editor-protocol parameter spec. E-mu documents a **closed-form
-cutoff byte → Hz conversion** — `fil_freq(value, maxfreq, mul)`, exponentially
-spaced down from `maxfreq`, with three tables selected by filter type.
+The concern was that E-mu's spec documents a closed-form cutoff byte → Hz
+curve disagreeing with our measured −3 dB corner by up to 3×, and that since
+source formats specify a *design* frequency, our calibration might be
+systematically low.
 
-It disagrees with the law measured here on 2026-07-31 by up to **3×** in the
-middle of the range. That is not automatically a contradiction: the spec's
-number is the **displayed / design** frequency, ours is the **acoustic −3 dB
-corner** of a 4-pole lowpass measured on noise, and a 4-pole cascade's −3 dB
-point sits well below its design frequency — the direction the disagreement
-actually runs.
+**Measured, and the premise was wrong.** The worry assumed the E4XT's 4-pole
+lowpass is a cascade of 1-pole sections, where the −3 dB point sits far below
+the design frequency. It is not:
 
-**The question is which one mpc2emu should be targeting.** Source formats
-(SF2, EXS24, SFZ, GIG) specify a filter *design* frequency, the same convention
-as the E4XT's panel — not a measured −3 dB point. If that is right, the current
-calibration is systematically **low**, and the spec's closed form would be the
-better mapping: exact for all 256 byte values, and per filter type rather than
-measured on one type only.
+| raw byte | −3 dB corner | asymptote slope | extrapolated f₀ | spec T3 |
+|---------:|-------------:|----------------:|----------------:|--------:|
+| 96 | 554 Hz | −25.0 dB/oct | 567 Hz | 570 Hz |
+| 128 | 879 Hz | −23.9 dB/oct | 927 Hz | 1027 Hz |
+| 160 | 1244 Hz | −21.3 dB/oct | 1480 Hz | 1833 Hz |
 
-**Not acted on**, because it needs a measurement that distinguishes the two
-conventions rather than an argument. The cleanest test is to set a known byte,
-read the frequency the **front panel displays**, and compare that against both
-the spec's closed form and our measured corner — a couple of minutes at the
-device, and it settles which quantity our calibration should chase.
+The slope is ~24 dB/oct — a genuine 4-pole — and f₀, obtained by extrapolating
+the asymptote back to unity gain (topology-independent), lands within 5–19% of
+the −3 dB corner. **The two conventions name almost the same frequency, so the
+question dissolves.** Our calibration targets the right quantity and stands
+unchanged.
 
-Full write-up in `docs/E4B_FORMAT.md` §"Cross-reference: the EOS
-editor-protocol parameter spec", along with two other things worth taking from
-eosed (official parameter names/ranges for fields RE'd anonymously here, and
-the official 6-stage envelope segment names, which independently confirm the
-PZT rate/level pairing).
+Two secondary results:
 
-**Status:** open. **Blocked on:** one panel reading at the device.
+- **The spec's tables do not describe this filter well.** T3 (10000, 1006) is
+  clearly closest — an exact hit at byte 96 — but drifts to 24% off by byte
+  160. T1 and T2 are much further out. So the closed form is *not* the better
+  mapping after all, despite covering all 256 bytes.
+- **Filter order, not table assignment, explains the per-type differences.**
+  The same byte on Low 2/4/6-pole gives 1037 / 872 / 734 Hz — monotonic with
+  pole count, which is physics. Three arbitrarily-assigned tables would not
+  produce a monotonic progression. (The duplicate 6-pole key measured
+  924/924 Hz against its twin, confirming repeatability.)
+
+**Method note.** An earlier attempt to settle this by re-analysing existing
+recordings failed: the best table/response-point pairing still varied 39%
+across bytes and the slope estimate ranged 10–36 dB/oct. Longer holds and
+4× overlap-averaged FFTs fixed it — the slope came back at ~24 dB/oct where it
+belongs. The lesson is that the earlier disagreement was measurement
+resolution, not a real property.
+
+**Status:** settled. Optionally still worth reading the front panel once at a
+known byte: if it displays T3's numbers, the device's own readout over-reads
+by up to 24%, which matters when comparing against panel values in future RE.
 
 ## Normalised-knob sources violate the `filter_cutoff` contract (OPEN, 2026-08-01)
 

@@ -842,8 +842,15 @@ may be systematically **low**, and the spec's closed form would be the better
 mapping — with the added advantages of covering all 256 byte values exactly and
 being per-filter-type rather than measured on one type only.
 
-Recorded as an open item in `TODO.md`; not acted on, because deciding it needs
-a measurement that distinguishes the two conventions rather than an argument.
+**Settled 2026-08-01 — the premise was wrong, and no change was needed.** The
+worry assumed a cascade of 1-pole sections. Measuring the asymptote instead of
+the corner shows the E4XT's 4-pole lowpass running at ~24 dB/oct with its
+extrapolated design frequency within 5-19% of its −3 dB point, so the two
+conventions name nearly the same frequency. The spec's tables turn out not to
+describe this filter well either: T3 is closest (exact at byte 96) but drifts
+24% off by byte 160. Per-type differences are explained by filter ORDER — the
+same byte on Low 2/4/6-pole gives 1037 / 872 / 734 Hz, monotonic with pole
+count — not by table assignment. See `TODO.md` for the full result.
 
 ### What flows the other way
 
