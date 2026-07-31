@@ -70,6 +70,44 @@ sent the pan analysis down a wrong path — see the method note in §E4BSTEREO.
 **Blocked on:** a rebuilt bank for the two open presets. The SD card is in the
 hardware, so that is a next-session item.
 
+## KRZ stereo — writer downmixes, reader keeps one side (OPEN, 2026-07-31)
+
+The E4B stereo work is done end-to-end and hardware-confirmed, which leaves
+the K2000 path as the odd one out: **both directions of the KRZ codec are
+mono-only, and that is now actively lossy** rather than merely incomplete,
+because stereo survives everywhere upstream of it.
+
+- **Writer.** `krz_writer` calls `ensure_mono()` at its entry point. That was
+  the right stopgap while nothing upstream carried stereo; it now discards a
+  channel from every stereo source on the way to a K2000.
+- **Reader.** `krz_parser` takes a stereo sample's **left channel only** —
+  the read-side mirror of the same limit. Milder than the E4B decode bug we
+  fixed (which read stereo as double-length mono and played
+  left-then-right), but still silent data loss.
+
+**The format side is already reverse-engineered** — `docs/KRZ_FORMAT.md`
+documents everything needed:
+
+| field | mono | stereo |
+|-------|------|--------|
+| `Soundfilehead` | one | **one per channel** (a second must be emitted) |
+| sample header flags, byte 6 | `0` | **`1`** (bit 0 is the stereo flag) |
+| `LYR[8]` | `0x04` | **`0x24`** |
+
+So this is implementation, not RE: emit the second `Soundfilehead`, set the
+two flags, and de-interleave into whatever channel layout the K2000 expects —
+that last part being the one genuine unknown, and the direct analogue of the
+E4B planar-vs-interleaved question that turned out to matter.
+
+**Verification is cheap and already wired.** The K2000R is on the bench
+alongside the E4XT, the Gotek floppy path works, and
+`tests/re_banks/hw_measure.py` measures per-channel content directly — the
+same L/R analysis that settled the E4B channel order would settle this. Build
+the KRZ analogue of `P1STIMAGE` (tone-left-only, tone-right-only,
+split-pitch, mono reference) and it answers in one pass.
+
+**Status:** open, unstarted. **Blocked on:** nothing.
+
 ## E4B per-zone GAIN under-delivers — measured, unfixed (2026-07-31)
 
 `ZoneMapping.volume` is documented as dB, but the E4XT does not produce the
