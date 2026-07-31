@@ -286,8 +286,7 @@ def _bank_props(path: str) -> bytes:
     """EMU3 dir-content entry props[5] marker.
 
     Confirmed against real hardware-written media (2026-07-28, 5 commercial
-    discs incl. library disc A, library disc B
-    library disc B, library disc D): E4B bank entries (body starts
+    discs incl. library discs A, B and D): E4B bank entries (body starts
     `FORM`...`E4B0`) carry `\\x00E4B0` here; EIII-family entries (all three
     on-disk variants -- `EMULATOR THREE `, `EMULATOR 3X   `, `EMU SI-32 v3  `)
     carry all-zero, regardless of which EIII variant. Hardcoding `\\x00E4B0`
