@@ -197,6 +197,75 @@ E4B_CUTOFF_MIN_HZ = 57.0
 E4B_CUTOFF_MAX_HZ = 20000.0
 
 
+# ── E4XT-measured cutoff and volume laws (2026-07-31) ──────────────────────
+# Both were measured on real hardware with white noise / a steady tone, driven
+# and captured by tests/re_banks/hw_measure.py.  See RESOLUTION_NOTES
+# §E4BFILTCAL for the full tables.  These describe what the E4XT ACTUALLY
+# does, as opposed to what the byte is labelled -- and they are applied in
+# writers/e4b_writer.py only, because the 0-1 `filter_cutoff` position and the
+# dB `volume` are SHARED internal representations that the KRZ and EIII paths
+# also consume; correcting them here would silently move those formats too,
+# and neither has hardware calibration to justify that.
+
+E4XT_CUTOFF_A_HZ = 125.86     # cutoff position 0.0 measures here, not 57 Hz
+E4XT_CUTOFF_K = 3.4937        # Hz = A * e^(K * position), r = 0.9958
+# Position 1.0 is NOT the top of that curve -- it measures wide open (>20 kHz),
+# i.e. the control is a sweep to ~4.1 kHz with a bypass endpoint.
+E4XT_CUTOFF_TOP_HZ = E4XT_CUTOFF_A_HZ * math.exp(E4XT_CUTOFF_K)   # ~4142 Hz
+E4XT_CUTOFF_BYPASS_ABOVE_HZ = math.sqrt(E4XT_CUTOFF_TOP_HZ * 20000.0)  # ~9.1 kHz
+
+
+def e4xt_cutoff_position(hz: float) -> float:
+    """Desired cutoff in Hz -> the position byte fraction that the E4XT really
+    renders at that frequency.
+
+    Above `E4XT_CUTOFF_BYPASS_ABOVE_HZ` the sweep simply cannot reach, so the
+    bypass endpoint is the closer answer: for a request of, say, 15 kHz,
+    letting everything through is nearer the truth than clamping to 4.1 kHz.
+    The crossover is the geometric midpoint between the curve's top and the
+    open endpoint.
+    """
+    if hz >= E4XT_CUTOFF_BYPASS_ABOVE_HZ:
+        return 1.0
+    pos = math.log(max(hz, 1e-6) / E4XT_CUTOFF_A_HZ) / E4XT_CUTOFF_K
+    return max(0.0, min(0.999, pos))
+
+
+# Per-zone volume: vpar[54] / zone entry [15] is labelled dB, but the audio
+# response is quadratic in the byte -- measured over 13 points, 0 to -24 dB,
+# fitted to within 0.39 dB:  delivered_dB = 0.43362*B - 0.012738*B^2
+_E4XT_VOL_C1 = 0.43362
+_E4XT_VOL_C2 = -0.012738
+E4XT_VOL_MEASURED_FLOOR_DB = -18.05   # what B = -24 actually delivers
+
+
+def e4xt_volume_byte(db: float) -> int:
+    """Desired attenuation in dB -> the byte to write so the E4XT delivers it.
+
+    Inverts the measured quadratic.  Writing the dB value straight in (what
+    this project did until 2026-07-31) delivers roughly half to three-quarters
+    of the requested attenuation -- see §E4BFILTCAL, and note that vpar[54]'s
+    earlier "hardware-confirmed" status only ever established that the FRONT
+    PANEL displays what we write, never that the audio matched.
+
+    Requests below `E4XT_VOL_MEASURED_FLOOR_DB` are EXTRAPOLATED past the
+    fitted range and should not be trusted as precise -- real hardware will
+    flatten out somewhere, and a quadratic will not. They stay monotonic
+    (quieter request -> quieter result), which is what matters for a fit that
+    has not been measured that far down.
+    """
+    if db >= 0.0:
+        return int(max(-128, min(127, round(db))))
+    # solve c2*B^2 + c1*B - db = 0 for the root at or below 0
+    disc = _E4XT_VOL_C1 ** 2 + 4.0 * _E4XT_VOL_C2 * db
+    if disc < 0.0:
+        # Beyond the fitted curve's reach: ask for the most attenuation the
+        # measured range supports rather than extrapolating into nonsense.
+        return -128
+    root = (-_E4XT_VOL_C1 + math.sqrt(disc)) / (2.0 * _E4XT_VOL_C2)
+    return int(max(-128, min(0, round(root))))
+
+
 def hz_to_e4b_cutoff(hz: float) -> float:
     """Map a cutoff frequency in Hz to the E4B exponential cutoff position
     (0.0-1.0, where the writer does round(pos*255) → vpar[60])."""

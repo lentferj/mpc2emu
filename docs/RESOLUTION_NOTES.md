@@ -4416,11 +4416,27 @@ channel (`tests/re_banks/hw_measure.py`).
    it rested on emu3bm and the EIII naming the first PCM block left, and that
    inference is now confirmed. Independently corroborated a second time
    through the pan path (below).
-4. **Voice cost — still open.** The E4XT has **no voice/polyphony counter**, and
-   at 128-voice polyphony the by-ear route needs 65+ held notes, so the test
-   preset as built could not answer it. Needs a bank that stacks ~40 voices on
-   a SINGLE key, where one keypress crosses the ceiling and the note count at
-   which stealing starts gives the ratio directly.
+4. **A stereo sample costs TWO voices.** ✅ Measured 2026-07-31, third attempt.
+   Level of a DETUNED stack (which sums incoherently, so level tracks √N)
+   follows √N exactly up to **32** stacked mono voices and up to **16** stacked
+   stereo voices — a clean 2:1.
+
+   The first two attempts both failed to a level ceiling masquerading as a
+   voice ceiling, and the second nearly produced a confident wrong answer:
+   identical stacked voices sum COHERENTLY, so 128 sat 42 dB above one and
+   saturated something long before the polyphony limit — and because a stereo
+   voice starts 1.65× louder, it saturated at ~0.6 of the mono depth, which is
+   very close to the 0.5 that the true answer produces.
+
+   Detuning settles it two ways. A shared level ceiling would break stereo at
+   32/5.6 ≈ 6 voices, not the observed 16; and more conclusively the two
+   ladders plateau at **different levels** (mono ~250–300, stereo ~420–490),
+   which no common level ceiling can produce. Feeds `--max-preset-size` and
+   the voice-limit logic.
+
+   *Incidental:* the ceiling is ~32 mono voices **on one note**, not the
+   E4XT's 128-voice global polyphony — so it looks like a per-note layer
+   limit. Separate question, not chased.
 5. **Pan MONO-SUMS a stereo voice** onto the pan position — it does not
    balance, and it does not discard a channel. ✅ Measured: at hard left the
    LEFT output carries **both** source pitches (440 + 659) and the right is

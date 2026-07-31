@@ -110,7 +110,9 @@ from typing import List
 from models.common import (Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            LoopType, lfo_rate_hz_to_byte,
                            env_seconds_to_rate, env_rate_to_seconds,
-                           env_level_to_byte, env_sustain_to_byte, cord_amount_to_byte)
+                           env_level_to_byte, env_sustain_to_byte, cord_amount_to_byte,
+                           e4xt_cutoff_position, e4xt_volume_byte,
+                           E4B_CUTOFF_MIN_HZ, E4B_CUTOFF_MAX_HZ)
 from processors.loop_renderer import bake_alternating_loop
 
 
@@ -505,7 +507,9 @@ def _zone_entry(zone: ZoneMapping, sample_idx: int, write_absolute: bool = False
     if write_absolute:
         ft_64 = max(-32768, min(32767, round(zone.fine_tune * 64.0 / 100.0)))
         struct.pack_into('>h', entry, 12, ft_64)
-        entry[15] = max(-128, min(127, round(zone.volume))) & 0xFF
+        # dB -> the byte that actually DELIVERS that dB; writing the value
+        # straight in delivers only half to three-quarters of it (§E4BFILTCAL).
+        entry[15] = e4xt_volume_byte(zone.volume) & 0xFF
         entry[16] = max(-64,  min(63,  round(zone.pan * 64.0))) & 0xFF
     entry[14] = min(127, zone.root_key)
     return bytes(entry)
@@ -750,10 +754,17 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
     # above when the voice has 2+ zones — see the per-zone entries instead;
     # a second hardware test showed this is NOT a voice-value + per-zone-
     # delta composition, the multi-zone case simply doesn't use these bytes).
-    vpar[54] = max(-128, min(127, round(_vol))) & 0xFF
+    vpar[54] = e4xt_volume_byte(_vol) & 0xFF
     vpar[55] = max(-64,  min(63,  round(_pan * 64.0))) & 0xFF
     vpar[58] = _XPM_FILTER_TYPE.get(voice.filter_type, 0x00)
-    vpar[60] = min(255, round(voice.filter_cutoff * 255))
+    # The 0-1 `filter_cutoff` is the SHARED internal position, defined by the
+    # documented 57 Hz..20 kHz law. Convert it to the frequency it is meant to
+    # mean, then ask for the position the E4XT actually renders there -- the
+    # real curve tops out near 4.1 kHz with a bypass endpoint, so a nominal
+    # 0.7 (3.4 kHz) would otherwise sound at 1.2 kHz. See §E4BFILTCAL.
+    _nominal_hz = E4B_CUTOFF_MIN_HZ * (E4B_CUTOFF_MAX_HZ / E4B_CUTOFF_MIN_HZ) ** max(
+        0.0, min(1.0, voice.filter_cutoff))
+    vpar[60] = min(255, round(e4xt_cutoff_position(_nominal_hz) * 255))
     vpar[61] = min(127, round(voice.filter_resonance * 127))
     # Band-stop (15-18) AND band-boost (19-22) both map to Swept EQ 1-oct
     # (vpar[58]=0x20), where vpar[61] is GAIN, not Q — they are the SAME parametric
