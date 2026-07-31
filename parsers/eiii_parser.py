@@ -725,18 +725,30 @@ def _parse_preset_chain(data: bytes, fmt: BankFormat, head_index: int,
         # whatever lies behind the last preset as note zones -- on some volumes
         # garbage referencing impossible sample numbers like 16356.
         #
-        # Live on the local corpus, not merely theoretical: 10 dangling links
-        # across 4 of the 17 discs (2.5% of the 400 links followed), of which
-        # two attach a PHANTOM VOICE to a real preset --
-        # `Perc Wheel Wah` (Formula 4000 Vol. 3) read 3 voices / 36 zones where
-        # the device plays 2 / 30, and `FM FM FM ...` (Vol. 10) read 3 / 3
-        # against 2 / 2.  The other eight decode to nothing.
+        # Live, and confirmed on the very disc CWM cites.  Vol. 16 is
+        # `EIII.16 Twenty Six Studio Drum Kits and Percussion` (they name the
+        # bank but never the volume); its dangling targets decode to 68 note
+        # zones of garbage referencing sample slots 385, 571, 16067, 16091,
+        # 16381 -- and 16356, the exact number their doc quotes -- in banks
+        # holding 3 to 27 samples.  178 out-of-range references in all.
+        # Pre-fix that cost `808 SNR 3     40` seven phantom voices and
+        # fourteen phantom zones (19/31 -> 12/17).
         #
-        # Worth stating how that was measured, because the obvious probe lies:
-        # walking the chains with an EMPTY sample table makes all ten look
-        # harmless, since zones whose sample cannot be resolved are dropped
-        # before they are counted.  Only a full parse_eiii() with the bank's
-        # real sample table shows the phantom voices.
+        # Milder elsewhere: 10 dangling links across 4 of the other 17 discs,
+        # of which two attach a phantom voice -- `Perc Wheel Wah` (Formula 4000
+        # Vol. 3) 3 voices / 36 zones -> 2 / 30, and `FM FM FM ...` (Vol. 10)
+        # 3 / 3 -> 2 / 2.
+        #
+        # Two measurement traps worth recording, having fallen into both.
+        # Walking the chains with an EMPTY sample table makes every dangling
+        # link look harmless, because _parse_zone() drops a zone whose index
+        # does not resolve before anything counts it.  And that same guard is
+        # why Vol. 16 never blew up on us: the impossible indices were silently
+        # discarded, so the damage that DID land was limited to the handful of
+        # garbage indices that happened to fall inside the sample table and
+        # therefore resolved -- to real samples that do not belong there.
+        # A clean-looking parse was evidence of the guard working, not of the
+        # bank being sound.
         if idx is not None and not _preset_present(data, fmt, idx):
             idx = None
 
