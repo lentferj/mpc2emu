@@ -321,7 +321,7 @@ Two hardware-driven rules baked into `_build_keymap_entries()`:
   physical `root_note`** (fixed 2026-07-27) — a zone whose `root_key` differs
   from its sample's recorded root (deliberate retuning; a drum map that cancels
   keytracking via a large per-entry `tuning` offset is the clearest real-world
-  case, found via real Patchman content while building `krz_parser.py`) has its
+  case, found via real third-party soundset content while building `krz_parser.py`) has its
   *actual* total pitch shift measured from `r_zone`, not `r_sample` — checking
   against `r_sample` could reject a perfectly safe assignment as "over-ceiling"
   and silently drop the sample.
@@ -727,9 +727,9 @@ This reverse-engineering effort drew on:
   `PARAJLZ.KRZ`, `VELAYRE.KRZ`, and the `KRZ_*` forward-RE series) plus live
   SysEx sessions — the primary source for the program-parameter byte semantics.
 - **Commercial soundset corpora**: 201 K2000 soundset `.KRZ` files (structural
-  validation of the container) and 160 Patchman soundsets / ~14 000 layers
-  (filter-byte and routing cross-checks), plus `KPOWER.KRZ` / Patchman
-  `PMVOL002.KRZ` (RAM-sample header verification).
+  validation of the container) and 160 third-party soundsets / ~14 000 layers
+  (filter-byte and routing cross-checks), plus `KPOWER.KRZ` / third-party soundset
+  `soundset 002` (RAM-sample header verification).
 - **The E-MU / Kurzweil K2000 Musician's Guide** (Ch 14 DSP Functions, Ch 23
   LFOs, Ch 25 Control Sources, Ch 26 DSP Algorithms, Ch 30 SysEx) for the
   parameter model and the control-source code list.

@@ -373,7 +373,7 @@ the band-group level via `_thin_and_redistribute`, then applying each
 surviving band's (possibly widened) range to every voice in it. Verified
 against the real repro file
 (`.../Kirk.Hunter.Virtuoso.Series.Strings1.E4/KH Violins/B.003-2_8Violins128MB.e4b`,
-preset `8VnEsHdMrcFat/SL`): 5 → 4 distinct bands at `keep_pct=70` (was 5 → 5).
+preset the 78-voice string preset): 5 → 4 distinct bands at `keep_pct=70` (was 5 → 5).
 Also spot-checked the CR-6 code paths still hold through the new grouping: a
 synthetic overlapping-band case (all `hi_vel=127`, like the real file) kept
 original ranges via the CR-6 guard; a synthetic contiguous 3-band/2-voices-
@@ -383,7 +383,7 @@ midpoint, both voices in each surviving band updated).
 **CR-20 `thin_key_zones()` no-op for one-zone-per-voice presets — DONE
 2026-07-27.** Found via VinSamLib (same downstream project as CR-19, same
 session): CR-19's mirror image on the KEY axis. `reduce_key_zones_pct=30`/`60`
-on the same real repro preset (`8VnEsHdMrcFat/SL`, 78 voices, each carrying
+on the same real repro preset (the 78-voice string preset, 78 voices, each carrying
 **exactly one zone** — the E4B parser's native shape for a densely
 multisampled instrument) printed `removed 0 key zone(s)` at any percentage.
 Root cause: `thin_key_zones(voice, keep_pct)` only thins zones *within one
@@ -410,7 +410,7 @@ unaffected — same code path, same behavior, regression-tested directly.
 **CR-21 `thin_velocity_layers()` picks a tiny outlier band as the sole
 survivor at aggressive reduction — DONE 2026-07-28.** Found via real E4XT
 hardware confirmation of VinSamLib's own test matrix (row 11,
-`reduce_velocity_layers_pct=75.0` on the same `8VnEsHdMrcFat/SL` preset
+`reduce_velocity_layers_pct=75.0` on the same the 78-voice string preset preset
 CR-19/20 already used): 78 voices collapsed to **1 surviving voice, covering
 only MIDI keys 63-66** — everywhere else on the keyboard silent on real
 hardware, confirmed not sample corruption (the one surviving sample played
@@ -1107,7 +1107,7 @@ any MPC/XPM/etc. field maps to it) is future work.
 <details>
 <summary>Original corpus investigation (how it was narrowed before the hardware read)</summary>
 
-### Corpus evidence (full ProRec + Rob Papen + Kirk Hunter scan)
+### Corpus evidence (full commercial-library scan)
 
 Scanned 131 commercial banks / 32 558 voices. `vpar[42]` is non-zero in
 703 voices (2.2 %). Findings:
@@ -1121,7 +1121,7 @@ Scanned 131 commercial banks / 32 558 voices. `vpar[42]` is non-zero in
   is a real per-voice parameter, not a fixed flag.
 - **Authors set it bank-wide on sliced loops.** The dominant value 15 (584 of
   703 voices) is **constant across entire sliced drum-loop banks** — every
-  slice voice in *LPS 1/2/3* has exactly 15; *Hollywood* is all 16. A value an
+  slice voice in *the loop-slice banks* has exactly 15; *the SFX bank* is all 16. A value an
   author sets once and copies to every slice of a loop.
 - **No correlation** with the already-decoded properties (filter type/cutoff/Q,
   amp gain, tuning, velocity range) — the bytes that co-occur with a non-zero
@@ -1143,9 +1143,9 @@ Scanned 131 commercial banks / 32 558 voices. `vpar[42]` is non-zero in
 ### How to confirm (two paths, fastest first)
 
 **Path A — read it straight off a bank Jan already owns (no test banks):**
-Load `B.000-LPS 1 136bpm RP` (or `Hollywood`) on the E4XT, open any voice, and
+Load `B.000-a loop-slice bank` (or `the SFX bank`) on the E4XT, open any voice, and
 walk the voice-editor pages looking for the parameter that reads a non-default
-**15** (Hollywood: **16**). Whatever page shows that value *is* `vpar[42]`.
+**15** (the SFX bank: **16**). Whatever page shows that value *is* `vpar[42]`.
 This is the cheapest experiment and uses real non-zero data.
 
 **Path B — isolate by single-parameter sweep:** start from one neutral preset,
@@ -1159,7 +1159,7 @@ To target a specific voice on hardware, use the inspector
 ```bash
 # list every preset/voice carrying a non-default vpar[42], with values
 python3 tests/re_banks/inspect_vpar.py --nonzero \
-    "~/Dokumente/SYNTHS/E4XT/E4Bs/.../B.000-Hollywood _.e4b"
+    "~/Dokumente/SYNTHS/E4XT/E4Bs/.../B.000-the SFX bank _.e4b"
 ```
 
 It prints `bank / preset / voice# / value`, so Jan can open exactly that
@@ -1700,7 +1700,7 @@ tuning. The model fields exist (`ZoneMapping.fine_tune` cents,
 
 MPC stores tuning at **two levels**, both of which must be summed:
 - Instrument-level `<TuneCoarse>` (semitones) + `<TuneFine>` (cents) — applies to
-  the whole keygroup (this is what `Lazloz Split` uses for its detuned stack).
+  the whole keygroup (this is what `the detuned-stack split preset` uses for its detuned stack).
 - Layer-level `<TuneCoarse>`/`<TuneFine>` — per sample layer.
 
 ### Parser fix (straightforward)
@@ -1738,12 +1738,12 @@ byte.
 
 ### Validation
 
-`Lazloz Split`: Inst 2 voice +12 st / +15 c, Inst 4 +25 c — confirm the stacked
+`the detuned-stack split preset`: Inst 2 voice +12 st / +15 c, Inst 4 +25 c — confirm the stacked
 voices beat against the untuned ones (the chorused "split" sound). Re-check the
 three demo presets and fix the `feature_coverage.ods` tuning labels.
 
 **Regression case — two presets must stop sounding identical (Jan 2026-06-12):**
-`Inst-Pad-JR Lazloz Split` (P003) and `Inst-Bass-JR Jupiter Rising Spt` (P004)
+`the detuned-stack split preset` (P003) and `Inst-Bass-JR Jupiter Rising Spt` (P004)
 currently both collapse to the *same* structure (`1 voice, 12 zones, all
 key0-127/vel0-127/root60`) — verified identical. Their source samples sound
 alike (both JR "UniPanBass" unison pads), so once the RootNote-collapse + the
@@ -1770,7 +1770,7 @@ cache key / model name, and apply the 16-char E4B limit only at write time with 
 note/round-robin/layer suffix is the distinguishing part), or `prefix[:8] +
 hash(full)[:8]`. Apply in `_safe_name` (or wherever names are truncated for the
 E4B sample chunk) so distinct source samples never share a written name.
-Validate on `Lazloz Split`: 12 samples should keep distinct, recognisable names
+Validate on `the detuned-stack split preset`: 12 samples should keep distinct, recognisable names
 (`…C1_A`, `…C1_B`, … not `…-1`, `…-2`).
 
 ---
@@ -2039,7 +2039,7 @@ is loaded unchanged.
 ### Field semantics (verified against MPC 3.7 manual + measured WAV frame counts)
 
 All slice offsets are in **sample frames** (confirmed: `SliceEnd` equals the
-referenced WAV's frame count in 6 of 7 `SloBand Sweeper` slices; the 7th,
+referenced WAV's frame count in 6 of 7 `the wide-drone preset` slices; the 7th,
 `C1_B`, is `2454` against a `2666`-frame WAV — a genuine pad-end trim).
 
 | Field | MPC UI name | Meaning |
@@ -2057,7 +2057,7 @@ the **Loop Position** to the **end of the sample**."* So the loop region is
 when the pad's **Sample Play = Note On** (One Shot ignores it) and **Slice =
 Pad** — both true here, which is why the intent is a held, sustaining drone.
 
-**Degenerate loop points (must handle):** 4 of 7 `SloBand` slices have
+**Degenerate loop points (must handle):** 4 of 7 `the wide-drone preset` slices have
 `SliceLoopStart == SliceEnd` (a zero-length loop: C1_A `[1325,1325]`, C2_A
 `[664,664]`, C2_B `[669,669]`, C4_B `[336,336]`). C3_A has a real sub-loop
 `[468,672]`; C1_B loops the whole pad region `[1120,2454]`. The MPC's behaviour
@@ -2079,7 +2079,7 @@ if slice_end > slice_start:
 ```
 
 **2. Slice loop** — `SliceLoop` is the Pad Loop **enum** (Jan confirmed mode is
-"Pad Loop / Forward" for `SloBand`). Map it; loop region is
+"Pad Loop / Forward" for `the wide-drone preset`). Map it; loop region is
 `[SliceLoopStart, SliceEnd]`, both rebased to the trimmed slice. Clamp the
 degenerate `loop_start >= loop_end` case to the whole trimmed slice (TENTATIVE —
 see "Degenerate loop points" above):
@@ -2107,7 +2107,7 @@ propagate them into the `ZoneMapping` when building the final SMP voice (lines
 422–433). Group by `(vel_lo, vel_hi, tune_coarse, tune_fine)` rather than vel
 range alone.
 
-**Caveat — the 122× unison stack:** `SloBand Sweeper` layers 122 identical
+**Caveat — the 122× unison stack:** `the wide-drone preset` layers 122 identical
 `C1_A` instruments (same slice, `TuneCoarse=12`, tiny per-voice `LfoPitch`/
 `LfoPan`), which on the MPC produces a thick phasing drone. The E4XT caps voices
 per preset far below 122, so even with correct slices the converted preset can
@@ -2704,7 +2704,7 @@ collapsed once the container proved solid):
   (`zone.root_key`), not `r_sample`. Whenever a zone deliberately retunes
   (`root_key != sample.root_note`), the old check mis-flagged perfectly safe
   assignments as over-ceiling and silently dropped the sample from the
-  keymap. Found via Patchman `PMVOL098.KRZ` (`2000 Series v114`, "Lo Fi Kicks
+  keymap. Found via a third-party `soundset 098` (`2000 Series v114`, "Lo Fi Kicks
   1"): a genuine drum map where each key gets its own sample at an
   independently chosen pitch (`entry.tuning` cancels the normal per-key
   auto-transpose entirely) — parsed correctly by `krz_parser.py`, but
@@ -2714,7 +2714,7 @@ collapsed once the container proved solid):
   bug was not specific to KRZ-sourced content** — any source format producing
   a deliberately retuned zone (`root_key != root_note`) would have hit it when
   converting *to* KRZ. Fixed by measuring the ceiling from `r_zone`
-  (`writers/krz_writer.py:392`). Verified: `PMVOL098.KRZ` is now stable
+  (`writers/krz_writer.py:392`). Verified: `soundset 098` is now stable
   gen1→gen2→gen3 (`Lo Fi Kicks 1`, 45 samples, no orphan preset); the existing
   HW-confirmed `tests/test_krz_writer.py` suite is unaffected (its fixtures
   never exercise `root_key != root_note`, so `r_zone == r_sample` there and
@@ -2727,7 +2727,7 @@ KRZ generations.** `tools/krz_to_krz_check.py` (parse → write → parse → wr
 preset counts drift — all of them this project's own synthetic multi-voice
 octave-slice pad-stack test/demo banks (`JRSLO*`, `K2KFEATDEMO*`,
 `krz_staging/VPO_BRASSACC|BRASSNOR|VIOLINKS`, `SCSYNTH_01`), **zero real
-commercial-library files** (all 12 Patchman files that were unstable before
+commercial-library files** (all 12 third-party soundset files that were unstable before
 the ceiling fix are now stable). Root cause: `_coverage_remap_voices` (§7.3's
 already-documented lossy octave-slice rebuild) regroups samples by root
 differently when applied a second time to its own previous output, so a
@@ -2954,7 +2954,7 @@ intersect each zone's range with the voice window —
 same pattern for velocity. If the intersection is empty (`lo > hi`), the zone
 is dropped rather than emitting an inverted range (mirrors CWM's own
 early-exit — commit `ead0e07`, cross-referenced against 76057 real zones from
-the E-mu Producer Series CD-ROMs).
+the commercial library CD-ROMs).
 
 **Why this is safe for mpc2emu's own output:** `writers/e4b_writer.py`
 (`_build_voice`) always sets the voice window to the min/max of the voice's
@@ -3028,7 +3028,7 @@ attack's level indefinitely).
 (attack2 1.1%, decay2 1.6%, release2 0.2% — usually negligible on its own),
 but where decay1's and decay2's *levels* differ sharply (0.9% of voices,
 `|Δ| >= 50` out of 127), it's concentrated in one-shot SFX material: every
-sampled example came from one `ProRec "Hollywood"` sound-effects bank
+sampled example came from one `a commercial SFX` sound-effects bank
 (`WALKER C1`, `DARTH VADER`, `LASER`, `X-WING`, …) where decay1 = byte 126
 (near-full, ~31ms — read alone as "sustain at 99%") and decay2 = byte 118
 (the *real* ~29.4 SECOND decay to silence). Old read: `attack=0.031 decay=
@@ -3052,11 +3052,11 @@ single-stage envelope byte-for-byte unchanged from the original CR-5
 behavior; only genuine two-stage envelopes are affected.
 
 **Verified:** corpus sweep before/after shows **0 crashes**, the exact
-"Hollywood" repro now decodes to the envelope above; new regression tests
+"the SFX bank" repro now decodes to the envelope above; new regression tests
 `tests/test_e4b_parser.py::test_single_stage_envelope_unchanged` (the common
 case, unaffected), `test_two_stage_envelope_combines` (synthetic two-stage
 case matching CWM's model), `test_stage2_zero_byte_contributes_true_zero`,
-`test_real_world_hollywood_sfx_repro` (exact byte repro) — all 4 confirmed to
+`test_real_world_sfx-bank_sfx_repro` (exact byte repro) — all 4 confirmed to
 fail against the pre-fix code and pass with it.
 
 **HARDWARE-CONFIRMED 2026-07-28.** Built a listen-control bank
@@ -3084,7 +3084,7 @@ always read the left/first field unconditionally.
 **Corpus-checked before fixing:** of 7,460 sample objects across the same
 141 files, 88 (1.2%) have the option-clear ("right channel") flag, 73 of
 those are looped. Reading the **left** field gives an in-range loop point
-for 67/73 (91.8%) — but for the other 6 (all in a `"Preview Vol.2"` bank),
+for 67/73 (91.8%) — but for the other 6 (all in a a preview bank),
 it's **negative** (e.g. `loop_start = -40`), an outright invalid value that
 can't be right by construction. Reading the **right** field instead gives a
 valid, in-range loop point for **all 73/73 (100%)**.
@@ -3460,9 +3460,9 @@ from each match to the next (or a 130 MB cap), since these commercial disc
 images don't need their EMU3/ISO9660 filesystem parsed to locate bank
 boundaries this way. **Result: 1118 banks, 19,040 presets, 33,614 samples,
 250,236 zones, zero parse failures.** Spot-checked decoded PCM (peak/RMS,
-e.g. a "STRANGELOVE" bank from the Depeche Mode/Alan Wilder EIII CD-ROM
+e.g. a "a pad" bank from the an artist-signature EIII CD-ROM
 decoding to a plausible layered stereo pad with sane sample rates and loop
-points; an "OrbitPercMasterX" bank — the same "Orbit Presets" library
+points; an "a drum-map bank" bank — the same "a commercial ESI library" library
 ConvertWithMoss's own format doc cites for the ESI sample-index-flag finding
 — decoding to real-looking drum one-shots) confirms plausible, not
 necessarily byte-perfect, decoding; this is corpus-scale structural
@@ -3497,10 +3497,9 @@ Checked against 5 real commercial EMU3-filesystem discs
 (`docs/EMU3_ISO_FORMAT.md` §2.4, read directly with a throwaway inspection
 script against `/home/lentferj/Dokumente/SYNTHS/E4XT/ISO-Images/`, known-good
 media Jan pointed at): E4B entries always carry `props = \x00E4B0`
-(`Post Industrial Cybr-Sound Depot.iso`, every bank); EIII entries always
-carry all-zero, across all three on-disk variants (`E-MU Formula 4000 Series
-Vol. 5 – Protozoa.iso`: `EMULATOR 3X`/`EMU SI-32 v3` entries; `Vol. 1 –
-Emulator Standards.iso`: `EMULATOR THREE` entries) — a clean, consistent,
+(`library disc A.iso`, every bank); EIII entries always
+carry all-zero, across all three on-disk variants (`E-MU library disc B Series
+`library disc B`: `EMULATOR 3X`/`EMU SI-32 v3` entries; `library disc D`: `EMULATOR THREE` entries) — a clean, consistent,
 never-mixed pattern. Since the E4XT's own file browser evidently reads this
 field to label a catalog entry (not just a third-party reader classifying
 someone else's disc, which was the narrower claim the field was originally
@@ -4270,7 +4269,7 @@ So a stereo sample is **one object with both channel bits set**, not two
 linked L/R objects. The E3S1 struct is the Emulator III's and stores every
 position twice — start/end/loop-start/loop-end at 22/30/38/46 (left) and
 26/34/42/50 (right) — and the two channels sit in **sequential PCM blocks**,
-not interleaved. From `24SldUpStC1`:
+not interleaved. From `a stereo slide sample`:
 
 ```
 startL=92     endL=154458      startR=154460   endR=308826    pcm=308736

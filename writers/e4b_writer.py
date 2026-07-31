@@ -4,8 +4,8 @@
 # This file is part of mpc2emu.
 # E4B format reverse-engineered from:
 #   - E4XT hardware-saved banks (JL AnalogBank, FltEnvTest, FLTTYPES series)
-#   - Commercial EOS CD-ROMs (E-MU Formula 4000 Series Vol. 5,
-#     Producer Series Vol. 01, Syntec WOS V4)
+#   - Commercial EOS CD-ROMs (library disc B,
+#     library disc C, library disc S)
 #   - struct emu3_sample from emu3bm by David García Goñi
 #     https://github.com/dagargo/emu3bm  (GPL-3.0-or-later)
 #   - Phil's E4 format notes
@@ -477,7 +477,7 @@ def _zone_entry(zone: ZoneMapping, sample_idx: int, write_absolute: bool = False
     """22-byte secondary zone entry.
 
     Decoded by ConvertWithMoss (git-moss/ConvertWithMoss #220, commit
-    7ce000f) from the E-mu Producer Series CD-ROMs:
+    7ce000f) from the commercial library CD-ROMs:
       [12:14] fine-tune, signed BE i16, 1/64-semitone
       [15]    volume, signed byte, dB
       [16]    panning, signed byte, -64..+63
@@ -708,7 +708,7 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
     #   from B.025, B.030-1V-2V-3V and the B.010-bisect-bank differential
     #   series: formula matches exactly in every case.
     # vpar[4] = n_zones: E4XT navigation formula (vpar[4]+1)*22 = zone table bytes.
-    #   No MARKER needed — confirmed from ProRec and Rob Papen commercial files.
+    #   No MARKER needed — confirmed from a commercial SFX library and a commercial loop library commercial files.
     vpar = bytearray(110)
     _trailer_off = VOICE_FIXED + n_zones * ZONE_ENTRY
     vpar[2]  = (_trailer_off >> 8) & 0xFF
@@ -938,7 +938,7 @@ def _build_preset_body(preset: Preset, preset_idx: int,
     struct.pack_into('>H', hdr, 20, num_voices)  # [20-21] num_voices
     hdr[28]   = 0x78                             # [28]   volume 120
     if num_voices > 1:
-        hdr[41] = 0x04                           # [41]   multi-voice flag (confirmed B.025 + Kirk Hunter)
+        hdr[41] = 0x04                           # [41]   multi-voice flag (confirmed B.025 + a commercial string library)
         hdr[43] = 0x01                           # [43]   multi-voice flag
     # [52-55] constant marker
     hdr[52], hdr[53], hdr[54], hdr[55] = 0x52, 0x23, 0x00, 0x7E

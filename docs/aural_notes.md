@@ -156,10 +156,10 @@ waveform/rate/sync points are the remaining, separate fidelity gaps on this patc
 
 ---
 
-## Inst-Pad-JR Lazloz Split — `FEATUREDEMO_03.E4B [03]`
+## the detuned-stack split preset — `FEATUREDEMO_03.E4B [03]`
 ## …and `Inst-Bass-JR Jup` — `FEATUREDEMO_03.E4B [04]` (Jan: "same")
 
-Source: `Jupiter Rising/Inst-Pad-JR Lazloz Split.xpm` — 4 keygroups, each 3
+Source: `Jupiter Rising/the detuned-stack split preset.xpm` — 4 keygroups, each 3
 unison layers (A/B/C); KG1(C1)+KG2(C2) on keys 0-59, KG3(C3)+KG4(C4) on 60-127.
 All layers RootNote=0, IgnoreBaseNote=False.
 
@@ -206,7 +206,7 @@ half, KG3+KG4 on the high half → 6 unison voices sounding per key). Nothing to
 ### I. Per-voice detune — **CORRECT** (confirm)
 **Jan:** V4-6 ctune+12/ftune+10, V10-12 ftune+16. These match the instrument-level
 `TuneCoarse/TuneFine` (KG2: coarse 12 / fine 15¢→+10 in 1/64-st; KG4: fine
-25¢→+16) — the intended Lazloz "split" detune, correctly converted. No action.
+25¢→+16) — the intended the detuned-stack split preset "split" detune, correctly converted. No action.
 
 ### J. Amp decay too short
 **Jan:** MPC GUI decay = 1.9 s; E4XT sounds like ~0.703 s (matches if MPC decay
@@ -410,11 +410,11 @@ velocity window vpar[18]/[21]), then set from min/max zone key.
 **Correction to §A:** I earlier conflated this with an "extend the edge zones to
 0/127" idea. They're **two separate things**:
 1. **Voice key-window = zone span** (certain, this is Jan's point; fixes the
-   false full-range claim on V1/V2 *and* the MS20/Lazloz "claims full range").
+   false full-range claim on V1/V2 *and* the MS20/the detuned-stack split preset "claims full range").
 2. **Edge-extension** — whether keys *outside* the keymap's covered range (here
    0-23 below KG1, 97-127 above KG21) should play the nearest edge sample. This is
    **uncertain** and per-patch: needs a hardware check "does the MPC sound below
-   the lowest / above the highest keygroup?" Don't assume it (my Lazloz "C0 sounds"
+   the lowest / above the highest keygroup?" Don't assume it (my the detuned-stack split preset "C0 sounds"
    read was likely just KG1 already spanning 0-59, not true extension). Fix (1) is
    the one to implement; (2) only if a patch demonstrably plays outside its keymap.
 

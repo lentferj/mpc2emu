@@ -217,7 +217,7 @@ or `0x8000` on ~5% of zones). `parsers/eiii_parser.py` masks with
 never sets these bits.
 
 **Truncated sample numbers on the library CD-ROMs.** Some E-mu library
-CD-ROM banks (Formula 4000, the General MIDI volume, a few classic-volume
+CD-ROM banks (library disc B, a General MIDI sample set, a few classic-volume
 banks) were mastered through a tool chain that wrote a zone's 16-bit sample
 index through 8 bits: the low byte is the true sample slot modulo 256, the
 high byte is zero or stale garbage. A preset whose samples sit above slot

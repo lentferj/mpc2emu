@@ -157,7 +157,7 @@ def _compute_sample_period(sample_rate: int) -> int:
 def _compute_max_pitch(sample_rate: int, root_note: int) -> int:
     # The MIDI pitch (×100 cents) at which the sample, transposed upward, reaches
     # the K2000's 48 kHz internal playback ceiling.  Reverse-engineered from real
-    # Patchman soundsets (PMVOL002): maxPitch = 100*root + 1200*log2(48000/sr)
+    # third-party soundsets (soundset 002): maxPitch = 100*root + 1200*log2(48000/sr)
     # (sr=30 kHz → +814, sr=15 kHz → +2014, both confirmed).
     return int(round(
         100 * root_note + 1200.0 * math.log(48000.0 / sample_rate, 2)
@@ -257,13 +257,13 @@ def _write_sample_object(f, sample: SampleData, obj_id: int,
 
     looped = sample.loop_type != LoopType.NO_LOOP
 
-    # Soundfilehead.flags — verified against real RAM-loaded soundsets (Patchman
-    # PMVOL002) and KurzFiler's WAV importer (LoadWaveMethod): a playable RAM
+    # Soundfilehead.flags — verified against real RAM-loaded soundsets (third-party soundset
+    # soundset 002) and KurzFiler's WAV importer (LoadWaveMethod): a playable RAM
     # sample needs 0x70 (needsLoad 0x40 + the 0x10/0x20 playback-enable bits);
     # 0x40 alone loads the sample but produces NO SOUND.
     #
     # Loop on/off IS the 0x80 bit (hardware-confirmed 2026-06-16): the K2000
-    # LOOPS when 0x80 is CLEAR and plays one-shot when 0x80 is SET.  The Patchman
+    # LOOPS when 0x80 is CLEAR and plays one-shot when 0x80 is SET.  The third-party soundset
     # corpus is all looped multisamples, so this path only ever emitted 0x70 and
     # the bug hid until MPC one-shots (Bass/Synth/Perc) came through: every
     # one-shot was force-looped on its zero-length end region → held notes stuck
@@ -397,7 +397,7 @@ def _build_keymap_entries(voice: VoiceLayer,
         # what the 48kHz internal engine limit is measured from. Using r_sample
         # here mis-flagged deliberately retuned zones (r_zone != r_sample, e.g.
         # a drum map that cancels keytracking via a large per-entry tuning
-        # offset — found 2026-07-27 building krz_parser.py, real Patchman
+        # offset — found 2026-07-27 building krz_parser.py, real third-party soundset
         # content) as over-ceiling even though their true shift is nowhere near
         # it, silently dropping the sample from the keymap.
         hi_key = min(zone.hi_key, NUM_KEYS - 1)   # defensive: never index past the 128-key buffer
@@ -730,7 +730,7 @@ _K2_CAL_ALGORITHM = 29       # CAL byte holding the algorithm number
 _K2_PARAMID_GAIN_MIN_DB = 12
 _K2_PARAMID_GAIN_SPAN_DB = 12
 # BANDPASS F2 is *width* (HOB1[1]), not resonance.  A fresh-selected bandpass
-# defaults to byte 0 (very narrow / thin).  The real Patchman corpus clusters its
+# defaults to byte 0 (very narrow / thin).  The real third-party soundset corpus clusters its
 # bandpass width at ~57-70 (median ~64), so emit a medium 64 rather than the thin
 # default.  Mapping MPC resonance->width is a future refinement (needs the width
 # byte<->octaves encoding RE'd from a disk-save).
@@ -928,7 +928,7 @@ def _coverage_remap_voices(voices, samples_by_name):
     voices, each stretching ONE octave-slice (roots an octave apart) across the
     whole keyboard.  But the K2000 can only pitch a sample up to the 48 kHz
     playback rate — for a 24 kHz slice that's ~1 octave above its root — so the
-    top of every band goes silent (SloBand #204: L1 died at ~C2, L2/L3 at ~C3).
+    top of every band goes silent (the wide-drone preset #204: L1 died at ~C2, L2/L3 at ~C3).
 
     Rebuild the stack as 1-3 COVERAGE multisample keymaps: lay the slices
     side-by-side, each covering only from the previous slice's ceiling up to its
@@ -1020,11 +1020,11 @@ def _voices_stacked(voices) -> bool:
     must all be kept (a K2000 "drum program", >3 layers, played on a drum channel).
 
     NOTE (2026-06-24): a stricter "keep all distinct-sample voices" version was
-    trialled to preserve SloBand's L/R octave stack, but it flips 7 melodic demo
+    trialled to preserve the wide-drone preset's L/R octave stack, but it flips 7 melodic demo
     patches (F9 piano, JP8/DX7 basses, JR ShortPad/WarmSlow, both brass sections)
     to drum-channel-only — too broad to apply unsupervised.  Kept the original
     3-layer-any-channel cap; faithful all-layer (drum-program) rendering for
-    SloBand & stacked siblings is a deferred opt-in.  See TODO."""
+    the wide-drone preset & stacked siblings is a deferred opt-in.  See TODO."""
     rs = [_voice_key_vel_range(v) for v in voices]
     for i in range(len(rs)):
         for j in range(i + 1, len(rs)):

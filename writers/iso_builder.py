@@ -56,8 +56,8 @@ Directory entry (emu3_dentry, 32 bytes):
             matches emu3fs emu3_set_fattrs() which increments blocks when
             there is a remainder, i.e. the last block is partially filled).
 
-Fixed filesystem geometry matching working reference images (Post Industrial,
-Protozoa):  start_fat=2, fat_blocks=5, start_root=7, root_blocks=4,
+Fixed filesystem geometry matching working reference images (library disc A,
+library disc B):  start_fat=2, fat_blocks=5, start_root=7, root_blocks=4,
 start_dircon=11, dircon_blocks=125, start_data=136.
 Cluster size 1 MB (cse=5) fits within 5 FAT blocks and produces the
 identical fixed-position layout the EOS firmware expects.
@@ -84,13 +84,13 @@ EMU3_MAX_FILES_PER_DIR = EMU3_BLOCKS_PER_DIR * EMU3_ENTRIES_PER_BLOCK  # 112 (st
 EMU3_BANKS_PER_FOLDER  = 100  # EOS UI limit: 2-digit folder slots B00..B99
 
 # Fixed filesystem geometry — must match what the EOS/E4XT firmware expects.
-# Reference images (PostInd, Formula 4000, etc.) all use:
+# Reference images (library disc A, library disc B, etc.) all use:
 #   start_fat=2  fat_blocks=5  start_root=7  root_blocks=4
 #   start_dircon=11  dircon_blocks=125  start_data=136
 #
 # CLUSTER SIZE: use the SMALLEST cse that fits all data within 5 FAT blocks.
 # The E4XT CD reader has a limited buffer; 1 MB clusters (cse=5) cause
-# "end of file" at ~60-70% load.  cse=4 (512 KB) matches PostInd and works.
+# "end of file" at ~60-70% load.  cse=4 (512 KB) matches library disc A and works.
 # build_iso() selects cse dynamically: 4 → 5 → 6 as data grows.
 
 _FAT_START    = 2
@@ -215,8 +215,7 @@ def _superblock(total_blocks: int, n_clusters: int, volume_label: str,
 
     # Bytes beyond the known parameters — present in every working reference ISO,
     # absent from ours, and coincide exactly with "FS:??" on the E4XT hardware.
-    # Verified across 6 different working ISOs (PostInd, EII, Vol10, Platinum,
-    # Vol1Std, Formula4000 Vol.2):
+    # Verified across 6 different working ISOs (library discs A, C, D and an EII volume):
     sb[0x28] = cse                 # cluster size shift (always set)
     sb[0x29] = 0x01                # EIV/EMU4 format flag — ALL working ISOs = 1
     sb[0x2D] = 0x08                # present in all cse=4/5 working ISOs
@@ -287,8 +286,8 @@ def _bank_props(path: str) -> bytes:
     """EMU3 dir-content entry props[5] marker.
 
     Confirmed against real hardware-written media (2026-07-28, 5 commercial
-    discs incl. Post Industrial Cybr-Sound Depot, E-MU Formula 4000 Vol.5
-    Protozoa, Vol.1 Emulator Standards): E4B bank entries (body starts
+    discs incl. library disc A, library disc B
+    library disc B, library disc D): E4B bank entries (body starts
     `FORM`...`E4B0`) carry `\\x00E4B0` here; EIII-family entries (all three
     on-disk variants -- `EMULATOR THREE `, `EMULATOR 3X   `, `EMU SI-32 v3  `)
     carry all-zero, regardless of which EIII variant. Hardcoding `\\x00E4B0`

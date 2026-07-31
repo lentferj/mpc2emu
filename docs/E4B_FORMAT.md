@@ -53,12 +53,12 @@ in real hardware and in the reference loader (emu.tools e-xplorer); see
 > **`TOC1` is optional, not just "not trusted."** mpc2emu always writes one,
 > and `e4b_parser._walk_chunks` never depends on it being present (it never
 > looks at offset 12 specifically) — but at least one real commercial disc
-> (`PlatinumPhattCD1/HipHopKickSnrHat`, Producer Series Vol. 8 CD 1) goes
+> (`a drum-kit preset on library disc C`, library disc C) goes
 > straight from `FORM <size> E4B0` to `E4Ma` with no `TOC1` chunk at all. Any
 > reader that assumes `TOC1` always exists will break on real-world media.
 >
 > **`EMSt` is not always the single last chunk of the file — "mega-banks"
-> exist.** At least one commercial disc (`PlatinumPhattCD1/MoPhattPerc&Kits`,
+> exist.** At least one commercial disc (`a percussion/kit preset on library disc C`,
 > same CD) is several originally-separate sub-banks concatenated into one
 > file: it contains a `TOC1` and an `EMSt` *mid-stream*, followed by more real
 > `E4P1`/`E3S1` content afterward. `e4b_parser._walk_chunks`'s caller tolerates
@@ -173,7 +173,7 @@ Fixed 82-byte header followed by N variable-length voice blocks, packed
 | `22:28` | 6  | —            | zero |
 | `28`    | 1  | `volume`     | `0x78` (=120) is mpc2emu's default master volume |
 | `29:41` | 12 | —            | zero |
-| `41`    | 1  | multi-voice flag | `0x04` when `num_voices > 1` (confirmed from hardware + Kirk Hunter commercial banks) |
+| `41`    | 1  | multi-voice flag | `0x04` when `num_voices > 1` (confirmed from hardware + commercial string-library banks) |
 | `42`    | 1  | —            | zero |
 | `43`    | 1  | multi-voice flag | `0x01` when `num_voices > 1` |
 | `44:52` | 8  | —            | zero |
@@ -504,8 +504,7 @@ leaves these three bytes zero. Three-stage hardware investigation
 (2026-07-26), all writing to the SD card as `HD0.img` and byte-diffed:
 
 1. Decoded by [ConvertWithMoss](https://github.com/git-moss/ConvertWithMoss)
-   (PR #220, commit `7ce000f`) from 76057 zones across the E-mu Producer
-   Series CD-ROMs, as an offset on top of the voice's own settings.
+   (PR #220, commit `7ce000f`) from 76057 zones across commercial library CD-ROMs, as an offset on top of the voice's own settings.
 2. `B.012 "Vce VolPan"` (7 *single-zone* voices, distinct front-panel
    Volume/Pan each) appeared to disprove it entirely — every zone entry
    stayed zero, `vpar[54]`/`[55]` matched the front-panel values exactly.
@@ -761,8 +760,7 @@ This reverse-engineering effort drew on:
   (`JL AnalogBank`, `FltEnvTest`, `FLTTYPES`/`FLTTYPES2` series, the
   `B.0xx-*` differential test series, and others referenced by name above) —
   the primary source for nearly every byte-level detail in this document.
-- **Commercial EOS CD-ROMs**: E-MU Formula 4000 Series Vol. 5, Producer
-  Series Vol. 01, Syntec WOS V4 (used to cross-check conventions against
+- **Commercial EOS CD-ROMs**: library discs B, C and S (used to cross-check conventions against
   professionally authored content).
 - **emu3bm** by David García Goñi — <https://github.com/dagargo/emu3bm>
   (GPL-3.0-or-later) — source of `struct emu3_sample`, the basis for the

@@ -305,7 +305,7 @@ def _apply_velocity_range(data: bytes, preset_offset: int, layer: int,
 # ---------------------------------------------------------------------------
 # Truncated 8-bit zone sample index repair
 # ---------------------------------------------------------------------------
-# Some E-mu library CD-ROM banks (Formula 4000, the General MIDI volume, a
+# Some E-mu library CD-ROM banks (library disc B, a General MIDI sample set, a
 # few classic-volume banks) were mastered through an 8-bit tool chain: a
 # zone's 16-bit sample index was written with the low byte as the true slot
 # modulo 256 and the high byte zero or stale garbage. A preset whose samples
@@ -718,32 +718,31 @@ def _parse_preset_chain(data: bytes, fmt: BankFormat, head_index: int,
         idx = (link - 1) if (0 < link <= fmt.max_presets and link - 1 != idx) else None
         # A chain ends at the first slot that holds NO preset -- which is what
         # the device does.  Several library CD-ROMs leave the last link of a
-        # chain dangling into an empty slot (ConvertWithMoss d94bde27 cites
-        # `CONCRT PERC2   X` of Vol. 16, whose 25-preset percussion chain links
-        # both ends to the empty slots 126/127).  An empty slot shares its
-        # table address with its successor, so following the link reads
-        # whatever lies behind the last preset as note zones -- on some volumes
-        # garbage referencing impossible sample numbers like 16356.
+        # chain dangling into an empty slot; ConvertWithMoss d94bde27 reports
+        # one whose 25-preset percussion chain links both ends to the empty
+        # slots 126/127.  An empty slot shares its table address with its
+        # successor, so following the link reads whatever lies behind the last
+        # preset as note zones -- on some discs garbage referencing impossible
+        # sample numbers.
         #
-        # Live, and confirmed on the very disc CWM cites.  Vol. 16 is
-        # `EIII.16 Twenty Six Studio Drum Kits and Percussion` (they name the
-        # bank but never the volume); its dangling targets decode to 68 note
+        # Live, and confirmed on the very disc they describe (`library disc P`
+        # in the local corpus map): its dangling targets decode to 68 note
         # zones of garbage referencing sample slots 385, 571, 16067, 16091,
-        # 16381 -- and 16356, the exact number their doc quotes -- in banks
-        # holding 3 to 27 samples.  178 out-of-range references in all.
-        # Pre-fix that cost `808 SNR 3     40` seven phantom voices and
-        # fourteen phantom zones (19/31 -> 12/17).
+        # 16381 and 16356 -- that last one the exact number their doc quotes --
+        # in banks holding 3 to 27 samples.  178 out-of-range references in
+        # all.  Pre-fix, that cost one drum preset seven phantom voices and
+        # fourteen phantom zones (19 voices / 31 zones -> 12 / 17).
         #
         # Milder elsewhere: 10 dangling links across 4 of the other 17 discs,
-        # of which two attach a phantom voice -- `Perc Wheel Wah` (Formula 4000
-        # Vol. 3) 3 voices / 36 zones -> 2 / 30, and `FM FM FM ...` (Vol. 10)
-        # 3 / 3 -> 2 / 2.
+        # of which two attach a phantom voice -- a percussion preset read
+        # 3 voices / 36 zones against the device's 2 / 30, and an FM preset
+        # 3 / 3 against 2 / 2.
         #
         # Two measurement traps worth recording, having fallen into both.
         # Walking the chains with an EMPTY sample table makes every dangling
         # link look harmless, because _parse_zone() drops a zone whose index
         # does not resolve before anything counts it.  And that same guard is
-        # why Vol. 16 never blew up on us: the impossible indices were silently
+        # why that disc never blew up on us: the impossible indices were silently
         # discarded, so the damage that DID land was limited to the handful of
         # garbage indices that happened to fall inside the sample table and
         # therefore resolved -- to real samples that do not belong there.

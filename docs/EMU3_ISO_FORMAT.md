@@ -65,7 +65,7 @@ Blocks 136 … :         E4B file data (clusters)  — _DATA_START=136
 
 All blocks are **512 bytes**. This geometry is *fixed* — it is not computed
 from the data size, but copied verbatim from working reference images
-(Post Industrial, Formula 4000, EII, Vol 10, Platinum, Vol 1 Std). The EOS
+(library discs A, B, D, E and an EII volume). The EOS
 firmware appears to expect superblock parameters that match this exact
 layout; deviating from it (even while keeping the parameters internally
 consistent) produced `FS:??` / `Capacity 0.0mb` errors on hardware during
@@ -121,8 +121,7 @@ working reference superblock; without it, the E4XT reports
 
 The flag bytes at `0x29`, `0x2D`, `0x32`, `0x33` have no documented meaning —
 their *values* were determined purely by byte-diffing six different working
-commercial/hardware-saved images (Post Industrial, EII, Vol 10, Platinum,
-Vol 1 Std, Formula 4000 Vol. 2) and copying whatever was constant across all
+commercial/hardware-saved images (library discs A, B, D, E and an EII volume) and copying whatever was constant across all
 of them. Treat them as "magic constants the firmware checks for", not as
 fields with a known semantic role.
 
@@ -178,10 +177,9 @@ props[5]         b'\x00E4B0' for an E4B bank; all-zero for EIII/ESI — see belo
 > project hardcoded `b'\x00E4B0'` unconditionally (mpc2emu was E4B-only), on
 > the theory (below) that the field wasn't reliably read by anything.
 > Scanned across 161 real EMU3 images at the time: 459 E4B banks (all
-> `props = \x00E4B0`, e.g. every entry on `Post Industrial Cybr-Sound
-> Depot.iso`) vs. 1028 EIII-format banks (all `props` all-zero, e.g. every
-> entry on `E-MU Formula 4000 Series Vol. 5 – Protozoa.iso` and `Vol. 1 –
-> Emulator Standards.iso`, across all three on-disk EIII variants —
+> `props = \x00E4B0`, e.g. every entry on `library disc A.iso`) vs. 1028 EIII-format banks (all `props` all-zero, e.g. every
+> entry on `library disc B` and `library disc D`
+> library disc D.iso`, across all three on-disk EIII variants —
 > `EMULATOR THREE `, `EMULATOR 3X   `, `EMU SI-32 v3  `), 30 fixed-id
 > ROM/system files. The pattern is consistent and reliable: **E4B ⇒
 > `\x00E4B0`, EIII/ESI ⇒ all-zero**, never mixed on any real disc found.
@@ -238,7 +236,7 @@ This choice isn't just about fitting the FAT — it also works around a
 **hardware buffering limit**: 1 MB clusters (`cse=5`) reliably caused
 `"end of file"` read errors at roughly 60–70% through loading on a real
 E4XT, even though the filesystem structure was otherwise valid. 512 KB
-clusters (`cse=4`, matching the "Post Industrial" reference disc) load
+clusters (`cse=4`, matching the "library disc A" reference disc) load
 cleanly. mpc2emu therefore prefers `cse=4` whenever the data fits, and only
 steps up to `cse=5`/`cse=6` for larger banks where the FAT-size ceiling
 forces it.
@@ -395,7 +393,7 @@ holds exactly one bank.
 This reverse-engineering effort drew on:
 
 - **Hardware-saved EMU3 CD images** created and dumped by Jan Lentfer
-  (Post Industrial, Formula 4000, EII, Vol 10, Platinum, Vol 1 Std, and
+  (library discs A, B, D, E and an EII volume, and
   others referenced by name above) — the primary source for the fixed
   geometry, superblock flag bytes, checksum algorithm, and the `blks`
   ceiling-vs-floor behaviour, all confirmed by loading mpc2emu-built images

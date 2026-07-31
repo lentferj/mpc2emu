@@ -609,7 +609,7 @@ Jan loaded converted MPC (XPM) banks on the K2000R; two bugs surfaced + fixed in
 1. **One-shots were force-looped → unnatural held notes (no sustain/release).**
    The Soundfilehead loop bit is **0x80: CLEAR = loop ON, SET = one-shot** (per
    krz_reader, HW-confirmed). The writer hard-coded `flags=0x70` (0x80 clear) for
-   *every* sample — only ever tested on looped Patchman corpora, so one-shots got
+   *every* sample — only ever tested on looped third-party soundset corpora, so one-shots got
    looped on their zero-length end region → held notes stuck on the final sample.
    Fix: `sfh_flags = 0x70 if looped else 0xF0`. Per-sample, so a bank with mixed
    loops (e.g. Organ) keeps its real sustain loops AND plays one-shots out.
@@ -826,7 +826,7 @@ Software-only work (no disk-saves) while Jan was AFK:
   `python3 tests/test_krz_writer.py`.
 
 - **Corpus cross-check** (`/home/lentferj/temp/corpus_filter_analysis.py` over the
-  160 Patchman soundsets = 3188 programs / 14212 layers) **validated the filter
+  160 third-party soundsets = 3188 programs / 14212 layers) **validated the filter
   byte map against real K2000 production files**: HOB0[0] = 2 (2POLE LOWPASS, 12019
   layers), 3 (BANDPASS), 15 (1-pole LOPASS), 50 (4POLE), 56 (DOUBLE NOTCH), 62
   (NONE) all confirmed.  Real soundsets use **Algorithm 2** for 2-pole LP (never the
@@ -848,7 +848,7 @@ Software-only work (no disk-saves) while Jan was AFK:
 
 ### 17k. Modulation-routing byte offsets located via corpus (2026-06-16)
 
-`/home/lentferj/temp/corpus_routing.py` scans every layer of the 160 Patchman
+`/home/lentferj/temp/corpus_routing.py` scans every layer of the 160 third-party soundset
 soundsets (14212 layers) and, per (segment, byte-index), measures what fraction of
 values fall in the control-source code set (manual Ch25).  Positions dominated by
 control-source codes ARE the Src/route fields — and the codes that show up confirm

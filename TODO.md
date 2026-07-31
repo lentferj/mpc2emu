@@ -394,8 +394,7 @@ synthetic unit test, not yet played back on a real K2000/K2000R.
 ## zone_reducer: aggressive reduce_velocity_layers_pct collapses KEY coverage too — RESOLVED + HW-CONFIRMED (2026-07-28)
 
 Found via real E4XT hardware confirmation of VinSamLib's own HW test matrix
-(row 11, `reduce_velocity_layers_pct=75.0` on the Kirk Hunter Strings
-preset "8VnEsHdMrcFat/SL" -- the same preset the earlier `efe130c`
+(row 11, `reduce_velocity_layers_pct=75.0` on the 78-voice string preset -- the same preset the earlier `efe130c`
 zone-reducer fix used). At 40% reduction (row 10), voice count goes
 78 -> 22, spread reasonably across the keyboard. At 75% (row 11), voice
 count collapsed to just **1 surviving voice**, covering **only MIDI keys
@@ -472,7 +471,7 @@ reader) found `parsers/e4b_parser.py` only read stage 1 of each PZT envelope
 pair (Attack1/Decay1/Release1), discarding the second stage entirely. For a
 small but real fraction of local third-party content (0.9% of 32,558
 voices) this made a voice that should decay to silence over many seconds
-read as "holds near-full forever" instead (a `ProRec "Hollywood"` SFX bank,
+read as "holds near-full forever" instead (a `a commercial SFX` SFX bank,
 verified byte-for-byte before fixing). Fixed in both amp and filter envelope
 decode — see `docs/RESOLUTION_NOTES.md` §E4BREAD2 for the full
 corpus-validation writeup, root-cause math, and regression tests
@@ -565,7 +564,7 @@ format. 10 of 593 local `.KRZ` files drift in preset/zone count between the
 2nd and 3rd generation — all of them this project's own synthetic multi-voice
 octave-slice pad-stack test/demo banks (`JRSLO*`, `K2KFEATDEMO*`,
 `krz_staging/VPO_BRASSACC|BRASSNOR|VIOLINKS`, `SCSYNTH_01`). **Zero real
-commercial-library files are affected** — the 12 Patchman files that WERE
+commercial-library files are affected** — the 12 third-party soundset files that WERE
 unstable here are now fixed (see the up-pitch-ceiling bug below).
 
 **Root cause:** `writers/krz_writer._coverage_remap_voices()` (the octave-
@@ -977,7 +976,7 @@ the `project_k2000_delete_lockup` memory.
 Key points: isolated to deleting a PROGRAM object (keymap-only delete is clean);
 **reproduces on REAL soundsets** (Monotanz `acguit`, authored `SYNTHEX_1`) — so likely
 **K2000-side, not our converter**. Our program/keymap/sample objects are byte-for-byte
-valid vs real banks (DFLT/CUTLO/xprogs4/SYNTHEX/PMVOL). Leading theory: deleting a
+valid vs real banks (DFLT/CUTLO/xprogs4/SYNTHEX/soundset). Leading theory: deleting a
 program loaded **individually** (partial dependency chain) corrupts the K2000 object
 table. Open: confirm whole-bank-load deletes are reliable; test `PPNOLOOP.img`; check
 OS version / another unit. Uncommitted `_build_keymap_entries` gap-fill (sampleId=0)
@@ -1190,7 +1189,7 @@ Resolution strategy + open questions: `docs/RESOLUTION_NOTES.md` §KRZ-PROG.
 Converted KRZs (ABASBASS / BLKSAW / SF2SET) loaded on the K2000R and created
 their presets, but **played silent**, while pre-existing soundsets played fine.
 Root-caused against KurzFiler source (`/home/lentferj/git-repos/kurzfiler`) +
-ground-truth dumps of real RAM-sample soundsets (Patchman `PMVOL002.KRZ`). The
+ground-truth dumps of real RAM-sample soundsets (a third-party `soundset 002`). The
 sample/keymap/program *framing* was already byte-correct; the bugs were all in
 **sample header field values** the program-only test banks never exercised:
 
@@ -1207,7 +1206,7 @@ sample/keymap/program *framing* was already byte-correct; the bugs were all in
    `100*(R_sample − R_zone) + fine_tune` (0 in the common case).
 4. **`altSampleStart`** was loopStart → must equal `sampleStart` (real files).
 5. **`maxPitch`** formula corrected to `100*root + 1200*log2(48000/sr)` (the
-   48 kHz transpose ceiling; RE'd from PMVOL002).
+   48 kHz transpose ceiling; RE'd from soundset 002).
 
 Fix in `writers/krz_writer.py` (`_write_sample_object`, `_build_keymap_entries`,
 `_compute_max_pitch`). Verified structurally identical to real soundsets with
@@ -1712,10 +1711,10 @@ XPM `TuneCoarse` (inst + layer summed) → `ZoneMapping.coarse_tune` → vpar[35
 XPM `TuneFine` (inst + layer summed, cents) → `ZoneMapping.fine_tune` → vpar[36]
 with proper unit conversion.
 
-The Lazloz/JR-Spt "split" character from detuned stacked instruments is now
+The detuned-stack "split" character from detuned stacked instruments is now
 correctly written. Feature-demo banks can be rebuilt to reflect this.
 
-**⚠ Demo-bank rebuild pending:** `JR_LAZLOZSPL`, `JR_SLOBANDSW`, `JR_JRISINGSP`
+**⚠ Demo-bank rebuild pending:** `DETUNESPLIT`, `WIDEDRONE`, `RISINGSPLIT`
 need a rebuild to pick up the new tuning output.
 
 ---
@@ -1724,11 +1723,11 @@ need a rebuild to pick up the new tuning output.
 
 **Status:** **RESOLVED 2026-06-12.** `_safe_name(..., tail=True)` keeps the
 distinguishing *tail* for sample names (preset/bank names still head-truncate).
-Verified: Lazloz samples keep distinct `…_C1_A`-style names.
+Verified: the detuned-stack split preset samples keep distinct `…_C1_A`-style names.
 
 When many samples share a >16-char common prefix, `_safe_name`'s 16-char
 truncation destroys the distinguishing suffix and the dedup counter replaces it
-with a meaningless index. `Inst-Pad-JR Lazloz Split.xpm` references
+with a meaningless index. `the detuned-stack split preset.xpm` references
 `Inst-Pad-LazSp-UniPanBass_C1_A … _C4_C` (26-char shared prefix) → all become
 `Inst-Pad-LazSp-U`, `…-1`, `…-2`, … (Jan: "S222-S233 often have the same
 names"). They stay unique but lose the C1_A/C2_B identity and look like
@@ -1819,7 +1818,7 @@ tracking `RootNote=0` zone the root now comes from the sample's **WAV `smpl`
 unity note** (`load_wav` reads it; `xpm_parser` uses it), falling back to the
 keygroup low note only when the WAV carries no unity note.  This fixed the **+36
 transpose** on Jupiter-Rising patches (lowest sample rooted at C1=36, but
-lo_key=0).  Verified: Lazloz Split now root_keys 36/48/60/72 (was 0).  See
+lo_key=0).  Verified: the detuned-stack split preset now root_keys 36/48/60/72 (was 0).  See
 `docs/aural_notes.md` §E/§F.
 
 `xpm_parser.py:331` decides key-tracking from `smp_mode = (raw_root == 0)`. This
@@ -1932,7 +1931,7 @@ voice for the whole file. Fix strategy + the group-vs-overlap-lane design
 decision in `docs/RESOLUTION_NOTES.md`.
 
 Note: this is the same "thin vs thick" class of issue as the XPM 122× unison
-stack ([[SloBand]] slice item) — both come down to the E4B needing parallel
+stack ([[the wide-drone preset]] slice item) — both come down to the E4B needing parallel
 voices to stack.
 
 ---
@@ -1950,8 +1949,7 @@ and `<SliceLoop>` (Pad Loop mode: 0=Off, 1=Forward, 2=Reverse, 3=Alternating)
 fields that select a sub-range of the referenced WAV in **sample frames** and
 loop from the Loop Position (`SliceLoopStart`) to the Pad End (`SliceEnd`). The
 current parser ignores all of these — it loads the full WAV and creates no loop
-points. Presets built on slice-based layers (e.g. `Inst-Synth-JR SloBand
-Sweeper.xpm`, which loops 7 short drone segments and stacks one 122×) sound
+points. Presets built on slice-based layers (e.g. `Inst-Synth-the wide-drone preset.xpm`, which loops 7 short drone segments and stacks one 122×) sound
 "metallic and distorted" because the full, non-looped WAV bears no resemblance to
 the intended looping slice.
 
@@ -2048,7 +2046,7 @@ on disk), ISO + colour-preserved ODS regenerated.
 
 ---
 
-## KRZ #204 SloBand Sweeper — structure fixes 2026-06-24 (junk KGs, +12); gaps remain
+## KRZ #204 the wide-drone preset — structure fixes 2026-06-24 (junk KGs, +12); gaps remain
 
 Deep-dived with Jan A/B-ing on the K2000R. The XPM is **8 keygroups** (4 key-bands
 × A/B pan pair, samples UniDrone C1/C2/C3/C4, unity 36/48/60/72) but pads to **128
@@ -2061,7 +2059,7 @@ Instrument slots** — KG9–128 are 120 identical junk copies (24–47 C1). All
   voice that the K2000 3-layer cap then *kept while dropping a real one*.
 - **Per-keygroup Pan** now read (instrument-level `<Pan>` + layer, summed).
 - **Semi +12** confirmed already applied (roots = unity−12); staging E4B was just
-  stale → regenerated `feature_staging/JR_SLOBANDSW_01.E4B` and rebuilt the ISO.
+  stale → regenerated `feature_staging/WIDEDRONE_01.E4B` and rebuilt the ISO.
 
 **ALSO FIXED — coverage multisample remap (2026-06-24, Jan's idea).** Wide-range
 octave-slice stacks can't keytrack past the K2000 up-pitch ceiling (~1 octave
@@ -2087,7 +2085,7 @@ keeps it off Bass-DX7 etc.).
    have higher-rooted slices.)
 3. **Sibling JR drones' staging is stale** — the coverage remap (writer) helps
    them, but the junk-KG-drop / +12 / pan PARSER fixes only apply when their
-   staging E4B is regenerated; only SloBand's was this round. Regenerate
+   staging E4B is regenerated; only the wide-drone preset's was this round. Regenerate
    `JR_*` staging from XPM to apply those uniformly.
 
 ## Band-Boost (BB) filters map to BANDPASS — RESOLVED 2026-06-25 (E4B + KRZ)
@@ -2129,7 +2127,7 @@ emits 2-pole BANDPASS — still wrong.)
 
 ## KRZ: bandpass + filter-env-sweep preset plays silent (OPEN, 2026-06-21)
 
-`K2KFEATDEMO` #204 "Inst-Synth-JR SloBand Sweeper" emits no sound on the K2000R.
+`K2KFEATDEMO` #204 "the wide-drone preset" emits no sound on the K2000R.
 Diagnosed: samples (UniDrone, root C1) have audio + loops, keymap keys assigned, amp
 env fine. The **2-pole bandpass** (HOB0[0]=3) is centered at cutoff byte **−12 (≈130 Hz**,
 from source `Cutoff=0.285`) and swept by the filter env (HOB0[5]=121 ENV2, depth 60); on

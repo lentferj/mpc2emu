@@ -948,7 +948,7 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
     )
     # The XPM always carries 128 Instrument slots; only the first
     # KeygroupNumKeygroups are real — the rest are padding (often duplicates of
-    # one keygroup, e.g. SloBand Sweeper's 120 copies of a 24-47 C1 slice that
+    # one keygroup, e.g. the wide-drone preset's 120 copies of a 24-47 C1 slice that
     # otherwise survive dedup as a junk voice and eat a K2000 layer).  Trim to
     # the declared count.
     n_kg = int(float(_get_text(root, './/KeygroupNumKeygroups', '0')) or 0)
@@ -962,7 +962,7 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
     # plus a parameter signature; units are then lane-allocated into voices so
     # that overlapping (simultaneously-sounding) layers become *parallel* voices
     # — the E4XT plays one zone per note per voice, so stacked MPC layers must be
-    # separate voices to actually stack (fixes thin/collapsed pads, e.g. Lazloz).
+    # separate voices to actually stack (fixes thin/collapsed pads, e.g. the detuned-stack split preset).
     all_units: list = []          # list of (params_key, inst_idx, ZoneMapping, non_transpose)
     inst_params: dict = {}        # inst_idx -> dict of voice-level params (env/filter/lfo)
 
@@ -1091,7 +1091,7 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
             # root-unset layer (0-127 oscillator/texture with no key info, e.g.
             # DX7 "Chain-Synth Oscillators").  Every other root-unset keygroup is
             # a normal multisample zone — even wide drone/"UniDrone" splits are
-            # meant to play CHROMATICALLY (Jan: SloBand must track per key) — so
+            # meant to play CHROMATICALLY (Jan: the wide-drone preset must track per key) — so
             # it key-tracks with root = keygroup LowNote (CWM writer fallback),
             # which matches the sample's recorded pitch (the pack roots each
             # sample at its keygroup low note).  Option B — RESOLUTION_NOTES.md.
@@ -1101,7 +1101,7 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
             vol_linear = float(_get_text(layer, 'Volume', '1.0'))
             volume = 20.0 * math.log10(max(vol_linear, 1e-6))
             # Pan lives at BOTH the keygroup (Instrument) and layer level (0-1,
-            # 0.5=center).  Many MPC pads pan per keygroup (e.g. SloBand Sweeper's
+            # 0.5=center).  Many MPC pads pan per keygroup (e.g. the wide-drone preset's
             # A/B copies hard L/R for stereo width) with the layer left centered,
             # so sum both and clamp.
             inst_pan  = (float(_get_text(instrument, 'Pan', '0.5')) - 0.5) * 2.0
@@ -1198,7 +1198,7 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
                     or a.hi_vel < b.lo_vel or a.lo_vel > b.hi_vel)
 
     # Drop fully-identical units first.  Some MPC presets stack the *same*
-    # sample/zone dozens of times (e.g. SloBand Sweeper layers one slice 122×)
+    # sample/zone dozens of times (e.g. the wide-drone preset layers one slice 122×)
     # as a polyphony/unison trick; on the E4XT that's just N identical voices
     # adding level, not character, and would blow the voice budget.  Keep one.
     _seen_units: set = set()

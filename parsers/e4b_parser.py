@@ -234,7 +234,7 @@ def _parse_sample_body(body: bytes) -> tuple:
         # two PCM blocks stored SEQUENTIALLY (all of left, then all of right)
         # and addressed by the L/R halves of each position pair. Corpus-RE'd
         # 2026-07-29 over 473 local .E4B files: 4803 of 20383 sample objects
-        # (23.6%) are stereo this way, e.g. "24SldUpStC1" with
+        # (23.6%) are stereo this way, e.g. "a stereo slide sample" with
         # startL=92 endL=154458 / startR=154460 endR=308826 over 308736 PCM
         # bytes -- two equal 154368-byte blocks, and per-channel loop points
         # (lsL=104 is 12 bytes into left, lsR=154472 is 12 bytes into right).
@@ -466,7 +466,7 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     # stage has a nonzero TIME in only ~1-2% of voices (attack2 1.1%, decay2
     # 1.6%, release2 0.2%) — usually negligible — but where decay2's LEVEL
     # differs sharply from decay1's (0.9% of voices, concentrated in one-shot
-    # SFX content — e.g. a "ProRec Hollywood" bank's laser/explosion/dialogue
+    # SFX content — e.g. a "a commercial SFX library the SFX bank" bank's laser/explosion/dialogue
     # hits), decay1 alone reports "holds near-full forever" when the real
     # envelope decays to silence over decay1+decay2's combined time (one
     # measured case: decay1 rate byte 0 = 31ms read as the whole decay, vs.
