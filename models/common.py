@@ -240,9 +240,23 @@ def e4xt_cutoff_position(hz: float) -> float:
 # Per-zone volume: vpar[54] / zone entry [15] is labelled dB, but the audio
 # response is quadratic in the byte -- measured over 13 points, 0 to -24 dB,
 # fitted to within 0.39 dB:  delivered_dB = 0.43362*B - 0.012738*B^2
-_E4XT_VOL_C1 = 0.43362
-_E4XT_VOL_C2 = -0.012738
-E4XT_VOL_MEASURED_FLOOR_DB = -18.05   # what B = -24 actually delivers
+# Refitted 2026-07-31 on CLEAN data, after the first fit turned out to be
+# contaminated. The first 13-point ladder put each gain on a different KEY and
+# produced a strongly curved law; measuring again with the key held constant
+# (velocity-banded voices on one note) gives an almost exactly LINEAR
+# response, ~0.767 dB per byte unit, fitting to 0.33 dB.
+#
+# Two candidate confounds were tested and BOTH came back flat, so neither
+# explains the original curvature: output level does not depend on key
+# (identical non-transposing voice measured +/-0.00 dB across C1-C6) and does
+# not depend on velocity (+0.00 dB from velocity 5 to 125). The disagreement
+# between the two datasets is therefore still unexplained -- they agree at
+# both endpoints and diverge by ~2 dB in the middle -- but the newer one holds
+# key constant, carries its own control preset, and fits a far more plausible
+# law, so it is the one used here.
+_E4XT_VOL_C1 = 0.76732
+_E4XT_VOL_C2 = 0.000246
+E4XT_VOL_MEASURED_FLOOR_DB = -22.90   # what B = -30 actually delivers
 
 
 def e4xt_volume_byte(db: float) -> int:
