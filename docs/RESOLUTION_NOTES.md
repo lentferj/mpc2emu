@@ -4348,6 +4348,27 @@ cheapest and strictest regression check available when touching a writer, and
 this made it useless — which is precisely when you least want to be without
 it.
 
+**Audit of the other writers (same day): clean.** An AST pass over `writers/`,
+`parsers/`, `processors/`, `models/` and `convert.py` found only **two**
+set-iteration sites, and neither can affect output order — one is a boolean
+`any()` inside a counter (`eiii_parser`), the other picks its result by
+minimum recorded traversal position rather than by iteration order
+(`xpm_parser._find_wav`, made that way deliberately; its comment says so).
+Dict iteration elsewhere is insertion-ordered in Python 3.7+ and therefore
+safe. The worker pools in `resampler`, `auto_loop` and `single_cycle` all use
+`ProcessPoolExecutor.map`, which preserves input order.
+
+Confirmed empirically rather than by reading: `--format e4b`, `krz`, `eiii`
+and `talsmpl` all produce byte-identical output across different
+`PYTHONHASHSEED` values, including `talsmpl`'s 21 exported WAVs.
+
+*Method note, because it bit me:* comparing `find | xargs md5sum` output
+between two runs reports a difference even when every file matches, since
+`md5sum` prints the path and the two runs live in differently-named
+directories. All four formats looked nondeterministic until the comparison
+was done per file. `md5sum` on a directory also fails silently and compares
+"equal", which turned an unchecked `samples/` directory into a false pass.
+
 ### Offline confirmation round (2026-07-29) — what raised confidence short of hardware
 
 Asked how certain the stereo work is without a hardware re-check. Four
