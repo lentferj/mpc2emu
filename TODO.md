@@ -26,6 +26,8 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 | item | note |
 |------|------|
 | **KRZ stereo** | mono in both directions; the format side is already RE'd, so this is implementation |
+| **Normalised-knob cutoff sources** | XPM/TAL/PGM dump a raw 0–1 knob into a field that means Hz — and the E4XT calibration made the mismatch bite |
+| **Bank sizing ignores stereo voice cost** | a stereo sample costs 2 voices and there is a ~32/note limit; the estimator knows neither |
 | **Corpus scan may count sampler OS files as banks** | see below |
 | **GIG→E4B fine-tune / per-zone volume** | both dropped on the way to the zone entry |
 | **AIFF not decoded**, **EXS24 first velocity layer only**, **SFZ keyswitches / overlapping regions**, **XPM slice playback** | parser feature gaps |
@@ -46,6 +48,75 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 | **The ~2 dB gain-dataset anomaly** | key, velocity and transposition all measured flat. Isolated to one early measurement that four later independent runs contradict. Recorded in case it recurs |
 
 ---
+
+## Normalised-knob sources violate the `filter_cutoff` contract (OPEN, 2026-08-01)
+
+**This is the one place the E4XT calibration work changed behaviour that had
+not been asked about, so it is worth stating plainly.**
+
+The shared internal `filter_cutoff` (0–1) is contractually a **position on the
+57 Hz – 20 kHz exponential**, defined by `hz_to_e4b_cutoff`. Parsers that know
+their source's cutoff in Hz honour it — `sf2_parser`, `exs24_parser`,
+`krz_parser`, `eiii_parser` all call `hz_to_e4b_cutoff(hz)` — and for those the
+2026-07-31 correction is unambiguously right: a request in Hz now lands within
+a few percent on the E4XT, where it used to be up to an octave and a half dark.
+
+But three parsers assign a **source's own normalised knob** straight into that
+field, treating it as "whatever 0–1 the source used":
+
+| parser | line | value |
+|--------|------|-------|
+| `xpm_parser` | `filt_cutoff` from MPC `<Cutoff>` | MPC's 0–1 control |
+| `talsmpl_parser` | `float(prog['filtercutoff'])` | TAL's 0–1 knob |
+| `pgm_parser` | `min(1.0, f1_freq / 99.0)` | MPC1000's 0–99 scaled |
+
+That was always a contract violation, but it was **invisible** while the
+writer mapped position to byte linearly. Now the writer interprets the
+position precisely, so those sources shifted:
+
+| knob | old byte → Hz | new byte → Hz |
+|------|---------------|---------------|
+| 0.25 | 64 → 301 Hz | 53 → 247 Hz |
+| 0.50 | 128 → 760 Hz | 153 → 1068 Hz |
+| 0.75 | 191 → 1504 Hz | 237 → **4552 Hz** |
+
+**Neither column is grounded** — the MPC's and TAL's own knob-to-Hz curves have
+never been measured, so there is no basis for calling either right. What is
+certain is that MPC/TAL/MPC1000-sourced filters now sound different from
+before, in a direction nobody verified.
+
+**The fix is a mapping, not a hack:** measure (or find) each source's
+knob → Hz curve and convert through `hz_to_e4b_cutoff` like every other
+parser. For MPC that is a bench task on the MPC itself and belongs with the
+MPC 3.x parameter checklist, which already lists `filterCutoff` scale as item
+A3.
+
+**Status:** open. **Blocked on:** the source-side curves. Until then the three
+parsers remain uncalibrated — as they always were, just now with a different
+wrong answer.
+
+## Bank sizing does not know a stereo sample costs two voices (OPEN, 2026-08-01)
+
+Measured 2026-07-31: on the E4XT a **stereo sample consumes two voices**, and
+there is a **~32-voice limit per NOTE** (global polyphony of 128 is intact —
+32 voices on each of four keys all sound).
+
+Neither fact reaches the code that reasons about size and fit.
+`writers/bank_splitter.py` and `processors/zone_reducer.py` contain no
+stereo or voice-count awareness at all, so:
+
+- `--max-preset-size` and the fit assistant under-count a stereo preset's real
+  voice usage by 2×;
+- a preset stacking more than **16 stereo layers on one key** (or 32 mono)
+  will have voices silently stolen on playback, and nothing warns.
+
+This matters more since stereo became the default: presets that used to be
+downmixed now carry twice the voice cost through exactly the logic that does
+not know it.
+
+**Status:** open. **Blocked on:** nothing — the facts are measured; this is
+teaching the estimator about them, plus a warning when a preset exceeds ~32
+voices on any single key.
 
 ## Corpus scan may count sampler OS files as banks (OPEN, 2026-08-01)
 
