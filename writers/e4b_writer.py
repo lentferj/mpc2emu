@@ -759,8 +759,12 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
     # rests on the SAME differential save and the same reasoning, so its audio
     # law is likewise unmeasured -- we do not actually know that pan -64
     # produces full-left, nor that the law between the endpoints is linear.
-    # The same caveat applies to vpar[42] Chorus Amount below, whose evidence
-    # is UI-percentage-vs-byte agreement.
+    # vpar[42] Chorus Amount below carried the same weak evidence, but was
+    # MEASURED on 2026-08-01 and came out right: amount maps linearly to
+    # detune depth (spectral width 0.45 / 4.55 / 9.09 / 13.64 / 19.09 Hz at
+    # 0/25/50/75/100%, with the beat rate tracking it — two independent
+    # readings of the same quantity, which is the check that it is real). So
+    # the linear UI-to-byte mapping does produce a linear audible effect.
     #
     # Two independent parameters have now failed this way, so panel agreement
     # is recorded here as insufficient evidence for any LEVEL or AMOUNT law.

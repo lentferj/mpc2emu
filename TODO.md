@@ -144,8 +144,16 @@ staged at `~/temp/pan_fidelity/` (43 points), waiting on a card window:
 **Status:** law measured and fitted; implementation deliberately withheld.
 **Blocked on:** Jan's fidelity call, plus `P_PANVOL` for feasibility.
 
-**Chorus (`vpar[42]`) remains unmeasured** — same class of claim, not in any
-bank yet.
+**Chorus (`vpar[42]`) MEASURED 2026-08-01 — and it is correct.** Amount maps
+linearly to detune depth: spectral width 0.45 / 4.55 / 9.09 / 13.64 / 19.09 Hz
+at 0 / 25 / 50 / 75 / 100%, with the beat rate tracking it (3.74 / 8.56 /
+12.83 / 18.72 Hz). Those are two independent readings of the same physical
+quantity — a chorus detuning a copy by Δf produces a beat at Δf and a spread
+of ~Δf — so their agreement is what makes the reading trustworthy. The linear
+UI-to-byte mapping therefore does produce a linear audible effect. Unlike
+volume and pan, this panel-derived claim survived measurement.
+
+**No EOS parameter this project writes now rests on panel evidence alone.**
 
 Caveat recorded in `writers/e4b_writer.py` at the claim itself: panel
 agreement is not sufficient evidence for a level or amount law.
@@ -223,12 +231,19 @@ dataset was contaminated. Applied in `e4b_writer` and inverted in
 `e4b_parser`; replayed on the E4XT at 7 points, **max error 0.34 dB** against
 6.5 dB uncorrected.
 
-**Still open, and worth someone's curiosity:** the two gain datasets disagree
-by ~2 dB in the middle while agreeing at both endpoints, and the two obvious
-explanations were measured and eliminated — level depends on neither key
-(±0.00 dB across C1–C6) nor velocity (+0.00 dB, 5→125). The shipped law is
-the one that verifies on hardware, but *why* the first one differed is
-unknown.
+**Still unexplained, but now isolated.** The two gain datasets disagree by
+~2 dB in the middle while agreeing at both endpoints. Three candidate causes
+have been measured and eliminated: level depends on neither **key** (±0.00 dB
+across C1–C6), **velocity** (+0.00 dB, 5→125), nor **transposition** (2026-08-01,
+the same 13 gains on transposing vs non-transposing keys differ by ≤0.66 dB,
+mostly 0.20).
+
+That exhausts the structural differences between the two datasets. The
+reasonable conclusion is not that the discrepancy is understood but that it is
+**isolated to one anomalous early measurement**, which four later independent
+runs — different presets, different selection mechanisms, different sessions —
+all contradict. The shipped linear law verifies on hardware at 7/7 within
+0.34 dB. Left open in case it ever recurs; not worth further hunting.
 
 ## E4B cutoff position → Hz is wrong above ~0.3 (OPEN, 2026-07-31)
 
