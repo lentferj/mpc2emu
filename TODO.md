@@ -131,8 +131,18 @@ a user setting that pan on the front panel would hear exactly this.
    voice's own volume setting, a single curve cannot compensate it and the
    whole approach fails.
 
+**Bank prepared 2026-07-31** — `tests/re_banks/gen_pan_fidelity_bank.py`,
+staged at `~/temp/pan_fidelity/` (43 points), waiting on a card window:
+
+| preset | settles |
+|--------|---------|
+| `P_PANVOL` | **the prerequisite** — pan × volume matrix, 3 pans at each of 3 volumes. If the excess curve differs between volume groups, no single correction can work and the question closes by arithmetic |
+| `P_PANFLT` | whether the excess belongs to the pan control or the output stage behind it |
+| `P_GAINXPO` | the ~2 dB gain discrepancy — the same 13 gains on transposing vs non-transposing keys. Key and velocity are already ruled out, so transposition is the last structural difference between the two datasets |
+| `P_CHORUS` | `vpar[42]`, the last claim still resting on panel-vs-byte evidence |
+
 **Status:** law measured and fitted; implementation deliberately withheld.
-**Blocked on:** (1) above, then a hardware pass for (2) and verification.
+**Blocked on:** Jan's fidelity call, plus `P_PANVOL` for feasibility.
 
 **Chorus (`vpar[42]`) remains unmeasured** — same class of claim, not in any
 bank yet.
