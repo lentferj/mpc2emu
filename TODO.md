@@ -26,6 +26,7 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 | item | note |
 |------|------|
 | **KRZ stereo** | mono in both directions; the format side is already RE'd, so this is implementation |
+| **Cutoff: design freq or −3 dB corner?** | E-mu's spec documents a closed-form byte→Hz curve that disagrees with our measurement 3× — because they describe different quantities. Which should we target? |
 | **Normalised-knob cutoff sources** | XPM/TAL/PGM dump a raw 0–1 knob into a field that means Hz — and the E4XT calibration made the mismatch bite |
 | **Bank sizing ignores stereo voice cost** | a stereo sample costs 2 voices and there is a ~32/note limit; the estimator knows neither |
 | **Corpus scan may count sampler OS files as banks** | see below |
@@ -48,6 +49,41 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 | **The ~2 dB gain-dataset anomaly** | key, velocity and transposition all measured flat. Isolated to one early measurement that four later independent runs contradict. Recorded in case it recurs |
 
 ---
+
+## Cutoff: design frequency or −3 dB corner? (OPEN, 2026-08-01)
+
+Found by cross-referencing the sibling project **eosed**, which transcribed
+E-mu's own editor-protocol parameter spec. E-mu documents a **closed-form
+cutoff byte → Hz conversion** — `fil_freq(value, maxfreq, mul)`, exponentially
+spaced down from `maxfreq`, with three tables selected by filter type.
+
+It disagrees with the law measured here on 2026-07-31 by up to **3×** in the
+middle of the range. That is not automatically a contradiction: the spec's
+number is the **displayed / design** frequency, ours is the **acoustic −3 dB
+corner** of a 4-pole lowpass measured on noise, and a 4-pole cascade's −3 dB
+point sits well below its design frequency — the direction the disagreement
+actually runs.
+
+**The question is which one mpc2emu should be targeting.** Source formats
+(SF2, EXS24, SFZ, GIG) specify a filter *design* frequency, the same convention
+as the E4XT's panel — not a measured −3 dB point. If that is right, the current
+calibration is systematically **low**, and the spec's closed form would be the
+better mapping: exact for all 256 byte values, and per filter type rather than
+measured on one type only.
+
+**Not acted on**, because it needs a measurement that distinguishes the two
+conventions rather than an argument. The cleanest test is to set a known byte,
+read the frequency the **front panel displays**, and compare that against both
+the spec's closed form and our measured corner — a couple of minutes at the
+device, and it settles which quantity our calibration should chase.
+
+Full write-up in `docs/E4B_FORMAT.md` §"Cross-reference: the EOS
+editor-protocol parameter spec", along with two other things worth taking from
+eosed (official parameter names/ranges for fields RE'd anonymously here, and
+the official 6-stage envelope segment names, which independently confirm the
+PZT rate/level pairing).
+
+**Status:** open. **Blocked on:** one panel reading at the device.
 
 ## Normalised-knob sources violate the `filter_cutoff` contract (OPEN, 2026-08-01)
 

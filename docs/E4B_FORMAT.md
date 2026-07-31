@@ -775,3 +775,80 @@ No third-party source code was copied into mpc2emu; this document and the
 corresponding writer (`writers/e4b_writer.py`) are independent
 implementations informed by the above sources plus original hardware
 differential analysis.
+
+---
+
+## Cross-reference: the EOS editor-protocol parameter spec (2026-08-01)
+
+The sibling project **eosed** (`~/git-repos/eosed`) talks to the E4XT live over
+E-mu's *editor protocol* SysEx, and in doing so transcribed E-mu's own
+parameter specification — ~270 parameters with names, ranges, units and, for
+several, the literal display-conversion functions from the spec's C source
+(`eos/params.py`, their RESOLUTION_NOTES §2).
+
+That document is authoritative in a way this file's contents are not: almost
+everything here was reverse-engineered by differential saves and byte hunting.
+Three things are worth taking from it, and one raises a question about our own
+calibration.
+
+### 1. Official names for things we RE'd anonymously
+
+The parameter ids are **not** our `vpar[]` offsets — they are a separate SysEx
+id space (e.g. non-transpose is parameter 57 there, `vpar[38]` here) — but the
+*semantics, ranges and units* describe the same machine, and they corroborate
+the RE:
+
+| spec parameter | range / unit | our field |
+|----------------|--------------|-----------|
+| `E4_VOICE_NON_TRANSPOSE` | 0/1 | `vpar[38]` |
+| `E4_VOICE_CHORUS_AMOUNT` | 0–100 % | `vpar[42]` |
+| `E4_VOICE_VENV_SEG0..4_RATE` / `_TGTLVL` | 0–127 / 0–100 % | the 6-stage amp PZT pairs |
+| `E4_VOICE_VOLENV_DEPTH` | 0–16, "−96 dB to −48 dB by 3's" | not written |
+
+### 2. The 6-stage envelope segments have official names
+
+`Atk1 / Dcy1 / Rls1 / Atk2 / Dcy2 / Rls2` — exactly the rate/level pair
+structure RE'd here, confirming the pairing and the ordering independently.
+
+### 3. E-mu documents a closed-form cutoff byte → Hz conversion
+
+```
+fil_freq(value, maxfreq, mul):   # value 0..255
+    f = maxfreq
+    repeat (255 - value) times:  f = f * mul // 1024
+    return f
+```
+
+with three tables — `(20000, 1002)`, `(18000, 1003)`, `(10000, 1006)` —
+selected by filter type.
+
+**It does not agree with the cutoff law measured here on 2026-07-31**, by up
+to 3× in the middle of the range. That is not necessarily a contradiction,
+because the two describe different quantities:
+
+- the spec's value is the **displayed / design** frequency, which is what the
+  front panel shows;
+- ours is the **acoustic −3 dB corner** of a 4-pole lowpass, measured on noise.
+
+A 4-pole cascade's −3 dB point sits well below its design frequency, and the
+disagreement runs in exactly that direction. So both may be right about their
+own quantity.
+
+**But that leaves a real question about which one mpc2emu should target.**
+Source formats (SF2, EXS24, SFZ, GIG) specify a filter *design* frequency, the
+same convention as the panel — not a measured −3 dB point. If so, the
+2026-07-31 calibration, which makes the acoustic corner match the requested Hz,
+may be systematically **low**, and the spec's closed form would be the better
+mapping — with the added advantages of covering all 256 byte values exactly and
+being per-filter-type rather than measured on one type only.
+
+Recorded as an open item in `TODO.md`; not acted on, because deciding it needs
+a measurement that distinguishes the two conventions rather than an argument.
+
+### What flows the other way
+
+eosed deliberately did **not** transcribe the LFO-rate display table (their §2:
+the source table's page-wrap is ambiguous). This project calibrated it
+empirically instead, from the E4XT's own rate menu — byte 0 = 0.08 Hz,
+64 = 4.12 Hz, 127 = 18.01 Hz, fitted log-quadratically in `models/common.py`.
+That is usable by them directly.
