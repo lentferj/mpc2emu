@@ -39,7 +39,8 @@ from pathlib import Path
 from models.common import (Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            LoopType, Envelope, lfo_rate_byte_to_hz,
                            env_rate_to_seconds, env_byte_to_level,
-                           cord_byte_to_amount)
+                           cord_byte_to_amount,
+                           e4xt_cutoff_byte_to_position, e4xt_byte_to_volume_db)
 
 
 # ---------------------------------------------------------------------------
@@ -346,11 +347,18 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     # (signed byte, -64=full-L..+63=full-R). Only meaningful for a
     # single-zone voice — a multi-zone voice ignores these and uses each
     # zone's own absolute value instead (see the zone loop below).
-    v_volume         = float(vpar[54] - 256 if vpar[54] > 127 else vpar[54])
+    # Same inverse requirement as the cutoff above: vpar[54] is the corrected
+    # byte, not the dB value, so decode it through the measured volume law.
+    v_volume         = e4xt_byte_to_volume_db(
+        vpar[54] - 256 if vpar[54] > 127 else vpar[54])
     v_pan            = max(-1.0, min(1.0, (vpar[55] - 256 if vpar[55] > 127 else vpar[55]) / 64.0))
     chorus_amount    = vpar[42] / 127.0   # Chorus Amount: 0-127 -> 0.0-1.0 (see _build_voice)
     filter_byte      = vpar[58]
-    filter_cutoff    = vpar[60] / 255.0
+    # vpar[60] holds a HARDWARE-CORRECTED byte (writers/e4b_writer.py applies
+    # the measured E4XT cutoff law), so it must be inverted back to the shared
+    # nominal position here -- otherwise parser and writer stop being inverses
+    # and an E4B->E4B conversion applies the correction twice. See §E4BFILTCAL.
+    filter_cutoff    = e4xt_cutoff_byte_to_position(vpar[60])
     filter_resonance = vpar[61] / 127.0
     if filter_byte in (0x20, 0x21, 0x22):
         # Swept EQ 1-oct = parametric band gain; vpar[61] is GAIN, not Q
@@ -558,7 +566,7 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
             # writer leaves them at 0 for a multi-zone voice (see
             # writers/e4b_writer.py._build_voice).
             zone_fine_tune = round(struct.unpack_from('>h', entry, 12)[0] * 100.0 / 64.0)
-            zone_volume    = float(entry[15] - 256 if entry[15] > 127 else entry[15])
+            zone_volume    = e4xt_byte_to_volume_db(entry[15] - 256 if entry[15] > 127 else entry[15])
             zone_pan       = max(-1.0, min(1.0, (entry[16] - 256 if entry[16] > 127 else entry[16]) / 64.0))
         else:
             # Single-zone voice: the voice's own vpar[36]/[54]/[55]

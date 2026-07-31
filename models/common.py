@@ -211,8 +211,14 @@ E4XT_CUTOFF_A_HZ = 125.86     # cutoff position 0.0 measures here, not 57 Hz
 E4XT_CUTOFF_K = 3.4937        # Hz = A * e^(K * position), r = 0.9958
 # Position 1.0 is NOT the top of that curve -- it measures wide open (>20 kHz),
 # i.e. the control is a sweep to ~4.1 kHz with a bypass endpoint.
-E4XT_CUTOFF_TOP_HZ = E4XT_CUTOFF_A_HZ * math.exp(E4XT_CUTOFF_K)   # ~4142 Hz
-E4XT_CUTOFF_BYPASS_ABOVE_HZ = math.sqrt(E4XT_CUTOFF_TOP_HZ * 20000.0)  # ~9.1 kHz
+# The fit covers positions 0.0-0.9 only; 0.9 measured 3390 Hz and 1.0 measured
+# wide open, with nothing sampled in between. So the highest frequency we can
+# actually ASK for is the one at position 0.9 -- extrapolating the curve to
+# 1.0 would both invent an unmeasured 4.1 kHz endpoint and collide with the
+# bypass that position really produces.
+E4XT_CUTOFF_MAX_POS = 0.9
+E4XT_CUTOFF_TOP_HZ = E4XT_CUTOFF_A_HZ * math.exp(E4XT_CUTOFF_K * E4XT_CUTOFF_MAX_POS)  # ~3390 Hz
+E4XT_CUTOFF_BYPASS_ABOVE_HZ = math.sqrt(E4XT_CUTOFF_TOP_HZ * 20000.0)   # ~8.2 kHz
 
 
 def e4xt_cutoff_position(hz: float) -> float:
@@ -228,7 +234,7 @@ def e4xt_cutoff_position(hz: float) -> float:
     if hz >= E4XT_CUTOFF_BYPASS_ABOVE_HZ:
         return 1.0
     pos = math.log(max(hz, 1e-6) / E4XT_CUTOFF_A_HZ) / E4XT_CUTOFF_K
-    return max(0.0, min(0.999, pos))
+    return max(0.0, min(E4XT_CUTOFF_MAX_POS, pos))
 
 
 # Per-zone volume: vpar[54] / zone entry [15] is labelled dB, but the audio
@@ -264,6 +270,33 @@ def e4xt_volume_byte(db: float) -> int:
         return -128
     root = (-_E4XT_VOL_C1 + math.sqrt(disc)) / (2.0 * _E4XT_VOL_C2)
     return int(max(-128, min(0, round(root))))
+
+
+def e4xt_cutoff_byte_to_position(byte: int) -> float:
+    """Inverse of the writer's correction: a vpar[60] byte -> the SHARED 0-1
+    position it represents.
+
+    The parser and the writer must stay exact inverses. Once the writer began
+    emitting a hardware-corrected byte rather than the nominal position,
+    reading `vpar[60] / 255` back as if it were nominal made every E4B->E4B
+    round-trip drift -- and because convert.py re-parses and re-writes, that
+    meant the correction was applied twice on a single conversion.
+    """
+    if byte >= 255:
+        return 1.0
+    hw_hz = E4XT_CUTOFF_A_HZ * math.exp(E4XT_CUTOFF_K * (byte / 255.0))
+    pos = math.log(max(hw_hz, 1e-6) / E4B_CUTOFF_MIN_HZ) / math.log(
+        E4B_CUTOFF_MAX_HZ / E4B_CUTOFF_MIN_HZ)
+    return max(0.0, min(1.0, pos))
+
+
+def e4xt_byte_to_volume_db(byte: int) -> float:
+    """Inverse of `e4xt_volume_byte`: the dB a written byte actually delivers.
+    Same round-trip requirement as the cutoff above."""
+    b = float(byte)
+    if b >= 0.0:
+        return b
+    return _E4XT_VOL_C1 * b + _E4XT_VOL_C2 * b * b
 
 
 def hz_to_e4b_cutoff(hz: float) -> float:
