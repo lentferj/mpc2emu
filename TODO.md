@@ -86,9 +86,21 @@ So we do not know that pan −64 produces full-left, nor that the law between
 the endpoints is linear. `vpar[42]` **Chorus Amount** is the same class of
 claim (UI percentage vs byte, verified against saved banks, never played).
 
-**Status:** open. **Blocked on:** one bank load — `P_PANLAW` in the EOS
-follow-up bank sweeps pan L→R for per-channel measurement. Chorus is harder
-to quantify and is not in that bank.
+**MEASURED 2026-07-31 — pan was wrong, exactly as the audit suspected.**
+Sweeping pan and reading the two channels separately shows **full deflection
+is reached at byte ±32, not ±64**. Our `pan × 64` mapping therefore threw away
+half the range: anything past ±0.5 collapsed to hard-panned, so a preset at
+−0.6 sounded identical to one at −1.0. Fixed to `× 32` in writer, parser and
+model; the panel really does show ±64, which is precisely why panel agreement
+could never have caught this.
+
+**Still open, deliberately not fixed:** panning also changes *level* — centre
+measures ~4.5 dB quieter than hard-panned, so this is not a constant-power
+law. Compensating would couple pan into volume, which is a larger change than
+it appears and wants its own verification.
+
+**Chorus (`vpar[42]`) remains unmeasured** — same class of claim, not in any
+bank yet.
 
 Caveat recorded in `writers/e4b_writer.py` at the claim itself: panel
 agreement is not sufficient evidence for a level or amount law.

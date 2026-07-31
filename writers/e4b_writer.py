@@ -111,7 +111,7 @@ from models.common import (Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            LoopType, lfo_rate_hz_to_byte,
                            env_seconds_to_rate, env_rate_to_seconds,
                            env_level_to_byte, env_sustain_to_byte, cord_amount_to_byte,
-                           e4xt_cutoff_position, e4xt_volume_byte,
+                           e4xt_cutoff_position, e4xt_volume_byte, e4xt_pan_byte,
                            E4B_CUTOFF_MIN_HZ, E4B_CUTOFF_MAX_HZ)
 from processors.loop_renderer import bake_alternating_loop
 
@@ -510,7 +510,7 @@ def _zone_entry(zone: ZoneMapping, sample_idx: int, write_absolute: bool = False
         # dB -> the byte that actually DELIVERS that dB; writing the value
         # straight in delivers only half to three-quarters of it (§E4BFILTCAL).
         entry[15] = e4xt_volume_byte(zone.volume) & 0xFF
-        entry[16] = max(-64,  min(63,  round(zone.pan * 64.0))) & 0xFF
+        entry[16] = e4xt_pan_byte(zone.pan) & 0xFF
     entry[14] = min(127, zone.root_key)
     return bytes(entry)
 
@@ -770,7 +770,7 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
     # a second hardware test showed this is NOT a voice-value + per-zone-
     # delta composition, the multi-zone case simply doesn't use these bytes).
     vpar[54] = e4xt_volume_byte(_vol) & 0xFF
-    vpar[55] = max(-64,  min(63,  round(_pan * 64.0))) & 0xFF
+    vpar[55] = e4xt_pan_byte(_pan) & 0xFF
     vpar[58] = _XPM_FILTER_TYPE.get(voice.filter_type, 0x00)
     # The 0-1 `filter_cutoff` is the SHARED internal position, defined by the
     # documented 57 Hz..20 kHz law. Convert it to the frequency it is meant to

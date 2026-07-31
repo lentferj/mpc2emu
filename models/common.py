@@ -207,101 +207,126 @@ E4B_CUTOFF_MAX_HZ = 20000.0
 # also consume; correcting them here would silently move those formats too,
 # and neither has hardware calibration to justify that.
 
-E4XT_CUTOFF_A_HZ = 125.86     # cutoff position 0.0 measures here, not 57 Hz
-E4XT_CUTOFF_K = 3.4937        # Hz = A * e^(K * position), r = 0.9958
-# Position 1.0 is NOT the top of that curve -- it measures wide open (>20 kHz),
-# i.e. the control is a sweep to ~4.1 kHz with a bypass endpoint.
-# The fit covers positions 0.0-0.9 only; 0.9 measured 3390 Hz and 1.0 measured
-# wide open, with nothing sampled in between. So the highest frequency we can
-# actually ASK for is the one at position 0.9 -- extrapolating the curve to
-# 1.0 would both invent an unmeasured 4.1 kHz endpoint and collide with the
-# bypass that position really produces.
-E4XT_CUTOFF_MAX_POS = 0.9
-E4XT_CUTOFF_TOP_HZ = E4XT_CUTOFF_A_HZ * math.exp(E4XT_CUTOFF_K * E4XT_CUTOFF_MAX_POS)  # ~3390 Hz
-E4XT_CUTOFF_BYPASS_ABOVE_HZ = math.sqrt(E4XT_CUTOFF_TOP_HZ * 20000.0)   # ~8.2 kHz
+# The cutoff sweep is NOT a single exponential. Fitting one over positions
+# 0.0-0.9 looked convincing (r = 0.9958) but badly underestimates the top:
+# sampling the raw bytes 217-255 that the fit had never covered showed the
+# curve accelerating hard -- byte 252 measures 21.5 kHz where the exponential
+# predicted 4.0 kHz. Extrapolating it would have capped every conversion at
+# ~2.9 kHz while the hardware reaches beyond 20 kHz.
+#
+# So the law is a measured TABLE, interpolated in log-frequency, rather than
+# any assumed form. Positions 0.0-0.8 come from the first white-noise sweep,
+# 0.851-1.0 from the raw-byte sweep that filled the gap. Measured on the E4XT
+# 2026-07-31; see RESOLUTION_NOTES §E4BFILTCAL.
+_E4XT_CUTOFF_TABLE = [
+    (0.000,   133.0), (0.100,   168.0), (0.200,   238.0), (0.300,   378.0),
+    (0.400,   534.0), (0.500,   755.0), (0.600,  1068.0), (0.700,  1199.0),
+    (0.800,  1903.0), (0.851,  2691.0), (0.878,  3390.0), (0.902,  3805.0),
+    (0.925,  4271.0), (0.949,  6041.0), (0.973,  9589.0), (0.988, 21527.0),
+    (1.000, 24163.0),
+]
+E4XT_CUTOFF_MIN_MEASURED_HZ = _E4XT_CUTOFF_TABLE[0][1]
+E4XT_CUTOFF_MAX_MEASURED_HZ = _E4XT_CUTOFF_TABLE[-1][1]
+
+
+def _interp(x, pts, xi=0, yi=1, logy=True):
+    """Piecewise interpolation over a monotonic table of (x, y) pairs."""
+    if x <= pts[0][xi]:
+        return pts[0][yi]
+    if x >= pts[-1][xi]:
+        return pts[-1][yi]
+    for a, b in zip(pts, pts[1:]):
+        if a[xi] <= x <= b[xi]:
+            span = b[xi] - a[xi]
+            t = 0.0 if span == 0 else (x - a[xi]) / span
+            if logy:
+                return math.exp(math.log(a[yi]) + t * (math.log(b[yi]) - math.log(a[yi])))
+            return a[yi] + t * (b[yi] - a[yi])
+    return pts[-1][yi]
 
 
 def e4xt_cutoff_position(hz: float) -> float:
-    """Desired cutoff in Hz -> the position byte fraction that the E4XT really
-    renders at that frequency.
-
-    Above `E4XT_CUTOFF_BYPASS_ABOVE_HZ` the sweep simply cannot reach, so the
-    bypass endpoint is the closer answer: for a request of, say, 15 kHz,
-    letting everything through is nearer the truth than clamping to 4.1 kHz.
-    The crossover is the geometric midpoint between the curve's top and the
-    open endpoint.
-    """
-    if hz >= E4XT_CUTOFF_BYPASS_ABOVE_HZ:
-        return 1.0
-    pos = math.log(max(hz, 1e-6) / E4XT_CUTOFF_A_HZ) / E4XT_CUTOFF_K
-    return max(0.0, min(E4XT_CUTOFF_MAX_POS, pos))
+    """Desired cutoff in Hz -> the position fraction the E4XT really renders
+    there, by inverting the measured table. Requests outside the measured
+    span clamp to its ends -- the hardware cannot go below ~133 Hz, and above
+    ~24 kHz it is wide open anyway."""
+    pts = [(f, p) for p, f in _E4XT_CUTOFF_TABLE]
+    return max(0.0, min(1.0, _interp(max(hz, 1e-6), pts, logy=False)))
 
 
-# Per-zone volume: vpar[54] / zone entry [15] is labelled dB, but the audio
-# response is quadratic in the byte -- measured over 13 points, 0 to -24 dB,
-# fitted to within 0.39 dB:  delivered_dB = 0.43362*B - 0.012738*B^2
-# Refitted 2026-07-31 on CLEAN data, after the first fit turned out to be
-# contaminated. The first 13-point ladder put each gain on a different KEY and
-# produced a strongly curved law; measuring again with the key held constant
-# (velocity-banded voices on one note) gives an almost exactly LINEAR
-# response, ~0.767 dB per byte unit, fitting to 0.33 dB.
+def e4xt_cutoff_byte_to_position(byte: int) -> float:
+    """Inverse: a vpar[60] byte -> the SHARED 0-1 position it represents.
+    Parser and writer must stay exact inverses -- when they were not, the
+    correction was applied twice on every E4B->E4B conversion."""
+    hw_hz = _interp(max(0.0, min(1.0, byte / 255.0)), _E4XT_CUTOFF_TABLE)
+    pos = math.log(max(hw_hz, 1e-6) / E4B_CUTOFF_MIN_HZ) / math.log(
+        E4B_CUTOFF_MAX_HZ / E4B_CUTOFF_MIN_HZ)
+    return max(0.0, min(1.0, pos))
+
+
+# Per-zone volume. vpar[54] / zone entry[15] is labelled dB, but the audio
+# response is what matters: measured 2026-07-31 at a CONSTANT key (velocity-
+# banded voices on one note, with a flat velocity control preset) it is almost
+# exactly LINEAR, ~0.767 dB per byte unit, fitting to 0.33 dB.
 #
-# Two candidate confounds were tested and BOTH came back flat, so neither
-# explains the original curvature: output level does not depend on key
-# (identical non-transposing voice measured +/-0.00 dB across C1-C6) and does
-# not depend on velocity (+0.00 dB from velocity 5 to 125). The disagreement
-# between the two datasets is therefore still unexplained -- they agree at
-# both endpoints and diverge by ~2 dB in the middle -- but the newer one holds
-# key constant, carries its own control preset, and fits a far more plausible
-# law, so it is the one used here.
+# An earlier 13-point ladder put each gain on a different key and produced a
+# strongly curved law. Both candidate confounds were then measured and came
+# back flat -- level depends on neither key (+/-0.00 dB across C1-C6 with a
+# non-transposing voice) nor velocity (+0.00 dB, 5 to 125) -- so why the two
+# datasets disagree by ~2 dB in the middle is still unexplained. The linear law
+# is used because it VERIFIES on hardware (7/7, max error 0.34 dB), which is a
+# different and stronger claim than understanding the discrepancy.
 _E4XT_VOL_C1 = 0.76732
 _E4XT_VOL_C2 = 0.000246
 E4XT_VOL_MEASURED_FLOOR_DB = -22.90   # what B = -30 actually delivers
 
 
+# Pan reaches FULL DEFLECTION at byte +/-32, not +/-64 -- measured 2026-07-31
+# by sweeping pan and reading the two channels separately. Bytes beyond +/-32
+# are indistinguishable from +/-32, so mapping our -1.0..+1.0 through *64 threw
+# away half the range: everything past +/-0.5 collapsed to hard-panned, and a
+# preset panned -0.6 sounded identical to one panned -1.0.
+#
+# Exactly the gap the "hardware-confirmed" note on vpar[55] could not see: the
+# front panel does display -64..+63, but the AUDIO saturates halfway.
+#
+# Also measured, and NOT compensated here: panning changes total level, with
+# centre ~4.5 dB quieter than hard-panned, so this is not a constant-power
+# law. Correcting that would couple pan into volume -- a bigger change than it
+# looks, wanting its own verification. Recorded in TODO.
+E4XT_PAN_FULL_BYTE = 32.0
+
+
+def e4xt_pan_byte(pan: float) -> int:
+    """Our -1.0 (L) .. +1.0 (R) -> the vpar[55] / zone entry[16] byte."""
+    return int(max(-64, min(63, round(max(-1.0, min(1.0, pan)) * E4XT_PAN_FULL_BYTE))))
+
+
+def e4xt_byte_to_pan(byte: int) -> float:
+    """Inverse of `e4xt_pan_byte`, so parser and writer stay inverses."""
+    return max(-1.0, min(1.0, byte / E4XT_PAN_FULL_BYTE))
+
+
 def e4xt_volume_byte(db: float) -> int:
     """Desired attenuation in dB -> the byte to write so the E4XT delivers it.
 
-    Inverts the measured quadratic.  Writing the dB value straight in (what
-    this project did until 2026-07-31) delivers roughly half to three-quarters
-    of the requested attenuation -- see §E4BFILTCAL, and note that vpar[54]'s
-    earlier "hardware-confirmed" status only ever established that the FRONT
-    PANEL displays what we write, never that the audio matched.
+    Inverts the measured near-linear law (~0.767 dB per byte unit). Writing the
+    dB value straight in -- what this project did until 2026-07-31 -- delivered
+    only half to three-quarters of the requested attenuation. Note that
+    vpar[54]'s earlier "hardware-confirmed" status only ever established that
+    the FRONT PANEL displays what we write, never that the audio matched.
 
     Requests below `E4XT_VOL_MEASURED_FLOOR_DB` are EXTRAPOLATED past the
-    fitted range and should not be trusted as precise -- real hardware will
-    flatten out somewhere, and a quadratic will not. They stay monotonic
-    (quieter request -> quieter result), which is what matters for a fit that
-    has not been measured that far down.
+    fitted range and are not precise -- real hardware flattens out somewhere
+    and a quadratic will not. They stay monotonic, which is what matters.
     """
     if db >= 0.0:
         return int(max(-128, min(127, round(db))))
-    # solve c2*B^2 + c1*B - db = 0 for the root at or below 0
     disc = _E4XT_VOL_C1 ** 2 + 4.0 * _E4XT_VOL_C2 * db
     if disc < 0.0:
-        # Beyond the fitted curve's reach: ask for the most attenuation the
-        # measured range supports rather than extrapolating into nonsense.
         return -128
     root = (-_E4XT_VOL_C1 + math.sqrt(disc)) / (2.0 * _E4XT_VOL_C2)
     return int(max(-128, min(0, round(root))))
-
-
-def e4xt_cutoff_byte_to_position(byte: int) -> float:
-    """Inverse of the writer's correction: a vpar[60] byte -> the SHARED 0-1
-    position it represents.
-
-    The parser and the writer must stay exact inverses. Once the writer began
-    emitting a hardware-corrected byte rather than the nominal position,
-    reading `vpar[60] / 255` back as if it were nominal made every E4B->E4B
-    round-trip drift -- and because convert.py re-parses and re-writes, that
-    meant the correction was applied twice on a single conversion.
-    """
-    if byte >= 255:
-        return 1.0
-    hw_hz = E4XT_CUTOFF_A_HZ * math.exp(E4XT_CUTOFF_K * (byte / 255.0))
-    pos = math.log(max(hw_hz, 1e-6) / E4B_CUTOFF_MIN_HZ) / math.log(
-        E4B_CUTOFF_MAX_HZ / E4B_CUTOFF_MIN_HZ)
-    return max(0.0, min(1.0, pos))
 
 
 def e4xt_byte_to_volume_db(byte: int) -> float:
