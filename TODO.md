@@ -124,10 +124,19 @@ panel.
 E4B only; the law was measured on an E4XT and says nothing about the K2000 or
 EIII.
 
-**Verified in software** (pan 0.5 → −3.07 dB, pan 1.0 → −4.6 dB written).
-**Not yet verified on hardware**: predicted residual is ±0.25 dB, derived from
-the verified pan-excess and gain laws, but the combined effect has not been
-played. Wants a bank.
+**HARDWARE-VERIFIED 2026-08-01.** Two banks built from one source, differing
+only in `--pan-law`:
+
+| pan | `hardware` | `constant-power` |
+|-----|-----------|------------------|
+| 0.25 | +1.07 dB | −0.40 dB |
+| 0.50 | +2.88 dB | −0.36 dB |
+| 0.75 | +3.94 dB | −0.28 dB |
+| 1.00 | +4.32 dB | −0.47 dB |
+
+Worst deviation from flat: **0.47 dB**, against 4.32 dB uncompensated — a 9×
+reduction, and close to the ±0.25 dB predicted from the pan-excess and gain
+laws separately. The residual is byte quantisation (volume steps ~0.767 dB).
 
 **Chorus (`vpar[42]`) MEASURED 2026-08-01 — and it is correct.** Amount maps
 linearly to detune depth: spectral width 0.45 / 4.55 / 9.09 / 13.64 / 19.09 Hz
