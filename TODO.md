@@ -94,10 +94,45 @@ half the range: anything past ±0.5 collapsed to hard-panned, so a preset at
 model; the panel really does show ±64, which is precisely why panel agreement
 could never have caught this.
 
-**Still open, deliberately not fixed:** panning also changes *level* — centre
-measures ~4.5 dB quieter than hard-panned, so this is not a constant-power
-law. Compensating would couple pan into volume, which is a larger change than
-it appears and wants its own verification.
+### The pan LEVEL law — measured, not compensated (decision pending)
+
+Panning changes total output level. Measured from the verified sweep:
+
+| pan | total power vs centre |
+|-----|----------------------|
+| ±0.3 | +1.6 dB |
+| ±0.6 | +3.2 / +3.6 dB |
+| ±1.0 | +4.3 / +4.5 dB |
+
+Fitted: **excess_dB ≈ 4.54 · |pan|^0.75** (max residual 0.50 dB). A
+constant-power law would give +0.00 dB throughout, so the E4XT's is neither
+constant-power nor constant-gain.
+
+**Not compensated, and this one is a judgement call rather than an oversight.**
+The cutoff and gain corrections were unambiguous: the source names a *value*
+(Hz, dB) and the hardware was not delivering it. Pan is different — the source
+names a *position*, and since the ×32 fix that position now IS delivered
+correctly (monotonic, symmetric, verified). What differs is a side-effect on a
+*second* parameter.
+
+Compensating means silently modifying the volume byte to hold total power
+constant across pan. That is right if the aim is fidelity to source formats,
+most of which (SFZ, SF2) use a roughly constant-power law — a hard-panned
+voice currently arrives ~4.5 dB louder than the source intended relative to a
+centred one. It is wrong if the aim is to reproduce what the E4XT does, since
+a user setting that pan on the front panel would hear exactly this.
+
+**Two things must be settled before implementing:**
+
+1. **Jan's call on which fidelity is wanted** — source intent, or hardware
+   behaviour.
+2. **Whether the excess is independent of volume and filter.** It was measured
+   at 0 dB with the filter open, at one voice. If the excess varies with the
+   voice's own volume setting, a single curve cannot compensate it and the
+   whole approach fails.
+
+**Status:** law measured and fitted; implementation deliberately withheld.
+**Blocked on:** (1) above, then a hardware pass for (2) and verification.
 
 **Chorus (`vpar[42]`) remains unmeasured** — same class of claim, not in any
 bank yet.
