@@ -4689,8 +4689,12 @@ no correction arithmetic at analysis time.
 
 | ladder | result |
 |--------|--------|
-| **Cutoff**, 10 points 150 Hz–12 kHz | **10/10 pass**, every reachable request within ±14%; the two clamped keys read identically, bypass confirmed |
+| **Cutoff**, 12 points 150 Hz–18 kHz | **12/12 pass** — including the four above 2920 Hz that the earlier fitted exponential would have clamped |
 | **Gain**, 7 points 0 to −18 dB | **7/7 pass**, max error **0.34 dB** (was 6.5 dB uncorrected) |
+| **Pan**, 7 points −1.0 to +1.0 | **monotonic across the whole range**, symmetric; −0.6 and −1.0 now 34.3 dB apart where they were previously identical |
+
+All three re-verified 2026-07-31 after the cutoff law was replaced by the
+measured table and pan was corrected from ×64 to ×32.
 
 **Two false starts on the way, both worth remembering.**
 
