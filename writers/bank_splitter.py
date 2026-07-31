@@ -329,10 +329,18 @@ def split_into_banks(
                 for voice in preset.voices
                 for zone in voice.zones
             }
+            # Iterate the sample LIST and filter, rather than iterating the
+            # name set: Python randomises string hashing per process, so set
+            # order differs between runs and this was the sole source of
+            # mpc2emu's nondeterministic E4B output (6.3 M bytes differing
+            # between two identical conversions -- same samples, same content,
+            # different order). That made byte-comparison useless for
+            # regression checking, which is exactly what you want when
+            # changing a writer. `preset_needed_samples` above already used
+            # this pattern; this was the one place that did not.
             needed_samples = [
-                sample_map[name]
-                for name in needed_names
-                if name in sample_map
+                s for s in source_bank.samples
+                if s.name in needed_names
             ]
             all_items.append((preset, needed_samples, source_bank.name))
 

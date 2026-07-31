@@ -4326,12 +4326,27 @@ that fit today over the limit.
 - End-to-end: a stereo WAV (L 220 Hz / R 330 Hz) through
   `load_wav → E4B → parse` returns both channels bit-exact.
 
-**Found while verifying, not yet fixed:** E4B output is **nondeterministic**
-— two runs of the *same* code over the same input differ in 13 M bytes
-because sample ordering varies (semantic content is identical). Byte-level
-A/B of full conversions is therefore meaningless until that is fixed; use a
-content digest. Worth a separate look, since reproducible output would make
-every future regression check far cheaper.
+**Found while verifying — FIXED 2026-07-31.** E4B output was
+**nondeterministic**: two runs of the *same* code over the same input differed
+by millions of bytes because sample ordering varied, while the semantic
+content was identical.
+
+Root cause: `bank_splitter.split_into_banks` gathered each preset's samples by
+iterating a **set** of sample names. Python randomises string hashing per
+process, so the order differed between runs. `preset_needed_samples` in the
+same file already had it right — build the name set, then iterate the sample
+*list* and filter — and that pattern is now used in both places.
+
+Verified by conversion, not by inspection: the same XPM converted twice
+differed by 6.27 MB before and is byte-identical after, including across three
+explicitly different `PYTHONHASHSEED` values, with the sample set and PCM
+content unchanged. `tests/test_determinism.py` pins the property; reverting
+the fix fails two of its three tests.
+
+Why it was worth fixing rather than working around: byte-comparison is the
+cheapest and strictest regression check available when touching a writer, and
+this made it useless — which is precisely when you least want to be without
+it.
 
 ### Offline confirmation round (2026-07-29) — what raised confidence short of hardware
 
