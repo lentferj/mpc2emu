@@ -367,8 +367,17 @@ class VoiceLayer:
     amp_env: Envelope = field(default_factory=_amp_env)
     filter_env: Envelope = field(default_factory=_filter_env)
     # Filter
-    filter_type: int = 0        # XPM FilterType: 0=off, 1=LP12, 2=LP24, 3=LP48,
-                                #   4=HP12, 5=HP24, 6=BP12, 7=BP24, 8=ContBP
+    filter_type: int = 0        # MPC XPM FilterType, the full 0-29 enum:
+                                #   0 off | 1-5 Low 1/2/4/6/8-pole
+                                #   6-10 High 1/2/4/6/8-pole | 11-14 Band 2/4/6/8
+                                #   15-18 BandStop 2/4/6/8   | 19-22 BandBoost 2/4/6/8
+                                #   23-25 Model1-3 | 26-28 Vocal1-3 | 29 MPC3000 LPF
+                                # Authoritative map: _XPM_FILTER_TYPE in
+                                # writers/e4b_writer.py (see docs/E4B_FORMAT.md
+                                # §4.4).  ConvertWithMoss's MPCFilter uses the
+                                # identical numbering for both MPC 2.x XML and
+                                # MPC 3.x JSON, so the MPC 3 reader passes the
+                                # integer straight through.
     filter_cutoff: float = 1.0  # 0.0-1.0 (1.0 = fully open / 20kHz)
     filter_resonance: float = 0.0  # 0.0-1.0
     filter_env_amount: float = 0.0  # 0.0-1.0 (envelope→cutoff depth, separate)

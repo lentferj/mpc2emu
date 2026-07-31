@@ -69,6 +69,23 @@ control, export, diff. **Highest priority is A1**, the `filterType`
 enumeration — until that is confirmed, a converted program that actually uses
 a filter cannot be trusted.
 
+**Checklist item E1 (ConvertWithMoss crosscheck) DONE 2026-07-31** — the one
+group that needed no hardware. It confirmed the filter enumeration, the
+`{value0,value1}` slot reading, AD ⇒ sustain 0 and the loop scheme against a
+second implementation; **settled A2** (root note is 1-based — proven from
+inside the file, since `samples[].metadata.rootNote` encodes the same fact
+0-based, agreeing on 71/71 layers); downgraded **A1** from "cannot be trusted"
+to "corroborated, wants one sweep"; and narrowed **A4** to the top of the time
+range (same exponential law both sides, 13.9 s vs 100 s at v=1 — ours is
+hardware-measured, theirs is round numbers).
+
+It also found **two real losses on our side, now fixed**: program/keygroup
+`transpose` was dropped entirely, and `samples[].metadata` (`rootNote`
+fallback + `tune`) was unread. Both are 0/default in every local file, so they
+were verified by mutating a real file; conversion of the three unmodified
+files is byte-identical to before. And **three bugs in CWM's MPC 3 reader** —
+see the "tell CWM" item below. Remaining checklist items all need the MPC.
+
 **Read the full official MPC v3.9 User Guide** — see §MPC3XPM "Full sweep".
 Implemented from it: **AD-mode envelopes now import with sustain 0** (the
 manual is explicit that AD mode decays to zero with no sustain, so reading
@@ -640,6 +657,39 @@ CWM's implementation:
 will reach out to the CWM project (Douglas Carmichael / Jürgen Moßgraber)
 personally** with these two findings once convenient. **Blocked on:** Jan's
 own outreach — nothing further needed from this project's side.
+
+**Three MORE for the same conversation, found 2026-07-31** in CWM's *MPC 3
+JSON* reader while doing the hardware-free crosscheck (checklist item E1, see
+`docs/re_procedures/mpc3_xpm_params.md`). All three are in
+`format/akai/mpc/`, at CWM `e8027b9d`:
+
+- **`layersv[].rootNote` is 1-based, and CWM reads it raw** —
+  `MPCModernDetector.readJsonSampleZone()` does `setKeyRoot(rootNote)` with no
+  adjustment, so every MPC 3 keygroup import is **one semitone sharp**. The
+  proof is inside the same file: `samples[].metadata.rootNote` (which CWM uses
+  as the fallback when `rootNote == 0`) is **0-based**, so the two branches of
+  that one method use two different bases. Verified on 71/71 layers across all
+  three local 3.9.0.31 files: metadata root == the note number in the sample's
+  filename, layer root == that number **+ 1**.
+- **The global-envelope branch is dead code.**
+  `MPCEnvelopesAndFilter(node, isGlobal=true)` looks for `ampEnvelopeGlobal` /
+  `filterEnvelopeGlobal` / `pitchEnvelopeGlobal` **inside `synthSection`**, but
+  in the real files those flags are siblings of `synthSection` on the
+  `keygroup` node. So they always read false, `globalEnvelopesAndFilter` is
+  always empty, and a program using global envelopes silently imports the
+  per-keygroup ones instead. (No user-visible difference *today*, because the
+  fallback happens to be the right answer when the flags are off.)
+- **`MPCFilter` drops filter types 19–28.** `FILTER_TYPES` is populated for
+  1–18 and 29 only, so Band-Boost (19–22), Model1–3 (23–25) and Vocal1–3
+  (26–28) yield `type == null` and the filter is discarded entirely. mpc2emu
+  maps all of them (`_XPM_FILTER_TYPE`, `writers/e4b_writer.py`), including the
+  hardware-RE'd band-boost = band-stop-with-inverted-gain result
+  (`docs/RESOLUTION_NOTES.md`, MS-20 patch #204).
+
+The crosscheck also **agreed** on the substantive things, which is the more
+important outcome: identical filter enumeration 1–18/29, identical
+`{value0,value1}` slot reading, identical AD-mode ⇒ sustain-0 handling, and
+the same two-tier loop scheme. See §MPC3XPM.
 
 ## E4B per-zone fine-tune/volume/pan (multi-zone voices) — RESOLVED + HW-CONFIRMED (2026-07-26)
 

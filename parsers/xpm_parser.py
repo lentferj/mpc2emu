@@ -701,6 +701,17 @@ def _v0(node, default=0.0):
     return default if node is None else node
 
 
+def _as_float(value, default=0.0) -> float:
+    """MPC 3 JSON numbers arrive as int, float, null or (rarely) a string;
+    coerce to float so arithmetic on them cannot raise."""
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _mpc3_to_xml(data) -> 'ET.Element':
     """Build the MPC 2.x element tree this module already parses from an
     MPC 3.x JSON program."""
@@ -713,6 +724,27 @@ def _mpc3_to_xml(data) -> 'ET.Element':
     # (type 1); 'keygroup' holds only program-global settings.
     instruments = (data.get('drum') or {}).get('instruments') or []
     insts_el = ET.SubElement(prog, 'Instruments')
+
+    # Program- and keygroup-level transpose, in semitones (may be fractional).
+    # Both apply on top of every instrument's own coarse/fine tune, so fold
+    # them into the instrument's TuneCoarse/TuneFine, which is where the XML
+    # path already sums instrument + layer tuning.  ConvertWithMoss does the
+    # same (`keygroupTranspose = programTranspose + keygroup.transpose`).
+    # Both are 0 in all three local 3.9 files, so this is read-side only until
+    # a program with a real transpose turns up — see the RE checklist.
+    kg_node = data.get('keygroup') or {}
+    transpose = (_as_float(data.get('transpose'))
+                 + _as_float(kg_node.get('transpose')))
+
+    # `samples[]` carries per-sample metadata the layers do not repeat: the
+    # recorded root note and a tuning offset.  NOTE the two root notes use
+    # DIFFERENT bases -- verified across all 71 layers of the three local
+    # files: `samples[].metadata.rootNote` equals the note number in the
+    # sample's own filename (0-based MIDI), while `layersv[].rootNote` is that
+    # number PLUS ONE (1-based, as in MPC 2.x XML).  <RootNote> below is the
+    # 1-based convention, so the metadata fallback is written +1.
+    sample_meta = {s.get('name'): (s.get('metadata') or {})
+                   for s in (data.get('samples') or []) if isinstance(s, dict)}
 
     for idx, inst in enumerate(instruments):
         layers = [l for l in (inst.get('layersv') or [])
@@ -732,8 +764,13 @@ def _mpc3_to_xml(data) -> 'ET.Element':
 
         put('LowNote',  inst.get('lowNote', 0))
         put('HighNote', inst.get('highNote', 127))
-        put('TuneCoarse', inst.get('coarseTune', 0))
-        put('TuneFine',   inst.get('fineTune', 0))
+        # Fold the program/keygroup transpose in; keep whole semitones in
+        # TuneCoarse and push any fraction into TuneFine as cents.
+        inst_semis  = _as_float(inst.get('coarseTune')) + transpose
+        inst_coarse = int(inst_semis)
+        put('TuneCoarse', inst_coarse)
+        put('TuneFine',   int(_as_float(inst.get('fineTune')))
+                          + round((inst_semis - inst_coarse) * 100))
         put('IgnoreBaseNote', 'True' if inst.get('ignoreBaseNote') else 'False')
         # Filter — MPC 3 keeps the same normalised 0-1 domain as MPC 2.
         put('FilterType',      filt.get('filterType', 0))
@@ -793,17 +830,29 @@ def _mpc3_to_xml(data) -> 'ET.Element':
             def lput(tag, val):
                 ET.SubElement(le, tag).text = str(val)
 
+            meta = sample_meta.get(lay.get('sampleName', '')) or {}
+
             lput('SampleName', lay.get('sampleName', ''))
             lput('VelStart',   lay.get('velocityStart', 0))
             lput('VelEnd',     lay.get('velocityEnd', 127))
-            lput('RootNote',   lay.get('rootNote', 0))
+            # rootNote 0 is the MPC "root unset" sentinel.  Prefer the sample's
+            # own recorded root over the WAV `smpl` unity note the XML path
+            # falls back to -- it is what the MPC itself shows.  Converted
+            # 0-based -> 1-based to match the <RootNote> convention.
+            lay_root = int(_as_float(lay.get('rootNote')))
+            if lay_root <= 0 and meta.get('rootNote') is not None:
+                lay_root = int(_as_float(meta.get('rootNote'))) + 1
+            lput('RootNote', lay_root)
             # volume is {'gainCoefficient': linear, 'controlValue': .., 'law': ..}
             vol = lay.get('volume')
             lput('Volume', vol.get('gainCoefficient', 1.0)
                  if isinstance(vol, dict) else (1.0 if vol is None else vol))
             lput('Pan',        lay.get('pan', 0.5))
             lput('TuneCoarse', lay.get('coarseTune', 0))
-            lput('TuneFine',   lay.get('fineTune', 0))
+            # metadata.tune is a per-sample offset in semitones (0.0 in every
+            # local file, so read-side only for now); TuneFine is in cents.
+            lput('TuneFine',   int(_as_float(lay.get('fineTune')))
+                               + round(_as_float(meta.get('tune')) * 100))
             # Loops.  MPC 3 carries TWO loop descriptions and a flag choosing
             # between them, which MPC 2.x had no equivalent of; this follows
             # ConvertWithMoss's MPCModernDetector, taken as correct in the

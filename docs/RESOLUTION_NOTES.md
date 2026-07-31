@@ -3955,6 +3955,8 @@ Field mapping (JSON → the XML tag the parser reads):
 | `.layersv[j].sampleName` / `rootNote` / `velocityStart` / `velocityEnd` | `SampleName` / `RootNote` / `VelStart` / `VelEnd` |
 | `.layersv[j].volume.gainCoefficient` / `pan` | `Volume` / `Pan` |
 | `.layersv[j].loop` / `loopStart` / `sampleStart` / `sampleEnd` | `Loop` / `SliceLoopStart` / `SliceStart` / `SliceEnd` |
+| `transpose` + `keygroup.transpose` | folded into the instrument's `TuneCoarse`/`TuneFine` *(added 2026-07-31)* |
+| `samples[].metadata.rootNote` / `.tune` | `RootNote` fallback (+1) / added to `TuneFine` as cents *(added 2026-07-31)* |
 
 Three things worth knowing for the next person:
 
@@ -4180,6 +4182,70 @@ the PDF, so whether MPC 3's `filterType` integers still match MPC 2's ordering
 the local files — every filter is at maximum cutoff with zero resonance, i.e.
 audibly bypassed either way — but it is the obvious thing to check before
 trusting a converted program that actually uses a filter.
+*(Substantially resolved the next day — see the crosscheck below.)*
 
 The extracted text is kept out of the repo (it is a 37 MB copyrighted manual);
 re-derive with `pdftotext -layout` from the vendor PDF if needed again.
+
+### ConvertWithMoss crosscheck (2026-07-31) — RE checklist item E1
+
+Read CWM `e8027b9d`'s `MPCModernDetector` / `MPCEnvelopesAndFilter` /
+`MPCFilter` against `_mpc3_to_xml()` field by field, then tested every
+divergence against the three real 3.9.0.31 files. Both sides read the same
+JSON, so a divergence is a bug in one of them — the lever that worked on the
+KRZ reader (§KRZ-CWM). Full detail in
+`docs/re_procedures/mpc3_xpm_params.md`.
+
+**Agreements** (these stop being single-source assumptions): the filter
+enumeration for 1–18 and 29; `{value0, value1}` as filter/LFO **slots**;
+AD mode ⇒ sustain 0; and the two-tier loop scheme including the
+`mode > 0 && end > 0` guard.
+
+**The filter-enumeration question above is largely answered.** CWM applies
+*one* table to MPC 2.x XML, MPC 3 JSON **and** its XPM writer, and it matches
+`_XPM_FILTER_TYPE` on every index it defines. The glossary — unreadable as a
+table, but readable as prose — lists the families in exactly that order
+(low-pass, high-pass, band-pass, band-stop, band-boost, Model, Vocal, MPC3000
+LPF) and confirms 1/2/6/8-pole variants exist, which is what puts the indices
+where they are. Not a hardware sweep, but no longer a leap of faith.
+
+**Two real losses on our side, both fixed here:**
+
+1. **`transpose` was dropped.** Program-level `transpose` and
+   `keygroup.transpose` are semitone offsets applying on top of every
+   instrument's own tuning; we read neither, so a transposed program converted
+   at concert pitch. Now folded into the instrument's `TuneCoarse`, with any
+   fraction pushed into `TuneFine` as cents — the same place the XML path
+   already sums instrument + layer tuning, and the same composition CWM uses.
+2. **`samples[].metadata` was unread.** It carries the sample's recorded
+   `rootNote` and a `tune` offset. The root is now the fallback when a layer's
+   `rootNote` is the 0 "unset" sentinel (preferred over the WAV `smpl` unity
+   note, since it is what the MPC itself displays), and `tune` is added to
+   `TuneFine` as cents.
+
+   **Mind the bases.** `samples[].metadata.rootNote` is **0-based** MIDI;
+   `layersv[].rootNote` is **1-based**. Verified on 71/71 layers across all
+   three files: the metadata root equals the note number in the sample's own
+   filename, the layer root equals that number **+ 1**. `_mpc3_to_xml()`
+   normalises everything to the 1-based `<RootNote>` convention, so the
+   metadata fallback is written **+1**. This also settles checklist item A2
+   without hardware — the file states the same fact twice, in two encodings.
+
+Both are 0/default in every local file, so they are read-side only until a
+non-default program turns up. Tested by mutating a real file: `transpose` +7 /
+−5 / net +2 / +2.5 (fractional → 2 semitones + 50 cents), `rootNote` forced to
+0 (falls back to the identical root), and `tune` 0.5 (→ +50 cents). Output on
+the three unmodified files is **byte-identical** to before, the classic XML
+path is unchanged across 60 real XML `.xpm` files, all 51 tests pass, and
+`K2-01.xpm` still converts to the same 7.06 MB / 21-zone E4B.
+
+**Three bugs found in CWM** (root-note off-by-one, dead global-envelope
+branch, filter types 19–28 dropped) — recorded in `TODO.md` under the existing
+"tell CWM" item, since Jan raises those personally.
+
+**Also fixed:** the `filter_type` comment in `models/common.py` described a
+9-value enum (`0=off, 1=LP12, 2=LP24, 3=LP48, 4=HP12…`) that **nothing in the
+codebase uses** — the operative table is the full MPC 0–29 enum in
+`_XPM_FILTER_TYPE`. Behaviour was always correct; the docstring on the
+canonical field that six parsers write into was not, and it briefly sent this
+crosscheck down a false trail.
