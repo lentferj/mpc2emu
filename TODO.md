@@ -33,8 +33,68 @@ samples / 31 zones with 5 stereo + 6 mono, and each stereo sample's per-channel
 content measures as designed (440 Hz left + silence, silence + 440 Hz right,
 440 Hz left + 659 Hz right).
 
-**Status:** built and software-verified; **no hardware confirmation yet.**
-**Blocked on:** Jan's E4XT bench session.
+**Status: SESSION DONE 2026-07-31 — 4 of 6 presets answered, 2 need a rebuilt
+bank.** Everything was *measured*, not judged by ear: notes driven over MIDI
+to the E4XT, audio captured from JACK, analysed offline. The harness is
+`tests/re_banks/hw_measure.py` and it is the reusable part of this — the
+existing `ENV_RATE`, `MOD_DEPTH_CAL` and `AMP_LEVEL` constants were all fitted
+from 4-6 hand-timed points, and this can sweep 128 unattended.
+
+| preset | result |
+|--------|--------|
+| `P1STIMAGE` | ✅ **Channel order correct**, stereo plays as stereo. See §E4BSTEREO. |
+| `P2STPAN` | ✅ **Pan mono-sums a stereo voice** onto the pan position. See §E4BSTEREO. |
+| `P4ENVTIME` | ✅ **`env_seconds_to_rate` confirmed** — attack ~20% long, release ~15% short, monotonic across 0.1-5 s. |
+| `P5FLTGAIN` | ⚠️ **Zone gain under-delivers** (below). Cutoff/resonance not measurable — see the test-design faults. |
+| `P6TRIMATK` | ✅ Reference pair reproduces, and now has a **numeric** acceptance criterion: a genuine slow swell starts at **1.7%** of its peak, the mis-trimmed copy at **50.8%**. |
+| `P3STVOICES` | ⏭ **Unanswerable as built** — no polyphony counter on the E4XT (below). |
+
+**Two test-design faults of mine, both worth fixing before the next bank:**
+
+- **`P3STVOICES` cannot work.** It assumed a voice/polyphony readout; the
+  E4XT has none, and at 128-voice polyphony you would need 65+ held notes to
+  reach the ceiling by hand. Replace with a preset stacking ~40 voices on a
+  SINGLE key: one keypress crosses the ceiling and the note count where
+  stealing begins gives the stereo-vs-mono ratio directly.
+- **`P5FLTGAIN`'s filter source is too band-limited.** A 110 Hz saw with 24
+  harmonics runs out of content at 2.6 kHz, so cutoff 0.60 and 1.00 had
+  nothing left to filter and no corner could be found; only 0.15 (~330 Hz) and
+  0.35 (~550 Hz) were measurable, and the resonance analysis was invalid.
+  Use **white noise** instead — energy at every frequency makes the corner
+  measurable across the whole range and turns resonance into a clean peak.
+
+Also: `P2STPAN`'s three keys are transposed copies (all three zones carry
+`root_key=C3` while sitting on different keys). Harmless there, but it briefly
+sent the pan analysis down a wrong path — see the method note in §E4BSTEREO.
+
+**Blocked on:** a rebuilt bank for the two open presets. The SD card is in the
+hardware, so that is a next-session item.
+
+## E4B per-zone GAIN under-delivers — measured, unfixed (2026-07-31)
+
+`ZoneMapping.volume` is documented as dB, but the E4XT does not produce the
+requested attenuation. Measured on the open-HW-RE bank with an identical
+source and an open filter across all three zones, so only zone volume varies:
+
+| requested | measured RMS | measured Δ |
+|-----------|--------------|------------|
+| 0 dB   | 0.02216 | — |
+| −6 dB  | 0.01515 | **−3.3 dB** |
+| −12 dB | 0.00865 | **−8.2 dB** |
+
+Roughly half to two-thirds of the requested attenuation arrives, and the
+ratio is not constant (0.55 then 0.68), so this is a **curve mismatch, not a
+scale factor**. Distinct from §E4BLEVEL, which is the amp-envelope sustain
+level; this is the per-zone volume byte.
+
+This is the gain half of the "SF2 static filter + zone gain/tune — needs
+hardware A/B" item, which can now be considered answered in the negative: the
+path reaches the writer, but the value it lands on is wrong.
+
+**Status:** measured, root cause not investigated. **Blocked on:** nothing —
+next step is to find the dB→byte conversion in `e4b_writer` and calibrate it
+against a denser sweep (the harness makes a 128-point run cheap, which would
+give the real law rather than a 3-point correction).
 
 ## MPC 3.x writes gzip+JSON `.xpm` — IMPLEMENTED (2026-07-30)
 

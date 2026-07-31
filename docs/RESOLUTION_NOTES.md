@@ -4400,21 +4400,48 @@ channel ORDER against.
   trailer, the silent-KRZ bug, the ISO `props[5]` marker) is a standing
   reminder that byte-correct files can still fail on the device.
 
-### Hardware checklist (when a bench session happens)
+### Hardware checklist — DONE 2026-07-31, except item 4
 
-Kept short deliberately — the exploration is done, this is confirmation:
+Confirmed on the E4XT with the combined open-HW-RE bank, measured rather than
+judged by ear: notes driven over MIDI, audio captured from JACK, analysed per
+channel (`tests/re_banks/hw_measure.py`).
 
-1. Load a `--stereo` bank on the E4XT. Does it load without "Unknown file
-   type" / IFF complaints?
-2. Does a stereo voice play **in stereo** (not one side, not mono-summed)?
-3. **Channel order**: play a sample whose sides differ audibly; confirm left
-   is left. (Or settle this beforehand from the exported WAVs.)
-4. **Voice cost**: does one stereo sample consume one voice or two? The manual
-   implies one (p.93); confirm against the polyphony counter, because it feeds
-   `--max-preset-size` and the voice-limit logic.
-5. **Pan** on a stereo voice: does it balance the existing image, or collapse
-   it? (TODO question 3, still unanswered.)
-6. Loop behaviour on a looped stereo sample — both sides must loop in sync.
+1. **Loads.** ✅ No "Unknown file type" / IFF complaint.
+2. **Plays in stereo.** ✅ The two sides carry different content.
+3. **Channel order is correct.** ✅ Left is left. Measured per channel on the
+   deliberately asymmetric material: a left-only key gives L 440 Hz / R silent
+   (rms 0.092 vs 0.00006), the right-only key the exact mirror, and the
+   split-pitch key gives **440 Hz left / 659 Hz right** — the low tone on the
+   side its sample stores it. This is the item no offline work could settle;
+   it rested on emu3bm and the EIII naming the first PCM block left, and that
+   inference is now confirmed. Independently corroborated a second time
+   through the pan path (below).
+4. **Voice cost — still open.** The E4XT has **no voice/polyphony counter**, and
+   at 128-voice polyphony the by-ear route needs 65+ held notes, so the test
+   preset as built could not answer it. Needs a bank that stacks ~40 voices on
+   a SINGLE key, where one keypress crosses the ceiling and the note count at
+   which stealing starts gives the ratio directly.
+5. **Pan MONO-SUMS a stereo voice** onto the pan position — it does not
+   balance, and it does not discard a channel. ✅ Measured: at hard left the
+   LEFT output carries **both** source pitches (440 + 659) and the right is
+   silent; hard right is the mirror; centre preserves the image (distinct
+   pitches per side). The summed level is 0.131 ≈ 0.092·√2, exactly two
+   channels folded into one.
+
+   **Consequence for the writer:** a non-centre pan on a stereo voice costs
+   the stereo image, not content. Keep stereo voices centred, or warn — the
+   earlier guess that extreme pan *drops a side* was wrong, so suppressing pan
+   to protect a channel would be solving the wrong problem.
+6. Loop behaviour on a looped stereo sample — **not yet tested**; the bank
+   carries no looped stereo sample.
+
+**Method note worth keeping.** The first pan reading was inferred from a
+by-ear report of "different pitches on each side" and concluded *balance*.
+That was wrong: the keys involved were transposed copies of one sample from a
+single root, so the differing pitches were transposition, not channel
+selection. Only a per-channel FFT settled it — and note that analysing a
+mono-summed capture would have destroyed exactly the evidence needed. For any
+stereo question, keep L and R separate all the way to the measurement.
 
 ## §MONO — Stereo is the default; mono is a vintage-fit reduction (2026-07-29)
 
