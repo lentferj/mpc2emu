@@ -1018,9 +1018,43 @@ true onset sits inside the coarse window and can be localized with a short
 — not the refine step — determines the cut, and that has never been checked
 against a real slow-attack capture or an Audacity-measured target.
 
-**Status:** open. **Blocked on:** test material with a genuinely slow attack
-(e.g. a bowed string or pad capture) + a visual/Audacity-measured target to
-compare against, the same way the fast-attack case was validated.
+**ROOT-CAUSED 2026-07-31 — reproduced in software, fix NOT yet found.**
+
+The blocker is gone: slow-attack material now exists (synthesised — a 6 s tone
+with a 3 s linear swell), and the hardware session produced a numeric
+acceptance criterion, since a genuine swell starts at **1.7%** of its peak and
+a mis-trimmed one at **50.8%** (§E4BSTEREO bank, `P6TRIMATK`).
+
+**Confirmed failure:** `--trim-start` cuts **1.16 s off a 3 s swell**, leaving
+it starting at 37% of peak instead of 0.8%. A 1 s swell is correctly left
+alone.
+
+**Cause,** instrumented rather than guessed. `_signal_threshold` takes
+`max(peak−72 dB, floor+6 dB)`, and the floor is `_windowed_ms`'s
+**10th-percentile window energy over the whole sample** — deliberately "robust
+to the loud body". That is right for tail-trim, where the quiet part really is
+the noise floor, and wrong for a gradual attack, where the quiet part **is the
+signal**. On the 3 s swell the floor reads **−20.6 dB** instead of digital
+silence, so the threshold lands at −14.6 dB rather than the intended
+−78.4 dB — 64 dB too high — and the detector fires 39% into the attack. The
+detector's own docstring names the assumption: it was tuned on *"fast synth/
+percussive attacks, not gradual swells"*.
+
+**A naive fix does not work, and was measured failing.** Replacing the
+percentile with the minimum windowed energy (the lead-in floor) fixes the
+swell exactly — 37% back to 0.8% — but **regresses real material**: on the MPC
+autosampler corpus it drops from trimming 21/21 samples (~1.5 s) to 8/21
+(~0.5 s), keeping ~45 ms of extra silence on 19 of 21. Real captures often
+contain a genuinely silent window, which makes the minimum ~0 and disables the
+adaptive floor entirely. So it trades over-trimming swells for under-trimming
+everything else, and was reverted.
+
+**What a real fix needs:** a floor estimated from the pre-onset region only,
+or detection of the monotonic-rise case so the floor branch can be suppressed
+just for it — while leaving the Audacity-validated fast-attack behaviour
+byte-identical. Both test corpora now exist to check that.
+
+**Status:** root-caused, unfixed. **Blocked on:** nothing but the work.
 
 ## Input-parser feature-parity gaps found via ConvertWithMoss 19.1.0 (ENHANCEMENT, OPEN 2026-07-25)
 
