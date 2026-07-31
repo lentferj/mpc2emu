@@ -1,6 +1,75 @@
 # mpc2emu — Open Items
 
-## Combined open-HW-RE bank ready for the E4XT — testing PENDING (2026-07-31)
+## Open at a glance (2026-08-01)
+
+This file is long and mostly archive — resolved entries are kept for their
+reasoning. What is actually **open**, grouped by what unblocks it:
+
+### Needs the E4XT / K2000 bench
+
+| item | note |
+|------|------|
+| **SF2 static filter** | the gain half is resolved and verified; the *filter* half still has no hardware A/B |
+| **VinSamLib confirmation batch** | needs rebuilding first — it predates the stereo decode fix and the zone-reducer fixes, so the images test code that no longer exists |
+| **KRZ program params, bandpass silence, the wide-drone preset** | several K2000-side items, all needing the K2000R |
+| **K2000R "Object → Delete" lockup** | needs factory resets; root cause was traced to k2kremote, not this project |
+
+### Needs the MPC (not the E4XT)
+
+| item | note |
+|------|------|
+| **MPC 3.x parameter checklist** | ~25 items in `docs/re_procedures/mpc3_xpm_params.md`. The structure is verified; the parameter *scales* are not. A2 is settled, A1/A4 narrowed |
+| **XPM envelope-time curve** | `_xpm_env_to_seconds` recalibration. NOTE: the 2026-07-31 envelope measurement verified the **writer's** seconds→rate mapping, not this. Still exactly as blocked as before |
+
+### Software only — no hardware needed
+
+| item | note |
+|------|------|
+| **KRZ stereo** | mono in both directions; the format side is already RE'd, so this is implementation |
+| **Corpus scan may count sampler OS files as banks** | see below |
+| **GIG→E4B fine-tune / per-zone volume** | both dropped on the way to the zone entry |
+| **AIFF not decoded**, **EXS24 first velocity layer only**, **SFZ keyswitches / overlapping regions**, **XPM slice playback** | parser feature gaps |
+| **Zone reducer not velocity-aware** | `--reduce-key-zones` can leave velocity holes |
+| **HDA directory block limited to 16 entries** | |
+
+### Decisions / personal actions
+
+| item | note |
+|------|------|
+| **Tell CWM about the KRZ + MPC 3 findings** | five findings now: 2 KRZ, 3 MPC 3. Jan raises these personally |
+| **New `vpar` fields from SysEx hunting** | found and documented; whether to implement is a judgement call |
+
+### Known-unexplained, not worth hunting
+
+| item | note |
+|------|------|
+| **The ~2 dB gain-dataset anomaly** | key, velocity and transposition all measured flat. Isolated to one early measurement that four later independent runs contradict. Recorded in case it recurs |
+
+---
+
+## Corpus scan may count sampler OS files as banks (OPEN, 2026-08-01)
+
+From ConvertWithMoss `d94bde27`: an E-mu volume's **operating system file**
+(`E3 Main Code`, dircon type `0x80`) is a memory dump whose content can itself
+begin with an EIII bank identifier and stale preset structures. CWM's reader
+skips type `0x80` for exactly this reason.
+
+mpc2emu has **no EMU3 filesystem reader** — the corpus scan locates banks by
+searching raw image bytes for the three identifier strings, which is precisely
+what an OS dump containing a stale identifier would fool. So some fraction of
+the documented **1118-bank corpus** may be OS memory dumps rather than banks,
+and any statistic derived from that count inherits the error.
+
+Nothing shipped depends on it: the count appears in validation notes, not in
+converter behaviour. But it should not be quoted as a clean figure until
+checked.
+
+**Status:** open, unquantified. **Blocked on:** nothing — scan the images for
+`E3 Main Code`, bound each OS file, and check how many identifier hits fall
+inside one.
+
+
+## Combined open-HW-RE bank — SESSION DONE (2026-07-31), 2 presets rebuilt since
 
 **Not a code task — a bench-session vehicle.** One bank + ISO covering every
 open hardware-RE item that can be settled on the E4XT, so a single session
@@ -239,7 +308,7 @@ runs — different presets, different selection mechanisms, different sessions �
 all contradict. The shipped linear law verifies on hardware at 7/7 within
 0.34 dB. Left open in case it ever recurs; not worth further hunting.
 
-## E4B cutoff position → Hz is wrong above ~0.3 (OPEN, 2026-07-31)
+## E4B cutoff position → Hz — RESOLVED + HW-VERIFIED (2026-07-31/08-01)
 
 Measured on the E4XT with white noise (bank 2, `P_FLT`, 11 points): the real
 curve is **`Hz = 125.9 · e^(3.494 · position)`** (r = 0.9958) with position
@@ -505,7 +574,7 @@ reportable upstream if Jan wants to.
 
 Not blocked on anything external — this is our own work, just not small.
 
-## SF2 static filter + zone gain/tune now reach the E4B/KRZ writers — needs hardware A/B (OPEN, 2026-07-29)
+## SF2 static filter + zone gain/tune — gain half RESOLVED + HW-VERIFIED; filter half still OPEN (2026-07-29)
 
 `parsers/sf2_parser.py` previously read **no** static filter and **no**
 preset-level generators, so every SF2 import arrived with the filter wide
@@ -1050,7 +1119,7 @@ values; real WAV-folder conversion with no source volume/pan/tune data
 round-trips to all-zero bytes (no regression). Existing test suite
 (11 tests) passes.
 
-## `--trim-start` needs re-verification against SLOW-attack material (OPEN, 2026-07-25)
+## `--trim-start` over-trimmed slow attacks — FIXED + VALIDATED (2026-07-31)
 
 `processors/start_trim.py`'s onset detector was built and tuned against fast
 synth-attack material (a Behringer K2-MKII capture via the MPC ONE
@@ -1175,7 +1244,7 @@ unaffected (different writer; K2000 honors rate via the `maxPitch` formula).
 **Blocked on:** a hardware artifact to diff — see `docs/RESOLUTION_NOTES.md §E4BRATE`
 for the SrCnv capture procedure and `tests/re_banks/diff_sample_rate_field.py`.
 
-## MPC Standalone 3.9.0 `.xpm` — gzipped-JSON "ACVS" format unreadable (OPEN, 2026-07-24)
+## MPC Standalone 3.9.0 `.xpm` — gzipped-JSON "ACVS" format (SUPERSEDED — see the IMPLEMENTED entry at the top)
 
 Programs saved by **MPC Standalone firmware 3.9.0** (hardware — MPC ONE etc.) are
 **not** the XML `.xpm` `parsers/xpm_parser.py` expects. They are **gzip-compressed**
@@ -2157,7 +2226,7 @@ into separate presets). The discriminator is the presence of `sw_last`.
 
 ---
 
-## E4XT per-preset voice limit — pin the cap (RE)
+## E4XT per-preset voice limit — RESOLVED 2026-06-13; per-NOTE limit ~32 measured 2026-07-31
 
 **Status:** **RESOLVED 2026-06-13 — no cap found; HARDWARE-CONFIRMED.**
 
