@@ -4432,8 +4432,17 @@ channel (`tests/re_banks/hw_measure.py`).
    the stereo image, not content. Keep stereo voices centred, or warn — the
    earlier guess that extreme pan *drops a side* was wrong, so suppressing pan
    to protect a channel would be solving the wrong problem.
-6. Loop behaviour on a looped stereo sample — **not yet tested**; the bank
-   carries no looped stereo sample.
+6. **Looped stereo loops in sync.** ✅ Measured 2026-07-31 on a sample
+   carrying 220 Hz left and 330 Hz right with a 4410-frame loop (an exact
+   whole number of cycles on both sides, so any drift would beat). Held well
+   past the loop point, each channel holds its own pitch exactly — L 220.0 Hz,
+   R 330.0 Hz at both 0.5-1.5 s and 4.0-5.0 s — with level steady to within
+   3%. Both blocks loop, and they stay in sync.
+
+**All six stereo questions are now settled.** The write side is confirmed on
+hardware end to end: loads, plays in stereo, correct channel order, pan
+mono-sums, and loops hold sync. The only stereo work left is the KRZ path,
+which is still mono in both directions (see TODO).
 
 **Method note worth keeping.** The first pan reading was inferred from a
 by-ear report of "different pitches on each side" and concluded *balance*.
@@ -4521,3 +4530,92 @@ pointing at `--mono left/right`. The user keeps the decision and the risk stops
 being invisible — better than a heuristic guessing on their behalf.
 `channel_correlation` is windowed to 20k frames to keep it off the critical
 path.
+
+## §E4BFILTCAL — Cutoff, resonance and zone-gain measured on the E4XT (2026-07-31)
+
+Measured with the second open-HW-RE bank, driven and captured by
+`tests/re_banks/hw_measure.py`. The material is **white noise**, chosen after
+the first attempt used a 110 Hz harmonic saw that ran out of content at
+2.6 kHz and left most of the cutoff range unmeasurable.
+
+### Cutoff position → Hz: our model is wrong above about 0.3
+
+The −3 dB corner, read off the noise spectrum in 1/6-octave bands:
+
+| position | measured | `hz_to_e4b_cutoff` model | measured / model |
+|---------:|---------:|-------------------------:|-----------------:|
+| 0.0 | 133 Hz | 57 Hz | 2.34× |
+| 0.1 | 168 Hz | 102 Hz | 1.64× |
+| 0.2 | 238 Hz | 184 Hz | 1.29× |
+| 0.3 | 378 Hz | 331 Hz | 1.14× |
+| 0.4 | 534 Hz | 594 Hz | 0.90× |
+| 0.5 | 755 Hz | 1068 Hz | 0.71× |
+| 0.6 | 1068 Hz | 1919 Hz | 0.56× |
+| 0.7 | 1199 Hz | 3447 Hz | 0.35× |
+| 0.8 | 1903 Hz | 6194 Hz | 0.31× |
+| 0.9 | 3390 Hz | 11130 Hz | 0.30× |
+| 1.0 | >20 kHz | 20000 Hz | — |
+
+Log-linear fit over 0.0–0.9: **`Hz = 125.9 · e^(3.494 · position)`**, r = 0.9958.
+That implies ~126 Hz at position 0 and only ~4.1 kHz at position 1, against the
+57 Hz / 20 kHz the current constants assume.
+
+**Position 1.0 is a bypass, not the top of the curve.** It measures wide open
+(>20 kHz), which is nowhere near the fitted trend's 4.1 kHz — so the control
+is an exponential sweep up to roughly 4 kHz with a fully-open endpoint, not a
+single exponential to 20 kHz.
+
+**Consequence.** Parsers that specify a cutoff in Hz (SF2, EXS24, GIG, SFZ)
+run it through `hz_to_e4b_cutoff` to get a position. Because the real curve is
+much shallower, a request for 3.4 kHz picks position 0.70 and the hardware
+delivers **1.2 kHz** — roughly an octave and a half too dark. The error is
+small below ~400 Hz and grows to 3× by the top of the sweep.
+
+*Caveats:* one filter type (4-pole lowpass), and the −3 dB corner is our
+definition, which need not match E-mu's design frequency. Neither explains a
+3× divergence.
+
+### Resonance: clean and monotonic
+
+Peak boost over the passband, at cutoff position 0.4:
+
+| resonance | peak boost | peak at |
+|----------:|-----------:|--------:|
+| 0.00 | +2.2 dB | 305 Hz |
+| 0.20 | +7.7 dB | 604 Hz |
+| 0.40 | +15.9 dB | 639 Hz |
+| 0.60 | +23.3 dB | 668 Hz |
+| 0.80 | +30.1 dB | 721 Hz |
+| 0.95 | +37.1 dB | 750 Hz |
+
+Monotonic, roughly 39 dB per unit, and the peak converges on the corner as Q
+rises. Nothing self-oscillates at 0.95 — broadband level actually falls
+slightly as resonance concentrates energy. No change needed.
+
+### Per-zone gain: the label is dB, the behaviour is not
+
+13 points, identical source, filter open, only `ZoneMapping.volume` varying:
+
+| requested | measured | error | measured/requested |
+|----------:|---------:|------:|-------------------:|
+| −2 dB | −0.91 | +1.09 | 0.46 |
+| −6 dB | −2.97 | +3.03 | 0.50 |
+| −12 dB | −7.28 | +4.72 | 0.61 |
+| −18 dB | −11.54 | +6.46 | 0.64 |
+| −24 dB | −18.05 | +5.95 | 0.75 |
+
+The delivered fraction climbs from 0.46 to 0.75, so this is a curve, not an
+offset — a 3-point correction could not have captured it, which is why the
+ladder was rebuilt with 13.
+
+**Why this slipped through.** `vpar[54]` is documented as "signed byte, dB;
+0 = unity — hardware-confirmed 2026-07-26", and `_zone_entry` writes the dB
+value straight in. That confirmation established that the **front panel
+displays** the value we write; it never established that the **audio** matches
+it. This is the same trap as §E4BLEVEL, where the amp-envelope sustain byte
+read 50% on the panel and measured −46 dB. Two independent parameters have now
+shown the same pattern, so *"the panel agrees"* should not be recorded as
+hardware confirmation of a level law again — only a measurement counts.
+
+**Status:** measured, not yet fixed. Both the cutoff constants and the zone
+gain law want re-deriving from these tables.

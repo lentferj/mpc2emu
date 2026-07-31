@@ -129,10 +129,40 @@ This is the gain half of the "SF2 static filter + zone gain/tune — needs
 hardware A/B" item, which can now be considered answered in the negative: the
 path reaches the writer, but the value it lands on is wrong.
 
-**Status:** measured, root cause not investigated. **Blocked on:** nothing —
-next step is to find the dB→byte conversion in `e4b_writer` and calibrate it
-against a denser sweep (the harness makes a 128-point run cheap, which would
-give the real law rather than a 3-point correction).
+**Re-measured 2026-07-31 with 13 points** (bank 2, `P_GAIN`): the delivered
+fraction climbs from 0.46 at −2 dB to 0.75 at −24 dB, confirming a curve
+rather than an offset. Root cause identified: `_zone_entry` / `vpar[54]`
+writes the dB value straight in, and the "hardware-confirmed 2026-07-26" note
+against `vpar[54]` established only that the **front panel displays** what we
+write — never that the audio matches. Same trap as §E4BLEVEL. Full table in
+`docs/RESOLUTION_NOTES.md` §E4BFILTCAL.
+
+**Status:** measured and root-caused; **fix not written**. **Blocked on:**
+nothing — derive the inverse law from the 13-point table and apply it in
+`_zone_entry`, then re-measure to confirm.
+
+## E4B cutoff position → Hz is wrong above ~0.3 (OPEN, 2026-07-31)
+
+Measured on the E4XT with white noise (bank 2, `P_FLT`, 11 points): the real
+curve is **`Hz = 125.9 · e^(3.494 · position)`** (r = 0.9958) with position
+1.0 acting as a **bypass** (>20 kHz), against the 57 Hz → 20 kHz single
+exponential that `hz_to_e4b_cutoff` assumes.
+
+The error is small below ~400 Hz and reaches **3×** at the top: a source
+asking for 3.4 kHz gets position 0.70, which the hardware renders at
+**1.2 kHz** — about an octave and a half too dark. This affects every parser
+that specifies cutoff in Hz (SF2, EXS24, GIG, SFZ).
+
+Resonance, measured in the same pass, is fine — monotonic 0 → +37 dB peak
+boost with the peak converging on the corner, no self-oscillation at 0.95.
+No change needed there.
+
+Full tables in `docs/RESOLUTION_NOTES.md` §E4BFILTCAL.
+
+**Status:** measured, unfixed. **Blocked on:** nothing — re-derive
+`E4B_CUTOFF_MIN_HZ`/`MAX_HZ` (or replace the single exponential with the
+fitted curve plus a bypass endpoint), then re-measure. A denser sweep is cheap
+now that the harness exists.
 
 ## MPC 3.x writes gzip+JSON `.xpm` — IMPLEMENTED (2026-07-30)
 
