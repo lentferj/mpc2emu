@@ -716,6 +716,29 @@ def _parse_preset_chain(data: bytes, fmt: BankFormat, head_index: int,
         voices.extend(_parse_layers(data, offset, samples_by_index, extra_samples, index_repairs))
         link = _get_u16(data, offset + PRESET_LINK)
         idx = (link - 1) if (0 < link <= fmt.max_presets and link - 1 != idx) else None
+        # A chain ends at the first slot that holds NO preset -- which is what
+        # the device does.  Several library CD-ROMs leave the last link of a
+        # chain dangling into an empty slot (ConvertWithMoss d94bde27 cites
+        # `CONCRT PERC2   X` of Vol. 16, whose 25-preset percussion chain links
+        # both ends to the empty slots 126/127).  An empty slot shares its
+        # table address with its successor, so following the link reads
+        # whatever lies behind the last preset as note zones -- on some volumes
+        # garbage referencing impossible sample numbers like 16356.
+        #
+        # Live on the local corpus, not merely theoretical: 10 dangling links
+        # across 4 of the 17 discs (2.5% of the 400 links followed), of which
+        # two attach a PHANTOM VOICE to a real preset --
+        # `Perc Wheel Wah` (Formula 4000 Vol. 3) read 3 voices / 36 zones where
+        # the device plays 2 / 30, and `FM FM FM ...` (Vol. 10) read 3 / 3
+        # against 2 / 2.  The other eight decode to nothing.
+        #
+        # Worth stating how that was measured, because the obvious probe lies:
+        # walking the chains with an EMPTY sample table makes all ten look
+        # harmless, since zones whose sample cannot be resolved are dropped
+        # before they are counted.  Only a full parse_eiii() with the bank's
+        # real sample table shows the phantom voices.
+        if idx is not None and not _preset_present(data, fmt, idx):
+            idx = None
 
     if not voices:
         return None
