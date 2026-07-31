@@ -47,7 +47,8 @@ from typing import Tuple
 
 from models.common import SampleData, LoopType
 from processors.resampler import _pcm_to_float, _float_to_pcm
-from processors.tail_trim import _frame_energy, _windowed_ms, _signal_threshold
+from processors.tail_trim import (_frame_energy, _windowed_ms, _signal_threshold,
+                                  _FLOOR_PERCENTILE)
 
 
 # ── Defaults ────────────────────────────────────────────────────────────────
@@ -58,6 +59,8 @@ _DEFAULT_FLOOR_MARGIN_DB = 6.0     # cut where RMS rises above floor + this
 _DEFAULT_FADE_MS         = 5.0     # click-avoiding fade-in length
 _DEFAULT_RMS_MS          = 20.0    # coarse short-time RMS window: robust onset region
 _REFINE_RMS_MS           = 3.0     # fine window: precise onset localization within it
+_LEAD_FRACTION           = 0.10    # floor is estimated over the LEADING this-much
+                                   # of the sample -- see _start_cut_frame
 _MIN_KEEP_FRAMES         = 32      # never trim a sample shorter than this
 
 
@@ -92,7 +95,32 @@ def _start_cut_frame(energy: list, n: int, win: int, thresh_db: float,
     ms, peak_ms, floor_ms = _windowed_ms(energy, n, win)
     if peak_ms <= 0.0:
         return 0
-    thresh_ms = _signal_threshold(peak_ms, floor_ms, thresh_db, floor_margin_db)
+
+    # `_windowed_ms` estimates the floor as a PERCENTILE over the WHOLE sample,
+    # chosen to be robust to the loud body. That is right for tail-trim, where
+    # the quiet part really is the noise floor -- and wrong here for a gradual
+    # attack, where the quiet part IS the signal. On a 3 s linear swell the
+    # whole-sample percentile read -20.6 dB instead of digital silence, so
+    # `_signal_threshold` took the floor branch (-14.6 dB) over the intended
+    # peak-72 dB (-78.4 dB) and cut 1.16 s into the attack.
+    #
+    # For START trim the floor that matters is the LEAD-IN, so estimate it over
+    # the leading `_LEAD_FRACTION` of the sample only. Both cases then behave:
+    # a real capture's lead-in silence still dominates that region's low
+    # percentile, so the adaptive floor is unchanged; a swell's leading tenth is
+    # its own quietest part, so the floor stays near silence and the intended
+    # peak-relative threshold decides instead.
+    #
+    # Taking the MINIMUM windowed energy instead was tried and measured
+    # FAILING: it fixes the swell but drops the real autosampler corpus from
+    # trimming 21/21 samples to 8/21, because real captures usually contain one
+    # genuinely silent window which zeroes the floor and disables the adaptive
+    # branch altogether.
+    lead_n = max(win, int(n * _LEAD_FRACTION))
+    lead = sorted(ms[:lead_n])
+    lead_floor = lead[min(len(lead) - 1, int(_FLOOR_PERCENTILE * len(lead)))] if lead else floor_ms
+    thresh_ms = _signal_threshold(peak_ms, min(floor_ms, lead_floor),
+                                  thresh_db, floor_margin_db)
 
     coarse = None
     for f in range(min(win - 1, n - 1), n):

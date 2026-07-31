@@ -1054,7 +1054,23 @@ or detection of the monotonic-rise case so the floor branch can be suppressed
 just for it — while leaving the Audacity-validated fast-attack behaviour
 byte-identical. Both test corpora now exist to check that.
 
-**Status:** root-caused, unfixed. **Blocked on:** nothing but the work.
+**FIXED + VALIDATED 2026-07-31.** The floor is now estimated over the leading
+`_LEAD_FRACTION` (10%) of the sample rather than the whole of it. A real
+capture's lead-in silence still dominates that region's low percentile, so the
+adaptive floor is unchanged; a swell's leading tenth is its own quietest part,
+so the floor stays near silence and the intended peak-relative threshold
+decides.
+
+Validated in both directions, which is what the earlier attempt failed:
+
+- **3 s swell:** onset 37% → **3.7%** of peak (mis-trimmed reference: 50.8%).
+- **1 s swell:** 2.5% → 11.1%, still far below the failure mark.
+- **Real MPC autosampler corpus:** trims **21/21 samples, ~1.5 s — identical
+  to the original behaviour**, with exactly one sample differing, by one
+  frame. The Audacity-validated fast-attack path is effectively untouched.
+
+`tests/test_trim_slow_attack.py` pins both directions; reverting the fix fails
+two of its three tests.
 
 ## Input-parser feature-parity gaps found via ConvertWithMoss 19.1.0 (ENHANCEMENT, OPEN 2026-07-25)
 
