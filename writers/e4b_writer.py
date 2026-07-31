@@ -750,6 +750,21 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
     # exactly — -96 was one of the test values); Pan -64=full-L..0=centre..
     # +63=full-R. (Earlier vpar[54] comment "0x00 = max, higher = quieter"
     # was an untested guess predating this confirmation.)
+    #
+    # READ THAT CONFIRMATION NARROWLY. It establishes that the FRONT PANEL
+    # displays the byte we write -- nothing more. For vpar[54] that turned out
+    # to be a different thing from the audio: writing the dB value straight in
+    # delivered only half to three-quarters of the requested attenuation until
+    # it was measured and corrected on 2026-07-31 (§E4BFILTCAL). vpar[55] pan
+    # rests on the SAME differential save and the same reasoning, so its audio
+    # law is likewise unmeasured -- we do not actually know that pan -64
+    # produces full-left, nor that the law between the endpoints is linear.
+    # The same caveat applies to vpar[42] Chorus Amount below, whose evidence
+    # is UI-percentage-vs-byte agreement.
+    #
+    # Two independent parameters have now failed this way, so panel agreement
+    # is recorded here as insufficient evidence for any LEVEL or AMOUNT law.
+    # Only a measurement counts.
     # ONLY meaningful for a single-zone voice (_vol/_pan are pre-set to 0.0
     # above when the voice has 2+ zones — see the per-zone entries instead;
     # a second hardware test showed this is NOT a voice-value + per-zone-

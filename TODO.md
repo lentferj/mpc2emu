@@ -70,6 +70,29 @@ sent the pan analysis down a wrong path — see the method note in §E4BSTEREO.
 **Blocked on:** a rebuilt bank for the two open presets. The SD card is in the
 hardware, so that is a next-session item.
 
+## EOS: pan and chorus laws rest on panel evidence, never measured (OPEN, 2026-07-31)
+
+Found by auditing every "hardware-confirmed" claim that concerns a level or
+amount, after **two** of them turned out to mean something weaker than they
+sounded.
+
+`vpar[55]` **Pan** is documented as *"HARDWARE-CONFIRMED 2026-07-26 via a
+7-voice differential save … Pan +63/−64/+32/−32 → `vpar[55]` exactly"*. That
+is the same save, and the same reasoning, that carried `vpar[54]` **Volume** —
+and volume then measured as under-delivering by up to **6.5 dB**, because the
+evidence only ever showed that the front panel displays the byte we write.
+
+So we do not know that pan −64 produces full-left, nor that the law between
+the endpoints is linear. `vpar[42]` **Chorus Amount** is the same class of
+claim (UI percentage vs byte, verified against saved banks, never played).
+
+**Status:** open. **Blocked on:** one bank load — `P_PANLAW` in the EOS
+follow-up bank sweeps pan L→R for per-channel measurement. Chorus is harder
+to quantify and is not in that bank.
+
+Caveat recorded in `writers/e4b_writer.py` at the claim itself: panel
+agreement is not sufficient evidence for a level or amount law.
+
 ## KRZ stereo — writer downmixes, reader keeps one side (OPEN, 2026-07-31)
 
 The E4B stereo work is done end-to-end and hardware-confirmed, which leaves
