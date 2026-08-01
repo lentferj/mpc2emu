@@ -4787,3 +4787,28 @@ non-stacking cases (key splits, velocity splits, zones within a layer), the
 partial-velocity-overlap peak, out-of-range and dangling zones, and the
 warning's on/off boundary at exactly 32 mono / 16 stereo. End-to-end on an
 18-layer stereo SFZ: warns at 36 voices, and both suggested flags clear it.
+Write→read→estimate agrees: re-parsing that bank returns 36 as well, so the
+writer, the E4B parser and the estimator all count the same voices.
+
+**A/B against the pre-change tree** (worktree at `4ab9584`): 56 conversions —
+a 33-file corpus across sfz/sf2/xpm/exs/pgm, run for e4b, krz and eiii, with
+and without `--auto-fit` — produced **byte-identical output in every case**.
+The change is purely additive; nothing written moved.
+
+**The corpus scan is the real validation**, and it is the check worth
+repeating if this code ever changes. Running the estimator over every local
+E4B bank — **385 banks, 1706 presets** — puts **4 presets** over the budget,
+0.23%. All four are `P_VMONO` (128) and `P_VSTER` (256) in `OHWRE2B`/`OHWRE3B`:
+the deliberately-built voice ladders from the 2026-07-31 bench session that
+*established* the limit. Nothing else in the corpus trips it, and the
+next-highest preset is `P_VSPREAD` at exactly 32 — the "32 voices on each of
+four keys" bank, which sits on the boundary and correctly stays silent.
+
+That the estimator independently rediscovers exactly the presets built to
+exceed the ceiling, and flags no ordinary multisample, is much stronger
+evidence than any synthetic fixture. Note also that `P_VSTER` reports 256
+voices from **one** stereo sample reused across 128 layers — the doubling
+follows the zone, not the sample count.
+
+Cost: **0.092 ms per preset** (158 ms for all 1706), so running it on every
+preset of every conversion is free.
