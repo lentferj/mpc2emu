@@ -28,7 +28,7 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 | **KRZ stereo** | mono in both directions; the format side is already RE'd, so this is implementation |
 | **Normalised-knob cutoff sources** | XPM/TAL/PGM dump a raw 0–1 knob into a field that means Hz — and the E4XT calibration made the mismatch bite |
 | ~~Bank sizing ignores stereo voice cost~~ | **implemented 2026-08-01** — the estimator counts per-note voices and warns; one decision left on whether `--auto-fit` should act on it |
-| **Corpus scan may count sampler OS files as banks** | see below |
+| ~~Corpus scan may count sampler OS files as banks~~ | **measured 2026-08-01** — 1118 raw hits are 1017 real banks; 100 were free-space leftovers, 1 an OS file. Figures corrected |
 | **GIG→E4B fine-tune / per-zone volume** | both dropped on the way to the zone entry |
 | **AIFF not decoded**, **EXS24 first velocity layer only**, **SFZ keyswitches / overlapping regions**, **XPM slice playback** | parser feature gaps |
 | **Zone reducer not velocity-aware** | `--reduce-key-zones` can leave velocity holes |
@@ -176,26 +176,53 @@ triggers on bytes only, so an over-budget preset that fits by size is warned
 about but not auto-thinned. See §POLY in `docs/RESOLUTION_NOTES.md` for the
 argument either way; it needs Jan's call, not more measurement.
 
-## Corpus scan may count sampler OS files as banks (OPEN, 2026-08-01)
+## Corpus scan counted 101 non-banks — MEASURED AND CORRECTED (2026-08-01)
 
 From ConvertWithMoss `d94bde27`: an E-mu volume's **operating system file**
 (`E3 Main Code`, dircon type `0x80`) is a memory dump whose content can itself
-begin with an EIII bank identifier and stale preset structures. CWM's reader
-skips type `0x80` for exactly this reason.
+begin with an EIII bank identifier. CWM's reader skips type `0x80` for exactly
+this reason, and mpc2emu's corpus scan — which searched raw image bytes for the
+three identifier strings — could not skip anything.
 
-mpc2emu has **no EMU3 filesystem reader** — the corpus scan locates banks by
-searching raw image bytes for the three identifier strings, which is precisely
-what an OS dump containing a stale identifier would fool. So some fraction of
-the documented **1118-bank corpus** may be OS memory dumps rather than banks,
-and any statistic derived from that count inherits the error.
+**Audited by writing the EMU3 filesystem reader the project never had**
+(`tests/re_banks/emu3_os_file_audit.py`): parse the superblock for the real
+geometry, walk the dir-content blocks for every entry and its type byte, follow
+each file's FAT chain for its true extent, then place every identifier hit in
+the file that owns those bytes. Reproduces the original scan **exactly** —
+1118 raw hits across the 22 volumes — so the two numbers are comparable
+directly:
 
-Nothing shipped depends on it: the count appears in validation notes, not in
-converter behaviour. But it should not be quoted as a clean figure until
-checked.
+| where the hit lands | count |
+|---|---:|
+| head of a real, directory-listed bank | **1017** |
+| in FAT-**free** space (deleted / leftover data) | 100 |
+| inside an OS file (type `0x80`) | 1 |
+| embedded in a bank's own data, file slack, allocated-but-unlisted | 0 |
 
-**Status:** open, unquantified. **Blocked on:** nothing — scan the images for
-`E3 Main Code`, bound each OS file, and check how many identifier hits fall
-inside one.
+**So the corpus is 1017 banks, not 1118 — 9.0% inflation.** The dominant cause
+is *not* the mechanism CWM flagged: that one accounts for a single hit. It is
+free-space data the discs' directories no longer reference.
+
+**The read-side validation is not weakened.** All 100 free-space hits were
+re-parsed and every one is a structurally valid bank with a sensible name,
+presets and samples (1496 presets, 2193 samples between them) — deleted or
+left over from mastering, not garbage. So "the parser read 1118 real bank
+images with zero failures" remains true and is still the right claim to make
+about the *parser*. What was wrong is using that number as a count of
+*library banks*, which is 1017.
+
+Two incidental findings worth keeping:
+
+- **The original scan's glob was case-sensitive** and silently skipped five
+  `.ISO` volumes. Correcting it is what makes the raw count land on 1118 —
+  before that, only 17 of the 22 volumes were read.
+- **A coincidence to not be fooled by:** the 22 volumes also hold exactly 1118
+  directory entries (1017 EIII banks + 76 E4B banks + 25 OS files). The two
+  1118s are unrelated.
+
+**Status: resolved.** Figures corrected in `README.md`, `README_de.md`,
+`parsers/eiii_parser.py`, `docs/EIII_FORMAT.md` and §EIII. Method and full
+per-volume results in `docs/RESOLUTION_NOTES.md` §OSFILE.
 
 
 ## Combined open-HW-RE bank — SESSION DONE (2026-07-31), 2 presets rebuilt since

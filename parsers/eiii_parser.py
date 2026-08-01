@@ -26,12 +26,19 @@ Primary use case here: round-trip verification of eiii_writer.py's own
 output (tests/test_eiii_roundtrip.py). Reading genuine third-party content
 is also validated directly: this parser has been run — read-only, no
 assertions beyond "doesn't crash and looks sane" — against 1118 real EIII/
-EIIIX/ESI banks (all three identifiers) pulled out of 17 commercial E4XT
-library CD-ROM images (Jan's personal collection), covering all 3 bank
+EIIIX/ESI bank images (all three identifiers) pulled out of 22 commercial
+E4XT library CD-ROM images (Jan's personal collection), covering all 3 bank
 variants: 19,040 presets / 33,614 samples / 250,236 zones, zero parse
 failures, spot-checked sample PCM (peak/RMS) and preset/zone structure all
 plausible. That is a larger corpus than ConvertWithMoss's own independent
 validation (22 CD-ROMs / 3,424 presets) — see TODO.md for how to re-run it.
+
+Audited 2026-08-01 by reading the EMU3 filesystem properly (TODO.md "Corpus
+scan counted 101 non-banks"): 1017 of those 1118 are banks the discs' own
+directories list; the other 101 are deleted/free-space leftovers plus one
+OS-file hit. They parse fine — they are real banks — but they are not
+library content. So 1118 is the right number for "bank images this parser
+handled" and 1017 for "banks on the discs".
 None of this is hardware playback confirmation, only structural/PCM
 plausibility — the writer side (eiii_writer.py) is the one that still needs
 an E4XT to actually load and play a written bank.
@@ -316,7 +323,8 @@ def _apply_velocity_range(data: bytes, preset_offset: int, layer: int,
 # presets are a small fraction of any given bank and E-mu's library CD-ROMs
 # have had no support channel for 30 years.
 #
-# Run against mpc2emu's own 1118-bank real-world corpus (see this module's
+# Run against mpc2emu's own 1118-image real-world corpus (1017 of them
+# directory-listed banks; see this module's
 # docstring): 4,144 of 251,697 zone->sample references repaired across 771
 # presets, 0 parse failures -- a similar scale to ConvertWithMoss's own
 # 4,756/821 over their 8-CD-ROM set.

@@ -3458,8 +3458,11 @@ were located by scanning each ISO's raw bytes for the three identifier
 strings (`EMULATOR THREE `, `EMULATOR 3X    `, `EMU SI-32 v3   `) and slicing
 from each match to the next (or a 130 MB cap), since these commercial disc
 images don't need their EMU3/ISO9660 filesystem parsed to locate bank
-boundaries this way. **Result: 1118 banks, 19,040 presets, 33,614 samples,
-250,236 zones, zero parse failures.** Spot-checked decoded PCM (peak/RMS,
+boundaries this way. **Result: 1118 bank images, 19,040 presets, 33,614
+samples, 250,236 zones, zero parse failures.** (Audited 2026-08-01 — see
+§OSFILE: 1017 of those 1118 are banks the discs' directories actually list,
+the rest deleted/free-space leftovers that parse fine but are not library
+content. The parse-success claim stands; the *bank count* is 1017.) Spot-checked decoded PCM (peak/RMS,
 e.g. a "a pad" bank from the an artist-signature EIII CD-ROM
 decoding to a plausible layered stereo pad with sane sample rates and loop
 points; an "a drum-map bank" bank — the same "a commercial ESI library" library
@@ -3468,7 +3471,9 @@ ConvertWithMoss's own format doc cites for the ESI sample-index-flag finding
 necessarily byte-perfect, decoding; this is corpus-scale structural
 validation, not a hardware playback test. The one-off scan script isn't
 checked in (ad hoc, paths are Jan's local collection) — re-derive from this
-note if needed again.
+note if needed again, or start from `tests/re_banks/emu3_os_file_audit.py`,
+which reads the EMU3 directory properly and reproduces the raw scan's counts
+alongside the corrected ones.
 
 ### Bank-format scope
 
@@ -3691,7 +3696,8 @@ Worth recording, since re-checking these each round is wasted effort:
 
 ### Corpus validation method (reusable)
 
-The EIII work was validated by scanning **1118 real EIII/EIIIX/ESI banks**
+The EIII work was validated by scanning **1118 real EIII/EIIIX/ESI bank
+images** (1017 of them directory-listed banks — §OSFILE)
 out of 22 commercial CD-ROM `.iso` images in Jan's collection
 (`~/Dokumente/SYNTHS/E4XT/{*.ISO,ISO-Images/*.iso}`), located by scanning
 raw bytes for the three identifier strings and slicing to the next match
@@ -4812,3 +4818,99 @@ follows the zone, not the sample count.
 
 Cost: **0.092 ms per preset** (158 ms for all 1706), so running it on every
 preset of every conversion is free.
+
+---
+
+## §OSFILE — Auditing the corpus count: the raw-byte bank scan over-counted by 9% (2026-08-01)
+
+**Resolved.** ConvertWithMoss `d94bde27` flags that an E-mu volume's
+operating-system file (`E3 Main Code`, dircon type `0x80`) is a memory dump
+that can itself contain a bank identifier, and skips type `0x80` when reading.
+mpc2emu's corpus scan searched **raw image bytes** for the three EIII
+identifier strings, so it could not skip anything — and every figure derived
+from that scan (§EIII, the sample-index-repair rates, the README claims)
+inherits whatever it over-counted.
+
+### Method — build the filesystem reader the project never had
+
+The honest way to answer this is not a heuristic. `docs/EMU3_ISO_FORMAT.md` §2
+already documents the volume layout well enough to *read* it, which nothing in
+the project had done — `iso_builder.py` only ever wrote one.
+`tests/re_banks/emu3_os_file_audit.py`:
+
+1. parses the superblock for the real geometry (all of it — several commercial
+   volumes use `cse=1` and `cse=3`, cluster sizes the writer never emits, and
+   a `dircon_start` of 9 rather than the writer's 11, so nothing may be
+   assumed from the writer's constants);
+2. walks every dir-content block for 32-byte entries, keeping the type byte
+   (`0x81` file, `0x80` OS image) and rejecting the `0x42`-filler that pads
+   the unused directory area on real discs;
+3. follows each file's **FAT chain** for its true extent, rather than assuming
+   the contiguous allocation the writer happens to produce;
+4. locates every identifier hit in the raw bytes, exactly as the original scan
+   did, and asks which file — if any — owns that offset.
+
+### Result: the raw count reproduces exactly, so the numbers are comparable
+
+**1118 raw hits**, matching the documented figure to the digit, which is the
+check that makes the rest of the table trustworthy:
+
+| where the hit lands | count |
+|---|---:|
+| head of a real, directory-listed bank | **1017** |
+| in FAT-**free** space (deleted / leftover) | 100 |
+| inside an OS file (type `0x80`) | 1 |
+| embedded in a bank's own data | 0 |
+| in a file's slack space | 0 |
+| FAT-allocated but unlisted | 0 |
+
+**The corpus is 1017 banks, not 1118 — 9.0% over-counted.** Free-space hits
+cluster on a handful of volumes (one contributes 62 on its own, another 18);
+most volumes are clean.
+
+### The mechanism CWM warned about is real but negligible here
+
+Exactly **one** hit of 1118 falls inside a type-`0x80` OS file. Every disc
+carrying an OS image has one or two (`E3 Main Code`, `E3X Main Code`, 25
+across the 22 volumes), but their content almost never begins with, or
+contains, a bank identifier. Skipping type `0x80` — the fix CWM applied —
+would have removed 1 of the 101 bad hits. **The real cause is different:
+deleted banks still physically present in free space.** Worth stating plainly,
+because adopting CWM's fix and declaring the problem solved would have left
+99% of the over-count in place.
+
+### What this does *not* invalidate
+
+All 100 free-space hits were re-parsed: **every one is a structurally valid
+bank** with a sensible name, presets and samples (1496 presets, 2193 samples
+between them). They are banks the disc's directory no longer references —
+deleted, or left over from mastering — not garbage that merely started with
+the right 15 bytes.
+
+So the parser claim and the library claim are different claims and both are
+now stated correctly:
+
+- **"read 1118 real bank images, zero failures"** — true, and the right
+  statement about the *parser*, since all 1118 really are banks;
+- **"the discs hold 1118 banks"** — wrong; that is 1017.
+
+Corrected in `README.md`, `README_de.md`, `parsers/eiii_parser.py`,
+`docs/EIII_FORMAT.md` and §EIII above.
+
+### Two traps found on the way
+
+- **The original glob was case-sensitive** (`*.ISO` at the top level, `*.iso`
+  in the subdirectory) and silently skipped five volumes. The audit only lands
+  on 1118 once that is fixed; before that it saw 17 of 22 volumes and 649
+  hits. A scan that quietly reads a subset of its corpus is worse than one
+  that fails.
+- **A coincidence not to be fooled by:** the 22 volumes hold exactly **1118
+  directory entries** as well (1017 EIII banks + 76 E4B banks + 25 OS files).
+  The two 1118s have nothing to do with each other, and either could be
+  mistaken for confirmation of the other.
+
+### Re-running it
+
+`python3 tests/re_banks/emu3_os_file_audit.py [IMAGE ...]` — no arguments
+audits the default 22-volume set; `VERBOSE=1` prints every hit that is not a
+clean bank header, with the file (or free cluster) that owns it.

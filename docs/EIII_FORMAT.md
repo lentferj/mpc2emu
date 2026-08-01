@@ -227,7 +227,8 @@ is a mastering-tool artifact of specific commercial discs, **not** a
 hardware or format bug — real EIII/EIIIX hardware reads the full 16-bit
 index correctly, which is presumably why it was never reported as a known
 issue over 25+ years: the affected presets are a small fraction of any
-given bank (running the repair below over mpc2emu's own 1118-bank corpus:
+given bank (running the repair below over mpc2emu's own 1118-image corpus
+(1017 directory-listed banks; see TODO.md):
 4,144 of 251,697 zone→sample references repaired, across 771 presets, 0
 parse failures — a similar scale to ConvertWithMoss's own 4,756/821 over
 their 8-CD-ROM set), and E-mu's library CD-ROMs have had no support channel
