@@ -4714,3 +4714,76 @@ non-transposing voice) and does not depend on velocity (+0.00 dB from 5 to
 agreeing at both endpoints, is still unexplained.** The linear law is the one
 that verifies on hardware, so it is the one in the code; that is a stronger
 claim than understanding the discrepancy, and the discrepancy stays open.
+
+---
+
+## §POLY — Per-note voice budget: teaching the size/fit path that stereo costs double (2026-08-01)
+
+**Implemented.** The two facts came out of the 2026-07-31 bench session
+(§E4BSTEREO item 4): a stereo sample costs **two voices**, and the ceiling is
+**~32 voices on one NOTE**, not the E4XT's 128-voice global polyphony. Neither
+had reached any code.
+
+### What the estimate has to get right
+
+Three things, and only the first is obvious:
+
+1. **Stereo doubles.** `sample_voice_cost()` — 2 if `channels >= 2`.
+2. **Zones inside one voice layer do not stack.** An E4B voice sounds only one
+   matching zone per note. That is precisely why SFZ overlapping regions had to
+   be split into parallel *voices* rather than piled into one voice's zone
+   table (see the SFZ overlapping-region strategy above). A 155-zone
+   single-layer import costs **one** voice. An estimator that counted zones
+   would fire on nearly every multisample in the corpus, and a warning that
+   cries wolf gets ignored — which is worse than no warning.
+   Where zones within one layer overlap, which one EOS picks is not modelled,
+   so the estimate takes the dearer (stereo) one.
+3. **The peak is not at the extremes.** Layers with velocity ranges 0–99,
+   50–127 and 64–90 all overlap only in 64–90; sampling velocity 0 or 127 sees
+   two layers, not three. The peak of a step function over closed intervals is
+   always reached at some interval's lower edge, so `peak_note_voices()` sweeps
+   the distinct `lo_vel` values (plus 0) against all 128 keys. Cost is
+   `vel_edges x layers x 128`, which is nothing.
+
+### Scope: e4b only
+
+`_VOICES_PER_NOTE = {'e4b': 32}`. The K2000 and EIII have smaller voice budgets
+and no per-note limit has been measured on either — and both paths are still
+mono-only, so the stereo cost cannot bite there anyway. Warning on a guessed
+number would be inventing a hardware fact, which is the one thing this
+project's notes have consistently refused to do. Add a row when a bench session
+produces one.
+
+### What was NOT wrong
+
+The byte estimate. Stereo PCM is naturally twice the bytes and
+`len(sample.data)` already counted it, so `--max-preset-size` never
+under-counted *size*. The TODO entry's "under-count by 2x" phrasing conflated
+the two ceilings. Voices are a **separate** budget: a preset can be trivially
+small in bytes and still steal voices, which is exactly why the check runs on
+every preset rather than only on the oversized ones the fit assistant sees.
+
+### Open question for Jan — should `--auto-fit` act on this?
+
+Today the fit assistant triggers on **bytes only**. An over-budget preset that
+fits by size gets a warning naming the two flags that fix it (`--mono`,
+`--reduce-velocity-layers`) but is written unchanged.
+
+- **For acting:** voice stealing is a real playback failure, and which layers
+  survive is arbitrary — arguably worse than a bank that is merely too big,
+  because it looks like it worked.
+- **Against:** `--auto-fit` is documented as fitting *oversized* presets.
+  Silently thinning a preset that fits every stated limit is a surprise, and
+  the honest fix is often `--mono`, which is a fidelity decision the user
+  should make rather than have made for them.
+
+Recommendation: leave it as a warning. Revisit if a real bank turns up where
+the warning fires and the suggested flags are not the right answer.
+
+### Verification
+
+`tests/test_polyphony.py` — 21 assertions covering the cost rule, the
+non-stacking cases (key splits, velocity splits, zones within a layer), the
+partial-velocity-overlap peak, out-of-range and dangling zones, and the
+warning's on/off boundary at exactly 32 mono / 16 stereo. End-to-end on an
+18-layer stereo SFZ: warns at 36 voices, and both suggested flags clear it.

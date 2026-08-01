@@ -27,7 +27,7 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 |------|------|
 | **KRZ stereo** | mono in both directions; the format side is already RE'd, so this is implementation |
 | **Normalised-knob cutoff sources** | XPM/TAL/PGM dump a raw 0–1 knob into a field that means Hz — and the E4XT calibration made the mismatch bite |
-| **Bank sizing ignores stereo voice cost** | a stereo sample costs 2 voices and there is a ~32/note limit; the estimator knows neither |
+| ~~Bank sizing ignores stereo voice cost~~ | **implemented 2026-08-01** — the estimator counts per-note voices and warns; one decision left on whether `--auto-fit` should act on it |
 | **Corpus scan may count sampler OS files as banks** | see below |
 | **GIG→E4B fine-tune / per-zone volume** | both dropped on the way to the zone entry |
 | **AIFF not decoded**, **EXS24 first velocity layer only**, **SFZ keyswitches / overlapping regions**, **XPM slice playback** | parser feature gaps |
@@ -141,28 +141,40 @@ A3.
 parsers remain uncalibrated — as they always were, just now with a different
 wrong answer.
 
-## Bank sizing does not know a stereo sample costs two voices (OPEN, 2026-08-01)
+## Bank sizing does not know a stereo sample costs two voices — IMPLEMENTED, one decision left (2026-08-01)
 
 Measured 2026-07-31: on the E4XT a **stereo sample consumes two voices**, and
 there is a **~32-voice limit per NOTE** (global polyphony of 128 is intact —
 32 voices on each of four keys all sound).
 
-Neither fact reaches the code that reasons about size and fit.
-`writers/bank_splitter.py` and `processors/zone_reducer.py` contain no
-stereo or voice-count awareness at all, so:
+Neither fact reached the code that reasons about size and fit.
+`writers/bank_splitter.py` and `processors/zone_reducer.py` contained no
+stereo or voice-count awareness at all, so a preset stacking more than
+**16 stereo layers on one key** (or 32 mono) had voices silently stolen on
+playback, and nothing warned. That matters more since stereo became the
+default: presets that used to be downmixed now carry twice the voice cost.
 
-- `--max-preset-size` and the fit assistant under-count a stereo preset's real
-  voice usage by 2×;
-- a preset stacking more than **16 stereo layers on one key** (or 32 mono)
-  will have voices silently stolen on playback, and nothing warns.
+**Status: implemented 2026-08-01.** `bank_splitter` gained
+`sample_voice_cost` / `peak_note_voices` / `polyphony_warnings`, and
+`convert.py` prints the warnings alongside the split warnings. Verified end
+to end on an 18-layer stereo SFZ: reports 36 voices, and both flags it
+suggests (`--mono`, `--reduce-velocity-layers`) do clear it. Covered by
+`tests/test_polyphony.py` (21 assertions).
 
-This matters more since stereo became the default: presets that used to be
-downmixed now carry twice the voice cost through exactly the logic that does
-not know it.
+Two things worth knowing about what was *not* wrong:
 
-**Status:** open. **Blocked on:** nothing — the facts are measured; this is
-teaching the estimator about them, plus a warning when a preset exceeds ~32
-voices on any single key.
+- **The byte estimate was already correct.** Stereo PCM is naturally twice
+  the bytes and `len(sample.data)` counts it, so `--max-preset-size` never
+  under-counted *size*. What was missing was voice accounting, which is a
+  separate ceiling — a preset can be tiny in bytes and still over budget.
+- **Zones inside one voice layer do not stack.** An E4B voice sounds only one
+  matching zone per note, so a 155-zone single-layer SFZ import costs one
+  voice, not 155. Counting zones would have produced nonsense warnings.
+
+**Left open — a decision, not a gap:** the fit assistant (`--auto-fit`) still
+triggers on bytes only, so an over-budget preset that fits by size is warned
+about but not auto-thinned. See §POLY in `docs/RESOLUTION_NOTES.md` for the
+argument either way; it needs Jan's call, not more measurement.
 
 ## Corpus scan may count sampler OS files as banks (OPEN, 2026-08-01)
 
