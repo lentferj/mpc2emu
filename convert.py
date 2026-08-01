@@ -78,7 +78,8 @@ from writers.krz_writer      import write_krz
 from writers.eiii_writer     import write_eiii
 from writers.iso_builder     import build_iso, build_iso_9660
 from writers.hda_builder     import build_hda_fat, build_hda_emu, auto_hda_size_mb
-from writers.bank_splitter   import split_into_banks, print_split_summary
+from writers.bank_splitter   import (split_into_banks, print_split_summary,
+                                     polyphony_warnings)
 from processors.resampler    import resample_bank, resample_to_rate, PROFILES
 from processors.zone_reducer import reduce_bank
 from info_cmd                import run_info
@@ -973,6 +974,11 @@ def main():
     # ── Split ─────────────────────────────────────────────────────────────────
     print(f"\n[{step_n}] Splitting into {args.bank_size:.0f} MB banks...")
     step_n += 1
+    # A preset can fit a bank by size and still lose layers on playback: the
+    # per-note voice budget is a separate ceiling from bytes, and stereo zones
+    # spend it twice as fast.  Report both together.
+    for w in polyphony_warnings(source_banks, args.format):
+        print(w)
     output_banks, warnings = split_into_banks(
         source_banks, args.bank_size, bank_name)
     for w in warnings:

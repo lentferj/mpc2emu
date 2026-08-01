@@ -59,6 +59,24 @@ _MAX_SAMPLES_PER_BANK = 1000
 # Same limit applies to presets: EOS numbers them P000-P999 (max 1000/bank).
 _MAX_PRESETS_PER_BANK = 1000
 
+# ── Polyphony (measured on the E4XT 2026-07-31) ────────────────────────────────
+# Two facts that nothing in the size/fit path used to know:
+#
+#   1. A STEREO sample costs TWO voices.  Detuned voice ladders plateau at 32
+#      mono but only 16 stereo, and the two ladders settle at *different*
+#      levels (~250-300 vs ~420-490), which rules out a shared level ceiling
+#      masquerading as a voice ceiling.  See docs/RESOLUTION_NOTES.md
+#      §E4BSTEREO item 4 — the first two attempts at this measurement both
+#      produced confident wrong answers.
+#   2. The ceiling is ~32 mono voices ON ONE NOTE, not the E4XT's 128-voice
+#      global polyphony (32 voices on each of four separate keys all sound).
+#
+# Only the E4XT numbers are measured.  The K2000 (krz) and EIII paths have
+# their own, smaller voice budgets, but no per-note limit has been measured on
+# either — and both are still mono-only, so the stereo cost cannot bite there.
+# Leave them out rather than warn on a guess.
+_VOICES_PER_NOTE = {'e4b': 32}
+
 
 def estimate_bank_size(bank: Bank) -> int:
     """
@@ -120,6 +138,90 @@ def velocity_layer_count(preset: Preset) -> int:
     if preset.voices:
         return len({(z.lo_vel, z.hi_vel) for z in preset.voices[0].zones})
     return 0
+
+
+def sample_voice_cost(sample: SampleData) -> int:
+    """Voices consumed by one sounding zone: 2 for a stereo sample, 1 for mono."""
+    return 2 if getattr(sample, 'channels', 1) >= 2 else 1
+
+
+def peak_note_voices(preset: Preset,
+                     samples: List[SampleData]) -> Tuple[int, int, int]:
+    """
+    Highest voice count this preset can put on a SINGLE key at a single
+    velocity, counting a stereo zone as two voices.
+
+    Returns `(voices, key, velocity)` — the peak and one key/velocity that
+    reaches it.  `(0, 0, 0)` for a preset with no playable zones.
+
+    An E4B *voice* sounds only one matching zone per note (that is why SFZ
+    overlapping regions had to be split into parallel voices, not stacked as
+    zones), so a voice layer contributes the cost of its matching zone, not the
+    sum over all of them.  Where several zones inside one layer overlap, the
+    dearer one is assumed — a stereo zone is the conservative reading.
+    """
+    cost = {s.name: sample_voice_cost(s) for s in samples}
+    # The peak of a step function built from closed intervals is always reached
+    # at some interval's lower edge, so only the distinct lo_vel values need
+    # testing (plus 0, for a preset whose zones all start above it).
+    vel_edges = sorted({z.lo_vel for v in preset.voices for z in v.zones} | {0})
+
+    best = (0, 0, 0)
+    for vel in vel_edges:
+        per_key = [0] * 128
+        for voice in preset.voices:
+            layer = [0] * 128
+            for z in voice.zones:
+                if not (z.lo_vel <= vel <= z.hi_vel):
+                    continue
+                c = cost.get(z.sample_name, 1)
+                for k in range(max(0, z.lo_key), min(127, z.hi_key) + 1):
+                    if c > layer[k]:
+                        layer[k] = c
+            for k in range(128):
+                per_key[k] += layer[k]
+        for k in range(128):
+            if per_key[k] > best[0]:
+                best = (per_key[k], k, vel)
+    return best
+
+
+def _note_name(midi: int) -> str:
+    names = ('C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B')
+    return f"{names[midi % 12]}{midi // 12 - 1}"
+
+
+def polyphony_warnings(source_banks: List[Bank], fmt: str) -> List[str]:
+    """
+    Warn about presets that stack more voices on one note than the hardware
+    will sound.  Over the limit the extra voices are not merely quiet — they
+    are stolen, so which layers survive is arbitrary.
+
+    Returns a list of ready-to-print warning strings (empty when the format has
+    no measured per-note limit, or nothing is over it).
+    """
+    limit = _VOICES_PER_NOTE.get(fmt)
+    if not limit:
+        return []
+
+    out: List[str] = []
+    for bank in source_banks:
+        for preset in bank.presets:
+            needed = preset_needed_samples(preset, bank.samples)
+            voices, key, vel = peak_note_voices(preset, needed)
+            if voices <= limit:
+                continue
+            stereo = sum(1 for s in needed if sample_voice_cost(s) > 1)
+            why = (f" ({stereo} of {len(needed)} samples are stereo, and a "
+                   f"stereo sample costs two voices)") if stereo else ""
+            out.append(
+                f"  [WARN] Preset '{preset.name}' from '{bank.name}' stacks "
+                f"{voices} voices on {_note_name(key)} at velocity {vel}, over "
+                f"the {limit}-voice-per-note limit{why} — the extra layers will "
+                f"be stolen on playback. To fix: --reduce-velocity-layers, or "
+                f"--mono to halve the cost of every stereo zone."
+            )
+    return out
 
 
 def _resample_est_bytes(preset: Preset, needed: List[SampleData],
