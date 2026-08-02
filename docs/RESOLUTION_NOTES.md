@@ -5031,7 +5031,7 @@ pitch after conversion.
 
 ---
 
-## §WAVFMT — `load_wav` rejects every WAV that is not format code 0x0001 (OPEN, found 2026-08-02)
+## §WAVFMT — `load_wav` rejected every WAV that is not format code 0x0001 (FIXED 2026-08-02)
 
 Found while checking ConvertWithMoss `8dcb97cb` (WAV files carrying an Ogg
 stream) for relevance. That specific case is niche for us, but the check
@@ -5080,9 +5080,46 @@ Worth keeping the 16-bit-only contract at the `SampleData` boundary — the
 conversion belongs in the loader, next to `_convert_24_to_16`, not in the
 writers.
 
-### Verification when it is done
+### What was implemented (2026-08-02)
 
-Synthesise one file per code (the throwaway generators used to find this are
-trivial: a `fmt ` chunk plus a `data` chunk) and assert a real float export
-round-trips to the same audio as the same material exported as 16-bit PCM.
-`tests/` is gitignored, so that lands in `tests/test_wav_formats.py` locally.
+`_parse_wav_chunks()` walks the RIFF chunks directly and `load_wav` dispatches
+on the resulting code; `import wave` is gone from the parser. Float PCM is
+converted by `_float_to_int16()`. Covered by `tests/test_wav_formats.py`
+(15 assertions).
+
+Three things the implementation turned up that the plan did not anticipate:
+
+- **The stdlib module was also truncating ordinary PCM files.** `wave` clamps
+  its reads to the **RIFF size field**, and real MPC exports understate it —
+  in `~/temp/SamplerExports` the field is 556 bytes short of the actual file.
+  Every one of those 71 samples was losing its last **186 frames** (~4 ms) and
+  having `loop_end` clamped that much early. Reading the `data` chunk as
+  declared recovers a length of exactly 4.000000 s, and the new output is a
+  strict superset of the old: byte-identical prefix, 186 frames longer. So the
+  container walk fixed a silent data-loss bug that had nothing to do with
+  format codes.
+- **Round, do not truncate.** `int(v * 32767.0)` biases every sample toward
+  zero; measured over 500k samples of a real 32-bit float take, truncation
+  gives a mean error of 0.497 LSB against rounding's 0.250. The converted
+  output now matches a float64 round-half-even reference exactly.
+- **Clamp before scaling.** Float WAVs legitimately exceed +/-1.0 — headroom
+  is the point of the format — so an unclamped cast wraps a loud peak into the
+  opposite polarity.
+
+Validated on ~3,700 real WAVs in `~/Mixbus` and `/mnt/music/rehearse`, of
+which **3,363 are 32-bit float** — i.e. material the old code rejected
+outright. A 44 MB / 3.7-minute float take converts in ~3 s; sampler sources
+are far shorter, so the pure-Python conversion loop is not worth optimising
+further.
+
+### FLAC (raised 2026-08-02, not implemented)
+
+The same corpora hold a lot of FLAC (`/mnt/music/sorted`, CD quality plus some
+hi-res), and reading it as a sample input was raised alongside this fix. It is
+**not** a variation of the above: the WAV work needed no decoder, whereas FLAC
+needs a real one, and Python ships none. The options are a third-party
+dependency (`soundfile`/`pyflac`, i.e. libsndfile or libFLAC), shelling out to
+`flac`/`ffmpeg` when present, or a pure-Python decoder. mpc2emu's pipeline is
+deliberately stdlib-only — the resampler avoids numpy for exactly this reason
+— so this is a policy decision for Jan before any code is written, not a
+technical one. Tracked in TODO.md.

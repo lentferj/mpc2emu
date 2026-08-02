@@ -32,7 +32,7 @@ import os
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Optional
-import wave
+import sys
 import struct
 
 from models.common import (
@@ -379,6 +379,89 @@ def _load_aiff(aiff_path: str, name: str) -> Optional[SampleData]:
     )
 
 
+# --- RIFF/WAVE container ---------------------------------------------------
+#
+# The stdlib `wave` module accepts ONLY format code 0x0001 and raises
+# `unknown format: N` for everything else, so 32-bit float exports (0x0003)
+# and WAVE_FORMAT_EXTENSIBLE (0xFFFE, the usual encoding for 24-bit and
+# multichannel WAV) were rejected outright. Both are ordinary DAW and
+# sample-library output. See docs/RESOLUTION_NOTES.md §WAVFMT.
+
+_WAVE_FORMAT_PCM        = 0x0001
+_WAVE_FORMAT_IEEE_FLOAT = 0x0003
+_WAVE_FORMAT_EXTENSIBLE = 0xFFFE
+
+# Ogg-in-WAV: a complete Ogg stream in the data chunk. Rejected deliberately
+# rather than mis-read -- decoding it would need a Vorbis decoder.
+_WAVE_FORMAT_OGG = frozenset(range(0x674F, 0x6752)) | frozenset(range(0x676F, 0x6772))
+
+
+def _parse_wav_chunks(raw: bytes) -> tuple:
+    """Walk a RIFF/WAVE file and return
+    ``(format_code, channels, sample_rate, bits, data)``.
+
+    Replaces `wave.open`, which only understands PCM.  Raises ValueError with
+    a readable message -- load_wav's caller turns that into the [ERROR] line.
+    """
+    if raw[:4] != b'RIFF' or raw[8:12] != b'WAVE':
+        raise ValueError("not a RIFF/WAVE file")
+
+    fmt = data = None
+    pos, end = 12, len(raw)
+    while pos + 8 <= end:
+        ck_id = raw[pos:pos + 4]
+        ck_sz = struct.unpack_from('<I', raw, pos + 4)[0]
+        body  = raw[pos + 8:pos + 8 + ck_sz]
+        if ck_id == b'fmt ':
+            fmt = body
+        elif ck_id == b'data':
+            data = body
+        pos += 8 + ck_sz + (ck_sz & 1)      # chunks are word-aligned
+        if fmt is not None and data is not None:
+            break
+
+    if fmt is None or data is None:
+        raise ValueError("missing fmt or data chunk")
+    if len(fmt) < 16:
+        raise ValueError("fmt chunk too short")
+
+    code, channels, rate = struct.unpack_from('<HHI', fmt, 0)
+    bits = struct.unpack_from('<H', fmt, 14)[0]
+
+    if code == _WAVE_FORMAT_EXTENSIBLE:
+        # The real code is the first two bytes of the SubFormat GUID; the rest
+        # of the GUID is the fixed KSDATAFORMAT tail and carries nothing.
+        if len(fmt) < 40:
+            raise ValueError("extensible fmt chunk without a SubFormat GUID")
+        code = struct.unpack_from('<H', fmt, 24)[0]
+
+    if channels < 1:
+        raise ValueError(f"bad channel count {channels}")
+    return code, channels, rate, bits, data
+
+
+def _float_to_int16(raw: bytes, bits: int) -> bytes:
+    """IEEE float PCM -> signed 16-bit LE.
+
+    Float WAVs legitimately exceed +/-1.0 (headroom is the point of the
+    format), so the scale is clamped; a bare cast would wrap loud peaks into
+    the opposite polarity.
+    """
+    src = array.array('f' if bits == 32 else 'd')
+    src.frombytes(raw[:len(raw) - (len(raw) % src.itemsize)])
+    if sys.byteorder == 'big':              # WAV is little-endian
+        src.byteswap()
+    # Round rather than truncate: truncation biases every sample toward zero
+    # and doubles the mean quantisation error (0.50 vs 0.25 LSB, measured over
+    # 500k samples of a real 32-bit float take).
+    out = array.array('h', [-32768 if v <= -1.0 else
+                            (32767 if v >= 1.0 else round(v * 32767.0))
+                            for v in src])
+    if sys.byteorder == 'big':
+        out.byteswap()
+    return out.tobytes()
+
+
 def load_wav(wav_path: str, name: str) -> Optional[SampleData]:
     """Load WAV or AIFF/AIFC audio and return a SampleData (16-bit mono LE).
     AIFF: reads INST+MARK chunks for loop points and base note.
@@ -389,22 +472,36 @@ def load_wav(wav_path: str, name: str) -> Optional[SampleData]:
     try:
         raw_file = open(wav_path, 'rb').read()
 
-        with wave.open(wav_path, 'rb') as wf:
-            channels   = wf.getnchannels()
-            sampwidth  = wf.getsampwidth()
-            framerate  = wf.getframerate()
-            n_frames   = wf.getnframes()
-            raw        = wf.readframes(n_frames)
+        code, channels, framerate, bit_depth, raw = _parse_wav_chunks(raw_file)
 
-        bit_depth = sampwidth * 8
+        # Trim a ragged tail so every frame is whole -- some writers pad the
+        # data chunk, and the converters below assume complete frames.
+        frame_bytes = channels * ((bit_depth + 7) // 8)
+        if frame_bytes and len(raw) % frame_bytes:
+            raw = raw[:len(raw) - (len(raw) % frame_bytes)]
 
-        # Convert to 16-bit if necessary
-        if bit_depth == 24:
-            raw, bit_depth = _convert_24_to_16(raw, channels)
-        elif bit_depth == 8:
-            raw, bit_depth = _convert_8_to_16(raw)
-        elif bit_depth != 16:
-            print(f"  [WARN] Unsupported bit depth {bit_depth} in {wav_path}, skipping")
+        if code == _WAVE_FORMAT_IEEE_FLOAT:
+            if bit_depth not in (32, 64):
+                print(f"  [WARN] Unsupported float width {bit_depth} in "
+                      f"{wav_path}, skipping")
+                return None
+            raw, bit_depth = _float_to_int16(raw, bit_depth), 16
+        elif code == _WAVE_FORMAT_PCM:
+            # Convert to 16-bit if necessary
+            if bit_depth == 24:
+                raw, bit_depth = _convert_24_to_16(raw, channels)
+            elif bit_depth == 8:
+                raw, bit_depth = _convert_8_to_16(raw)
+            elif bit_depth != 16:
+                print(f"  [WARN] Unsupported bit depth {bit_depth} in {wav_path}, skipping")
+                return None
+        elif code in _WAVE_FORMAT_OGG:
+            print(f"  [WARN] {wav_path} holds an Ogg stream, not PCM — skipping "
+                  f"(no Vorbis decoder; see RESOLUTION_NOTES §WAVFMT)")
+            return None
+        else:
+            print(f"  [WARN] Unsupported WAV format code 0x{code:04X} in "
+                  f"{wav_path}, skipping")
             return None
 
         # Stereo is PRESERVED here: the parser's job is a faithful read.
@@ -412,10 +509,10 @@ def load_wav(wav_path: str, name: str) -> Optional[SampleData]:
         # --mono), alongside the other vintage-fit reductions, or forced by
         # a writer whose format mpc2emu cannot emit stereo for.
 
-        # Read loop points from SMPL chunk (wave module ignores this).
-        # Clamp loop_end to actual loaded frame count — the SMPL chunk uses the
-        # nominal WAV header frame count which can differ from what wave.readframes
-        # actually delivers.
+        # Read loop points from the SMPL chunk.
+        # Clamp loop_end to the actual loaded frame count — the SMPL chunk uses
+        # the nominal WAV header frame count, which can differ from what the
+        # data chunk actually delivers.
         n_actual = len(raw) // (2 * (1 if channels == 1 else 2))
         # Frame count, channel-aware: a frame is 2 bytes PER CHANNEL, and the
         # data stays interleaved here because the parser preserves stereo.
