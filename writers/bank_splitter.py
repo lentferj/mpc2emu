@@ -75,7 +75,14 @@ _MAX_PRESETS_PER_BANK = 1000
 # their own, smaller voice budgets, but no per-note limit has been measured on
 # either — and both are still mono-only, so the stereo cost cannot bite there.
 # Leave them out rather than warn on a guess.
-_VOICES_PER_NOTE = {'e4b': 32}
+#: Voices the hardware will sound on a single note.  `sample_voice_cost()`
+#: charges a stereo sample two, which is measured on both machines.
+#:   e4b — 32 per note (E4XT, global polyphony 128), HW-confirmed 2026-07-31
+#:   krz — 24, the K2000's entire polyphony, HW-confirmed 2026-08-02: a stereo
+#:         sample plateaus at 12 simultaneous notes where the same material in
+#:         mono reaches 24, measured identically at velocity 100, 45 and 25 so
+#:         the plateau is voice allocation rather than output clipping
+_VOICES_PER_NOTE = {'e4b': 32, 'krz': 24}
 
 
 def estimate_bank_size(bank: Bank) -> int:

@@ -221,8 +221,8 @@ neither a summed nor a swapped image can produce.
 | 2 | stereo keys sound, both channels | **PASS** |
 | 3 | **channel order** | **header 0 is the LEFT channel** |
 | 4 | loop sync | **PASS** — L 220 only, R 330 only, steady |
-| 5 | stereo voice cost | not measured |
-| 6 | mono voice cost (control) | not measured |
+| 5 | stereo voice cost | **2 voices** — plateaus at 12 simultaneous notes |
+| 6 | mono voice cost (control) | **1 voice** — reaches 24, the K2000's full polyphony |
 | 7 | `LYR[8]` 0x20 | **required, not cosmetic** — clearing it removes the second channel entirely |
 | 8 | pan law | not measured (needs front-panel interaction) |
 | 9 | pan RAM byte | not measured |
@@ -269,3 +269,22 @@ as rising pitches. The file is written correctly; the K2000 does not honour it.
 Give every sample its **own program** in any bank whose result must be trusted,
 and verify by ear or by measurement which sample a key actually plays before
 interpreting its audio. Tracked in TODO.md.
+
+### Voice cost (measured 2026-08-02)
+
+| notes played | stereo | mono |
+|---|---|---|
+| 8 | 8 | 8 |
+| 12 | 12 | 12 |
+| 16 | **12** | 16 |
+| 20 | **12** | 20 |
+| 24 | **12** | 24 |
+
+**A stereo sample costs two voices**, as on the E4XT. Stereo plateaus at 12
+simultaneous notes; the same material in mono reaches 24, the K2000's whole
+polyphony. Ratio 2.00.
+
+Measured at velocity 100, 45 and 25 with identical results (peaks -15 to
+-28 dB at the lower velocities), so the plateau is voice allocation and not
+output clipping — the failure mode that cost two attempts at this measurement
+on the E4XT. `writers/bank_splitter._VOICES_PER_NOTE` now carries `'krz': 24`.
