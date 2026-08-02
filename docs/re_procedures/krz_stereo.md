@@ -224,8 +224,8 @@ neither a summed nor a swapped image can produce.
 | 5 | stereo voice cost | **2 voices** — plateaus at 12 simultaneous notes |
 | 6 | mono voice cost (control) | **1 voice** — reaches 24, the K2000's full polyphony |
 | 7 | `LYR[8]` 0x20 | **required, not cosmetic** — clearing it removes the second channel entirely |
-| 8 | pan law | not measured (needs front-panel interaction) |
-| 9 | pan RAM byte | not measured |
+| 8 | pan law | **not applicable as framed** — see below |
+| 9 | pan RAM byte | not applicable as framed |
 | 10 | pan file byte | HOB `0x52`/`0x53` carry channel routing — see RESOLUTION_NOTES §KRZSTEREO2 |
 
 Measured on a bank produced by `krz_writer` with no post-hoc patching, so this
@@ -288,3 +288,49 @@ Measured at velocity 100, 45 and 25 with identical results (peaks -15 to
 -28 dB at the lower velocities), so the plateau is voice allocation and not
 output clipping — the failure mode that cost two attempts at this measurement
 on the E4XT. `writers/bank_splitter._VOICES_PER_NOTE` now carries `'krz': 24`.
+
+### Pan — MEASURED 2026-08-02
+
+Pan is **not** on the layer page (it is on the **Output** page), which is what
+made an earlier attempt conclude the question was mis-framed. It is a normal
+parameter and both halves of it are now measured.
+
+#### The law: constant power
+
+| pan | L | R | total power | excess vs centre |
+|---|---|---|---|---|
+| hard left | -21.70 dB | -83.02 dB | -21.70 dB | +0.57 dB |
+| centre | -24.72 dB | -25.88 dB | -22.27 dB | 0 |
+| hard right | -86.07 dB | -22.84 dB | -22.84 dB | -0.57 dB |
+
+Panning hard raises the live channel by **+3.02 dB** (left) and **+3.04 dB**
+(right); the constant-power figure is 3.01 dB. The excess is symmetric at
+**±0.57 dB**, exactly half the rig's own +1.14 dB centre imbalance, so the
+instrument's true excess is **0.00 dB**.
+
+**The K2000 pan law is constant power.** This differs from the E4XT's +4.5 dB
+excess, so the two cannot share a `--pan-law` setting.
+
+The opposite channel falls to -83/-86 dB at the extremes, i.e. the noise floor:
+hard pan is full separation, not a partial tilt.
+
+#### The RAM byte
+
+A single byte changes across the whole 274-byte program object:
+
+| pan | byte 270 | bits 2..5, 4-bit signed |
+|---|---|---|
+| hard left | `0xE5` | 9 → **-7** |
+| centre | `0xC1` | 0 → **0** |
+| hard right | `0xDD` | 7 → **+7** |
+
+**Pan is a 4-bit signed field in bits 2..5 of RAM byte 270, range -7..+7** —
+which is why the Output page shows no numeric value in the usual sense.
+
+#### Still needed to WRITE pan
+
+The above is the **RAM** layout returned by SysEx `DUMP`. The firmware converts
+between RAM and the `.KRZ` segment layout on load/save, so the file byte is a
+separate question: save a panned program to disk and byte-diff the `.KRZ`
+against an unpanned one. Until that is done mpc2emu still writes no pan.
+

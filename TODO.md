@@ -394,8 +394,19 @@ control (byte-identical channels come back correlated). Full detail in
 `docs/RESOLUTION_NOTES.md` §KRZSTEREO / §KRZSTEREO2 and the measured results in
 `docs/re_procedures/krz_stereo.md`.
 
-Not measured, still open: stereo voice cost on the K2000 (does a stereo sample
-cost two voices, as it does on the E4XT?) and the KRZ pan law.
+Voice cost measured 2026-08-02: **a stereo sample costs two voices** (stereo
+plateaus at 12 simultaneous notes, mono reaches 24), so
+`bank_splitter._VOICES_PER_NOTE` now carries `'krz': 24`.
+
+Pan measured 2026-08-02 (it is on the **Output** page, not the layer page):
+the K2000 pan law is **constant power** — hard pan raises the live channel
++3.0 dB with 0.00 dB total-power excess once the rig's own imbalance is
+subtracted, against the E4XT's +4.5 dB, so the two cannot share a
+`--pan-law`. The RAM byte is decoded: **bits 2..5 of byte 270, 4-bit signed,
+-7..+7**. **Still open:** the corresponding byte in the `.KRZ` FILE layout —
+SysEx returns the RAM layout and the firmware converts on load/save, so a
+panned program must be saved to disk and byte-diffed before mpc2emu can write
+pan.
 
 ## E4B per-zone GAIN under-delivers — measured, unfixed (2026-07-31)
 
