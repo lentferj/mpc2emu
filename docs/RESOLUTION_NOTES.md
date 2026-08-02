@@ -4914,3 +4914,90 @@ Corrected in `README.md`, `README_de.md`, `parsers/eiii_parser.py`,
 `python3 tests/re_banks/emu3_os_file_audit.py [IMAGE ...]` — no arguments
 audits the default 22-volume set; `VERBOSE=1` prints every hit that is not a
 clean bank header, with the file (or free cluster) that owns it.
+
+---
+
+## §RESAMPALIAS — `resample_to_rate` aliased worse than the code it was better than (FIXED 2026-08-02)
+
+Prompted by ConvertWithMoss `e3a9600a` (2026-08-02), which replaced its own
+linear-interpolation rate conversion with a band-limited one. Checking whether
+that finding applied to us showed it did — and that we were in worse shape than
+the code they had just replaced.
+
+### What was wrong
+
+`processors/resampler.py::resample_to_rate` ran a `_twopole_lowpass` at
+`0.45 × dst_rate` and then linear-interpolated. Two one-poles in cascade is
+~12 dB/oct, which is nowhere near enough at a transition this tight: content
+just above the destination Nyquist arrived barely attenuated and folded
+straight back into the audible band.
+
+Measured on a full-scale sweep lying **entirely** above the new Nyquist
+(11.6–21 kHz, converted 44.1 → 22.05 kHz), which should come back as silence:
+
+| implementation | aliased residual |
+|---|---|
+| CWM, linear (the code they replaced) | −9 dB (their figure) |
+| CWM, windowed sinc (`e3a9600a`) | −101 dB (their figure) |
+| **mpc2emu, 2-pole + linear** | **−5.3 dB peak / −9.6 dB RMS** |
+| **mpc2emu, windowed sinc (this fix)** | **−89.4 dB peak / −115 dB RMS** |
+
+The same softness cost the passband: −1.4 dB at 5 kHz and −3.0 dB at 8 kHz,
+i.e. it dulled clearly audible content while still aliasing. The new path is
+flat (< 0.05 dB) to 9.5 kHz and −0.5 dB at 10 kHz.
+
+This was **not** an opt-in corner. The KRZ headroom-aware downsample
+(`convert.py`, the `max_sr < 0` branch) is the default for KRZ output, so every
+KRZ bank with wide key zones went through it. `--max-sample-rate` is the other
+caller. `resample_vintage` is untouched: its aliasing is the product, not a
+defect — see `_decimate`.
+
+### The fix
+
+Convolution with a Blackman-windowed sinc whose cutoff sits below the
+destination Nyquist; the kernel is both the anti-alias filter and the
+interpolator. `_sinc_bank` / `_sinc_resample`, pure stdlib — numpy is
+deliberately not a pipeline dependency.
+
+Three things worth not re-deriving:
+
+- **A lower-sidelobe window is worse here.** Blackman-Harris (−92 dB sidelobes
+  vs Blackman's −74 dB) measured **−55 dB where Blackman gave −75 dB** at equal
+  kernel length. What limits this filter is the width of the transition band
+  just above the new Nyquist, not the far stopband, and B-H's wider main lobe
+  attenuates less exactly there. Reach for a longer kernel, not a quieter
+  window.
+- **`_SINC_ZEROS = 32`, `_SINC_ROLLOFF = 0.95`** from a measured sweep. Going
+  to 48 zeros pushes the alias below the 16-bit floor entirely (the "−239 dB"
+  reading is output quantising to exact zero, not a real number) for +37 %
+  time; 32 already sits at the floor. Rolloff 0.95 costs nothing in aliasing
+  over 0.92 and buys ~1 kHz of passband; 0.97 costs 6 dB for another 0.4 dB.
+- **Weights are precomputed per phase.** The fractional position of an output
+  sample cycles with period `dst_rate / gcd`, so an exact polyphase bank is
+  built when that is ≤ `_SINC_MAX_PHASES` (2048) and phase-interpolated
+  otherwise. The KRZ path picks arbitrary targets (e.g. 44100 → 42763), so the
+  interpolated branch is a normal case, not a fallback. 2 s of mono audio
+  converts in ~0.3 s.
+
+### Two pre-existing bugs in the same function, also fixed
+
+Both were latent because they need a **stereo** sample to bite, and only
+reachable via `--max-sample-rate` until KRZ stereo lands:
+
+1. **Channel bleed.** The old code interpolated over the interleaved stream,
+   so each output sample mixed L and R together and the frame count was
+   computed on total samples rather than frames. Now split → convert →
+   re-interleave.
+2. **Loop points scaled against twice the real frame count.**
+   `n_frames = len(pcm_out) // 2` treats bytes-per-frame as 2 regardless of
+   channel count, so a stereo sample's `loop_end` could be clamped to a value
+   past the end of the sample. Now divides by `channels`.
+
+### Verification
+
+`tests/test_resampler.py` (10 assertions): the sweep-above-Nyquist property,
+passband flatness at 1/5/8/9.5 kHz, unity DC gain, stereo non-bleed, loop-point
+frame math, the never-upsample guard, and the interpolated-phase path. Plus an
+end-to-end `--format krz` conversion of a 21-sample multisample: both rate
+paths exercised, and every sample's dominant partial still lands on its root
+pitch after conversion.

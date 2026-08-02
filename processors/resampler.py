@@ -53,6 +53,7 @@ References:
 import array
 import math
 import os
+from operator import mul
 import struct
 import sys
 import random
@@ -215,6 +216,107 @@ def _twopole_lowpass(samples: list[float], cutoff_hz: float,
     # Second pole slightly above to flatten passband
     stage2 = _onepole_lowpass(stage1, cutoff_hz * 1.2, sample_rate)
     return stage2
+
+
+# --- Band-limited (windowed-sinc) rate conversion -------------------------
+#
+# Used by resample_to_rate() for FAITHFUL rate changes.  The vintage chain
+# above deliberately does the opposite (see _decimate): its aliasing is the
+# product, not a defect.
+#
+# Why not the 2-pole prefilter + linear interpolation this replaced: a
+# cascade of two one-poles is ~12 dB/oct, so content just above the new
+# Nyquist came through barely attenuated and folded straight back into the
+# audible band, while the same softness dulled the passband ~3 dB at 8 kHz.
+# Measured on a full-scale sweep lying entirely above the new Nyquist
+# (44.1 -> 22.05 kHz), that path aliased at -5.3 dB peak / -9.6 dB RMS.
+# See docs/RESOLUTION_NOTES.md "Resampler aliasing".
+
+_SINC_ZEROS   = 32      # zero crossings of the sinc each side of centre
+_SINC_ROLLOFF = 0.95    # cutoff as a fraction of the destination Nyquist:
+                        # a finite kernel's transition band would otherwise
+                        # straddle Nyquist and alias the top of the passband
+_SINC_MAX_PHASES = 2048  # exact polyphase bank up to this many phases
+
+
+def _sinc_bank(ratio: float, nphases: int, ts: int, fc: float) -> list[list[float]]:
+    """Filter weights for `nphases` sub-sample offsets, each normalised to
+    unity DC gain.  Row p holds the taps for a fractional offset of p/nphases,
+    ordered for input indices floor(pos)-ts+1 .. floor(pos)+ts."""
+    bank = []
+    for p in range(nphases + 1):
+        frac = p / nphases
+        row = []
+        for j in range(-ts + 1, ts + 1):
+            t = frac - j
+            x = 2.0 * fc * t
+            s = 1.0 if x == 0.0 else math.sin(math.pi * x) / (math.pi * x)
+            at = abs(t)
+            if at >= ts:
+                w = 0.0
+            else:   # Blackman.  Lower-sidelobe windows (Blackman-Harris) are
+                    # WORSE here at equal length: what limits this filter is
+                    # the width of the transition band just above the new
+                    # Nyquist, not the far stopband, and their wider main lobe
+                    # attenuates less exactly there (measured: -55 vs -75 dB).
+                w = (0.42 + 0.5 * math.cos(math.pi * at / ts)
+                     + 0.08 * math.cos(2.0 * math.pi * at / ts))
+            row.append(s * w)
+        g = sum(row)
+        bank.append([v / g for v in row] if g else row)
+    return bank
+
+
+def _sinc_resample(samples: list[float], src_rate: int,
+                   dst_rate: int) -> list[float]:
+    """Band-limited rate conversion by convolution with a windowed sinc.
+
+    When down-sampling, the kernel is stretched so its cutoff sits below the
+    DESTINATION Nyquist — that is what removes the content which would
+    otherwise fold back.  Weights depend only on an output sample's fractional
+    position, which cycles with period dst_rate/gcd, so they are computed once
+    into a polyphase bank rather than per output sample.
+    """
+    if src_rate == dst_rate or not samples:
+        return samples[:]
+
+    ratio = src_rate / dst_rate
+    fc = 0.5 * _SINC_ROLLOFF / max(1.0, ratio)      # cycles per input sample
+    ts = max(1, int(math.ceil(_SINC_ZEROS / (2.0 * fc))))
+
+    g = math.gcd(src_rate, dst_rate)
+    up, down = dst_rate // g, src_rate // g
+    exact = up <= _SINC_MAX_PHASES
+    nphases = up if exact else _SINC_MAX_PHASES
+    bank = _sinc_bank(ratio, nphases, ts, fc)
+
+    n_in = len(samples)
+    n_out = int(n_in / ratio)
+    out = [0.0] * n_out
+    last = n_in - 1
+
+    for i in range(n_out):
+        if exact:
+            k = i * down
+            n0, p = k // up, k % up
+            w = bank[p]
+        else:
+            pos = i * ratio
+            n0 = int(pos)
+            fp = (pos - n0) * nphases
+            p0 = int(fp)
+            f = fp - p0
+            wa, wb = bank[p0], bank[p0 + 1]
+            w = [a + (b - a) * f for a, b in zip(wa, wb)]
+        lo = n0 - ts + 1
+        hi = n0 + ts + 1
+        if lo >= 0 and hi <= n_in:
+            seg = samples[lo:hi]
+        else:   # replicate the edge sample rather than fading into silence
+            seg = [samples[n if 0 <= n <= last else (0 if n < 0 else last)]
+                   for n in range(lo, hi)]
+        out[i] = sum(map(mul, w, seg))
+    return out
 
 
 def _onepole_highpass(samples: list[float], cutoff_hz: float,
@@ -493,12 +595,12 @@ def resample_vintage(
 
 def resample_to_rate(sample: SampleData, dst_rate: int,
                      verbose: bool = True) -> SampleData:
-    """Clean linear-interpolation downsample to `dst_rate` (no vintage coloring).
+    """Clean band-limited downsample to `dst_rate` (no vintage coloring).
 
     Unlike resample_vintage (which deliberately aliases + requantizes for
-    period character), this is a faithful rate change: a 2-pole anti-alias
-    lowpass at the new Nyquist, then linear interpolation, then loop-point
-    rescaling.  16-bit is preserved.
+    period character), this is a faithful rate change: convolution with a
+    windowed sinc whose cutoff sits below the destination Nyquist, then
+    loop-point rescaling.  16-bit and the channel count are preserved.
 
     The motivating use is KRZ floppy banks: the K2000 can only pitch a sample
     UP by log2(48000/sr) octaves before clamping (see docs/RESOLUTION_NOTES.md
@@ -516,25 +618,20 @@ def resample_to_rate(sample: SampleData, dst_rate: int,
         print(f"    Downsample '{sample.name}' {src_rate} → {dst_rate} Hz "
               f"(up-pitch headroom +{1200*math.log(48000.0/dst_rate, 2)/100:.1f} st)")
 
-    # Anti-alias at the destination Nyquist (slightly below, for filter rolloff)
-    signal = _twopole_lowpass(signal, dst_rate * 0.45, src_rate)
-
-    # Linear-interpolation resample
-    ratio = src_rate / dst_rate
-    n_out = int(len(signal) / ratio)
-    out = []
-    last = len(signal) - 1
-    for i in range(n_out):
-        pos = i * ratio
-        i0 = int(pos)
-        frac = pos - i0
-        s0 = signal[i0]
-        s1 = signal[i0 + 1] if i0 < last else s0
-        out.append(s0 + (s1 - s0) * frac)
+    # Band-limited conversion: the windowed-sinc kernel is both the
+    # anti-alias filter and the interpolator (see _sinc_resample).
+    if sample.channels == 2:
+        # Planar-split, convert each channel, re-interleave: convolving the
+        # interleaved stream would mix the two channels into each other.
+        left  = _sinc_resample(signal[0::2], src_rate, dst_rate)
+        right = _sinc_resample(signal[1::2], src_rate, dst_rate)
+        out = [v for pair in zip(left, right) for v in pair]
+    else:
+        out = _sinc_resample(signal, src_rate, dst_rate)
 
     pcm_out = _float_to_pcm(out)
     scale = dst_rate / src_rate
-    n_frames = len(pcm_out) // 2
+    n_frames = len(pcm_out) // 2 // max(1, sample.channels)
     loop_start = max(0, min(round(sample.loop_start * scale), n_frames))
     loop_end   = max(loop_start, min(round(sample.loop_end * scale), n_frames))
 

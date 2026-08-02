@@ -29,6 +29,7 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 | **Normalised-knob cutoff sources** | XPM/TAL/PGM dump a raw 0–1 knob into a field that means Hz — and the E4XT calibration made the mismatch bite |
 | ~~Bank sizing ignores stereo voice cost~~ | **implemented 2026-08-01** — the estimator counts per-note voices and warns; one decision left on whether `--auto-fit` should act on it |
 | ~~Corpus scan may count sampler OS files as banks~~ | **measured 2026-08-01** — 1118 raw hits are 1017 real banks; 100 were free-space leftovers, 1 an OS file. Figures corrected |
+| ~~`resample_to_rate` aliased badly~~ | **fixed 2026-08-02** — 2-pole prefilter + linear interpolation aliased at −5.3 dB; windowed sinc now −89 dB. Ran by default on the KRZ path. Also fixed stereo channel bleed + loop-point frame math in the same function |
 | **GIG→E4B fine-tune / per-zone volume** | both dropped on the way to the zone entry |
 | **AIFF not decoded**, **EXS24 first velocity layer only**, **SFZ keyswitches / overlapping regions**, **XPM slice playback** | parser feature gaps |
 | **Zone reducer not velocity-aware** | `--reduce-key-zones` can leave velocity holes |
