@@ -5251,49 +5251,34 @@ distinguishes working stereo from two independently mangled channels.
 
 ---
 
-## §KRZKEYMAP — per-entry sample assignment does not reach the K2000 (OPEN)
+## §KRZKEYMAP — per-entry sample assignment: the entry index is off by 12 (FIXED 2026-08-02)
 
-A keymap with distinct samples on adjacent keys plays only the **first**,
-key-tracked — audible as the same sample rising in pitch across the keys. The
-file is written correctly; the instrument does not honour it. This is why every
-trustworthy KRZ test bank here uses **one sample per program**.
+A keymap with distinct samples on adjacent keys played only the **first**,
+key-tracked. The cause: **the K2000 sounds keymap entry `i` at key `i + 12`**,
+and mpc2emu wrote each zone into `entry[key]`. The keys actually played
+therefore read entries 12 below the ones we filled — whatever the surrounding
+fill had put there, almost always the first sample.
 
-### What has been ruled out
+### Evidence
 
-Our keymap is byte-comparable to real multi-sample keymaps on every axis that
-can be checked offline:
+A commercial bank whose entries 0..47 reference an absent ROM sample and whose
+real samples begin at entry 48 is silent below key 60, sounds from key 60 up,
+and its run boundary at entry 52 lands on key 64.
 
-| | mpc2emu | real banks |
-|---|---|---|
-| method field (body `[2:4]`) | `0x0013` | `0x0013` on 62 real multi-sample keymaps |
-| entry size | 5 bytes | 5 bytes for method `0x13` |
-| 28-byte keymap header | `00 00 00 13 00 00 00 64 00 7f 00 05 …` | byte-identical |
-| entry layout | `tuning(2) sampleID(2) byte4(1)` | same |
-| entry byte 4 | `1` | `1` in 1598 of 2020 real entries (79%) |
+A four-tone test bank (mono, 440/550/660/880, one per key on 48..51) written
+the old way measured **440/466/494/524** — indistinguishable from the
+single-sample control, because that is what it was. Written as
+`entry[key - 12]` the same bank measures **440/550/660/880** while the control
+is unchanged.
 
-Also ruled out: `header_sample_id` (0 in both), `cents_per_entry` (100 in both),
-`num_keys` (128 in both), and a single 0..127 table (1569 of 1584 corpus
-keymaps). Real banks likewise place distinct samples on single adjacent keys.
+### Consequences
 
-### What has NOT been checked, and must be first
-
-**Whether a real multi-sample bank does per-key assignment on this K2000R.**
-The commercial control bank's keymap has several samples across a key range,
-but only stereo separation was ever measured on it — never that two different
-keys play two different samples. If real banks fail the same way, this is not
-our bug.
-
-If they pass, load a real bank and ours together and bisect: patch our keymap
-toward theirs field by field until the behaviour flips.
-
-**Plan:** `docs/re_procedures/krz_keymap_per_entry.md` — built to *disprove*
-the claim first, since the evidence for it is one listening observation plus a
-reading from a sitting that predates the stereo fixes, and every offline
-comparison since has found our keymaps indistinguishable from real ones.
-
-### Note for whoever picks this up
-
-Verify by **ear or measurement which sample a key actually plays** before
-concluding anything. The file being correct proves nothing here — it was
-correct every time while the hardware played something else, and reading the
-keymap back out of the file is not a substitute for hearing it.
+- **Every multisample KRZ bank produced before this fix is wrong on hardware**
+  and must be regenerated; the file looks correct and re-reads correctly,
+  because the reader carried the matching offset. See the README.
+- With `basePitch = 0` the 128 entries cover keys **12..139**, so keys 0..11
+  cannot be addressed and a zone asked for from key 0 starts at 12.
+- This settles the entry-index base question open since the ConvertWithMoss
+  crosscheck: their `12 + ...` form is right. The earlier corpus-only reading
+  (root-inside-zone, 39.6% vs 26.4%) picked the other one — that margin was
+  never strong enough to decide it either way.

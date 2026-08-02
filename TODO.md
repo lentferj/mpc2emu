@@ -36,7 +36,7 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 | ~~FLAC as a sample input~~ | **declined 2026-08-02** — needs a decoder dependency, and mpc2emu stays small and self-contained. No sample container mpc2emu reads embeds FLAC; folder input can be converted by the user beforehand. Do not re-raise. See §WAVFMT "FLAC" |
 | **Zone reducer not velocity-aware** | `--reduce-key-zones` can leave velocity holes |
 | **HDA directory block limited to 16 entries** | |
-| **KRZ per-entry sample assignment: only the first sample plays** | a keymap with distinct samples on adjacent keys plays only the FIRST, key-tracked (audible as rising pitches). Our keymap is byte-comparable to real multi-sample ones — same method `0x13`, same 28-byte header, same 5-byte entry layout, entry byte 4 = 1 as in 79% of real entries — so the cause is outside those fields. Needs a bench session, see §KRZKEYMAP. Workaround: one sample per program |
+| ~~KRZ per-entry sample assignment~~ | **fixed 2026-08-02** — the K2000 sounds keymap entry `i` at key `i+12`; we wrote `entry[key]`. See §KRZKEYMAP |
 | ~~`--from-samples` drops samples that share a root note~~ | **fixed 2026-08-02** — a collided group is spread onto consecutive keys, roots moved with them so pitch is unchanged; distinct-root multisamples untouched |
 
 ### Decisions / personal actions
