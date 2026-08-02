@@ -85,9 +85,13 @@ import struct
 from typing import List, Tuple
 
 from models.common import (Bank, Preset, SampleData, VoiceLayer, LoopType,
-                          KRZ_ENV_TIME_GRID, KRZ_RELEASE_FACTOR, ensure_mono
+                          KRZ_ENV_TIME_GRID, KRZ_RELEASE_FACTOR
 )
 from processors.loop_renderer import bake_alternating_loop
+# The K2000 and the E4B both store stereo PCM planar (whole left channel, then
+# whole right), so the de-interleaver is shared rather than reimplemented --
+# duplicated codecs in this project have drifted before (CR-13/CR-17).
+from writers.e4b_writer import _interleaved_to_planar
 
 
 # ---------------------------------------------------------------------------
@@ -249,7 +253,17 @@ def _vol_adjust_byte(volume_db: float) -> int:
 
 def _write_sample_object(f, sample: SampleData, obj_id: int,
                           word_offset: int, volume_db: float = 0.0) -> None:
-    num_words = len(sample.data) // 2
+    # Stereo is two Soundfilehead records over two PLANAR per-channel blocks
+    # (docs/KRZ_FORMAT.md §3.1).  Corpus-verified over 533 real stereo samples
+    # 2026-08-01: layout PLANAR 533/533, the two headers identical in rootkey,
+    # sample rate and flags 533/533, and their loop points offset by exactly
+    # the channel length 533/533 -- so the second header is the first with
+    # every absolute word offset shifted by one channel.
+    channels = 2 if getattr(sample, 'channels', 1) >= 2 else 1
+    total_words = len(sample.data) // 2
+    # Per-channel length.  Every word offset below is in CHANNEL words, which
+    # for mono is just the sample length.
+    num_words = total_words // channels
     loop_start_w = sample.loop_start
     loop_end_w   = sample.loop_end if sample.loop_end > 0 else num_words - 1
     period       = _compute_sample_period(sample.sample_rate)
@@ -290,47 +304,59 @@ def _write_sample_object(f, sample: SampleData, obj_id: int,
     bw = _BlockWriter(f, _hash(T_SAMPLE, obj_id))
     bw.begin(sample.name)
 
-    # KSample fixed header (12 bytes).  baseID=1 and flags=0 (mono) match every
-    # real soundset; flags bit0 is the stereo flag (1=stereo), so the old 0x40
-    # here was meaningless.
+    # KSample fixed header (12 bytes).  baseID=1 and HeadersOfs=8 match every
+    # real soundset, mono and stereo alike (533/533 stereo samples in the
+    # corpus carry baseID=1, HeadersOfs=8, numHeaders=1, flags=1).  flags bit0
+    # is the stereo flag, so the old 0x40 here was meaningless.
     f.write(struct.pack('>hhhBBhh',
-        1,          # baseID (always 1)
-        0,          # numHeaders (0 = 1 header, mono)
-        8,          # HeadersOfs (always 8)
-        0,          # flags (0 = mono, 1 = stereo)
-        0,          # ks1
-        0,          # copyID
-        0,          # ks2
+        1,             # baseID (always 1)
+        channels - 1,  # numHeaders (0 = 1 header/mono, 1 = 2 headers/stereo)
+        8,             # HeadersOfs (always 8)
+        channels - 1,  # flags bit0: 0 = mono, 1 = stereo
+        0,             # ks1
+        0,             # copyID
+        0,             # ks2
     ))
 
-    # Soundfilehead (32 bytes) — single mono header
-    # offsetToEnvelope: for 1 header, envofs=0, value=0+8=8
-    # altOffsetToEnvelope: 0+6=6
+    # One Soundfilehead (32 bytes) per channel, planar: channel c's block
+    # starts one channel-length after channel c-1's.
     # volumeAdjust / altVolumeAdjust: per-sample gain, signed i8 in 0.5 dB steps.
     # Our gain is per-zone (ZoneMapping.volume); write_krz aggregates it per sample
     # and passes it here.  0 dB → 0, so unity samples are unchanged (pending HW).
+    # Real stereo samples carry the same value on both channels (533/533), so
+    # the shared `va` is right rather than a simplification.
     va = _vol_adjust_byte(volume_db) & 0xFF
-    f.write(struct.pack('>BBBBhh',
-        sample.root_note & 0xFF,
-        sfh_flags & 0xFF,
-        va,   # volumeAdjust      (signed i8, 0.5 dB steps)
-        va,   # altVolumeAdjust   (same, applied when the Alt start is active)
-        max_pitch & 0xFFFF,
-        0,    # offsetToName
-    ))
-    f.write(struct.pack('>iiii',
-        abs_start,
-        alt_start,          # == sampleStart in real files
-        loop_start_field,   # loop start (looped) / end (one-shot)
-        sample_end_field,   # CR-10: loop end (looped) / PCM end (one-shot)
-    ))
-    f.write(struct.pack('>hhI',
-        8,    # offsetToEnvelope
-        6,    # altOffsetToEnvelope
-        period,
-    ))
+    for ch in range(channels):
+        shift = ch * num_words
+        # offsetToEnvelope points past the REMAINING headers at the shared
+        # envelope records that follow the last one: (n-1-i)*32 + 8, and +6 for
+        # the alt.  Mono reduces to the historic 8/6.  Corpus-verified on the
+        # dominant stereo convention (439/533 are exactly 40/38 then 8/6; the
+        # other 94 differ only in the alt slot, which we write identically to
+        # the main envelope anyway).
+        env_ofs = (channels - 1 - ch) * 32 + 8
+        f.write(struct.pack('>BBBBhh',
+            sample.root_note & 0xFF,
+            sfh_flags & 0xFF,
+            va,   # volumeAdjust      (signed i8, 0.5 dB steps)
+            va,   # altVolumeAdjust   (same, applied when the Alt start is active)
+            max_pitch & 0xFFFF,
+            0,    # offsetToName
+        ))
+        f.write(struct.pack('>iiii',
+            abs_start + shift,
+            alt_start + shift,          # == sampleStart in real files
+            loop_start_field + shift,   # loop start (looped) / end (one-shot)
+            sample_end_field + shift,   # CR-10: loop end (looped) / PCM end (one-shot)
+        ))
+        f.write(struct.pack('>hhI',
+            env_ofs,      # offsetToEnvelope
+            env_ofs - 2,  # altOffsetToEnvelope
+            period,
+        ))
 
-    # 2× Envelope default: [-1, 1, 0, 0, -1600, 0]
+    # 2× Envelope default: [-1, 1, 0, 0, -1600, 0].  Shared by every header —
+    # that is what the offsets above point at.
     env = struct.pack('>hhhhhh', -1, 1, 0, 0, -1600, 0)
     f.write(env)
     f.write(env)
@@ -512,8 +538,13 @@ def _make_layer_segments(keymap_id: int, stereo: bool = False,
     cal = bytearray(31)
     cal[0] = 0x7F
     cal[3] = 0x2B
-    cal[7]  = (keymap_id >> 8) & 0xFF
-    cal[8]  =  keymap_id       & 0xFF
+    # CAL[7,8] is the SECOND keymap slot — one slot per channel, so it carries
+    # the id only for a stereo layer.  (This function is currently unused; kept
+    # consistent with _patch_layer so reviving it cannot reintroduce the mono
+    # playback bug.  See docs/RESOLUTION_NOTES.md §KRZSTEREO2.)
+    if stereo:
+        cal[7] = (keymap_id >> 8) & 0xFF
+        cal[8] =  keymap_id       & 0xFF
     cal[11] = (keymap_id >> 8) & 0xFF
     cal[12] =  keymap_id       & 0xFF
     cal[29] = 1   # numKeymaps
@@ -770,7 +801,15 @@ def _k2_filter_plan(xpm_type: int):
     return 1, _K2_FILTER_LP, _K2_F2_RES, _K2_F3_SEP, True  # Low4+/Model/Vocal -> 4-pole
 
 
-def _patch_layer(voice, keymap_id: int):
+def _voice_is_stereo(voice, samples_by_name: dict) -> bool:
+    """True when any sample this voice's zones reference is stereo."""
+    if not samples_by_name or voice is None:
+        return False
+    return any(getattr(samples_by_name.get(z.sample_name), 'channels', 1) >= 2
+               for z in voice.zones)
+
+
+def _patch_layer(voice, keymap_id: int, stereo: bool = False):
     """Return a patched copy of the template layer segments for one voice."""
     segs = [(tag, bytearray(data)) for tag, data in _TPL_LAYER]
     by = {}
@@ -785,16 +824,65 @@ def _patch_layer(voice, keymap_id: int):
     lyr[3], lyr[4] = lo_k & 0x7F, hi_k & 0x7F
     lyr[5] = _vel_byte(lo_v, hi_v)   # packed LoVel/HiVel (0–7 marks; see _vel_byte)
     lyr[6] = 0x7F                    # Enable = ON (NOT hiVel — that was the gating bug)
+    # Bit 0x20 of LYR[8] is the layer's stereo flag; the low bits carry other
+    # per-layer settings and are left as the template has them.  Corpus-checked
+    # 2026-08-01 over 7,608 real layers: set on 86.4% of layers whose keymap is
+    # all-stereo and 0.7% of all-mono ones.  (Not 100% — a layer may deliberately
+    # play one channel of a stereo sample — so it is a playback choice, not a
+    # property of the data.  We set it whenever the source is stereo.)
+    if stereo:
+        lyr[8] |= 0x20
 
     cal = seg(0x40)
-    # Keymap reference goes ONLY in CAL[11,12].  CAL[7,8] is a *second* keymap slot
-    # (real K2000 programs keep it 0); writing the keymap id there too made every
-    # layer claim two keymaps, overflowing the K2000 at 4+ layers -> whole program
-    # silent (HW-confirmed 2026-06-23 against ROM #183/#193/#194, 3/8/19 layers, all
-    # of which have CAL[8]=0).  Keep CAL[7,8] zero.
-    cal[7] = cal[8] = 0
+    # Keymap reference: CAL[11,12] always; CAL[7,8] is a SECOND keymap slot, and
+    # the K2000 appears to use one slot per channel.
+    #
+    #   mono   layer -> CAL[7,8] = 0        (id in CAL[11,12] only)
+    #   stereo layer -> id in BOTH slots    (one per channel)
+    #
+    # Both halves are hardware-grounded and neither is optional:
+    #
+    # - Zeroing it unconditionally silenced our stereo samples. The K2000 read
+    #   only the first Soundfilehead; ST_RON, whose first block is silent,
+    #   produced silence rather than its 550 Hz second block (2026-08-02).
+    # - Setting it unconditionally made every layer claim two keymaps and
+    #   overflowed the K2000 at 4+ layers -> whole program silent (HW-confirmed
+    #   2026-06-23 against ROM #183/#193/#194). That result stands; the rule
+    #   drawn from it was over-general because it came from mono layers.
+    #
+    # The corpus agrees with both at once: across 201 real banks CAL[8] is
+    # nonzero on 97.6% of layers whose keymap references a stereo sample and on
+    # only 4.2% of mono ones.  See docs/RESOLUTION_NOTES.md §KRZSTEREO2.
+    if stereo:
+        cal[7] = (keymap_id >> 8) & 0xFF
+        cal[8] = keymap_id & 0xFF
+    else:
+        cal[7] = cal[8] = 0
     cal[11] = (keymap_id >> 8) & 0xFF
     cal[12] = keymap_id & 0xFF
+
+    # --- stereo channel routing (HW-confirmed 2026-08-02) ---
+    #
+    # The second keymap slot above makes the K2000 READ both Soundfileheads;
+    # these two bytes decide WHERE each one goes.  Without them both headers
+    # play but are summed to both outputs -- audible as a mono image from a
+    # correctly-written stereo sample.
+    #
+    #   HOB 0x52/0x53 byte 2  = 0x70   routes header 1 to the RIGHT output
+    #   HOB 0x52 byte 14      = 0x90   pulls header 0 to the LEFT
+    #   HOB 0x53 byte 14      = 0x94
+    #
+    # Measured on C3 with a 440 Hz / 660 Hz stereo sample: left 440 = 0.1052 /
+    # 660 = 0.0000, right 440 = 0.0000 / 660 = 0.0886.  Byte 2 alone routes
+    # only header 1 (right carries 440 + 660); byte 14 is what completes it.
+    # A variant with byte 2 + HOB 0x52 byte 0 = 0x28 and NO byte 14 did not
+    # separate, so byte 0 is not part of this and is left alone.
+    # See docs/RESOLUTION_NOTES.md §KRZSTEREO2.
+    if stereo:
+        for tag, b14 in ((0x52, 0x90), (0x53, 0x94)):
+            hob = seg(tag)
+            hob[2] = 0x70
+            hob[14] = b14
 
     # --- amp envelope (always User mode + the source ADSR) ---
     seg(0x20)[1] = 0                                         # AMPENV mode -> User
@@ -848,7 +936,8 @@ def _patch_layer(voice, keymap_id: int):
 
 
 def _write_program_object(f, preset: Preset, prog_id: int,
-                           voice_keymaps: list) -> None:
+                           voice_keymaps: list,
+                           samples_by_name: dict = None) -> None:
     """Clone the #199 template and patch per-voice values (filter, envelopes,
     LFO).  One layer per voice (CR-1)."""
     layers = voice_keymaps or [(None, prog_id)]
@@ -872,7 +961,7 @@ def _write_program_object(f, preset: Preset, prog_id: int,
             cal[11] = (kid >> 8) & 0xFF
             cal[12] = kid & 0xFF
         else:
-            segs = _patch_layer(voice, kid)
+            segs = _patch_layer(voice, kid, _voice_is_stereo(voice, samples_by_name))
         for tag, data in segs:
             f.write(_pack_segment(tag, bytes(data)))
 
@@ -1053,17 +1142,14 @@ def write_krz(bank: Bank, output_path: str) -> None:
     if n_baked:
         print(f"  Baked {n_baked} ping-pong loop(s) into PCM as forward loops")
 
-    # The K2000 stores stereo as a second Soundfilehead (docs/KRZ_FORMAT.md
-    # §3.1/§7.5); mpc2emu does not emit that yet, so downmix EXPLICITLY here.
-    # Without this every length below (num_words, the sample-pool cursor,
-    # sampleEnd) would read interleaved stereo as mono and write a
-    # double-length, wrong-pitched sample. Tracked in TODO.md.
-    n_stereo = sum(1 for s in samples if getattr(s, 'channels', 1) == 2)
+    # Stereo is written as a second Soundfilehead over a second planar PCM
+    # block (docs/KRZ_FORMAT.md §3.1).  Until 2026-08-01 this downmixed
+    # instead, which was the right stopgap while nothing upstream carried
+    # stereo and actively lossy once E4B stereo landed.
+    n_stereo = sum(1 for s in samples if getattr(s, 'channels', 1) >= 2)
     if n_stereo:
-        for s in samples:
-            ensure_mono(s)
-        print(f"  Downmixed {n_stereo} stereo sample(s) to mono "
-              f"(KRZ stereo output not implemented)")
+        print(f"  {n_stereo} stereo sample(s) → two Soundfileheads each "
+              f"(planar L then R)")
 
     # --- Object ID assignment (user range 200-999) ---
     base_id = 200
@@ -1171,7 +1257,8 @@ def write_krz(bank: Bank, output_path: str) -> None:
         # --- Program objects (one layer per voice) ---
         for pi, preset in enumerate(bank.presets):
             pid = base_id + pi
-            _write_program_object(f, preset, pid, preset_keymaps[pi])
+            _write_program_object(f, preset, pid, preset_keymaps[pi],
+                                  samples_by_name)
             print(f"  Program [{pid}] '{preset.name}': "
                   f"{len(preset_keymaps[pi])} layer(s)")
 
@@ -1185,9 +1272,13 @@ def write_krz(bank: Bank, output_path: str) -> None:
 
         # --- Sample PCM data (big-endian 16-bit) ---
         for sample in samples:
-            # Our internal format is 16-bit signed little-endian;
-            # K2000 expects big-endian.  Swap pairs of bytes.
-            data = sample.data
+            # Our internal format is 16-bit signed little-endian INTERLEAVED;
+            # the K2000 expects big-endian, and stereo PLANAR (all of the left
+            # channel, then all of the right) — the two Soundfileheads point at
+            # the two blocks.  De-interleave first, then byteswap the whole
+            # thing in one pass.
+            data = _interleaved_to_planar(sample.data) \
+                if getattr(sample, 'channels', 1) >= 2 else sample.data
             swapped = bytearray(len(data))
             for j in range(0, len(data) - 1, 2):
                 swapped[j]   = data[j + 1]

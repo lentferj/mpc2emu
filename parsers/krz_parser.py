@@ -37,7 +37,10 @@ Scope and known lossiness (mirrors docs/KRZ_FORMAT.md §7):
   - AMPENV "Natural" mode (ENC[1]==1) means the hardware ignores the ENV
     bytes entirely; such layers keep the model's default envelope rather
     than decoding garbage.
-  - Stereo samples are read as their left channel only (mono-internal model).
+  - Stereo samples (KSample flags bit 0 + a second Soundfilehead) are read
+    back as one interleaved 2-channel SampleData. Note that numHeaders > 1
+    alone does NOT mean stereo — real files also use multi-header objects
+    for groups of MONO samples at different rootkeys.
   - The keymap entry tuning field's partial-key-tracking form and the
     per-entry volAdj unit are not confirmed against hardware — decoded but
     flagged inline (see docs/KRZ_FORMAT.md §3.2).
@@ -218,6 +221,19 @@ def _pcm_extents(sample_objs: List[dict], pcm_words: int) -> Dict[Tuple[int, int
             end_w = max(end_w, h.start_w + 1)   # guard: never an empty/negative slice
             extents[(s['id'], hi)] = end_w
     return extents
+
+
+def _planar_to_interleaved(left: bytes, right: bytes) -> bytes:
+    """Two equal-length 16-bit LE channel blocks -> interleaved stereo, the
+    exact inverse of `writers.e4b_writer._interleaved_to_planar` (which the KRZ
+    writer also uses).  Strided slicing, so no per-frame loop."""
+    n = min(len(left), len(right)) // 2      # frames
+    out = bytearray(n * 4)
+    out[0:n * 4:4] = left[0:n * 2:2]         # left  low byte
+    out[1:n * 4:4] = left[1:n * 2:2]         # left  high byte
+    out[2:n * 4:4] = right[0:n * 2:2]        # right low byte
+    out[3:n * 4:4] = right[1:n * 2:2]        # right high byte
+    return bytes(out)
 
 
 def _extract_pcm(data: bytes, osize: int, h: _KrzHeader, end_w: int) -> bytes:
@@ -583,22 +599,30 @@ def parse_krz(path: str) -> Bank:
     sample_gain_db: Dict[str, float] = {}   # SampleData.name -> Soundfilehead.volumeAdjust
     all_names: set = set()
     used_sample_ids: set = set()
-    n_rom = n_absent = n_stereo = 0
+    n_rom = n_absent = n_stereo = n_half_stereo = 0
 
     def _get_sample(sample_id: int) -> Optional[Tuple[SampleData, int]]:
-        """Return (SampleData, header_idx) for the primary (left/mono)
-        channel of sample_id, or None if unavailable (ROM/absent)."""
-        nonlocal n_rom, n_absent, n_stereo
+        """Return (SampleData, header_idx) for sample_id, or None if
+        unavailable (ROM/absent).  A stereo sample (KSample flags bit 0, two
+        Soundfileheads over two planar per-channel blocks) is returned as one
+        interleaved 2-channel SampleData; header_idx is always the first
+        header, which is the one whose loop points and rootkey are used."""
+        nonlocal n_rom, n_absent, n_stereo, n_half_stereo
         s = samples_by_id.get(sample_id)
         if s is None:
             n_absent += 1
             return None
         used_sample_ids.add(sample_id)
-        header_idx = 0   # mono / left channel only -- mpc2emu is mono internally
+        header_idx = 0
         key = (sample_id, header_idx)
         if key in sample_cache:
             return sample_cache[key], header_idx
-        if s['stereo']:
+        # Read both channels only when the sample really is stereo AND a second
+        # header exists: numHeaders > 1 is ALSO used for multi-sample groups of
+        # MONO samples at different rootkeys (71 such objects in the corpus,
+        # up to 64 headers), so header count alone must not be taken as stereo.
+        stereo = bool(s['stereo']) and len(s['headers']) >= 2
+        if stereo:
             n_stereo += 1
         h = s['headers'][header_idx] if header_idx < len(s['headers']) else None
         if h is None or not h.has_data:
@@ -616,13 +640,32 @@ def parse_krz(path: str) -> Bank:
             return None
         end_w = extents.get(key, h.start_w)
         pcm = _extract_pcm(data, osize, h, end_w)
+        channels = 1
+        if stereo:
+            h2 = s['headers'][1]
+            pcm2 = (_extract_pcm(data, osize, h2,
+                                 extents.get((sample_id, 1), h2.start_w))
+                    if h2.has_data and h2.start_w < pcm_words else b'')
+            if pcm2:
+                # The two planar blocks should be the same length; a
+                # tightly-packed file can leave the extent estimate a frame
+                # out, so trim to the shorter rather than emit a ragged
+                # interleave that would swap the channels part-way through.
+                n = min(len(pcm), len(pcm2)) // 2 * 2
+                pcm = _planar_to_interleaved(pcm[:n], pcm2[:n])
+                channels = 2
+            else:
+                # Flagged stereo but the second block is ROM/absent — keep the
+                # one channel we have rather than dropping the sample.
+                n_stereo -= 1
+                n_half_stereo += 1
         candidate = s['name'][:MAX_NAME]
         if candidate in all_names:
             candidate = f"{s['name'][:14]}#{header_idx}"[:MAX_NAME]
         if candidate in all_names:
             candidate = (s['name'][:11] + f"{sample_id:04d}")[:MAX_NAME]
         all_names.add(candidate)
-        n_frames = len(pcm) // 2
+        n_frames = len(pcm) // 2 // channels
         last_idx = max(0, n_frames - 1)
         # Defensive clamp: whether sampleEnd is inclusive-last-frame or already
         # exclusive varies for tightly-packed real-world samples (see
@@ -631,7 +674,8 @@ def parse_krz(path: str) -> Bank:
         loop_start = min(max(0, h.loop_start_w - h.start_w), last_idx) if h.looped else 0
         loop_end = min(max(0, h.end_w - h.start_w), last_idx) if h.looped else 0
         sd = SampleData(
-            name=candidate, data=pcm, sample_rate=h.sample_rate, channels=1,
+            name=candidate, data=pcm, sample_rate=h.sample_rate,
+            channels=channels,
             bit_depth=16,
             loop_type=LoopType.FORWARD if h.looped else LoopType.NO_LOOP,
             loop_start=loop_start, loop_end=loop_end,
@@ -772,8 +816,10 @@ def parse_krz(path: str) -> Bank:
         print(f"  [WARN] {n_absent} zone(s) reference sample object(s) "
               f"not present in this file — skipped.")
     if n_stereo:
-        print(f"  [WARN] {n_stereo} stereo sample(s) read as their left "
-              f"channel only (mpc2emu is mono internally).")
+        print(f"  [INFO] {n_stereo} stereo sample(s) read as two channels.")
+    if n_half_stereo:
+        print(f"  [WARN] {n_half_stereo} sample(s) flagged stereo carry only "
+              f"one channel in this file — read as mono.")
     if n_orphan_keymaps:
         print(f"  [INFO] {n_orphan_keymaps} keymap(s) not referenced by any "
               f"program recovered as their own preset(s).")
