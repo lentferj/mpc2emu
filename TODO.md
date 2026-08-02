@@ -33,7 +33,7 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 | **GIG→E4B fine-tune / per-zone volume** | both dropped on the way to the zone entry |
 | **AIFF not decoded**, **EXS24 first velocity layer only**, **SFZ keyswitches / overlapping regions**, **XPM slice playback** | parser feature gaps |
 | ~~Non-PCM WAV format codes rejected~~ | **fixed 2026-08-02** — own RIFF walk replaces stdlib `wave`; 32-bit/64-bit float and `WAVE_FORMAT_EXTENSIBLE` now read, Ogg-in-WAV refused cleanly. Also recovered tails that `wave` silently truncated. See §WAVFMT |
-| **FLAC not supported as a sample input** | raised 2026-08-02; corpora at `/mnt/music/sorted` (CD-quality + hi-res), `/mnt/music/rehearse`, `~/Mixbus`. Blocked on a dependency decision: the pipeline is stdlib-only and Python ships no FLAC decoder. See §WAVFMT "FLAC" |
+| ~~FLAC as a sample input~~ | **declined 2026-08-02** — needs a decoder dependency, and mpc2emu stays small and self-contained. No sample container mpc2emu reads embeds FLAC; folder input can be converted by the user beforehand. Do not re-raise. See §WAVFMT "FLAC" |
 | **Zone reducer not velocity-aware** | `--reduce-key-zones` can leave velocity holes |
 | **HDA directory block limited to 16 entries** | |
 

@@ -5120,14 +5120,29 @@ that same sample loaded 288. A 44 MB / 3.7-minute float take converts in ~3 s;
 sampler sources are far shorter, so the pure-Python conversion loop is not
 worth optimising further.
 
-### FLAC (raised 2026-08-02, not implemented)
+### FLAC — raised and DECLINED 2026-08-02
 
-The same corpora hold a lot of FLAC (`/mnt/music/sorted`, CD quality plus some
-hi-res), and reading it as a sample input was raised alongside this fix. It is
-**not** a variation of the above: the WAV work needed no decoder, whereas FLAC
-needs a real one, and Python ships none. The options are a third-party
-dependency (`soundfile`/`pyflac`, i.e. libsndfile or libFLAC), shelling out to
-`flac`/`ffmpeg` when present, or a pure-Python decoder. mpc2emu's pipeline is
-deliberately stdlib-only — the resampler avoids numpy for exactly this reason
-— so this is a policy decision for Jan before any code is written, not a
-technical one. Tracked in TODO.md.
+Reading FLAC as a sample input was raised alongside this fix (the corpora at
+`/mnt/music/sorted`, `/mnt/music/rehearse` and `~/Mixbus` hold a lot of it).
+**Declined — do not re-raise without a new reason.**
+
+It is not a variation of the WAV work. That needed no decoder; FLAC needs a
+real one and Python ships none, so every route costs something permanent: a
+third-party dependency (`soundfile`/`pyflac`, i.e. libsndfile or libFLAC),
+shelling out to `flac`/`ffmpeg` and inheriting whatever is installed, or
+carrying a pure-Python decoder. mpc2emu stays small and self-contained — the
+same reason the resampler implements its own windowed sinc rather than
+importing numpy (§RESAMPALIAS).
+
+The two arguments that settle it:
+
+- **Nothing we read embeds FLAC.** The sampler containers mpc2emu parses
+  (E4B, EIII/ESI, KRZ, XPM/PGM, SFZ, SF2, EXS24, GIG, TAL) all carry PCM.
+  Adding a decoder would buy exactly one thing: loose `.flac` files in a
+  folder import. (For the record, FL Studio's DirectWave *does* store its
+  samples FLAC-compressed — but mpc2emu does not read DirectWave, so it
+  costs us nothing today. If that format is ever added, this decision is
+  worth revisiting **for that reader only**.)
+- **Folder input has a trivial user-side workaround.** Converting a folder of
+  `.flac` to `.wav` beforehand is one `flac`/`ffmpeg` command, and the user
+  keeps control of the decode.
