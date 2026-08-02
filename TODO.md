@@ -10,7 +10,8 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 | item | note |
 |------|------|
 | **SF2 static filter** | the gain half is resolved and verified; the *filter* half still has no hardware A/B |
-| **VinSamLib confirmation batch** | needs rebuilding first — it predates the stereo decode fix and the zone-reducer fixes, so the images test code that no longer exists |
+| **VinSamLib confirmation batch** | needs rebuilding first — it predates the stereo decode fix and the zone-reducer fixes, so the images test code that no longer exists. **Also predates the KRZ keymap `i+12` fix**, so any multisample KRZ bank in it is one of the banks §KRZKEYMAP says must be regenerated — rebuilding is now required for correctness, not just coverage |
+| **Two third-party banks may share our old keymap off-by-12** | A guitar bank on a commercial K2000 CD-ROM library (`library disc T`, 11 of 13 zones) and one on a third-party K2000 floppy soundset (`soundset F1`, 2 of 3) are the only 2 of 2289 hardware-sourced banks that VinSamLib's `tools/check_krz_banks.py` flags as keymap-shifted, and both carry *our* exact keymap write form (method `0x13`, basePitch 0, 100 cents, 128 entries, entrySize 5) despite being third-party conversions. Play adjacent keys and listen for one sample key-tracking. **Either outcome is worth having:** if they are shifted, a third-party converter made the same `i+12` mistake and that is a format-knowledge datum like the CWM findings; if they are fine, the root-inside-zone heuristic has a ~2/2289 false-positive rate and VinSamLib's scanner should say so |
 | **KRZ program params, bandpass silence, the wide-drone preset** | several K2000-side items, all needing the K2000R |
 | **K2000R "Object → Delete" lockup** | needs factory resets; root cause was traced to k2kremote, not this project |
 
@@ -37,6 +38,7 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 | **Zone reducer not velocity-aware** | `--reduce-key-zones` can leave velocity holes |
 | **HDA directory block limited to 16 entries** | |
 | ~~KRZ per-entry sample assignment~~ | **fixed 2026-08-02** — the K2000 sounds keymap entry `i` at key `i+12`; we wrote `entry[key]`. See §KRZKEYMAP |
+| **`_note_of_entry`'s basePitch/cents generality is untested** | it handles arbitrary `base_pitch`/`cents_per_entry`, but nothing in reach varies: **all 1584 keymaps across a 201-file K2000 library are basePitch 0 / 100 cents / 128 keys** (measured for VinSamLib 2026-08-03). So the `i+12` hardware confirmation only ever exercised the degenerate case, and the general formula rests on the arithmetic being obviously right rather than on evidence. Low priority — flagged so nobody mistakes it for corpus-verified |
 | ~~`--from-samples` drops samples that share a root note~~ | **fixed 2026-08-02** — a collided group is spread onto consecutive keys, roots moved with them so pitch is unchanged; distinct-root multisamples untouched |
 
 ### Decisions / personal actions
