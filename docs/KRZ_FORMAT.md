@@ -194,16 +194,28 @@ Written by `_write_sample_object()`. Body layout after the object name:
 | Offset | Size | Field | Value written |
 |---|---|---|---|
 | `0:2`   | 2 | `baseID`     | `1` (always — matches every real soundset) |
-| `2:4`   | 2 | `numHeaders` | `0` = one header (mono) |
+| `2:4`   | 2 | `numHeaders` | header count **minus one**: `0` = mono, `1` = stereo. Also `>1` for multi-sample MONO groups — see below |
 | `4:6`   | 2 | `HeadersOfs` | `8` (always) |
 | `6`     | 1 | `flags`      | `0` = mono, `1` = stereo (bit 0 is the **stereo** flag, *not* needsLoad) |
 | `7`     | 1 | `ks1`        | `0` |
 | `8:10`  | 2 | `copyID`     | `0` |
 | `10:12` | 2 | `ks2`        | `0` |
 
-> mpc2emu writes **mono only** — one `Soundfilehead` per sample. A stereo sample
-> would need `numHeaders = 1`, `flags` bit 0 set, and a second `Soundfilehead`;
-> that path is not implemented (see [§7.5](#75-other-known-caveats)).
+> **Stereo** is `numHeaders = 1`, `flags` bit 0 set, and a second
+> `Soundfilehead`. Corpus-verified over **533 real stereo samples**: all
+> carry `baseID = 1`, `HeadersOfs = 8`, `numHeaders = 1`, `flags = 1`.
+>
+> ⚠ **`numHeaders > 1` does not mean stereo.** Real files also use multi-header
+> sample objects for groups of **mono** samples at different rootkeys — 71 such
+> objects in the local corpus, up to **64** headers. Only `flags` bit 0 means
+> stereo. A reader that infers stereo from the header count corrupts all of them.
+>
+> **Channel layout is PLANAR** (533/533): the whole left channel, then the whole
+> right, each addressed by its own header's absolute `sampleStart`. The second
+> header is the first with *every* absolute word offset shifted by one channel
+> length — verified three ways across the corpus: the two headers agree on
+> rootkey, sample rate and flags (533/533), and their loop points differ by
+> exactly the channel length (533/533).
 
 **Soundfilehead (32 bytes)** — one per channel; `struct '>BBBBhh'` + `'>iiii'` +
 `'>hhI'`:
@@ -220,7 +232,7 @@ Written by `_write_sample_object()`. Body layout after the object name:
 | `12:16` | 4 | `altSampleStart`   | `== sampleStart` in real files |
 | `16:20` | 4 | `sampleLoopStart`  | looped → loop start word; one-shot → PCM-end word |
 | `20:24` | 4 | `sampleEnd`        | looped → **loop end** word (not PCM end); one-shot → PCM-end word. See below (`CR-10`). |
-| `24:26` | 2 | `offsetToEnvelope` | `8` (mono, 1 header). **General (multi-header) form:** `(numHeaders − 1 − i) × 32 + 8` for header `i`, so every header's envelope offset points at the shared envelope records that follow the last header. mpc2emu only emits one header, where this reduces to `8`. |
+| `24:26` | 2 | `offsetToEnvelope` | `8` (mono, 1 header). **General (multi-header) form:** `(numHeaders − 1 − i) × 32 + 8` for header `i`, so every header's envelope offset points at the shared envelope records that follow the last header. Corpus-confirmed on stereo: 439 of 533 are exactly `40/38` then `8/6`; the other 94 differ only in the *alt* slot, which mpc2emu writes identically to the main envelope. |
 | `26:28` | 2 | `altOffsetToEnvelope` | `6` — general form `(numHeaders − 1 − i) × 32 + 6` |
 | `28:32` | 4 | `samplePeriod`     | BE u32 = `round(1e9 / sample_rate)` (`_compute_sample_period`) |
 
@@ -391,7 +403,7 @@ via KurzFiler + KPOWER + the `VELAYRE.KRZ` velocity diff):
 | `4` | `hiKey` | `0–127` |
 | `5` | velocity window | **packed** LoVel/HiVel — see below |
 | `6` | Enable control source | **`0x7F` = ON** (this is *not* hiVel — writing hiVel here gated the layer) |
-| `8` | mono/stereo flags | `0x04` mono / `0x24` stereo |
+| `8` | flags, incl. stereo | bit **`0x20`** = stereo; the low bits carry other per-layer settings (`0x04` mono / `0x24` stereo is the common pair). Corpus-checked over 7,608 real layers: `0x20` set on **86.4%** of layers whose keymap is all-stereo vs **0.7%** of all-mono ones. Not 100% — a layer may deliberately play one channel of a stereo sample, so it is a playback choice rather than a property of the data |
 
 The velocity window byte (`_vel_byte()`) packs two 0–7 dynamic marks
 (`ppp = 0 … fff = 7`): **`(loMark << 3) | (7 − hiMark)`** — LoVel in bits 3–5
@@ -405,7 +417,8 @@ files until the `VELAYRE.KRZ` diff.
 |---|---|---|
 | `0` | (constant) | `0x7F` |
 | `3` | (constant) | `0x2B` |
-| `11:13` | `keymapID` (BE) | the Keymap object id for this layer. **Only** CAL[11,12] — CAL[7,8] is a *second* keymap slot and must stay 0 (writing the id there too made every layer claim two keymaps, overflowing the K2000 at 4+ layers → whole program silent; HW-confirmed 2026-06-23). |
+| `7:9`   | 2nd `keymapID` (BE) | the **second keymap slot — one per channel**. `0` for a mono layer; for a **stereo** layer it carries the same id as `CAL[11:13]`, and without it the K2000 never reads the sample's second `Soundfilehead` (HW-confirmed 2026-08-02). Corpus: nonzero on 97.6% of layers whose keymap is stereo, 4.2% of mono ones. ⚠ Setting it on *mono* layers makes every layer claim two keymaps and silences programs at 4+ layers (HW-confirmed 2026-06-23) — it is conditional, not unconditional. |
+| `11:13` | `keymapID` (BE) | the Keymap object id for this layer. Always written. |
 | `21` | pitch Src1 source | `114` = LFO1 when LFO→pitch (vibrato) is routed (`_K2_CS_LFO1`) |
 | `22` | pitch Src1 depth | signed, `round(lfo1_to_pitch × 79)` (approx — see [§7.4](#74-approximate-depth-calibrations)) |
 | `29` | algorithm number | `1` / `5` / `16` / `2` — selected by the filter plan (§4.3) |
@@ -420,6 +433,9 @@ three HOB "block-type" bytes. The four HOB pages map to functions **F1 / F2 / F3
 | Byte | Field | Meaning |
 |---|---|---|
 | `HOB0(0x50)[0]` | F1 filter type | see the filter-type table |
+| `HOB2(0x52)[2]`, `HOB3(0x53)[2]` | stereo channel routing | `0x70` routes the sample's **second** `Soundfilehead` to the RIGHT output. Written only for stereo layers |
+| `HOB2(0x52)[14]` | stereo channel routing | `0x90` pulls the **first** header to the LEFT. Byte 2 alone leaves it on both outputs |
+| `HOB3(0x53)[14]` | stereo channel routing | `0x94`, as above |
 | `HOB0(0x50)[1]` | F1 cutoff | signed semitones (`_cutoff_byte`) |
 | `HOB0(0x50)[5]` | F1 Src1 source | `121` (`_K2_CS_ENV2`) when a filter envelope is routed |
 | `HOB0(0x50)[6]` | F1 Src1 depth | filter-env depth `round(amt × 127)` (approx) |
@@ -660,8 +676,10 @@ mod-wheel→filter, LFO→amp tremolo) still need disk-save calibration.
 
 ### 7.5 Other known caveats
 
-- **Mono only.** Stereo samples would need a second `Soundfilehead`; not
-  implemented.
+- **Stereo** is written and read as the planar two-`Soundfilehead` layout of
+  §3.1. **Header 0 is the LEFT channel** (hardware-confirmed on a K2000R).
+  Playing back as stereo also needs `CAL[7,8]` and the HOB routing bytes —
+  see §4.2 and `docs/RESOLUTION_NOTES.md` §KRZSTEREO2.
 - **Ping-pong loops** (`ALTERNATING`) are baked into PCM as forward loops by
   `bake_alternating_loop()` (the K2000 path has no native ping-pong; emitting a
   plain forward loop clicked every cycle).
@@ -697,8 +715,9 @@ mod-wheel→filter, LFO→amp tremolo) still need disk-save calibration.
   the "filter_cutoff is not a shared frequency scale" finding recorded during
   the reader's construction. A follow-up (not yet done) would route
   `krz_writer._cutoff_byte` through Hz too, making the two exact inverses.
-- **Stereo samples are read as their left/mono channel only** (mpc2emu's
-  internal model is mono); this is the read-side mirror of §7.5's "mono only."
+- **Stereo samples** are read back as one interleaved 2-channel `SampleData`
+  from their two planar blocks. 533 stereo samples across the corpus read
+  back, and 51 of them round-trip KRZ→KRZ byte-exact.
 
 ---
 

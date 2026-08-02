@@ -5146,3 +5146,105 @@ The two arguments that settle it:
 - **Folder input has a trivial user-side workaround.** Converting a folder of
   `.flac` to `.wav` beforehand is one `flac`/`ffmpeg` command, and the user
   keeps control of the decode.
+
+---
+
+## §KRZSTEREO — the stereo sample layout, read from the corpus (2026-08-01)
+
+KRZ stereo samples are **planar**: the whole left channel, then the whole
+right. Established from 533 real stereo samples across 233 local `.KRZ` files,
+533/533 on every claim below.
+
+A stereo sample carries **two `Soundfilehead` records** with independent
+absolute offsets. The second is the first with every offset shifted by exactly
+one channel length:
+
+| claim | evidence |
+|---|---|
+| `block1.start = block0.end + 1` | 533/533 |
+| delta start = delta end = delta loopstart = channel length | 533/533 |
+| both headers share `root`, `period`, `flags` | 533/533 |
+| never reversed (block 1 always follows block 0) | 730/730 objects with two real blocks |
+
+### `numHeaders > 1` does NOT mean stereo
+
+Real files use multi-header sample objects for groups of **mono** samples at
+different rootkeys — 71 such objects locally, up to 64 headers. Only
+`KSample.flags` bit 0 (`FLAG_STEREO`) means stereo. Keying on the header count
+corrupts every multi-root mono sample.
+
+### Keymap entry `SSNr`
+
+The keymap entry's `SSNr` selects the header; for a stereo sample it must
+reference the LEFT member of a pair, so the K2000 takes `SSNr` and `SSNr+1` as
+the two channels (`headerIndex = (SSNr - 1) & ~1`). A two-header stereo sample
+therefore has exactly one valid value, `SSNr = 1`, which mpc2emu writes.
+Hardware-checked: setting it to 3 addresses a header that does not exist and
+the sample goes silent.
+
+### Implementation
+
+`writers/krz_writer.py` writes the two planar blocks; `parsers/krz_parser.py`
+reassembles them into interleaved stereo. Mono output is byte-identical to
+before, and 51 real samples round-trip byte-exact.
+
+**Writing this layout is necessary but not sufficient to get stereo
+playback** — see §KRZSTEREO2 for the three additional fields the K2000
+requires.
+
+## §KRZSTEREO2 — what makes a stereo sample play as stereo (2026-08-02)
+
+Writing the planar block layout is necessary but **not sufficient**. A file can
+match real stereo samples field for field and still play as mono. Three more
+things are required, all hardware-confirmed on a K2000R:
+
+### 1. `LYR[8]` bit `0x20` — the stereo marker
+
+Set on the layer. Confirmed by a real bank carrying stereo and mono programs
+over the same material: `0x24` vs `0x04`. Clearing it removes the second
+channel entirely.
+
+### 2. `CAL[7,8]` — the second keymap slot
+
+A stereo layer carries the keymap id in **both** `CAL[11:13]` and `CAL[7,8]`.
+The K2000 uses one keymap slot per channel; with only the first set it never
+reads the second `Soundfilehead` at all — a sample whose first block is silent
+produces silence, even with a full-scale second block.
+
+**This is conditional on the layer being stereo.** Setting it unconditionally
+makes every layer claim two keymaps and silences programs at 4+ layers
+(HW-confirmed 2026-06-23, ROM #183/#193/#194). Mono layers must keep it zero.
+
+Corpus evidence across 201 banks: `CAL[8]` is nonzero on **97.6%** of layers
+whose keymap references a stereo sample and **4.2%** of mono ones.
+
+### 3. HOB `0x52`/`0x53` — channel routing
+
+| byte | value | effect |
+|---|---|---|
+| `0x52`/`0x53` byte 2 | `0x70` | routes header 1 to the RIGHT output |
+| `0x52` byte 14 | `0x90` | pulls header 0 to the LEFT |
+| `0x53` byte 14 | `0x94` | " |
+
+Byte 2 alone leaves header 0 on both outputs, so the image is still centred.
+Both are needed. HOB byte 0 is *not* part of this — a variant carrying byte 2
+plus byte 0 and no byte 14 does not separate.
+
+Corpus: byte 2 = `0x70` on 72.4% of stereo layers vs 4.2% of mono; byte 14 =
+`(0x90, 0x94)` on 47.7% of stereo vs **0.7%** of mono. Neither is universal
+among stereo programs, which is consistent with these encoding pan **positions**
+rather than a boolean — a deliberately centred or narrowed stereo program would
+carry different values, while a mono program has no reason to carry them at all.
+If KRZ ever gains a `--pan-law`, this is the field it writes.
+
+### Channel order
+
+**Header 0 is the LEFT channel**, header 1 the right. Measured directly: a
+440/660 stereo sample plays 440 on the left output and 660 on the right, with
+the opposite channel at true zero.
+
+### Verification
+
+See `docs/re_procedures/krz_stereo.md` for the measured results, including the
+negative control (byte-identical channels must come back correlated) that
+distinguishes working stereo from two independently mangled channels.
