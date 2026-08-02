@@ -5106,11 +5106,19 @@ Three things the implementation turned up that the plan did not anticipate:
   is the point of the format — so an unclamped cast wraps a loud peak into the
   opposite polarity.
 
+- **32-bit *integer* PCM was a separate gap**, found only by running the
+  corpus: code `0x0001` with `wBitsPerSample == 32` is not float, and the PCM
+  branch handled 8/16/24 only. 12 of a 300-file random sample failed on it
+  until `_convert_32_to_16()` was added — the same strided high-two-bytes copy
+  as the 24-bit path, verified against an arithmetic `>> 16` reference on a
+  real 48 kHz stereo file.
+
 Validated on ~3,700 real WAVs in `~/Mixbus` and `/mnt/music/rehearse`, of
 which **3,363 are 32-bit float** — i.e. material the old code rejected
-outright. A 44 MB / 3.7-minute float take converts in ~3 s; sampler sources
-are far shorter, so the pure-Python conversion loop is not worth optimising
-further.
+outright. A random 300-file sample now loads 300/300, where the first run of
+that same sample loaded 288. A 44 MB / 3.7-minute float take converts in ~3 s;
+sampler sources are far shorter, so the pure-Python conversion loop is not
+worth optimising further.
 
 ### FLAC (raised 2026-08-02, not implemented)
 

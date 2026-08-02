@@ -490,6 +490,8 @@ def load_wav(wav_path: str, name: str) -> Optional[SampleData]:
             # Convert to 16-bit if necessary
             if bit_depth == 24:
                 raw, bit_depth = _convert_24_to_16(raw, channels)
+            elif bit_depth == 32:
+                raw, bit_depth = _convert_32_to_16(raw)
             elif bit_depth == 8:
                 raw, bit_depth = _convert_8_to_16(raw)
             elif bit_depth != 16:
@@ -673,6 +675,21 @@ def _convert_24_to_16(raw: bytes, channels: int) -> tuple:
     out = bytearray(n * 2)
     out[0::2] = raw[1:n * 3:3]      # mid byte  -> LE low
     out[1::2] = raw[2:n * 3:3]      # high byte -> LE high
+    return bytes(out), 16
+
+
+def _convert_32_to_16(raw: bytes) -> tuple:
+    """Little-endian signed 32-bit integer PCM -> signed 16-bit.
+
+    Same argument as `_convert_24_to_16`: for LE data the top two bytes ARE
+    the 16-bit value, so this is a strided copy rather than arithmetic.
+    Distinct from IEEE float, which also carries 32 bits per sample but is
+    format code 0x0003 and needs `_float_to_int16`.
+    """
+    n = len(raw) // 4
+    out = bytearray(n * 2)
+    out[0::2] = raw[2:n * 4:4]      # byte 2 -> LE low
+    out[1::2] = raw[3:n * 4:4]      # byte 3 -> LE high
     return bytes(out), 16
 
 
