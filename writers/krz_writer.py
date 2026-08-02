@@ -889,10 +889,39 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False):
     # separate, so byte 0 is not part of this and is left alone.
     # See docs/RESOLUTION_NOTES.md §KRZSTEREO2.
     if stereo:
+        # A stereo layer pans its two channels hard apart: 0x70 is pan +7
+        # (hard right) in byte 2, 0x90/0x94 is pan -7 (hard left) in byte 14.
+        # ZoneMapping.pan is deliberately ignored here -- panning a stereo
+        # sample would collapse the image it was written to preserve.
         for tag, b14 in ((0x52, 0x90), (0x53, 0x94)):
             hob = seg(tag)
             hob[2] = 0x70
             hob[14] = b14
+    else:
+        # Mono: pan lives in the HIGH NIBBLE of HOB 0x53 byte 14, as a 4-bit
+        # signed value -7 (hard left) .. +7 (hard right); the low nibble is
+        # something else and is preserved.  HW-confirmed 2026-08-02 by saving
+        # the same program at three pan settings and byte-diffing the .KRZ:
+        # centre 0x04, hard left 0x94, hard right 0x74 -- one differing byte
+        # out of 252.  Validated over 27k real fields, none outside -7..+7.
+        #
+        # The law is CONSTANT POWER (measured: hard pan raises the live channel
+        # +3.0 dB with 0.00 dB total-power excess), unlike the E4XT's +4.5 dB,
+        # so the two formats cannot share a --pan-law setting.
+        # Pan is a per-ZONE value in the model but a per-LAYER field here, so
+        # take the first zone that asks for one.  (mpc2emu builds one layer per
+        # voice, so a layer's zones are a key/velocity split of one part and
+        # share a pan in practice.)
+        pan = 0.0
+        for _z in getattr(voice, 'zones', ()) or ():
+            _p = getattr(_z, 'pan', 0.0) or 0.0
+            if _p:
+                pan = float(_p)
+                break
+        pan = max(-1.0, min(1.0, pan))
+        step = max(-7, min(7, round(pan * 7)))
+        hob = seg(0x53)
+        hob[14] = ((step & 0x0F) << 4) | (hob[14] & 0x0F)
 
     # --- amp envelope (always User mode + the source ADSR) ---
     seg(0x20)[1] = 0                                         # AMPENV mode -> User

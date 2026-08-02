@@ -291,9 +291,8 @@ on the E4XT. `writers/bank_splitter._VOICES_PER_NOTE` now carries `'krz': 24`.
 
 ### Pan — MEASURED 2026-08-02
 
-Pan is **not** on the layer page (it is on the **Output** page), which is what
-made an earlier attempt conclude the question was mis-framed. It is a normal
-parameter and both halves of it are now measured.
+Pan sits on the **Output** page, not the layer page. Both halves of the
+question — the law and the byte — are measured below.
 
 #### The law: constant power
 
@@ -327,10 +326,30 @@ A single byte changes across the whole 274-byte program object:
 **Pan is a 4-bit signed field in bits 2..5 of RAM byte 270, range -7..+7** —
 which is why the Output page shows no numeric value in the usual sense.
 
-#### Still needed to WRITE pan
+#### The FILE byte — and it is one we already write
 
-The above is the **RAM** layout returned by SysEx `DUMP`. The firmware converts
-between RAM and the `.KRZ` segment layout on load/save, so the file byte is a
-separate question: save a panned program to disk and byte-diff the `.KRZ`
-against an unpanned one. Until that is done mpc2emu still writes no pan.
+Saving the same program at three pan settings and byte-diffing the `.KRZ`
+gives **one differing byte out of 252**:
+
+| pan | HOB `0x53` byte 14 | high nibble, 4-bit signed |
+|---|---|---|
+| centre | `0x04` | 0 |
+| hard left | `0x94` | **-7** |
+| hard right | `0x74` | **+7** |
+
+**Pan is the HIGH NIBBLE of HOB `0x53` byte 14, 4-bit signed, -7..+7.** The low
+nibble is unrelated and must be preserved. Validated across **27,000+** real
+byte-14 fields in the corpus: every one decodes inside -7..+7, and the
+distribution peaks at centre and tapers either side, with a spike at +7 for
+hard-panned stereo right channels.
+
+**This unifies the pan finding with the stereo one.** The "channel routing"
+bytes are pan fields at their extremes: byte 2 = `0x70` is pan **+7** (hard
+right) and byte 14 = `0x90`/`0x94` is pan **-7** (hard left). A stereo layer is
+simply its two channels panned hard apart — not a separate mechanism.
+
+Implemented in `krz_writer._patch_layer`: a mono layer writes
+`ZoneMapping.pan` (-1..+1) into that nibble; a stereo layer keeps the hard
+-7/+7 split, since panning a stereo sample would collapse the image it exists
+to preserve.
 

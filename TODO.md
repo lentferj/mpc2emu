@@ -403,10 +403,11 @@ the K2000 pan law is **constant power** — hard pan raises the live channel
 +3.0 dB with 0.00 dB total-power excess once the rig's own imbalance is
 subtracted, against the E4XT's +4.5 dB, so the two cannot share a
 `--pan-law`. The RAM byte is decoded: **bits 2..5 of byte 270, 4-bit signed,
--7..+7**. **Still open:** the corresponding byte in the `.KRZ` FILE layout —
-SysEx returns the RAM layout and the firmware converts on load/save, so a
-panned program must be saved to disk and byte-diffed before mpc2emu can write
-pan.
+-7..+7**. The FILE byte is the **high nibble of HOB `0x53` byte 14** (4-bit signed,
+-7..+7), found by saving one program at three pan settings and byte-diffing —
+one differing byte in 252, validated over 27k corpus fields. mpc2emu now
+writes `ZoneMapping.pan` for mono layers; stereo layers keep the hard -7/+7
+split that places their two channels. **KRZ pan is done.**
 
 ## E4B per-zone GAIN under-delivers — measured, unfixed (2026-07-31)
 
