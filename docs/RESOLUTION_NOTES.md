@@ -5248,3 +5248,47 @@ the opposite channel at true zero.
 See `docs/re_procedures/krz_stereo.md` for the measured results, including the
 negative control (byte-identical channels must come back correlated) that
 distinguishes working stereo from two independently mangled channels.
+
+---
+
+## §KRZKEYMAP — per-entry sample assignment does not reach the K2000 (OPEN)
+
+A keymap with distinct samples on adjacent keys plays only the **first**,
+key-tracked — audible as the same sample rising in pitch across the keys. The
+file is written correctly; the instrument does not honour it. This is why every
+trustworthy KRZ test bank here uses **one sample per program**.
+
+### What has been ruled out
+
+Our keymap is byte-comparable to real multi-sample keymaps on every axis that
+can be checked offline:
+
+| | mpc2emu | real banks |
+|---|---|---|
+| method field (body `[2:4]`) | `0x0013` | `0x0013` on 62 real multi-sample keymaps |
+| entry size | 5 bytes | 5 bytes for method `0x13` |
+| 28-byte keymap header | `00 00 00 13 00 00 00 64 00 7f 00 05 …` | byte-identical |
+| entry layout | `tuning(2) sampleID(2) byte4(1)` | same |
+| entry byte 4 | `1` | `1` in 1598 of 2020 real entries (79%) |
+
+Also ruled out: `header_sample_id` (0 in both), `cents_per_entry` (100 in both),
+`num_keys` (128 in both), and a single 0..127 table (1569 of 1584 corpus
+keymaps). Real banks likewise place distinct samples on single adjacent keys.
+
+### What has NOT been checked, and must be first
+
+**Whether a real multi-sample bank does per-key assignment on this K2000R.**
+The commercial control bank's keymap has several samples across a key range,
+but only stereo separation was ever measured on it — never that two different
+keys play two different samples. If real banks fail the same way, this is not
+our bug.
+
+If they pass, load a real bank and ours together and bisect: patch our keymap
+toward theirs field by field until the behaviour flips.
+
+### Note for whoever picks this up
+
+Verify by **ear or measurement which sample a key actually plays** before
+concluding anything. The file being correct proves nothing here — it was
+correct every time while the hardware played something else, and reading the
+keymap back out of the file is not a substitute for hearing it.
