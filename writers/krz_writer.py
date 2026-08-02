@@ -432,7 +432,17 @@ def _build_keymap_entries(voice: VoiceLayer,
             hi_key = min(hi_key, ceiling)
 
         for key in range(zone.lo_key, hi_key + 1):
-            offset = key * KEYMAP_ENTRY_SIZE
+            # The K2000 sounds entry `i` at key `i + 12`, so a zone that must
+            # sound at `key` is written into entry `key - 12` (HW-confirmed
+            # 2026-08-02; see parsers/krz_parser.KEYMAP_ENTRY_NOTE_OFFSET).
+            # Writing entry[key] put every sample 12 keys above where it was
+            # asked for, and left the keys actually played pointing at whatever
+            # filled the entries below -- which is why a multisample keymap
+            # sounded like ONE sample key-tracked.
+            entry = key - 12
+            if not 0 <= entry < NUM_KEYS:
+                continue
+            offset = entry * KEYMAP_ENTRY_SIZE
             struct.pack_into('>hHB', entries, offset,
                              tuning, sid & 0xFFFF, 1)
 

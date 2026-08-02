@@ -274,12 +274,19 @@ class _KrzEntry:
         return (self.tuning, self.vol_adj, self.sample_id, self.sub_sample)
 
 
+#: The K2000 sounds keymap entry `i` at MIDI key `i + 12`.  HW-confirmed
+#: 2026-08-02: a commercial bank whose entries 0..47 reference an absent ROM
+#: sample and whose real samples start at entry 48 is silent below key 60 and
+#: sounds from key 60 up, and its run boundary at entry 52 lands on key 64.
+#: This is ConvertWithMoss's `12 + ...` form; the earlier corpus-only reading
+#: (root-inside-zone, 39.6% vs 26.4%) picked the other one and was wrong.
+KEYMAP_ENTRY_NOTE_OFFSET = 12
+
+
 def _note_of_entry(base_pitch: int, cents_per_entry: int, i: int) -> int:
-    """Corpus-verified (2026-07-27, 8010 multisample entry-runs across 577
-    local files): note = round((basePitch + i*centsPerEntry)/100), base 0 —
-    NOT ConvertWithMoss's `12 + ...` form (root-inside-zone 39.6% vs 26.4%,
-    see TODO.md). Software evidence only, not HW-closed."""
-    return round((base_pitch + i * cents_per_entry) / 100.0)
+    """MIDI note sounded by entry `i` — see KEYMAP_ENTRY_NOTE_OFFSET."""
+    return (KEYMAP_ENTRY_NOTE_OFFSET
+            + round((base_pitch + i * cents_per_entry) / 100.0))
 
 
 def _parse_keymap_object(data: bytes, obj: dict) -> dict:

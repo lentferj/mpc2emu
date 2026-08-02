@@ -32,6 +32,22 @@ or untested output could overwrite or corrupt data, or be rejected by hardware.
 Always test images on a ZuluSCSI / SCSI2SD / emulator **before** connecting
 irreplaceable equipment.
 
+### Regenerate KRZ multisample banks made before 2026-08-02
+
+A bug in the KRZ keymap writer placed every zone **12 semitones away from the
+key it was asked for**. The K2000 sounds keymap entry `i` at MIDI key `i + 12`,
+and mpc2emu wrote each zone into `entry[key]` instead of `entry[key - 12]`.
+
+The effect on hardware is that a multisampled program plays **one sample
+key-tracked across the whole keyboard** rather than the right sample per key —
+so a piano, a drum kit or any velocity/key-split instrument sounds wrong, while
+the `.KRZ` file itself looks entirely correct and re-reads correctly in
+mpc2emu. Single-sample programs are unaffected.
+
+**If you produced KRZ banks with an earlier version, regenerate them.** There
+is no way to repair an existing bank short of rewriting its keymaps, and no
+warning is emitted for old files.
+
 ---
 
 ## AI assistance & human authorship
