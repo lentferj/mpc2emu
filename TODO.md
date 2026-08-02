@@ -25,7 +25,7 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 
 | item | note |
 |------|------|
-| **KRZ stereo** | mono in both directions; the format side is already RE'd, so this is implementation |
+| ~~KRZ stereo~~ | **done 2026-08-02, hardware-confirmed** — planar layout, second keymap slot and HOB channel routing; header 0 is the left channel. See RESOLUTION_NOTES §KRZSTEREO / §KRZSTEREO2 |
 | **Normalised-knob cutoff sources** | XPM/TAL/PGM dump a raw 0–1 knob into a field that means Hz — and the E4XT calibration made the mismatch bite |
 | ~~Bank sizing ignores stereo voice cost~~ | **implemented 2026-08-01** — the estimator counts per-note voices and warns; one decision left on whether `--auto-fit` should act on it |
 | ~~Corpus scan may count sampler OS files as banks~~ | **measured 2026-08-01** — 1118 raw hits are 1017 real banks; 100 were free-space leftovers, 1 an OS file. Figures corrected |
@@ -36,6 +36,8 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 | ~~FLAC as a sample input~~ | **declined 2026-08-02** — needs a decoder dependency, and mpc2emu stays small and self-contained. No sample container mpc2emu reads embeds FLAC; folder input can be converted by the user beforehand. Do not re-raise. See §WAVFMT "FLAC" |
 | **Zone reducer not velocity-aware** | `--reduce-key-zones` can leave velocity holes |
 | **HDA directory block limited to 16 entries** | |
+| **KRZ per-entry sample assignment: only the first sample plays** | a keymap with distinct samples on adjacent keys plays only the FIRST, key-tracked (audible as rising pitches). The file is written correctly; the K2000 does not honour it. Workaround: one sample per program. Blocks multisample KRZ output |
+| **`--from-samples` drops samples that share a root note** | four samples all rooted at 60 produce a keymap mapping only TWO of them; later zones overwrite earlier ones instead of each sample taking its own key. Fix on main |
 
 ### Decisions / personal actions
 
@@ -379,43 +381,21 @@ volume and pan, this panel-derived claim survived measurement.
 Caveat recorded in `writers/e4b_writer.py` at the claim itself: panel
 agreement is not sufficient evidence for a level or amount law.
 
-## KRZ stereo — writer downmixes, reader keeps one side (OPEN, 2026-07-31)
+## KRZ stereo — DONE, hardware-confirmed (2026-08-02)
 
-The E4B stereo work is done end-to-end and hardware-confirmed, which leaves
-the K2000 path as the odd one out: **both directions of the KRZ codec are
-mono-only, and that is now actively lossy** rather than merely incomplete,
-because stereo survives everywhere upstream of it.
+Both directions implemented and confirmed on a K2000R. `krz_writer` emits the
+planar two-block layout plus the three fields the K2000 needs to play it as
+stereo (`LYR[8]` 0x20, the `CAL[7,8]` second keymap slot, and HOB `0x52`/`0x53`
+channel routing); `krz_parser` reads both blocks back as interleaved stereo.
+Header 0 is the left channel.
 
-- **Writer.** `krz_writer` calls `ensure_mono()` at its entry point. That was
-  the right stopgap while nothing upstream carried stereo; it now discards a
-  channel from every stereo source on the way to a K2000.
-- **Reader.** `krz_parser` takes a stereo sample's **left channel only** —
-  the read-side mirror of the same limit. Milder than the E4B decode bug we
-  fixed (which read stereo as double-length mono and played
-  left-then-right), but still silent data loss.
+Verified on synthetic tones, on converted real audio, and against a negative
+control (byte-identical channels come back correlated). Full detail in
+`docs/RESOLUTION_NOTES.md` §KRZSTEREO / §KRZSTEREO2 and the measured results in
+`docs/re_procedures/krz_stereo.md`.
 
-**The format side is already reverse-engineered** — `docs/KRZ_FORMAT.md`
-documents everything needed:
-
-| field | mono | stereo |
-|-------|------|--------|
-| `Soundfilehead` | one | **one per channel** (a second must be emitted) |
-| sample header flags, byte 6 | `0` | **`1`** (bit 0 is the stereo flag) |
-| `LYR[8]` | `0x04` | **`0x24`** |
-
-So this is implementation, not RE: emit the second `Soundfilehead`, set the
-two flags, and de-interleave into whatever channel layout the K2000 expects —
-that last part being the one genuine unknown, and the direct analogue of the
-E4B planar-vs-interleaved question that turned out to matter.
-
-**Verification is cheap and already wired.** The K2000R is on the bench
-alongside the E4XT, the Gotek floppy path works, and
-`tests/re_banks/hw_measure.py` measures per-channel content directly — the
-same L/R analysis that settled the E4B channel order would settle this. Build
-the KRZ analogue of `P1STIMAGE` (tone-left-only, tone-right-only,
-split-pitch, mono reference) and it answers in one pass.
-
-**Status:** open, unstarted. **Blocked on:** nothing.
+Not measured, still open: stereo voice cost on the K2000 (does a stereo sample
+cost two voices, as it does on the E4XT?) and the KRZ pan law.
 
 ## E4B per-zone GAIN under-delivers — measured, unfixed (2026-07-31)
 
