@@ -140,6 +140,28 @@ def parse_sample_dir(dir_path: str, wav_dir: Optional[str] = None,
         raise ValueError("no usable samples (all unreadable)")
 
     placed.sort(key=lambda rs: rs[0])
+
+    # Samples sharing a root must not collide.  The split below puts the
+    # boundary between two neighbours at their midpoint, so equal roots give
+    # lo = root + 1 and hi = root -- an INVERTED, empty range, and that sample
+    # never sounds.  A folder of drum one-shots hits this every time: nothing
+    # names a pitch, so every sample lands on the default root and all but the
+    # first and last are silently dropped.
+    #
+    # Spread a collided group onto consecutive keys instead, one sample per
+    # key, and move each zone's root WITH it so the sample still plays at its
+    # natural pitch rather than transposed.
+    if len({r for r, _ in placed}) < len(placed):
+        spread, nxt = [], None
+        for root, sd in placed:
+            key = root if nxt is None or root > nxt else nxt
+            spread.append((min(127, key), sd))
+            nxt = min(127, key) + 1
+        moved = sum(1 for (a, _), (b, _) in zip(placed, spread) if a != b)
+        print(f"   [INFO] {moved} sample(s) shared a root note — spread onto "
+              f"consecutive keys so none is lost")
+        placed = spread
+
     roots = [r for r, _ in placed]
     n = len(placed)
     zones = []
