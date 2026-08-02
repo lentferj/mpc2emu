@@ -32,6 +32,7 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 | ~~`resample_to_rate` aliased badly~~ | **fixed 2026-08-02** — 2-pole prefilter + linear interpolation aliased at −5.3 dB; windowed sinc now −89 dB. Ran by default on the KRZ path. Also fixed stereo channel bleed + loop-point frame math in the same function |
 | **GIG→E4B fine-tune / per-zone volume** | both dropped on the way to the zone entry |
 | **AIFF not decoded**, **EXS24 first velocity layer only**, **SFZ keyswitches / overlapping regions**, **XPM slice playback** | parser feature gaps |
+| **Non-PCM WAV format codes rejected** | `load_wav` uses stdlib `wave`, which accepts only `0x0001`. 32-bit float (`0x0003`) and `WAVE_FORMAT_EXTENSIBLE` (`0xFFFE`) are ordinary DAW/library output and are skipped with an `[ERROR]`. Confirmed on a real float export. See `docs/RESOLUTION_NOTES.md` §WAVFMT |
 | **Zone reducer not velocity-aware** | `--reduce-key-zones` can leave velocity holes |
 | **HDA directory block limited to 16 entries** | |
 

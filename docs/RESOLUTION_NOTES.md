@@ -5028,3 +5028,61 @@ frame math, the never-upsample guard, and the interpolated-phase path. Plus an
 end-to-end `--format krz` conversion of a 21-sample multisample: both rate
 paths exercised, and every sample's dominant partial still lands on its root
 pitch after conversion.
+
+---
+
+## §WAVFMT — `load_wav` rejects every WAV that is not format code 0x0001 (OPEN, found 2026-08-02)
+
+Found while checking ConvertWithMoss `8dcb97cb` (WAV files carrying an Ogg
+stream) for relevance. That specific case is niche for us, but the check
+exposed a much broader one underneath it.
+
+`parsers/xpm_parser.py::load_wav` decodes through the stdlib `wave` module,
+which accepts **only** `WAVE_FORMAT_PCM` (`0x0001`) and raises
+`unknown format: N` for anything else. The exception is caught and turned into
+
+```
+  [ERROR] Could not load WAV <path>: unknown format: 3
+```
+
+and the sample is dropped. The failure is at least loud and names the file —
+no silent corruption — but these are not exotic files:
+
+| code | meaning | how common |
+|---|---|---|
+| `0x0003` | IEEE float (32/64-bit) | **ordinary DAW export**; confirmed on a real 2ch/48 kHz/32-bit file in `~/Dokumente/New Project/Audio/` |
+| `0xFFFE` | `WAVE_FORMAT_EXTENSIBLE` | the standard way to write 24-bit and >2-channel WAV; the real format code sits in the `SubFormat` GUID |
+| `0x674F`–`0x6751`, `0x676F`–`0x6771` | Ogg Vorbis in WAV | niche (FL Studio DirectWave packs) — CWM's actual commit |
+
+A local scan of 496 `.wav` files found 493 plain PCM and one real float file,
+so this is not currently biting a corpus we convert often. It would bite the
+moment someone builds a bank straight from DAW-exported material, which is a
+normal workflow.
+
+### Fix strategy
+
+Do **not** reach for a dependency. `load_wav` already reads the whole file
+into `raw_file` for the `smpl` chunk, so the `fmt ` chunk is right there:
+parse it directly instead of delegating the container walk to `wave`.
+
+1. Read `fmt `: `wFormatTag`, `nChannels`, `nSamplesPerSec`, `wBitsPerSample`.
+2. If `wFormatTag == 0xFFFE`, the effective code is the first two bytes of the
+   `SubFormat` GUID in the chunk extension — resolve it and continue as that
+   code. This alone fixes most 24-bit files.
+3. `0x0001` → the existing 8/16/24-bit paths, unchanged.
+4. `0x0003` → float32 (or float64) to int16: scale by 32767 with a clamp,
+   since float WAVs legitimately exceed ±1.0 and a bare cast would wrap.
+5. Anything else, Ogg codes included → keep today's named `[ERROR]`. Failing
+   clearly beats mis-reading; CWM took the same line, accepting only a data
+   chunk that really begins with an `OggS` page.
+
+Worth keeping the 16-bit-only contract at the `SampleData` boundary — the
+conversion belongs in the loader, next to `_convert_24_to_16`, not in the
+writers.
+
+### Verification when it is done
+
+Synthesise one file per code (the throwaway generators used to find this are
+trivial: a `fmt ` chunk plus a `data` chunk) and assert a real float export
+round-trips to the same audio as the same material exported as 16-bit PCM.
+`tests/` is gitignored, so that lands in `tests/test_wav_formats.py` locally.
