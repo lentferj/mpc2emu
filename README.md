@@ -588,8 +588,9 @@ neutral root note (60), preventing extreme pitch transposition.
 
 KRZ program parameters are mapped onto the Kurzweil K2000 VAST program model
 by cloning the ROM **#199 "Default Program"** template and patching the
-per-voice values (filter, envelopes, LFO, loop points) into a single keymap +
-single layer per voice. Much of this mapping is hardware-verified on a
+per-voice values (filter, envelopes, LFO, loop points, **pan**) into a single
+keymap + single layer per voice. **Stereo samples** are written as two planar
+blocks panned hard apart. Much of this mapping is hardware-verified on a
 **K2000R** — filter type, cutoff (in Hz) and resonance were confirmed by ear,
 and the LFO shapes were decoded from a live SysEx probe.
 
@@ -660,8 +661,10 @@ loop (`0x70`) and **set** to play one-shot (`0xF0`); a looped sample's
 `sampleEnd` field is set to the loop end (not the PCM end) so the K2000 does
 not loop over the post-loop decay tail. The K2000 has no ping-pong loop mode,
 so **ping-pong loops are baked into the PCM** (a reversed copy of the loop
-interior is spliced in). Output is **mono only** — stereo sources are
-downmixed.
+interior is spliced in). **Stereo is supported**: a stereo sample is written
+as two planar `Soundfilehead` blocks placed hard left and right, which the
+K2000 costs as **two voices** (24-voice polyphony means 12 simultaneous stereo
+notes). Use `--mono` to halve that cost.
 
 ### Layers & drum programs
 
@@ -1099,7 +1102,8 @@ mpc2emu/
 
 | Feature | Status |
 |---|---|
-| Native stereo samples in E4B | ❌ downmixed to mono |
+| Native stereo samples in E4B | ✅ written as an L/R block pair |
+| Native stereo samples in KRZ | ✅ written as two planar blocks, panned hard apart |
 | GIG Giga-codec (compressed) | ❌ not supported |
 | TAL `.talwav` (encrypted) | ❌ not readable |
 | EXS24 PPC big-endian | ❌ not supported — same on-disk magic as LE, can't be distinguished |

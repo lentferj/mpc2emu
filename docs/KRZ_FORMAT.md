@@ -307,16 +307,26 @@ voice. Body layout after the object name:
 |---|---|---|---|
 | `0:2` | 2 | `tuning`   | BE **i16** cents — a **constant per-zone fine offset** `100·(R_sample − R_zone) + fine_tune`, usually 0. The K2000 already transposes each key from the sample rootkey + `centsPerEntry`; the tuning field must **not** re-encode the per-key shift (the old `100·(root−12−key)` double-counted it and drove high keys to −72 semitones → silent). A constant offset means mpc2emu assumes **100 % chromatic key-tracking**; the field can also express *partial* tracking per key as `round((keyTracking − 1)·(note − R_sample)·100) + fine_tune` (KurzFiler/CWM form) — a drum map cancels tracking entirely with `keyTracking = 0`. Not yet mapped (see TODO). |
 
-> **Entry-index base — corpus evidence, not HW-closed (2026-07-27).**
-> ConvertWithMoss's `KurzweilKeymap.getNoteOfEntry()` computes
-> `note = 12 + round((basePitch + i·centsPerEntry)/100)`. Checked entry `i`
-> against the referenced sample's own `rootkey` across 8,010 multisample
-> entry-runs in 577 local files (does the root fall inside the run's key
-> span?): `note = i` (mpc2emu's own convention, `krz_parser._note_of_entry`)
-> scores 39.6%, `note = i+12` scores 26.4%. Software evidence favors
-> mpc2emu's convention over CWM's `+12`, but this is **not conclusive** —
-> it wants an aural/hardware check on real K2000 content before the
-> corresponding `TODO.md` item is closed for good.
+> ⚠ **Entry index is NOT the key — entry `i` sounds at key `i + 12`**
+> (HW-confirmed 2026-08-02). `note = 12 + round((basePitch + i·centsPerEntry)/100)`,
+> i.e. ConvertWithMoss's form. A zone that must sound at `key` is therefore
+> written into `entry[key − 12]`.
+>
+> Proof: a commercial bank whose entries 0..47 reference an absent ROM sample
+> and whose real samples begin at entry 48 is silent below key 60, sounds from
+> key 60 up, and its run boundary at entry 52 lands on key 64. A four-tone test
+> bank written as `entry[key]` measured 440/466/494/524 across four keys that
+> should have given 440/550/660/880 — one sample key-tracked, which is what it
+> was; written as `entry[key − 12]` the same bank measures 440/550/660/880.
+>
+> An earlier corpus-only reading here favoured `note = i` (root-inside-zone,
+> 39.6% vs 26.4%) and was **wrong** — that margin was never strong enough to
+> decide it either way.
+>
+> Consequence: with `basePitch = 0` the 128 entries cover keys **12..139**, so
+> keys 0..11 cannot be addressed at all and a zone asked for from key 0 starts
+> at 12.
+
 | `2:4` | 2 | `sampleID` | BE u16, the referenced Sample object id |
 | `4`   | 1 | `SSNr`     | subsample index = `1` |
 
@@ -433,9 +443,9 @@ three HOB "block-type" bytes. The four HOB pages map to functions **F1 / F2 / F3
 | Byte | Field | Meaning |
 |---|---|---|
 | `HOB0(0x50)[0]` | F1 filter type | see the filter-type table |
-| `HOB2(0x52)[2]`, `HOB3(0x53)[2]` | stereo channel routing | `0x70` routes the sample's **second** `Soundfilehead` to the RIGHT output. Written only for stereo layers |
-| `HOB2(0x52)[14]` | stereo channel routing | `0x90` pulls the **first** header to the LEFT. Byte 2 alone leaves it on both outputs |
-| `HOB3(0x53)[14]` | stereo channel routing | `0x94`, as above |
+| `HOB3(0x53)[14]` | **PAN** | **high nibble = 4-bit signed pan, `-7` (hard left) .. `+7` (hard right)**; low nibble is unrelated and must be preserved. Centre `0x04`, hard left `0x94`, hard right `0x74` — HW-confirmed by saving one program at three pan settings and byte-diffing (one differing byte in 252), and validated over 27k corpus fields, none outside `-7..+7`. The pan law is **constant power** (hard pan raises the live channel +3.0 dB with 0.00 dB total-power excess), unlike the E4XT's +4.5 dB, so the two formats cannot share a `--pan-law` |
+| `HOB2(0x52)[14]` | pan, second block | same encoding |
+| `HOB2(0x52)[2]`, `HOB3(0x53)[2]` | pan, further DSP pages | same encoding. **Stereo placement is just pan at the extremes:** a stereo layer writes byte 2 = `0x70` (pan `+7`, hard right) and byte 14 = `0x90`/`0x94` (pan `-7`, hard left), putting one `Soundfilehead` on each output. It is not a separate routing mechanism |
 | `HOB0(0x50)[1]` | F1 cutoff | signed semitones (`_cutoff_byte`) |
 | `HOB0(0x50)[5]` | F1 Src1 source | `121` (`_K2_CS_ENV2`) when a filter envelope is routed |
 | `HOB0(0x50)[6]` | F1 Src1 depth | filter-env depth `round(amt × 127)` (approx) |
