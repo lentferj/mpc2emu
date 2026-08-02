@@ -170,8 +170,7 @@ the whole block to a 4-byte boundary before computing `blocksize`.
 > program layers while building `krz_parser.py`: `CAL[7,8]` is the **sole**
 > keymap-id carrier in **zero** layers; `CAL[11,12]` alone carries it in
 > 30,483; both are set (and disagree) in 948. So CWM's fallback order
-> misreads those 948 layers — `krz_parser.py` reads `CAL[11:13]` only. (Jan
-> plans to raise this with the CWM project personally — see `TODO.md`.)
+> misreads those 948 layers — `krz_parser.py` reads `CAL[11:13]` only.
 
 ### 2.3 End marker & PCM region
 

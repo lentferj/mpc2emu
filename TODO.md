@@ -39,7 +39,6 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 
 | item | note |
 |------|------|
-| **Tell CWM about the KRZ + MPC 3 findings** | five findings now: 2 KRZ, 3 MPC 3. Jan raises these personally |
 | **New `vpar` fields from SysEx hunting** | found and documented; whether to implement is a judgement call |
 
 ### Known-unexplained, not worth hunting
@@ -578,7 +577,8 @@ It also found **two real losses on our side, now fixed**: program/keygroup
 fallback + `tune`) was unread. Both are 0/default in every local file, so they
 were verified by mutating a real file; conversion of the three unmodified
 files is byte-identical to before. And **three bugs in CWM's MPC 3 reader** —
-see the "tell CWM" item below. Remaining checklist items all need the MPC.
+see `docs/RESOLUTION_NOTES.md` §MPC3XPM. Remaining checklist items all need
+the MPC.
 
 **Read the full official MPC v3.9 User Guide** — see §MPC3XPM "Full sweep".
 Implemented from it: **AD-mode envelopes now import with sustain 0** (the
@@ -1160,71 +1160,6 @@ Flagged by Jan; worth tracking since they overlap mpc2emu's own E-mu RE work:
 
 #220's independent validation against `e4b_parser.py` remains a nice
 confirmation this project's E4B model is solid from an outside perspective.
-
-## Personal action: tell CWM about two KRZ reader discrepancies (OPEN, 2026-07-27)
-
-**Not a code task — Jan wants to raise this with ConvertWithMoss himself,**
-personally, rather than have it filed automatically. Context: CWM added a
-Kurzweil KRZ reader in the last ~10 days (`cf4a49f`..`c905467`,
-2026-07-21..27, mostly Douglas Carmichael), explicitly crediting mpc2emu's
-hardware RE for the DSP layer (`dea9dbb` commit body;
-`documentation/design/KURZWEIL_FORMAT.md:141-145` in their repo). While
-scoping mpc2emu's own KRZ *reader* (see the KRZ-as-source-format plan), two
-corpus checks against 577 local `.KRZ` files turned up discrepancies with
-CWM's implementation:
-
-- **Keymap id: `CAL[7,8]` is never the sole carrier.** Over 33,866 program
-  layers, `CAL[11,12]` alone carries the id in 30,483; `CAL[7,8]` alone
-  carries it in **zero**. Both are set (and disagree) in 948 layers. CWM's
-  `KurzweilProgram.java` reads `[7,8]` first, falling back to `[11,12]` only
-  when `[7,8]` is zero — so it misreads those 948 layers. mpc2emu's own docs
-  (`docs/KRZ_FORMAT.md` §4.2, CAL`[11:13]`) and hardware RE
-  (`writers/krz_writer.py:776-782`, HW-confirmed against ROM #183/#193/#194)
-  already had this right.
-- **Note base is `i`, not `i+12`.** CWM's `KurzweilKeymap.getNoteOfEntry()`
-  uses `12 + round((basePitch + i*centsPerEntry)/100)`. A root-inside-zone
-  check across 8,010 multisample entry-runs favors `note = i` (39.6%) over
-  `note = i + 12` (26.4%) — consistent with mpc2emu's own convention, though
-  **not conclusive enough to call this settled** without an aural/hardware
-  check on real K2000 content.
-
-**Status:** evidence gathered and recorded in `docs/KRZ_FORMAT.md`; **Jan
-will reach out to the CWM project (Douglas Carmichael / Jürgen Moßgraber)
-personally** with these two findings once convenient. **Blocked on:** Jan's
-own outreach — nothing further needed from this project's side.
-
-**Three MORE for the same conversation, found 2026-07-31** in CWM's *MPC 3
-JSON* reader while doing the hardware-free crosscheck (checklist item E1, see
-`docs/re_procedures/mpc3_xpm_params.md`). All three are in
-`format/akai/mpc/`, at CWM `e8027b9d`:
-
-- **`layersv[].rootNote` is 1-based, and CWM reads it raw** —
-  `MPCModernDetector.readJsonSampleZone()` does `setKeyRoot(rootNote)` with no
-  adjustment, so every MPC 3 keygroup import is **one semitone sharp**. The
-  proof is inside the same file: `samples[].metadata.rootNote` (which CWM uses
-  as the fallback when `rootNote == 0`) is **0-based**, so the two branches of
-  that one method use two different bases. Verified on 71/71 layers across all
-  three local 3.9.0.31 files: metadata root == the note number in the sample's
-  filename, layer root == that number **+ 1**.
-- **The global-envelope branch is dead code.**
-  `MPCEnvelopesAndFilter(node, isGlobal=true)` looks for `ampEnvelopeGlobal` /
-  `filterEnvelopeGlobal` / `pitchEnvelopeGlobal` **inside `synthSection`**, but
-  in the real files those flags are siblings of `synthSection` on the
-  `keygroup` node. So they always read false, `globalEnvelopesAndFilter` is
-  always empty, and a program using global envelopes silently imports the
-  per-keygroup ones instead. (No user-visible difference *today*, because the
-  fallback happens to be the right answer when the flags are off.)
-- **`MPCFilter` drops filter types 19–28.** `FILTER_TYPES` is populated for
-  1–18 and 29 only, so Band-Boost (19–22), Model1–3 (23–25) and Vocal1–3
-  (26–28) yield `type == null` and the filter is discarded entirely. mpc2emu
-  maps all of them (`_XPM_FILTER_TYPE`, `writers/e4b_writer.py`), including the
-  hardware-RE'd band-boost = band-stop-with-inverted-gain result
-  (`docs/RESOLUTION_NOTES.md`, MS-20 patch #204).
-
-The crosscheck also **agreed** on the substantive things, which is the more
-important outcome: identical filter enumeration 1–18/29, identical
-`{value0,value1}` slot reading, identical AD-mode ⇒ sustain-0 handling, and
-the same two-tier loop scheme. See §MPC3XPM.
 
 ## E4B per-zone fine-tune/volume/pan (multi-zone voices) — RESOLVED + HW-CONFIRMED (2026-07-26)
 

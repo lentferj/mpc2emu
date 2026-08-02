@@ -4244,9 +4244,36 @@ the three unmodified files is **byte-identical** to before, the classic XML
 path is unchanged across 60 real XML `.xpm` files, all 51 tests pass, and
 `K2-01.xpm` still converts to the same 7.06 MB / 21-zone E4B.
 
-**Three bugs found in CWM** (root-note off-by-one, dead global-envelope
-branch, filter types 19–28 dropped) — recorded in `TODO.md` under the existing
-"tell CWM" item, since Jan raises those personally.
+**Three bugs found in CWM's MPC 3 JSON reader** while doing this crosscheck,
+all in `format/akai/mpc/` at CWM `e8027b9d`. Kept here as format knowledge —
+each one is a statement about the *format*, which is why it is worth having
+even though passing them upstream is not a tracked action:
+
+- **`layersv[].rootNote` is 1-based and CWM reads it raw.**
+  `MPCModernDetector.readJsonSampleZone()` calls `setKeyRoot(rootNote)` with no
+  adjustment, so every MPC 3 keygroup import lands **one semitone sharp**. The
+  proof is inside the same method: `samples[].metadata.rootNote`, its fallback
+  when `rootNote == 0`, is 0-based — so the two branches use two different
+  bases. This is the same 71/71 evidence recorded above.
+- **The global-envelope branch is dead code.**
+  `MPCEnvelopesAndFilter(node, isGlobal=true)` looks for `ampEnvelopeGlobal` /
+  `filterEnvelopeGlobal` / `pitchEnvelopeGlobal` **inside `synthSection`**, but
+  in real files those flags are siblings of `synthSection` on the `keygroup`
+  node. They therefore always read false, `globalEnvelopesAndFilter` is always
+  empty, and a program using global envelopes silently imports the
+  per-keygroup ones. No user-visible difference *today*, because that fallback
+  happens to be the right answer while the flags are off — which is exactly
+  what makes it worth writing down.
+- **`MPCFilter` drops filter types 19–28.** `FILTER_TYPES` is populated for
+  1–18 and 29 only, so Band-Boost (19–22), Model1–3 (23–25) and Vocal1–3
+  (26–28) yield `type == null` and the filter is discarded outright. mpc2emu
+  maps all of them (`_XPM_FILTER_TYPE`, `writers/e4b_writer.py`), including the
+  hardware-RE'd band-boost = band-stop-with-inverted-gain result (§BB).
+
+The crosscheck also **agreed** on the substantive things, which is the more
+important outcome: identical filter enumeration 1–18/29, identical
+`{value0,value1}` slot reading, identical AD-mode ⇒ sustain-0 handling, and
+the same two-tier loop scheme.
 
 **Also fixed:** the `filter_type` comment in `models/common.py` described a
 9-value enum (`0=off, 1=LP12, 2=LP24, 3=LP48, 4=HP12…`) that **nothing in the
