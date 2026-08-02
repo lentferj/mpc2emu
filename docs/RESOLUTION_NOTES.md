@@ -5286,6 +5286,11 @@ our bug.
 If they pass, load a real bank and ours together and bisect: patch our keymap
 toward theirs field by field until the behaviour flips.
 
+**Plan:** `docs/re_procedures/krz_keymap_per_entry.md` — built to *disprove*
+the claim first, since the evidence for it is one listening observation plus a
+reading from a sitting that predates the stereo fixes, and every offline
+comparison since has found our keymaps indistinguishable from real ones.
+
 ### Note for whoever picks this up
 
 Verify by **ear or measurement which sample a key actually plays** before
