@@ -288,7 +288,8 @@ def _load_aiff(aiff_path: str, name: str) -> Optional[SampleData]:
     (signed 16-bit little-endian) is also accepted; all other AIFC compression
     types are rejected with a warning."""
     try:
-        data = open(aiff_path, 'rb').read()
+        with open(aiff_path, 'rb') as _fh:
+            data = _fh.read()
     except OSError as e:
         print(f"  [ERROR] Could not read AIFF {aiff_path}: {e}")
         return None
@@ -508,7 +509,8 @@ def load_wav(wav_path: str, name: str) -> Optional[SampleData]:
     if sfx in ('.aif', '.aiff'):
         return _load_aiff(wav_path, name)
     try:
-        raw_file = open(wav_path, 'rb').read()
+        with open(wav_path, 'rb') as _fh:
+            raw_file = _fh.read()
 
         code, channels, framerate, bit_depth, raw = _parse_wav_chunks(raw_file)
 
@@ -700,7 +702,7 @@ _ZONE_PLAY = {
 
 
 def _warn_zone_play(mode: int, inst_idx: int, seen: set) -> None:
-    """Report a zone-play mode we do not reproduce, once per mode per bank.
+    """Report a zone-play mode we do not reproduce, once per mode per preset.
 
     Mode 1 (velocity) is the normal case and is exactly what the converter
     already does, so it is silent.
@@ -768,11 +770,18 @@ def _apply_loop_crossfade(sd: SampleData, xfade_frames: int) -> bool:
     loop_len = E - S + 1
     # Cap: cannot blend more than the pre-roll before the loop, nor so much of
     # the loop that the crossfade swallows it.
-    xf = max(1, min(int(xfade_frames), S, loop_len // 3))
+    #
+    # This must NOT be floored to 1.  `max(1, ...)` here was a real bug: with
+    # loop_start == 0 there is no pre-roll at all, the clamp correctly computes
+    # 0, and forcing it to 1 made the source index (S - xf + i) == -1 -- which
+    # Python resolves to the LAST frame of the sample, quietly blending the end
+    # of the sound into the loop seam.  A loop shorter than three frames hit
+    # the same path.  When there is nothing to blend from, do nothing.
+    xf = min(int(xfade_frames), S, loop_len // 3)
     if xf < 1:
         return False
     pcm = array.array('h')
-    pcm.frombytes(sd.data[:n * bpf])
+    pcm.frombytes(memoryview(sd.data)[:n * bpf])
     if sys.byteorder == 'big':
         pcm.byteswap()
     for i in range(xf):
@@ -817,7 +826,7 @@ def _apply_reverse(sd: SampleData) -> None:
     # a time: the naive version costs ~750 ms on a 5 MB stereo sample, which is
     # long enough to notice on a bank full of reversed layers.
     pcm = array.array('h')
-    pcm.frombytes(sd.data[:n * 2 * ch])
+    pcm.frombytes(memoryview(sd.data)[:n * 2 * ch])
     if sys.byteorder == 'big':
         pcm.byteswap()
     if ch == 1:
@@ -1824,7 +1833,12 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
                 # PCM (no target format carries either as a flag), so the same
                 # WAV at different settings is a DIFFERENT SampleData and must
                 # not share a cache entry -- see §XPMGAPS.
-                reverse = _get_text(layer, 'Direction', '0').strip() not in ('', '0')
+                # Compare numerically, not textually: a '0.0' would pass a
+                # `not in ('', '0')` test and silently reverse the sample.
+                try:
+                    reverse = float(_get_text(layer, 'Direction', '0') or 0) != 0.0
+                except ValueError:
+                    reverse = False
                 slice_xf = int(float(_get_text(
                     layer, 'SliceLoopCrossFadeLength', '0') or 0))
                 cache_key = (sample_name, slice_start, slice_end, slice_loop,
@@ -1871,8 +1885,8 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
                             sample_cache[cache_key] = sd
                             # Sample's recorded root (WAV smpl unity, None if absent)
                             # — the RootNote=0 playback root (fixes JR +36 transpose).
-                            sample_wav_root[cache_key] = _read_smpl_root(
-                                open(wav_path, 'rb').read())
+                            with open(wav_path, 'rb') as _fh:
+                                sample_wav_root[cache_key] = _read_smpl_root(_fh.read())
                             bank.samples.append(sd)
                             print(f"    Loaded sample: {sd.name} ({sd.sample_rate}Hz, {len(sd.data)//2} frames)")
                     else:
