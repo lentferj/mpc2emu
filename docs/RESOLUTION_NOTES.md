@@ -5318,11 +5318,9 @@ means nothing downstream had to learn about containers at all.
 A payload with no keygroup program now refuses with a sentence that says so,
 rather than the old "unsupported payload".
 
-**Known limitation, logged in TODO.md:** a project holding *several* keygroup
-programs converts only the first. `parse_xpm` builds one `Preset` per file, so
-the rest would need a multi-preset `parse_xpm` — a real refactor of a ~390-line
-function, not a small change. It warns and names what it skipped, so the loss
-is visible.
+**Superseded 2026-08-03 by §MPC3BANK:** a project holding several keygroup
+programs originally converted only the first. It now converts all of them into
+one multi-preset bank.
 
 ### E3 — resolve the sample exactly instead of searching for it
 
@@ -5563,3 +5561,90 @@ was salvageable by adjusting one constant.
 constants — the 2.x curve was itself hardware-measured (on an MPC One running
 2.x) and there is no evidence it is wrong for 2.x programs, only that 3.x
 differs.
+
+## §MPC3BANK — an MPC 3 project is a bank; every keygroup track is a preset (2026-08-03)
+
+An MPC 3 **project** (`.xpj`) carries one program per track, so a project with
+several keygroup tracks is the MPC's equivalent of an E4B bank. `parse_xpm`
+built exactly one `Preset` per file, so everything past the first keygroup
+program was dropped with a warning.
+
+That mattered more than it first looked. The natural MPC workflow — run the
+Auto Sampler several times, each onto its own track, then save the project —
+produces exactly the file this could not convert.
+
+### What changed
+
+The preset-building body of `parse_xpm` is now an inner `_build_preset(root,
+preset_name)`, and the function drives it once per program:
+
+| container | presets |
+|-----------|---------|
+| `.xpm` (program) | 1 |
+| `.xty` (track) | 1 |
+| `.xpj` (project) | one per `type == 1` track |
+
+The MPC 2.x XML path is unchanged — it feeds a one-element list, so it takes
+the identical route and cannot behave differently.
+
+**The sample caches are shared across presets on purpose.** Two programs in one
+project routinely reference the same WAV, and it must be loaded and stored
+once. Verified on a synthetic three-track project where two keygroup programs
+share a sample and a drum track is filtered out: 2 presets, 2 samples, the
+shared one loaded once.
+
+Preset names come from the **program**, not the filename, so a converted
+project reads `Keygroup 001` / `Keygroup 002` rather than two copies of the
+project name. `program_number` is assigned in order and reaches the E4B TOC as
+the per-preset MIDI program (byte 31 — verified in a written file: 0 and 1).
+
+### MPC 2.x projects are the same case, and were silently broken
+
+A 2.x `.xpj` is **XML**, and it is a `<Project>` — settings and a file list, not
+a program. Registering `.xpj` therefore fed it to the program parser, which
+found no `<Instrument>` elements and returned a **preset with zero voices and
+zero samples**: a "successful" parse of nothing, which is worse than an error.
+
+A 2.x project keeps its programs as separate files in its data folder, named
+`<name>.<Kind>.xpm` — the kind is in the filename (`Keygroup`, `Drum`, `MIDI`,
+`Plugin`, `Audio`, `CV`, `Clip`). So the 2.x equivalent of "project = bank" is
+to gather the `*.Keygroup.xpm` files, which is now what happens; samples are
+searched in that folder rather than the whole Projects tree. A project with no
+keygroup program refuses with a sentence saying so.
+
+### `_find_wav` missed every sample whose name ends in `.wav`
+
+Found by the corpus, not by reasoning. A sample imported from `Foo.wav` is
+named **"Foo.wav"** in the program and stored as **`Foo.wav.WAV`** on disk.
+`_find_wav` only appended `.wav`/`.WAV` when the name had *no* suffix, so it
+looked for `Foo.wav`, missed `Foo.wav.WAV`, and dropped the zone. One 2.x
+project alone has 393 such files. The extension is now appended regardless,
+with the exact name still tried first.
+
+### Verified against the MPC One backup corpus
+
+`/mnt/music_production/mpc_one_backup/.../Projects` — 22 JSON projects spanning
+firmware **3.4.1 → 3.9.0**, 36 XML 2.x projects, 571 standalone 2.x programs.
+
+| | converted | refused | presets | samples |
+|---|---|---|---|---|
+| `.xpj` JSON (3.x) | 7 | 10 | — | — |
+| `.xpj` XML (2.x) | 22 | 8 | — | — |
+| both | 29 | 18 | **93** | **1271** |
+| standalone `.xpm` | 571 / 571 | 0 | 571 | 970 zones |
+
+**Zero crashes and zero missing-sample warnings** across the projects. The 18
+refusals are projects containing no keygroup program at all. Five missing-sample
+warnings remain among the standalone programs, all in one `_[AutoSave]` folder
+that carries 5 programs and 0 WAVs — genuinely absent, not a lookup failure.
+
+Also confirmed end to end: `Project-three.xpj` → one E4B bank, 2 presets,
+2 samples, which re-parses correctly and carries distinct MIDI program numbers
+in the TOC (byte 31: 0 and 1).
+
+### Not addressed
+
+Reading a preset's MIDI program number back out of an E4B is still missing —
+`parse_e4b` constructs `Preset(...)` without `program_number`, so an E4B→E4B
+round trip loses the assignment. Logged in TODO.md; it is a parser gap that
+predates this work.

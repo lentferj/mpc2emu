@@ -1122,15 +1122,17 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
                 f"{xpm_path.name} is an MPC {header[1]} {container.lower()} "
                 f"with no keygroup program (type 1) in it — a drum, plugin or "
                 f"MIDI track has nothing to convert.")
-        if len(programs) > 1:
-            skipped = ', '.join(repr(str(p.get('name', '?')))
-                                for p in programs[1:])
-            print(f"  [WARN] {len(programs)} keygroup programs in this "
-                  f"{container.lower()} — converting only the first "
-                  f"({str(programs[0].get('name', '?'))!r}); skipped: {skipped}")
         print(f"Parsing XPM (MPC {header[1]} JSON, {container.lower()}): "
               f"{xpm_path}")
-        root = _mpc3_to_xml(programs[0])
+        if len(programs) > 1:
+            print(f"  {len(programs)} keygroup programs → one bank, one preset "
+                  f"each: {', '.join(str(p.get('name', '?')) for p in programs)}")
+        # A project carries one keygroup program per track, so it is the MPC's
+        # equivalent of an E4B bank: every program becomes a preset, and they
+        # share one sample pool (see _build_preset).  A bare program or a track
+        # simply yields a one-preset bank.
+        program_trees = [(str(p.get('name') or xpm_path.stem), _mpc3_to_xml(p))
+                         for p in programs]
         # MPC 3 keeps its samples in a sibling folder named after the file and
         # its container kind; used for exact lookup (see _resolve_mpc3_sample).
         mpc3_sample_dir = xpm_path.parent / f"{xpm_path.stem}_[{container}Data]"
@@ -1146,13 +1148,35 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
                 f"(/* XPM */), an unrelated image format.")
         print(f"Parsing XPM: {xpm_path}")
         tree = ET.parse(str(xpm_path))
-        root = tree.getroot()
+        _root = tree.getroot()
+        if _root.tag == 'Project':
+            # An MPC 2.x project (.xpj) is XML, but it is a <Project>, not a
+            # program: it holds only settings and a file list.  Its programs
+            # live as separate .xpm files in the sibling data folder, named
+            # `<name>.<Kind>.xpm` -- so the 2.x equivalent of the 3.x
+            # "project = bank" case is to gather the Keygroup ones.  Without
+            # this a 2.x .xpj parsed "successfully" into an empty preset, which
+            # is worse than failing.  See §MPC3BANK.
+            data_dir = xpm_path.parent / f"{xpm_path.stem}_[ProjectData]"
+            kg = sorted(data_dir.glob('*.Keygroup.xpm')) if data_dir.is_dir() else []
+            if not kg:
+                raise ValueError(
+                    f"{xpm_path.name} is an MPC 2.x project, not a program. "
+                    f"Its programs live in {data_dir.name}/ and none of them is "
+                    f"a keygroup program (only drum, MIDI, plugin, audio or CV "
+                    f"tracks) — nothing to convert.")
+            print(f"  MPC 2.x project → {len(kg)} keygroup program(s): "
+                  f"{', '.join(p.name.rsplit('.Keygroup', 1)[0] for p in kg)}")
+            program_trees = [(p.name.rsplit('.Keygroup', 1)[0],
+                              ET.parse(str(p)).getroot()) for p in kg]
+            # The project's samples sit in that same folder, not beside the
+            # .xpj, so search there rather than walking the whole Projects tree.
+            if wav_dir == xpm_path.parent:
+                wav_dir = data_dir
+        else:
+            program_trees = [(xpm_path.stem, _root)]
 
     bank = Bank(name=_safe_name(xpm_path.stem))
-    preset = Preset(
-        name           = _safe_name(xpm_path.stem),
-        program_number = 0,
-    )
 
     sample_cache: dict[str, SampleData] = {}
     # Tracks how many samples share the same truncated base name so we can
@@ -1162,348 +1186,366 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
     # unity note) — used as the RootNote=0 playback root instead of lo_key.
     sample_wav_root: dict[str, Optional[int]] = {}
 
-    # MPC XPM v2.x structure (MPC One / Live / X, firmware 2.x):
-    # <MPCVObject>
-    #   <Program type="Keygroup">
-    #     <Instruments>
-    #       <Instrument number="1">          ← no type attr; key range here
-    #         <LowNote>36</LowNote>          ← MIDI integer
-    #         <HighNote>47</HighNote>         ← MIDI integer
-    #         <VolumeAttack>…</VolumeAttack>  ← envelope on Instrument
-    #         <Layers>
-    #           <Layer number="1">
-    #             <SampleName>kick</SampleName>  ← no extension
-    #             <VelStart>0</VelStart>
-    #             <VelEnd>127</VelEnd>
-    #             <RootNote>36</RootNote>     ← MIDI integer
-    #             <Volume>1.0</Volume>        ← 0-1 linear
-    #             <Pan>0.5</Pan>              ← 0-1, 0.5=center
-    #           </Layer>
-    #         </Layers>
-    #       </Instrument>
-    #     </Instruments>
-    #   </Program>
-    # </MPCVObject>
+    def _build_preset(root, preset_name):
+        """Build one Preset from one program element tree and append it to
+        `bank`.  Split out of parse_xpm so an MPC 3 project, which carries one
+        keygroup program per track, converts into a multi-preset bank the way
+        an E4B bank does -- see docs/RESOLUTION_NOTES.md §MPC3D3.
 
-    # Skip drum programs — each instrument is a pad hit, not a pitched zone.
-    program_elem = root.find('Program')
-    if program_elem is not None and program_elem.get('type', '') == 'Drum':
-        print(f"  [SKIP] Drum program — not a Keygroup instrument")
-        bank.presets.append(preset)
-        return bank
+        The sample caches are deliberately SHARED across presets: two programs
+        in one project routinely reference the same WAV, and it must be loaded
+        and stored once, not once per preset."""
+        preset = Preset(name=_safe_name(preset_name), program_number=len(bank.presets))
 
-    instruments = sorted(
-        root.findall('.//Instrument'),
-        key=lambda e: int(e.get('number', '9999'))
-    )
-    # The XPM always carries 128 Instrument slots; only the first
-    # KeygroupNumKeygroups are real — the rest are padding (often duplicates of
-    # one keygroup, e.g. the wide-drone preset's 120 copies of a 24-47 C1 slice that
-    # otherwise survive dedup as a junk voice and eat a K2000 layer).  Trim to
-    # the declared count.
-    n_kg = int(float(_get_text(root, './/KeygroupNumKeygroups', '0')) or 0)
-    if 0 < n_kg < len(instruments):
-        print(f"  KeygroupNumKeygroups={n_kg} → using first {n_kg} of "
-              f"{len(instruments)} instrument slots (rest are padding)")
-        instruments = instruments[:n_kg]
-    print(f"  Found {len(instruments)} instrument(s)")
+        # MPC XPM v2.x structure (MPC One / Live / X, firmware 2.x):
+        # <MPCVObject>
+        #   <Program type="Keygroup">
+        #     <Instruments>
+        #       <Instrument number="1">          ← no type attr; key range here
+        #         <LowNote>36</LowNote>          ← MIDI integer
+        #         <HighNote>47</HighNote>         ← MIDI integer
+        #         <VolumeAttack>…</VolumeAttack>  ← envelope on Instrument
+        #         <Layers>
+        #           <Layer number="1">
+        #             <SampleName>kick</SampleName>  ← no extension
+        #             <VelStart>0</VelStart>
+        #             <VelEnd>127</VelEnd>
+        #             <RootNote>36</RootNote>     ← MIDI integer
+        #             <Volume>1.0</Volume>        ← 0-1 linear
+        #             <Pan>0.5</Pan>              ← 0-1, 0.5=center
+        #           </Layer>
+        #         </Layers>
+        #       </Instrument>
+        #     </Instruments>
+        #   </Program>
+        # </MPCVObject>
 
-    # Zone/voice building.  Each parsed layer becomes a "unit" carrying its zone
-    # plus a parameter signature; units are then lane-allocated into voices so
-    # that overlapping (simultaneously-sounding) layers become *parallel* voices
-    # — the E4XT plays one zone per note per voice, so stacked MPC layers must be
-    # separate voices to actually stack (fixes thin/collapsed pads, e.g. the detuned-stack split preset).
-    all_units: list = []          # list of (params_key, inst_idx, ZoneMapping, non_transpose)
-    inst_params: dict = {}        # inst_idx -> dict of voice-level params (env/filter/lfo)
+        # Skip drum programs — each instrument is a pad hit, not a pitched zone.
+        program_elem = root.find('Program')
+        if program_elem is not None and program_elem.get('type', '') == 'Drum':
+            print(f"  [SKIP] Drum program — not a Keygroup instrument")
+            bank.presets.append(preset)
+            return
 
-    # KeygroupWheelToLfo (program-level, 0-1): on the MPC the mod wheel gates the
-    # LFO depth — at rest (wheel down) the LFO contributes (1 - wheel) of its
-    # programmed depth, reaching full depth only at full wheel.  We pass the FULL
-    # LFO depth plus `wheel_to_lfo` to the writer, which reproduces this on the
-    # E4XT via a cascaded ModWheel→CordN-Amount cord (RE'd 2026-06-13 — see
-    # e4b_writer / docs/re_procedures/re_suite.md §3-4).
-    wheel_to_lfo = max(0.0, min(1.0, float(_get_text(root, './/KeygroupWheelToLfo', '0.0'))))
-
-    for inst_idx, instrument in enumerate(instruments):
-        lo_key = int(_get_text(instrument, 'LowNote',  '0'))
-        hi_key = int(_get_text(instrument, 'HighNote', '127'))
-
-        # IgnoreBaseNote is the MPC's real "non-transpose" flag (CWM
-        # MPCModernDetector: the per-layer KeyTrack field is only honoured when
-        # IgnoreBaseNote=True).  RootNote=0 is the "root unset" sentinel, NOT a
-        # non-transpose signal — see docs/RESOLUTION_NOTES.md.
-        ignore_base = _get_text(instrument, 'IgnoreBaseNote', 'False').strip().lower() == 'true'
-        # Tuning: MPC stores it at instrument *and* layer level; both are summed.
-        inst_coarse = int(_get_text(instrument, 'TuneCoarse', '0'))
-        inst_fine   = int(_get_text(instrument, 'TuneFine',  '0'))
-
-        # Envelope *times* are normalised 0–1 controls, not seconds — convert
-        # via the hardware-measured MPC curve (sustain values are levels: kept).
-        # 2.x and 3.x use different constants; see §MPCENV.
-        _env = lambda tag, dflt='0.0': _xpm_env_to_seconds(
-            float(_get_text(instrument, tag, dflt)), mpc3=is_mpc3)
-        env_attack  = _env('VolumeAttack')
-        env_decay   = _env('VolumeDecay')
-        env_sustain = float(_get_text(instrument, 'VolumeSustain', '1.0'))
-        env_release = _env('VolumeRelease')
-
-        filt_type    = int(  _get_text(instrument, 'FilterType',    '0'))
-        # MPC 3's `Cutoff` is a normalised knob, NOT a position on the E4B
-        # 57 Hz–20 kHz exponential that `filter_cutoff` is contractually
-        # defined as.  Convert knob → Hz → contract, the same route every
-        # Hz-aware parser takes (§MPCCUTOFF).  The MPC 2.x path has no
-        # measured curve yet, so it keeps its historical pass-through.
-        _cut_raw = float(_get_text(instrument, 'Cutoff', '1.0'))
-        filt_cutoff = (hz_to_e4b_cutoff(_xpm3_cutoff_to_hz(_cut_raw))
-                       if is_mpc3 else _cut_raw)
-        filt_res     = float(_get_text(instrument, 'Resonance',     '0.0'))
-        filt_env_amt = float(_get_text(instrument, 'FilterEnvAmt',  '0.0'))
-        filt_atk     = _env('FilterAttack')
-        filt_dec     = _env('FilterDecay')
-        filt_sus     = float(_get_text(instrument, 'FilterSustain', '1.0'))
-        filt_rel     = _env('FilterRelease')
-        filt_keytrk  = max(-1.0, min(1.0, float(_get_text(instrument, 'FilterKeytrack',   '0.0'))))
-        filt_velamt  = max(-1.0, min(1.0, float(_get_text(instrument, 'VelocityToFilter', '0.0'))))
-
-        # LFO (MPC has a single per-keygroup LFO → maps to E4B LFO1).  Only
-        # emit it when something is actually routed (LfoPitch / LfoCutoff),
-        # otherwise leave the EOS default so the voice stays byte-clean.
-        lfo_pitch  = max(-1.0, min(1.0, float(_get_text(instrument, 'LfoPitch',  '0.0'))))
-        lfo_cutoff = max(-1.0, min(1.0, float(_get_text(instrument, 'LfoCutoff', '0.0'))))
-        lfo_block  = instrument.find('LFO')
-        lfo_active = (abs(lfo_pitch) > 0.001 or abs(lfo_cutoff) > 0.001) and lfo_block is not None
-        if lfo_active:
-            lfo_rate_hz = lfo_knob_to_hz(float(_get_text(lfo_block, 'Rate', '0.5')))
-            lfo_shape   = _xpm_lfo_shape(_get_text(lfo_block, 'Type', 'Sine'))
-            # MPC <Reset> True = retrigger phase per note = E4B Key Sync;
-            # False = free-run.  model lfo*_sync: False=Key Sync, True=Free Run.
-            lfo_sync    = (_get_text(lfo_block, 'Reset', 'False').lower() != 'true')
-            # MPC <Sync> = tempo-lock division index (0 = free; see _MPC_SYNC_DIV).
-            try:
-                lfo_sync_div = int(_get_text(lfo_block, 'Sync', '0') or 0)
-            except ValueError:
-                lfo_sync_div = 0
-            # When synced the MPC ignores <Rate> (it sits at the default ~0.5 ≈
-            # 2 Hz for every division — the §D/§P bug).  The tempo lives in the
-            # project, not the XPM, so reproduce the division's speed as a fixed
-            # rate at a 120 BPM reference (see _mpc_sync_hz).
-            if lfo_sync_div:
-                _synced_hz = _mpc_sync_hz(lfo_sync_div)
-                if _synced_hz is not None:
-                    lfo_rate_hz = _synced_hz
-
-        # Per-instrument voice parameters (env / filter / LFO).  Layers from
-        # instruments with identical params merge into one voice (a keymap);
-        # overlapping layers split into parallel voices (see lane-allocation).
-        pdict = dict(
-            env_attack=env_attack, env_decay=env_decay,
-            env_sustain=env_sustain, env_release=env_release,
-            filter_type=filt_type, filter_cutoff=filt_cutoff,
-            filter_resonance=filt_res, filter_env_amount=filt_env_amt,
-            filter_env_attack=filt_atk, filter_env_decay=filt_dec,
-            filter_env_sustain=filt_sus, filter_env_release=filt_rel,
-            filter_keytrack=filt_keytrk, velocity_to_filter=filt_velamt,
+        instruments = sorted(
+            root.findall('.//Instrument'),
+            key=lambda e: int(e.get('number', '9999'))
         )
-        # MPC 3 second LFO (<LFO2>, emitted only by the JSON converter — an
-        # MPC 2.x XML program never has one, so this is inert there).  Routed
-        # to pitch only, which is what VoiceLayer's lfo2_* models.
-        lfo2_block = instrument.find('LFO2')
-        if lfo2_block is not None:
-            _l2_pitch = max(-1.0, min(1.0,
-                            float(_get_text(lfo2_block, 'Pitch', '0.0'))))
-            if abs(_l2_pitch) > 0.001:
+        # The XPM always carries 128 Instrument slots; only the first
+        # KeygroupNumKeygroups are real — the rest are padding (often duplicates of
+        # one keygroup, e.g. the wide-drone preset's 120 copies of a 24-47 C1 slice that
+        # otherwise survive dedup as a junk voice and eat a K2000 layer).  Trim to
+        # the declared count.
+        n_kg = int(float(_get_text(root, './/KeygroupNumKeygroups', '0')) or 0)
+        if 0 < n_kg < len(instruments):
+            print(f"  KeygroupNumKeygroups={n_kg} → using first {n_kg} of "
+                  f"{len(instruments)} instrument slots (rest are padding)")
+            instruments = instruments[:n_kg]
+        print(f"  Found {len(instruments)} instrument(s)")
+
+        # Zone/voice building.  Each parsed layer becomes a "unit" carrying its zone
+        # plus a parameter signature; units are then lane-allocated into voices so
+        # that overlapping (simultaneously-sounding) layers become *parallel* voices
+        # — the E4XT plays one zone per note per voice, so stacked MPC layers must be
+        # separate voices to actually stack (fixes thin/collapsed pads, e.g. the detuned-stack split preset).
+        all_units: list = []          # list of (params_key, inst_idx, ZoneMapping, non_transpose)
+        inst_params: dict = {}        # inst_idx -> dict of voice-level params (env/filter/lfo)
+
+        # KeygroupWheelToLfo (program-level, 0-1): on the MPC the mod wheel gates the
+        # LFO depth — at rest (wheel down) the LFO contributes (1 - wheel) of its
+        # programmed depth, reaching full depth only at full wheel.  We pass the FULL
+        # LFO depth plus `wheel_to_lfo` to the writer, which reproduces this on the
+        # E4XT via a cascaded ModWheel→CordN-Amount cord (RE'd 2026-06-13 — see
+        # e4b_writer / docs/re_procedures/re_suite.md §3-4).
+        wheel_to_lfo = max(0.0, min(1.0, float(_get_text(root, './/KeygroupWheelToLfo', '0.0'))))
+
+        for inst_idx, instrument in enumerate(instruments):
+            lo_key = int(_get_text(instrument, 'LowNote',  '0'))
+            hi_key = int(_get_text(instrument, 'HighNote', '127'))
+
+            # IgnoreBaseNote is the MPC's real "non-transpose" flag (CWM
+            # MPCModernDetector: the per-layer KeyTrack field is only honoured when
+            # IgnoreBaseNote=True).  RootNote=0 is the "root unset" sentinel, NOT a
+            # non-transpose signal — see docs/RESOLUTION_NOTES.md.
+            ignore_base = _get_text(instrument, 'IgnoreBaseNote', 'False').strip().lower() == 'true'
+            # Tuning: MPC stores it at instrument *and* layer level; both are summed.
+            inst_coarse = int(_get_text(instrument, 'TuneCoarse', '0'))
+            inst_fine   = int(_get_text(instrument, 'TuneFine',  '0'))
+
+            # Envelope *times* are normalised 0–1 controls, not seconds — convert
+            # via the hardware-measured MPC curve (sustain values are levels: kept).
+            # 2.x and 3.x use different constants; see §MPCENV.
+            _env = lambda tag, dflt='0.0': _xpm_env_to_seconds(
+                float(_get_text(instrument, tag, dflt)), mpc3=is_mpc3)
+            env_attack  = _env('VolumeAttack')
+            env_decay   = _env('VolumeDecay')
+            env_sustain = float(_get_text(instrument, 'VolumeSustain', '1.0'))
+            env_release = _env('VolumeRelease')
+
+            filt_type    = int(  _get_text(instrument, 'FilterType',    '0'))
+            # MPC 3's `Cutoff` is a normalised knob, NOT a position on the E4B
+            # 57 Hz–20 kHz exponential that `filter_cutoff` is contractually
+            # defined as.  Convert knob → Hz → contract, the same route every
+            # Hz-aware parser takes (§MPCCUTOFF).  The MPC 2.x path has no
+            # measured curve yet, so it keeps its historical pass-through.
+            _cut_raw = float(_get_text(instrument, 'Cutoff', '1.0'))
+            filt_cutoff = (hz_to_e4b_cutoff(_xpm3_cutoff_to_hz(_cut_raw))
+                           if is_mpc3 else _cut_raw)
+            filt_res     = float(_get_text(instrument, 'Resonance',     '0.0'))
+            filt_env_amt = float(_get_text(instrument, 'FilterEnvAmt',  '0.0'))
+            filt_atk     = _env('FilterAttack')
+            filt_dec     = _env('FilterDecay')
+            filt_sus     = float(_get_text(instrument, 'FilterSustain', '1.0'))
+            filt_rel     = _env('FilterRelease')
+            filt_keytrk  = max(-1.0, min(1.0, float(_get_text(instrument, 'FilterKeytrack',   '0.0'))))
+            filt_velamt  = max(-1.0, min(1.0, float(_get_text(instrument, 'VelocityToFilter', '0.0'))))
+
+            # LFO (MPC has a single per-keygroup LFO → maps to E4B LFO1).  Only
+            # emit it when something is actually routed (LfoPitch / LfoCutoff),
+            # otherwise leave the EOS default so the voice stays byte-clean.
+            lfo_pitch  = max(-1.0, min(1.0, float(_get_text(instrument, 'LfoPitch',  '0.0'))))
+            lfo_cutoff = max(-1.0, min(1.0, float(_get_text(instrument, 'LfoCutoff', '0.0'))))
+            lfo_block  = instrument.find('LFO')
+            lfo_active = (abs(lfo_pitch) > 0.001 or abs(lfo_cutoff) > 0.001) and lfo_block is not None
+            if lfo_active:
+                lfo_rate_hz = lfo_knob_to_hz(float(_get_text(lfo_block, 'Rate', '0.5')))
+                lfo_shape   = _xpm_lfo_shape(_get_text(lfo_block, 'Type', 'Sine'))
+                # MPC <Reset> True = retrigger phase per note = E4B Key Sync;
+                # False = free-run.  model lfo*_sync: False=Key Sync, True=Free Run.
+                lfo_sync    = (_get_text(lfo_block, 'Reset', 'False').lower() != 'true')
+                # MPC <Sync> = tempo-lock division index (0 = free; see _MPC_SYNC_DIV).
+                try:
+                    lfo_sync_div = int(_get_text(lfo_block, 'Sync', '0') or 0)
+                except ValueError:
+                    lfo_sync_div = 0
+                # When synced the MPC ignores <Rate> (it sits at the default ~0.5 ≈
+                # 2 Hz for every division — the §D/§P bug).  The tempo lives in the
+                # project, not the XPM, so reproduce the division's speed as a fixed
+                # rate at a 120 BPM reference (see _mpc_sync_hz).
+                if lfo_sync_div:
+                    _synced_hz = _mpc_sync_hz(lfo_sync_div)
+                    if _synced_hz is not None:
+                        lfo_rate_hz = _synced_hz
+
+            # Per-instrument voice parameters (env / filter / LFO).  Layers from
+            # instruments with identical params merge into one voice (a keymap);
+            # overlapping layers split into parallel voices (see lane-allocation).
+            pdict = dict(
+                env_attack=env_attack, env_decay=env_decay,
+                env_sustain=env_sustain, env_release=env_release,
+                filter_type=filt_type, filter_cutoff=filt_cutoff,
+                filter_resonance=filt_res, filter_env_amount=filt_env_amt,
+                filter_env_attack=filt_atk, filter_env_decay=filt_dec,
+                filter_env_sustain=filt_sus, filter_env_release=filt_rel,
+                filter_keytrack=filt_keytrk, velocity_to_filter=filt_velamt,
+            )
+            # MPC 3 second LFO (<LFO2>, emitted only by the JSON converter — an
+            # MPC 2.x XML program never has one, so this is inert there).  Routed
+            # to pitch only, which is what VoiceLayer's lfo2_* models.
+            lfo2_block = instrument.find('LFO2')
+            if lfo2_block is not None:
+                _l2_pitch = max(-1.0, min(1.0,
+                                float(_get_text(lfo2_block, 'Pitch', '0.0'))))
+                if abs(_l2_pitch) > 0.001:
+                    pdict.update(
+                        lfo2_rate=lfo_knob_to_hz(float(_get_text(lfo2_block, 'Rate', '0.5'))),
+                        lfo2_shape=_xpm_lfo_shape(_get_text(lfo2_block, 'Type', 'Sine')),
+                        lfo2_to_pitch=_l2_pitch,
+                    )
+
+            if lfo_active:
+                # Full LFO depth + wheel_to_lfo → writer splits into static + wheel-
+                # gated cords (faithful KeygroupWheelToLfo gating).
                 pdict.update(
-                    lfo2_rate=lfo_knob_to_hz(float(_get_text(lfo2_block, 'Rate', '0.5'))),
-                    lfo2_shape=_xpm_lfo_shape(_get_text(lfo2_block, 'Type', 'Sine')),
-                    lfo2_to_pitch=_l2_pitch,
+                    lfo1_rate=lfo_rate_hz, lfo1_shape=lfo_shape, lfo1_sync=lfo_sync,
+                    lfo1_sync_division=lfo_sync_div,
+                    lfo1_to_pitch=lfo_pitch,
+                    lfo1_to_filter=lfo_cutoff,
+                    wheel_to_lfo=wheel_to_lfo,
                 )
+            iparam_tuple = tuple(sorted(
+                (k, round(v, 6) if isinstance(v, float) else v) for k, v in pdict.items()
+            ))
+            inst_params[iparam_tuple] = pdict
 
-        if lfo_active:
-            # Full LFO depth + wheel_to_lfo → writer splits into static + wheel-
-            # gated cords (faithful KeygroupWheelToLfo gating).
-            pdict.update(
-                lfo1_rate=lfo_rate_hz, lfo1_shape=lfo_shape, lfo1_sync=lfo_sync,
-                lfo1_sync_division=lfo_sync_div,
-                lfo1_to_pitch=lfo_pitch,
-                lfo1_to_filter=lfo_cutoff,
-                wheel_to_lfo=wheel_to_lfo,
-            )
-        iparam_tuple = tuple(sorted(
-            (k, round(v, 6) if isinstance(v, float) else v) for k, v in pdict.items()
-        ))
-        inst_params[iparam_tuple] = pdict
+            for layer in instrument.findall('Layers/Layer'):
+                sample_name = _get_text(layer, 'SampleName', '')
+                if not sample_name:
+                    continue
 
-        for layer in instrument.findall('Layers/Layer'):
-            sample_name = _get_text(layer, 'SampleName', '')
-            if not sample_name:
-                continue
+                vel_lo = int(_get_text(layer, 'VelStart', '0'))
+                vel_hi = int(_get_text(layer, 'VelEnd',   '127'))
+                # RootNote=0 is the MPC "root unset" sentinel (NOT non-transpose).
+                raw_root = int(_get_text(layer, 'RootNote', '0'))
+                lay_coarse   = int(_get_text(layer, 'TuneCoarse', '0'))
+                lay_fine     = int(_get_text(layer, 'TuneFine',  '0'))
+                coarse_tune  = inst_coarse + lay_coarse      # semitones → vpar[35]
+                fine_cents   = inst_fine + lay_fine          # cents → vpar[36]
 
-            vel_lo = int(_get_text(layer, 'VelStart', '0'))
-            vel_hi = int(_get_text(layer, 'VelEnd',   '127'))
-            # RootNote=0 is the MPC "root unset" sentinel (NOT non-transpose).
-            raw_root = int(_get_text(layer, 'RootNote', '0'))
-            lay_coarse   = int(_get_text(layer, 'TuneCoarse', '0'))
-            lay_fine     = int(_get_text(layer, 'TuneFine',  '0'))
-            coarse_tune  = inst_coarse + lay_coarse      # semitones → vpar[35]
-            fine_cents   = inst_fine + lay_fine          # cents → vpar[36]
+                # Non-transpose (fixed pitch) iff IgnoreBaseNote, OR a *full-range*
+                # root-unset layer (0-127 oscillator/texture with no key info, e.g.
+                # DX7 "Chain-Synth Oscillators").  Every other root-unset keygroup is
+                # a normal multisample zone — even wide drone/"UniDrone" splits are
+                # meant to play CHROMATICALLY (Jan: the wide-drone preset must track per key) — so
+                # it key-tracks with root = keygroup LowNote (CWM writer fallback),
+                # which matches the sample's recorded pitch (the pack roots each
+                # sample at its keygroup low note).  Option B — RESOLUTION_NOTES.md.
+                full_range = (lo_key <= 0 and hi_key >= 127)
+                non_transpose = ignore_base or (raw_root == 0 and full_range)
 
-            # Non-transpose (fixed pitch) iff IgnoreBaseNote, OR a *full-range*
-            # root-unset layer (0-127 oscillator/texture with no key info, e.g.
-            # DX7 "Chain-Synth Oscillators").  Every other root-unset keygroup is
-            # a normal multisample zone — even wide drone/"UniDrone" splits are
-            # meant to play CHROMATICALLY (Jan: the wide-drone preset must track per key) — so
-            # it key-tracks with root = keygroup LowNote (CWM writer fallback),
-            # which matches the sample's recorded pitch (the pack roots each
-            # sample at its keygroup low note).  Option B — RESOLUTION_NOTES.md.
-            full_range = (lo_key <= 0 and hi_key >= 127)
-            non_transpose = ignore_base or (raw_root == 0 and full_range)
+                vol_linear = float(_get_text(layer, 'Volume', '1.0'))
+                volume = 20.0 * math.log10(max(vol_linear, 1e-6))
+                # Pan lives at BOTH the keygroup (Instrument) and layer level (0-1,
+                # 0.5=center).  Many MPC pads pan per keygroup (e.g. the wide-drone preset's
+                # A/B copies hard L/R for stereo width) with the layer left centered,
+                # so sum both and clamp.
+                inst_pan  = (float(_get_text(instrument, 'Pan', '0.5')) - 0.5) * 2.0
+                layer_pan = (float(_get_text(layer,      'Pan', '0.5')) - 0.5) * 2.0
+                pan = max(-1.0, min(1.0, inst_pan + layer_pan))
 
-            vol_linear = float(_get_text(layer, 'Volume', '1.0'))
-            volume = 20.0 * math.log10(max(vol_linear, 1e-6))
-            # Pan lives at BOTH the keygroup (Instrument) and layer level (0-1,
-            # 0.5=center).  Many MPC pads pan per keygroup (e.g. the wide-drone preset's
-            # A/B copies hard L/R for stereo width) with the layer left centered,
-            # so sum both and clamp.
-            inst_pan  = (float(_get_text(instrument, 'Pan', '0.5')) - 0.5) * 2.0
-            layer_pan = (float(_get_text(layer,      'Pan', '0.5')) - 0.5) * 2.0
-            pan = max(-1.0, min(1.0, inst_pan + layer_pan))
+                # MPC slice playback (Pad Start/End + Pad Loop).  Same sample at a
+                # different slice window is a distinct SampleData → key the cache by
+                # the slice too.
+                slice_start  = int(_get_text(layer, 'SliceStart', '0'))
+                slice_end    = int(_get_text(layer, 'SliceEnd',   '0'))
+                slice_loop   = int(_get_text(layer, 'SliceLoop',  '0'))
+                slice_lstart = int(_get_text(layer, 'SliceLoopStart', '0'))
+                slice_lend   = int(_get_text(layer, 'SliceLoopEnd', '0'))
+                # <Loop> is the MPC layer's master loop toggle — its authority over any
+                # embedded WAV `smpl` loop (the MPC ignores the WAV loop when False).
+                # Absent → default True to preserve legacy WAV-smpl-loop behaviour.
+                loop_on      = _get_text(layer, 'Loop', 'True').strip().lower() == 'true'
+                cache_key = (sample_name, slice_start, slice_end, slice_loop,
+                             slice_lstart, loop_on, slice_lend)
 
-            # MPC slice playback (Pad Start/End + Pad Loop).  Same sample at a
-            # different slice window is a distinct SampleData → key the cache by
-            # the slice too.
-            slice_start  = int(_get_text(layer, 'SliceStart', '0'))
-            slice_end    = int(_get_text(layer, 'SliceEnd',   '0'))
-            slice_loop   = int(_get_text(layer, 'SliceLoop',  '0'))
-            slice_lstart = int(_get_text(layer, 'SliceLoopStart', '0'))
-            slice_lend   = int(_get_text(layer, 'SliceLoopEnd', '0'))
-            # <Loop> is the MPC layer's master loop toggle — its authority over any
-            # embedded WAV `smpl` loop (the MPC ignores the WAV loop when False).
-            # Absent → default True to preserve legacy WAV-smpl-loop behaviour.
-            loop_on      = _get_text(layer, 'Loop', 'True').strip().lower() == 'true'
-            cache_key = (sample_name, slice_start, slice_end, slice_loop,
-                         slice_lstart, loop_on, slice_lend)
+                if cache_key not in sample_cache:
+                    # MPC 3 names its file exactly; only search when it cannot.
+                    wav_path = (_resolve_mpc3_sample(layer, mpc3_sample_dir)
+                                or _find_wav(sample_name, wav_dir))
+                    if wav_path:
+                        sd = load_wav(str(wav_path), sample_name)
+                        if sd:
+                            _apply_slice(sd, slice_start, slice_end, slice_loop,
+                                         slice_lstart, loop_on, slice_lend)
+                            # Deduplicate truncated names within this XPM.
+                            base = sd.name
+                            n = _name_count.get(base, 0)
+                            if n > 0:
+                                suffix = str(n)
+                                sd.name = base[:16 - len(suffix)] + suffix
+                            _name_count[base] = n + 1
+                            sample_cache[cache_key] = sd
+                            # Sample's recorded root (WAV smpl unity, None if absent)
+                            # — the RootNote=0 playback root (fixes JR +36 transpose).
+                            sample_wav_root[cache_key] = _read_smpl_root(
+                                open(wav_path, 'rb').read())
+                            bank.samples.append(sd)
+                            print(f"    Loaded sample: {sd.name} ({sd.sample_rate}Hz, {len(sd.data)//2} frames)")
+                    else:
+                        print(f"    [WARN] Sample not found: {sample_name}")
 
-            if cache_key not in sample_cache:
-                # MPC 3 names its file exactly; only search when it cannot.
-                wav_path = (_resolve_mpc3_sample(layer, mpc3_sample_dir)
-                            or _find_wav(sample_name, wav_dir))
-                if wav_path:
-                    sd = load_wav(str(wav_path), sample_name)
-                    if sd:
-                        _apply_slice(sd, slice_start, slice_end, slice_loop,
-                                     slice_lstart, loop_on, slice_lend)
-                        # Deduplicate truncated names within this XPM.
-                        base = sd.name
-                        n = _name_count.get(base, 0)
-                        if n > 0:
-                            suffix = str(n)
-                            sd.name = base[:16 - len(suffix)] + suffix
-                        _name_count[base] = n + 1
-                        sample_cache[cache_key] = sd
-                        # Sample's recorded root (WAV smpl unity, None if absent)
-                        # — the RootNote=0 playback root (fixes JR +36 transpose).
-                        sample_wav_root[cache_key] = _read_smpl_root(
-                            open(wav_path, 'rb').read())
-                        bank.samples.append(sd)
-                        print(f"    Loaded sample: {sd.name} ({sd.sample_rate}Hz, {len(sd.data)//2} frames)")
+                sd_cached = sample_cache.get(cache_key)
+                safe_sname = sd_cached.name if sd_cached else _safe_name(sample_name, tail=True)
+
+                # Playback root: non-transpose → 60; explicit RootNote → RootNote-1;
+                # RootNote=0 (MPC unset) → the sample's WAV-recorded pitch (smpl unity),
+                # falling back to the keygroup low note when the WAV has no unity note.
+                #
+                # Override full_range+root-unset → non_transpose when the WAV smpl chunk
+                # contains a unity note: the sample IS pitched (e.g. AXELEAD smpl_unity=48).
+                # IgnoreBaseNote is left alone — that's an explicit user setting.
+                if non_transpose and not ignore_base:
+                    _wr = sample_wav_root.get(cache_key)
+                    if _wr is not None:
+                        non_transpose = False
+                if non_transpose:
+                    root = 60
+                elif raw_root > 0:
+                    root = raw_root - 1
                 else:
-                    print(f"    [WARN] Sample not found: {sample_name}")
+                    _wr = sample_wav_root.get(cache_key)
+                    root = _wr if _wr is not None else lo_key
+                # Fold MPC TuneCoarse into the root note so K2000 key-tracking matches.
+                # TuneCoarse > 0 means MPC plays everything that many semitones higher;
+                # lowering root by the same amount makes K2000 apply the same transpose.
+                root = max(0, min(127, root - coarse_tune))
+                if sd_cached is not None:
+                    sd_cached.root_note = root
 
-            sd_cached = sample_cache.get(cache_key)
-            safe_sname = sd_cached.name if sd_cached else _safe_name(sample_name, tail=True)
+                zone = ZoneMapping(
+                    sample_name = safe_sname,
+                    lo_key      = lo_key,
+                    hi_key      = hi_key,
+                    lo_vel      = vel_lo,
+                    hi_vel      = vel_hi,
+                    root_key    = root,
+                    volume      = volume,
+                    pan         = pan,
+                    fine_tune   = fine_cents,
+                    coarse_tune = coarse_tune,
+                )
+                all_units.append(((iparam_tuple, non_transpose), zone))
 
-            # Playback root: non-transpose → 60; explicit RootNote → RootNote-1;
-            # RootNote=0 (MPC unset) → the sample's WAV-recorded pitch (smpl unity),
-            # falling back to the keygroup low note when the WAV has no unity note.
-            #
-            # Override full_range+root-unset → non_transpose when the WAV smpl chunk
-            # contains a unity note: the sample IS pitched (e.g. AXELEAD smpl_unity=48).
-            # IgnoreBaseNote is left alone — that's an explicit user setting.
-            if non_transpose and not ignore_base:
-                _wr = sample_wav_root.get(cache_key)
-                if _wr is not None:
-                    non_transpose = False
-            if non_transpose:
-                root = 60
-            elif raw_root > 0:
-                root = raw_root - 1
-            else:
-                _wr = sample_wav_root.get(cache_key)
-                root = _wr if _wr is not None else lo_key
-            # Fold MPC TuneCoarse into the root note so K2000 key-tracking matches.
-            # TuneCoarse > 0 means MPC plays everything that many semitones higher;
-            # lowering root by the same amount makes K2000 apply the same transpose.
-            root = max(0, min(127, root - coarse_tune))
-            if sd_cached is not None:
-                sd_cached.root_note = root
+        # Lane-allocate units into voices: zones that overlap in key AND velocity
+        # must go to *separate* voices (the E4XT plays one zone per note per voice,
+        # so stacked MPC layers only stack as parallel voices); non-overlapping zones
+        # sharing the same params collapse into one voice (a keymap).
+        def _overlaps(a: ZoneMapping, b: ZoneMapping) -> bool:
+            return not (a.hi_key < b.lo_key or a.lo_key > b.hi_key
+                        or a.hi_vel < b.lo_vel or a.lo_vel > b.hi_vel)
 
-            zone = ZoneMapping(
-                sample_name = safe_sname,
-                lo_key      = lo_key,
-                hi_key      = hi_key,
-                lo_vel      = vel_lo,
-                hi_vel      = vel_hi,
-                root_key    = root,
-                volume      = volume,
-                pan         = pan,
-                fine_tune   = fine_cents,
-                coarse_tune = coarse_tune,
-            )
-            all_units.append(((iparam_tuple, non_transpose), zone))
+        # Drop fully-identical units first.  Some MPC presets stack the *same*
+        # sample/zone dozens of times (e.g. the wide-drone preset layers one slice 122×)
+        # as a polyphony/unison trick; on the E4XT that's just N identical voices
+        # adding level, not character, and would blow the voice budget.  Keep one.
+        _seen_units: set = set()
+        deduped_units: list = []
+        for sig, zone in all_units:
+            key = (sig, zone.sample_name, zone.lo_key, zone.hi_key,
+                   zone.lo_vel, zone.hi_vel, zone.root_key, zone.fine_tune)
+            if key in _seen_units:
+                continue
+            _seen_units.add(key)
+            deduped_units.append((sig, zone))
+        if len(deduped_units) < len(all_units):
+            print(f"    Deduplicated {len(all_units) - len(deduped_units)} identical stacked unit(s)")
 
-    # Lane-allocate units into voices: zones that overlap in key AND velocity
-    # must go to *separate* voices (the E4XT plays one zone per note per voice,
-    # so stacked MPC layers only stack as parallel voices); non-overlapping zones
-    # sharing the same params collapse into one voice (a keymap).
-    def _overlaps(a: ZoneMapping, b: ZoneMapping) -> bool:
-        return not (a.hi_key < b.lo_key or a.lo_key > b.hi_key
-                    or a.hi_vel < b.lo_vel or a.lo_vel > b.hi_vel)
-
-    # Drop fully-identical units first.  Some MPC presets stack the *same*
-    # sample/zone dozens of times (e.g. the wide-drone preset layers one slice 122×)
-    # as a polyphony/unison trick; on the E4XT that's just N identical voices
-    # adding level, not character, and would blow the voice budget.  Keep one.
-    _seen_units: set = set()
-    deduped_units: list = []
-    for sig, zone in all_units:
-        key = (sig, zone.sample_name, zone.lo_key, zone.hi_key,
-               zone.lo_vel, zone.hi_vel, zone.root_key, zone.fine_tune)
-        if key in _seen_units:
-            continue
-        _seen_units.add(key)
-        deduped_units.append((sig, zone))
-    if len(deduped_units) < len(all_units):
-        print(f"    Deduplicated {len(all_units) - len(deduped_units)} identical stacked unit(s)")
-
-    voice_lanes: list = []   # list of [sig, VoiceLayer]
-    for sig, zone in deduped_units:
-        placed = False
-        for lane_sig, v in voice_lanes:
-            if lane_sig == sig and not any(_overlaps(z, zone) for z in v.zones):
+        voice_lanes: list = []   # list of [sig, VoiceLayer]
+        for sig, zone in deduped_units:
+            placed = False
+            for lane_sig, v in voice_lanes:
+                if lane_sig == sig and not any(_overlaps(z, zone) for z in v.zones):
+                    v.zones.append(zone)
+                    placed = True
+                    break
+            if not placed:
+                iparam_tuple, non_transpose = sig
+                v = VoiceLayer(non_transpose=non_transpose)
+                for k, val in inst_params[iparam_tuple].items():
+                    setattr(v, k, val)
                 v.zones.append(zone)
-                placed = True
-                break
-        if not placed:
-            iparam_tuple, non_transpose = sig
-            v = VoiceLayer(non_transpose=non_transpose)
-            for k, val in inst_params[iparam_tuple].items():
-                setattr(v, k, val)
-            v.zones.append(zone)
-            voice_lanes.append((sig, v))
+                voice_lanes.append((sig, v))
 
-    # Cap to the E4XT per-preset voice limit, keeping the widest-coverage voices
-    # (shared with the SFZ parser; limit pinned by the VOICECOUNT RE bank).
-    built = [v for _sig, v in voice_lanes if v.zones]
-    capped = cap_voices_by_coverage(built)
-    if len(capped) < len(built):
-        print(f"    [WARN] {len(built)} simultaneous voices — capped to "
-              f"{len(capped)} (E4XT voice limit); narrowest layers dropped")
-    for voice in capped:
-        preset.voices.append(voice)
+        # Cap to the E4XT per-preset voice limit, keeping the widest-coverage voices
+        # (shared with the SFZ parser; limit pinned by the VOICECOUNT RE bank).
+        built = [v for _sig, v in voice_lanes if v.zones]
+        capped = cap_voices_by_coverage(built)
+        if len(capped) < len(built):
+            print(f"    [WARN] {len(built)} simultaneous voices — capped to "
+                  f"{len(capped)} (E4XT voice limit); narrowest layers dropped")
+        for voice in capped:
+            preset.voices.append(voice)
 
-    bank.presets.append(preset)
-    print(f"  Preset '{preset.name}': {len(preset.voices)} voice(s), "
-          f"{len(bank.samples)} sample(s)")
+        bank.presets.append(preset)
+        print(f"  Preset '{preset.name}': {len(preset.voices)} voice(s), "
+              f"{len(bank.samples)} sample(s)")
+        return
+
+    for _name, _root in program_trees:
+        _build_preset(_root, _name)
+    if len(program_trees) > 1:
+        print(f"  {len(bank.presets)} preset(s), {len(bank.samples)} sample(s) "
+              f"total in '{bank.name}'")
     return bank
 
 
@@ -1596,10 +1638,16 @@ def _find_wav(sample_name: str, search_dir: Path) -> Optional[Path]:
     """Search for a WAV file by name in the given directory and subdirectories."""
     basename = Path(sample_name).name
 
-    # Build candidate names: exact, plus .wav/.WAV when no extension is present
+    # Build candidate names: the exact name first, then with .wav/.WAV appended.
+    # The extension is appended even when the name ALREADY ends in .wav -- a
+    # sample imported from `Foo.wav` is named "Foo.wav" in the program and
+    # stored as `Foo.wav.WAV` on disk, so the double extension is real and
+    # common (393 such files in one 2.x project of the MPC One backup).
     names = [basename]
-    if not Path(basename).suffix:
+    if Path(basename).suffix.lower() != '.wav':
         names += [basename + '.wav', basename + '.WAV']
+    else:
+        names += [basename + '.WAV', basename + '.wav']
 
     # Direct lookup first (fast path)
     for name in names:
