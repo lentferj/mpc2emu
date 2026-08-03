@@ -5648,3 +5648,68 @@ Reading a preset's MIDI program number back out of an E4B is still missing —
 `parse_e4b` constructs `Preset(...)` without `program_number`, so an E4B→E4B
 round trip loses the assignment. Logged in TODO.md; it is a parser gap that
 predates this work.
+
+## §XPMGAPS — three MPC layer fields we drop and ConvertWithMoss reads (OPEN, found 2026-08-03)
+
+Found by comparing our MPC support against `MPCModernDetector` after the
+project-as-bank work (§MPC3BANK). None of the three blocks a conversion; each
+silently loses fidelity. Listed most audible first.
+
+### 1. `direction` — reverse playback (checklist C7)
+
+**What:** the layer field `direction` (`0` = forward). §MPC3XPM already records
+it in the slice-field table; nothing reads it. A reversed layer converts as
+forward, which is not a subtle loss.
+
+**Fix:** neither E4B nor KRZ has a per-zone reverse-playback flag, so the
+conversion has to **reverse the PCM itself** at load time — the same shape as
+the existing ping-pong handling, which bakes the reversed interior into the
+sample rather than relying on a target-format flag (see the ping-pong note
+earlier in this file). Reverse the frames after slicing and before looping, and
+mirror the loop points about the new length: a loop `[a, b]` in a sample of
+`n` frames becomes `[n-1-b, n-1-a]`.
+
+**Watch for:** `SliceLoop = 2` (Reverse) and `3` (Alternating) are a *separate*
+mechanism from `direction` and are still only inferred from the manual, never
+seen in data (§MPC3XPM). Do not conflate them — a reversed *sample* and a
+reverse *loop mode* are different things, and implementing one as the other
+would be worse than dropping both.
+
+### 2. Loop crossfade and `loopFineTune` (checklist B5)
+
+**What:** `loopCrossfadeLength` (layer) and `SliceLoopCrossFadeLength`
+(`sliceInfo`, `-1` = none), plus `loopFineTune`. All unread. A crossfaded MPC
+loop converts as a hard splice and can click at the seam.
+
+**Fix:** we already own a crossfade implementation — `--auto-loop` renders
+seamless loops with a crossfade — so this is wiring an incoming length into
+that machinery rather than writing new DSP. The MPC value is in **frames**;
+CWM instead stores a *fraction of the loop length*, so do not copy their
+number without converting.
+
+**Open question:** whether the MPC crossfades symmetrically about the loop
+point or backwards from it. That changes which frames get mixed, and it is
+measurable on the bench rig now — a loop with a long crossfade, recorded and
+compared against both renderings.
+
+### 3. `ZonePlay` / play logic
+
+**What:** the per-instrument zone-selection mode — round-robin, random,
+velocity-based. CWM maps it onto its `PlayLogic`. We ignore it, so a
+round-robin keygroup collapses to one fixed choice and loses its variation.
+
+**Fix:** this one may not be portable. EOS selects a zone by key and velocity;
+it has no round-robin. The honest options are to approximate round-robin as
+parallel voices (which stacks them instead of alternating — wrong), or to warn
+and drop. **Prefer warning and dropping**, and record the decision, rather than
+inventing a mapping that changes what the preset does. Worth checking the EOS
+manual for a random/alternate zone mechanism before settling that.
+
+### Where we are ahead, for balance
+
+Not everything went their way in that comparison: CWM cannot convert MPC **2.x
+XML projects** at all (their `getProgramElement()` rejects any root that is not
+`MPCVObject`, and a 2.x `.xpj` is a `<Project>`), their XML sample lookup is a
+single `sampleName + ".WAV"` candidate with no subdirectory search or
+case-insensitive fallback, they drop filter types 19–28 which we map, and their
+cutoff and envelope curves are unmeasured — §MPCCUTOFF refuted theirs by 2–6×.
