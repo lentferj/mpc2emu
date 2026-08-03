@@ -5283,6 +5283,79 @@ is unchanged.
   (root-inside-zone, 39.6% vs 26.4%) picked the other one — that margin was
   never strong enough to decide it either way.
 
+## §MPC3D3 — track and project containers, and exact sample resolution (FIXED 2026-08-03)
+
+Two MPC 3 gaps closed from the RE checklist
+(`docs/re_procedures/mpc3_xpm_params.md`, items **D3** and **E3**), both
+software-only — no hardware was needed for either.
+
+### D3 — a `.xpm` is not always a bare program
+
+Header line 3 names the payload, and the MPC writes three of them:
+`SerialisableProgramData`, `SerialisableTrackData` and
+`SerialisableProjectData`. We accepted only the first and raised on the other
+two, so **a keygroup program saved inside a track or a project was
+unreachable** even though the program itself is identical.
+
+`_mpc3_program_nodes()` now extracts them:
+
+| payload | program(s) |
+|---------|------------|
+| `…ProgramData` | the payload root itself |
+| `…TrackData` | `data.program`, if `type == 1` |
+| `…ProjectData` | every `data.tracks[].program` with `type == 1` |
+
+`type == 1` is the keygroup program; drum, plugin and MIDI tracks are filtered
+out. ConvertWithMoss reads the same field the same way.
+
+**One structural wrinkle:** in the track and project containers `samples[]`
+sits on the *payload root*, not on the program node — so the per-sample
+`metadata` (`rootNote`, `tune`) that §MPC3XPM depends on is one level up from
+where a bare program keeps it. It is folded into each program node on
+extraction, which keeps `_mpc3_to_xml()` reading one self-contained dict and
+means nothing downstream had to learn about containers at all.
+
+A payload with no keygroup program now refuses with a sentence that says so,
+rather than the old "unsupported payload".
+
+**Known limitation, logged in TODO.md:** a project holding *several* keygroup
+programs converts only the first. `parse_xpm` builds one `Preset` per file, so
+the rest would need a multi-preset `parse_xpm` — a real refactor of a ~390-line
+function, not a small change. It warns and names what it skipped, so the loss
+is visible.
+
+### E3 — resolve the sample exactly instead of searching for it
+
+MPC 3 writes its samples into a sibling `<stem>_[<Kind>Data]/` folder and names
+the file in each layer's own `sampleFile`, so the correct WAV is known without
+looking for it. We were resolving by `sampleName` through `_find_wav()`, which
+walks the whole tree and takes the **first name match in traversal order**.
+
+**That is a real bug, not a theoretical one.** Negative control: two programs,
+each with its own `_[ProgramData]` folder, each holding a different
+`SHARED.wav`, the decoy earlier in traversal order.
+
+| path | resolves to | frames |
+|------|-------------|--------|
+| old `_find_wav` | `AAA_decoy_[ProgramData]/SHARED.wav` | 1000 |
+| new `_resolve_mpc3_sample` | `ZZZ_real_[ProgramData]/SHARED.wav` | 8000 |
+
+It stays a *preference*, not a requirement: a miss falls back to the old
+search, so re-organised or hand-assembled exports keep working. CWM errors out
+instead; being forgiving costs nothing here and keeps every export that works
+today working.
+
+### Verification
+
+All three local 3.9.0.31 files convert unchanged (21 / 25 / 25 samples), the
+133-test suite passes, and track/project extraction was checked on synthesized
+containers covering: a track, a project with two keygroup tracks plus a drum
+track, and a project with no keygroup program at all.
+
+**What is still owed:** the synthesized containers are our own guess at the
+shape. Two real exports would confirm the field names and the `type == 1`
+filter on genuine MPC output — filed as checklist item **D5**.
+
 ## §CUTOFFKNOB — a candidate MPC knob → Hz curve, from ConvertWithMoss (CANDIDATE, 2026-08-03)
 
 Fix material for the open TODO *"Normalised-knob sources violate the

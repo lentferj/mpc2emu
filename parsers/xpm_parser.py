@@ -746,6 +746,14 @@ def _safe_name(name: str, maxlen: int = 16, tail: bool = False) -> str:
 
 MPC3_MAGIC = b'\x1f\x8b'          # gzip; a classic XPM is plain '<?xml'
 
+# Header line 3 -> the word the MPC uses for that container in the sibling
+# sample folder it writes next to the file (`<stem>_[ProgramData]/` etc).
+_MPC3_PAYLOADS = {
+    'SerialisableProgramData': 'Program',
+    'SerialisableTrackData':   'Track',
+    'SerialisableProjectData': 'Project',
+}
+
 
 def is_mpc3_xpm(path) -> bool:
     """True if `path` is an MPC 3.x (gzip+JSON) program rather than XML."""
@@ -767,10 +775,73 @@ def _mpc3_read(path):
             raise ValueError(f"unsupported MPC 3 encoding {header[3]!r}")
         payload = _json.load(g)
     kind = header[2]
-    if kind != 'SerialisableProgramData':
+    if kind not in _MPC3_PAYLOADS:
         raise ValueError(f"unsupported MPC 3 payload {kind!r} "
-                          f"(only SerialisableProgramData is a program)")
+                          f"(expected one of {', '.join(sorted(_MPC3_PAYLOADS))})")
     return header, payload.get('data', {})
+
+
+def _mpc3_program_nodes(kind: str, data: dict) -> list:
+    """The keygroup program(s) inside an MPC 3 payload.
+
+    A `.xpm` is not always a bare program: the MPC also writes a whole track
+    (`SerialisableTrackData`, one program) and a whole project
+    (`SerialisableProjectData`, one program per track).  Both were rejected
+    outright before, so a keygroup program saved inside either was
+    unreachable.
+
+    `type == 1` is the keygroup program; the other types are drum, plugin and
+    MIDI tracks, which are not ours to convert.  ConvertWithMoss filters on
+    the same field.
+
+    In the track and project containers `samples[]` sits on the payload root
+    rather than on the program node, so it is folded into each program here —
+    that keeps `_mpc3_to_xml` reading one self-contained dict regardless of
+    which container the program arrived in.
+    """
+    if kind == 'SerialisableProgramData':
+        return [data] if isinstance(data, dict) else []
+
+    if kind == 'SerialisableTrackData':
+        candidates = [data.get('program')]
+    else:                                    # SerialisableProjectData
+        candidates = [t.get('program') for t in (data.get('tracks') or [])
+                      if isinstance(t, dict)]
+
+    programs = []
+    for prog in candidates:
+        if not isinstance(prog, dict):
+            continue
+        if int(_as_float(prog.get('type'), -1.0)) != 1:
+            continue
+        if not prog.get('samples'):
+            prog = {**prog, 'samples': data.get('samples') or []}
+        programs.append(prog)
+    return programs
+
+
+def _resolve_mpc3_sample(layer, sample_dir) -> Optional[Path]:
+    """The WAV for an MPC 3 layer, resolved exactly rather than by search.
+
+    MPC 3 writes its samples into a sibling `<stem>_[<Kind>Data]/` folder and
+    names the file in the layer's own `sampleFile`, so the right WAV is known
+    without looking for it.  `_find_wav` instead takes the first name match in
+    a whole-tree walk, which picks the wrong file when a same-named sample
+    sits in another program's folder beside it.
+
+    Returns None — falling back to `_find_wav` — when the folder or the file
+    is missing, so a re-organised or hand-assembled export still resolves the
+    old way.  (ConvertWithMoss treats the miss as an error instead; being
+    forgiving here costs nothing and keeps every export that works today
+    working.)
+    """
+    if sample_dir is None:
+        return None
+    name = _get_text(layer, 'SampleFile', '')
+    if not name:
+        return None
+    candidate = sample_dir / name
+    return candidate if candidate.is_file() else None
 
 
 def _v0(node, default=0.0):
@@ -913,6 +984,11 @@ def _mpc3_to_xml(data) -> 'ET.Element':
             meta = sample_meta.get(lay.get('sampleName', '')) or {}
 
             lput('SampleName', lay.get('sampleName', ''))
+            # The exact filename inside the sibling `_[<Kind>Data]/` folder.
+            # Carries no meaning for the XML path (MPC 2.x has no equivalent)
+            # but lets the MPC 3 sample lookup be exact — see
+            # _resolve_mpc3_sample.
+            lput('SampleFile', lay.get('sampleFile', ''))
             lput('VelStart',   lay.get('velocityStart', 0))
             lput('VelEnd',     lay.get('velocityEnd', 127))
             # rootNote 0 is the MPC "root unset" sentinel.  Prefer the sample's
@@ -996,10 +1072,31 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
     # tree this parser already understands (see _mpc3_to_xml). A file ending
     # .xpm that is neither is almost always an X11 pixmap, which shares the
     # extension; say so plainly instead of failing with an XML error.
+    mpc3_sample_dir = None
     if is_mpc3_xpm(xpm_path):
         header, data = _mpc3_read(str(xpm_path))
-        print(f"Parsing XPM (MPC {header[1]} JSON): {xpm_path}")
-        root = _mpc3_to_xml(data)
+        kind = header[2]
+        container = _MPC3_PAYLOADS[kind]
+        programs = _mpc3_program_nodes(kind, data)
+        if not programs:
+            raise ValueError(
+                f"{xpm_path.name} is an MPC {header[1]} {container.lower()} "
+                f"with no keygroup program (type 1) in it — a drum, plugin or "
+                f"MIDI track has nothing to convert.")
+        if len(programs) > 1:
+            skipped = ', '.join(repr(str(p.get('name', '?')))
+                                for p in programs[1:])
+            print(f"  [WARN] {len(programs)} keygroup programs in this "
+                  f"{container.lower()} — converting only the first "
+                  f"({str(programs[0].get('name', '?'))!r}); skipped: {skipped}")
+        print(f"Parsing XPM (MPC {header[1]} JSON, {container.lower()}): "
+              f"{xpm_path}")
+        root = _mpc3_to_xml(programs[0])
+        # MPC 3 keeps its samples in a sibling folder named after the file and
+        # its container kind; used for exact lookup (see _resolve_mpc3_sample).
+        mpc3_sample_dir = xpm_path.parent / f"{xpm_path.stem}_[{container}Data]"
+        if not mpc3_sample_dir.is_dir():
+            mpc3_sample_dir = None
     else:
         with open(xpm_path, 'rb') as _fh:
             _head = _fh.read(16)
@@ -1238,7 +1335,9 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
                          slice_lstart, loop_on, slice_lend)
 
             if cache_key not in sample_cache:
-                wav_path = _find_wav(sample_name, wav_dir)
+                # MPC 3 names its file exactly; only search when it cannot.
+                wav_path = (_resolve_mpc3_sample(layer, mpc3_sample_dir)
+                            or _find_wav(sample_name, wav_dir))
                 if wav_path:
                     sd = load_wav(str(wav_path), sample_name)
                     if sd:

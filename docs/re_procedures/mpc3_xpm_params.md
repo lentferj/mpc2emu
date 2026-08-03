@@ -138,9 +138,15 @@ just convert it, rather than sweeping.
 
 ### What not to spend bench time on
 
-**A2 is settled** — `rootNote` is 1-based, proven from inside the file. **E1 is
-done.** **E3** (deterministic `sampleFile` resolution) and **D3**
-(track/project containers) are software work needing no MPC at all.
+**A2 is settled** — `rootNote` is 1-based, proven from inside the file. **E1,
+E3 and D3 are done** — E3 (deterministic `sampleFile` resolution) and D3
+(track/project containers) were software work and landed 2026-08-03.
+
+The one thing D3 leaves for the bench is **D5**: it was verified against
+synthesized containers, so two real exports — a keygroup program inside a
+track, and a project with two keygroup tracks plus a drum track — would
+confirm the field names and the `type == 1` filter on genuine MPC output.
+Two exports, no sweeps; worth folding into session 1 if the MPC is already on.
 
 ---
 
@@ -232,9 +238,22 @@ done.** **E3** (deterministic `sampleFile` resolution) and **D3**
 - [ ] **D1 Multi-layer keygroup** (up to 8 samples per keygroup) with real
       velocity splits — exercises the lane allocation the XML path does.
 - [ ] **D2 A drum program** (`type != 1`) — do we handle or reject it?
-- [ ] **D3 `SerialisableTrackData` / `SerialisableProjectData`** — CWM extracts
-      `data.program` and `data.tracks[].program` filtered to `type == 1`; we
-      reject both, so a keygroup program inside a track/project is unreachable.
+- [x] **D3 `SerialisableTrackData` / `SerialisableProjectData`** — **DONE
+      2026-08-03, no hardware.** `_mpc3_program_nodes()` extracts
+      `data.program` (track) and `data.tracks[].program` (project), filtered to
+      `type == 1`, and folds the root-level `samples[]` into each program so
+      `_mpc3_to_xml` still reads one self-contained dict. A payload with no
+      keygroup program now refuses with a sentence saying so instead of
+      "unsupported payload". **Known limitation:** a project holding *several*
+      keygroup programs converts only the first and warns, naming the ones it
+      skipped — `parse_xpm` builds one Preset per file. Logged in TODO.md.
+      Verified on synthetic track/project containers (a real one still has to
+      come off the MPC — see D5).
+- [ ] **D5 A real track / project export.** *(New, from D3.)* D3 was built and
+      tested against synthesized containers, because no local file is one. Save
+      a keygroup program inside a track, and a project with two keygroup tracks
+      plus a drum track, and confirm the field names and the `type == 1`
+      filter hold on real MPC output. Cheap: two exports, no sweeps.
 - [ ] **D4 An oscillator layer** — confirm it arrives as a layer with no
       sample, and decide the behaviour (skip with a warning, most likely).
 
@@ -258,15 +277,17 @@ done.** **E3** (deterministic `sampleFile` resolution) and **D3**
       - **A1, A2 and A4 all narrowed** — see above. A2 is settled.
 - [ ] **E2 Re-scan the library** for MPC 3 files as more are exported, and
       re-run the structural checks in §MPC3XPM.
-- [ ] **E3 Resolve samples via `sampleFile` in `<stem>_[ProgramData]/`.**
-      *(New, from E1.)* We resolve by `sampleName` through `_find_wav()`, which
-      walks the tree and takes the first name match; CWM resolves
-      deterministically to `<stem>_[<Kind>Data]/<sampleFile>`. Equivalent on the
-      local files (`sampleFile == sampleName + ".wav"`, and the auto-sampler's
-      `MIDI NNN-` prefix means 0 of 71 names collide across the three
-      programs), but a hand-named program sitting beside another with a
-      same-named sample would silently pull the wrong WAV. Not urgent — no
-      local file triggers it — but it is a correctness-by-construction win.
+- [x] **E3 Resolve samples via `sampleFile` in `<stem>_[ProgramData]/`.**
+      **DONE 2026-08-03, no hardware.** `_resolve_mpc3_sample()` builds the
+      exact path from the layer's own `sampleFile` and the sibling
+      `<stem>_[<Kind>Data]/` folder, falling back to the old `_find_wav()`
+      search when either is missing — so re-organised or hand-assembled
+      exports keep working, where CWM errors out.
+      **The bug it fixes is real, not theoretical**, confirmed with a negative
+      control: two programs each holding their own `SHARED.wav`, the decoy
+      earlier in traversal order. Old path resolved the decoy (1000 frames),
+      new path resolves the right file (8000). All three local 3.9.0.31 files
+      convert unchanged (21/25/25 samples).
 
 ---
 
