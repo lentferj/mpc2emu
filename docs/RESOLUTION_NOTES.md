@@ -16,6 +16,113 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 
 ---
 
+## §ISODIR — EMU3 CD image drops banks past the 16th (how to fix)
+
+**Status: guard ready to apply; multi-block wants one E4XT confirmation.**
+
+### Problem
+
+`writers/iso_builder.py::build_iso` writes one dir-content block for a list
+of any length. `_dircon_block` slices `files[:EMU3_ENTRIES_PER_BLOCK]` and
+`_root_block("Default Folder  ", _DIRCON_START)` puts a single block number
+in the folder's 7-slot block list. Cluster allocation, FAT and file data are
+built from the full list, so the excess banks are on the disc but
+unreferenced. See `TODO.md` for the reproduction.
+
+### Stage 1 — stop the silent loss (software only, no hardware)
+
+Mirror what `build_hda` already does. In `build_iso`, right after
+`file_infos` is built:
+
+```python
+if len(e4b_files) > EMU3_ENTRIES_PER_BLOCK:
+    dropped = file_infos[EMU3_ENTRIES_PER_BLOCK:]
+    print(f"  [ERROR] EMU3 CD directory holds at most "
+          f"{EMU3_ENTRIES_PER_BLOCK} banks; {len(file_infos)} provided. "
+          f"Dropping {len(dropped)}:")
+    for fi in dropped:
+        print(f"            {Path(fi['path']).name}")
+    print("          Split across multiple images, or use --hda "
+          "(multi-block, no 16-bank limit).")
+    file_infos = file_infos[:EMU3_ENTRIES_PER_BLOCK]
+```
+
+Truncate `file_infos` **before** `allocs`/`n_clusters`/`total_blocks` are
+computed, otherwise the image keeps the dead clusters it has now.
+
+### Stage 2 — 17…112 banks on one disc
+
+The machinery exists in this same module; `build_emu_hdd` (line ~745) already
+does it:
+
+```python
+dircon_bytes = b''
+for i in range(0, len(banks), EMU3_ENTRIES_PER_BLOCK):
+    dircon_bytes += _dircon_block(banks[i:i + EMU3_ENTRIES_PER_BLOCK])
+```
+
+with the folder entry carrying the block list. For the CD path:
+
+```python
+n_dircon = max(1, (len(file_infos) + EMU3_ENTRIES_PER_BLOCK - 1)
+                  // EMU3_ENTRIES_PER_BLOCK)          # cap at EMU3_BLOCKS_PER_DIR (7)
+blocks   = [_DIRCON_START + i for i in range(n_dircon)]
+root     = _root_block("Default Folder  ", blocks)     # already takes a list
+dircon   = b''.join(_dircon_block(file_infos[i:i + EMU3_ENTRIES_PER_BLOCK])
+                    for i in range(0, len(file_infos), EMU3_ENTRIES_PER_BLOCK))
+dircon  += b'\x00' * BSIZE * (_DIRCON_BLOCKS - n_dircon)
+pad1[0]  = _DIRCON_START + n_dircon                    # next-free pointer, not +1
+```
+
+`_folder_entry` already accepts a list and pads with `0xFFFF`, so no change
+there. Two details that are easy to get wrong:
+
+- **`pad1[0]` must become `_DIRCON_START + n_dircon`**, not the hardcoded
+  `+ 1` — it is the next-free dir-content block pointer.
+- **The `slot` byte** (entry offset 17) is the 2-digit bank id. `_dircon_block`
+  falls back to the *within-block* index when `slot` is absent, which is
+  correct only for a single block. Past 16 banks the caller must set
+  `fi['slot']` to the running index across all blocks, as `build_emu_hdd`
+  does, or the discs get four banks each numbered 00–15.
+
+Beyond 112 banks the folder is full; `build_emu_hdd`'s multi-folder path
+(`EMU3_BANKS_PER_FOLDER = 100`) is the model, but the EOS UI's 2-digit bank
+slots make >100 per folder questionable anyway.
+
+### Confirmation needed before Stage 2 ships
+
+Our multi-block dir content is hardware-confirmed on the **HDD** profile
+only. Build one CD image with ~20 banks, load it on the E4XT via ZuluSCSI and
+check that banks 17–20 appear in the browser and load. If the CD reader only
+honours the first block-list slot, Stage 1 is the permanent answer and the
+16-bank cap is a real format limit for CD volumes.
+
+### Cross-reference
+
+ConvertWithMoss `3dbd378f` (2026-08-03) makes exactly this change to the
+writer it took from our RE — 16 → 112 files, same 7-slot folder block list,
+entry numbers running across blocks. Independent agreement on the mechanism,
+but they state the images are round-tripped through their own detector and
+**not** hardware-verified, so it is not a substitute for the E4XT check.
+
+That commit also adds an **EIII/EIIIX/ESI-native CD layout**, which we do not
+have and currently do not need — our `--format eiii --iso` targets the E4XT's
+EIII compatibility loader, so EOS geometry is right for it. Recorded in case
+we ever want discs a real EIII can mount: `fat_blocks=7, root_blocks=6,
+dircon_blocks=192` (vs EOS 5/4/125); file entries carry **no** form type at
+offset 28 where EOS has `E4B0`; the superblock stores the medium size as u32
+at `0x2A` instead of the EOS flag byte `0x2D = 0x08`; the padding block after
+the superblock is filled with `0x80` from offset 4. Their source is two
+volumes of one EIIIX library, unverified on hardware.
+
+**Not a finding, do not re-derive:** the per-entry form-type difference
+(`\x00E4B0` for E4B bodies, all-zero for EIII bodies) is the same thing
+`_bank_props` has done since 2026-07-28, where we established it from five
+commercial discs *and* hardware-tested it on the E4XT's browser. We were
+there first and with better evidence.
+
+---
+
 ## §E4BRATE — EOS4 sample-rate field (how to fix the resample pitch bug)
 
 **Symptom.** E4B samples stored below 44.1 kHz play sharp by `src/dst` (27500 →
@@ -993,7 +1100,21 @@ for v in smp_by_vel.values():
 
 ## 11. HDA directory >16 entries
 
-**Status: ready to apply (add guard/warning).**
+**Status: APPLIED (2026-08-03 audit) — `build_hda` emits the `[ERROR]`, lists
+the dropped files and truncates. The guard below is the code that is in the
+tree, not a proposal.**
+
+**Correction (2026-08-03):** the "Future" paragraph below speculates that
+multi-block directories chain via a next-block pointer in each block's last
+4 bytes, and that confirming this needs hardware RE. That is wrong on both
+counts for the **EMU3** filesystem: there is no chaining. The folder's root
+directory entry carries a **list of up to 7 dir-content block numbers** at
+offset 18 (`0xFFFF` = unused), which `_folder_entry`/`build_emu_hdd` in
+`writers/iso_builder.py` already write and which is hardware-confirmed on the
+HDD profile. The EMU3 CD path has the same 16-entry bug and is *not* guarded —
+see §ISODIR. Note this §11 is about `writers/hda_builder.py`, the **EMU4/EIV**
+filesystem, whose directory is a different structure; whether it has an
+equivalent block list is genuinely unknown.
 
 ### Problem
 

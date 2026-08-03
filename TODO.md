@@ -36,7 +36,8 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 | ~~Non-PCM WAV format codes rejected~~ | **fixed 2026-08-02** — own RIFF walk replaces stdlib `wave`; 32-bit/64-bit float and `WAVE_FORMAT_EXTENSIBLE` now read, Ogg-in-WAV refused cleanly. Also recovered tails that `wave` silently truncated. See §WAVFMT |
 | ~~FLAC as a sample input~~ | **declined 2026-08-02** — needs a decoder dependency, and mpc2emu stays small and self-contained. No sample container mpc2emu reads embeds FLAC; folder input can be converted by the user beforehand. Do not re-raise. See §WAVFMT "FLAC" |
 | **Zone reducer not velocity-aware** | `--reduce-key-zones` can leave velocity holes |
-| **HDA directory block limited to 16 entries** | |
+| **HDA directory block limited to 16 entries** | guard is applied — `build_hda` drops the excess with a loud `[ERROR]`. §11's "needs hardware RE to confirm the chaining convention" is stale: there is no chaining, the folder entry carries a 7-slot block list |
+| **EMU3 CD image silently keeps only the first 16 banks** | `build_iso` writes one dir-content block and `_dircon_block` slices `files[:16]`, so bank 17+ get cluster chains and file data but no directory entry — invisible and unloadable, with no warning and the console still listing them as written. Our own `build_emu_hdd` already does multi-block correctly. Reproduced 2026-08-03. See §ISODIR |
 | ~~MPC 3 project with several keygroup programs converts only the first~~ | **fixed 2026-08-03** — `parse_xpm` now builds one preset per keygroup program with a shared sample pool, so an `.xpj` converts like an E4B bank. See §MPC3BANK |
 | **`e4b_parser` does not read a preset's MIDI program number back** | the writer stores it (TOC byte 31, verified) but `parse_e4b` builds `Preset(...)` without `program_number`, so every preset reads back as 0 and an E4B→E4B round trip silently loses the assignment. Cosmetic for conversion, wrong for round-tripping. Found 2026-08-03 |
 | **XPM `direction` (reverse playback) is dropped** | a layer with `direction = 1` converts as forward — audibly wrong, not subtle. ConvertWithMoss implements this and we do not. Checklist C7; fix strategy in §XPMGAPS |
@@ -57,6 +58,51 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 | item | note |
 |------|------|
 | **The ~2 dB gain-dataset anomaly** | key, velocity and transposition all measured flat. Isolated to one early measurement that four later independent runs contradict. Recorded in case it recurs |
+
+---
+
+## EMU3 CD image silently drops banks past the 16th (BUG, OPEN 2026-08-03)
+
+`writers/iso_builder.py::build_iso` — the `--iso` output for `--format e4b`
+and `--format eiii` — writes exactly **one** dir-content block:
+
+```python
+root   = _root_block("Default Folder  ", _DIRCON_START)   # block_list = [11, -1 × 6]
+dircon = _dircon_block(file_infos)                        # slices files[:16]
+```
+
+`_dircon_block` silently truncates with `files[:EMU3_ENTRIES_PER_BLOCK]`, and
+`_folder_entry` records a single dir-content block. Everything else in the
+image is built from the **full** file list: cluster allocation, the FAT
+chains and the file data all cover every bank. So banks 17+ are physically
+present on the disc and occupy space, but no directory entry references them
+— the E4XT cannot see or load them. Nothing warns; `build_iso`'s own
+per-file console listing prints all of them as if written.
+
+`convert.py:1111` passes every produced bank into one image
+(`iso_fn(out_paths, iso_path, bank_name)`), so any library that splits into
+more than 16 banks — routine with `--max-bank-size` — hits this.
+
+**Reproduced 2026-08-03** (20 × 200 KB dummy banks): image 10.1 MB, all 20
+allocated clusters 1–20, folder `block_list=(11, 65535 × 6)`, 16 entries
+readable, `BANK16..BANK19` missing.
+
+The module already knows the real limit —
+`EMU3_MAX_FILES_PER_DIR = 112` is defined at line 83 and never used by this
+path — and our own `build_emu_hdd` in the same file already writes
+multi-block dir content properly (7 blocks per folder, 100 banks per folder,
+multiple folders beyond that). Only the CD path was left on the single-block
+assumption.
+
+**Status:** open, fix strategy in `docs/RESOLUTION_NOTES.md` §ISODIR.
+**Blocked on:** nothing for the guard (software-only). The 17–112 bank
+multi-block image wants one E4XT confirmation that the CD reader honours the
+folder block list the same way the HDD reader does — our HDD multi-block
+images are hardware-confirmed, the CD variant has never been tested past 16.
+
+Found by cross-referencing ConvertWithMoss `3dbd378f` (2026-08-03), which
+extends the same filesystem writer from 16 to 112 files using the identical
+7-slot folder block list. Their commit is not hardware-verified.
 
 ---
 
