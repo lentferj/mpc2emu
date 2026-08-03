@@ -691,6 +691,136 @@ def _apply_slice(sd: SampleData, slice_start: int, slice_end: int,
         sd.loop_end   = 0
 
 
+#: MPC zone-play mode -> (name, whether EOS can express it).
+#: 0 = cycle (round-robin), 1 = velocity (the normal case), 2 = random.
+_ZONE_PLAY = {
+    0: ('cycle / round-robin', False),
+    2: ('random', True),
+}
+
+
+def _warn_zone_play(mode: int, inst_idx: int, seen: set) -> None:
+    """Report a zone-play mode we do not reproduce, once per mode per bank.
+
+    Mode 1 (velocity) is the normal case and is exactly what the converter
+    already does, so it is silent.
+
+    **Mode 2 (random) is not hopeless**, and the earlier note in §XPMGAPS that
+    "EOS has no round-robin" was only half right. The EOS 4.0 manual (p. 320,
+    Realtime Window Controls) documents **Crossfade Random** as a modulation
+    source "specifically designed" to "randomly switch between several voices",
+    generating one random number for every voice assigned to the same key --
+    which is precisely this feature. Mapping it means building realtime
+    crossfade windows plus a cord per voice, so it is a writer-side project of
+    its own and is filed in TODO.md rather than guessed at here.
+
+    **Mode 0 (cycle) really has no equivalent** -- Crossfade Random is random,
+    not sequential, and nothing in EOS advances through zones in order.
+
+    Either way the conversion currently keeps every layer and lets key/velocity
+    decide, so a round-robin keygroup plays one fixed choice instead of
+    alternating. That is a visible, warned loss rather than an invented mapping
+    that would change what the preset does.
+    """
+    entry = _ZONE_PLAY.get(mode)
+    if entry is None or mode in seen:
+        return
+    seen.add(mode)
+    name, has_eos_equivalent = entry
+    hint = ("EOS can express this via Crossfade Random — not implemented yet, "
+            "see TODO.md" if has_eos_equivalent else
+            "EOS has no sequential zone cycling")
+    print(f"    [WARN] instrument {inst_idx + 1}: zone play = {name}; "
+          f"not reproduced ({hint})")
+
+
+def _apply_loop_crossfade(sd: SampleData, xfade_frames: int) -> bool:
+    """Bake the MPC layer's loop crossfade into the PCM.
+
+    The MPC stores the length in FRAMES (`loopCrossfadeLength`, or `sliceInfo`'s
+    `LoopCrossfadeLength`; both -1 and 0 mean none).  ConvertWithMoss stores a
+    *fraction of the loop length* instead -- do not copy their number.
+
+    Neither target format carries a loop-crossfade parameter, so as with
+    reverse playback the only way to reproduce it is to render it.  The blend
+    is the equal-power one `processors/auto_loop.py` already uses: the `xf`
+    frames ending at loop_end are morphed into the `xf` frames ending just
+    before loop_start, so the wrap loop_end -> loop_start is a continuous run.
+
+    **The MPC's own convention is UNVERIFIED.** Whether it crossfades
+    symmetrically about the loop point or backwards from it is unknown: every
+    one of the 69 808 layers in the MPC One corpus has a crossfade of 0 or -1,
+    so there is no real file to check against, and it has not been measured on
+    hardware.  This renders a seamless loop of the right length, which is the
+    audible intent; the exact frame alignment is a best-faithful guess.  See
+    §XPMGAPS.
+
+    Returns True if a crossfade was applied.
+    """
+    if xfade_frames <= 0 or sd.loop_type == LoopType.NO_LOOP:
+        return False
+    ch = max(1, getattr(sd, 'channels', 1))
+    bpf = 2 * ch
+    n = len(sd.data) // bpf
+    S, E = sd.loop_start, sd.loop_end
+    if not (0 <= S < E < n):
+        return False
+    loop_len = E - S + 1
+    # Cap: cannot blend more than the pre-roll before the loop, nor so much of
+    # the loop that the crossfade swallows it.
+    xf = max(1, min(int(xfade_frames), S, loop_len // 3))
+    if xf < 1:
+        return False
+    pcm = array.array('h')
+    pcm.frombytes(sd.data[:n * bpf])
+    if sys.byteorder == 'big':
+        pcm.byteswap()
+    for i in range(xf):
+        t = i / (xf - 1) if xf > 1 else 1.0
+        fo = math.cos(0.5 * math.pi * t)
+        fi = math.sin(0.5 * math.pi * t)
+        for c in range(ch):
+            ie = (E - xf + 1 + i) * ch + c
+            isr = (S - xf + i) * ch + c
+            v = fo * pcm[ie] + fi * pcm[isr]
+            pcm[ie] = max(-32768, min(32767, int(round(v))))
+    if sys.byteorder == 'big':
+        pcm.byteswap()
+    sd.data = pcm.tobytes()
+    return True
+
+
+def _apply_reverse(sd: SampleData) -> None:
+    """Play this sample backwards (MPC layer `Direction` = 1).
+
+    Neither E4B/EOS nor the K2000 has a per-zone reverse-playback flag, so the
+    only faithful conversion is to reverse the PCM itself -- the same approach
+    the ping-pong renderer already takes for a loop mode the target cannot
+    express.  Done AFTER slicing, so the reversal applies to exactly the region
+    the MPC would have played.
+
+    Frames are reversed, not bytes: channel interleaving inside a frame must
+    survive, or a stereo sample comes back with its channels swapped and each
+    sample's bytes flipped into noise.
+
+    Loop points mirror about the new length -- a loop [a, b] in an n-frame
+    sample becomes [n-1-b, n-1-a] -- because the frames they referred to have
+    moved.  Leaving them alone would keep the loop at the wrong end of the
+    sound, which is the kind of bug that still plays and still sounds like
+    "a loop", just not the right one.
+    """
+    bpf = 2 * max(1, getattr(sd, 'channels', 1))
+    n = len(sd.data) // bpf
+    if n < 2:
+        return
+    mv = memoryview(sd.data)[:n * bpf]
+    sd.data = b''.join(bytes(mv[i * bpf:(i + 1) * bpf]) for i in range(n - 1, -1, -1))
+    if sd.loop_type != LoopType.NO_LOOP:
+        a, b = sd.loop_start, sd.loop_end
+        sd.loop_start = max(0, n - 1 - b)
+        sd.loop_end   = max(sd.loop_start, n - 1 - a)
+
+
 # unsigned-8 -> signed-8 sign flip, for the bulk 8->16 conversion below.
 # (Same table `gig_parser` uses for its own 8-bit path, CR-16 #1.)
 _FLIP_SIGN8 = bytes((i ^ 0x80) for i in range(256))
@@ -1098,6 +1228,12 @@ def _mpc3_to_xml(data) -> 'ET.Element':
 
         put('LowNote',  inst.get('lowNote', 0))
         put('HighNote', inst.get('highNote', 127))
+        # Zone-play mode: 0 = cycle (round-robin), 1 = velocity (normal),
+        # 2 = random.  MPC 2.x spells it <ZonePlay>; the JSON field is named
+        # `zonePlayTime`, whose value distribution across the corpus matches
+        # the XML tag exactly (1 dominant, 0 and 2 rare).  Read only to warn
+        # -- see _warn_zone_play.
+        put('ZonePlay', int(_as_float(inst.get('zonePlayTime'), 1.0)))
         # Fold the program/keygroup transpose in; keep whole semitones in
         # TuneCoarse and push any fraction into TuneFine as cents.
         inst_semis  = _as_float(inst.get('coarseTune')) + transpose
@@ -1207,10 +1343,12 @@ def _mpc3_to_xml(data) -> 'ET.Element':
                 lmode  = int(lay.get('loopMode', 0) or 0)
                 lstart = int(lay.get('loopStart', 0) or 0)
                 lend   = int(lay.get('loopEnd', 0) or 0)
+                lxfade = int(lay.get('loopCrossfadeLength', 0) or 0)
             else:
                 lmode  = int(slice_info.get('LoopMode', 0) or 0)
                 lstart = int(slice_info.get('LoopStart', 0) or 0)
                 lend   = int(slice_info.get('End', 0) or 0)
+                lxfade = int(slice_info.get('LoopCrossfadeLength', 0) or 0)
             has_loop = lmode > 0 and lend > 0
             # `offset` shifts the play start on top of sampleStart (CWM does
             # the same); MPC 2.x folded it into SliceStart.
@@ -1222,6 +1360,23 @@ def _mpc3_to_xml(data) -> 'ET.Element':
             lput('SliceLoop',      lmode if has_loop else 0)
             lput('SliceLoopStart', lstart)
             lput('SliceLoopEnd',   lend if has_loop else 0)
+            # `direction` 1 = the layer plays its sample BACKWARDS.  This is a
+            # different mechanism from SliceLoop 2/3 (a reverse or alternating
+            # loop MODE) and must not be conflated with it -- see §XPMGAPS.
+            # MPC 2.x spells the same field <Direction>, so both paths meet at
+            # this tag and only one implementation is needed downstream.
+            lput('Direction',  int(_as_float(lay.get('direction'))))
+            # Loop crossfade length in FRAMES (-1 and 0 both mean "none").
+            # NOT ConvertWithMoss's fraction-of-loop-length -- do not copy
+            # their number without converting.
+            lput('SliceLoopCrossFadeLength', max(0, lxfade) if has_loop else 0)
+            # `loopFineTune` has no known semantics and is 0 in every one of
+            # the 69808 layers of the MPC One corpus, so there is nothing to
+            # calibrate it against. Warn rather than guess if one ever appears.
+            _lft = _as_float(lay.get('loopFineTune'))
+            if _lft:
+                print(f"    [WARN] layer {lidx + 1} has loopFineTune={_lft:g}, "
+                      f"whose meaning is unknown — ignored (see §XPMGAPS)")
     return root
 
 
@@ -1461,6 +1616,7 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
         # that overlapping (simultaneously-sounding) layers become *parallel* voices
         # — the E4XT plays one zone per note per voice, so stacked MPC layers must be
         # separate voices to actually stack (fixes thin/collapsed pads, e.g. the detuned-stack split preset).
+        _zone_play_warned: set = set()   # warn once per mode, not once per keygroup
         all_units: list = []          # list of (params_key, inst_idx, ZoneMapping, non_transpose)
         inst_params: dict = {}        # inst_idx -> dict of voice-level params (env/filter/lfo)
 
@@ -1495,6 +1651,11 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
             # IgnoreBaseNote=True).  RootNote=0 is the "root unset" sentinel, NOT a
             # non-transpose signal — see docs/RESOLUTION_NOTES.md.
             ignore_base = _get_text(instrument, 'IgnoreBaseNote', 'False').strip().lower() == 'true'
+            try:
+                _warn_zone_play(int(float(_get_text(instrument, 'ZonePlay', '1') or 1)),
+                                inst_idx, _zone_play_warned)
+            except ValueError:
+                pass
             # Tuning: MPC stores it at instrument *and* layer level; both are summed.
             inst_coarse = int(_get_text(instrument, 'TuneCoarse', '0'))
             inst_fine   = int(_get_text(instrument, 'TuneFine',  '0'))
@@ -1642,8 +1803,15 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
                 # embedded WAV `smpl` loop (the MPC ignores the WAV loop when False).
                 # Absent → default True to preserve legacy WAV-smpl-loop behaviour.
                 loop_on      = _get_text(layer, 'Loop', 'True').strip().lower() == 'true'
+                # Reverse playback and loop crossfade are both baked into the
+                # PCM (no target format carries either as a flag), so the same
+                # WAV at different settings is a DIFFERENT SampleData and must
+                # not share a cache entry -- see §XPMGAPS.
+                reverse = _get_text(layer, 'Direction', '0').strip() not in ('', '0')
+                slice_xf = int(float(_get_text(
+                    layer, 'SliceLoopCrossFadeLength', '0') or 0))
                 cache_key = (sample_name, slice_start, slice_end, slice_loop,
-                             slice_lstart, loop_on, slice_lend)
+                             slice_lstart, loop_on, slice_lend, reverse, slice_xf)
 
                 if cache_key not in sample_cache:
                     # MPC 3 names its file exactly; only search when it cannot.
@@ -1654,6 +1822,12 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
                         if sd:
                             _apply_slice(sd, slice_start, slice_end, slice_loop,
                                          slice_lstart, loop_on, slice_lend)
+                            if slice_xf > 0 and _apply_loop_crossfade(sd, slice_xf):
+                                print(f"    Loop crossfade: {slice_xf} frames "
+                                      f"baked into '{sd.name}'")
+                            if reverse:
+                                _apply_reverse(sd)
+                                print(f"    Reversed '{sd.name}' (Direction=1)")
                             # Deduplicate truncated names within this XPM.
                             #
                             # Counting per base and trusting the rewrite was

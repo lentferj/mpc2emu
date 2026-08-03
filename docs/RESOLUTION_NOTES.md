@@ -5770,11 +5770,20 @@ Reading a preset's MIDI program number back out of an E4B is still missing —
 round trip loses the assignment. Logged in TODO.md; it is a parser gap that
 predates this work.
 
-## §XPMGAPS — three MPC layer fields we drop and ConvertWithMoss reads (OPEN, found 2026-08-03)
+## §XPMGAPS — three MPC layer fields we drop and ConvertWithMoss reads (**1 and 2 IMPLEMENTED 2026-08-03**, branch `cwm_ketchup`)
 
 Found by comparing our MPC support against `MPCModernDetector` after the
 project-as-bank work (§MPC3BANK). None of the three blocks a conversion; each
 silently loses fidelity. Listed most audible first.
+
+> **Status after implementation:**
+> 1. **`direction` — DONE.** Baked into the PCM, byte-exact against a reversed
+>    real 330 612-frame sample and mirror-exact in the audio domain.
+> 2. **Loop crossfade — DONE**, with the caveat below that the MPC's own frame
+>    alignment is unverified. `loopFineTune` is *not* implemented: it warns.
+> 3. **`ZonePlay` — warns, deliberately not reproduced.** But the claim below
+>    that "EOS has no round-robin" was **half wrong** — see the correction in
+>    section 3.
 
 ### 1. `direction` — reverse playback (checklist C7)
 
@@ -5796,6 +5805,28 @@ seen in data (§MPC3XPM). Do not conflate them — a reversed *sample* and a
 reverse *loop mode* are different things, and implementing one as the other
 would be worse than dropping both.
 
+**Implemented 2026-08-03** as `_apply_reverse()`, applied after slicing so the
+reversal covers exactly the region the MPC would have played, with loop points
+mirrored about the new length. Frames are reversed, not bytes — reversing bytes
+would swap a stereo sample's channels and flip each sample's bytes into noise.
+
+**Verified four ways:**
+
+1. Byte-exact unit tests: mono order, stereo channel pairing, loop mirroring
+   `(2,5) → (4,7)`, and double-reverse identity on random stereo PCM.
+2. **Byte-exact end to end on a real file** — a real 2.x keygroup program with
+   `Direction` flipped on, giving a 330 612-frame sample identical to its
+   source read backwards.
+3. **Audio domain:** the RMS envelope mirrors to within 0.0000% of peak.
+4. **Negative control:** the same sample's forward and reversed envelopes
+   differ by 77% of peak, so the mirror test is meaningful rather than a
+   symmetric-sample artefact.
+
+**Corpus note:** `Direction = 1` occurs in 32 files, but *only in Drum and Clip
+programs* — which are skipped by design. No keygroup program in the corpus uses
+it, which is why test 2 above had to flip the flag on a real file rather than
+find one.
+
 ### 2. Loop crossfade and `loopFineTune` (checklist B5)
 
 **What:** `loopCrossfadeLength` (layer) and `SliceLoopCrossFadeLength`
@@ -5813,18 +5844,52 @@ point or backwards from it. That changes which frames get mixed, and it is
 measurable on the bench rig now — a loop with a long crossfade, recorded and
 compared against both renderings.
 
+**Implemented 2026-08-03**, using the equal-power blend `processors/auto_loop.py`
+already uses: the `xf` frames ending at `loop_end` are morphed into the `xf`
+frames ending just before `loop_start`, so the wrap is continuous. Length is
+clamped to the pre-roll and to a third of the loop. Verified byte-exact against
+a hand-computed blend, with the region outside the blend proven untouched.
+
+**But it has never run on real data, and cannot be until some appears.** Every
+one of the **69 808** layers in the MPC One corpus has a crossfade of `0` or
+`-1`. So the code is unit-correct and its frame alignment is still a
+best-faithful guess — the audible intent (a seamless loop of the right length)
+is right either way. `loopFineTune` is likewise `0` everywhere; it is **not**
+implemented, it warns, because there is nothing to calibrate a guess against.
+
 ### 3. `ZonePlay` / play logic
 
 **What:** the per-instrument zone-selection mode — round-robin, random,
 velocity-based. CWM maps it onto its `PlayLogic`. We ignore it, so a
 round-robin keygroup collapses to one fixed choice and loses its variation.
 
-**Fix:** this one may not be portable. EOS selects a zone by key and velocity;
-it has no round-robin. The honest options are to approximate round-robin as
-parallel voices (which stacks them instead of alternating — wrong), or to warn
-and drop. **Prefer warning and dropping**, and record the decision, rather than
-inventing a mapping that changes what the preset does. Worth checking the EOS
-manual for a random/alternate zone mechanism before settling that.
+**Values:** `0` = cycle (round-robin), `1` = velocity (the normal case),
+`2` = random. Corpus distribution across MPC 2.x XML: 61 823 × `1`, 271 × `2`,
+145 × `0` — so non-default zone play is rare but real, and it does occur in
+keygroup programs (`Inst-Bass-F9 *.xpm` among others).
+
+**CORRECTION (2026-08-03): "EOS has no round-robin" was half wrong.** The EOS
+4.0 manual, *Realtime Window Controls* p. 320, documents **Crossfade Random**
+as a modulation source *"specifically designed"* for when *"you may want to
+randomly switch between several voices"*, and — unlike the other random sources
+— it *"generates one random number for all voices that are assigned to the same
+key"*. That is exactly `ZonePlay = 2`.
+
+So the two modes are not alike:
+
+| mode | EOS equivalent |
+|------|----------------|
+| `2` random | **yes** — Crossfade Random + realtime crossfade windows |
+| `0` cycle | **no** — Crossfade Random is random, not sequential, and nothing in EOS advances through zones in order |
+
+**Implemented:** a warning per mode per bank, naming which of the two it is and
+whether EOS could express it. Nothing is silently lost, and the message points
+at the right next step instead of implying the feature is impossible.
+
+**Still to do (TODO.md):** mapping `ZonePlay = 2` onto Crossfade Random. That
+is writer-side work — realtime crossfade windows plus a cord per voice — and
+doing it unverified would risk changing what a preset does, so it wants a
+hardware audition rather than a guess.
 
 ### Where we are ahead, for balance
 
