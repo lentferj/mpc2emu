@@ -5834,3 +5834,87 @@ XML projects** at all (their `getProgramElement()` rejects any root that is not
 single `sampleName + ".WAV"` candidate with no subdirectory search or
 case-insensitive fallback, they drop filter types 19–28 which we map, and their
 cutoff and envelope curves are unmeasured — §MPCCUTOFF refuted theirs by 2–6×.
+
+## §XPMDRUM — MPC drum programs convert; sample-free program types now refuse (2026-08-03)
+
+`parse_xpm` skipped `type="Drum"` and returned a preset with no voices and no
+samples, without raising — so a caller could not tell "nothing to convert" from
+"converted". Raised from VinSamLib, which greys such rows out rather than
+offering an import that silently yields nothing.
+
+**It was not a marginal file type.** In the MPC One backup's `Projects` tree,
+drum programs are **90 files carrying 956 zones and 907 samples** — comparable
+to the 82 keygroup programs (970 zones, 957 samples), with a much higher median
+per file (12 samples vs 5). All of it converted to nothing.
+
+*(One correction to the original TODO text: it said drum programs hold "more
+sampled material than the keygroup programs". Counting distinct sample names,
+it is 940 vs 964 — slightly fewer, ~98%. The density-per-file point stands.)*
+
+### A drum kit is one-key zones whose root equals their key
+
+That single idea is the whole conversion, and **neither writer needed a new
+feature**:
+
+- **EOS** transposes by `key - root`, which is 0 when they are equal.
+- **The K2000** computes `tuning = 100*(r_sample - r_zone) + fine_tune`
+  (`krz_writer.py:405`), which cancels its auto-transpose exactly when `r_zone`
+  is the key. `krz_writer` already documents meeting this idiom in real
+  third-party soundsets, and its up-pitch ceiling is measured from `r_zone`
+  precisely so deliberately-retuned drum zones are not dropped.
+
+`TuneCoarse` is deliberately **not** folded into the root for a pad: on a drum
+hit it is an intentional pitch offset and must survive as a real transpose,
+unlike the keygroup path where it is cancelled to match key-tracking.
+
+### The pad → note map is DATA, not a formula
+
+Across 56 MPC 3 drum programs: **24** use `(36 + pad) mod 128`, **1** is the
+identity, and **31 carry a custom map** — General-MIDI layouts and hand-built
+kits, e.g. `37, 36, 42, 82, 40, 38, 46, 44, …`. Computing the note instead of
+reading `padNoteMap.noteForPad` would put more than half the corpus's kits on
+the wrong keys.
+
+**MPC 2.x XML does not store it.** All **11 520** `<PadNote>` elements across
+the 90 corpus drum programs carry a `number` attribute and an empty body, and
+the neighbouring `ProgramPads-v2.10` blob holds pad *colours*
+(`0,127,0` green, `0,127,127` teal), not notes. So the 2.x path lays pads out
+from MIDI 36 and **warns** that a custom/GM kit will land elsewhere. There is
+nothing better to read in a 2.x file; consecutive keys still give a playable
+kit.
+
+### Consequence on the K2000 worth knowing
+
+`krz_writer` fills keymap holes by extending the nearest assigned entry, because
+a keymap with `sampleId=0` holes **locks up the K2000 on Master→Delete** and
+needs multiple factory resets. The fill copies the neighbour's entry verbatim,
+including its constant tuning — so on a drum kit the keys *between* pads sound
+the neighbouring hit **transposed**, rather than silent. That is the documented
+lesser evil, not a new fault: the alternative is the lockup.
+
+### Sample-free program types now refuse
+
+MIDI, Plugin, Audio, CV and Clip programs reference no sample data at all —
+**399 such files in the corpus, every one with zero sample references**. They
+now raise with a sentence saying so, instead of returning an empty preset.
+
+### Verified
+
+| type | files | converted | zones | samples |
+|------|-------|-----------|-------|---------|
+| Keygroup | 82 | 82 | **970** | 957 |
+| Drum | 90 | **90** | **956** | **907** |
+| MIDI / Audio / Plugin / CV / Clip | 399 | 0 (refused) | — | — |
+
+Keygroup zone count is **identical to the pre-change baseline**, so the keygroup
+path is untouched. 629-file sweep: 0 unexpected errors. A project that
+previously refused for holding no keygroup program (`Complex.xpj`) now yields
+three drum presets, and both writers round-trip them with every zone one-key
+and `root == key`. The custom pad map is honoured end to end — keys land on
+`36,37,38,40,42,43,44,45,46,47,48,82`, including the outlier.
+
+### Not done
+
+Velocity layers within a pad, pad mute groups, and the MPC's one-shot/note-off
+pad modes are not mapped. Nor is the 2.x pad layout recoverable — if a real
+`<PadNote>` body ever turns up in the wild, `_pad_note_map` already reads it.

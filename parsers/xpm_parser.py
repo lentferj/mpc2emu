@@ -783,6 +783,12 @@ def _safe_name(name: str, maxlen: int = 16, tail: bool = False) -> str:
 
 MPC3_MAGIC = b'\x1f\x8b'          # gzip; a classic XPM is plain '<?xml'
 
+#: An MPC drum program always serialises 128 pads, sampled or not.
+_MAX_PADS = 128
+#: Pad 1 lands on MIDI 36 (C1) when a program carries no explicit map -- the
+#: MPC's own default, and what 24 of 56 corpus drum programs use verbatim.
+_PAD_BASE_NOTE = 36
+
 # Header line 3 -> the word the MPC uses for that container in the sibling
 # sample folder it writes next to the file (`<stem>_[ProgramData]/` etc).
 _MPC3_PAYLOADS = {
@@ -849,7 +855,12 @@ def _mpc3_program_nodes(kind: str, data: dict) -> list:
     for prog in candidates:
         if not isinstance(prog, dict):
             continue
-        if int(_as_float(prog.get('type'), -1.0)) != 1:
+        # 1 = keygroup, 0 = drum.  Both carry sampled material and both are
+        # convertible (a drum kit is one-key zones whose root equals their key
+        # -- see §XPMDRUM).  The other types (MIDI, plugin, audio, CV, clip)
+        # reference no sample data at all: 393 such files in the MPC One
+        # corpus, every one of them with zero sample references.
+        if int(_as_float(prog.get('type'), -1.0)) not in (0, 1):
             continue
         if not prog.get('samples'):
             prog = {**prog, 'samples': data.get('samples') or []}
@@ -900,13 +911,68 @@ def _as_float(value, default=0.0) -> float:
         return default
 
 
+def _pad_note_map(root) -> dict:
+    """`{pad_index (0-based): midi_note}` for a drum program.
+
+    Read from `<PadNoteMap><PadNote number="N">note</PadNote>`, which the MPC 3
+    path fills in from the program's own `padNoteMap.noteForPad`.
+
+    **MPC 2.x XML does not store this.** All 11 520 `<PadNote>` elements across
+    the 90 drum programs in the MPC One corpus carry a `number` attribute and an
+    empty body, and the neighbouring `ProgramPads-v2.10` blob holds pad colours
+    (`0,127,0` green, `0,127,127` teal), not notes. So an unmapped pad falls
+    back to `_PAD_BASE_NOTE + index`, wrapped into range.
+
+    That fallback is right for the 24 corpus programs that use the MPC default
+    and wrong for the 31 that carry a custom (often General-MIDI) layout --
+    but for a 2.x file there is nothing better to read, and consecutive keys
+    still give a playable kit. Callers warn when they fall back.
+    """
+    out = {}
+    for el in root.iter('PadNote'):
+        try:
+            idx = int(el.get('number', '0')) - 1
+        except ValueError:
+            continue
+        text = (el.text or '').strip()
+        if idx < 0 or not text:
+            continue
+        try:
+            out[idx] = int(float(text)) & 0x7F
+        except ValueError:
+            continue
+    return out
+
+
 def _mpc3_to_xml(data) -> 'ET.Element':
     """Build the MPC 2.x element tree this module already parses from an
     MPC 3.x JSON program."""
     root = ET.Element('MPCVObject')
     prog = ET.SubElement(root, 'Program')
-    prog.set('type', 'Keygroup')
+    is_drum = int(_as_float(data.get('type'), 1.0)) == 0
+    prog.set('type', 'Drum' if is_drum else 'Keygroup')
     ET.SubElement(prog, 'ProgramName').text = str(data.get('name', ''))
+
+    # A drum program's pad -> MIDI note mapping is real per-program DATA, not a
+    # formula: across 56 drum programs in the MPC One corpus, 24 use
+    # (36 + pad) mod 128, one is the identity, and **31 carry a custom map**
+    # (General-MIDI drum layouts and hand-arranged kits).  Assuming the formula
+    # would put more than half of them on the wrong keys.
+    #
+    # Emitted into the 2.x `<PadNoteMap><PadNote number="N">` shape so both
+    # firmware paths read one place.  MPC 2.x XML does NOT store it -- every
+    # one of the 11 520 <PadNote> elements in the corpus has an empty body --
+    # so that path falls back to consecutive notes (see _pad_note_map).
+    note_for_pad = ((data.get('padNoteMap') or {}).get('noteForPad')) or {}
+    if is_drum and note_for_pad:
+        pnm = ET.SubElement(prog, 'PadNoteMap')
+        for i in range(_MAX_PADS):
+            v = note_for_pad.get(f'value{i}')
+            if v is None:
+                continue
+            el = ET.SubElement(pnm, 'PadNote')
+            el.set('number', str(i + 1))
+            el.text = str(int(_as_float(v)))
 
     # MPC 3 keeps the keygroup list under 'drum' even for a keygroup program
     # (type 1); 'keygroup' holds only program-global settings.
@@ -1220,12 +1286,30 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
         #   </Program>
         # </MPCVObject>
 
-        # Skip drum programs — each instrument is a pad hit, not a pitched zone.
+        # A drum program is convertible: each pad becomes a ONE-KEY zone whose
+        # root equals its key, so the sample plays at native pitch and does not
+        # keytrack.  Both writers already handle that shape -- EOS plays one
+        # zone per key, and krz_writer's `tuning = 100*(r_sample - r_zone)`
+        # cancels the K2000's auto-transpose exactly when r_zone is the key
+        # (the drum-map idiom it already documents meeting in real soundsets).
+        # See §XPMDRUM.
         program_elem = root.find('Program')
-        if program_elem is not None and program_elem.get('type', '') == 'Drum':
-            print(f"  [SKIP] Drum program — not a Keygroup instrument")
-            bank.presets.append(preset)
-            return
+        prog_type = (program_elem.get('type', '') if program_elem is not None
+                     else '')
+        is_drum = prog_type == 'Drum'
+        if program_elem is not None and prog_type not in ('', 'Keygroup', 'Drum'):
+            # MIDI / Plugin / Audio / CV / Clip reference no sample data at all
+            # (393 such files in the corpus, every one with zero references).
+            # Refuse rather than hand back an empty preset a caller cannot
+            # distinguish from a successful conversion.
+            raise ValueError(
+                f"{xpm_path.name} is an MPC {prog_type} program — it carries no "
+                f"sample data, so there is nothing to convert.")
+        pad_notes = _pad_note_map(root) if is_drum else {}
+        if is_drum and not pad_notes:
+            print(f"  [WARN] drum program has no pad→note map (MPC 2.x does not "
+                  f"store one) — laying pads out from MIDI {_PAD_BASE_NOTE}; a "
+                  f"kit using a custom/GM layout will land on different keys")
 
         instruments = sorted(
             root.findall('.//Instrument'),
@@ -1262,6 +1346,20 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
         for inst_idx, instrument in enumerate(instruments):
             lo_key = int(_get_text(instrument, 'LowNote',  '0'))
             hi_key = int(_get_text(instrument, 'HighNote', '127'))
+
+            # A drum pad carries no key range of its own -- every pad in the
+            # corpus is LowNote 0 / HighNote 127, because the PAD is the key.
+            # Collapse it onto its mapped note; `pad_key` also becomes the
+            # zone's root below, which is what stops it keytracking.
+            pad_key = None
+            if is_drum:
+                try:
+                    pad_no = int(instrument.get('number', inst_idx + 1)) - 1
+                except ValueError:
+                    pad_no = inst_idx
+                pad_key = pad_notes.get(
+                    pad_no, (_PAD_BASE_NOTE + pad_no) % 128)
+                lo_key = hi_key = pad_key
 
             # IgnoreBaseNote is the MPC's real "non-transpose" flag (CWM
             # MPCModernDetector: the per-layer KeyTrack field is only honoured when
@@ -1469,6 +1567,17 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
                 # TuneCoarse > 0 means MPC plays everything that many semitones higher;
                 # lowering root by the same amount makes K2000 apply the same transpose.
                 root = max(0, min(127, root - coarse_tune))
+                # A drum pad plays its sample at NATIVE pitch on its own key.
+                # Making the root the key is what expresses that in both target
+                # formats: EOS transposes by (key - root) = 0, and the K2000's
+                # `tuning = 100*(r_sample - r_zone)` cancels its auto-transpose
+                # exactly.  It also keeps the zone clear of krz_writer's
+                # up-pitch ceiling, which is measured from the zone root.
+                # TuneCoarse is deliberately NOT folded in here -- on a pad it
+                # is a deliberate pitch offset of the hit, so it must survive as
+                # a real transpose rather than being cancelled.
+                if pad_key is not None:
+                    root = max(0, min(127, pad_key - coarse_tune))
                 if sd_cached is not None:
                     sd_cached.root_note = root
 
