@@ -37,7 +37,7 @@ import struct
 
 from models.common import (
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType, lfo_knob_to_hz,
-    cap_voices_by_coverage, stereo_to_mono,
+    cap_voices_by_coverage, stereo_to_mono, hz_to_e4b_cutoff,
 )
 
 
@@ -104,19 +104,56 @@ def _mpc_sync_hz(div: int, bpm: float = None):
 # MPC envelope value → seconds
 # ---------------------------------------------------------------------------
 # MPC keygroup envelope *times* (VolumeAttack/Decay/Release, FilterAttack/
-# Decay/Release) are normalised 0.0–1.0 controls, NOT seconds.  Hardware-
-# measured on an MPC One (2026-06-09, XPM_VOL_DECAY): the control is a steep
-# exponential — decay-to-(effectively-)silence ≈ 0.00079·e^(9.78·value) s
-# (~×3.4 per 0.125 step; value 0 ≈ instant/silent, 1.0 ≈ 15 s).  Same curve is
-# applied to attack/release and the filter envelope (MPC uses one time-curve
-# for all segments).  See docs/re_procedures/xpm_envelope.md.
+# Decay/Release) are normalised 0.0–1.0 controls, NOT seconds.  Both firmware
+# generations use the same exponential form with different constants, so the
+# two paths carry their own — see docs/RESOLUTION_NOTES.md §MPCENV.
+#
+# 2.x: hardware-measured on an MPC One (2026-06-09, XPM_VOL_DECAY), 1.0 ≈ 14 s.
 _XPM_ENV_A = 0.00079
 _XPM_ENV_K = 9.78
 
+# 3.x: measured on an MPC One running 3.9.0.31 (2026-08-03) by reading the
+# firmware's own millisecond display against the dial's 128 detents -- each
+# detent is one n/127 step.  Five points from 3.7 ms to 30 s fit to within
+# 0.56%, and n=96 was predicted before measuring to +0.08%:
+#
+#     n=16 -> 3.7 ms   n=32 -> 13.4 ms   n=64 -> 180.4 ms
+#     n=96 -> 2.42 s   n=127 -> 30.0 s
+#
+# The displayed number is the time to SILENCE, confirmed acoustically at both
+# ends of the scale.  Attack, Decay and Release were each measured and agree
+# exactly, so one curve still covers every segment; Hold and Delay are assumed
+# to match but were NOT measured.
+_XPM3_ENV_A = 0.001005
+_XPM3_ENV_K = 10.3022
 
-def _xpm_env_to_seconds(value: float) -> float:
+
+def _xpm_env_to_seconds(value: float, mpc3: bool = False) -> float:
     """MPC normalised envelope value (0.0–1.0) → time in seconds."""
-    return _XPM_ENV_A * math.exp(_XPM_ENV_K * max(0.0, min(1.0, value)))
+    v = max(0.0, min(1.0, value))
+    if mpc3:
+        return _XPM3_ENV_A * math.exp(_XPM3_ENV_K * v)
+    return _XPM_ENV_A * math.exp(_XPM_ENV_K * v)
+
+
+# ---------------------------------------------------------------------------
+# MPC 3 filter cutoff → Hz
+# ---------------------------------------------------------------------------
+# `filterCutoff` is a normalised knob, not a frequency.  Measured on an MPC One
+# 3.9.0.31 (2026-08-03) by sweeping the cutoff against band-limited noise and
+# fitting the -3 dB corner of each recording -- eight points from 112 Hz to
+# 10.6 kHz, max residual 2.6%, with knob 88 predicted before measurement to
+# +0.9%.  See docs/RESOLUTION_NOTES.md §MPCCUTOFF.
+#
+# This replaces ConvertWithMoss's claimed curve (§CUTOFFKNOB), which measured
+# 2-6x too high and was never an MPC scale at all.
+_XPM3_CUTOFF_F0 = 21.377      # Hz at knob 0
+_XPM3_CUTOFF_SPAN = 728.0     # multiplier across the full 0..1 range
+
+
+def _xpm3_cutoff_to_hz(value: float) -> float:
+    """MPC 3 normalised `filterCutoff` (0.0–1.0) → -3 dB corner in Hz."""
+    return _XPM3_CUTOFF_F0 * (_XPM3_CUTOFF_SPAN ** max(0.0, min(1.0, value)))
 
 
 # ---------------------------------------------------------------------------
@@ -1073,7 +1110,9 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
     # .xpm that is neither is almost always an X11 pixmap, which shares the
     # extension; say so plainly instead of failing with an XML error.
     mpc3_sample_dir = None
+    is_mpc3 = False
     if is_mpc3_xpm(xpm_path):
+        is_mpc3 = True
         header, data = _mpc3_read(str(xpm_path))
         kind = header[2]
         container = _MPC3_PAYLOADS[kind]
@@ -1200,19 +1239,29 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
 
         # Envelope *times* are normalised 0–1 controls, not seconds — convert
         # via the hardware-measured MPC curve (sustain values are levels: kept).
-        env_attack  = _xpm_env_to_seconds(float(_get_text(instrument, 'VolumeAttack',  '0.0')))
-        env_decay   = _xpm_env_to_seconds(float(_get_text(instrument, 'VolumeDecay',   '0.0')))
+        # 2.x and 3.x use different constants; see §MPCENV.
+        _env = lambda tag, dflt='0.0': _xpm_env_to_seconds(
+            float(_get_text(instrument, tag, dflt)), mpc3=is_mpc3)
+        env_attack  = _env('VolumeAttack')
+        env_decay   = _env('VolumeDecay')
         env_sustain = float(_get_text(instrument, 'VolumeSustain', '1.0'))
-        env_release = _xpm_env_to_seconds(float(_get_text(instrument, 'VolumeRelease', '0.0')))
+        env_release = _env('VolumeRelease')
 
         filt_type    = int(  _get_text(instrument, 'FilterType',    '0'))
-        filt_cutoff  = float(_get_text(instrument, 'Cutoff',        '1.0'))
+        # MPC 3's `Cutoff` is a normalised knob, NOT a position on the E4B
+        # 57 Hz–20 kHz exponential that `filter_cutoff` is contractually
+        # defined as.  Convert knob → Hz → contract, the same route every
+        # Hz-aware parser takes (§MPCCUTOFF).  The MPC 2.x path has no
+        # measured curve yet, so it keeps its historical pass-through.
+        _cut_raw = float(_get_text(instrument, 'Cutoff', '1.0'))
+        filt_cutoff = (hz_to_e4b_cutoff(_xpm3_cutoff_to_hz(_cut_raw))
+                       if is_mpc3 else _cut_raw)
         filt_res     = float(_get_text(instrument, 'Resonance',     '0.0'))
         filt_env_amt = float(_get_text(instrument, 'FilterEnvAmt',  '0.0'))
-        filt_atk     = _xpm_env_to_seconds(float(_get_text(instrument, 'FilterAttack',  '0.0')))
-        filt_dec     = _xpm_env_to_seconds(float(_get_text(instrument, 'FilterDecay',   '0.0')))
+        filt_atk     = _env('FilterAttack')
+        filt_dec     = _env('FilterDecay')
         filt_sus     = float(_get_text(instrument, 'FilterSustain', '1.0'))
-        filt_rel     = _xpm_env_to_seconds(float(_get_text(instrument, 'FilterRelease', '0.0')))
+        filt_rel     = _env('FilterRelease')
         filt_keytrk  = max(-1.0, min(1.0, float(_get_text(instrument, 'FilterKeytrack',   '0.0'))))
         filt_velamt  = max(-1.0, min(1.0, float(_get_text(instrument, 'VelocityToFilter', '0.0'))))
 

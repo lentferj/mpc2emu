@@ -5,18 +5,28 @@ SPDX-FileCopyrightText: Copyright (C) 2026  mpc2emu contributors
 
 # Hardware RE: MPC 3.x `.xpm` parameter identification & verification
 
-> **STATUS: OPEN — hardware-free groundwork done (E1, 2026-07-31).** The
-> reader exists and is structurally correct (`docs/RESOLUTION_NOTES.md`
-> §MPC3XPM), but most parameter *scales* remain unverified, because the only
-> local files are MPC Auto Sampler output with every value at its default.
+> **STATUS: the two scales that change audio are now MEASURED (2026-08-03,
+> MPC One 3.9.0.31).**
 >
-> The ConvertWithMoss crosscheck (**E1**) has now been done and moved four
-> items: **A2 is settled** (root note really is 1-based — proven from inside
-> the file, no hardware needed), **A1 is corroborated** by two independent
-> implementations plus the manual's glossary ordering, **A4 is narrowed** to
-> the top of the time range, and **B5's loop scheme** is confirmed as
-> two-implementation rather than adopted-on-authority. Everything else still
-> needs the MPC.
+> - **A3 cutoff — DONE.** `f(c) = 21.377 * 728^c` Hz (§MPCCUTOFF).
+> - **A4 envelope times — DONE.** `t(v) = 0.001005 * e^(10.3022 v)` s (§MPCENV).
+> - **D5 containers — DONE.** `.xty` / `.xpj`, `type == 1` (§MPC3D3).
+> - **A2, E1, E3, D3** were already settled without hardware.
+>
+> Both third-party candidate curves were refuted in the process: CWM's cutoff
+> mapping ran 2–6× high, and neither envelope law survived (ours 0.47× at the
+> top, theirs 3.33×).
+>
+> **Still open and still needing the MPC:** A1 (filter-type integers,
+> especially 19–28), A3's *resonance* half, A5, all of B, all of C, and D1/D2/D4.
+> Those are structural — they need exports, not audio, and batch onto one card
+> trip.
+>
+> **Method note that changed everything:** the data dial is detented and its
+> clicks are exactly the `n/127` steps, and the firmware displays envelope
+> times in milliseconds. Between them, most remaining *scale* questions can be
+> answered by dialling and reading the screen, with audio needed only to
+> confirm the UI is truthful (it was, at both ends of the envelope range).
 
 ## Why this is unusually cheap
 
@@ -64,77 +74,115 @@ noise, and ignore them thereafter.
 
 ---
 
-## Bench session protocol
+## Bench session protocol — ONE card trip
 
-The checklist below is ordered by *topic*. This section is ordered by **value
-per export**, so a short session at the MPC still moves the most. Everything
-here is hardware-only — the reader, the diff lever and the cross-checks are
-already done.
+**The expensive operation is not dialling in a parameter, it is moving the SD
+card between the MPC and the PC** (Jan, 2026-08-03). So this section is not
+ordered by value-per-export and does not propose sessions: it is a single
+batch designed so that **nothing here needs a second trip**. Do as much of it
+as patience allows in one sitting; anything skipped is a known gap rather than
+a forced return.
 
-Export everything to `~/temp/mpc3_re/`. The filenames matter: sweep mode sorts
-them, so the UI value must be zero-padded (`cutoff_000.xpm`, `cutoff_025.xpm`,
-… ) or the series prints out of order and the encoding is unreadable.
+Everything goes to `~/temp/mpc3_re/`. **The MPC does not allow underscores in
+filenames** — use hyphens. Zero-pad the numeric part (`cutoff-000`,
+`cutoff-032`, …) so sweep mode sorts the series correctly; unpadded names print
+out of order and the encoding becomes unreadable.
 
-### Session 1 — 20 exports, settles the three parameters that change audio
+### The finding that shapes this list
 
-**1. Null sweep first — 2 exports.** Save the baseline program twice, touching
-nothing in between: `null_a.xpm`, `null_b.xpm`. Then
+The MPC's normalised controls are **`n / 127` in float32** — the default amp
+`Decay` of `0.04724409431219101` is exactly `float32(6/127)`. The parameter
+domain is 127 integer steps, and **the JSON therefore contains no Hz and no
+seconds anywhere**.
 
-```bash
-python3 tests/re_banks/mpc3_xpm_diff.py ~/temp/mpc3_re/null_a.xpm ~/temp/mpc3_re/null_b.xpm
-```
+That has a hard consequence: **no number of exports can settle A3 (cutoff in
+Hz) or A4 (envelope times in seconds).** A diff can only ever recover the knob
+position. ConvertWithMoss's `normalizeCutoff` (§CUTOFFKNOB) is not reading an
+MPC scale — it is *inventing* a Hz interpretation of a knob position.
 
-Every path that shows up here is save-noise and must be ignored for the rest of
-the session. **At least one is already known:** `layersv[*]/sliceIncrementRngSeed`
-differs across all three local 3.9.0.31 files (124239 / 109445 / 112124) and is
-plainly a random seed. Do this step first — without the noise list, a
-one-parameter sweep is unreadable.
+So the trip has three parts, and **part 2 is the one that is easy to forget and
+expensive to forget**.
 
-**2. A3 `filterCutoff` — 5 exports.** The highest-value item, because it now
-has a *specific hypothesis to kill*: `docs/RESOLUTION_NOTES.md` §CUTOFFKNOB
-records ConvertWithMoss's claimed curve (140-semitone log, 32.7 Hz – 106.3 kHz).
-Set the filter to a plain low-pass and sweep **Cutoff** across its UI range —
-`cutoff_000`, `cutoff_025`, `cutoff_050`, `cutoff_075`, `cutoff_100` —
-recording the **UI readout** for each, which is the whole point (if the UI
-shows Hz, the curve falls straight out; if it shows 0–100, we get the JSON
-scale but still need the Hz another way).
+### Part 1 — exports (one control off baseline, everything else default)
 
-```bash
-python3 tests/re_banks/mpc3_xpm_diff.py --grep cutoff ~/temp/mpc3_re/cutoff_*.xpm
-```
+Save the baseline program once as `baseline.xpm`, then change exactly one
+control per export. The null sweep is already done and came back clean (only
+`/name` differs between two saves), so **the save is byte-stable and every
+sweep below will show exactly one moving path.**
 
-Confirm exactly one path varies. Then check the JSON series against
-§CUTOFFKNOB: if `n = 0.75` reads ~14 kHz in the UI, CWM's curve is right and
-three parsers can be fixed; if it reads ~4.5 kHz, our current writer is right
-and CWM's constant is wrong. Either answer closes the item.
+| item | exports | names |
+|------|---------|-------|
+| A1 filter enum | one per type, **19–28 first** | `ftype-<uiname>` |
+| A3 cutoff | 5 | `cutoff-000/032/064/096/127` |
+| A3 resonance | 3 | `res-000/064/127` |
+| A4 amp envelope | 3 each for A/D/R | `amp-attack-000/064/127`, `amp-decay-…`, `amp-release-…` |
+| A5 filter slot | 1 | `filter2-only` (Filter **2** set, Filter 1 default) |
+| B1 volume law | 3 | `vol-000/064/127` |
+| B2 pan | 3 | `pan-000/064/127` |
+| B3 tune | 4 | `tune-coarse-minus12`, `tune-coarse-plus12`, `tune-fine-minus50`, `tune-fine-plus50` |
+| B4 velocity | 1 | `vel-split` (two layers, 0–63 and 64–127) |
+| B5 loop | 2 | `loop-sustain` (a real sustain loop), `loop-xfade` (crossfade set) |
+| C1 hold / delay | 2 | `hold-064`, `delay-064` |
+| C2 AD mode | 1 | `ad-mode` |
+| C3 filter 2 | 2 | `filter-blend-064`, `filter-serial` |
+| C4 pitch envelope | 1 | `pitchenv-127` |
+| C5 curves | 2 | `curve-attack-000`, `curve-attack-127` |
+| C6 tempo sync | 1 | `tempo-sync-on` |
+| C7 direction | 1 | `reverse` |
+| C8 velocity mod | 4 | `vel-to-start`, `vel-to-pan`, `vel-to-pitch`, `vel-sens` |
+| D1 multi-layer | 1 | `multilayer-4` (4 layers, real velocity splits) |
+| D2 drum program | 1 | `drum-standalone` (a drum program saved on its own) |
+| D4 oscillator | 1 | `osc-layer` (a layer with an oscillator, no sample) |
 
-**3. A4 envelope top-of-range — 3 exports.** Only the **top** is in doubt
-(ours 13.9 s vs CWM's 100 s at v = 1.0; they agree at the bottom). Set
-**Release** to maximum, minimum, and midpoint: `release_max`, `release_min`,
-`release_mid`. Then hold and release a note on the max one and **time the tail
-with a stopwatch or a recording**. 14 s and 100 s are not close — a single
-timing settles it, and no JSON reading can.
+`~40` exports. Each is one control change and a save.
 
-**4. A5 filter slot — 1 export.** Set **Filter 2 only**, leave Filter 1 at
-default, export as `filter2_only.xpm`, and confirm `value1` moves while
-`value0` does not. One export, removes an assumption underneath every filter
-value we read.
+### Part 2 — audio (**mostly superseded: the MPC is on the bench rig now**)
 
-**5. A1 filter enum, types 19–28 — 10 exports.** Types 1–18 and 29 are already
-corroborated three ways; **19–28 (Band-Boost / Model / Vocal) are the ones with
-no second opinion** — mpc2emu maps them, ConvertWithMoss drops them. One export
-per type, named for the UI's own name for it (`ftype_bandboost1.xpm`, …), then
-sweep and read off the integers. If time runs out, this is the item to cut —
-it costs the most exports and mis-mapping a filter type is audible but not
-silent-breaking.
+The card-trip framing above assumed audio had to be *recorded on the MPC*. It
+does not: the MPC One is wired into the same rig as the E4XT and K2000R —
+MIDI on the Scarlett port channel 1, audio on `system:capture_5/6` — so
+`tests/re_banks/hw_measure.py --device mpc` drives and records it directly from
+the PC. **A3 and A4 were both settled this way and need no further audio.**
 
-### Session 2 — the B and D items
+What that leaves for audio, all cheap now that the rig is wired:
 
-B1–B4 (volume law, pan, tune, velocity) are each a 3-export sweep on the same
-pattern. **D1** (a real multi-layer keygroup with velocity splits) and **D2**
-(a drum program) are worth more than any single B item, because they exercise
-whole code paths that no local file reaches — build one of each by hand and
-just convert it, rather than sweeping.
+- **C2 AD mode.** Record a held note in AD mode — does it decay to silence
+  while the key is still down?
+- **C5 curves.** Record attack at curve `0.375` (default), `0`, and max. The
+  question is whether 0.375 is linear.
+- **A1 filter slopes.** A quick confirmation that `Low1` is 6 dB/oct against
+  `Low2`'s measured 12 — cheaper than reasoning about the enum from names.
+
+**Note on CC automation: it does not work for keygroup parameters.** MPC
+forums and Akai's own docs agree there is no MIDI-learn path to a keygroup
+filter, and the commonly suggested workaround — insert a filter FX and control
+*that* — is actively wrong for calibration, since it measures a different
+filter from the one whose knob value the JSON stores. Everything above was
+measured by dialling by hand and recording, which worked fine.
+
+### Part 3 — a text file on the card
+
+The cheapest item here and the one that can make half of part 2 unnecessary.
+Create `ui-readouts.txt` next to the exports and write down **what the MPC's
+screen actually displays** for each control:
+
+- Cutoff — Hz? `0–127`? `0–100`? (If it shows Hz, A3 is settled on the spot.)
+- Resonance — the manual's "values lower than 80" hints at a 0–100 display.
+- Envelope A/D/R — ms/seconds, or a bare number?
+- Volume — dB or normalised? Pan — L/R or 0–127?
+
+Also note the UI name of each filter type next to its index as you sweep A1;
+that mapping is the whole deliverable for that item.
+
+### Insurance — cheap now, expensive to come back for
+
+- A **second null sweep** at the end of the session (`null-end.xpm`), to prove
+  nothing drifted across ~40 saves.
+- One export with **two filters and an LFO active at once**, to confirm the
+  `value0` / `value1` slot reading holds when both slots are genuinely in use.
+- A project (`.xpj`) containing **three or more** auto-sampled keygroup tracks —
+  the real target of the project-as-bank work, and the only way to test more
+  than two presets in one file.
 
 ### What not to spend bench time on
 
@@ -142,11 +190,9 @@ just convert it, rather than sweeping.
 E3 and D3 are done** — E3 (deterministic `sampleFile` resolution) and D3
 (track/project containers) were software work and landed 2026-08-03.
 
-The one thing D3 leaves for the bench is **D5**: it was verified against
-synthesized containers, so two real exports — a keygroup program inside a
-track, and a project with two keygroup tracks plus a drum track — would
-confirm the field names and the `type == 1` filter on genuine MPC output.
-Two exports, no sweeps; worth folding into session 1 if the MPC is already on.
+**D5 is done too** (2026-08-03) — see the results section. `type == 1` is
+confirmed against real MPC output, and the real container extensions turned out
+to be `.xty` and `.xpj`, not `.xpm`.
 
 ---
 
@@ -180,10 +226,19 @@ Two exports, no sweeps; worth folding into session 1 if the MPC is already on.
       same fact in one file, agreeing on 71/71 layers across all three files.
       A deliberate-root sweep would still be nice, but nothing hinges on it.
       *(This is also a live bug in CWM, which reads both raw — see TODO.md.)*
-- [ ] **A3 `filterCutoff` / `filterResonance` scale.** Assumed normalised 0–1,
-      as in MPC 2.x. Sweep against the UI readout; note the manual quotes
-      resonance advice in "values lower than 80", implying a 0–100 UI scale.
-- [ ] **A4 Envelope times.** `_xpm_env_to_seconds()` is hardware-measured on an
+- [x] **A3 `filterCutoff` scale.** **DONE 2026-08-03, hardware.** Measured on
+      an MPC One 3.9.0.31: `f(c) = 21.377 * 728^c` Hz, 21.4 Hz to 15.6 kHz,
+      eight points, max residual 2.6%, knob 88 predicted before measurement to
+      +0.9%. Implemented in `xpm_parser._xpm3_cutoff_to_hz`. See
+      `docs/RESOLUTION_NOTES.md` §MPCCUTOFF. **`filterResonance` is still
+      unmeasured** — only the cutoff half of this item is closed.
+- [x] **A4 Envelope times.** **DONE 2026-08-03, hardware.**
+      `t(v) = 0.001005 * e^(10.3022 v)` s, 1 ms to 30 s, five points, max
+      residual 0.56%, knob 96 predicted before measurement to +0.08%. The
+      displayed number is time-to-silence, confirmed acoustically. Attack,
+      Decay and Release all measured identical, so one curve still covers every
+      segment; Hold and Delay assumed, not measured. See §MPCENV. Original
+      note follows: `_xpm_env_to_seconds()` is hardware-measured on an
       **MPC One running 2.x**. Confirm MPC 3 did not change the curve —
       sweep Attack/Decay/Release against a stopwatch or a recorded tail.
       **E1 narrowed this to the range constant, not the law.** CWM uses
@@ -296,6 +351,66 @@ Two exports, no sweeps; worth folding into session 1 if the MPC is already on.
 *(One table per parameter as sweeps are done: UI value on the left, JSON value
 on the right, then the derived encoding. Nothing here yet needed the MPC — all
 of it came from E1.)*
+
+### D5 container shapes — SETTLED (2026-08-03, real MPC One 3.9.0.31)
+
+Jan exported a baseline program, a track and a project from an MPC One on
+firmware **3.9.0.31**. Four results:
+
+**1. The containers do not share the `.xpm` extension.**
+
+| payload | extension | sample folder |
+|---------|-----------|---------------|
+| `SerialisableProgramData` | `.xpm` | `<stem>_[ProgramData]/` |
+| `SerialisableTrackData` | **`.xty`** | `<stem>_[TrackData]/` |
+| `SerialisableProjectData` | **`.xpj`** | `<stem>_[ProjectData]/` |
+
+The folder naming E3 assumes is confirmed exactly. The extensions were *not*
+what D3 assumed, and `parsers/registry.py` keys the CLI on extension — so
+track and project files were being ignored by `convert.py` even though
+`parse_xpm()` handles them correctly when called directly. ConvertWithMoss
+registers all three (`MPCModernDetector`: `".xpm", ".xpj", ".xty"`).
+
+**2. `type == 1` is confirmed, and the filter is essential rather than
+cosmetic.** Observed values in a real project:
+
+| type | track kind |
+|------|-----------|
+| 0 | drum |
+| **1** | **keygroup** |
+| 7 | return |
+| 8 | submix |
+| 9 | output |
+
+A three-track project serialises **32 tracks** — the two keygroup programs plus
+30 submix / return / output buses. Without the type filter a project is
+unconvertible noise.
+
+**3. One D3 assumption was wrong (harmlessly).** The implementation folds the
+payload-root `samples[]` into each program node, on the assumption that track
+and project programs do not carry their own. Real output shows **every program
+node has its own `samples`**; the root copy in a `.xpj` is a project-wide pool
+of all sixteen. The fold-in is guarded by `if not prog.get('samples')`, so it
+is a no-op rather than a bug — but it is not doing what its comment claimed.
+
+**4. The save is byte-stable.** The null sweep (same program saved twice)
+differs in exactly one path, `/name`, and only because the second save was
+given a different filename. **There is no save-noise at all**, so every
+parameter sweep shows exactly one moving path. This corrects an earlier note in
+this document which called `sliceIncrementRngSeed` save-noise: it is stable
+across saves of one program and differs only *between* programs.
+
+### Normalised controls are `n / 127` — SETTLED (2026-08-03, no hardware)
+
+Derived from the baseline export, not measured. The default amp-envelope
+`Decay` is `0.04724409431219101`, which is **exactly `float32(6 / 127)`**. The
+MPC's normalised parameter domain is 127 integer steps stored as float32.
+
+**Consequence, and it is the important one:** the JSON contains **no Hz and no
+seconds anywhere**. A parameter diff can only ever recover a knob position, so
+**A3 and A4 cannot be settled by exporting** — they need recorded audio. This
+is also why §CUTOFFKNOB should be read as ConvertWithMoss *inventing* a Hz
+interpretation of a knob position rather than reporting an MPC scale.
 
 ### A2 `rootNote` basis — SETTLED (2026-07-31, no hardware)
 

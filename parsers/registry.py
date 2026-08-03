@@ -32,6 +32,12 @@ from parsers.eiii_parser     import parse_eiii
 PARSERS = {
     '.e4b':     lambda p, w, **kw: parse_e4b(str(p)),
     '.xpm':     lambda p, w, **kw: parse_xpm(str(p), w),
+    # MPC 3 writes the same gzip+JSON container under three extensions: a bare
+    # program is .xpm, a track is .xty and a project is .xpj (confirmed on an
+    # MPC One 3.9.0.31, checklist D5).  One reader handles all three — it
+    # dispatches on the payload name in the header, not the extension.
+    '.xty':     lambda p, w, **kw: parse_xpm(str(p), w),
+    '.xpj':     lambda p, w, **kw: parse_xpm(str(p), w),
     '.pgm':     lambda p, w, **kw: parse_pgm(str(p), [w] if w else None),
     '.set':     lambda p, w, **kw: parse_mpc60_set(str(p)),
     '.img':     lambda p, w, **kw: parse_mpc60_img(str(p)),

@@ -5356,7 +5356,22 @@ track, and a project with no keygroup program at all.
 shape. Two real exports would confirm the field names and the `type == 1`
 filter on genuine MPC output — filed as checklist item **D5**.
 
-## §CUTOFFKNOB — a candidate MPC knob → Hz curve, from ConvertWithMoss (CANDIDATE, 2026-08-03)
+## §CUTOFFKNOB — a candidate MPC knob → Hz curve, from ConvertWithMoss (**REFUTED 2026-08-03**, see §MPCCUTOFF)
+
+> **Refuted the same day it was written.** Measured on an MPC One 3.9.0.31:
+> at three-quarter knob this curve predicts 13 858 Hz; the hardware measures
+> **2934 Hz**. It is 2–6× high across the whole usable range and the error
+> grows upward. The real curve is in §MPCCUTOFF.
+>
+> Kept because *how* it was wrong is the useful part. The `n/127` finding
+> below is what should have raised suspicion: the MPC's JSON stores a knob
+> position and no frequency anywhere, so a converter quoting Hz for it is
+> necessarily supplying its own interpretation. A third-party constant that
+> cannot be traced to a measurement is a hypothesis, whatever its provenance —
+> and this project has now seen ConvertWithMoss be right (the §KRZKEYMAP entry
+> base) and wrong (this) on exactly that kind of value.
+
+
 
 Fix material for the open TODO *"Normalised-knob sources violate the
 `filter_cutoff` contract"*. That item is blocked on the **source-side**
@@ -5420,3 +5435,131 @@ can be either right (their `12 + ...` entry base was) or wrong. It stays item
 now has a specific hypothesis to confirm or refute rather than an open
 question. TAL and MPC1000 (`talsmpl_parser`, `pgm_parser`) are untouched by
 this — CWM offers nothing for either.
+
+## §MPCCUTOFF — the MPC 3 cutoff knob, measured (SETTLED 2026-08-03, hardware)
+
+`filterCutoff` is a normalised knob, not a frequency, and the JSON carries no
+Hz anywhere. Measured directly on an **MPC One running 3.9.0.31**, driven over
+MIDI with audio captured through the bench rig:
+
+```
+f(c) = 21.377 * 728.0^c        c = the stored 0-1 value
+f(n) = 21.377 * 1.05326^n      n = the UI knob 0..127
+```
+
+**21.4 Hz .. 15.6 kHz, 9.51 octaves, 0.898 semitones per step.**
+
+### Measurement
+
+White noise through a single keygroup, Filter 1 set to **Low2**, resonance 0,
+filter-envelope amount 0. One recording per knob position; each spectrum is
+divided by a reference take at knob 127 (which cancels the noise sample's own
+shape *and* the interface response), then a 2-pole response is fitted to the
+result.
+
+| knob | measured | fitted | err |
+|------|----------|--------|-----|
+| 32 | 112.1 Hz | 112.5 | +0.3% |
+| 48 | 260.9 Hz | 258.0 | −1.1% |
+| 64 | 592.5 Hz | 591.9 | −0.1% |
+| 79 | 1285.8 Hz | 1289.2 | +0.3% |
+| 88 | 2053.2 Hz | 2056.6 | +0.2% |
+| 95 | 2933.6 Hz | 2957.4 | +0.8% |
+| 111 | 6630.3 Hz | 6784.1 | +2.3% |
+| 119 | 10553.9 Hz | 10275.0 | −2.6% |
+
+Knob **88 was predicted at 2035 Hz before it was measured** and came back at
+2053 (+0.9%), so the law predicts rather than merely interpolating.
+
+Two by-products: the fitted slope came out at −11.6 / −12.5 / −11.8 dB per
+octave, independently confirming **Low2 is a true 2-pole**; and `filterBlend:
+0.5` was shown *not* to pass a dry path — closing the filter drops the output
+21.7 dB, so the blend does not leak unfiltered signal into the measurement.
+
+### What it replaces
+
+`parsers/xpm_parser.py` passed the raw knob straight into `filter_cutoff`,
+which is contractually a position on the E4B 57 Hz–20 kHz exponential. That
+made MPC-sourced filters roughly **2× too bright**. The parser now converts
+knob → Hz → `hz_to_e4b_cutoff`, the same route every Hz-aware parser uses.
+
+Both prior candidates were wrong: ConvertWithMoss's §CUTOFFKNOB by 2–6× (worst
+at the top), our own pass-through by 1.4–2.9× (worst at the bottom).
+
+### Not settled
+
+**Knob 127 itself.** The law extrapolates to 15.6 kHz; measuring it against a
+filter-off reference gives ~23 kHz with a 20–31 kHz confidence band. The whole
+measurement rests on 0.96 dB of droop, so it constrains little. Left as
+extrapolated — it is above the E4XT's 20 kHz ceiling and clamps anyway.
+
+**MPC 2.x.** This curve was measured on 3.9.0.31 only. The XML path keeps its
+historical pass-through until someone measures a 2.x unit the same way.
+
+## §MPCENV — MPC 3 envelope times, measured (SETTLED 2026-08-03, hardware)
+
+```
+t(v) = 0.001005 * e^(10.3022 v)   seconds     v = the stored 0-1 value
+range: 1.00 ms .. 30.0 s
+```
+
+### Measurement
+
+Two discoveries made this cheap. **The MPC's data dial is detented, and its
+clicks are exactly the `n/127` steps** — so knob positions are addressable by
+counting clicks, for any parameter. And **the firmware displays envelope times
+in milliseconds**, so the mapping can largely be *read* rather than measured.
+
+| clicks | UI | fitted | err |
+|--------|----|--------|-----|
+| 16 | 3.7 ms | 3.7 | −0.56% |
+| 32 | 13.4 ms | 13.5 | +0.54% |
+| 64 | 180.4 ms | 180.6 | +0.13% |
+| 96 | 2.420 s | 2.422 | +0.08% |
+| 127 | 30.0 s | 29.94 | −0.19% |
+
+Knob 96 was predicted before measurement (+0.08%). Max residual **0.56% across
+four orders of magnitude**.
+
+**Attack, Decay and Release were each read at 32 clicks and all give 13.4 ms**,
+and Decay and Release both max at 30 s — so one curve covers every segment, as
+before. Hold and Delay are *assumed* to match; they were not measured.
+
+### The displayed number is the time to SILENCE
+
+Confirmed acoustically at both ends. At 2.42 s the output is −56 dB and in the
+noise floor immediately after; −40 dB arrives at 2.362 s.
+
+**A trap worth recording:** the same check at 13.4 ms first suggested the UI
+meant the −20 dB point. That was an artefact of smoothing the analysis with a
+3 ms window over a 13 ms decay — 23% of the event, which drags every crossing
+later. At 2.42 s the same smoothing is 2% and the answer changes. *Match the
+analysis window to the timescale, or the measurement invents a convention that
+is not there.*
+
+### The decay shape is not exponential
+
+| t | measured | linear-amplitude model |
+|---|----------|------------------------|
+| 0.5 s | −2.3 dB | −2.0 dB |
+| 1.0 s | −7.1 dB | −4.6 dB |
+| 1.5 s | −13.0 dB | −8.4 dB |
+| 2.0 s | −22.1 dB | −15.2 dB |
+
+It falls faster than linear — roughly **amplitude ∝ (1 − t/T)^1.5**. EOS
+envelopes are built from exponential segments, so matching the total time gets
+the length right while the middle of the curve sits a few dB high. Not
+corrected; recorded so the residual is known rather than mysterious.
+
+### What it replaces
+
+Ours (`0.00079·e^(9.78v)`, max 14 s) ran **0.47×** at the top; CWM's
+(`0.001·e^(11.513v)`, max 100 s) ran **3.33×**. The truth sits between them:
+CWM had essentially the right prefactor (0.001 vs 0.001005) with far too steep
+an exponent, we had the better exponent with less than half the range. Neither
+was salvageable by adjusting one constant.
+
+`_xpm_env_to_seconds()` now takes an `mpc3=` flag and keeps both sets of
+constants — the 2.x curve was itself hardware-measured (on an MPC One running
+2.x) and there is no evidence it is wrong for 2.x programs, only that 3.x
+differs.

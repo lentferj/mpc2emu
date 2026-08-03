@@ -20,14 +20,14 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 | item | note |
 |------|------|
 | **MPC 3.x parameter checklist** | ~25 items in `docs/re_procedures/mpc3_xpm_params.md`. The structure is verified; the parameter *scales* are not. A2 is settled, A1/A4 narrowed |
-| **XPM envelope-time curve** | `_xpm_env_to_seconds` recalibration. NOTE: the 2026-07-31 envelope measurement verified the **writer's** seconds→rate mapping, not this. Still exactly as blocked as before |
+| **XPM envelope-time curve** | **MPC 3 half FIXED 2026-08-03** — measured 1 ms–30 s, `t(v) = 0.001005·e^(10.3022v)` (§MPCENV). **Still open:** the MPC **2.x** curve is unchanged and unverified against 3.x's finding that the encoding differs; Hold/Delay assumed rather than measured |
 
 ### Software only — no hardware needed
 
 | item | note |
 |------|------|
 | ~~KRZ stereo~~ | **done 2026-08-02, hardware-confirmed** — planar layout, second keymap slot and HOB channel routing; header 0 is the left channel. See RESOLUTION_NOTES §KRZSTEREO / §KRZSTEREO2 |
-| **Normalised-knob cutoff sources** | XPM/TAL/PGM dump a raw 0–1 knob into a field that means Hz — and the E4XT calibration made the mismatch bite. A *candidate* MPC curve now exists (§CUTOFFKNOB), still unmeasured |
+| **Normalised-knob cutoff sources** | **MPC 3 half FIXED 2026-08-03** — knob → Hz measured on hardware (§MPCCUTOFF), parser converts through `hz_to_e4b_cutoff`. **Still open:** TAL, MPC1000 (`pgm`), and the MPC **2.x** XML path, all of which keep the raw pass-through |
 | ~~Bank sizing ignores stereo voice cost~~ | **implemented 2026-08-01** — the estimator counts per-note voices and warns; one decision left on whether `--auto-fit` should act on it |
 | ~~Corpus scan may count sampler OS files as banks~~ | **measured 2026-08-01** — 1118 raw hits are 1017 real banks; 100 were free-space leftovers, 1 an OS file. Figures corrected |
 | ~~`resample_to_rate` aliased badly~~ | **fixed 2026-08-02** — 2-pole prefilter + linear interpolation aliased at −5.3 dB; windowed sinc now −89 dB. Ran by default on the KRZ path. Also fixed stereo channel bleed + loop-point frame math in the same function |
