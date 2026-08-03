@@ -601,6 +601,26 @@ def build_iso(e4b_files: List[str], output_iso: str,
     print(f"  Volume label: {label}")
     print(f"  Files: {len(e4b_files)}")
 
+    # This path writes ONE dir-content block, so the folder can reference at
+    # most EMU3_ENTRIES_PER_BLOCK banks.  Everything else here (cluster
+    # allocation, the FAT, the file data) is built from the list it is given,
+    # so a longer list used to produce banks that were physically on the disc
+    # but had no directory entry — invisible to the E4XT, silently.  Drop them
+    # here, before the layout is computed, so the image carries no dead
+    # clusters either.  Lifting the limit to EMU3_MAX_FILES_PER_DIR is
+    # RESOLUTION_NOTES §ISODIR stage 2 and needs an E4XT confirmation first.
+    if len(e4b_files) > EMU3_ENTRIES_PER_BLOCK:
+        dropped   = e4b_files[EMU3_ENTRIES_PER_BLOCK:]
+        e4b_files = e4b_files[:EMU3_ENTRIES_PER_BLOCK]
+        print(f"  [ERROR] An EMU3 CD directory holds at most "
+              f"{EMU3_ENTRIES_PER_BLOCK} banks; {len(dropped)} will NOT be "
+              f"written:")
+        for p in dropped:
+            print(f"            {Path(p).name}")
+        print(f"          Split the banks across multiple images "
+              f"(≤{EMU3_ENTRIES_PER_BLOCK} each), or use --hda, whose "
+              f"directory has no such limit.")
+
     # ── choose cluster size: smallest cse whose clusters fit in 5 FAT blocks ──
     file_sizes = [Path(p).stat().st_size for p in e4b_files]
     cse        = _choose_cse(file_sizes)   # CR-9: per-file cluster ceilings
