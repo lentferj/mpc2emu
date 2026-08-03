@@ -5282,3 +5282,68 @@ is unchanged.
   crosscheck: their `12 + ...` form is right. The earlier corpus-only reading
   (root-inside-zone, 39.6% vs 26.4%) picked the other one — that margin was
   never strong enough to decide it either way.
+
+## §CUTOFFKNOB — a candidate MPC knob → Hz curve, from ConvertWithMoss (CANDIDATE, 2026-08-03)
+
+Fix material for the open TODO *"Normalised-knob sources violate the
+`filter_cutoff` contract"*. That item is blocked on the **source-side**
+knob → Hz curves, which have never been measured. ConvertWithMoss now carries
+one for the MPC, so there is finally a concrete curve to test against — but it
+is **their reading, not our measurement**, which is why this is a candidate and
+not a fix.
+
+### The curve
+
+`ConvertWithMoss 30177c27` (2026-07-30) added
+`core/algorithm/MathUtils.normalizeCutoff` / `denormalizeCutoff`:
+
+```
+n  = clamp((log2(hz / 880) * 12 + 57) / 140, 0, 1)
+hz = clamp(880 * 2^((n * 140 - 57) / 12), 32.7, 106300)
+```
+
+A plain **log/semitone scale: 140 semitones wide, anchored so `n = 0` is
+32.7 Hz (C1) and `n = 1` is 106.3 kHz.** The two directions round-trip exactly
+(verified here to 4 decimals). Before this commit CWM used the same flat
+`normalizeFrequency(cutoff, MAX_FREQUENCY)` that we still use.
+
+The same commit also moved MPC cutoff **key-tracking** from a 1200-cent to a
+**24000-cent** full-scale range, on both the read and write sides.
+
+### What it would mean for us
+
+`parsers/xpm_parser.py:1112` reads MPC `<Cutoff>` as a bare float and passes it
+through as `filter_cutoff`, i.e. straight into a field contractually defined as
+a position on the 57 Hz – 20 kHz E4XT exponential. The fix shape is the one the
+TODO already states — knob → Hz → `hz_to_e4b_cutoff` — with this as the first
+leg.
+
+Applying it changes the answer a lot, and not toward the current one:
+
+| knob | current (post-2026-07-31 writer) | this curve |
+|------|----------------------------------|------------|
+| 0.25 | 247 Hz | 247 Hz |
+| 0.50 | 1068 Hz | 1865 Hz |
+| 0.75 | 4552 Hz | **14080 Hz** |
+
+Two consequences worth knowing before anyone implements it:
+
+- **The top fifth of the knob is off the end of the E4XT.** `n = 0.7934` is
+  already 20 kHz, so everything above that clamps to wide open — a real
+  MPC preset sweeping 0.8 → 1.0 would flatten to no movement at all.
+- **The bottom is below the floor too**: `n = 0` is 32.7 Hz against the
+  E4XT's 57 Hz. Only the middle ~72% of the range survives the mapping.
+
+That is not an argument against the curve — if it is what the MPC does, the
+clamping is honest and the current silent mis-scaling is not. It does mean the
+conversion must clamp deliberately and probably warn.
+
+### Status
+
+**Candidate, not adopted.** Nothing here is measured by us, and a third-party
+converter's constant is exactly the kind of thing the §KRZKEYMAP episode says
+can be either right (their `12 + ...` entry base was) or wrong. It stays item
+**A3** on the MPC 3.x parameter checklist; the bench task is unchanged, but it
+now has a specific hypothesis to confirm or refute rather than an open
+question. TAL and MPC1000 (`talsmpl_parser`, `pgm_parser`) are untouched by
+this — CWM offers nothing for either.

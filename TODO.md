@@ -27,7 +27,7 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 | item | note |
 |------|------|
 | ~~KRZ stereo~~ | **done 2026-08-02, hardware-confirmed** — planar layout, second keymap slot and HOB channel routing; header 0 is the left channel. See RESOLUTION_NOTES §KRZSTEREO / §KRZSTEREO2 |
-| **Normalised-knob cutoff sources** | XPM/TAL/PGM dump a raw 0–1 knob into a field that means Hz — and the E4XT calibration made the mismatch bite |
+| **Normalised-knob cutoff sources** | XPM/TAL/PGM dump a raw 0–1 knob into a field that means Hz — and the E4XT calibration made the mismatch bite. A *candidate* MPC curve now exists (§CUTOFFKNOB), still unmeasured |
 | ~~Bank sizing ignores stereo voice cost~~ | **implemented 2026-08-01** — the estimator counts per-note voices and warns; one decision left on whether `--auto-fit` should act on it |
 | ~~Corpus scan may count sampler OS files as banks~~ | **measured 2026-08-01** — 1118 raw hits are 1017 real banks; 100 were free-space leftovers, 1 an OS file. Figures corrected |
 | ~~`resample_to_rate` aliased badly~~ | **fixed 2026-08-02** — 2-pole prefilter + linear interpolation aliased at −5.3 dB; windowed sinc now −89 dB. Ran by default on the KRZ path. Also fixed stereo channel bleed + loop-point frame math in the same function |
@@ -146,6 +146,14 @@ A3.
 **Status:** open. **Blocked on:** the source-side curves. Until then the three
 parsers remain uncalibrated — as they always were, just now with a different
 wrong answer.
+
+**Update 2026-08-03:** ConvertWithMoss now carries a candidate MPC knob → Hz
+curve (a 140-semitone log scale, 32.7 Hz – 106.3 kHz). It is their reading, not
+a measurement, and it disagrees sharply with our current numbers at the top of
+the range. Recorded with its consequences in `docs/RESOLUTION_NOTES.md`
+§CUTOFFKNOB. Does **not** unblock this item — A3 still needs the MPC — but the
+bench task is now "confirm or refute this curve" rather than "measure from
+scratch". Nothing for TAL or MPC1000.
 
 ## Bank sizing does not know a stereo sample costs two voices — IMPLEMENTED, one decision left (2026-08-01)
 
