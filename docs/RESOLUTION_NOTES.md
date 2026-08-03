@@ -5818,17 +5818,40 @@ reversal covers exactly the region the MPC would have played, with loop points
 mirrored about the new length. Frames are reversed, not bytes — reversing bytes
 would swap a stereo sample's channels and flip each sample's bytes into noise.
 
-**Verified four ways:**
+**Verified eight ways:**
 
 1. Byte-exact unit tests: mono order, stereo channel pairing, loop mirroring
    `(2,5) → (4,7)`, and double-reverse identity on random stereo PCM.
 2. **Byte-exact end to end on a real file** — a real 2.x keygroup program with
-   `Direction` flipped on, giving a 330 612-frame sample identical to its
-   source read backwards.
-3. **Audio domain:** the RMS envelope mirrors to within 0.0000% of peak.
-4. **Negative control:** the same sample's forward and reversed envelopes
+   `Direction` flipped on, giving a 330 612-frame stereo sample identical to
+   its source read backwards.
+3. **Byte-exact through the full `convert.py` → E4B → re-parse round trip**, so
+   the writer preserves it too.
+4. **Audio domain:** the RMS envelope mirrors to within 0.0000% of peak.
+5. **Negative control:** the same sample's forward and reversed envelopes
    differ by 77% of peak, so the mirror test is meaningful rather than a
    symmetric-sample artefact.
+6. **MPC 3 JSON path** separately: byte-exact reversal and correct loop
+   mirroring from a synthesized `.xpm` (the real-file test above is the 2.x XML
+   path, and the two reach `_apply_reverse` by different routes).
+7. **Cache separation:** one program using the same WAV forward on one key and
+   reversed on another yields two distinct samples, the second the reverse of
+   the first — reverse and crossfade both bake into the PCM, so the cache key
+   had to include them or the two would collide. Also confirmed deterministic
+   across runs.
+8. **KRZ path:** byte-exactness is impossible there because that path resamples
+   (44.1 kHz → 24 kHz), so it was checked in the audio domain instead — the
+   envelope mirrors to 0.008% of peak with 78% asymmetry.
+
+**Composition with the crossfade** is also checked: crossfade-then-reverse
+equals reverse-of-crossfaded, the loop mirrors, and the blended frames land at
+the mirrored boundary (frames 31–35 become 4–8), i.e. still at the loop seam.
+
+**Performance:** the obvious implementation — joining frames one at a time —
+costs ~750 ms on a 5 MB stereo sample, long enough to notice on a bank full of
+reversed layers. Reversing per channel with strided `array` slices instead
+brings that to ~57 ms (13×; 52× for mono), with byte-exactness re-verified on
+the real file afterwards.
 
 **Corpus note:** `Direction = 1` occurs in 32 files, but *only in Drum and Clip
 programs* — which are skipped by design. No keygroup program in the corpus uses

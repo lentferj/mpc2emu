@@ -809,12 +809,29 @@ def _apply_reverse(sd: SampleData) -> None:
     sound, which is the kind of bug that still plays and still sounds like
     "a loop", just not the right one.
     """
-    bpf = 2 * max(1, getattr(sd, 'channels', 1))
-    n = len(sd.data) // bpf
+    ch = max(1, getattr(sd, 'channels', 1))
+    n = len(sd.data) // (2 * ch)
     if n < 2:
         return
-    mv = memoryview(sd.data)[:n * bpf]
-    sd.data = b''.join(bytes(mv[i * bpf:(i + 1) * bpf]) for i in range(n - 1, -1, -1))
+    # Reverse per channel with strided slices rather than joining frames one at
+    # a time: the naive version costs ~750 ms on a 5 MB stereo sample, which is
+    # long enough to notice on a bank full of reversed layers.
+    pcm = array.array('h')
+    pcm.frombytes(sd.data[:n * 2 * ch])
+    if sys.byteorder == 'big':
+        pcm.byteswap()
+    if ch == 1:
+        pcm.reverse()
+    else:
+        out = array.array('h', bytes(len(pcm) * 2))
+        for c in range(ch):
+            lane = pcm[c::ch]
+            lane.reverse()
+            out[c::ch] = lane
+        pcm = out
+    if sys.byteorder == 'big':
+        pcm.byteswap()
+    sd.data = pcm.tobytes()
     if sd.loop_type != LoopType.NO_LOOP:
         a, b = sd.loop_start, sd.loop_end
         sd.loop_start = max(0, n - 1 - b)
