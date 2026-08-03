@@ -5784,6 +5784,14 @@ silently loses fidelity. Listed most audible first.
 > 3. **`ZonePlay` — warns, deliberately not reproduced.** But the claim below
 >    that "EOS has no round-robin" was **half wrong** — see the correction in
 >    section 3.
+>
+> **What is still assumption rather than measurement**, and the plan to settle
+> it, is written up as **HW-1 … HW-5** in
+> `docs/re_procedures/mpc3_xpm_params.md` ("Hardware confirmation plan").
+> Byte-exactness proves we do what we *intended*; it does not prove the
+> intention matches the MPC. HW-1 (is `direction` whole-region reversal, and
+> does the amp envelope stay on the forward time axis?) is the one that
+> actually matters — the other four are cheap or dormant.
 
 ### 1. `direction` — reverse playback (checklist C7)
 

@@ -184,6 +184,70 @@ that mapping is the whole deliverable for that item.
   the real target of the project-as-bank work, and the only way to test more
   than two presets in one file.
 
+### Hardware confirmation plan for the `cwm_ketchup` features (2026-08-03)
+
+Reverse playback, loop crossfade and the zone-play warning were implemented
+against the corpus and unit-tested to byte level (`docs/RESOLUTION_NOTES.md`
+§XPMGAPS). Three of them rest on **assumptions no file in the corpus can
+settle**, listed here so they are confirmed rather than quietly trusted.
+
+Each test states what to build, what to capture, and — importantly — **what
+outcome would falsify it**. A test whose failure mode is not written down in
+advance tends to get read as confirmation whatever it produces.
+
+The MPC is on the rig (`hw_measure.py --device mpc`), so "record" means driving
+it from the PC, not resampling onto the card.
+
+**HW-1 — does `direction = 1` mean plain, whole-region reversal?**
+*This is the one actually worth doing.* Our conversion reverses the sliced
+region and nothing else; that is an assumption, not a measurement, and it is
+the assumption the entire feature rests on.
+
+- Build: one keygroup, one layer, a **strongly asymmetric** sample — sharp
+  attack, long decay. Set `Direction = 1`. Export it *and* record the MPC
+  playing it.
+- Compare the recorded envelope against our converted PCM's envelope.
+- **Confirms** if the attack lands at the *end* of the recording and the
+  envelope matches ours within measurement noise.
+- **Falsifies** if the MPC reverses only part of the region, or applies the
+  amp envelope to the *original* time axis rather than the reversed one — both
+  show up as an envelope mismatch, not as silence, so compare shapes rather
+  than listening for "does it sound backwards".
+- Second question in the same take: does the **amp envelope still run forward**
+  (attack at note-on, applied to reversed audio)? We assume yes and keep the
+  envelope untouched. If the MPC reverses the envelope too, our attack is at
+  the wrong end.
+
+**HW-2 — loop-crossfade frame alignment.**
+Every corpus layer has crossfade `0`/`-1`, so this has never run on real data.
+- **First find out whether the UI even exposes it** — if a non-zero crossfade
+  cannot be set on this firmware, that answers the question and the code stays
+  as dormant, documented best-effort.
+- If it can: build a sustained sample with an explicit loop and a **long**
+  crossfade (≥1000 frames so the difference is visible), export **and** record.
+- Compare the recorded loop against our rendering versus a symmetric-about-the-
+  loop-point rendering. They differ by exactly the crossfade length in
+  placement, which is easy to see in a spectrogram or a sample-aligned diff.
+- Low priority: nothing in the corpus is affected either way.
+
+**HW-3 — `loopFineTune` semantics.** Unknown, and `0` in all 69 808 corpus
+layers. Set it non-zero, export, record. Does the loop's **pitch** shift (a
+cents offset) or its **length** change (a fractional loop endpoint)? One take
+distinguishes them. Until then it stays unimplemented and warns — deliberately,
+since a guess here silently detunes a loop.
+
+**HW-4 — `SliceLoop` 2 and 3.** The Reverse and Alternating loop modes are
+inferred from the manual and have **never been seen in data** (§MPC3XPM). Set
+Pad Loop to each, export, read the integers. No audio needed. Cheap, and it
+closes a documented guess. Note this is a *different* mechanism from
+`direction` — see §XPMGAPS.
+
+**HW-5 — `ZonePlay = 2` → EOS Crossfade Random.** Only once someone implements
+the mapping. This one is an **E4XT** audition, not an MPC one: build a bank
+with several voices on one key plus Crossfade Random cords and confirm it
+actually switches between them. Recorded here so the E4XT half is not
+forgotten.
+
 ### What not to spend bench time on
 
 **A2 is settled** — `rootNote` is 1-based, proven from inside the file. **E1,
