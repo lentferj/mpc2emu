@@ -64,6 +64,86 @@ noise, and ignore them thereafter.
 
 ---
 
+## Bench session protocol
+
+The checklist below is ordered by *topic*. This section is ordered by **value
+per export**, so a short session at the MPC still moves the most. Everything
+here is hardware-only — the reader, the diff lever and the cross-checks are
+already done.
+
+Export everything to `~/temp/mpc3_re/`. The filenames matter: sweep mode sorts
+them, so the UI value must be zero-padded (`cutoff_000.xpm`, `cutoff_025.xpm`,
+… ) or the series prints out of order and the encoding is unreadable.
+
+### Session 1 — 20 exports, settles the three parameters that change audio
+
+**1. Null sweep first — 2 exports.** Save the baseline program twice, touching
+nothing in between: `null_a.xpm`, `null_b.xpm`. Then
+
+```bash
+python3 tests/re_banks/mpc3_xpm_diff.py ~/temp/mpc3_re/null_a.xpm ~/temp/mpc3_re/null_b.xpm
+```
+
+Every path that shows up here is save-noise and must be ignored for the rest of
+the session. **At least one is already known:** `layersv[*]/sliceIncrementRngSeed`
+differs across all three local 3.9.0.31 files (124239 / 109445 / 112124) and is
+plainly a random seed. Do this step first — without the noise list, a
+one-parameter sweep is unreadable.
+
+**2. A3 `filterCutoff` — 5 exports.** The highest-value item, because it now
+has a *specific hypothesis to kill*: `docs/RESOLUTION_NOTES.md` §CUTOFFKNOB
+records ConvertWithMoss's claimed curve (140-semitone log, 32.7 Hz – 106.3 kHz).
+Set the filter to a plain low-pass and sweep **Cutoff** across its UI range —
+`cutoff_000`, `cutoff_025`, `cutoff_050`, `cutoff_075`, `cutoff_100` —
+recording the **UI readout** for each, which is the whole point (if the UI
+shows Hz, the curve falls straight out; if it shows 0–100, we get the JSON
+scale but still need the Hz another way).
+
+```bash
+python3 tests/re_banks/mpc3_xpm_diff.py --grep cutoff ~/temp/mpc3_re/cutoff_*.xpm
+```
+
+Confirm exactly one path varies. Then check the JSON series against
+§CUTOFFKNOB: if `n = 0.75` reads ~14 kHz in the UI, CWM's curve is right and
+three parsers can be fixed; if it reads ~4.5 kHz, our current writer is right
+and CWM's constant is wrong. Either answer closes the item.
+
+**3. A4 envelope top-of-range — 3 exports.** Only the **top** is in doubt
+(ours 13.9 s vs CWM's 100 s at v = 1.0; they agree at the bottom). Set
+**Release** to maximum, minimum, and midpoint: `release_max`, `release_min`,
+`release_mid`. Then hold and release a note on the max one and **time the tail
+with a stopwatch or a recording**. 14 s and 100 s are not close — a single
+timing settles it, and no JSON reading can.
+
+**4. A5 filter slot — 1 export.** Set **Filter 2 only**, leave Filter 1 at
+default, export as `filter2_only.xpm`, and confirm `value1` moves while
+`value0` does not. One export, removes an assumption underneath every filter
+value we read.
+
+**5. A1 filter enum, types 19–28 — 10 exports.** Types 1–18 and 29 are already
+corroborated three ways; **19–28 (Band-Boost / Model / Vocal) are the ones with
+no second opinion** — mpc2emu maps them, ConvertWithMoss drops them. One export
+per type, named for the UI's own name for it (`ftype_bandboost1.xpm`, …), then
+sweep and read off the integers. If time runs out, this is the item to cut —
+it costs the most exports and mis-mapping a filter type is audible but not
+silent-breaking.
+
+### Session 2 — the B and D items
+
+B1–B4 (volume law, pan, tune, velocity) are each a 3-export sweep on the same
+pattern. **D1** (a real multi-layer keygroup with velocity splits) and **D2**
+(a drum program) are worth more than any single B item, because they exercise
+whole code paths that no local file reaches — build one of each by hand and
+just convert it, rather than sweeping.
+
+### What not to spend bench time on
+
+**A2 is settled** — `rootNote` is 1-based, proven from inside the file. **E1 is
+done.** **E3** (deterministic `sampleFile` resolution) and **D3**
+(track/project containers) are software work needing no MPC at all.
+
+---
+
 ## Checklist
 
 ### A. Confirm the things currently assumed
