@@ -321,7 +321,14 @@ to be `.xty` and `.xpj`, not `.xpm`.
 
 - [ ] **B1 Layer `volume`** — `{gainCoefficient, controlValue, law}`. Which
       field does the UI drive, and is `gainCoefficient` linear or dB?
-- [ ] **B2 Layer `pan`** — assumed 0–1 with 0.5 centre.
+- [ ] **B2 Layer `pan`** — assumed 0–1 with 0.5 centre. **The corpus cannot
+      test this:** all 2 182 populated layers in the `Projects` tree are
+      *exactly* 0.5. Any "it works" from corpus conversion is vacuous — the
+      value never leaves its default. Needs a hand-dialled program.
+      *(Contrast layer `Volume`, which IS real data: 31% of populated layers
+      carry non-default values, even though 93% of EMPTY layers sit at 1.0 —
+      a reminder that "always at the default" must be checked on the rows
+      that matter, not on every row.)*
 - [ ] **B3 `coarseTune` / `fineTune`** — semitones and cents? Sweep ±.
 - [ ] **B4 `velocityStart` / `velocityEnd`** — assumed 0–127 direct.
 - [ ] **B5 Loop fields** — the two-tier scheme
