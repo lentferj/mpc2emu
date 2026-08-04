@@ -6239,9 +6239,33 @@ with an order of magnitude to spare. Decisively, the residual against raw
 *inside* the seam (0.02421) equals the residual everywhere else (0.02394) —
 the seam is not special. **The MPC produces no blend there.**
 
-### Why: we were reading the wrong field
+### Why: the crossfade was applied ONCE ALREADY, when the sample was made
 
-The layer carries four related fields, and the UI explains them:
+*Revised 2026-08-04 after Jan found the control.* The **Auto Sampler** has its
+own looping settings: `Loop Start (ms)`, `Loop End (ms)`, **`X-Fade (# of
+samples)`** and **`X-Fade-Type (EqPower / Linear)`**.
+
+That matches `SliceLoopCrossFadeLength` exactly — same units (*samples*, not
+ms), and `EqPower` is the same blend shape this project implemented. So the
+field is a **record of what the Auto Sampler already did to the WAV when it
+created it**, not an instruction to do it at load time. The audio on disk is
+*already* crossfaded; applying it again double-crossfades, which is precisely
+what the measurement caught.
+
+Supporting evidence: the loop wrap in that WAV is continuous — the step from
+`loop_end` back to `loop_start` is only **1.63×** a normal sample-to-sample
+step — i.e. a seam that has already been dealt with.
+
+*(An earlier revision of this section blamed the `Tail Length` control below
+for gating the crossfade. That was a guess made before the Auto Sampler
+setting was known. Tail Length is a real and separate feature; it is not what
+`SliceLoopCrossFadeLength` records. A correlation probe looking for a blend
+signature in the WAV was inconclusive and is not counted as evidence — the
+conclusion rests on the playback measurement and the Auto Sampler control.)*
+
+### The four related fields
+
+The layer carries four, and the UI explains them:
 
 | field | value here | UI |
 |-------|-----------|-----|
@@ -6250,11 +6274,11 @@ The layer carries four related fields, and the UI explains them:
 | `SliceLoopCrossFadeLength` | `128` | *(what we read)* |
 | `LoopCrossfadeLength` | `0` | layer-level twin |
 
-The MPC's crossfade is gated by **Tail Length**, a separate control offering
-`Off, 100, 200, … 5000 ms`. `SliceLoopCrossFadeLength` is a length in *frames*
+**Tail Length** is a separate playback feature offering `Off, 100, 200, …
+5000 ms`, and it is Off here. `SliceLoopCrossFadeLength` is in *samples*
 (128 = 2.9 ms) and cannot be that control — the corpus values (4, 7, 8, 9, 14,
-65, 69, 70, 74, 77, 128) do not sit on a 100 ms grid. So the length sits in the
-file while the feature is switched off, and honouring it alone invents audio.
+65, 69, 70, 74, 77, 128) do not sit on a 100 ms grid, but they do look exactly
+like Auto Sampler X-Fade lengths.
 
 ### What changed
 
@@ -6277,6 +6301,13 @@ tail-enabled measurement says how the feature should actually sound.
 
 ### Still open
 
-What the Tail actually does when enabled. That needs one export with **Tail
-Length set to a non-zero value**, plus a recording — then the field that moves
-identifies the control, and the recording says how to render it.
+**Tail Length**, which is a genuinely separate feature and still unmapped. One
+export with it set non-zero identifies the field that carries it, and a
+recording says how to render it.
+
+**`128` looks like the Auto Sampler's default.** Of the positive values in the
+`Projects` subtree, **7 of 9 are 128** (78%), with a single `100` and a single
+`123` beside them — a power of two that dominates, with occasional
+user-dialled values. That is what a default looks like, and it further
+supports the field being a record of what the sampler did rather than an
+instruction to the loader.
