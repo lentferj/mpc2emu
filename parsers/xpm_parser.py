@@ -1862,9 +1862,20 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
                         if sd:
                             _apply_slice(sd, slice_start, slice_end, slice_loop,
                                          slice_lstart, loop_on, slice_lend)
-                            if slice_xf > 0 and _apply_loop_crossfade(sd, slice_xf):
-                                print(f"    Loop crossfade: {slice_xf} frames "
-                                      f"baked into '{sd.name}'")
+                            # NOT applied -- see §XPMXFADE.  Measured on the
+                            # hardware 2026-08-04: a program carrying
+                            # SliceLoopCrossFadeLength=128 plays with NO blend
+                            # at the loop seam, because the MPC's crossfade is
+                            # gated by a separate "Tail Length" control that is
+                            # Off here (`SliceTailLength` = 0).  Baking a blend
+                            # from the length alone invents audio the hardware
+                            # never produces.  The renderer is kept, and tested,
+                            # for when a tail-enabled measurement says how it
+                            # should actually sound.
+                            if slice_xf > 0:
+                                print(f"    [INFO] loop crossfade length "
+                                      f"{slice_xf} present but Tail is off — "
+                                      f"not applied (§XPMXFADE)")
                             if reverse:
                                 _apply_reverse(sd)
                                 print(f"    Reversed '{sd.name}' (Direction=1)")

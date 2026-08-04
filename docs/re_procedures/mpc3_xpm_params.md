@@ -218,31 +218,16 @@ the assumption the entire feature rests on.
   envelope untouched. If the MPC reverses the envelope too, our attack is at
   the wrong end.
 
-**HW-2 — loop-crossfade frame alignment. PROMOTED: this is now the live one.**
+**HW-2 — loop-crossfade frame alignment. DONE 2026-08-04 — FALSIFIED.**
+The MPC applies no blend at the loop seam: measured against a program carrying
+`SliceLoopCrossFadeLength = 128`, the recording matches the *raw* sample
+better than either candidate rendering, with 10x measurement headroom. Its
+crossfade is gated by a separate **Tail Length** control (`Off, 100…5000 ms`)
+which is off in that program. Our implementation is disabled; see §XPMXFADE.
 
-*Corrected 2026-08-04.* This entry previously said "every corpus layer has
-crossfade 0/-1, so this has never run on real data" and rated it low priority.
-**That was wrong** — it counted only the MPC 3 JSON layers. MPC 2.x XML carries
-`SliceLoopCrossFadeLength` too, and across the MPC One backup **1 375 layers
-hold a positive value** (4, 7, 8, 9, 14, 65, 69, 70, 74, 77, 128 …). Two files
-in `Projects` alone bake a crossfade into 14 samples today.
-
-So the code is **not** dormant: it alters real conversions, using a frame
-alignment that is still a guess at the MPC's own convention.
-
-- Real material already exists — no need to invent a test program. Both
-  `CAT10-Auto sampled.Keygroup.xpm` (crossfade **128**, 7 samples) and
-  `Inst-Bass-F9 Classic Sqr.xpm` (**14**) are in the backup.
-- Play one of those programs on the MPC and record it through the rig
-  (`hw_measure.py --device mpc`) while holding a note across several loop
-  cycles. A longer crossfade shows the difference more plainly, so prefer the
-  128 one, or dial a longer one if the UI allows.
-- Compare the recorded loop against our rendering versus a
-  symmetric-about-the-loop-point rendering. They differ by exactly the
-  crossfade length in placement, which a sample-aligned diff shows directly.
-- **Falsified if** the recorded seam matches the symmetric rendering, or
-  neither — in which case what we bake in is wrong and should be reconsidered
-  against simply honouring the loop points and leaving the PCM alone.
+**What is still open (HW-2b):** what the Tail does when *enabled*. One export
+with Tail Length set non-zero identifies the field that carries it, and one
+recording says how to render it. Until then nothing is applied.
 
 **HW-3 — `loopFineTune` semantics.** Unknown, and `0` in all 69 808 corpus
 layers. Set it non-zero, export, record. Does the loop's **pitch** shift (a

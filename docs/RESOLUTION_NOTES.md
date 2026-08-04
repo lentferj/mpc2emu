@@ -6209,3 +6209,74 @@ programs, so any byte-identical baseline covering them needs re-taking. Banks
 already built are not wrong — just named less helpfully.
 
 Found via VinSamLib 2026-08-04.
+
+## §XPMXFADE — HW-2 answered: the MPC does not apply the loop crossfade (2026-08-04, measured)
+
+**Result: our implementation was falsified, and the crossfade is no longer
+baked in.** This is the negative result HW-2 existed to get, and it arrived
+before the branch was merged.
+
+### What was measured
+
+`CAT10-Auto sampled.Keygroup.xpm` carries `SliceLoopCrossFadeLength = 128` on
+seven samples. Its `-060 C1` sample was played on the MPC at **key 60, root
+60** — native rate, no transposition, so a sample-accurate comparison is
+possible — held for 12 s across several loop cycles and recorded through the
+bench rig.
+
+Three candidate renderings of the loop were built from the source WAV,
+resampled to the 48 kHz capture rate and aligned by cross-correlation:
+
+| candidate | residual RMS in the seam window |
+|-----------|--------------------------------|
+| **raw — no crossfade at all** | **0.02421** |
+| symmetric about the loop point | 0.02812 |
+| ours (blend ending at `loop_end`) | 0.03052 |
+
+The two blended candidates differ from raw by RMS **0.269** in that window and
+the measurement residual is **0.1×** that, so the test resolves the question
+with an order of magnitude to spare. Decisively, the residual against raw
+*inside* the seam (0.02421) equals the residual everywhere else (0.02394) —
+the seam is not special. **The MPC produces no blend there.**
+
+### Why: we were reading the wrong field
+
+The layer carries four related fields, and the UI explains them:
+
+| field | value here | UI |
+|-------|-----------|-----|
+| `SliceTailLength` | `0.0` | **"Tail Length: Off"** |
+| `SliceTailPosition` | `0.5` | "tail start 253 ms" |
+| `SliceLoopCrossFadeLength` | `128` | *(what we read)* |
+| `LoopCrossfadeLength` | `0` | layer-level twin |
+
+The MPC's crossfade is gated by **Tail Length**, a separate control offering
+`Off, 100, 200, … 5000 ms`. `SliceLoopCrossFadeLength` is a length in *frames*
+(128 = 2.9 ms) and cannot be that control — the corpus values (4, 7, 8, 9, 14,
+65, 69, 70, 74, 77, 128) do not sit on a 100 ms grid. So the length sits in the
+file while the feature is switched off, and honouring it alone invents audio.
+
+### What changed
+
+`_apply_loop_crossfade` is **no longer called**. A layer with a non-zero length
+logs an `[INFO]` saying it was not applied and why. The renderer and its tests
+are kept: the DSP is correct, and it is what will be needed once a
+tail-enabled measurement says how the feature should actually sound.
+
+### Two side results from the same take
+
+- **The MPC plays at correct pitch.** The loop period measured 2.000 s against
+  a metadata period of 1.9996 s — within ~7 cents. An earlier reading of
+  "47930 Hz, 8.8% sharp" was an artefact of an autocorrelation window centred
+  on the wrong expected value, which could not have found the right answer.
+  Search wide before believing a period.
+- **The audible loop seam in that program is the source material, not us.** It
+  is an auto-sampled note looping from ~2.0 s back to ~0.5 s while still
+  decaying, so there is a level step at every wrap. A 2.9 ms crossfade could
+  not hide it even switched on.
+
+### Still open
+
+What the Tail actually does when enabled. That needs one export with **Tail
+Length set to a non-zero value**, plus a recording — then the field that moves
+identifies the control, and the recording says how to render it.
