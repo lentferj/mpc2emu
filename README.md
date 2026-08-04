@@ -32,48 +32,11 @@ or untested output could overwrite or corrupt data, or be rejected by hardware.
 Always test images on a ZuluSCSI / SCSI2SD / emulator **before** connecting
 irreplaceable equipment.
 
-### Regenerate KRZ multisample banks made before 2026-08-02
-
-A bug in the KRZ keymap writer placed every zone **12 semitones away from the
-key it was asked for**. The K2000 sounds keymap entry `i` at MIDI key `i + 12`,
-and mpc2emu wrote each zone into `entry[key]` instead of `entry[key - 12]`.
-
-The effect on hardware is that a multisampled program plays **one sample
-key-tracked across the whole keyboard** rather than the right sample per key —
-so a piano, a drum kit or any velocity/key-split instrument sounds wrong, while
-the `.KRZ` file itself looks entirely correct and re-reads correctly in
-mpc2emu. Single-sample programs are unaffected.
-
-**If you produced KRZ banks with an earlier version, regenerate them.** There
-is no way to repair an existing bank short of rewriting its keymaps, and no
-warning is emitted for old files.
-
-### Regenerate MPC-sourced banks made before 2026-08-04
-
-A bug in the MPC parser's sample-name handling **silently dropped a sample's
-audio and made its zones play a different sample instead**.
-
-Sample names are shortened to 16 characters, and repeats get a counter appended.
-The counter was never checked against the names already used, so two different
-samples could end up sharing one name — most often when a name already ended in
-the digit being appended (`…_2600_C-1` + `1` is unchanged, and names ending
-`-1`, `A1`, `C1` are ordinary in auto-sampled sets). A zone's only handle on its
-audio is that name, so the second sample was loaded, counted, logged as
-`Loaded sample:` — and then never referenced. Its zones sounded the first
-sample, at whatever pitch that implied.
-
-Measured on one auto-sampled program of 97 samples, one per semitone: **57
-distinct names survived, and 40 of the 97 zones played a neighbour instead of
-their own audio.** Across a large MPC library, 140 programs were affected.
-
-Nothing warned, and the resulting `.E4B` / `.KRZ` looks correct and re-reads
-correctly — as with the KRZ keymap bug above, the damage is only audible on
-hardware.
-
-**If you converted MPC programs (`.xpm`, `.xty`, `.xpj`) with an earlier
-version, regenerate those banks.** Current versions also refuse to finish
-quietly: `parse_xpm` now reports an `[ERROR]` if two samples share a name or a
-zone names a sample that was not loaded.
+**Three fixed defects produced files that are wrong and do not look it** —
+multisample `.KRZ` banks, MPC-sourced banks, and EMU3 CD images holding more
+than 16 banks. All three are fixed, none can be repaired in place, and nothing
+warns you about a file you already have: see [Fixed defects — check what you
+built earlier](#fixed-defects--check-what-you-built-earlier).
 
 ---
 
@@ -1122,6 +1085,62 @@ mpc2emu/
         ├── gen_zone_entry_test.py     #   secondary-zone-entry field probes
         └── inspect_vpar.py            #   dump any vpar[N] across banks (found vpar[42]=chorus)
 ```
+
+---
+
+## Fixed defects — check what you built earlier
+
+Defects that are **fixed** but whose output is still on your disk. Each one
+produced files that parse cleanly, re-read correctly in mpc2emu and look
+entirely normal, so nothing will tell you which of your own files are affected
+— that is the whole reason this section exists. None can be repaired in place;
+the fix is always to rebuild from the source material with a current mpc2emu.
+
+This is a different question from [Known Limitations](#known-limitations)
+below, which is what mpc2emu will not do for you *today*. This is what it
+already did to files you *have*.
+
+### If you built KRZ multisample banks before 2026-08-02, regenerate them
+
+The KRZ keymap writer placed every zone **12 semitones away from the key it was
+asked for**. The K2000 sounds keymap entry `i` at MIDI key `i + 12`, and
+mpc2emu wrote each zone into `entry[key]` instead of `entry[key - 12]`.
+
+On hardware a multisampled program plays **one sample key-tracked across the
+whole keyboard** rather than the right sample per key — so a piano, a drum kit
+or any velocity/key-split instrument sounds wrong. Single-sample programs are
+unaffected.
+
+### If you converted MPC programs before 2026-08-04, regenerate those banks
+
+Sample names are shortened to 16 characters, and repeats get a counter
+appended. The counter was never checked against the names already used, so two
+different samples could end up sharing one name — most often when a name
+already ended in the digit being appended (`…_2600_C-1` + `1` is unchanged, and
+names ending `-1`, `A1`, `C1` are ordinary in auto-sampled sets).
+
+A zone's only handle on its audio is that name, so the second sample was
+loaded, counted, logged as `Loaded sample:` — and then never referenced. Its
+zones sounded the first sample, at whatever pitch that implied.
+
+Measured on one auto-sampled program of 97 samples, one per semitone: **57
+distinct names survived, and 40 of the 97 zones played a neighbour instead of
+their own audio.** Across a large MPC library, 140 programs were affected.
+
+Applies to `.xpm`, `.xty` and `.xpj` sources. Current versions also refuse to
+finish quietly: an `[ERROR]` is reported if two samples share a name, or if a
+zone names a sample that was not loaded.
+
+### If you built EMU3 CD images with more than 16 banks before 2026-08-03, rebuild them
+
+`build_iso` wrote a single directory-content block, which holds 16 entries.
+Bank 17 and beyond got their cluster chains and file data written, but **no
+directory entry** — so they are present on the image, invisible to the E4XT and
+impossible to load. Nothing warned, and the console still listed them as
+written.
+
+Images with 16 banks or fewer are unaffected. Current versions refuse rather
+than dropping the excess silently.
 
 ---
 
