@@ -6034,3 +6034,73 @@ real invariants are that sample names are **unique** and that every zone name
 `[ERROR]` with the offending names rather than failing silently.
 
 Found from VinSamLib 2026-08-04.
+
+## §XPMTRUNC — head-vs-tail sample-name truncation, decided per program (2026-08-04)
+
+`_safe_name(..., tail=True)` was fixed at every sample call site. The reasoning
+holds for a **multisample** — those share a long prefix and differ at the end
+(`…UniPanBass_C1_A` vs `…_C2_B`), so the tail is where identity lives.
+
+**A drum kit is the mirror image.** `BD Drumulator Clean`, `Clap Drumulator
+Clean`, `Cymbal Drumulator Clean` all *end* alike and differ at the front, so
+the tail keeps the one part that identifies nothing. A real 14-sample kit:
+
+| | distinct names |
+|---|---|
+| tail | **4** |
+| head | **13** |
+
+`_unique_sample_name` then numbers the collisions, and the kit reads
+`Drumulator Clean`, `Drumulator Clea1`, … `Drumulator Cle10` on a
+16-character display. No audio is lost — that was §XPMNAMES — but a user
+cannot tell which pad is which.
+
+### Why not simply flip the flag
+
+Measured over **5 311** corpus programs holding 2+ distinct sample names:
+
+| | programs |
+|---|---|
+| only the tail works | 4 264 |
+| only the head works | 79 |
+| both | 820 |
+| neither | 148 |
+
+| rule | renames forced |
+|------|----------------|
+| all tail (today) | 8 694 |
+| **all head** | **71 030** |
+| per program, best of the two | **5 665** |
+
+A global switch is **8× worse**. Both rules are pure functions of one program's
+own name set, so `_prefers_tail()` picks per program — whichever yields more
+distinct names, **ties to the tail**, so behaviour is preserved everywhere it
+already worked. **101 programs improve**, and the best cases go from dozens of
+renames to none.
+
+### It composes with §XPMNAMES
+
+The auto-sampled program from that entry collapses 97 → 57 under the tail;
+under the head all 97 survive. §XPMNAMES stopped that collapse from *losing
+audio*; this removes the collapse itself, so the same bank now converts with
+**zero renames instead of 40**.
+
+### A false positive fixed in the same pass
+
+The invariant added with §XPMNAMES — "every zone name resolves" — was firing on
+**11 corpus files** whose zones name a WAV that is simply absent from disk.
+That is a missing *file*, already reported as `[WARN] Sample not found`, not a
+name-resolution fault. Those names are now excluded: a check that cries wolf
+gets ignored when it matters.
+
+### Verified
+
+629-file sweep: **0 duplicate names, 0 `[ERROR]` lines, 0 unexpected errors.**
+The Drumulator kit now reads `BD`, `SD`, `Clap`, `Cymbal`, `CH`, `OH`,
+`Cowbell`, `Clave`, `Rim`, `Tom Lo/Mid/Hi` with one rename instead of ten.
+
+**Note:** this changes sample names in *newly* converted banks for those 101
+programs, so any byte-identical baseline covering them needs re-taking. Banks
+already built are not wrong — just named less helpfully.
+
+Found via VinSamLib 2026-08-04.

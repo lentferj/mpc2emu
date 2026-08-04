@@ -930,6 +930,37 @@ def _as_float(value, default=0.0) -> float:
         return default
 
 
+def _prefers_tail(sample_names) -> bool:
+    """Should this program's sample names keep their tail or their head?
+
+    `_safe_name(tail=True)` is right for a MULTISAMPLE: those share a long
+    prefix and differ at the end (`…UniPanBass_C1_A` vs `…_C2_B`), so the tail
+    is where the identity lives. A drum kit is the mirror image — `BD
+    Drumulator Clean`, `Clap Drumulator Clean`, `Cymbal Drumulator Clean` all
+    *end* alike and differ at the front — so the tail keeps the one part that
+    identifies nothing. One real 14-sample kit collapses to **4** distinct
+    tails against 13 distinct heads, and the bank then reads
+    `Drumulator Clean`, `Drumulator Clea1`, … on a 16-character display.
+
+    **Not a flag to flip globally.** Measured over the corpus, the tail is the
+    only rule that works for the overwhelming majority of programs; switching
+    everything to the head makes things far worse overall. Both rules are pure
+    functions of one program's own name set, so the choice is made per program:
+    whichever yields more distinct names, **ties going to the tail** so today's
+    behaviour is preserved wherever it already works.
+
+    No audio depends on this — `_unique_sample_name` guarantees uniqueness
+    either way (§XPMNAMES). What is at stake is whether a user can tell which
+    pad is which on the hardware.
+    """
+    uniq = {n for n in sample_names if n}
+    if len(uniq) < 2:
+        return True
+    n_tail = len({_safe_name(n, tail=True) for n in uniq})
+    n_head = len({_safe_name(n, tail=False) for n in uniq})
+    return n_tail >= n_head
+
+
 def _unique_sample_name(name: str, taken: set, limit: int = 16) -> str:
     """A name at most `limit` chars that is not already in `taken`.
 
@@ -1335,6 +1366,11 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
     # The sample names ALREADY taken in this bank.  Tracking the names rather
     # than a per-base count is the whole point -- see _unique_sample_name.
     _names_taken: set = set()
+    # Source names whose WAV could not be found on disk.  Their zones
+    # legitimately resolve to nothing, and that was already reported as
+    # `[WARN] Sample not found` -- so the invariant below must not report
+    # them a second time as if the name handling were at fault.
+    _missing_wavs: set = set()
     # WAV smpl-chunk recorded root per cached sample (None if the WAV has no
     # unity note) — used as the RootNote=0 playback root instead of lo_key.
     sample_wav_root: dict[str, Optional[int]] = {}
@@ -1397,6 +1433,12 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
             print(f"  [WARN] drum program has no pad→note map (MPC 2.x does not "
                   f"store one) — laying pads out from MIDI {_PAD_BASE_NOTE}; a "
                   f"kit using a custom/GM layout will land on different keys")
+
+        # Decide head-vs-tail truncation ONCE for this program, from its own
+        # set of sample names -- a multisample wants the tail, a drum kit the
+        # head.  See _prefers_tail.
+        _name_tail = _prefers_tail(
+            (e.text or '').strip() for e in root.iter('SampleName'))
 
         instruments = sorted(
             root.findall('.//Instrument'),
@@ -1629,6 +1671,10 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
                             #
                             # Advance until the candidate is genuinely unused,
                             # against the names actually taken.
+                            # Re-derive under this program's chosen rule:
+                            # load_wav defaults to the tail, which is wrong
+                            # for a drum kit (see _prefers_tail).
+                            sd.name = _safe_name(sample_name, tail=_name_tail)
                             sd.name = _unique_sample_name(sd.name, _names_taken)
                             _names_taken.add(sd.name)
                             sample_cache[cache_key] = sd
@@ -1640,9 +1686,11 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
                             print(f"    Loaded sample: {sd.name} ({sd.sample_rate}Hz, {len(sd.data)//2} frames)")
                     else:
                         print(f"    [WARN] Sample not found: {sample_name}")
+                        _missing_wavs.add(sample_name)
 
                 sd_cached = sample_cache.get(cache_key)
-                safe_sname = sd_cached.name if sd_cached else _safe_name(sample_name, tail=True)
+                safe_sname = (sd_cached.name if sd_cached
+                              else _safe_name(sample_name, tail=_name_tail))
 
                 # Playback root: non-transpose → 60; explicit RootNote → RootNote-1;
                 # RootNote=0 (MPC unset) → the sample's WAV-recorded pitch (smpl unity),
@@ -1781,8 +1829,14 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
         print(f"  [ERROR] {len(_names) - len(set(_names))} sample(s) share a "
               f"name with another — their zones will sound the wrong audio: "
               f"{', '.join(dupes[:6])}")
+    # Exclude zones whose WAV was simply absent: that is a missing FILE, not a
+    # name-resolution fault, and it already produced its own warning. Reporting
+    # it here too made the check fire on 11 corpus files that are merely
+    # incomplete -- a check that cries wolf gets ignored when it matters.
+    _unresolved = {_safe_name(n, tail=True) for n in _missing_wavs} | \
+                  {_safe_name(n, tail=False) for n in _missing_wavs}
     _missing = sorted({z.sample_name for p in bank.presets for v in p.voices
-                       for z in v.zones} - set(_names))
+                       for z in v.zones} - set(_names) - _unresolved)
     if _missing:
         print(f"  [ERROR] {len(_missing)} zone sample name(s) match no loaded "
               f"sample: {', '.join(_missing[:6])}")
