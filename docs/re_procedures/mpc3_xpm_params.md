@@ -198,25 +198,12 @@ advance tends to get read as confirmation whatever it produces.
 The MPC is on the rig (`hw_measure.py --device mpc`), so "record" means driving
 it from the PC, not resampling onto the card.
 
-**HW-1 — does `direction = 1` mean plain, whole-region reversal?**
-*This is the one actually worth doing.* Our conversion reverses the sliced
-region and nothing else; that is an assumption, not a measurement, and it is
-the assumption the entire feature rests on.
-
-- Build: one keygroup, one layer, a **strongly asymmetric** sample — sharp
-  attack, long decay. Set `Direction = 1`. Export it *and* record the MPC
-  playing it.
-- Compare the recorded envelope against our converted PCM's envelope.
-- **Confirms** if the attack lands at the *end* of the recording and the
-  envelope matches ours within measurement noise.
-- **Falsifies** if the MPC reverses only part of the region, or applies the
-  amp envelope to the *original* time axis rather than the reversed one — both
-  show up as an envelope mismatch, not as silence, so compare shapes rather
-  than listening for "does it sound backwards".
-- Second question in the same take: does the **amp envelope still run forward**
-  (attack at note-on, applied to reversed audio)? We assume yes and keep the
-  envelope untouched. If the MPC reverses the envelope too, our attack is at
-  the wrong end.
+**HW-1 — does `direction = 1` mean whole-region reversal? DONE 2026-08-04 —
+CONFIRMED.** All 10 comparable hits move their energy peak later when Direction
+is set (forward 0.01–0.20 within the hit, reversed 0.16–0.62), which is
+reversal. The amp envelope stays on the forward time axis: a mirrored envelope
+would put the peak at ~1.0 and it does not. `Direction` lives in **Program
+Edit**, is honoured by 3.9, and is NOT a loop setting — see §XPMREV.
 
 **HW-2 — loop-crossfade frame alignment. DONE 2026-08-04 — FALSIFIED.**
 The MPC applies no blend at the loop seam: measured against a program carrying

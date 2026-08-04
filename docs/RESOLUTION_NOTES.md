@@ -6311,3 +6311,70 @@ recording says how to render it.
 user-dialled values. That is what a default looks like, and it further
 supports the field being a record of what the sampler did rather than an
 instruction to the loader.
+
+## §XPMREV — HW-1 answered: the MPC does reverse on `Direction` (2026-08-04, measured)
+
+**Result: confirmed.** Unlike the crossfade (§XPMXFADE), `Direction` is a live
+parameter that MPC 3.9 honours, and our implementation matches what it does.
+
+### What was measured
+
+A drum kit on the MPC, 16 keys scanned (36–51, 11 sounding), recorded through
+the rig; then `Direction → Reverse` applied and the identical scan repeated.
+The setting was applied to **all pads**, which made every sounding key a test
+case rather than one.
+
+The robust measure is **where the peak falls within each hit**:
+
+| | forward | reversed |
+|---|---------|----------|
+| peak position (0 = start, 1 = end) | 0.01 – 0.20 | 0.16 – 0.62 |
+
+**All 10 comparable hits move their peak later**, and the energy centroid moves
+later in 8 of 10. A forward drum hit peaks immediately; these build toward the
+end. That is reversal.
+
+### The amp envelope stays on the forward time axis
+
+The second question in the same take. Had the envelope been mirrored with the
+audio, the reversed peak would sit at ≈1.0 — an abrupt onset with everything
+at the very end. It does not; it lands mid-to-late, which is what reversed
+audio shaped by a **still-forward** envelope looks like. That is what
+`_apply_reverse` assumes, so the assumption holds.
+
+Stated honestly: this half is *consistent with* the measurement rather than
+proven by it. A mirrored envelope is excluded; the exact envelope contribution
+is not separately fitted.
+
+### Where `Direction` lives, and what it is not
+
+- It is exposed in **Program Edit**, not Sample Edit — which is why it first
+  looked absent. It is not a legacy field.
+- It is **not a loop setting**. Across the files that use it, `Direction = 1`
+  appears on **non-looped** layers 6 times against looped 3, and the
+  `Fake Scratches` tutorial kit pairs the same sample forward and reversed on
+  adjacent pads with no loop at all. `SliceLoop` (0=Off, 1=Forward, 2=Reverse,
+  3=Alternating) is the loop-direction field; `Direction` is whole-slice
+  playback direction.
+- The MPC also offers a destructive **"Process slice → Reverse"** DSP, which
+  rewrites the sample data and leaves `Direction = 0`. That is a different
+  operation and must not be confused with the flag.
+
+### Method note — two metrics that were wrong before one that was right
+
+Worth recording, because both failures looked like results:
+
+1. **A single global time offset** across two separate recordings reported that
+   *all eleven* keys had changed. With short drum hits, run-to-run timing
+   jitter destroys per-note alignment. (That one turned out to be accidentally
+   right — all pads *had* been reversed — which is exactly how a broken metric
+   escapes notice.)
+2. **Envelope correlation over a fixed window** scored the mirrored hypothesis
+   at 0.04–0.39 and concluded "same orientation" for every hit, while the raw
+   envelopes plainly showed a swell-then-cut. The window was 0.45 s but the
+   slices occupy ~0.2 s, so it was correlating the forward decay tail against
+   silence.
+
+Peak position within the sounding span needs no alignment, no window choice and
+no normalisation, and it separated the two cases immediately. **Prefer a
+measure with nothing to tune.**
