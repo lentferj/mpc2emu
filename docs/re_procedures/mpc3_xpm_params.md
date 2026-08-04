@@ -218,17 +218,31 @@ the assumption the entire feature rests on.
   envelope untouched. If the MPC reverses the envelope too, our attack is at
   the wrong end.
 
-**HW-2 — loop-crossfade frame alignment.**
-Every corpus layer has crossfade `0`/`-1`, so this has never run on real data.
-- **First find out whether the UI even exposes it** — if a non-zero crossfade
-  cannot be set on this firmware, that answers the question and the code stays
-  as dormant, documented best-effort.
-- If it can: build a sustained sample with an explicit loop and a **long**
-  crossfade (≥1000 frames so the difference is visible), export **and** record.
-- Compare the recorded loop against our rendering versus a symmetric-about-the-
-  loop-point rendering. They differ by exactly the crossfade length in
-  placement, which is easy to see in a spectrogram or a sample-aligned diff.
-- Low priority: nothing in the corpus is affected either way.
+**HW-2 — loop-crossfade frame alignment. PROMOTED: this is now the live one.**
+
+*Corrected 2026-08-04.* This entry previously said "every corpus layer has
+crossfade 0/-1, so this has never run on real data" and rated it low priority.
+**That was wrong** — it counted only the MPC 3 JSON layers. MPC 2.x XML carries
+`SliceLoopCrossFadeLength` too, and across the MPC One backup **1 375 layers
+hold a positive value** (4, 7, 8, 9, 14, 65, 69, 70, 74, 77, 128 …). Two files
+in `Projects` alone bake a crossfade into 14 samples today.
+
+So the code is **not** dormant: it alters real conversions, using a frame
+alignment that is still a guess at the MPC's own convention.
+
+- Real material already exists — no need to invent a test program. Both
+  `CAT10-Auto sampled.Keygroup.xpm` (crossfade **128**, 7 samples) and
+  `Inst-Bass-F9 Classic Sqr.xpm` (**14**) are in the backup.
+- Play one of those programs on the MPC and record it through the rig
+  (`hw_measure.py --device mpc`) while holding a note across several loop
+  cycles. A longer crossfade shows the difference more plainly, so prefer the
+  128 one, or dial a longer one if the UI allows.
+- Compare the recorded loop against our rendering versus a
+  symmetric-about-the-loop-point rendering. They differ by exactly the
+  crossfade length in placement, which a sample-aligned diff shows directly.
+- **Falsified if** the recorded seam matches the symmetric rendering, or
+  neither — in which case what we bake in is wrong and should be reconsidered
+  against simply honouring the loop points and leaving the PCM alone.
 
 **HW-3 — `loopFineTune` semantics.** Unknown, and `0` in all 69 808 corpus
 layers. Set it non-zero, export, record. Does the loop's **pitch** shift (a
