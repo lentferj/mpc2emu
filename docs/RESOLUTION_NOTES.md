@@ -5978,3 +5978,59 @@ no presets, which `convert.py` already reports as nothing to do.
 unexpected errors**, giving 286 presets / 3 302 zones / 2 752 samples. Before
 the fix, 62 converted and 35 refused. A mixed project now reports
 `2 keygroup + 2 drum program(s)` and skips the unfilled kit by name.
+
+## §XPMNAMES — truncated-name dedup silently dropped every second sample (FIXED 2026-08-04)
+
+A zone's only handle on its audio is the sample **name**. The dedup that kept
+names inside 16 characters counted per base and then trusted its own rewrite:
+
+```python
+n = _name_count.get(base, 0)
+if n > 0:
+    sd.name = base[:16 - len(n_str)] + n_str    # never checked this was free
+```
+
+**Two ways the result was not new**, both live in real data:
+
+1. **The base already ends in the digit being appended**, so the rewrite is a
+   no-op: `'…_2600_C-1'` + `'1'` → `'…_2600_C-1'`. Names ending `-1`, `A1`,
+   `C1` are ordinary in auto-sampled sets, so this is the common case.
+2. **The rewrite lands on a different real sample**:
+   `'MarioPCP2600__C0'` + `'1'` → `'MarioPCP2600__C1'`, which is another
+   note's name.
+
+Either way the loser was loaded, appended to `bank.samples`, printed as
+`Loaded sample:` — and never referenced again. Its zones addressed the winner.
+**Nothing warned; the log looked clean.**
+
+### Measured
+
+One auto-sampled keygroup program, one WAV per semitone:
+
+| | before | after |
+|---|--------|-------|
+| WAVs loaded | 97 | 97 |
+| distinct sample names | **57** | **97** |
+| zones | 97 | 97 |
+| zones sounding a namesake | **40** | **0** |
+
+So every second semitone played its neighbour, at the wrong pitch. Across the
+`Projects` tree the fix leaves **0 programs with duplicate names and 0 orphaned
+samples**, from 140 programs / 5 766 samples affected before.
+
+### Fix
+
+`_unique_sample_name()` advances the counter against the names **actually
+taken**, not a per-base tally, because shortening can map two different bases
+onto one string. Names stay within 16 characters.
+
+### The guard, and why not the one that was proposed
+
+The report suggested writers refuse a bank whose *zone count exceeds its
+distinct sample names*. That would fire constantly on healthy banks — many
+zones legitimately share one sample (velocity layers, split key ranges). The
+real invariants are that sample names are **unique** and that every zone name
+**resolves**, and `parse_xpm` now checks both after building, reporting
+`[ERROR]` with the offending names rather than failing silently.
+
+Found from VinSamLib 2026-08-04.

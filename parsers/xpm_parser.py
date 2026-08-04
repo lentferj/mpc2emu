@@ -930,6 +930,36 @@ def _as_float(value, default=0.0) -> float:
         return default
 
 
+def _unique_sample_name(name: str, taken: set, limit: int = 16) -> str:
+    """A name at most `limit` chars that is not already in `taken`.
+
+    Sample names are the ONLY handle a zone has on its audio, so two samples
+    sharing one name is not a cosmetic clash — it silently drops the second
+    sample's audio and makes its zones sound the first one.
+
+    The counter has to be advanced against the names actually taken, not
+    against a per-base tally, because shortening can map two different bases
+    onto the same string. Both failure modes were live:
+
+      * a base already ending in the digit being appended came back unchanged
+        (`'…_2600_C-1'` + `'1'` -> `'…_2600_C-1'`), and names ending `-1`,
+        `A1`, `C1` are ordinary in auto-sampled sets;
+      * a rewrite could land on a *different* real sample
+        (`'MarioPCP2600__C0'` + `'1'` -> `'MarioPCP2600__C1'`).
+
+    Falls back to a longer suffix rather than giving up, and finally to the
+    candidate itself, so it always returns something.
+    """
+    if name not in taken:
+        return name
+    for n in range(1, 10_000):
+        suffix = str(n)
+        cand = name[:max(1, limit - len(suffix))] + suffix
+        if cand not in taken:
+            return cand
+    return name
+
+
 def _pad_note_map(root) -> dict:
     """`{pad_index (0-based): midi_note}` for a drum program.
 
@@ -1302,9 +1332,9 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
     bank = Bank(name=_safe_name(xpm_path.stem))
 
     sample_cache: dict[str, SampleData] = {}
-    # Tracks how many samples share the same truncated base name so we can
-    # append a counter suffix to keep each sd.name unique within 16 chars.
-    _name_count: dict[str, int] = {}
+    # The sample names ALREADY taken in this bank.  Tracking the names rather
+    # than a per-base count is the whole point -- see _unique_sample_name.
+    _names_taken: set = set()
     # WAV smpl-chunk recorded root per cached sample (None if the WAV has no
     # unity note) — used as the RootNote=0 playback root instead of lo_key.
     sample_wav_root: dict[str, Optional[int]] = {}
@@ -1583,12 +1613,24 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
                             _apply_slice(sd, slice_start, slice_end, slice_loop,
                                          slice_lstart, loop_on, slice_lend)
                             # Deduplicate truncated names within this XPM.
-                            base = sd.name
-                            n = _name_count.get(base, 0)
-                            if n > 0:
-                                suffix = str(n)
-                                sd.name = base[:16 - len(suffix)] + suffix
-                            _name_count[base] = n + 1
+                            #
+                            # Counting per base and trusting the rewrite was
+                            # silent DATA LOSS: it never checked the result was
+                            # actually free.  A base already ending in the digit
+                            # being appended came back UNCHANGED
+                            # ('…_2600_C-1' + '1' -> '…_2600_C-1', and names
+                            # ending -1/A1/C1 are everywhere), and a rewrite
+                            # could equally land on a different real sample
+                            # ('…__C0' + '1' -> '…__C1').  Zones address samples
+                            # by NAME, so the loser was loaded, appended and
+                            # logged, then never referenced -- measured on one
+                            # auto-sampled program: 97 WAVs, 57 distinct names,
+                            # 97 zones, 40 of them sounding a namesake.
+                            #
+                            # Advance until the candidate is genuinely unused,
+                            # against the names actually taken.
+                            sd.name = _unique_sample_name(sd.name, _names_taken)
+                            _names_taken.add(sd.name)
                             sample_cache[cache_key] = sd
                             # Sample's recorded root (WAV smpl unity, None if absent)
                             # — the RootNote=0 playback root (fixes JR +36 transpose).
@@ -1723,6 +1765,27 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
     if len(program_trees) > 1:
         print(f"  {len(bank.presets)} preset(s), {len(bank.samples)} sample(s) "
               f"total in '{bank.name}'")
+
+    # Post-build invariant. A zone's only handle on its audio is the sample
+    # NAME, so two samples sharing one name means the second is unreachable and
+    # its zones sound the first — silent data loss that used to happen and
+    # logged nothing (see _unique_sample_name).
+    #
+    # NOT "zones <= distinct samples", which the bug report suggested: many
+    # zones legitimately share one sample (velocity layers, split key ranges),
+    # so that test would fire constantly on healthy banks. The real invariants
+    # are that names are unique and that every zone resolves.
+    _names = [s.name for s in bank.samples]
+    if len(set(_names)) != len(_names):
+        dupes = sorted({n for n in _names if _names.count(n) > 1})
+        print(f"  [ERROR] {len(_names) - len(set(_names))} sample(s) share a "
+              f"name with another — their zones will sound the wrong audio: "
+              f"{', '.join(dupes[:6])}")
+    _missing = sorted({z.sample_name for p in bank.presets for v in p.voices
+                       for z in v.zones} - set(_names))
+    if _missing:
+        print(f"  [ERROR] {len(_missing)} zone sample name(s) match no loaded "
+              f"sample: {', '.join(_missing[:6])}")
     return bank
 
 
