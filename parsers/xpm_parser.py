@@ -1839,8 +1839,17 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
                     reverse = float(_get_text(layer, 'Direction', '0') or 0) != 0.0
                 except ValueError:
                     reverse = False
-                slice_xf = int(float(_get_text(
-                    layer, 'SliceLoopCrossFadeLength', '0') or 0))
+                # Both -1 and 0 mean "no crossfade", and MPC 2.x XML uses them
+                # interchangeably -- one real drum program has -1 on pad 1 and 0
+                # on pad 82 for the SAME sample.  Normalise before it reaches the
+                # cache key, or two identical zones miss each other's cache
+                # entry, load the audio twice and get a needless "_F1" duplicate.
+                try:
+                    slice_xf = int(float(_get_text(
+                        layer, 'SliceLoopCrossFadeLength', '0') or 0))
+                except ValueError:
+                    slice_xf = 0
+                slice_xf = max(0, slice_xf)
                 cache_key = (sample_name, slice_start, slice_end, slice_loop,
                              slice_lstart, loop_on, slice_lend, reverse, slice_xf)
 
