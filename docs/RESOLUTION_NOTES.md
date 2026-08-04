@@ -5881,12 +5881,21 @@ frames ending just before `loop_start`, so the wrap is continuous. Length is
 clamped to the pre-roll and to a third of the loop. Verified byte-exact against
 a hand-computed blend, with the region outside the blend proven untouched.
 
-**But it has never run on real data, and cannot be until some appears.** Every
-one of the **69 808** layers in the MPC One corpus has a crossfade of `0` or
-`-1`. So the code is unit-correct and its frame alignment is still a
-best-faithful guess — the audible intent (a seamless loop of the right length)
-is right either way. `loopFineTune` is likewise `0` everywhere; it is **not**
-implemented, it warns, because there is nothing to calibrate a guess against.
+**CORRECTION 2026-08-04: it does run on real data.** This paragraph used to say
+the opposite — that all 69 808 corpus layers carry `0` or `-1`, so the code
+could never fire. That count was **MPC 3 JSON only**. MPC 2.x XML carries
+`SliceLoopCrossFadeLength` as well, and across the MPC One backup **1 375
+layers hold a positive value** (4, 7, 8, 9, 14, 65, 69, 70, 74, 77, 128 …); two
+files in `Projects` bake a crossfade into 14 samples today.
+
+So the frame alignment is not a dormant guess — it alters real conversions.
+That promotes **HW-2** from "low priority, nothing affected either way" to the
+live question on this branch, and real test material already exists rather than
+needing to be built (`CAT10-Auto sampled.Keygroup.xpm`, crossfade 128).
+
+`loopFineTune` is a separate matter and the `0`-everywhere claim still holds for
+it: it is **not** implemented, it warns, because there is nothing to calibrate a
+guess against.
 
 ### 3. `ZonePlay` / play logic
 
