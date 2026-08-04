@@ -48,6 +48,33 @@ mpc2emu. Single-sample programs are unaffected.
 is no way to repair an existing bank short of rewriting its keymaps, and no
 warning is emitted for old files.
 
+### Regenerate MPC-sourced banks made before 2026-08-04
+
+A bug in the MPC parser's sample-name handling **silently dropped a sample's
+audio and made its zones play a different sample instead**.
+
+Sample names are shortened to 16 characters, and repeats get a counter appended.
+The counter was never checked against the names already used, so two different
+samples could end up sharing one name — most often when a name already ended in
+the digit being appended (`…_2600_C-1` + `1` is unchanged, and names ending
+`-1`, `A1`, `C1` are ordinary in auto-sampled sets). A zone's only handle on its
+audio is that name, so the second sample was loaded, counted, logged as
+`Loaded sample:` — and then never referenced. Its zones sounded the first
+sample, at whatever pitch that implied.
+
+Measured on one auto-sampled program of 97 samples, one per semitone: **57
+distinct names survived, and 40 of the 97 zones played a neighbour instead of
+their own audio.** Across a large MPC library, 140 programs were affected.
+
+Nothing warned, and the resulting `.E4B` / `.KRZ` looks correct and re-reads
+correctly — as with the KRZ keymap bug above, the damage is only audible on
+hardware.
+
+**If you converted MPC programs (`.xpm`, `.xty`, `.xpj`) with an earlier
+version, regenerate those banks.** Current versions also refuse to finish
+quietly: `parse_xpm` now reports an `[ERROR]` if two samples share a name or a
+zone names a sample that was not loaded.
+
 ---
 
 ## AI assistance & human authorship
