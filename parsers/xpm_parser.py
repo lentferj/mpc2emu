@@ -27,6 +27,7 @@ Older MPC formats (PGM) are binary and handled separately (not yet implemented).
 """
 
 import array
+import collections
 import math
 import os
 import xml.etree.ElementTree as ET
@@ -783,6 +784,24 @@ def _safe_name(name: str, maxlen: int = 16, tail: bool = False) -> str:
 
 MPC3_MAGIC = b'\x1f\x8b'          # gzip; a classic XPM is plain '<?xml'
 
+#: MPC 3 `program.type` -> human name, for messages.  0/1 are the two we
+#: convert; 7/8/9 were read off a real 32-track project (§MPC3D3).  3 and 4
+#: appear only in MIDI-controller and multi-interface template projects in the
+#: MPC One backup and have not been pinned down, so they print as "type N"
+#: rather than being guessed at.
+_MPC3_PROGRAM_TYPES = {
+    0: 'drum', 1: 'keygroup', 7: 'return', 8: 'submix', 9: 'output',
+}
+
+
+def _mpc3_type_name(t) -> str:
+    try:
+        t = int(t)
+    except (TypeError, ValueError):
+        return 'unknown'
+    return _MPC3_PROGRAM_TYPES.get(t, f'type {t}')
+
+
 #: An MPC drum program always serialises 128 pads, sampled or not.
 _MAX_PADS = 128
 #: Pad 1 lands on MIDI 36 (C1) when a program carries no explicit map -- the
@@ -1184,15 +1203,31 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
         container = _MPC3_PAYLOADS[kind]
         programs = _mpc3_program_nodes(kind, data)
         if not programs:
+            # Name what WAS found rather than what was not: this sentence is
+            # the whole explanation a user gets (VinSamLib shows it verbatim in
+            # the tooltip of a greyed-out row), so "nothing here" is far less
+            # useful than "these are the things it holds".
+            _present = []
+            for _t in (data.get('tracks') or []):
+                _p = _t.get('program') if isinstance(_t, dict) else None
+                if isinstance(_p, dict) and _p.get('type') is not None:
+                    _present.append(_mpc3_type_name(_p.get('type')))
+            _bare = data.get('program')
+            if isinstance(_bare, dict) and _bare.get('type') is not None:
+                _present.append(_mpc3_type_name(_bare.get('type')))
+            _seen = ', '.join(sorted(set(_present))) or 'no programs at all'
             raise ValueError(
                 f"{xpm_path.name} is an MPC {header[1]} {container.lower()} "
-                f"with no keygroup program (type 1) in it — a drum, plugin or "
-                f"MIDI track has nothing to convert.")
+                f"with no keygroup or drum program in it — it holds {_seen}, "
+                f"none of which carries sample data.")
         print(f"Parsing XPM (MPC {header[1]} JSON, {container.lower()}): "
               f"{xpm_path}")
         if len(programs) > 1:
-            print(f"  {len(programs)} keygroup programs → one bank, one preset "
-                  f"each: {', '.join(str(p.get('name', '?')) for p in programs)}")
+            _kinds = collections.Counter(
+                _mpc3_type_name(p.get('type')) for p in programs)
+            _desc = ' + '.join(f"{n} {k}" for k, n in sorted(_kinds.items()))
+            print(f"  {_desc} program(s) → one bank, one preset each: "
+                  f"{', '.join(str(p.get('name', '?')) for p in programs)}")
         # A project carries one keygroup program per track, so it is the MPC's
         # equivalent of an E4B bank: every program becomes a preset, and they
         # share one sample pool (see _build_preset).  A bare program or a track
