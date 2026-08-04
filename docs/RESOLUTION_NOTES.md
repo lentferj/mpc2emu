@@ -5918,3 +5918,63 @@ and `root == key`. The custom pad map is honoured end to end — keys land on
 Velocity layers within a pad, pad mute groups, and the MPC's one-shot/note-off
 pad modes are not mapped. Nor is the 2.x pad layout recoverable — if a real
 `<PadNote>` body ever turns up in the wild, `_pad_note_map` already reads it.
+
+## §XPMDRUM2X — an MPC 2.x project gathered only its keygroup programs (FIXED 2026-08-04)
+
+§XPMDRUM (`27ff6a4`) taught the MPC **3** project path to take drum programs —
+`_mpc3_program_nodes` accepts `type` 0 and 1 — but left the **2.x** branch
+beside it globbing `*.Keygroup.xpm` alone. The two container generations were
+left disagreeing about what a project contains, and the same commit's drum
+support was unreachable through a 2.x project.
+
+Found from VinSamLib 2026-08-04, where a project row listed 5 programs while
+its own data folder held 7.
+
+### Measured on the MPC One backup
+
+| | |
+|---|---|
+| 2.x projects with a data folder | **94** |
+| converted incompletely (keygroups only) | 62 |
+| refused outright, holding *only* drum kits | **32** |
+| keygroup-only projects (i.e. unaffected) | **0** |
+| drum programs inside 2.x project folders | 219 |
+| …of those with sampled pads | 166 |
+| sampled pads the `.xpj` route could not reach | **2 197** |
+
+Because no keygroup-only project exists in that backup, **every** 2.x project
+that converted at all converted partially.
+
+*(The originating note said 178 projects and 63 incomplete. 178 is both
+firmware generations combined — 94 are 2.x XML, 84 are MPC 3 JSON — and the
+2.x-specific figures are the ones above. Every actionable number in it was
+correct.)*
+
+### Fix
+
+Gather `*.Keygroup.xpm` **and** `*.Drum.xpm`, and reword the refusal, which
+must now mean "no keygroup *or drum* program".
+
+**Order: keygroups first, then drums, each sorted.** Not cosmetic — preset
+order is what an E4B bank exposes, so appending drums after the existing
+keygroup order leaves the preset *numbering* of an already-converting project
+untouched. Re-converting a project therefore does not renumber the presets of a
+bank someone has already loaded.
+
+### A second empty-preset case, found while testing
+
+**55 of the 224 drum programs in the backup have zero sampled pads** — kits
+created but never filled. Those produced an empty preset, which is the very
+complaint §XPMDRUM was raised to fix, just one level further in: a slot in the
+bank claiming a program converted when it did not.
+
+`_build_preset` now skips a preset with no voices and says so. Gathering a
+project drops those and keeps the rest; a single such file yields a bank with
+no presets, which `convert.py` already reports as nothing to do.
+
+### Verified
+
+97 MPC 2.x projects across the whole backup: **94 convert, 3 refuse, 0
+unexpected errors**, giving 286 presets / 3 302 zones / 2 752 samples. Before
+the fix, 62 converted and 35 refused. A mixed project now reports
+`2 keygroup + 2 drum program(s)` and skips the unfilled kit by name.

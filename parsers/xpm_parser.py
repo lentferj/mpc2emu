@@ -1220,21 +1220,43 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
             # program: it holds only settings and a file list.  Its programs
             # live as separate .xpm files in the sibling data folder, named
             # `<name>.<Kind>.xpm` -- so the 2.x equivalent of the 3.x
-            # "project = bank" case is to gather the Keygroup ones.  Without
+            # "project = bank" case is to gather the convertible ones.  Without
             # this a 2.x .xpj parsed "successfully" into an empty preset, which
             # is worse than failing.  See §MPC3BANK.
+            #
+            # Keygroup AND Drum, to match what the MPC 3 path gathers
+            # (`_mpc3_program_nodes` takes type 0 and 1).  Taking only keygroups
+            # here left the two container generations disagreeing about what a
+            # project contains: measured on the MPC One backup, 62 of 94 2.x
+            # projects converted incompletely and 32 more -- holding only drum
+            # kits -- refused outright, while every one of those kits converted
+            # fine when pointed at directly.  All 224 drum programs in that
+            # backup live inside a project folder, so the .xpj route reached
+            # none of them.  See §XPMDRUM2X.
+            #
+            # Keygroups first, then drums, each sorted: this leaves the preset
+            # ORDER of an already-converting project untouched, so re-converting
+            # one does not renumber the presets an existing E4B bank has.
             data_dir = xpm_path.parent / f"{xpm_path.stem}_[ProjectData]"
-            kg = sorted(data_dir.glob('*.Keygroup.xpm')) if data_dir.is_dir() else []
-            if not kg:
+            if data_dir.is_dir():
+                kg = sorted(data_dir.glob('*.Keygroup.xpm'))
+                dr = sorted(data_dir.glob('*.Drum.xpm'))
+            else:
+                kg = dr = []
+            progs = [(p, '.Keygroup') for p in kg] + [(p, '.Drum') for p in dr]
+            if not progs:
                 raise ValueError(
                     f"{xpm_path.name} is an MPC 2.x project, not a program. "
                     f"Its programs live in {data_dir.name}/ and none of them is "
-                    f"a keygroup program (only drum, MIDI, plugin, audio or CV "
-                    f"tracks) — nothing to convert.")
-            print(f"  MPC 2.x project → {len(kg)} keygroup program(s): "
-                  f"{', '.join(p.name.rsplit('.Keygroup', 1)[0] for p in kg)}")
-            program_trees = [(p.name.rsplit('.Keygroup', 1)[0],
-                              ET.parse(str(p)).getroot()) for p in kg]
+                    f"a keygroup or drum program (only MIDI, plugin, audio, CV "
+                    f"or clip tracks, which carry no sample data) — nothing to "
+                    f"convert.")
+            _kinds = (f"{len(kg)} keygroup" if kg else '') + \
+                     (' + ' if kg and dr else '') + (f"{len(dr)} drum" if dr else '')
+            print(f"  MPC 2.x project → {_kinds} program(s): "
+                  f"{', '.join(p.name.rsplit(k, 1)[0] for p, k in progs)}")
+            program_trees = [(p.name.rsplit(k, 1)[0], ET.parse(str(p)).getroot())
+                             for p, k in progs]
             # The project's samples sit in that same folder, not beside the
             # .xpj, so search there rather than walking the whole Projects tree.
             if wav_dir == xpm_path.parent:
@@ -1644,6 +1666,17 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
                   f"{len(capped)} (E4XT voice limit); narrowest layers dropped")
         for voice in capped:
             preset.voices.append(voice)
+
+        if not preset.voices:
+            # A program with no sampled content contributes nothing, and an
+            # empty preset in a bank is worse than no preset: it occupies a
+            # slot and tells the user a program converted when it did not.
+            # Real: 55 of the 224 drum programs in the MPC One backup are kits
+            # that were created but never filled.  Gathering a project skips
+            # them and keeps the rest; a single such file yields a bank with no
+            # presets, which convert.py already reports as nothing to do.
+            print(f"  [SKIP] '{preset.name}': no sampled content")
+            return
 
         bank.presets.append(preset)
         print(f"  Preset '{preset.name}': {len(preset.voices)} voice(s), "
