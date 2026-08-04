@@ -330,7 +330,13 @@ to be `.xty` and `.xpj`, not `.xpm`.
       a reminder that "always at the default" must be checked on the rows
       that matter, not on every row.)*
 - [ ] **B3 `coarseTune` / `fineTune`** — semitones and cents? Sweep ±.
-- [ ] **B4 `velocityStart` / `velocityEnd`** — assumed 0–127 direct.
+- [ ] **B4 `velocityStart` / `velocityEnd`** — assumed 0–127 direct. **This
+      one the corpus DOES cover:** populated layers carry real variety
+      (VelStart 0/1/30/64/106…, VelEnd 127/105/63/29…), and **91 instruments
+      have genuinely different velocity ranges across their layers**. Spot-
+      checked: overlapping ranges convert to parallel voices with no
+      overlapping zone pair inside any one voice, which is the required
+      behaviour. Only the 0–127 *scale* is still assumed rather than shown.
 - [ ] **B5 Loop fields** — the two-tier scheme
       (`layerLoopModeOverridesSliceLoopMode`). Re-read against CWM in E1: our
       tier selection, the `mode > 0 && end > 0` guard and the field names all
