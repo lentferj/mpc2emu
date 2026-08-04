@@ -33,8 +33,8 @@ Always test images on a ZuluSCSI / SCSI2SD / emulator **before** connecting
 irreplaceable equipment.
 
 **Three fixed defects produced files that are wrong and do not look it** —
-multisample `.KRZ` banks, MPC-sourced banks, and EMU3 CD images holding more
-than 16 banks. All three are fixed, none can be repaired in place, and nothing
+MPC-sourced banks, EMU3 CD images holding more than 16 banks, and multisample
+`.KRZ` banks. All three are fixed, none can be repaired in place, and nothing
 warns you about a file you already have: see [Fixed defects — check what you
 built earlier](#fixed-defects--check-what-you-built-earlier).
 
@@ -1100,16 +1100,8 @@ This is a different question from [Known Limitations](#known-limitations)
 below, which is what mpc2emu will not do for you *today*. This is what it
 already did to files you *have*.
 
-### If you built KRZ multisample banks before 2026-08-02, regenerate them
-
-The KRZ keymap writer placed every zone **12 semitones away from the key it was
-asked for**. The K2000 sounds keymap entry `i` at MIDI key `i + 12`, and
-mpc2emu wrote each zone into `entry[key]` instead of `entry[key - 12]`.
-
-On hardware a multisampled program plays **one sample key-tracked across the
-whole keyboard** rather than the right sample per key — so a piano, a drum kit
-or any velocity/key-split instrument sounds wrong. Single-sample programs are
-unaffected.
+**Newest first** — if you last read this section on a given date, everything
+above that date's entry is new to you.
 
 ### If you converted MPC programs before 2026-08-04, regenerate those banks
 
@@ -1141,6 +1133,17 @@ written.
 
 Images with 16 banks or fewer are unaffected. Current versions refuse rather
 than dropping the excess silently.
+
+### If you built KRZ multisample banks before 2026-08-02, regenerate them
+
+The KRZ keymap writer placed every zone **12 semitones away from the key it was
+asked for**. The K2000 sounds keymap entry `i` at MIDI key `i + 12`, and
+mpc2emu wrote each zone into `entry[key]` instead of `entry[key - 12]`.
+
+On hardware a multisampled program plays **one sample key-tracked across the
+whole keyboard** rather than the right sample per key — so a piano, a drum kit
+or any velocity/key-split instrument sounds wrong. Single-sample programs are
+unaffected.
 
 ---
 
