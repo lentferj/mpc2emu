@@ -104,7 +104,8 @@ import xml.etree.ElementTree as ET
 from xml.dom import minidom
 
 from models.common import (
-    Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType, Envelope
+    Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType, Envelope,
+    safe_filename,
 )
 from parsers.xpm_parser import load_wav, _safe_name
 from parsers.tal_template import new_tal_root, new_multisample
@@ -544,7 +545,9 @@ def write_talsmpl(bank: Bank, output_dir: str,
     for preset in bank.presets:
         # CR-7c: two presets with the same name would otherwise overwrite each
         # other's .talsmpl on disk — suffix duplicates.
-        stem = preset.name or 'Preset'
+        # A preset name is metadata and may contain anything the source
+        # device allowed; as a filename a '/' in it is a path separator.
+        stem = safe_filename(preset.name or 'Preset', 'Preset')
         if stem in used_stems:
             i = 1
             while f"{stem}_{i}" in used_stems:
@@ -599,7 +602,7 @@ def write_talsmpl(bank: Bank, output_dir: str,
         def _emit_multisample(zone):
             sample = sample_map[zone.sample_name]
             if copy_samples:
-                wav_filename = f"{sample.name}.wav"
+                wav_filename = f"{safe_filename(sample.name, 'Sample')}.wav"
                 _write_wav(sample, str(sample_dir / wav_filename))
                 rel_path = f"samples/{wav_filename}"
             else:

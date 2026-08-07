@@ -324,6 +324,23 @@ def e4xt_pan_excess_db(pan: float) -> float:
     return _E4XT_PAN_EXCESS_K * (abs(max(-1.0, min(1.0, pan))) ** _E4XT_PAN_EXCESS_P)
 
 
+def safe_filename(name: str, fallback: str = 'UNNAMED') -> str:
+    """A model name made safe to use as one component of a filename.
+
+    Preset and sample names are metadata and may legitimately contain anything
+    the source device allowed — an E4XT preset really is called
+    `Inv/Vel>Q Arco`. Writers that name a *file* after one must sanitise it, or
+    the `/` is taken as a path separator and the write fails with
+    FileNotFoundError on a directory that was never created.
+
+    Unlike `_safe_name` this does not truncate and does not strip an
+    extension: it is about the filesystem, not about a device's name field.
+    """
+    out = ''.join(c if (c.isalnum() or c in ' _-.') else '_' for c in name)
+    out = out.strip(' .')
+    return out or fallback
+
+
 def e4xt_pan_byte(pan: float) -> int:
     """Our -1.0 (L) .. +1.0 (R) -> the vpar[55] / zone entry[16] byte."""
     return int(max(-64, min(63, round(max(-1.0, min(1.0, pan)) * E4XT_PAN_FULL_BYTE))))
