@@ -334,6 +334,26 @@ def _build_emst() -> bytes:
 # E3S1 sample chunk body
 # ---------------------------------------------------------------------------
 
+def _pcm_bytes_written(s) -> int:
+    """How many PCM bytes this sample will actually contribute to the file.
+
+    **Must** match what the write loop emits. For stereo that is not
+    `len(s.data)`: `_interleaved_to_planar` keeps whole frames only, so a
+    buffer holding a half-frame (`len % 4 == 2`) writes two bytes fewer than
+    it holds. Declaring the larger number shifts every chunk after it, and the
+    result is silent — the writer reports the full sample count, and the file
+    reads back as ONE sample with the rest orphaned.
+
+    Reached in practice through `--resample emulator2` / `emax1` on a stereo
+    bank, which is what turned a 77-sample bank into a 1-sample file. The
+    resampler no longer emits half-frames, but the invariant belongs here:
+    the size a chunk declares comes from the bytes it writes, not from an
+    upstream buffer that may not survive the transform.
+    """
+    n = len(s.data)
+    return (n // 4) * 4 if getattr(s, 'channels', 1) == 2 else n
+
+
 def _interleaved_to_planar(data: bytes) -> bytes:
     """Interleaved 16-bit stereo (mpc2emu's internal form) -> the E4B's
     PLANAR layout: the whole left channel, then the whole right.
@@ -1035,8 +1055,8 @@ def write_e4b(bank: Bank, output_path: str) -> None:
     for i, s in enumerate(samples):
         hdr = _build_sample_header(s, i + 1)
         sample_headers.append(hdr)
-        sample_body_lens.append(len(hdr) + len(s.data))
-        print(f"  Sample [{i+1:02d}] '{s.name}': {len(s.data)} bytes PCM")
+        sample_body_lens.append(len(hdr) + _pcm_bytes_written(s))
+        print(f"  Sample [{i+1:02d}] '{s.name}': {_pcm_bytes_written(s)} bytes PCM")
 
     preset_bodies = []
     for i, p in enumerate(bank.presets):

@@ -487,90 +487,125 @@ def resample_vintage(
     if verbose:
         print(f"    Resampling '{sample.name}' → {profile.display_name}")
 
-    # Convert to float
-    signal = _pcm_to_float(sample.data)
-
-    # --- Stage 1: Anti-aliasing filter (before decimation) ---
-    if verbose:
-        print(f"      [1/6] Anti-alias filter ({profile.aa_cutoff_hz:.0f} Hz, "
-              f"{profile.aa_poles}-pole)")
-    if profile.aa_poles == 1:
-        signal = _onepole_lowpass(signal, profile.aa_cutoff_hz, src_rate)
+    # Convert to float. **Stereo is processed one channel at a time.** The
+    # whole chain below -- filters, decimation, quantization -- is a
+    # convolution over consecutive samples, and consecutive samples of an
+    # interleaved buffer alternate L,R,L,R. Running it over the interleaved
+    # stream smears the channels into each other: measured, a pair with
+    # digital silence in the right channel came out with the right at 16542
+    # against the left's 16590, i.e. very nearly mono. It also produced an odd
+    # number of samples, leaving a half-frame that misaligned every chunk the
+    # E4B writer emitted after it -- which is how a 77-sample bank came to
+    # read back as one. `resample_to_rate` already split channels for exactly
+    # this reason; the vintage path never did.
+    channels = max(1, getattr(sample, 'channels', 1) or 1)
+    _all = _pcm_to_float(sample.data)
+    if channels == 2:
+        planes = [_all[0::2], _all[1::2]]
+        # Whole frames only: a trailing half-frame has no partner sample.
+        n = min(len(planes[0]), len(planes[1]))
+        planes = [pl[:n] for pl in planes]
     else:
-        signal = _twopole_lowpass(signal, profile.aa_cutoff_hz, src_rate)
+        planes = [_all]
 
-    # --- Stage 2: Decimate to target rate ---
-    if verbose:
-        print(f"      [2/6] Decimate {src_rate} Hz → {dst_rate} Hz")
-    signal = _decimate(signal, src_rate, dst_rate)
+    _peak = max((abs(x) for x in _all), default=0.0)
+    _shared_gain = (0.99 / _peak) if _peak > 1e-9 else 1.0
 
-    # --- Stage 3: Gain-stage (normalize toward full scale) ---
-    # A quantizer's step size is fixed relative to full scale, so a signal
-    # that only uses a fraction of the available range effectively gets
-    # fewer usable bits — and proportionally worse SNR — than the profile
-    # spec describes. A sound designer of the era would have recorded as hot
-    # as possible before sampling to avoid exactly this. We reproduce that
-    # best practice: boost the signal toward full scale before quantizing
-    # (so it gets the full resolution the profile spec assumes), then —
-    # by default — scale back down afterwards to restore the source's
-    # original perceived level (see `restore_level`).
-    target_peak = 0.99
-    peak = max((abs(x) for x in signal), default=0.0)
-    gain = (target_peak / peak) if peak > 1e-9 else 1.0
-    if verbose:
-        print(f"      [3/6] Gain-stage "
-              f"(peak {20*math.log10(max(peak, 1e-9)):.1f} dBFS → "
-              f"×{gain:.2f} → {20*math.log10(target_peak):.1f} dBFS)")
-    if gain != 1.0:
-        signal = [x * gain for x in signal]
+    done = []
+    for _ch, signal in enumerate(planes):
 
-    # --- Stage 4: Quantize (µ-law companded for the EII, else linear) ---
-    if verbose:
-        noise_note = (f', +noise floor {profile.noise_floor_bits:.1f}b'
-                      if profile.noise_floor_bits else '')
-        codec = (f'µ-{profile.mu_law:.0f} companded' if profile.mu_law
-                 else ('truncate' if profile.truncate else 'round'))
-        print(f"      [4/6] Quantize to {profile.bit_depth}-bit "
-              f"({codec}"
-              f"{', +TPDF dither' if profile.dither else ''}"
-              f"{noise_note})")
-    if profile.mu_law:
-        signal = _mu_law_quantize(
-            signal,
-            profile.bit_depth,
-            profile.mu_law,
-            profile.truncate,
-            profile.noise_floor_bits,
-        )
-    else:
-        signal = _quantize(
-            signal,
-            profile.bit_depth,
-            profile.truncate,
-            profile.dither,
-            profile.noise_floor_bits,
-        )
-
-    # --- Stage 5: Bandpass coloring ---
-    if bandpass and profile.bp_enabled:
+        gain = _shared_gain
+        # --- Stage 1: Anti-aliasing filter (before decimation) ---
         if verbose:
-            print(f"      [5/6] Bandpass color "
-                  f"({profile.bp_lo_hz:.0f}–{profile.bp_hi_hz:.0f} Hz)")
-        signal = _onepole_highpass(signal, profile.bp_lo_hz, dst_rate)
-        if profile.bp_poles == 1:
-            signal = _onepole_lowpass(signal, profile.bp_hi_hz, dst_rate)
+            print(f"      [1/6] Anti-alias filter ({profile.aa_cutoff_hz:.0f} Hz, "
+                  f"{profile.aa_poles}-pole)")
+        if profile.aa_poles == 1:
+            signal = _onepole_lowpass(signal, profile.aa_cutoff_hz, src_rate)
         else:
-            signal = _twopole_lowpass(signal, profile.bp_hi_hz, dst_rate)
-        if profile.dc_offset != 0.0:
-            signal = [x + profile.dc_offset for x in signal]
-    elif verbose:
-        print(f"      [5/6] Bandpass color: skipped")
+            signal = _twopole_lowpass(signal, profile.aa_cutoff_hz, src_rate)
 
-    # --- Stage 6: Restore original level (default) and store at vintage rate ---
-    if restore_level and gain != 1.0:
-        signal = [x / gain for x in signal]
-    if verbose:
-        print(f"      [6/6] Restore level → store at {dst_rate} Hz (saves RAM; EOS pitches correctly)")
+        # --- Stage 2: Decimate to target rate ---
+        if verbose:
+            print(f"      [2/6] Decimate {src_rate} Hz → {dst_rate} Hz")
+        signal = _decimate(signal, src_rate, dst_rate)
+
+        # --- Stage 3: Gain-stage (normalize toward full scale) ---
+        # A quantizer's step size is fixed relative to full scale, so a signal
+        # that only uses a fraction of the available range effectively gets
+        # fewer usable bits — and proportionally worse SNR — than the profile
+        # spec describes. A sound designer of the era would have recorded as hot
+        # as possible before sampling to avoid exactly this. We reproduce that
+        # best practice: boost the signal toward full scale before quantizing
+        # (so it gets the full resolution the profile spec assumes), then —
+        # by default — scale back down afterwards to restore the source's
+        # original perceived level (see `restore_level`).
+        # One gain for the whole sample, not one per channel: normalising a
+        # hard-panned pair independently would move the stereo image (the
+        # quiet side would be lifted toward the loud one). `peak` is taken
+        # across every channel before the loop.
+        target_peak = 0.99
+        if verbose:
+            print(f"      [3/6] Gain-stage "
+                  f"(peak {20*math.log10(max(_peak, 1e-9)):.1f} dBFS → "
+                  f"×{gain:.2f} → {20*math.log10(target_peak):.1f} dBFS)")
+        if gain != 1.0:
+            signal = [x * gain for x in signal]
+
+        # --- Stage 4: Quantize (µ-law companded for the EII, else linear) ---
+        if verbose:
+            noise_note = (f', +noise floor {profile.noise_floor_bits:.1f}b'
+                          if profile.noise_floor_bits else '')
+            codec = (f'µ-{profile.mu_law:.0f} companded' if profile.mu_law
+                     else ('truncate' if profile.truncate else 'round'))
+            print(f"      [4/6] Quantize to {profile.bit_depth}-bit "
+                  f"({codec}"
+                  f"{', +TPDF dither' if profile.dither else ''}"
+                  f"{noise_note})")
+        if profile.mu_law:
+            signal = _mu_law_quantize(
+                signal,
+                profile.bit_depth,
+                profile.mu_law,
+                profile.truncate,
+                profile.noise_floor_bits,
+            )
+        else:
+            signal = _quantize(
+                signal,
+                profile.bit_depth,
+                profile.truncate,
+                profile.dither,
+                profile.noise_floor_bits,
+            )
+
+        # --- Stage 5: Bandpass coloring ---
+        if bandpass and profile.bp_enabled:
+            if verbose:
+                print(f"      [5/6] Bandpass color "
+                      f"({profile.bp_lo_hz:.0f}–{profile.bp_hi_hz:.0f} Hz)")
+            signal = _onepole_highpass(signal, profile.bp_lo_hz, dst_rate)
+            if profile.bp_poles == 1:
+                signal = _onepole_lowpass(signal, profile.bp_hi_hz, dst_rate)
+            else:
+                signal = _twopole_lowpass(signal, profile.bp_hi_hz, dst_rate)
+            if profile.dc_offset != 0.0:
+                signal = [x + profile.dc_offset for x in signal]
+        elif verbose:
+            print(f"      [5/6] Bandpass color: skipped")
+
+        # --- Stage 6: Restore original level (default) and store at vintage rate ---
+        if restore_level and gain != 1.0:
+            signal = [x / gain for x in signal]
+        if verbose:
+            print(f"      [6/6] Restore level → store at {dst_rate} Hz (saves RAM; EOS pitches correctly)")
+        done.append(signal)
+
+    if channels == 2 and len(done) == 2:
+        left, right = done
+        n = min(len(left), len(right))
+        signal = [v for i in range(n) for v in (left[i], right[i])]
+    else:
+        signal = done[0]
     pcm_out = _float_to_pcm(signal)
 
     # Loop points were relative to src_rate frames; rescale to dst_rate frames.
