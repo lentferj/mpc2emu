@@ -85,6 +85,30 @@ _MAX_PRESETS_PER_BANK = 1000
 _VOICES_PER_NOTE = {'e4b': 32, 'krz': 24}
 
 
+def bank_limit_bytes(max_size_mb: float) -> int:
+    """Usable bytes in a bank of `max_size_mb`, after the safety margin.
+
+    The per-sample / per-preset / per-bank overhead constants slightly
+    *under*-count the real serialized size (E4Sa headers, word-alignment
+    padding, the mandatory trailing EMSt chunk and FORM framing), so packing
+    right up to the byte limit can spill a few KB over — and an E4B even one
+    byte past the E4XT's sample RAM will not load.
+
+    The margin used to be a flat 1 MB, which is sized for a 128 MB bank and
+    fatal for a small one: `--bank-size 1` left **one byte** usable, so nothing
+    could fit and the fit assistant looped applying reductions that could not
+    help. It is now proportional with a floor. Every default is unaffected —
+    12.5% of 8 MB is already 1 MB, and the smallest hardware limit in use is
+    64 MB.
+
+    **This is the only place the margin is computed.** `convert.py` used to
+    carry its own copy of the flat 1 MB, so the splitter and the fit assistant
+    disagreed about what fits.
+    """
+    margin = min(1024 * 1024, max(64 * 1024, int(max_size_mb * 1024 * 1024 * 0.125)))
+    return max(1, int(max_size_mb * 1024 * 1024) - margin)
+
+
 def estimate_bank_size(bank: Bank) -> int:
     """
     Estimate the serialized size of a Bank in bytes.
@@ -415,13 +439,7 @@ def split_into_banks(
           - List of output Bank objects
           - List of warning strings (oversized presets, etc.)
     """
-    # Safety margin: the per-sample / per-preset / per-bank overhead constants
-    # below slightly *under*-count the real serialized size (E4Sa headers,
-    # word-alignment padding, the mandatory trailing EMSt chunk + FORM framing),
-    # so packing right up to the byte limit can spill a few KB over — and an E4B
-    # even 1 byte past the E4XT's 128 MB sample RAM will not load.  Reserve 1 MB.
-    _SAFETY_MARGIN = 1024 * 1024
-    limit_bytes = max(1, int(max_size_mb * 1024 * 1024) - _SAFETY_MARGIN)
+    limit_bytes = bank_limit_bytes(max_size_mb)
     warnings: List[str] = []
 
     # Flatten: collect (preset, [its samples], source_bank_name) tuples

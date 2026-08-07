@@ -217,8 +217,11 @@ def fit_oversized_presets(source_banks: List[Bank], fmt: str,
       - non-interactive without --auto-fit: print the suggestions and exit
         non-zero, so a batch run never silently ships an unloadable/oversized bank.
     """
-    from writers.bank_splitter import fit_options, preset_needed_samples
-    bank_limit = max(1, int(bank_size_mb * 1024 * 1024) - 1024 * 1024)  # 1 MB safety
+    from writers.bank_splitter import (fit_options, preset_needed_samples,
+                                       bank_limit_bytes)
+    # One source of truth: this used to be a second, flat 1 MB margin, so the
+    # fit assistant and the splitter disagreed about what fits.
+    bank_limit = bank_limit_bytes(bank_size_mb)
     if max_preset_bytes and max_preset_bytes < bank_limit:
         limit_bytes = max_preset_bytes
         bound_desc = "the per-preset limit (--max-preset-size)"
