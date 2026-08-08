@@ -6378,3 +6378,52 @@ Worth recording, because both failures looked like results:
 Peak position within the sounding span needs no alignment, no window choice and
 no normalisation, and it separated the two cases immediately. **Prefer a
 measure with nothing to tune.**
+
+
+---
+
+## §CWM201 — ConvertWithMoss 20.1.0 cross-check (2026-08-08)
+
+Checkpoint moved from `80e6076e` to `8e2345fa` (28 commits).
+
+**The release contains no MPC and no E-MU work.** It adds Teenage Engineering
+OP-XY, Casio FZ and Audiomodern Soundbox, and fixes 1010music, DecentSampler,
+Fairlight, Korg, Roland MC-707, Roland S-7xx, Synclavier and Yamaha. Nothing
+in it is about the formats this project shares with it.
+
+What it was still worth reading for is **fault families**. Four were checked
+against this codebase and found already correct — recorded so they are not
+re-checked next time:
+
+| CWM fixed | ours |
+|-----------|------|
+| a preset name with `&`, `<`, `>` or a quote produced malformed XML | not applicable: `talsmpl` writes through `ElementTree`, which escapes |
+| upsampling 8-bit gave silent samples; 8→24 set UNSIGNED instead of SIGNED | `_convert_8_to_16` already treats 8-bit WAV as unsigned; a 128-centred input comes out centred on zero |
+| 32-bit float samples as input | already supported (`_WAVE_FORMAT_IEEE_FLOAT`) |
+| WAV metadata unreadable behind a large padding chunk before `data` | our RIFF walker reads a 5 KB `PAD ` chunk correctly |
+
+One found a **real bug here**. Three separate CWM writers had kept characters
+illegal in filenames (DecentSampler's DSBUNDLE folder, 1010music's preset
+folders, Audiomodern's preset and group names). Checking the same family
+locally showed `_bank_path` building the output path straight from
+`bank.name` — so `--bank-name "Rock/Pop"` wrote **zero files and still printed
+"Done"**, on both `e4b` and `krz`. Fixed in `f76e09d`.
+
+The uncomfortable part: `73da40d` had already fixed exactly this for *preset*
+names a day earlier, after the release matrix hit it in the `talsmpl` writer.
+That fix stopped at the level where the fault appeared instead of asking where
+else a name becomes a path. **When a bug turns out to be "a name used as a
+filename", the fix is to find every place that does it, not the one that
+crashed.**
+
+Two further items are relevant but not actionable:
+
+- **Roland S-7xx**: locating sample data through the FAT and the directory
+  entries rather than assuming a contiguous block, and skipping deleted
+  entries so following references do not shift. Our AKAI image reader already
+  walks the FAT, and AKAI programs reference samples **by name**, so a skipped
+  entry cannot shift anything.
+- **Continuation disks** whose names carry trailing spaces. We have the same
+  situation unsupported: one library disc's programs reference samples that
+  ship on other discs of its set (see the AKAI notes). Not a fault, but the
+  same problem exists here and CWM has now solved its half of it.
