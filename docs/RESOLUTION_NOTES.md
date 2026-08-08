@@ -16,6 +16,95 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 
 ---
 
+## §NAMEBYTE — name fields decoded as ASCII (E4B/EMU3 DONE; EIII/SF2/MPC60 open)
+
+**Status: fixed 2026-08-08 for E4B (`57a909b`) and the EMU3/ISO 9660 sites
+(`149e2b9`). Three formats still to decide, each on its own evidence.**
+
+### What was wrong
+
+`parsers/e4b_parser.py::_decode_name` used `raw.decode('ascii',
+errors='replace')`. A real E4XT writes bytes above 0x7E into the 16-byte name
+field — glyphs off its own front panel, from a character ROM that is neither
+ASCII nor ISO-8859-1 — and `errors='replace'` turned each into U+FFFD before
+the name reached the `Bank` model. Unrecoverable, and carried into every bank
+written from that parse.
+
+### The measurement
+
+Walk every local `.E4B` chunk by chunk with the parser's own `_walk_chunks`
+and inspect `body[2:18]` of each `E3S1`/`E4P1`:
+
+```python
+for tag, body in _walk_chunks(open(path, 'rb').read()):
+    if tag in (b'E3S1', b'E4P1') and len(body) >= 18:
+        hi = [b for b in body[2:18] if b > 0x7e]
+```
+
+461 files: exactly one byte value, **0xA5, 19 times**, all in one third-party
+bank, separating an articulation label from the note name (`8LDesp\xa5G1`) —
+authoring, not corruption. VinSamLib measured the same byte independently:
+413 times plus 0x7F across 131 hardware-authored banks. Low local prevalence
+is expected; nearly all 461 files are our own output.
+
+### The fix, and three details worth keeping
+
+`latin-1` on both sides, exact inverses. It preserves the **byte**, and makes
+no claim about the **glyph** — latin-1 renders 0xA5 as a yen sign and EOS's
+table is not ISO-8859-1. Displaying the right character needs that table,
+which we do not have; storing the right byte does not, and only the byte
+decides whether a written bank is correct. **Do not guess at a mapping.**
+
+1. **`errors=` is dead code on a latin-1 decode** — latin-1 maps all 256 byte
+   values and cannot fail. Keep it on the *encode*, where a codepoint above
+   0xFF from a UTF-8 source format genuinely cannot fit.
+2. **`rstrip(' ')`, not `rstrip()`.** Bare `rstrip()` strips every
+   whitespace-class codepoint, which under latin-1 includes 0xA0 (NBSP) and
+   0x85 (NEL) — real name bytes the old ASCII decode turned into U+FFFD and
+   therefore kept. It would have fixed 0xA5 while opening a hole one byte
+   away. The pad character is the space `_name16()` writes, and nothing else.
+3. **Fix both sides in one commit.** Parser-only leaves the byte alive in the
+   model and kills it at write time; VinSamLib hit the mirror image of this on
+   their side, where a latin-1 reader against an ASCII writer put the same
+   sample under two different names in one file.
+
+### The same fault one level up (both fixed in `149e2b9`)
+
+- EMU3 directory entries were **written** `encode('ascii','replace')` at four
+  sites while being **read** `decode('latin-1')` at two, a few lines away. A
+  bank name carrying the byte died on the media even with the parser fixed.
+- `_iso9660_unique_names` filtered with `str.isalnum()`, which is **True** for
+  latin-1 letters (`é`, `ü`, `µ`). Those reached the caller's bare
+  `iso_name.encode('ascii')` and raised `UnicodeEncodeError` mid-build — a
+  crash, not a corruption. Confirmed: stem `Café` → `CAF\xc9001.E4B;1` →
+  raises. ISO 9660 Level 1 identifiers are spec'd to `A-Z 0-9 _`, so
+  restricting to ASCII is the format's rule, not a workaround.
+
+### Still open — decide per format, do not blanket-replace
+
+| format | state | what would settle it |
+|--------|-------|----------------------|
+| EIII (`eiii_parser` / `eiii_writer`) | symmetric ASCII, so nothing diverges today | the same chunk-walk over the 1017-bank EIII library, which is **not on this disk**. Same E-MU lineage as E4B (the E4B sample struct *is* the Emulator III's), so the prior is strong |
+| SF2 (`sf2_parser`, 6 sites) | ASCII on read | SF2 is spec'd ASCII — this one may well be correct as it stands |
+| MPC60 (`mpc60_parser`, 3 sites) | ASCII on read | the MPC60's own character set; no corpus measured |
+
+**Deliberately not changed:** `krz_writer.py:209` encodes ASCII while
+`krz_parser.py:129` decodes latin-1 — the same shape of asymmetry, but
+scanning all **238** local `.KRZ` files with `_read_objects` found **zero**
+object names with a byte above 0x7E. Leaving the lossy-but-safe `?` rather
+than pushing an unverified byte at hardware.
+
+### Regression tests (local, `tests/` is untracked)
+
+`tests/test_e4b_parser.py`: byte survives the decode; 0xA0/0x85 are not
+stripped; full write→re-parse round trip, asserting the file holds 0xA5 and no
+`?`. `tests/test_iso_builder_props.py`: the EMU3 entry holds the byte; every
+ISO 9660 identifier is pure ASCII and a full build with a non-ASCII bank name
+and volume label completes. Each was confirmed to fail with its own half of
+the fix reverted.
+
+---
+
 ## §ISODIR — EMU3 CD image drops banks past the 16th (how to fix)
 
 **Status: guard ready to apply; multi-block wants one E4XT confirmation.**

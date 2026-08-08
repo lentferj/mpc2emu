@@ -35,6 +35,7 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 | **AIFF not decoded**, **EXS24 first velocity layer only**, **SFZ keyswitches / overlapping regions**, **XPM slice playback** | parser feature gaps |
 | ~~Non-PCM WAV format codes rejected~~ | **fixed 2026-08-02** — own RIFF walk replaces stdlib `wave`; 32-bit/64-bit float and `WAVE_FORMAT_EXTENSIBLE` now read, Ogg-in-WAV refused cleanly. Also recovered tails that `wave` silently truncated. See §WAVFMT |
 | ~~FLAC as a sample input~~ | **declined 2026-08-02** — needs a decoder dependency, and mpc2emu stays small and self-contained. No sample container mpc2emu reads embeds FLAC; folder input can be converted by the user beforehand. Do not re-raise. See §WAVFMT "FLAC" |
+| **EIII / SF2 / MPC60 name fields still decode as ASCII** | the E4B and EMU3 halves are **fixed 2026-08-08** (§NAMEBYTE) — a real E4XT writes bytes above 0x7E into a name field and `errors='replace'` destroyed them on read. The same `ascii`/`replace` pair sits in `eiii_parser`/`eiii_writer` (symmetric today, so nothing diverges), `sf2_parser` (6 sites) and `mpc60_parser` (3). EIII is the same E-MU lineage and probably wants the same fix; SF2 is spec'd ASCII and may be right as it stands. **Blocked on:** a corpus to measure each against — the 1017-bank EIII library is not on this disk. Decide per format, do not blanket-replace |
 | **Zone reducer not velocity-aware** | `--reduce-key-zones` can leave velocity holes |
 | **HDA directory block limited to 16 entries** | guard is applied — `build_hda` drops the excess with a loud `[ERROR]`. §11's "needs hardware RE to confirm the chaining convention" is stale: there is no chaining, the folder entry carries a 7-slot block list |
 | **EMU3 CD image silently keeps only the first 16 banks** | `build_iso` writes one dir-content block and `_dircon_block` slices `files[:16]`, so bank 17+ get cluster chains and file data but no directory entry — invisible and unloadable, with no warning and the console still listing them as written. Our own `build_emu_hdd` already does multi-block correctly. Reproduced 2026-08-03. See §ISODIR |
@@ -70,6 +71,32 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 | **The ~2 dB gain-dataset anomaly** | key, velocity and transposition all measured flat. Isolated to one early measurement that four later independent runs contradict. Recorded in case it recurs |
 
 ---
+
+## Name fields destroyed a byte a real E4XT wrote — FIXED for E4B + EMU3 (2026-08-08)
+
+**Status: E4B read/write and EMU3 directory entries fixed (`57a909b`,
+`149e2b9`). Open for EIII, SF2 and MPC60 — one decision each, not a blanket
+replace.** Fix strategy and the measurement: `docs/RESOLUTION_NOTES.md`
+§NAMEBYTE.
+
+`_decode_name` read the 16-byte E4B name field as ASCII with
+`errors='replace'`, so every byte above 0x7E became U+FFFD before reaching the
+`Bank` model — unrecoverable, and written into every bank produced from that
+parse. Real hardware-authored content does use those bytes: 0xA5 as a
+separator between an articulation label and a note name, 19 times in one local
+third-party bank, 413 times across a separately measured 131-bank library.
+
+The writer had to move with the reader, and two more sites one level up: EMU3
+directory entries were written ASCII and read back latin-1 a few lines away,
+and the ISO 9660 identifier sanitiser let latin-1 *letters* through to a bare
+`encode('ascii')` that raises. Reported by VinSamLib; the `rstrip()` detail
+and the ISO 9660 crash were found here.
+
+**Still open, blocked on corpora:** `eiii_parser`/`eiii_writer` (symmetric
+ASCII today — same E-MU lineage, so it probably wants the same fix, but no
+local EIII corpus to measure), `sf2_parser`, `mpc60_parser`. Deliberately not
+changed: `krz_writer`'s ASCII encode against `krz_parser`'s latin-1 decode —
+zero of 238 local `.KRZ` files carry such a byte in an object name.
 
 ## EMU3 CD image silently drops banks past the 16th (BUG, OPEN 2026-08-03)
 
