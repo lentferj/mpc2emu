@@ -249,8 +249,21 @@ _NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 
 
 def _name16(s: str) -> bytes:
-    """16-byte space-padded ASCII name."""
-    return s.encode('ascii', errors='replace')[:MAX_NAME].ljust(MAX_NAME, b' ')
+    """16-byte space-padded name, latin-1.
+
+    latin-1 and not ASCII, so this is the exact inverse of
+    e4b_parser._decode_name() -- see its docstring for why a real E4XT puts
+    bytes above 0x7E in a name field.  Encoding as ASCII here would kill the
+    byte at write time even with the parser fixed.
+
+    errors= stays, unlike on the decode side: a name reaching us from a UTF-8
+    source format (XPM, EXS24) can hold a codepoint above 0xFF, which latin-1
+    genuinely cannot represent.
+
+    Every name field in the file goes through this one helper -- sample header,
+    preset, TOC entry -- so they cannot disagree with each other.
+    """
+    return s.encode('latin-1', errors='replace')[:MAX_NAME].ljust(MAX_NAME, b' ')
 
 
 def _sample_display_name(sample: SampleData) -> str:

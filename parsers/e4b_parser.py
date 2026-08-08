@@ -134,7 +134,34 @@ _NOTE_RE = re.compile(r'_([A-G]#?)(-?\d+)$')
 # ---------------------------------------------------------------------------
 
 def _decode_name(raw: bytes) -> str:
-    return raw.decode('ascii', errors='replace').rstrip()
+    """Decode a 16-byte E4B name field.  Exact inverse of e4b_writer._name16().
+
+    **latin-1, not ASCII.**  A real E4XT puts bytes above 0x7E in this field --
+    glyphs off its own front panel.  Decoding as ASCII with errors='replace'
+    turned each one into U+FFFD, which is unrecoverable, so every bank written
+    from such a parse carried the damage.  Measured over the local corpus (461
+    E4B files, walked chunk by chunk): 0xA5 appears 19 times, used as a
+    separator between an articulation label and the note name -- an authoring
+    choice, not corruption.  A second library of 131 hardware-authored banks
+    measured independently shows the same byte 413 times, plus 0x7F, and
+    nothing else above 0x7E.
+
+    latin-1 preserves the BYTE.  It does not claim the right GLYPH: it renders
+    0xA5 as a yen sign and EOS's character table is not ISO-8859-1.  Displaying
+    the right character would need that table, which we do not have; storing
+    the right byte does not, and only the byte decides whether a bank we write
+    is correct.  Do not guess at a mapping.
+
+    No errors= argument: latin-1 maps all 256 byte values by definition and
+    cannot fail, so one here would be dead code that reads like a guard.
+
+    rstrip(' ') and not rstrip(): the pad character is the space _name16()
+    writes, and nothing else.  Bare rstrip() strips every whitespace-class
+    codepoint, which under latin-1 now includes 0xA0 (NBSP) and 0x85 (NEL) --
+    real name bytes that the old ASCII decode turned into U+FFFD and therefore
+    happened to keep.  It would fix 0xA5 while opening a hole one byte away.
+    """
+    return raw.decode('latin-1').rstrip(' ')
 
 
 def _decode_root_and_name(display_name: str) -> tuple:
