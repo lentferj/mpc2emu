@@ -84,9 +84,25 @@ decides whether a written bank is correct. **Do not guess at a mapping.**
 
 | format | state | what would settle it |
 |--------|-------|----------------------|
-| EIII (`eiii_parser` / `eiii_writer`) | symmetric ASCII, so nothing diverges today | the same chunk-walk over the 1017-bank EIII library, which is **not on this disk**. Same E-MU lineage as E4B (the E4B sample struct *is* the Emulator III's), so the prior is strong |
+| ~~EIII~~ | **CLOSED 2026-08-08: leave it ASCII** | measured after all — see below |
 | SF2 (`sf2_parser`, 6 sites) | ASCII on read | SF2 is spec'd ASCII — this one may well be correct as it stands |
 | MPC60 (`mpc60_parser`, 3 sites) | ASCII on read | the MPC60's own character set; no corpus measured |
+
+**EIII: measured and closed, against the prior.** VinSamLib had the corpus we
+did not and walked **1 019** EIII/ESI banks out of its EMU3 images — 30 935
+sample names and 19 423 preset names. Six banks hold any byte above 0x7E, and
+none of them is plausible text: the high bytes are interleaved with control
+characters throughout (`'\x83\x02l\xfe\x05\x04\xe8\x13…'`), which is what
+deleted-bank content sitting in free space looks like, not what a person types
+on a front panel.
+
+So the E-MU-lineage prior was wrong, and it was a strong one — the E4B sample
+struct *is* the Emulator III's, and 0xA5 appears 413 times in a comparable E4B
+library. Six banks in a thousand, none of them text, is not evidence of a
+charset. `eiii_writer` stays ASCII rather than pushing an unverified byte at
+hardware. **This is the argument for the per-format rule:** a blanket replace
+would have shipped a change here that a thousand real banks say nothing asks
+for.
 
 **Deliberately not changed:** `krz_writer.py:209` encodes ASCII while
 `krz_parser.py:129` decodes latin-1 — the same shape of asymmetry, but
