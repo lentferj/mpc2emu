@@ -104,15 +104,31 @@ hardware. **This is the argument for the per-format rule:** a blanket replace
 would have shipped a change here that a thousand real banks say nothing asks
 for.
 
-**Deliberately not changed, now on two disjoint corpora:**
-`krz_writer.py:209` encodes ASCII while `krz_parser.py:129` decodes latin-1 —
-the same shape of asymmetry, but scanning all **238** local `.KRZ` files with
-`_read_objects` found **zero** object names with a byte above 0x7E. VinSamLib
-then ran the same question over **472** files of its own — 16 599 objects,
-read at raw byte level out of `block[10:8+ofs]` rather than through its own
-ASCII decoder, which would have hidden exactly what it was looking for — and
-also found **zero**. Two independent libraries agreeing is better evidence
-than either alone. `krz_writer` stays ASCII.
+**Deliberately not changed — and the evidence for it was rebuilt twice
+(2026-08-09).** `krz_writer.py:209` encodes ASCII while `krz_parser.py`
+decodes latin-1, the same shape of asymmetry as the E4B name byte. The
+question is whether any real KRZ name uses one.
+
+The first answer here scanned **238 loose `.KRZ` files** and found zero.
+VinSamLib reported zero over 472 loose files of its own, and this section
+recorded that as "two disjoint corpora agreeing". **Both scans were the same
+blind spot**: nearly all real K2000 content lives inside floppy and disk
+images, and neither had opened one. VinSamLib withdrew its number and
+re-scanned including images, reporting 0x7F 4 036 times.
+
+Re-run properly here — loose files **plus** every bank inside
+`~/disk-image/*/*.img`, walking each `PRAM` header: **216 banks, 6 451
+objects, zero authored high bytes.** The 0x7F it reports does not appear at
+all locally.
+
+What the image scan *did* find was four bytes (0x9D, 0xDB) that turned out not
+to be name content: see §KRZNAME16 below. Both projects had counted the same
+artefact.
+
+So the conclusion stands but the reasoning does not transfer: **no local
+evidence a KRZ name carries a byte above 0x7E**, and `krz_writer` stays ASCII
+until someone produces a raw block dump showing one *inside* a 16-character
+name rather than past it.
 
 ### Regression tests (local, `tests/` is untracked)
 
@@ -122,6 +138,34 @@ stripped; full write→re-parse round trip, asserting the file holds 0xA5 and no
 ISO 9660 identifier is pure ASCII and a full build with a non-ASCII bank name
 and volume label completes. Each was confirmed to fail with its own half of
 the fix reverted.
+
+---
+
+## §KRZNAME16 — a full-length KRZ name picked up the bytes after it (2026-08-09)
+
+**Status: fixed.** `parsers/krz_parser.py` capped at `MAX_NAME`.
+
+A KRZ object name is at most 16 characters and NUL-terminated. A name that
+fills the field **exactly** has no room for its terminator, so
+`split(b'\x00')[0]` returned everything up to `ofs` — which is padded and
+rounded up — and the reader appended whatever followed.
+
+Found in two real banks: `ofs = 20`, name field `b'General MIDI kit\x9d\xdb'`.
+Sixteen real characters, then two bytes that belong to the block, not the name.
+
+Why it matters beyond tidiness: those two bytes were **counted as evidence of
+a character set**, here and independently in VinSamLib's corpus (it reported
+0x9D and 0xDB six times each — the same artefact at a different corpus size).
+A reader bug produced data that looked like a format finding, and the finding
+would have justified changing the writer.
+
+The general lesson, which is the one worth keeping: **a byte that appears only
+at the very end of a maximum-length field is a parsing artefact until proven
+otherwise.** Check the field's own length limit before concluding anything
+about its contents.
+
+Regression test in `tests/test_krz_roundtrip.py`, confirmed to fail with the
+cap reverted (it returns `'General MIDI kit\x9dÛ'`).
 
 ---
 

@@ -126,7 +126,16 @@ def _read_objects(data: bytes) -> Tuple[int, List[dict]]:
         objsize = -bs
         hash_ = struct.unpack_from('>H', data, after)[0]
         ofs = struct.unpack_from('>H', data, after + 4)[0]
-        name = data[after + 6:after + 4 + ofs].split(b'\0')[0].decode('latin1', 'replace')
+        # [:MAX_NAME] is load-bearing, not tidiness. A name is at most 16
+        # characters and is NUL-terminated -- but a name that fills the field
+        # exactly has no terminator, so `split(b'\0')[0]` returns everything
+        # up to `ofs`, which is padded and rounded. Real banks then read back
+        # names like 'General MIDI kit\x9d\xdb': the 16 real characters plus
+        # two bytes of whatever followed. Those trailing bytes are not name
+        # content, and they are exactly the kind of thing that later gets
+        # counted as evidence of a non-ASCII character set (they were).
+        name = (data[after + 6:after + 4 + ofs]
+                .split(b'\0')[0][:MAX_NAME].decode('latin1'))
         objs.append(dict(hash=hash_, type=_gtype(hash_), id=_gid(hash_),
                          name=name, body=after + 2 + 2 + ofs,
                          after=after, objsize=objsize))

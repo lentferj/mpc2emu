@@ -134,7 +134,7 @@ Every object is one length-prefixed block. The framing is emitted by the
 | `4:6` | 2 | `hash` | BE u16 = `(type_code << 10) + id` (`_hash()`). See the type table below. |
 | `6:8` | 2 | `size` | BE u16 — object size, patched by `end()` to `end_of_object − offset_of_size_field + 2`, where `end_of_object` is the **2-byte-aligned** end, *before* the block's 4-byte padding. So `size` is `blocksize − 4` when the object already ended on a 4-byte boundary and `blocksize − 6` when the padding added two bytes — both are the same rule. Measured over 2 260 blocks of our own output: 1 926 at −4, 334 at −6, zero exceptions. Worth stating because reading only the formula suggests −4 always, and a corpus then looks like it disagrees with the spec. |
 | `8:10` | 2 | `ofs` | BE u16 = `name_len + 3` (odd name length) or `name_len + 4` (even). This is the offset from the `ofs` field to the start of the object-specific data. |
-| `10:10+n` | n | `name` | ASCII, max 16 chars (`ascii`, `errors='replace'`). |
+| `10:10+n` | n | `name` | ASCII, **max 16 chars**, NUL-terminated. A name that fills the field exactly has no terminator, so a reader must cap at 16 rather than run to `ofs` — `ofs` is padded and rounded, and reading to it returns trailing block bytes as if they were name characters (real banks: `b'General MIDI kit\x9d\xdb'`). See RESOLUTION_NOTES §KRZNAME16; those two bytes were briefly counted as evidence of a non-ASCII character set. |
 | — | 1 or 2 | pad | null terminator + word-alignment: `\x00` (odd `n`) or `\x00\x00` (even `n`). |
 | — | … | data | type-specific object body (§3–§4) |
 
