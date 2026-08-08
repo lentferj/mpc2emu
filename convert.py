@@ -83,7 +83,7 @@ from writers.bank_splitter   import (split_into_banks, print_split_summary,
 from processors.resampler    import resample_bank, resample_to_rate, PROFILES
 from processors.zone_reducer import reduce_bank
 from info_cmd                import run_info
-from models.common           import Bank
+from models.common           import Bank, safe_filename
 
 
 def collect_input_files(input_path: Path) -> List[Path]:
@@ -999,9 +999,17 @@ def main():
     def _bank_path(i: int, bank) -> str:
         # --bank-start adds the EOS B.NNN- volume prefix (B.100-NAME_01.E4B, …);
         # without it, just NAME.E4B.
+        #
+        # The bank name reaches here from --bank-name or from a source file, so
+        # it may contain anything the user typed. Unsanitised, a '/' in it is a
+        # path separator: `--bank-name "Rock/Pop"` wrote **zero files** and
+        # still printed "Done", because each bank failed individually on a
+        # directory nobody created. The name inside the bank is untouched —
+        # only the filename is made safe.
+        stem = safe_filename(bank.name, 'BANK')
         if args.bank_start is not None:
-            return str(out_dir / f"B.{args.bank_start + i:03d}-{bank.name}{ext}")
-        return str(out_dir / f"{bank.name}{ext}")
+            return str(out_dir / f"B.{args.bank_start + i:03d}-{stem}{ext}")
+        return str(out_dir / f"{stem}{ext}")
 
     # Pre-flight: don't clobber existing bank/ISO/HDA files unless --overwrite.
     planned = [_bank_path(i, b) for i, b in enumerate(output_banks)]
