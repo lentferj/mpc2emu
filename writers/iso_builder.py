@@ -264,7 +264,7 @@ def _folder_entry(dir_name: str, dircon_blocks, dtype: int = EMU3_DTYPE_1) -> by
                    in block_list[7] (unused slots = 0xFFFF / -1).
     dtype: 0x40 = user folder, 0x80 = HDD system "Default Folder".
     """
-    name = dir_name.encode('ascii', errors='replace')[:16].ljust(16, b' ')
+    name = dir_name.encode('latin-1', errors='replace')[:16].ljust(16, b' ')
     if isinstance(dircon_blocks, int):
         dircon_blocks = [dircon_blocks]
     block_list = (list(dircon_blocks)[:EMU3_BLOCKS_PER_DIR]
@@ -316,7 +316,7 @@ def _dircon_block(files: List[dict]) -> bytes:
     block = bytearray(BSIZE)
     for i, f in enumerate(files[:EMU3_ENTRIES_PER_BLOCK]):
         off  = i * 32
-        name = f['name'].encode('ascii', errors='replace')[:16].ljust(16, b' ')
+        name = f['name'].encode('latin-1', errors='replace')[:16].ljust(16, b' ')
         block[off:off+16] = name
         block[off+16] = 0x00                  # unknown
         block[off+17] = f.get('slot', i) & 0xFF   # 2-digit folder slot / file id
@@ -372,12 +372,22 @@ def _iso9660_unique_names(filenames: List[str]) -> List[str]:
 
     The extension is taken from each source file (``.KRZ`` for K2000 banks,
     ``.E4B`` for E4XT banks) so the K2000/E4XT recognises the bank type — it must
-    not be hardcoded."""
+    not be hardcoded.
+
+    The ``isascii()`` in the sanitiser is load-bearing, not belt-and-braces:
+    ``str.isalnum()`` is **True** for latin-1 letters (``é``, ``ü``, ``µ``), so
+    without it those pass straight through to the caller's
+    ``iso_name.encode('ascii')`` — which has no ``errors=`` — and raise
+    ``UnicodeEncodeError`` mid-build.  ISO 9660 Level 1 identifiers are spec'd
+    to A-Z 0-9 _ anyway, so restricting to ASCII here is the format's rule and
+    not a workaround for the encode."""
     names = []
     for i, fn in enumerate(filenames):
         ext = (Path(fn).suffix.lstrip('.').upper() or 'E4B')[:3]
+        ext = ''.join(c if (c.isalnum() and c.isascii()) else '_' for c in ext)
         stem = Path(fn).stem.upper()
-        stem = ''.join(c if c.isalnum() or c == '_' else '_' for c in stem)
+        stem = ''.join(c if (c.isalnum() and c.isascii()) or c == '_' else '_'
+                       for c in stem)
         prefix = stem[:5].rstrip('_') or 'BANK'
         names.append(f"{prefix}{i+1:03d}.{ext};1")
     return names
@@ -490,7 +500,11 @@ def build_iso_9660(e4b_files: List[str], output_iso: str,
 
     SEC  = 2048
     ts   = _time.gmtime()
-    label = volume_label[:32].upper().encode('ascii')
+    # errors='replace': the label reaches here from --iso-label or from a bank
+    # name, either of which can hold a non-ASCII character.  A PVD volume
+    # identifier is ASCII by spec, so substituting is right -- raising
+    # UnicodeEncodeError halfway through a build is not.
+    label = volume_label[:32].upper().encode('ascii', errors='replace')
 
     iso_names = _iso9660_unique_names([Path(f).name for f in e4b_files])
 
@@ -905,7 +919,7 @@ def emu_hdd_append(image: str, e4b_files: List[str], folder: str = None,
                 if next_free_dircon >= dircon_start + dircon_blocks:
                     raise ValueError("dircon area full — cannot allocate a folder block")
                 newblk = next_free_dircon; next_free_dircon += 1
-                meta[free_root:free_root+16] = folder.encode('ascii','replace')[:16].ljust(16,b' ')
+                meta[free_root:free_root+16] = folder.encode('latin-1','replace')[:16].ljust(16,b' ')
                 meta[free_root+16] = 0x00
                 meta[free_root+17] = EMU3_DTYPE_1     # user folder
                 struct.pack_into('<7h', meta, free_root+18, newblk, -1,-1,-1,-1,-1,-1)
@@ -976,7 +990,7 @@ def emu_hdd_append(image: str, e4b_files: List[str], folder: str = None,
                                  f"({EMU3_BANKS_PER_FOLDER} banks max)")
             used_slots.add(slot)
             n_c, blks, brem = _alloc(size, clust_sz)
-            meta[eo:eo+16] = name.encode('ascii','replace')[:16].ljust(16,b' ')
+            meta[eo:eo+16] = name.encode('latin-1','replace')[:16].ljust(16,b' ')
             meta[eo+16] = 0x00
             meta[eo+17] = slot & 0xFF
             struct.pack_into('<H', meta, eo+18, free[0])
