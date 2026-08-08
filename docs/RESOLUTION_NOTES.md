@@ -104,11 +104,15 @@ hardware. **This is the argument for the per-format rule:** a blanket replace
 would have shipped a change here that a thousand real banks say nothing asks
 for.
 
-**Deliberately not changed:** `krz_writer.py:209` encodes ASCII while
-`krz_parser.py:129` decodes latin-1 — the same shape of asymmetry, but
-scanning all **238** local `.KRZ` files with `_read_objects` found **zero**
-object names with a byte above 0x7E. Leaving the lossy-but-safe `?` rather
-than pushing an unverified byte at hardware.
+**Deliberately not changed, now on two disjoint corpora:**
+`krz_writer.py:209` encodes ASCII while `krz_parser.py:129` decodes latin-1 —
+the same shape of asymmetry, but scanning all **238** local `.KRZ` files with
+`_read_objects` found **zero** object names with a byte above 0x7E. VinSamLib
+then ran the same question over **472** files of its own — 16 599 objects,
+read at raw byte level out of `block[10:8+ofs]` rather than through its own
+ASCII decoder, which would have hidden exactly what it was looking for — and
+also found **zero**. Two independent libraries agreeing is better evidence
+than either alone. `krz_writer` stays ASCII.
 
 ### Regression tests (local, `tests/` is untracked)
 
