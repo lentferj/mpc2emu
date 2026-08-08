@@ -170,6 +170,17 @@ ever populates the **primary** layer slot; the secondary slot is always
 layering within a single preset — out of scope here since mpc2emu's own
 `VoiceLayer`-per-preset-link model already covers multi-layer presets.
 
+**A consequence worth stating, because it cost a silent data loss:** since
+the key map holds one index per key, **two zones cannot share a key inside
+one preset**. E4B and KRZ have no such rule — their engines stack overlapping
+zones in a single layer — so a bank that converts perfectly to those formats
+can be unrepresentable here. `eiii_writer._split_key_overlaps` spreads such a
+voice across the linked-preset chain instead, one layer per non-overlapping
+subset. Before that existed, the later zone simply won every contested key
+and any zone left with none was dropped without a warning: a folder of 13
+same-range samples wrote 13 samples and **one** zone, which no sample-count
+check can detect.
+
 ### Zone (48 bytes)
 
 ```
