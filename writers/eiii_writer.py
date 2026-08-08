@@ -51,6 +51,7 @@ All multi-byte values are little-endian (EIII/ESI, unlike E4B/KRZ, is not
 68k-derived). Sample positions are byte offsets, not frame indices.
 """
 
+import copy
 import math
 import struct
 from dataclasses import dataclass
@@ -710,6 +711,55 @@ def _unique_disk_name(name: str, used: set) -> str:
     return candidate
 
 
+def _split_key_overlaps(voice: VoiceLayer) -> List[VoiceLayer]:
+    """Split one VoiceLayer into layers whose zones do not overlap in key.
+
+    An EIII preset maps each of its 88 keys to exactly ONE note zone, so two
+    zones covering the same key cannot both live in one preset. `_create_preset`
+    resolves that the way the sampler's own panel does -- later wins -- and a
+    zone that loses every key is dropped.
+
+    That is correct for a partial overlap at a zone boundary. It is silent
+    destruction when a whole voice shares one key range: a folder of 13 WAVs
+    whose filenames carry no note information becomes 13 zones all spanning the
+    keyboard, of which **twelve vanish and no warning is printed**. The bank
+    still contains all 13 samples, so a sample-count check cannot see it
+    either. E4B and KRZ take the identical Bank and keep every zone, because
+    their engines allow overlapping zones in one layer.
+
+    So instead of dropping, spread the collisions across the linked-preset
+    chain this writer already uses for velocity layers: first-fit, preserving
+    zone order, so a voice with no overlaps produces exactly one layer and
+    byte-identical output to before.
+
+    Reported by the sibling VinSamLib project, 2026-08-08.
+    """
+    layers: List[List[ZoneMapping]] = []
+    spans: List[List[Tuple[int, int]]] = []
+    for zone in voice.zones:
+        lo, hi = zone.lo_key, zone.hi_key
+        for i, taken in enumerate(spans):
+            if all(hi < t_lo or lo > t_hi for t_lo, t_hi in taken):
+                layers[i].append(zone)
+                taken.append((lo, hi))
+                break
+        else:
+            layers.append([zone])
+            spans.append([(lo, hi)])
+
+    if len(layers) <= 1:
+        return [voice]
+
+    out: List[VoiceLayer] = []
+    for zones in layers:
+        # copy(voice) then replace the zones: every non-zone attribute of the
+        # layer (filter, envelopes, velocity extent) must survive the split.
+        clone = copy.copy(voice)
+        clone.zones = zones
+        out.append(clone)
+    return out
+
+
 def _preset_name(preset_name: str, layer_number: int) -> str:
     if layer_number == 0:
         return preset_name
@@ -776,8 +826,20 @@ def write_eiii(bank: Bank, output_path: str, variant: str = 'e3x') -> None:
     hit_limit = False
     for preset in bank.presets:
         first = len(preset_bodies)
-        multi = len(preset.voices) > 1
-        for i, voice in enumerate(preset.voices):
+        # A voice whose zones overlap in key cannot fit one EIII preset; it
+        # becomes several linked layers rather than losing zones silently.
+        # See _split_key_overlaps.
+        voices: List[VoiceLayer] = []
+        for voice in preset.voices:
+            split = _split_key_overlaps(voice)
+            if len(split) > 1:
+                print(f"  [WARN] preset '{preset.name}': {len(voice.zones)} zones "
+                      f"overlap on the same keys and an EIII preset maps each key "
+                      f"to one zone — split across {len(split)} linked layers "
+                      f"(they play together)")
+            voices.extend(split)
+        multi = len(voices) > 1
+        for i, voice in enumerate(voices):
             if len(preset_bodies) >= bank_format.max_presets:
                 print(f"  [WARN] bank exceeds {bank_format.max_presets}-preset "
                       f"{bank_format.device_name} limit, '{preset.name}' voice "
@@ -788,8 +850,8 @@ def write_eiii(bank: Bank, output_path: str, variant: str = 'e3x') -> None:
             body = _create_preset(name, voice, sample_info_by_name, bank_format)
             if body is not None:
                 preset_bodies.append(body)
-        n_zones = sum(len(v.zones) for v in preset.voices)
-        print(f"  Preset '{preset.name}': {len(preset.voices)} voice(s) "
+        n_zones = sum(len(v.zones) for v in voices)
+        print(f"  Preset '{preset.name}': {len(voices)} voice(s) "
               f"-> {len(preset_bodies) - first} EIII preset(s), {n_zones} zone(s)")
         groups.append((first, len(preset_bodies)))
         if hit_limit:
