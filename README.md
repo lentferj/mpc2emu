@@ -32,8 +32,9 @@ or untested output could overwrite or corrupt data, or be rejected by hardware.
 Always test images on a ZuluSCSI / SCSI2SD / emulator **before** connecting
 irreplaceable equipment.
 
-**Eight fixed defects produced files that are wrong and do not look it** —
-velocity-layered SFZ and WAV folders written to E4B, velocity-layered WAV
+**Nine fixed defects produced files that are wrong and do not look it** —
+anything converted FROM an E4B with a partial sustain, velocity-layered SFZ
+and WAV folders written to E4B, velocity-layered WAV
 folders, EIII banks from any many-zones-per-layer source,
 stereo sources through the vintage resample profiles, MPC-sourced banks, EMU3
 CD images holding more than 16 banks, multisample `.KRZ` banks, and names
@@ -1105,6 +1106,22 @@ already did to files you *have*.
 
 **Newest first** — if you last read this section on a given date, everything
 above that date's entry is new to you.
+
+### If you converted **from** an E4B before 2026-08-09, the sustain came out far too loud — reconvert
+
+The E4XT's amp-envelope sustain byte is dB-law, measured on hardware in July.
+The **writer** was corrected then; the **reader** was not, so it kept
+interpreting that byte linearly. A sustain the E4XT plays at 0.5% amplitude
+was handed to the KRZ, EIII and TAL-Sampler writers as 50%.
+
+Affects any conversion whose *source* was an `.e4b` and whose presets use a
+partial sustain — sustain at exactly 0% or 100% is unaffected, since those are
+the two points where the two laws agree. Real banks here read ~0.8 before and
+~0.13 after.
+
+E4B → E4B round trips were wrong in the same way, and the output looks
+entirely normal: the bank plays, every sample and zone is present, and only
+the sustained portion of each note is at the wrong level.
 
 ### If you built E4B banks from velocity-layered SFZ (or WAV folders) before 2026-08-09, rebuild them
 
