@@ -6720,3 +6720,28 @@ parser. That line is gone; the size filter is what stops it recurring.
 **Nothing is now marked "no fixture".** The remaining honesty about coverage
 is elsewhere: `.sf2` and `.exs` are synthesised, and axis C does not cross the
 sub-options of the flags it drives.
+
+
+## KRZ keymap: reporting the up-pitch ceiling clamp
+
+Companion to the TODO of the same name.
+
+**How to fix:** the mechanism is already in place — `_build_keymap_entries`
+now returns a `lost_zones` list that `write_krz` renders into one summary.
+Add a second category to it for ceiling-clamped zones rather than a second
+warning: one message, two reasons, so the output does not grow a warning per
+defect class.
+
+**Measure first.** The low-key warning shipped on 2026-08-09 in a form that
+fired on nearly every bank, because clipping the bottom off a catch-all zone
+is the normal shape of a multisample, not a defect. A code review caught it on
+two of our own test banks. Before reporting ceiling clamps, count over the
+corpus how many zones are *entirely* lost (`ceiling < lo_key`) versus merely
+clipped, and report only the first — the same distinction that made the
+low-key warning correct.
+
+**Open question for Jan:** when a zone IS entirely lost to the ceiling, is
+dropping it right at all? `_compute_max_pitch` exists because the K2000
+cannot up-pitch a sample indefinitely; the alternative is to keep the zone and
+let it play flat above the ceiling. That is a hardware-audible judgement call,
+not a code decision.

@@ -2922,3 +2922,37 @@ shifts the **constant**, not the 9.78 exponent.
   values to confirm the exponent before refitting.
 - When done, **drop the KRZ-only `_KRZ_RELEASE_FACTOR`** (the global fix
   subsumes it). See `docs/RESOLUTION_NOTES.md` §"XPM release-time recalibration".
+
+---
+
+## KRZ keymap: `base_pitch` is threaded but never used for entry placement
+
+**Status:** open, dormant — no wrong output today.
+
+`_build_keymap_entries` takes `base_pitch`, and `_write_keymap_object` writes
+it into the KKeymap header, but entry placement is hardcoded `key - 12`
+(`FIRST_MAPPABLE_KEY`). `write_krz` sets `base_pitch = 0`, so the two agree and
+nothing is wrong. Set it non-zero and the header and the entry table disagree:
+every zone lands `base_pitch/100` semitones off.
+
+Per `docs/KRZ_FORMAT.md`, `note = 12 + round((basePitch + i·centsPerEntry)/100)`.
+A `basePitch` of −1200 would map the 128 entries onto keys 0–127 and remove the
+key-12 floor entirely, which is also why the floor is a *writer default*, not a
+hardware limit — the dropped-zone warning is worded accordingly.
+
+**Blocked on:** nothing in code; wants a K2000R confirmation that a non-zero
+basePitch keymap loads and sounds where intended before we rely on it.
+
+## KRZ keymap: the up-pitch ceiling clamp drops keys silently
+
+**Status:** open — same class as the low-key loss fixed 2026-08-09.
+
+`_build_keymap_entries` clamps `hi_key = min(hi_key, ceiling)` from
+`_compute_max_pitch`. When `ceiling < lo_key` the whole zone vanishes; when it
+lands mid-zone the top of the zone is discarded. Neither says anything. Reach
+is larger than the low-key case: a 22 kHz sample rooted at key 36 loses
+everything above key ~49.
+
+**Blocked on:** nothing — but it needs a corpus measurement first to find how
+often it fires and whether the surviving keymap still covers the range, so the
+report does not become the noise the first low-key warning was.

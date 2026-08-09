@@ -117,6 +117,11 @@ KRZ_SOFTWARE_VERSION = 353   # K2000 firmware v3.53 (KHeader.rest[2])
 # method 0x13 (per-entry tuning+sampleID+subSample) is what the K2000 itself writes
 # when it saves a keymap (confirmed against a hardware-edited save).
 KEYMAP_METHOD = 0x0013
+#: The K2000 sounds keymap entry `i` at key `i + 12` (HW-confirmed
+#: 2026-08-02). With our fixed basePitch of 0 that puts the lowest
+#: addressable key at 12; a non-zero basePitch would move it (see TODO.md).
+FIRST_MAPPABLE_KEY = 12
+
 KEYMAP_ENTRY_SIZE = 5  # Method2Size(0x13) = 2+2+1
 
 NUM_KEYS = 128          # K2000 keyboard range
@@ -406,6 +411,7 @@ def _build_keymap_entries(voice: VoiceLayer,
     velocity layers our parsers model as separate voices) coexist.
     """
     entries = bytearray(NUM_KEYS * KEYMAP_ENTRY_SIZE)
+    lost_zones: list = []   # zones no part of which can be placed (see below)
     for zone in voice.zones:
         sid = sample_id_map.get(zone.sample_name, 0)
         if sid == 0:
@@ -441,6 +447,16 @@ def _build_keymap_entries(voice: VoiceLayer,
         if sample is not None:
             ceiling = _compute_max_pitch(sample.sample_rate, r_zone) // 100
             hi_key = min(hi_key, ceiling)
+
+        # A zone is only worth reporting when NONE of it survives. Clipping
+        # the bottom off a zone is the normal shape of a multisample: parsers
+        # and _coverage_remap both extend the lowest zone down to key 0 as a
+        # catch-all, and that zone still sounds from key 12 up -- nothing was
+        # lost. Warning on those fired on nearly every bank, including two
+        # test banks where no sample disappeared, which is how a warning
+        # teaches people to ignore it.
+        if hi_key < FIRST_MAPPABLE_KEY and hi_key >= zone.lo_key:
+            lost_zones.append((zone.sample_name, zone.lo_key, hi_key))
 
         for key in range(zone.lo_key, hi_key + 1):
             # The K2000 sounds entry `i` at key `i + 12`, so a zone that must
@@ -484,13 +500,13 @@ def _build_keymap_entries(voice: VoiceLayer,
         elif carry is not None:
             entries[off:off + ES] = carry
 
-    return bytes(entries), KEYMAP_METHOD, KEYMAP_ENTRY_SIZE, 0
+    return bytes(entries), KEYMAP_METHOD, KEYMAP_ENTRY_SIZE, 0, lost_zones
 
 
 def _write_keymap_object(f, name: str, voice: VoiceLayer, obj_id: int,
                           sample_id_map: dict, samples_by_name: dict,
-                          base_pitch: int) -> None:
-    entries, method, entry_size, header_sid = _build_keymap_entries(
+                          base_pitch: int) -> list:
+    entries, method, entry_size, header_sid, lost = _build_keymap_entries(
         voice, sample_id_map, samples_by_name, base_pitch)
 
     bw = _BlockWriter(f, _hash(T_KEYMAP, obj_id))
@@ -512,6 +528,7 @@ def _write_keymap_object(f, name: str, voice: VoiceLayer, obj_id: int,
 
     f.write(entries)
     bw.end()
+    return lost
 
 
 # ---------------------------------------------------------------------------
@@ -1181,6 +1198,7 @@ def _voices_stacked(voices) -> bool:
 
 def write_krz(bank: Bank, output_path: str) -> None:
     """Serialize a Bank to a Kurzweil .KRZ file."""
+    lost_zones: list = []
     print(f"Writing KRZ: {output_path}")
     print(f"  {len(bank.presets)} preset(s), {len(bank.samples)} sample(s)")
 
@@ -1301,8 +1319,10 @@ def write_krz(bank: Bank, output_path: str) -> None:
         # --- Keymap objects (one per voice) ---
         for pi, preset in enumerate(bank.presets):
             for voice, kid in preset_keymaps[pi]:
-                _write_keymap_object(f, preset.name, voice, kid,
-                                     sample_id_map, samples_by_name, base_pitch)
+                lost_zones.extend(
+                    (preset.name, *z) for z in _write_keymap_object(
+                        f, preset.name, voice, kid,
+                        sample_id_map, samples_by_name, base_pitch))
 
         # --- Program objects (one layer per voice) ---
         for pi, preset in enumerate(bank.presets):
@@ -1329,20 +1349,38 @@ def write_krz(bank: Bank, output_path: str) -> None:
             # thing in one pass.
             data = _interleaved_to_planar(sample.data) \
                 if getattr(sample, 'channels', 1) >= 2 else sample.data
-            # array.byteswap flips the bytes inside each 2-byte element in C.
-            # This was a per-2-byte Python loop and it dominated the whole
-            # conversion: profiling a 43 MB source, 7.87 s of 7.90 s total sat
-            # in this function's own body. Measured on that data volume, the
-            # loop takes 8.14 s and this takes 0.11 s for byte-identical
-            # output. krz_parser has always done it this way (`_extract_pcm`);
-            # only the write path still had the loop, reintroduced when this
-            # block was rewritten for stereo.
+            # array.byteswap flips the bytes inside each 2-byte element in
+            # C. This was a per-2-byte Python loop and it dominated the whole
+            # conversion: on a 43 MB source the loop cost 3.55 s against
+            # 0.09 s here (~39x), for identical output on every buffer of even
+            # length -- which, measured over the corpus, is all 1504 of them.
+            # krz_parser has always done it this way (`_extract_pcm`); only
+            # the write path still had the loop, reintroduced when this block
+            # was rewritten for stereo.
+            #
+            # A ragged final byte is DROPPED, not written. word_offsets above
+            # advances by len(data)//2 words, so writing that byte pushed every
+            # later sample's declared start one byte out and would have read
+            # the rest of the bank byte-shifted. The old loop wrote a 0x00
+            # there and desynced identically; dropping it is the fix, not a
+            # regression. No corpus sample has an odd length -- 16-bit PCM
+            # cannot -- so this path is a guard, not a behaviour change.
+            n = len(data) // 2 * 2
             a = array.array('h')
-            a.frombytes(data[:len(data) // 2 * 2])
+            a.frombytes(memoryview(data)[:n])   # memoryview: no extra copy
             a.byteswap()
-            f.write(a.tobytes())
-            if len(data) % 2:
-                f.write(data[-1:])          # odd trailing byte, kept as-is
+            a.tofile(f)                         # tofile: no .tobytes() copy
 
         total = f.tell()
         print(f"  Written: {output_path} ({total/1024/1024:.2f} MB)")
+    if lost_zones:
+        print(f"  [WARN] {len(lost_zones)} zone(s) lie entirely below key "
+              f"{FIRST_MAPPABLE_KEY} and were dropped -- those samples are not "
+              f"in the bank at all:")
+        for pname, sname, lo, hi in lost_zones[:8]:
+            print(f"           '{pname}': '{sname}' keys {lo}-{hi}")
+        if len(lost_zones) > 8:
+            print(f"           ... and {len(lost_zones) - 8} more")
+        print(f"         A keymap entry sounds at key entry+{FIRST_MAPPABLE_KEY} "
+              f"with the basePitch of 0 this writer emits, so key "
+              f"{FIRST_MAPPABLE_KEY} is the lowest it can address.")
