@@ -6698,8 +6698,25 @@ The matrix picks its GIG **by rule** — the smallest file carrying at least 5
 samples and 5 zones — rather than by name, so the cell does not depend on one
 library staying where it is, and no commercial filename enters a tracked file.
 
-### Still not covered
+### MPC60 closed too, the same day (2026-08-09)
 
-`.set` and MPC60 `.img`: all 10 local SETs are 720K-truncated, the parser
-correctly refuses them, and truncation is not recoverable. Those need one
-intact file.
+`.set` and `.img (MPC60)` were the last two declared gaps, and for the same
+reason as GIG: every local SET was a **720K-truncated** copy that the parser
+correctly refuses, so the intact path had never run. Two archives of intact
+**800K** disks (819 200 bytes exactly) closed it:
+
+| | |
+|---|---|
+| disks parsed | **34 / 34** |
+| totals | 34 presets, 664 samples, 459+205 zones, 40 kHz throughout |
+| end to end | 4 disks × 4 targets, key coverage preserved |
+
+The fixture filters on the 819 200-byte size on purpose. Emptying `NO_FIXTURE`
+re-activated a legacy line that pointed `.img (MPC60)` at the old truncated
+copies and silently overwrote the intact fixture — four green cells became
+four red ones, and the cause was a fixture-selection line rather than any
+parser. That line is gone; the size filter is what stops it recurring.
+
+**Nothing is now marked "no fixture".** The remaining honesty about coverage
+is elsewhere: `.sf2` and `.exs` are synthesised, and axis C does not cross the
+sub-options of the flags it drives.

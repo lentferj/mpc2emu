@@ -29,9 +29,18 @@ each axis:
 
 | axis | what it answers | cells |
 |------|-----------------|-------|
-| **A** input × output | does every source format reach every target format at all | 64 |
+| **A** input × output | does every source format reach every target format at all | 72 |
 | **B** output × medium | bank file, `--iso`, `--hda`, `--floppy`, `--add-to` | 14 |
 | **C** processors | each flag on one representative path, plus the pairs known to interact | 30 |
+
+**MPC60 is covered at last, and the gap was the corpus, not the code.** Every
+local `.SET` was a 720K-truncated copy that the parser correctly refuses, so
+both the `.set` and `.img (MPC60)` rows had sat empty since the matrix was
+written. 34 intact **800K** disks (819 200 bytes) turned up in two archives;
+all 34 parse — 34 presets, 664 samples, 40 kHz throughout — and four of them
+convert to all four targets with key coverage preserved. The fixture filters
+on the 819 200-byte size, because mixing a truncated copy back in would turn a
+declared gap into four red cells.
 
 **GIG is real, and chosen by rule.** 146 GigaSampler files live in
 `~/linuxsampler`; the fixture is the smallest one carrying at least 5 samples
