@@ -468,6 +468,36 @@ def env_sustain_to_byte(frac: float) -> int:
     return env_level_to_byte(pct)
 
 
+def env_sustain_from_byte(byte: int) -> float:
+    """Amp-envelope sustain byte → the LINEAR amplitude fraction it plays at.
+
+    The exact inverse of :func:`env_sustain_to_byte`, and it has to exist:
+    that function pre-compensates for the E4XT's dB-law sustain (§E4BLEVEL,
+    hardware-measured), so reading the byte back with the LINEAR
+    `env_level_to_byte` inverse is not an inverse at all. It over-reads badly
+    -- a bank written at 12.5% amplitude read back as 79.5%.
+
+    That mattered beyond round-tripping: the byte means the same thing in a
+    third-party bank, so every E4B read reported sustain far too high, and
+    every E4B->KRZ/EIII/TAL conversion carried it.
+
+    The filter envelope is NOT dB-law -- the writer uses the linear
+    `env_level_to_byte` for it -- so only the amp envelope inverts through
+    here.
+    """
+    byte = max(0, min(127, int(byte)))
+    if byte <= 0:
+        return 0.0
+    if byte >= env_level_to_byte(100.0):
+        return 1.0
+    # env_byte_to_level returns a FRACTION (0..1) while env_sustain_to_byte's
+    # `pct` is a percentage (0..100) -- the two helpers do not share units, and
+    # forgetting that is what made the first version of this return 0.0.
+    pct = env_byte_to_level(byte) * 100.0
+    db = ENV_LEVEL_DB_INTERCEPT + ENV_LEVEL_DB_SLOPE * pct
+    return max(0.0, min(1.0, 10 ** (db / 20.0)))
+
+
 # ── Signed mod-cord amount codec (±1.0 <-> signed byte stored unsigned) ─────
 # CR-13/CR-18: was inlined ~5× across the E4B writer/parser.
 def cord_amount_to_byte(amount: float) -> int:

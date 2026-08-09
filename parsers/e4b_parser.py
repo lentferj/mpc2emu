@@ -37,6 +37,7 @@ import re
 import struct
 from pathlib import Path
 from models.common import (Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
+                           env_sustain_from_byte,
                            LoopType, Envelope, lfo_rate_byte_to_hz,
                            env_rate_to_seconds, env_byte_to_level,
                            cord_byte_to_amount,
@@ -527,7 +528,13 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     env_attack  = _fenv_rate_inv(pzt[0]) + _stage2_seconds(pzt[2])
     env_decay   = _fenv_rate_inv(pzt[4]) + _stage2_seconds(pzt[6])
     env_release = _fenv_rate_inv(pzt[8]) + _stage2_seconds(pzt[10])
-    env_sustain = max(0.0, min(1.0, _fenv_level_inv(pzt[7])))
+    # The amp-envelope sustain byte is dB-law on hardware (§E4BLEVEL), and
+    # e4b_writer pre-compensates for that with env_sustain_to_byte. Reading it
+    # back through the LINEAR level inverse was not an inverse: a bank written
+    # at 12.5% amplitude read back as 79.5%. That is not only a round-trip
+    # fault -- the byte means the same in a third-party bank, so every E4B read
+    # over-reported sustain and every E4B->KRZ/EIII/TAL conversion carried it.
+    env_sustain = max(0.0, min(1.0, env_sustain_from_byte(pzt[7])))
 
     # Depth/sign from the cord amount (0 when the FilterEnv→Filter cord is 0).
     filter_env_amount = cord_byte_to_amount(cord_amt)
