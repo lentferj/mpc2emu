@@ -32,11 +32,13 @@ or untested output could overwrite or corrupt data, or be rejected by hardware.
 Always test images on a ZuluSCSI / SCSI2SD / emulator **before** connecting
 irreplaceable equipment.
 
-**Three fixed defects produced files that are wrong and do not look it** —
-MPC-sourced banks, EMU3 CD images holding more than 16 banks, and multisample
-`.KRZ` banks. All three are fixed, none can be repaired in place, and nothing
-warns you about a file you already have: see [Fixed defects — check what you
-built earlier](#fixed-defects--check-what-you-built-earlier).
+**Seven fixed defects produced files that are wrong and do not look it** —
+velocity-layered WAV folders, EIII banks from any many-zones-per-layer source,
+stereo sources through the vintage resample profiles, MPC-sourced banks, EMU3
+CD images holding more than 16 banks, multisample `.KRZ` banks, and names
+carrying a `?` where a symbol belonged. All are fixed, none can be repaired in
+place, and nothing warns you about a file you already have: see [Fixed defects
+— check what you built earlier](#fixed-defects--check-what-you-built-earlier).
 
 ---
 
@@ -1102,6 +1104,68 @@ already did to files you *have*.
 
 **Newest first** — if you last read this section on a given date, everything
 above that date's entry is new to you.
+
+### If you converted a WAV folder that layers by velocity before 2026-08-09, rebuild it
+
+A folder whose files name a velocity — `Piano-C3-v40`, `Piano-C3-v90`, or the
+dynamics `_pp` / `_ff` — was mapped onto **adjacent keys instead of stacked
+layers**. Nothing read velocity, so two layers of one note looked exactly like
+two samples that had both defaulted to the same root, and the spread that
+exists to save a drum kit applied to them instead.
+
+The result plays: pressing C#3 sounds the C3 sample, the velocity layering is
+gone, and every sample is present and correctly named, so nothing looks wrong.
+Four files gave `C3-v40` at keys 0–60, `C3-v90` at 61–62, `E3-v40` at 63–64,
+`E3-v90` at 65–127.
+
+Applies to `--from-samples` and any folder input. Drum kits and other folders
+that name no velocity were always handled correctly and are unaffected.
+
+### If you built EIII banks from a WAV folder or any many-zones-per-layer source before 2026-08-08, rebuild them
+
+An EIII preset maps each of its 88 keys to exactly one zone. Where two zones
+covered the same key, the later one won and any zone left holding no keys was
+**dropped without a warning**. A folder of 13 WAVs sharing a key range wrote
+**13 samples and one zone**: twelve samples sitting in the file, correctly
+named, that can never sound.
+
+A sample-count check cannot see this — every sample is there. E4B and KRZ take
+the identical input and keep all 13, because their engines allow overlapping
+zones in one layer, so a bank that converted fine to those formats can still
+be wrong as `.E3X`/`.ESI`. Current versions spread such a voice across the
+linked-preset chain and say so.
+
+### If you used `--resample emulator2` / `--resample emax1` on stereo sources before 2026-08-08, rebuild those banks
+
+The vintage resample profiles ran the whole chain — filters, decimation,
+quantisation — over the **interleaved** buffer, whose consecutive samples
+alternate left, right, left, right. The two channels were filtered into each
+other: a stereo pair with digital silence on the right came back with the
+right channel at 16542 against the left's 16590. Very nearly mono, and it
+sounds like a normal bank.
+
+The same mistake left stereo PCM a half-frame long, which for E4B misaligned
+every chunk after it — a 77-sample bank read back as **1 sample with 77
+orphaned zones**. That half is detectable: if a bank reads back with far fewer
+samples than you put in, it is this. The channel smearing is not detectable
+and affects KRZ and EIII banks too, which kept every sample and are wrong
+anyway.
+
+Mono sources are unaffected, and `--resample` to a plain rate (`resample_to_rate`)
+always split the channels correctly.
+
+### If names in your converted banks contain `?` where a symbol should be, rebuild them (before 2026-08-08)
+
+Three name paths encoded ASCII and replaced anything else with `?`: the E4B
+name field, EMU3 directory entries on `--iso` / `--hda` images, and — reading
+rather than writing — a KRZ name that exactly filled its 16-character field
+picked up the two bytes after it.
+
+Real E4XT banks use 0xA5 as a separator inside a name (413 times in one
+131-bank library), and real K2000 banks use 0x7F before a stereo pair's `L`/`R`
+marker (4 073 times across 4 627 local banks). Audio is unaffected — this
+costs you the names only, but a name is how you find a sound, and nothing
+marks which files lost one.
 
 ### If you converted MPC programs before 2026-08-04, regenerate those banks
 
