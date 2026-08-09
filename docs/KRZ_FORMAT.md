@@ -161,6 +161,31 @@ the whole block to a 4-byte boundary before computing `blocksize`.
 > differs, and mpc2emu never emits these objects — but a future reader that must
 > distinguish FX / song / QA-bank objects should adopt the conditional decode
 > rather than our unconditional `>> 10`. This is unreconciled against hardware.
+>
+> **Corpus measurement settles which label is right for FX (2026-08-09).** The
+> two decodes are distinguishable by what *points at* the object. Across 2 237
+> banks, of 10 985 in-bank resolutions of a program's 0x0F (FX) segment:
+>
+> | resolves to | count |
+> |---|---|
+> | type 113 (`0x71xx`, "effect") | 10 395 |
+> | type 111 / 100 / 104 | 590 |
+> | type 112 (`0x70xx`, "song") | 1 |
+> | **more than one candidate type** | **0** |
+>
+> So an FX segment means the `0x71xx` object — the "113 = effect" side of the
+> conditional rule — and 112/song is essentially never an FX target. Zero
+> ambiguous resolutions also means an **id alone is a safe key** despite the
+> per-type id spaces. Measured by the VinSamLib project over its K2000 library
+> and contributed here; still corpus evidence rather than hardware, so the
+> conditional decode remains the recommendation for a reader that must tell
+> FX / song / QA-bank apart.
+>
+> The same work independently confirms the FX segment's **id field is the first
+> u16** of the 7-byte 0x0F segment: over 120 banks carrying their own effects
+> it lands on an id the bank owns 720 times, against 3/0/0/0/0 for offsets 1-5.
+> `_TPL_GLOBAL` in `writers/krz_writer.py` puts its `1` in exactly that field,
+> so the writer and the measurement agree without either having seen the other.
 
 > **CAL keymap-slot — corpus-settled 2026-07-27.** `krz_writer.py` keeps
 > `CAL[7,8]` at zero and writes the keymap id only to `CAL[11:13]` (§4.2
@@ -318,6 +343,31 @@ voice. Body layout after the object name:
 > bank written as `entry[key]` measured 440/466/494/524 across four keys that
 > should have given 440/550/660/880 — one sample key-tracked, which is what it
 > was; written as `entry[key − 12]` the same bank measures 440/550/660/880.
+
+> ⚠ **"An absent id is a ROM id" holds only OUTSIDE the id range you are
+> minting into.** A keymap entry or program segment naming an object the bank
+> does not contain normally means the K2000's ROM, and the reference should be
+> passed through verbatim rather than zeroed — zeroing silences a bank that
+> plays correctly on hardware (see below, and `_remap` in mpc2emu's parser).
+>
+> But that inference is only safe while nothing else can claim the number. A
+> tool that **re-assembles** banks and allocates fresh object ids (VinSamLib's
+> `assemble()` mints from 200 upward) can allocate straight over an absent id:
+> measured there, a drum keymap pointing 55 keys at an absent sample 249 met a
+> build that minted 50 samples ending at exactly 249, and those keys came out
+> playing an unrelated sample from a different bank — 173 of 4 200 ordered
+> two-bank pairs collide this way. No dangling-reference check can catch it,
+> because the reference *resolves*; the failure is wrong audio, not silence.
+> The guard is a range test: pass through only outside the window this build
+> allocates, and write 0 inside it, which is the only representable answer once
+> a real object owns that number. 97.8 % of genuine ROM references sit below
+> 200; the colliding ones are dangling references to another disk's user
+> samples, not ROM at all.
+>
+> **`writers/krz_writer.py` cannot meet this** — it builds from samples and owns
+> the whole id space it emits. Recorded because the rule as stated above is what
+> this project told others, and it is incomplete without the range condition.
+> Measured by the VinSamLib project, 2026-08-09.
 >
 > An earlier corpus-only reading here favoured `note = i` (root-inside-zone,
 > 39.6% vs 26.4%) and was **wrong** — that margin was never strong enough to
