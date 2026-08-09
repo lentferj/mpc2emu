@@ -105,6 +105,7 @@ Sample (E3S1) body = 94-byte header + little-endian 16-bit PCM
 """
 
 import math
+import copy
 import struct
 from typing import List
 from models.common import (Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
@@ -989,9 +990,60 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
 # E4P1 preset chunk body
 # ---------------------------------------------------------------------------
 
+def _split_by_velocity(voice: VoiceLayer):
+    """One voice per distinct velocity window.
+
+    E4B switches velocity at the VOICE, not the zone: §5.2 of
+    docs/E4B_FORMAT.md records that writing per-zone velocity without a
+    matching vpar[18]/vpar[21] makes velocity-switched layers "layer instead
+    of switch" -- every layer sounding at once. vpar[18]/[21] are the min/max
+    over the voice's zones, so a single voice holding zones with DIFFERENT
+    windows collapses to one window spanning them all, and the switch is gone.
+
+    A source that puts velocity layers in one VoiceLayer therefore has to be
+    split before writing. `parse_sample_dir` does exactly that for a folder
+    that names velocities, and any per-zone-velocity source (SFZ, SF2, XPM)
+    can too.
+
+    Note the round-trip through this project's own parser does NOT show the
+    fault: e4b_parser intersects the voice window with the zone entry's own
+    velocity bytes, which this writer also emits, so it reconstructs the
+    distinction the hardware would have lost. Reported by VinSamLib, whose
+    container reader reads the voice window alone.
+
+    Zone order is preserved within each window, and a voice whose zones all
+    share one window is returned unchanged -- so output for every existing
+    source is byte-identical.
+    """
+    windows = []
+    for zone in voice.zones:
+        key = (zone.lo_vel, zone.hi_vel)
+        if key not in windows:
+            windows.append(key)
+    if len(windows) <= 1:
+        return [voice]
+    out = []
+    for lo_vel, hi_vel in windows:
+        clone = copy.copy(voice)
+        clone.zones = [z for z in voice.zones
+                       if (z.lo_vel, z.hi_vel) == (lo_vel, hi_vel)]
+        out.append(clone)
+    return out
+
+
 def _build_preset_body(preset: Preset, preset_idx: int,
                        sample_name_to_idx: dict) -> bytes:
-    num_voices = len(preset.voices)
+    # Velocity switches at the voice, so a voice holding several windows must
+    # become several voices -- see _split_by_velocity.
+    voices = []
+    for v in preset.voices:
+        split = _split_by_velocity(v)
+        if len(split) > 1:
+            print(f"  [INFO] preset '{preset.name}': a voice carries "
+                  f"{len(split)} velocity windows — split into {len(split)} "
+                  f"voices, since E4B switches velocity per voice")
+        voices.extend(split)
+    num_voices = len(voices)
     hdr = bytearray(PRES_HDR)
 
     struct.pack_into('>H', hdr, 0, preset_idx)   # [0-1]  index
@@ -1010,7 +1062,7 @@ def _build_preset_body(preset: Preset, preset_idx: int,
 
     voice_parts = []
     last = num_voices - 1
-    for i, v in enumerate(preset.voices):
+    for i, v in enumerate(voices):
         voice_parts.append(_build_voice(v, sample_name_to_idx, is_last=(i == last)))
     voice_data = b''.join(voice_parts)
     return bytes(hdr) + voice_data
