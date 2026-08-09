@@ -29,7 +29,7 @@ each axis:
 
 | axis | what it answers | cells |
 |------|-----------------|-------|
-| **A** input × output | does every source format reach every target format at all | 92 |
+| **A** input × output | does every source format reach every target format at all | 60 |
 | **B** output × medium | bank file, `--iso`, `--hda`, `--floppy`, `--add-to` | 14 |
 | **C** processors | each flag on one representative path, plus the pairs known to interact | 30 |
 
