@@ -104,6 +104,79 @@ hardware. **This is the argument for the per-format rule:** a blanket replace
 would have shipped a change here that a thousand real banks say nothing asks
 for.
 
+**KRZ: RETRACTED 2026-08-09 — the byte is real and `krz_writer` now encodes
+latin-1.** This section twice recorded the opposite, and the reasoning failed
+the same way both times.
+
+The first answer scanned **238 loose `.KRZ` files** and found zero. VinSamLib
+reported zero over 472 loose files, and this section called that "two disjoint
+corpora agreeing". VinSamLib then withdrew its number — it had never opened a
+disc image — and reported **0x7F 4 036 times**. Re-running here over loose
+files plus one subdirectory of floppy images still gave zero, so the reply
+said the finding did not reproduce.
+
+It reproduces. The third scan covered what the first two had missed — the
+**K2000 CD-ROM images under `~/Dokumente/SYNTHS/K2000R`**, which is where
+almost all commercial K2000 content on this machine lives:
+
+| corpus | banks | objects | high bytes |
+|--------|-------|---------|------------|
+| loose `.KRZ` | 833 | 27 149 | **0** |
+| floppy images | 1 747 | 43 548 | 14 |
+| **K2000 CD-ROM images** | **2 047** | **60 574** | **4 083** |
+| total | 4 627 | 131 271 | 4 097 |
+
+**4 073 of those are 0x7F, and every one is authored**: a sample-object name
+with 0x7F as the separator before a stereo pair's channel marker —
+`'VOI:Attack Voi\x7fL'` / `\x7fR` — filling exactly 16 characters, so it is
+inside the field and not the §KRZNAME16 overrun. The remaining 12 bytes are
+scattered singles in names that are mostly unprintable: misparse, as before.
+
+**But the inference everyone drew from it was wrong, including mine.** 0x7F
+is *inside* ASCII (0–127), so `krz_writer`'s `encode('ascii')` preserved it
+exactly and always had. Nothing was ever lost. VinSamLib reported "it loses
+0x7F on the way out"; the first regression test written here for it passed
+with the fix reverted, which is what exposed the error. The frequency
+measurement was right; the conclusion drawn from it was not.
+
+`krz_writer` now encodes latin-1 anyway, for the narrower reason that it makes
+the pair exact inverses — no byte `krz_parser` produces can be altered on the
+way back out. What that actually changes is bytes **≥ 0x80**, of which the
+corpus holds 12, all in otherwise-unprintable names.
+
+**Two method lessons, and the entry is worth keeping for them.**
+
+*One.* Three scans returned zero and all three were looking where the byte is
+not. A zero is
+evidence of absence only if the corpus is known to cover the places the thing
+would live, and none of the three checked that. VinSamLib caught it first for
+its own corpus and said so; the same sentence applied here and was not
+applied. **Before reporting a zero, enumerate where the material actually
+lives and show the scan reached it.**
+
+*Two.* A correct measurement does not make the conclusion drawn from it
+correct. 0x7F really does appear 4 073 times, and "therefore ASCII drops it"
+still did not follow. The check that caught it was mechanical: **write the
+regression test, then revert the fix and require the test to fail.** It
+passed, so the fix was not doing the thing the commit message was about to
+claim.
+
+**EIII: measured and closed, against the prior.** VinSamLib had the corpus we
+did not and walked **1 019** EIII/ESI banks out of its EMU3 images — 30 935
+sample names and 19 423 preset names. Six banks hold any byte above 0x7E, and
+none of them is plausible text: the high bytes are interleaved with control
+characters throughout (`'\x83\x02l\xfe\x05\x04\xe8\x13…'`), which is what
+deleted-bank content sitting in free space looks like, not what a person types
+on a front panel.
+
+So the E-MU-lineage prior was wrong, and it was a strong one — the E4B sample
+struct *is* the Emulator III's, and 0xA5 appears 413 times in a comparable E4B
+library. Six banks in a thousand, none of them text, is not evidence of a
+charset. `eiii_writer` stays ASCII rather than pushing an unverified byte at
+hardware. **This is the argument for the per-format rule:** a blanket replace
+would have shipped a change here that a thousand real banks say nothing asks
+for.
+
 **Deliberately not changed — and the evidence for it was rebuilt twice
 (2026-08-09).** `krz_writer.py:209` encodes ASCII while `krz_parser.py`
 decodes latin-1, the same shape of asymmetry as the E4B name byte. The

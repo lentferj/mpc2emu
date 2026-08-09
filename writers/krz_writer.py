@@ -206,7 +206,17 @@ class _BlockWriter:
         self._size_pos = f.tell()
         f.write(struct.pack('>H', 0))          # size placeholder
 
-        nb = name.encode('ascii', errors='replace')[:16]
+        # latin-1 so this is the exact inverse of krz_parser's latin-1 read:
+        # no byte the parser produced can be altered on the way back out.
+        #
+        # NOT because 0x7F was being lost. 0x7F is authored in real K2000 names
+        # -- the separator before a stereo pair's L/R marker,
+        # 'VOI:Attack Voi\x7fL', 4 073 times across 4 627 local banks -- but it
+        # is inside ASCII (0-127), so the previous encode preserved it exactly.
+        # Both projects briefly believed otherwise; see RESOLUTION_NOTES
+        # §NAMEBYTE. What this actually changes is bytes >= 0x80, of which the
+        # corpus holds 12, all in names that are otherwise unprintable.
+        nb = name.encode('latin-1', errors='replace')[:16]
         n = len(nb)
         if n % 2 == 0:
             ofs = n + 4
