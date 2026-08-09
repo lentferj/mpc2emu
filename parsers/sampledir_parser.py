@@ -65,6 +65,47 @@ def _note_to_midi(note, octave_offset: int) -> int:
     return max(0, min(127, (octave + octave_offset) * 12 + semitone))
 
 
+
+#: Dynamic markings, quietest first. Only these -- `p` and `f` alone are
+#: deliberately included but `m` is not, and nothing shorter is matched,
+#: because a bare letter in a drum name would fire constantly.
+_DYNAMICS = ('pppp', 'ppp', 'pp', 'p', 'mp', 'mf', 'ff', 'fff', 'ffff', 'f')
+_DYN_ORDER = {d: i for i, d in enumerate(
+    ('pppp', 'ppp', 'pp', 'p', 'mp', 'mf', 'f', 'ff', 'fff', 'ffff'))}
+_VEL_NUM_RE = re.compile(r'(?:^|[-_ ])v(?:el)?[-_ ]?(\d{1,3})(?=$|[-_ .])', re.I)
+_VEL_DYN_RE = re.compile(r'(?:^|[-_ ])(' + '|'.join(_DYNAMICS) + r')(?=$|[-_ .])')
+
+
+def _velocity_rank(stem: str):
+    """Order this sample within a velocity stack, or None if it names none.
+
+    Two shapes appear in real folders: a number (`v40`, `vel90`, `V-127`) and
+    a dynamic marking (`_pp`, `-ff`). Returns a sortable rank; the caller only
+    compares ranks within one root, never across roots, so the two shapes
+    never need a common scale.
+
+    Deliberately conservative. A folder of drum one-shots must NOT match --
+    the collided-root spread below is right for those, and a false positive
+    here would map a whole kit onto one key. Hence the separator requirement
+    and no bare single letters other than the real dynamics.
+    """
+    m = _VEL_NUM_RE.search(stem)
+    if m:
+        n = int(m.group(1))
+        if 1 <= n <= 127:
+            return (0, n)
+    m = _VEL_DYN_RE.search(stem.lower())
+    if m:
+        return (0, _DYN_ORDER[m.group(1)])
+    return None
+
+
+def _velocity_bands(n: int):
+    """Split 1..127 into `n` contiguous bands, quietest first."""
+    edges = [round(127 * i / n) for i in range(n + 1)]
+    return [(max(1, edges[i] + 1) if i else 1, edges[i + 1]) for i in range(n)]
+
+
 def parse_sample_dir(dir_path: str, wav_dir: Optional[str] = None,
                      octave_offset: Optional[int] = None, **kw) -> Bank:
     """Build a one-preset Bank from a directory of root-note-named WAVs.
@@ -165,6 +206,40 @@ def parse_sample_dir(dir_path: str, wav_dir: Optional[str] = None,
     # Spread a collided group onto consecutive keys instead, one sample per
     # key, and move each zone's root WITH it so the sample still plays at its
     # natural pitch rather than transposed.
+    # Before spreading, ask whether a collided group is a VELOCITY STACK.
+    # The spread below cannot tell "two drums that both defaulted to root 60"
+    # from "two velocity layers of C3", because nothing here reads velocity --
+    # so four files Piano-C3-v40/v90/E3-v40/v90 became four adjacent keys,
+    # C#3 sounded a C3, and the layering was gone. Reported by VinSamLib.
+    #
+    # A group is a stack only if EVERY member names a velocity and no two name
+    # the same one. That is deliberately strict: a drum kit must still spread,
+    # and a false positive here would fold a whole kit onto one key.
+    vel_zones = []
+    if len({r for r, _ in placed}) < len(placed):
+        by_root = {}
+        for root, sd in placed:
+            by_root.setdefault(root, []).append(sd)
+        stacked = {}
+        for root, group in by_root.items():
+            if len(group) < 2:
+                continue
+            ranks = [_velocity_rank(sd.name) for sd in group]
+            if all(r is not None for r in ranks) and len(set(ranks)) == len(ranks):
+                stacked[root] = [sd for _r, sd in sorted(zip(ranks, group),
+                                                         key=lambda rs: rs[0])]
+        if stacked:
+            keep = []
+            for root, sd in placed:
+                if root in stacked and sd is not stacked[root][0]:
+                    continue                     # folded into the stack below
+                keep.append((root, sd))
+            n_layers = sum(len(g) for g in stacked.values())
+            print(f"   [INFO] {n_layers} sample(s) across {len(stacked)} root(s) "
+                  f"name a velocity — layered instead of spread onto new keys")
+            placed = keep
+            vel_zones = stacked
+
     if len({r for r, _ in placed}) < len(placed):
         spread, nxt = [], None
         for root, sd in placed:
@@ -186,6 +261,16 @@ def parse_sample_dir(dir_path: str, wav_dir: Optional[str] = None,
         # ZoneMapping.fine_tune, never SampleData.fine_tune, so a WAV `smpl`
         # chunk's MIDIPitchFraction (read by load_wav) was silently dropped
         # one function after being parsed.
+        stack = vel_zones.get(root) if vel_zones else None
+        if stack:
+            for (v_lo, v_hi), layer in zip(_velocity_bands(len(stack)), stack):
+                zones.append(ZoneMapping(sample_name=layer.name, lo_key=lo,
+                                         hi_key=hi, lo_vel=v_lo, hi_vel=v_hi,
+                                         root_key=root,
+                                         fine_tune=layer.fine_tune))
+                print(f"   {layer.name:18s} root={root:3d}  keys {lo:3d}-{hi:3d}"
+                      f"  vel {v_lo:3d}-{v_hi:3d}")
+            continue
         zones.append(ZoneMapping(sample_name=sd.name, lo_key=lo, hi_key=hi,
                                  lo_vel=0, hi_vel=127, root_key=root,
                                  fine_tune=sd.fine_tune))
