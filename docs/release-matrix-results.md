@@ -8,10 +8,10 @@ python3 tests/release_matrix.py --markdown docs/release-matrix-results.md
 
 # Release matrix — recorded results
 
-Generated on **2026-08-09** from commit `84c3213` on branch `main`. See `docs/RELEASE_MATRIX.md` for what the axes mean and what this does
+Generated on **2026-08-09** from commit `b1a9d1a` on branch `GIG_E2E`. See `docs/RELEASE_MATRIX.md` for what the axes mean and what this does
 *not* establish.
 
-Axis A: **60 of 60** attempted cells green. `--` marks a format with no local fixture — **a gap, never a pass**; the list is at
+Axis A: **64 of 64** attempted cells green. `--` marks a format with no local fixture — **a gap, never a pass**; the list is at
 the bottom.
 
 | input | e4b | eiii | krz | talsmpl |
@@ -21,6 +21,7 @@ the bottom.
 | `.e4b` | OK | OK | OK | OK |
 | `.esi` | OK | OK | OK | OK |
 | `.exs (synthetic)` | OK | OK | OK | OK |
+| `.gig` | OK | OK | OK | OK |
 | `.krz` | OK | OK | OK | OK |
 | `.pgm` | OK | OK | OK | OK |
 | `.sf2 (synthetic)` | OK | OK | OK | OK |
@@ -73,6 +74,5 @@ the bottom.
 | `--max-preset-size (refuses)` | OK |
 
 **No fixture (gap, not coverage):**
-- `.gig` — no local GigaSampler file
 - `.img (MPC60)` — the local MPC60 floppies contain those same truncated SETs
 - `.set` — all 10 local MPC60 SETs are 720K-truncated copies; the parser correctly refuses them, so the intact path is untested

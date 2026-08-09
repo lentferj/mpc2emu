@@ -29,9 +29,16 @@ each axis:
 
 | axis | what it answers | cells |
 |------|-----------------|-------|
-| **A** input × output | does every source format reach every target format at all | 60 |
+| **A** input × output | does every source format reach every target format at all | 64 |
 | **B** output × medium | bank file, `--iso`, `--hda`, `--floppy`, `--add-to` | 14 |
 | **C** processors | each flag on one representative path, plus the pairs known to interact | 30 |
+
+**GIG is real, and chosen by rule.** 146 GigaSampler files live in
+`~/linuxsampler`; the fixture is the smallest one carrying at least 5 samples
+and 5 zones, picked at run time rather than by name so the cell does not
+depend on one library staying where it is. All 146 parse, and 12 of them
+converted to all four targets with key coverage preserved — see
+`docs/RESOLUTION_NOTES.md` §GIGE2E.
 
 **Two fixtures are synthesised, and that is weaker.** No SoundFont or EXS24
 instrument is local, so `tests/re_banks/gen_sf2_fixture.py` and

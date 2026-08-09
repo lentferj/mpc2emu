@@ -6653,3 +6653,53 @@ Two further items are relevant but not actionable:
   situation unsupported: one library disc's programs reference samples that
   ship on other discs of its set (see the AKAI notes). Not a fault, but the
   same problem exists here and CWM has now solved its half of it.
+
+---
+
+## §GIGE2E — GigaSampler end to end, over 146 real files (2026-08-09)
+
+**Status: verified. `.gig` is no longer a declared gap in the release matrix.**
+
+`.gig` had a matrix row and no fixture — "no local GigaSampler file" — so the
+parser had unit coverage and the path from a real GIG to a written bank had
+never been walked. `~/linuxsampler` holds **146** of them (1.4 GB), which
+closes that.
+
+### What was checked
+
+| | |
+|---|---|
+| files parsed | **146 / 146**, no failures |
+| totals | 151 presets, 910 samples, 2 698 zones |
+| converted end to end | 12 files × 4 output formats = **48 conversions, 0 failures** |
+| content preserved | key coverage identical in 11 of 12; the 12th is explained below |
+
+Both extension cases occur — 117 `.gig` and 29 `.GIG` — and both work: the
+registry holds `.gig` only, but `convert.py` lower-cases the suffix before the
+lookup. Worth stating because it looked like a 20% gap until it was tested.
+
+### The one difference, and why it is not a loss
+
+KRZ reports FEWER zones than the source for several files (61 → 16, 61 → 7,
+61 → 13). That is re-grouping, not loss: a KRZ keymap is 128 entries and
+`krz_parser` merges contiguous runs of the same sample back into one zone, so
+61 single-key zones over one sample come back as a handful of ranges. **Key
+coverage is identical**, which is the measure that matters — comparing zone
+counts alone would have raised a false alarm here, and did until coverage was
+checked.
+
+One file gains keys (60 → 128). That is the documented keymap gap-fill:
+`krz_writer` fills holes because a hole locks the K2000 up on Master→Delete,
+and the trade-off is recorded in `TODO.md`.
+
+### Fixture selection
+
+The matrix picks its GIG **by rule** — the smallest file carrying at least 5
+samples and 5 zones — rather than by name, so the cell does not depend on one
+library staying where it is, and no commercial filename enters a tracked file.
+
+### Still not covered
+
+`.set` and MPC60 `.img`: all 10 local SETs are 720K-truncated, the parser
+correctly refuses them, and truncation is not recoverable. Those need one
+intact file.
