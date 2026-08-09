@@ -282,7 +282,92 @@ def _decode_3ewa(d: bytes, o: int) -> dict:
     return out
 
 
-def _parse_3prg_envelope(walker: _RiffWalker) -> dict:
+# ── dimension regions ──────────────────────────────────────────────────────
+#
+# A GIG region is not one sample.  It carries a '3lnk' chunk describing up to
+# 8 DIMENSIONS (velocity, sample channel, layer, ...), and one DIMENSION
+# REGION per combination of their zones -- each with its OWN sample and its own
+# articulation.  A 4-way velocity split over a stereo sample is 8 dimension
+# regions, and reading only the first one keeps 1 sample of 8 and drops the
+# velocity layering entirely.  Measured on a real marimba: 147 samples in the
+# file, VELOCITY x4, and the old code produced 49 zones all pointing at ONE
+# sample.  Diagnosed by the sibling VinSamLib project from a `gigdump` dump.
+#
+# '3lnk' layout, transcribed from libgig's own writer (Region::UpdateChunks,
+# LinuxSampler-SVN libgig/src/gig.cpp) rather than guessed:
+#   [0:4]            u32  number of dimension regions actually present
+#   [4 + i*8]        u8   dimension type   (0x82 = velocity, 0x80 = channel)
+#   [5 + i*8]        u8   bits
+#   [6 + i*8]        u8   bit shift
+#   [8 + i*8]        u8   zone count
+#   [44] or [68]     i32[] wave-pool index per dimension region
+# The wave pool starts at 44 for gig v2 (5 dimensions) and 68 for v3+ (8),
+# which is exactly 4 + n*8 in each case -- so the chunk size distinguishes them.
+_DIM_VELOCITY = 0x82
+_DIM_SAMPLECHANNEL = 0x80
+
+
+def _parse_3lnk(data: bytes, off: int, size: int) -> Optional[dict]:
+    """Dimension definitions + the per-dimension-region wave indices."""
+    if size < 48:
+        return None
+    n_dimregs = struct.unpack_from('<I', data, off)[0]
+    n_dims = 8 if size >= 1092 else 5
+    pool_at = 4 + n_dims * 8
+    dims = []
+    for i in range(n_dims):
+        b = off + 4 + i * 8
+        dtype, bits, shift = data[b], data[b + 1], data[b + 2]
+        zones = data[b + 4]
+        if dtype != 0x00 and bits:
+            # `zones` is frequently 0 or 1 in gig2 files even where bits says
+            # otherwise; libgig falls back to 2**bits for exactly this reason
+            # (`zones ? zones : 0x01 << bits`, gig.cpp:3339). Taking the byte
+            # at face value collapsed a VELOCITY x4 dimension to one zone and
+            # made this whole fix a no-op.
+            dims.append({'type': dtype, 'bits': bits, 'shift': shift,
+                         'zones': zones if zones > 1 else (1 << bits)})
+    max_dimregs = 256 if n_dims == 8 else 32
+    waves = []
+    for i in range(min(n_dimregs, max_dimregs)):
+        o = off + pool_at + i * 4
+        if o + 4 > off + size:
+            break
+        waves.append(struct.unpack_from('<i', data, o)[0])
+    return {'n': n_dimregs, 'dims': dims, 'waves': waves}
+
+
+def _velocity_splits(dimregs_3ewa, vel_dim, index_of):
+    """Velocity ranges for each zone of the velocity dimension.
+
+    gig2 stores an upper limit per dimension region at '3ewa' byte 124; gig3
+    stores one per dimension at byte 140+d.  Where neither is populated the
+    range is split evenly, which is what libgig falls back to as well.
+    """
+    zones = vel_dim['zones']
+    limits = []
+    for z in range(zones):
+        entry = dimregs_3ewa.get(index_of(z))
+        blob = entry[0] if entry else None
+        hi = None
+        if blob is not None and len(blob) > 140:
+            hi = blob[124] or None                    # gig2
+            if not hi:
+                du = blob[140:148]
+                hi = du[0] or None                    # gig3, velocity is dim 0 here
+        limits.append(hi)
+    if not all(limits) or sorted(limits) != limits:
+        step = 128 // zones
+        limits = [min(127, (z + 1) * step - 1) for z in range(zones)]
+        limits[-1] = 127
+    out, lo = [], 0
+    for hi in limits:
+        out.append((lo, min(127, hi)))
+        lo = min(127, hi) + 1
+    return out
+
+
+def _parse_3prg_envelope(walker: _RiffWalker, blobs: Optional[dict] = None) -> dict:
     """Extract amp envelope (EG1) and, when the VCF is enabled, the filter
     envelope (EG2) + cutoff/resonance/type from the Giga 3prg LIST.
 
@@ -295,13 +380,23 @@ def _parse_3prg_envelope(walker: _RiffWalker) -> dict:
     try:
         d = walker.data
         result = None
+        idx = -1
         for fc, off, sz in walker.chunks():
             if fc != 'LIST' or d[off:off + 4] != b'3ewl':
                 continue
+            idx += 1
             ewl = _RiffWalker(d, off + 4, sz - 4)
             ea = ewl.find('3ewa')
             if not ea or ea[1] < 140:
                 continue
+            if blobs is not None:
+                # A DimensionRegion is a DLS Sampler in its own right: its
+                # 'wsmp' carries the UnityNote for THAT layer, which is what
+                # a per-key instrument varies. The region-level wsmp is a
+                # default and is frequently a stale 60.
+                w = ewl.find('wsmp')
+                blobs[idx] = (d[ea[0]:ea[0] + ea[1]],
+                              _parse_wsmp(d, w[0], w[1])['root_note'] if w else None)
             dec = _decode_3ewa(d, ea[0])
             if result is None:
                 result = dec                       # amp env: first region
@@ -573,9 +668,10 @@ def parse_gig(gig_path: str, max_instruments: int = 32,
                 # 3prg — Giga articulation (envelope)
                 env = {'attack': 0.001, 'decay': 0.3,
                        'sustain': 0.8, 'release': 0.5}
+                dimreg_blobs = {}
                 prg_r = rgn_walker.find_list('3prg')
                 if prg_r:
-                    env = _parse_3prg_envelope(prg_r)
+                    env = _parse_3prg_envelope(prg_r, dimreg_blobs)
 
                 root = wsmp_info['root_note']
                 if root == 0 or root > 127:
@@ -583,17 +679,81 @@ def parse_gig(gig_path: str, max_instruments: int = 32,
 
                 vol_db = wsmp_info['gain_db']
 
-                zone = ZoneMapping(
-                    sample_name = sd.name,
-                    lo_key      = min(127, rgn['key_lo']),
-                    hi_key      = min(127, rgn['key_hi']),
-                    lo_vel      = min(127, rgn['vel_lo']),
-                    hi_vel      = min(127, rgn['vel_hi']),
-                    root_key    = min(127, root),
-                    fine_tune   = wsmp_info['fine_tune'],
-                    volume      = vol_db,
-                )
-                voice.zones.append(zone)
+                # One zone per VELOCITY dimension zone, each with its own
+                # dimension region's sample -- see _parse_3lnk. With no
+                # velocity dimension this produces exactly one zone from
+                # dimension region 0, which is what the old code did.
+                lnk_r = rgn_walker.find('3lnk')
+                lnk = _parse_3lnk(data, lnk_r[0], lnk_r[1]) if lnk_r else None
+                vel_dim = next((x for x in (lnk or {}).get('dims', [])
+                                if x['type'] == _DIM_VELOCITY), None)
+
+                emitted = []
+                dim_roots = {}
+                if lnk and vel_dim and lnk['waves']:
+                    def _index_of(vz, _vd=vel_dim):
+                        return (vz << _vd['shift']) & 0xFF
+                    splits = _velocity_splits(dimreg_blobs, vel_dim, _index_of)
+                    for vz, (v_lo, v_hi) in enumerate(splits):
+                        di = _index_of(vz)
+                        if di >= len(lnk['waves']):
+                            continue
+                        wi = lnk['waves'][di]
+                        if wi < 0 or wi >= len(waves) or waves[wi] is None:
+                            continue
+                        entry = dimreg_blobs.get(di)
+                        dr_blob = entry[0] if entry else None
+                        dr_root = entry[1] if entry else None
+                        # PitchTrack lives on the DIMENSION REGION ('3ewa'
+                        # byte 108, bit 0 set = tracking OFF). LinuxSampler
+                        # skips the whole (key - UnityNote) term when it is
+                        # off (engines/gig/Voice.cpp:95 ->
+                        # common/AbstractVoice.cpp:962), so the sample plays
+                        # at its recorded rate and the unity note is inert.
+                        #
+                        # E4B, KRZ and EIII have no "unpitched" flag -- they
+                        # always transpose by (key - root) -- so the only way
+                        # to express "play at the recorded rate" is to write
+                        # root = the key the zone covers.
+                        untracked = bool(dr_blob and len(dr_blob) > 108
+                                         and (dr_blob[108] & 0x01))
+                        emitted.append((waves[wi], v_lo, v_hi, untracked))
+                        if dr_root:
+                            dim_roots[id(waves[wi])] = dr_root
+                if not emitted:
+                    emitted = [(sd, min(127, rgn['vel_lo']),
+                                min(127, rgn['vel_hi']), False)]
+
+                for dim_sd, v_lo, v_hi, untracked in emitted:
+                    if dim_sd.name not in banked_names:
+                        banked_names.add(dim_sd.name)
+                        bank.samples.append(dim_sd)
+                    # Each dimension region carries its own sample, so the root
+                    # comes from that sample rather than the region's wsmp --
+                    # which is what made a 4-layer marimba read as one note.
+                    r = dim_roots.get(id(dim_sd))
+                    if r is None or r == 0 or r > 127:
+                        r = root if dim_sd is sd else dim_sd.root_note
+                    if untracked:
+                        # Root = the key it covers, so (key - root) is zero.
+                        r = min(127, rgn['key_lo'])
+                        if rgn['key_hi'] != rgn['key_lo'] and not _warned_span:
+                            print(f"  [WARN] pitch-tracking is off for a zone "
+                                  f"spanning keys {rgn['key_lo']}-{rgn['key_hi']}: "
+                                  f"the target formats always transpose by "
+                                  f"(key - root), so it will transpose across "
+                                  f"that span. Rooted at {rgn['key_lo']}.")
+                            _warned_span = True
+                    voice.zones.append(ZoneMapping(
+                        sample_name = dim_sd.name,
+                        lo_key      = min(127, rgn['key_lo']),
+                        hi_key      = min(127, rgn['key_hi']),
+                        lo_vel      = v_lo,
+                        hi_vel      = v_hi,
+                        root_key    = min(127, r),
+                        fine_tune   = wsmp_info['fine_tune'],
+                        volume      = vol_db,
+                    ))
 
                 # Amp envelope (EG1): take from the first region.
                 if len(voice.zones) == 1:
