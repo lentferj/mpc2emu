@@ -32,8 +32,9 @@ or untested output could overwrite or corrupt data, or be rejected by hardware.
 Always test images on a ZuluSCSI / SCSI2SD / emulator **before** connecting
 irreplaceable equipment.
 
-**Seven fixed defects produced files that are wrong and do not look it** —
-velocity-layered WAV folders, EIII banks from any many-zones-per-layer source,
+**Eight fixed defects produced files that are wrong and do not look it** —
+velocity-layered SFZ and WAV folders written to E4B, velocity-layered WAV
+folders, EIII banks from any many-zones-per-layer source,
 stereo sources through the vintage resample profiles, MPC-sourced banks, EMU3
 CD images holding more than 16 banks, multisample `.KRZ` banks, and names
 carrying a `?` where a symbol belonged. All are fixed, none can be repaired in
@@ -1104,6 +1105,24 @@ already did to files you *have*.
 
 **Newest first** — if you last read this section on a given date, everything
 above that date's entry is new to you.
+
+### If you built E4B banks from velocity-layered SFZ (or WAV folders) before 2026-08-09, rebuild them
+
+E4B selects velocity at the **voice**, not the zone. A source that puts its
+velocity layers in one layer-with-many-zones — SFZ does, and so did a WAV
+folder after the fix below — was written as a single voice whose velocity
+window spanned every layer, so **all layers sound at once instead of switching
+by playing dynamics**.
+
+Measured over 2 067 local `.sfz` files: **68 of 2 560 voices** carry more than
+one velocity window, typically 4-to-6-layer drum libraries. One such library
+wrote as 1 voice spanning velocity 1–127 and now writes as 6 voices with the
+right window each.
+
+KRZ and EIII are unaffected — they carry velocity on the program layer and per
+zone respectively. E4B alone had it, and mpc2emu's own reader could not show
+it: it intersects the voice window with the zone bytes and reconstructs the
+distinction the hardware would have lost.
 
 ### If you converted a WAV folder that layers by velocity before 2026-08-09, rebuild it
 
