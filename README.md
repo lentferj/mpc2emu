@@ -1076,8 +1076,14 @@ and exits non-zero, so an oversized / unloadable bank is never silently written.
 This works for E4B (128 MB E4XT), KRZ (64 MB K2000), and EIII (128 MB
 EIIIX/ESI) output.
 
-Per-bank hardware limits: max **1000 samples** and **1000 presets** per bank
-for E4B/KRZ; max bank size **128 MB** (E4XT) / **64 MB** (K2000). EIIIX/ESI
+Per-bank hardware limits: **E4B** max 1000 samples / 1000 presets, bank size
+128 MB (E4XT). **KRZ** is tighter and for a different reason — object ids run
+200–999, so 800 objects per type, and objects live in the K2000's **PRAM**
+(~116 K on unexpanded hardware) rather than in sample RAM. A keymap costs 688
+bytes against a sample header's 84, so a KRZ bank runs out of **presets** long
+before samples or megabytes: roughly **120 presets** on a stock machine,
+whatever the bank's size. `--pram` raises the budget for expanded machines
+(`--pram 760` is a common one). Bank size caps at 64 MB (K2000). EIIIX/ESI
 banks cap out at **999 samples / 256 presets** per bank (`docs/EIII_FORMAT.md`)
 — the writer enforces this defensively, but the `--auto-fit` pre-split fitting
 assistant above doesn't yet know about the tighter 256-preset ceiling.

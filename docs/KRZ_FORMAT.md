@@ -684,9 +684,37 @@ on the K2000R.
 | Sample RAM | **64 MB** | `convert.py` `_hw_limits['krz'] = 64`; larger inputs split by `bank_splitter.py`; default `--bank-size` a conservative 32 MB |
 | Layers per program | **32** (`_MAX_KRZ_LAYERS`) | hardware max; the writer clamps split layers to it |
 | "Regular" program layers | **3** | >3 *stacked/unison* layers are spread-picked to 3 so the program plays on **any** channel; >3 *split* layers (velocity/key/drum) become a **drum program** that only sounds on a drum channel (HW-confirmed) |
-| Object user id space | **200–999** | `base_id = 200`; samples/keymaps/programs share it (typed hash disambiguates) |
+| Object user id space | **200–999** | `base_id = 200`; samples/keymaps/programs each number from 200 independently (typed hash disambiguates) — HW-confirmed. Past 999 the machine **clamps**: every further object lands on 999, each overwriting the last, silently. Past 1023 the id carries into the type field of the hash and the object reads back as a different type |
+| Object memory (PRAM) | **~116 K usable** (128 K fitted); expansions to 760 K are common but not standard | Objects live in PRAM, *separately from sample RAM* — see §6.1. This, not the id space, is what a bank actually runs out of |
 | Up-pitch ceiling (per sample) | `root + 12·log2(48000/sr)` semitones | keys above it are not assigned the sample (avoids losing keytracking); raise via `--max-sample-rate` |
 | FAT16 volume | **~2047 MB** | `fat16.format_new` requires cluster count 4085..65524; `build_k2000_disk` splits or errors above it |
+
+### 6.1 PRAM — object memory, and why the preset count runs out first
+
+A K2000 keeps its **objects** in PRAM, separately from sample RAM. Per-object
+cost, measured 2026-08-10 against a K2000R's own object list (the machine
+displays these sizes):
+
+| object | our writer | real banks |
+|---|---|---|
+| sample header | 84 B | 84 B |
+| program | 272 B | 224 – 714 B |
+| keymap | 688 B | 178 – 1332 B |
+
+The PCM itself is *not* in PRAM — a sample costs 84 bytes here however long it
+is.
+
+**A keymap dominates.** `krz_writer` emits one per voice, so a preset costs
+`272 + voices × 688` — 960 B for a plain one. That is why the **preset** axis
+runs out long before the sample axis: 800 samples are only 66 K, but 600
+presets are 562 K. On unexpanded hardware (~116 K) that allows roughly **120
+presets**, which is why nearly every commercial bank is small — ours run 8–38 K.
+
+Our writer's figures are fixed because its output is; a reader must take the
+sizes from the objects rather than assume them.
+
+`bank_splitter.bank_pram_bytes()` estimates this, and `--pram KB` sets the
+budget (default 110 K = stock, less headroom for setups and effects).
 
 ---
 
