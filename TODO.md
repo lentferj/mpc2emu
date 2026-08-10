@@ -2991,16 +2991,37 @@ hardware limit — the dropped-zone warning is worded accordingly.
 **Blocked on:** nothing in code; wants a K2000R confirmation that a non-zero
 basePitch keymap loads and sounds where intended before we rely on it.
 
-## KRZ keymap: the up-pitch ceiling clamp drops keys silently
+## KRZ keymap: the up-pitch ceiling clamp drops keys silently — FIXED 2026-08-09
 
-**Status:** open — same class as the low-key loss fixed 2026-08-09.
+`_build_keymap_entries` clamps `hi_key` to `_compute_max_pitch`. When the
+ceiling falls below `lo_key` the whole zone vanished, with nothing said.
 
-`_build_keymap_entries` clamps `hi_key = min(hi_key, ceiling)` from
-`_compute_max_pitch`. When `ceiling < lo_key` the whole zone vanishes; when it
-lands mid-zone the top of the zone is discarded. Neither says anything. Reach
-is larger than the low-key case: a 22 kHz sample rooted at key 36 loses
-everything above key ~49.
+**Measured first, deliberately** (7 082 zones over 120 E4B banks + 25 GIG
+files), because the low-key warning shipped earlier the same day fired on
+nearly every bank and had to be narrowed:
 
-**Blocked on:** nothing — but it needs a corpus measurement first to find how
-often it fires and whether the surviving keymap still covers the range, so the
-report does not become the noise the first low-key warning was.
+| outcome | zones | share |
+|---|---|---|
+| entirely lost (`ceiling < lo_key`) | 527 | 7.4 % |
+| merely clipped at the top | 3 056 | 43.2 % |
+| untouched | 3 499 | 49.4 % |
+
+Reporting the clipped 43 % would have been exactly that noise. Only the
+entirely-lost 7.4 % is reported, as a second category on the existing
+dropped-zone message rather than a second warning.
+
+**Those keys are not silent.** The hole-filling pass extends a neighbouring
+zone over them (it must — a keymap hole locks up the K2000 on Master→Delete),
+so they sound the *wrong sample*. The message says so, and points at
+`--max-sample-rate`, which downsamples and thereby raises the ceiling.
+
+The reference `cp80.gig` conversion reports 34 such zones; it had been losing
+them silently all along. Covered by
+`test_zones_lost_above_the_pitch_ceiling_are_reported`, confirmed to fail with
+the fix reverted, with both negative controls.
+
+**Open question for Jan, unchanged:** whether dropping is right at all, or
+whether the zone should be kept and allowed to play flat above the ceiling.
+That is a hardware-audible judgement call.
+
+

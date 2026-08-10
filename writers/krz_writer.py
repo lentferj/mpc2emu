@@ -415,6 +415,18 @@ def _build_keymap_entries(voice: VoiceLayer,
     for zone in voice.zones:
         sid = sample_id_map.get(zone.sample_name, 0)
         if sid == 0:
+            # An EMPTY sample name is an unassigned zone -- normal, and the
+            # only case that occurs: measured over 9 535 corpus zones, all 36
+            # unresolved references carry '' rather than a name, in banks that
+            # do have samples. Skipping those is right and silence is right.
+            #
+            # A NON-empty name that does not resolve is different: the parser
+            # produced a zone pointing at a sample it did not emit. That is an
+            # internal inconsistency, it happens zero times today, and if it
+            # ever starts happening the silence is what would hide it.
+            if zone.sample_name:
+                lost_zones.append((zone.sample_name, zone.lo_key, zone.hi_key,
+                                   'no such sample in the bank'))
             continue
         sample = samples_by_name.get(zone.sample_name)
         r_sample = sample.root_note if sample is not None else 60   # written rootkey
@@ -444,8 +456,11 @@ def _build_keymap_entries(voice: VoiceLayer,
         # content) as over-ceiling even though their true shift is nowhere near
         # it, silently dropping the sample from the keymap.
         hi_key = min(zone.hi_key, NUM_KEYS - 1)   # defensive: never index past the 128-key buffer
+        orig_hi = hi_key
+        over_ceiling = False
         if sample is not None:
             ceiling = _compute_max_pitch(sample.sample_rate, r_zone) // 100
+            over_ceiling = ceiling < zone.lo_key
             hi_key = min(hi_key, ceiling)
 
         # A zone is only worth reporting when NONE of it survives. Clipping
@@ -455,8 +470,19 @@ def _build_keymap_entries(voice: VoiceLayer,
         # lost. Warning on those fired on nearly every bank, including two
         # test banks where no sample disappeared, which is how a warning
         # teaches people to ignore it.
-        if hi_key < FIRST_MAPPABLE_KEY and hi_key >= zone.lo_key:
-            lost_zones.append((zone.sample_name, zone.lo_key, hi_key))
+        if over_ceiling:
+            # The K2000 cannot pitch a sample arbitrarily far up, so a zone
+            # sitting entirely above its sample's ceiling cannot be placed at
+            # all. Measured over 7 082 corpus zones: 7.4 % are lost this way
+            # and 43 % are merely clipped at the top -- reporting the clipped
+            # ones would be the same noise the low-key warning started as.
+            # These keys are NOT silent: the hole-filling below extends a
+            # neighbour over them, so they play the WRONG sample instead.
+            lost_zones.append((zone.sample_name, zone.lo_key, orig_hi,
+                               'above the up-pitch ceiling'))
+        elif hi_key < FIRST_MAPPABLE_KEY and hi_key >= zone.lo_key:
+            lost_zones.append((zone.sample_name, zone.lo_key, hi_key,
+                               f'below key {FIRST_MAPPABLE_KEY}'))
 
         for key in range(zone.lo_key, hi_key + 1):
             # The K2000 sounds entry `i` at key `i + 12`, so a zone that must
@@ -1374,13 +1400,20 @@ def write_krz(bank: Bank, output_path: str) -> None:
         total = f.tell()
         print(f"  Written: {output_path} ({total/1024/1024:.2f} MB)")
     if lost_zones:
-        print(f"  [WARN] {len(lost_zones)} zone(s) lie entirely below key "
-              f"{FIRST_MAPPABLE_KEY} and were dropped -- those samples are not "
-              f"in the bank at all:")
-        for pname, sname, lo, hi in lost_zones[:8]:
-            print(f"           '{pname}': '{sname}' keys {lo}-{hi}")
+        print(f"  [WARN] {len(lost_zones)} zone(s) could not be placed and were "
+              f"dropped:")
+        for pname, sname, lo, hi, why in lost_zones[:8]:
+            print(f"           '{pname}': '{sname}' keys {lo}-{hi} -- {why}")
         if len(lost_zones) > 8:
             print(f"           ... and {len(lost_zones) - 8} more")
-        print(f"         A keymap entry sounds at key entry+{FIRST_MAPPABLE_KEY} "
-              f"with the basePitch of 0 this writer emits, so key "
-              f"{FIRST_MAPPABLE_KEY} is the lowest it can address.")
+        reasons = {w for _, _, _, _, w in lost_zones}
+        if any('below key' in w for w in reasons):
+            print(f"         A keymap entry sounds at key entry+"
+                  f"{FIRST_MAPPABLE_KEY} with the basePitch of 0 this writer "
+                  f"emits, so key {FIRST_MAPPABLE_KEY} is the lowest it can "
+                  f"address.")
+        if any('ceiling' in w for w in reasons):
+            print(f"         The K2000 cannot pitch a sample far above its "
+                  f"root; those keys are filled from a neighbouring zone, so "
+                  f"they sound the WRONG sample rather than nothing. "
+                  f"--max-sample-rate downsamples, which raises the ceiling.")

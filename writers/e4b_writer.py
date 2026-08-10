@@ -725,6 +725,16 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
     for zone in voice.zones:
         idx = sample_name_to_idx.get(zone.sample_name, 0)
         if idx < 1:
+            # Empty name = unassigned zone, which is the only case that occurs
+            # (all 36 unresolved references over a 9 535-zone corpus are '').
+            # A NON-empty name that does not resolve means the parser emitted a
+            # zone pointing at a sample it did not write -- an internal
+            # inconsistency worth surfacing rather than dropping in silence.
+            if zone.sample_name:
+                print(f"  [WARN] zone keys {zone.lo_key}-{zone.hi_key} names "
+                      f"sample '{zone.sample_name}', which is not in the bank "
+                      f"-- dropped. This means a parser emitted a zone "
+                      f"pointing at a sample it did not write.")
             continue
         zones_raw += _zone_entry(zone, idx, write_absolute=_multi)
         voice_lo_vel = min(voice_lo_vel, zone.lo_vel)
