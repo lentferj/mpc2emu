@@ -816,3 +816,43 @@ Detailed session logs and the still-open RE items live in
 [`docs/re_procedures/krz_program_re.md`](re_procedures/krz_program_re.md),
 [`docs/re_procedures/krz_paramid.md`](re_procedures/krz_paramid.md), and
 `TODO.md` / `docs/RESOLUTION_NOTES.md`.
+
+
+---
+
+## Two reader hazards measured in a third-party library but NOT in ours
+
+Both were found by the VinSamLib project (2026-08-09) in its own K2000
+library, and both were then measured here across **457 `.KRZ` files** (loose
+files plus the CD-ROM images) and found **zero times**. Recorded because "we
+have never seen it" is not "it cannot happen" — the corpora differ, and a
+reader written against ours would break on theirs.
+
+**1. Stereo planes are not always back-to-back, and can nest.** 45 of 802
+multi-header samples in their library have a gap between the two channel
+planes, and one real bank *interleaves* two stereo samples — each one's
+planes straddling the other's. A reader that takes a sample's extent as the
+distance to the next sample's start reads 10 950 words where the sample
+really spans 176 794.
+
+`parsers/krz_parser._pcm_extents` uses exactly that next-start rule, as a
+**hard ceiling** — deliberately, so a wrong guess about whether `sampleEnd`
+is inclusive can never read into a neighbour's PCM (see CR-10 above). On a
+nested layout that ceiling truncates the outer sample instead. Our
+measurement: of **772 multi-header samples across 457 files, zero** have
+another sample starting between their planes, so the rule is safe for
+everything we can see and has not been changed. Their suggested rule if it
+ever does bite: `max(sampleEnd) - min(sampleStart) + 1` as a **floor**, with
+the gap heuristic allowed to extend it but never shorten it.
+
+**2. Duplicate object ids exist in the wild.** 3 of their banks hold two
+objects with the same type and id; a dict-keyed parse silently keeps
+whichever came last. They keep the **first** — the one every reference in the
+file was written against — and record the shadowed one. Measured here: **zero
+collisions across 457 files**.
+
+Also confirmed from their side: reading a name to the end of the block rather
+than stopping at the 16-byte field yields a longer name for 486 of 64 471
+objects, 6 of them picking up unprintable bytes — including the
+`'General MIDI kit\x9d\xdb'` this document cites. Our reader has capped at
+the field since `84c3213`.
