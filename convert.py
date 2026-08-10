@@ -983,7 +983,7 @@ def main():
     for w in polyphony_warnings(source_banks, args.format):
         print(w)
     output_banks, warnings = split_into_banks(
-        source_banks, args.bank_size, bank_name)
+        source_banks, args.bank_size, bank_name, fmt=args.format)
     for w in warnings:
         print(w)
     print_split_summary(source_banks, output_banks, args.bank_size)

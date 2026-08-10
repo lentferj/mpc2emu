@@ -1247,6 +1247,68 @@ def write_krz(bank: Bank, output_path: str) -> None:
 
     # --- Object ID assignment (user range 200-999) ---
     base_id = 200
+    # _hash() packs the object id into the low 10 bits (`type << 10 | id`) with
+    # no mask, so an id of 1024 carries straight into the TYPE field: a sample
+    # (type 38) numbered 1024 hashes to 39936, which reads back as type 39
+    # id 0. It is not a sample with a wrong id -- it is not a sample. The
+    # failure is silent and total.
+    #
+    # HW-CONFIRMED 2026-08-10 (K2000R, Jan): the usable id ceiling is 999, NOT
+    # the 1023 the hash can encode. A test bank of 796 programs filled up to
+    # program 999 and then put every remaining program ON 999, each
+    # overwriting the last -- the machine clamps, it does not refuse. So there
+    # are two ceilings and the LOWER one binds:
+    #
+    #   id > 999   the K2000 silently discards (clamps onto 999)
+    #   id > 1023  the id carries into the type field and the object is read
+    #              back as a different type entirely
+    #
+    # Ids run from base_id = 200, so 200..999 = 800 objects per type. Capping
+    # at 999 keeps us below the 1023 wrap as well, so one guard covers both.
+    #
+    # The overflow was found by the VinSamLib project (2026-08-09) after
+    # hitting the same ceiling on their side; the 999 clamp came out of the
+    # hardware session that followed.
+    _MAX_OBJ_ID = 999
+    if base_id + len(samples) - 1 > _MAX_OBJ_ID:
+        raise ValueError(
+            f"{len(samples)} samples exceeds what a KRZ bank can address: "
+            f"object ids run {base_id}..{_MAX_OBJ_ID} (HW-confirmed), so at "
+            f"most {_MAX_OBJ_ID - base_id + 1} samples fit. Split the bank "
+            f"(--max-bank-size, or fewer presets per bank).")
+    if base_id + len(bank.presets) - 1 > _MAX_OBJ_ID:
+        raise ValueError(
+            f"{len(bank.presets)} presets exceeds what a KRZ bank can "
+            f"address: at most {_MAX_OBJ_ID - base_id + 1} fit.")
+    # HW 2026-08-10: a 796-PROGRAM bank HUNG the K2000 on "Please wait ..."
+    # and needed a power cycle -- it is not only ids that limit a bank, sheer
+    # size does too. The boundary is unmeasured, so this warns rather than
+    # refuses.
+    #
+    # The thresholds come from what has actually LOADED, and the two axes have
+    # different evidence:
+    #
+    #   presets  229 is the largest in the VinSamLib library; 796 is the only
+    #            measured failure. Anything between is unknown.
+    #   samples  283, ours -- K2KFEATDEMO_06. Four of the six K2KFEATDEMO
+    #            banks carry 219-283 samples and loaded on the K2000R (#204
+    #            was auditioned off _04 and _05, see TODO). An earlier
+    #            draft of this warning used the VinSamLib library's 191 and
+    #            would have fired on 4 of our own 6 hardware-verified demo
+    #            banks -- a warning that cries wolf on shipped, working output
+    #            is worse than none.
+    #
+    # There is no measured sample-count failure at all; 283 is a floor under
+    # "known to work", not a ceiling on what works.
+    _HW_SAFE_PRESETS, _HW_SAFE_SAMPLES = 229, 283
+    if len(bank.presets) > _HW_SAFE_PRESETS or len(samples) > _HW_SAFE_SAMPLES:
+        print(f"  [WARN] {len(bank.presets)} preset(s) / {len(samples)} sample(s) "
+              f"is larger than any bank known to LOAD on a K2000 "
+              f"({_HW_SAFE_PRESETS} presets / {_HW_SAFE_SAMPLES} samples). A "
+              f"796-preset bank hung the machine on \"Please wait ...\" and "
+              f"needed a power cycle; where it actually breaks is unmeasured. "
+              f"Consider --max-bank-size to split further.")
+
     sample_id_map   = {s.name: base_id + i for i, s in enumerate(samples)}
     samples_by_name = {s.name: s for s in samples}
 
@@ -1318,6 +1380,11 @@ def write_krz(bank: Bank, output_path: str) -> None:
         for voice in voices:
             vk.append((voice, km_id))
             km_id += 1
+            if km_id - 1 > _MAX_OBJ_ID:
+                raise ValueError(
+                    f"this bank needs more than {_MAX_OBJ_ID - base_id + 1} "
+                    f"keymaps (one per voice); KRZ object ids stop at "
+                    f"{_MAX_OBJ_ID}. Split the bank.")
         preset_keymaps.append(vk)
 
     # basePitch=0: matches every real K2000 production file.  The K2000 derives

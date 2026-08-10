@@ -3025,3 +3025,53 @@ whether the zone should be kept and allowed to play flat above the ceiling.
 That is a hardware-audible judgement call.
 
 
+---
+
+## KRZ object ids stop at 999 — HW-confirmed, writer refuses and splitter splits
+
+**Status: DONE 2026-08-10** — writer refuses, splitter splits on the same
+number, both halves hardware-informed.
+
+`_hash(type, id) = (type << 10) + id` packs the id into the low 10 bits with
+no mask, so an id of 1024 carries into the TYPE field: a sample (type 38)
+numbered 1024 hashes to 39936, which reads back as **type 39, id 0**. Not a
+sample with a wrong id — not a sample. Silent and total.
+
+**HW-CONFIRMED 2026-08-10 (K2000R):** there are *two* ceilings and the lower
+one binds.
+
+| condition | what the machine does |
+|---|---|
+| `id > 999` | **clamps** — every further object lands on 999, each overwriting the last, silently |
+| `id > 1023` | the id carries into the type field; the object reads back as a different type |
+
+Ids start at `base_id = 200`, so the usable count is **800 per type**
+(200–999), not the 824 the hash can encode. `write_krz` raises past it
+(800 OK, 801 refused).
+
+The same session confirmed **per-type numbering is right on hardware**: a bank
+with samples, keymaps and programs all numbered 200–205 loaded on a cleared
+K2000 and all six programs played their own sound, including three built so
+the keymap number and sample number deliberately differ. The machine resolves
+a reference by the slot it sits in, not a shared id space.
+
+**A bank can also be too big to load at all.** A 796-program test bank hung
+the machine on "Please wait ..." and needed a power cycle. The largest bank
+anywhere in Jan's library is 229 programs / 191 samples / 77 keymaps.
+`write_krz` warns outside that envelope rather than refusing — the real
+boundary is somewhere between 229 and 796 and has not been measured.
+
+**Splitter half — DONE 2026-08-10.** `bank_splitter._MAX_SAMPLES_PER_BANK =
+1000` is the **EOS** limit, 176 above what KRZ can address, so the splitter
+handed `write_krz` banks it had to refuse: a hard error instead of a split.
+`format_limits(fmt)` now returns `(800, 800)` for `krz` and `(1000, 1000)`
+otherwise, `TargetBank` carries its own ceilings, and `split_into_banks`
+takes `fmt` (one caller, `convert.py`, which already had `args.format` on the
+line above). Verified: a 900-sample source yields **1** bank for e4b and
+**2** for krz (max 800), and both KRZ banks write without refusal.
+
+Found by the VinSamLib project, 2026-08-09, after hitting the same ceiling on
+their side; their `assemble()` minted all three object types from one shared
+counter and wrapped far sooner. Their corpus also confirms our per-type
+numbering is right: 1 631 banks carry a sample, a keymap and a program all
+numbered 200.

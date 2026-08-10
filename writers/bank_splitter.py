@@ -59,6 +59,28 @@ _MAX_SAMPLES_PER_BANK = 1000
 # Same limit applies to presets: EOS numbers them P000-P999 (max 1000/bank).
 _MAX_PRESETS_PER_BANK = 1000
 
+# KRZ is tighter, and for two separate reasons. Object ids start at 200, and:
+#   * id > 999  -- HW-CONFIRMED 2026-08-10: the K2000 CLAMPS, putting every
+#                  further object on 999 so each overwrites the last. Silent.
+#   * id > 1023 -- the id carries into the type field of the hash
+#                  (`type << 10 | id`, krz_writer._hash) and the object reads
+#                  back as a different type entirely.
+# The lower one binds: 200..999 = 800 objects PER TYPE. write_krz refuses a
+# bank past it; splitting on the real ceiling means the user gets more banks
+# instead of an error.
+_MAX_OBJECTS_PER_KRZ_BANK = 800
+
+#: Per-format (max samples, max presets) for one output bank.
+_FORMAT_LIMITS = {
+    'krz': (_MAX_OBJECTS_PER_KRZ_BANK, _MAX_OBJECTS_PER_KRZ_BANK),
+}
+
+
+def format_limits(fmt: str):
+    """(max_samples, max_presets) for one output bank of this format."""
+    return _FORMAT_LIMITS.get(fmt, (_MAX_SAMPLES_PER_BANK,
+                                    _MAX_PRESETS_PER_BANK))
+
 # ── Polyphony (measured on the E4XT 2026-07-31) ────────────────────────────────
 # Two facts that nothing in the size/fit path used to know:
 #
@@ -342,6 +364,8 @@ class TargetBank:
     # different-PCM collision (e.g. same-named samples from two source banks).
     _sample_keys: dict = field(default_factory=dict, repr=False)
     current_size: int = _BANK_OVERHEAD
+    max_samples: int = _MAX_SAMPLES_PER_BANK
+    max_presets: int = _MAX_PRESETS_PER_BANK
 
     def _unique_sample_name(self, base: str) -> str:
         if base not in self._sample_names:
@@ -403,10 +427,10 @@ class TargetBank:
                 extra += _SAMPLE_CHUNK_OVERHEAD + len(sample.data)
                 new_samples += 1
 
-        if len(self._sample_names) + new_samples > _MAX_SAMPLES_PER_BANK:
+        if len(self._sample_names) + new_samples > self.max_samples:
             return False
 
-        if len(self.presets) + 1 > _MAX_PRESETS_PER_BANK:
+        if len(self.presets) + 1 > self.max_presets:
             return False
 
         return (self.current_size + extra) <= limit_bytes
@@ -425,6 +449,7 @@ def split_into_banks(
     source_banks: List[Bank],
     max_size_mb: float,
     base_name: str = "EMU_BANK",
+    fmt: str = 'e4b',
 ) -> Tuple[List[Bank], List[str]]:
     """
     Pack presets from multiple source banks into size-limited output banks.
@@ -433,6 +458,8 @@ def split_into_banks(
         source_banks:  List of Bank objects (one per XPM)
         max_size_mb:   Maximum size per output bank in megabytes
         base_name:     Base name for output banks (truncated to 12 chars)
+        fmt:           Output format -- sets the per-bank object ceiling
+                       (KRZ addresses 824 objects per type, EOS 1000)
 
     Returns:
         Tuple of:
@@ -440,6 +467,7 @@ def split_into_banks(
           - List of warning strings (oversized presets, etc.)
     """
     limit_bytes = bank_limit_bytes(max_size_mb)
+    _max_s, _max_p = format_limits(fmt)
     warnings: List[str] = []
 
     # Flatten: collect (preset, [its samples], source_bank_name) tuples
@@ -498,12 +526,13 @@ def split_into_banks(
                 f"To fix: use --bank-size to raise the limit (E4XT max: 128 MB, K2000 max: 64 MB), "
                 f"or reduce preset size with --reduce-key-zones / --reduce-velocity-layers."
             )
-        if len(needed_samples) > _MAX_SAMPLES_PER_BANK:
+        if len(needed_samples) > _max_s:
             warnings.append(
                 f"  [WARN] Preset '{preset.name}' from '{source_name}' "
                 f"references {len(needed_samples)} unique samples, exceeding "
-                f"the EOS {_MAX_SAMPLES_PER_BANK}-sample-per-bank limit "
-                f"(S000-S999) — bank will be invalid."
+                f"the {_max_s}-sample-per-bank limit for {fmt.upper()} "
+                f"— bank will be invalid. A single preset cannot be split, "
+                f"so use --reduce-key-zones / --reduce-velocity-layers."
             )
 
         # Find first target bank that fits
@@ -516,7 +545,8 @@ def split_into_banks(
 
         if not placed:
             # Open a new target bank
-            tb = TargetBank(index=len(target_banks) + 1)
+            tb = TargetBank(index=len(target_banks) + 1,
+                            max_samples=_max_s, max_presets=_max_p)
             tb.add_preset(preset, needed_samples)
             target_banks.append(tb)
 
