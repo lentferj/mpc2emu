@@ -344,6 +344,15 @@ def main():
         metavar='DIR', help='Output directory (default: current directory)')
     ap.add_argument('--overwrite', action='store_true',
         help='Overwrite existing output files without prompting')
+    ap.add_argument('--pram', type=int, default=None, metavar='KB',
+                    help="K2000 usable PRAM in KB (--format krz). Objects "
+                         "(programs, keymaps, sample headers) live in PRAM, "
+                         "not sample RAM, and it runs out long before the "
+                         "object-id space does: a one-voice preset costs "
+                         "~960 bytes, so ~117 fit the original hardware. "
+                         "Default 110 = an unexpanded K2000 with headroom for "
+                         "setups/effects (~116 K is the usable total); raise it if "
+                         "the machine has a PRAM expansion (760 is a common one).")
     ap.add_argument('--bank-size', '--max-bank-size', dest='bank_size',
         type=_size_mb_type, default=32.0, metavar='SIZE',
         help='Max bank size, e.g. 64MB / 65536K / 32 (bare = MB). Default 32 MB; '
@@ -983,7 +992,8 @@ def main():
     for w in polyphony_warnings(source_banks, args.format):
         print(w)
     output_banks, warnings = split_into_banks(
-        source_banks, args.bank_size, bank_name, fmt=args.format)
+        source_banks, args.bank_size, bank_name, fmt=args.format,
+        pram_k=args.pram)
     for w in warnings:
         print(w)
     print_split_summary(source_banks, output_banks, args.bank_size)

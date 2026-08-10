@@ -263,6 +263,16 @@ Output:
   --bank-size MB      Maximum bank size  (default: 32; alias: --max-bank-size)
                       Accepts K/KB/M/MB/G/GB suffixes; a bare number = MB
                       (e.g. --max-bank-size 64MB).
+  --pram KB           K2000 usable PRAM (--format krz). A K2000 keeps its
+                      OBJECTS — programs, keymaps, sample headers — in PRAM,
+                      not in sample RAM, and PRAM runs out long before the
+                      object-id space does: a one-voice preset costs ~960 bytes
+                      (272 program + 688 keymap) against a sample header's 84,
+                      so a bank hits the limit on PRESET count, not sample
+                      count.  Default 110 = an unexpanded K2000 (~116 K usable,
+                      minus headroom for setups and effects) → ~117 presets per
+                      bank.  Raise it if the target machine has a PRAM
+                      expansion: --pram 760 is a common one and allows ~810.
   --max-preset-size SIZE  Cap each single preset/program (e.g. 8192K) so no one
                       preset fills a whole bank; over-cap presets are thinned to
                       fit.  (default: no per-preset cap)

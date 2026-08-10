@@ -3055,23 +3055,57 @@ K2000 and all six programs played their own sound, including three built so
 the keymap number and sample number deliberately differ. The machine resolves
 a reference by the slot it sits in, not a shared id space.
 
-**A bank can also be too big to load at all.** A 796-program test bank hung
-the machine on "Please wait ..." and needed a power cycle. The largest bank
-anywhere in Jan's library is 229 programs / 191 samples / 77 keymaps.
-`write_krz` warns outside that envelope rather than refusing — the real
-boundary is somewhere between 229 and 796 and has not been measured.
+**A bank can also be too big to load at all — MEASURED 2026-08-10 (K2000R,
+disc `K2KLIMIT`, `tests/re_banks/gen_k2000_loadlimit_disk.py`).**
 
-**Splitter half — DONE 2026-08-10.** `bank_splitter._MAX_SAMPLES_PER_BANK =
-1000` is the **EOS** limit, 176 above what KRZ can address, so the splitter
-handed `write_krz` banks it had to refuse: a hard error instead of a split.
-`format_limits(fmt)` now returns `(800, 800)` for `krz` and `(1000, 1000)`
-otherwise, `TargetBank` carries its own ceilings, and `split_into_banks`
-takes `fmt` (one caller, `convert.py`, which already had `args.format` on the
-line above). Verified: a 900-sample source yields **1** bank for e4b and
-**2** for krz (max 800), and both KRZ banks write without refusal.
+Two axes kept separate, because our writer emits one keymap per voice: a
+program costs ~2 objects, a sample 1. Samples ~11 ms so RAM could not
+confound the count — the largest bank reported `Memory: 690K`.
 
-Found by the VinSamLib project, 2026-08-09, after hitting the same ceiling on
-their side; their `assemble()` minted all three object types from one shared
-counter and wrapped far sooner. Their corpus also confirms our per-type
-numbering is right: 1 631 banks carry a sample, a keymap and a program all
-numbered 200.
+| bank | samples | presets | objects | result |
+|---|---|---|---|---|
+| S200–S600 | 200–600 | 1 | 202–602 | load |
+| **S800** | **800** | 1 | 802 | **loads**, top object on id **999** |
+| P200 | 8 | 200 | 408 | loads, fast |
+| P400 | 8 | 400 | 808 | loads, noticeably slower |
+| **P600** | 8 | **600** | 1208 | **loads, ~20 s on "Please wait ..."** |
+
+**No failure was found on either axis.** The full id range 200–999 is usable —
+the machine listed `999*S0799-C 4` — and every object count matched exactly
+(`Sel: 0/408`, `Sel: 0/808`).
+
+**The real limit is PRAM, and it is per-machine — this is what the object
+counts above were actually measuring.** A K2000 keeps its *objects* (programs,
+keymaps, sample headers) in PRAM, separately from sample RAM. Measured cost,
+matching the machine's own object list:
+
+| object | bytes |
+|---|---|
+| sample header | 84 |
+| program | 272 |
+| keymap | 688 |
+
+We emit one keymap per voice, so a preset costs `272 + voices × 688` — 960 B
+for a plain one. That is why the preset axis runs out first: 800 samples are
+only 66 K, but 600 presets are 562 K.
+
+**It explains the hang exactly.** 796 presets × 960 B = **746 K against that
+machine's 760 K** — 98 % full. Never an object-count limit.
+
+**And it invalidates generalising from this machine.** The K2000R used for
+these tests has a **760 K expansion**; an original K2000 has 128 K fitted,
+**~116 K usable**, and most commercial banks were authored for it (our
+K2KFEATDEMO banks run 8–38 K). A 600-preset bank needs 562 K and simply will
+not load on a stock machine.
+
+Applied: the splitter now caps on **estimated PRAM bytes**, default **110 K**
+(the stock ~116 K less headroom for setups and effects), overridable with
+`--pram KB`. That gives ~117 one-voice presets per bank by default and ~810
+with `--pram 760`. `write_krz` warns against the same stock figure. The
+object-id ceiling (800 per type) still applies underneath and binds the sample
+axis.
+
+**Still open:** where between 600 and 796 it actually breaks. A P700 bank
+would halve the gap. It only matters for libraries producing more than 600
+presets in one bank, which is rare — every bank in either local library is far
+below it.

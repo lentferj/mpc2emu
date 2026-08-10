@@ -36,7 +36,7 @@ Strategie für den E4XT, da ein Preset alle seine Samples in derselben Bank brau
 
 import math
 from dataclasses import dataclass, field, replace
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 from models.common import Bank, Preset, SampleData
 
 
@@ -69,8 +69,41 @@ _MAX_PRESETS_PER_BANK = 1000
 # bank past it; splitting on the real ceiling means the user gets more banks
 # instead of an error.
 _MAX_OBJECTS_PER_KRZ_BANK = 800
+# ── KRZ: PRAM is the real limit, and it is per-machine ────────────────────────
+# A K2000 keeps its OBJECTS (programs, keymaps, sample headers) in PRAM,
+# separately from sample RAM. Object COUNT is not what binds -- PRAM BYTES are,
+# and how many there are depends on the machine:
+#
+#   original K2000   128K fitted, ~116K usable
+#   expanded         760K is common but NOT standard
+#
+# The default budget is 110K rather than the full 116K: PRAM also holds
+# setups, effects and whatever the user already has loaded, and a bank that
+# fills it exactly leaves no room for any of that. 110K is safe, and --pram
+# overrides it in either direction.
+#
+# Most commercial banks were authored to fit the original, which is why real
+# ones are small: our K2KFEATDEMO banks run 8-38K.
+#
+# Per-object cost, measured 2026-08-10 against a K2000R's own object list
+# (the machine displays exactly these sizes):
+_PRAM_SAMPLE  = 84     # sample header; the PCM itself lives in sample RAM
+_PRAM_PROGRAM = 272
+_PRAM_KEYMAP  = 688    # 128 entries x 5 bytes + header -- the dominant cost
+#
+# We emit one keymap PER VOICE, so a preset costs 272 + voices*688. A plain
+# one-voice preset is 960 bytes, which is why the preset axis runs out long
+# before the sample axis: 800 samples are only 66K, but 600 presets are 562K.
+#
+# This model explains the hang that started all of this: 796 presets x 960 B =
+# 746K against that machine's 760K, i.e. 98% full. It was never an object-count
+# limit. On a stock machine the same arithmetic allows ~117 presets at the
+# 110K default, ~123 if the full 116K is claimed with --pram 116.
+_DEFAULT_PRAM_K = 110
 
-#: Per-format (max samples, max presets) for one output bank.
+#: Per-format (max samples, max presets) for one output bank. The KRZ preset
+#: figure is a backstop only -- `pram_budget_bytes` is what actually binds, and
+#: is far lower on a stock machine.
 _FORMAT_LIMITS = {
     'krz': (_MAX_OBJECTS_PER_KRZ_BANK, _MAX_OBJECTS_PER_KRZ_BANK),
 }
@@ -80,6 +113,22 @@ def format_limits(fmt: str):
     """(max_samples, max_presets) for one output bank of this format."""
     return _FORMAT_LIMITS.get(fmt, (_MAX_SAMPLES_PER_BANK,
                                     _MAX_PRESETS_PER_BANK))
+
+
+def pram_budget_bytes(pram_k: Optional[int] = None) -> int:
+    """Usable PRAM in bytes. `pram_k` is the machine's USABLE PRAM in KB."""
+    return int(pram_k if pram_k else _DEFAULT_PRAM_K) * 1024
+
+
+def preset_pram_bytes(preset: Preset) -> int:
+    """PRAM an assembled preset occupies: its program plus one keymap per voice."""
+    return _PRAM_PROGRAM + max(1, len(preset.voices)) * _PRAM_KEYMAP
+
+
+def bank_pram_bytes(n_samples: int, presets) -> int:
+    """PRAM an assembled KRZ bank occupies."""
+    return (n_samples * _PRAM_SAMPLE
+            + sum(preset_pram_bytes(p) for p in presets))
 
 # ── Polyphony (measured on the E4XT 2026-07-31) ────────────────────────────────
 # Two facts that nothing in the size/fit path used to know:
@@ -364,6 +413,8 @@ class TargetBank:
     # different-PCM collision (e.g. same-named samples from two source banks).
     _sample_keys: dict = field(default_factory=dict, repr=False)
     current_size: int = _BANK_OVERHEAD
+    #: 0 = no PRAM limit (every format but KRZ).
+    pram_budget: int = 0
     max_samples: int = _MAX_SAMPLES_PER_BANK
     max_presets: int = _MAX_PRESETS_PER_BANK
 
@@ -433,6 +484,13 @@ class TargetBank:
         if len(self.presets) + 1 > self.max_presets:
             return False
 
+        # PRAM, not object count, is what a K2000 actually runs out of.
+        if self.pram_budget:
+            used = bank_pram_bytes(len(self._sample_names) + new_samples,
+                                   self.presets + [preset])
+            if used > self.pram_budget:
+                return False
+
         return (self.current_size + extra) <= limit_bytes
 
     def to_bank(self, base_name: str) -> Bank:
@@ -450,6 +508,7 @@ def split_into_banks(
     max_size_mb: float,
     base_name: str = "EMU_BANK",
     fmt: str = 'e4b',
+    pram_k: Optional[int] = None,
 ) -> Tuple[List[Bank], List[str]]:
     """
     Pack presets from multiple source banks into size-limited output banks.
@@ -459,7 +518,10 @@ def split_into_banks(
         max_size_mb:   Maximum size per output bank in megabytes
         base_name:     Base name for output banks (truncated to 12 chars)
         fmt:           Output format -- sets the per-bank object ceiling
-                       (KRZ addresses 824 objects per type, EOS 1000)
+                       (KRZ addresses 800 objects per type, EOS 1000)
+        pram_k:        K2000 USABLE PRAM in KB (KRZ only; default 116, the
+                       original hardware). Objects live in PRAM and it runs
+                       out long before the id space does.
 
     Returns:
         Tuple of:
@@ -468,6 +530,7 @@ def split_into_banks(
     """
     limit_bytes = bank_limit_bytes(max_size_mb)
     _max_s, _max_p = format_limits(fmt)
+    _pram = pram_budget_bytes(pram_k) if fmt == 'krz' else 0
     warnings: List[str] = []
 
     # Flatten: collect (preset, [its samples], source_bank_name) tuples
@@ -526,6 +589,17 @@ def split_into_banks(
                 f"To fix: use --bank-size to raise the limit (E4XT max: 128 MB, K2000 max: 64 MB), "
                 f"or reduce preset size with --reduce-key-zones / --reduce-velocity-layers."
             )
+        if _pram and preset_pram_bytes(preset) + _PRAM_SAMPLE * len(needed_samples) > _pram:
+            warnings.append(
+                f"  [WARN] Preset '{preset.name}' from '{source_name}' needs "
+                f"{(preset_pram_bytes(preset) + _PRAM_SAMPLE * len(needed_samples))/1024:.0f} K "
+                f"of K2000 PRAM on its own, more than the "
+                f"{_pram/1024:.0f} K budget — the bank will not load. A single "
+                f"preset cannot be split; use --reduce-key-zones / "
+                f"--reduce-velocity-layers, or --pram if this machine has a "
+                f"PRAM expansion."
+            )
+
         if len(needed_samples) > _max_s:
             warnings.append(
                 f"  [WARN] Preset '{preset.name}' from '{source_name}' "
@@ -546,7 +620,8 @@ def split_into_banks(
         if not placed:
             # Open a new target bank
             tb = TargetBank(index=len(target_banks) + 1,
-                            max_samples=_max_s, max_presets=_max_p)
+                            max_samples=_max_s, max_presets=_max_p,
+                            pram_budget=_pram)
             tb.add_preset(preset, needed_samples)
             target_banks.append(tb)
 

@@ -1285,22 +1285,44 @@ def write_krz(bank: Bank, output_path: str) -> None:
     # size does too. The boundary is unmeasured, so this warns rather than
     # refuses.
     #
-    # The thresholds come from what has actually LOADED, and the two axes have
-    # different evidence:
+    # Both thresholds are MEASURED on a K2000R (2026-08-10, disc K2KLIMIT,
+    # tests/re_banks/gen_k2000_loadlimit_disk.py), not inferred from the
+    # largest bank in somebody's library:
     #
-    #   presets  229 is the largest in the VinSamLib library; 796 is the only
-    #            measured failure. Anything between is unknown.
-    #   samples  283, ours -- K2KFEATDEMO_06. Four of the six K2KFEATDEMO
-    #            banks carry 219-283 samples and loaded on the K2000R (#204
-    #            was auditioned off _04 and _05, see TODO). An earlier
-    #            draft of this warning used the VinSamLib library's 191 and
-    #            would have fired on 4 of our own 6 hardware-verified demo
-    #            banks -- a warning that cries wolf on shipped, working output
-    #            is worse than none.
+    #   samples  800 loaded, top object on id 999 -- the whole addressable
+    #            range -- and quickly. No failure found on this axis at all.
+    #   presets  600 loaded (600 programs + 600 keymaps = 1208 objects), but
+    #            sat ~20 s on "Please wait ...", against a barely noticeable
+    #            pause at 400. The per-program cost climbs.
     #
-    # There is no measured sample-count failure at all; 283 is a floor under
-    # "known to work", not a ceiling on what works.
-    _HW_SAFE_PRESETS, _HW_SAFE_SAMPLES = 229, 283
+    # Earlier drafts used 229 / 283 (largest known to load in two libraries)
+    # and before that 191, which fired on 4 of our own 6 hardware-verified
+    # demo banks. Both would now nag about banks measured to be fine.
+    #
+    # What actually runs out is PRAM, and how much there is depends on the
+    # machine -- see bank_splitter's PRAM section for the model and the
+    # measurements. A preset costs 272 + voices*688 bytes; an unexpanded
+    # K2000 has ~116K usable, so ~123 one-voice presets fit. The 600-preset
+    # bank that loaded here did so on a 760K expansion, and the 796-preset
+    # bank that hung needed 746K of that 760K. The default budget is 110K
+    # rather than the full ~116K usable, to leave room for setups, effects
+    # and whatever the user already has loaded.
+    #
+    # The splitter enforces the budget (--pram); this is a last-line warning
+    # for banks that reach the writer another way, and it uses the stock
+    # figure because that is what most machines have.
+    from writers.bank_splitter import bank_pram_bytes, pram_budget_bytes
+    _pram_used = bank_pram_bytes(len(samples), bank.presets)
+    _pram_stock = pram_budget_bytes()
+    if _pram_used > _pram_stock:
+        print(f"  [WARN] this bank needs ~{_pram_used/1024:.0f} K of K2000 "
+              f"PRAM ({len(bank.presets)} preset(s), {len(samples)} sample(s)); "
+              f"an unexpanded K2000 has ~{_pram_stock/1024:.0f} K and will not "
+              f"load it. Objects live in PRAM, not sample RAM -- a preset "
+              f"costs ~1 K, a sample ~84 bytes. Split further "
+              f"(--max-bank-size), or pass --pram if the target machine has a "
+              f"PRAM expansion.")
+    _HW_SAFE_PRESETS, _HW_SAFE_SAMPLES = 600, 800
     if len(bank.presets) > _HW_SAFE_PRESETS or len(samples) > _HW_SAFE_SAMPLES:
         print(f"  [WARN] {len(bank.presets)} preset(s) / {len(samples)} sample(s) "
               f"is larger than any bank known to LOAD on a K2000 "
