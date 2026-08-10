@@ -615,25 +615,25 @@ def build_iso(e4b_files: List[str], output_iso: str,
     print(f"  Volume label: {label}")
     print(f"  Files: {len(e4b_files)}")
 
-    # This path writes ONE dir-content block, so the folder can reference at
-    # most EMU3_ENTRIES_PER_BLOCK banks.  Everything else here (cluster
-    # allocation, the FAT, the file data) is built from the list it is given,
-    # so a longer list used to produce banks that were physically on the disc
-    # but had no directory entry — invisible to the E4XT, silently.  Drop them
-    # here, before the layout is computed, so the image carries no dead
-    # clusters either.  Lifting the limit to EMU3_MAX_FILES_PER_DIR is
-    # RESOLUTION_NOTES §ISODIR stage 2 and needs an E4XT confirmation first.
-    if len(e4b_files) > EMU3_ENTRIES_PER_BLOCK:
-        dropped   = e4b_files[EMU3_ENTRIES_PER_BLOCK:]
-        e4b_files = e4b_files[:EMU3_ENTRIES_PER_BLOCK]
-        print(f"  [ERROR] An EMU3 CD directory holds at most "
-              f"{EMU3_ENTRIES_PER_BLOCK} banks; {len(dropped)} will NOT be "
+    # The folder's block list holds EMU3_BLOCKS_PER_DIR entries of
+    # EMU3_ENTRIES_PER_BLOCK banks each, so one EMU3 directory addresses
+    # EMU3_MAX_FILES_PER_DIR banks -- not the 16 this path used to assume.
+    # Everything else here (cluster allocation, the FAT, the file data) is
+    # built from the list it is given, so a longer list produced banks that
+    # were physically on the disc but had no directory entry: invisible to the
+    # E4XT, and silently. Anything past the structural limit is still dropped,
+    # but before the layout is computed, so the image carries no dead clusters.
+    if len(e4b_files) > EMU3_MAX_FILES_PER_DIR:
+        dropped   = e4b_files[EMU3_MAX_FILES_PER_DIR:]
+        e4b_files = e4b_files[:EMU3_MAX_FILES_PER_DIR]
+        print(f"  [ERROR] An EMU3 directory holds at most "
+              f"{EMU3_MAX_FILES_PER_DIR} banks; {len(dropped)} will NOT be "
               f"written:")
         for p in dropped:
             print(f"            {Path(p).name}")
         print(f"          Split the banks across multiple images "
-              f"(≤{EMU3_ENTRIES_PER_BLOCK} each), or use --hda, whose "
-              f"directory has no such limit.")
+              f"(≤{EMU3_MAX_FILES_PER_DIR} each), or use --hda, whose "
+              f"directory spans multiple folders.")
 
     # ── choose cluster size: smallest cse whose clusters fit in 5 FAT blocks ──
     file_sizes = [Path(p).stat().st_size for p in e4b_files]
@@ -656,6 +656,11 @@ def build_iso(e4b_files: List[str], output_iso: str,
             'clusters': n_c,
             'blks':     blks,
             'brem':     brem,
+            # The 2-digit file id must run across the whole folder.
+            # _dircon_block falls back to the WITHIN-block index, which is
+            # right only for a single block -- past 16 banks that would number
+            # every block 00-15 over again.
+            'slot':     len(file_infos),
         })
 
     n_clusters   = sum(allocs)
@@ -670,14 +675,25 @@ def build_iso(e4b_files: List[str], output_iso: str,
     # ── build filesystem blocks ──────────────────────────────────────────────
     sb   = _superblock(total_blocks, n_clusters, label, cse)
 
+    # One dir-content block per 16 banks, listed in the folder entry's 7-slot
+    # block list -- the same shape build_emu_hdd writes and the E4XT reads from
+    # our hardware-confirmed HDD images. For <= 16 banks this is one block at
+    # _DIRCON_START and the bytes are identical to the single-block form, so
+    # nothing already confirmed on hardware changes.
+    n_dircon = max(1, (len(file_infos) + EMU3_ENTRIES_PER_BLOCK - 1)
+                      // EMU3_ENTRIES_PER_BLOCK)
+    dircon_ids = list(range(_DIRCON_START, _DIRCON_START + n_dircon))
+
     pad1 = bytearray(BSIZE)
-    pad1[0] = _DIRCON_START + 1   # next-free dircon block pointer
+    pad1[0] = _DIRCON_START + n_dircon   # next-free dircon block pointer
 
     fat    = _fat_blocks(allocs, n_clusters, _FAT_BLOCKS)
-    root   = _root_block("Default Folder  ", _DIRCON_START)
+    root   = _root_block("Default Folder  ", dircon_ids)
     root  += b'\x00' * BSIZE * (_ROOT_BLOCKS - 1)
-    dircon = _dircon_block(file_infos)
-    dircon += b'\x00' * BSIZE * (_DIRCON_BLOCKS - 1)
+    dircon = b''.join(
+        _dircon_block(file_infos[i:i + EMU3_ENTRIES_PER_BLOCK])
+        for i in range(0, max(len(file_infos), 1), EMU3_ENTRIES_PER_BLOCK))
+    dircon += b'\x00' * BSIZE * (_DIRCON_BLOCKS - n_dircon)
 
     print(f"  Layout: fat={_FAT_START}+{_FAT_BLOCKS}  root={_ROOT_START}+{_ROOT_BLOCKS}"
           f"  dircon={_DIRCON_START}+{_DIRCON_BLOCKS}  data={_DATA_START}"

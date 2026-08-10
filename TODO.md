@@ -100,7 +100,7 @@ local EIII corpus to measure), `sf2_parser`, `mpc60_parser`. Deliberately not
 changed: `krz_writer`'s ASCII encode against `krz_parser`'s latin-1 decode —
 zero of 238 local `.KRZ` files carry such a byte in an object name.
 
-## EMU3 CD image silently drops banks past the 16th (BUG, OPEN 2026-08-03)
+## EMU3 CD image silently drops banks past the 16th — FIXED 2026-08-09
 
 `writers/iso_builder.py::build_iso` — the `--iso` output for `--format e4b`
 and `--format eiii` — writes exactly **one** dir-content block:
@@ -133,11 +133,47 @@ multi-block dir content properly (7 blocks per folder, 100 banks per folder,
 multiple folders beyond that). Only the CD path was left on the single-block
 assumption.
 
-**Status:** open, fix strategy in `docs/RESOLUTION_NOTES.md` §ISODIR.
-**Blocked on:** nothing for the guard (software-only). The 17–112 bank
-multi-block image wants one E4XT confirmation that the CD reader honours the
-folder block list the same way the HDD reader does — our HDD multi-block
-images are hardware-confirmed, the CD variant has never been tested past 16.
+**Status: FIXED 2026-08-09.** The CD path now writes one dir-content block
+per 16 banks and lists them in the folder entry's 7-slot block list — the
+shape `build_emu_hdd` already writes and our hardware-confirmed HDD images
+use. The 2-digit file id runs across the whole folder (`_dircon_block`'s
+fallback is the *within-block* index, which past 16 banks would have numbered
+each block 00–15 again). Anything past the structural 112 is still dropped,
+now with the count named.
+
+**Verified in software:** a 16-bank image is **byte-identical** to the one the
+old code produced (sha `836eab0cb89271a7`), so nothing already confirmed on
+hardware changed; a 20-bank image lists blocks `[11, 12]` with all 20 banks
+referenced, ids 0–19 unique, clusters contiguous; 112 fills all 7 blocks; 113
+drops exactly one with the error. Regression test
+`test_emu3_cd_directory_spans_blocks`, confirmed to fail with the fix
+reverted.
+
+**HW-CONFIRMED 2026-08-10 (E4XT, Jan)** — disc `CD2-DIRCON.iso`, 20 banks,
+1-16 in dir-content block 11 and 17-20 in block 12
+(`tests/re_banks/gen_emu3_dircon_bank.py`).
+
+- The CD browser lists all 20 banks including `DIRCON20`. Under the old code
+  the listing would have stopped at `DIRCON16` — block 12 did not exist. So
+  the reader walks the folder's 7-slot block list.
+- B16-B19 (the four block-12 banks) load, and sending one MIDI note from an
+  MPC One plays a **different pitch on each preset**. That rules out the
+  failure a listing cannot show: entries that are listed correctly but all
+  resolve to the same data. Each block-12 entry resolves to its own bank.
+
+Together with the software check — 20 distinct start clusters, and the data
+at each cluster byte-matching its source bank — the E4XT's CD reader handles
+multi-block directories the same way its hardware-confirmed HDD reader does.
+**The CD bank limit is the structural 112, not 16.**
+
+**The first version of this test was worthless and the mistake is recorded in
+the generator's header.** It gave every sample a `root_note` equal to its own
+recorded pitch; a sampler transposes from `root_note`, so the two cancel and
+all 20 banks sounded identical at any key. Jan reported exactly that, twice,
+which was the correct reading of a broken disc. v2 fixes it by sharing
+`root_note = 60` across all banks and varying only the recorded frequency.
+
+
 
 Found by cross-referencing ConvertWithMoss `3dbd378f` (2026-08-03), which
 extends the same filesystem writer from 16 to 112 files using the identical
