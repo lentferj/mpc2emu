@@ -122,6 +122,22 @@ KEYMAP_METHOD = 0x0013
 #: addressable key at 12; a non-zero basePitch would move it (see TODO.md).
 FIRST_MAPPABLE_KEY = 12
 
+#: OPT-IN, default OFF: emit ONE keymap object for voices whose keymaps come
+#: out byte-identical, instead of one per voice.
+#:
+#: A keymap is 688 bytes of PRAM against a program's 272, so a bank of presets
+#: that all share a layout wastes most of its PRAM on duplicates -- 300 such
+#: presets carry 201 K of identical keymaps. Sharing them is what real K2000
+#: banks do (a re-assembled 796-program bank was measured with 52 keymaps).
+#:
+#: Default OFF because it changes the bytes of every multi-preset bank we have
+#: hardware-confirmed, and because the sharing itself is what is under test:
+#: VinSamLib's 796-program/52-keymap bank hung a machine at 32% PRAM, which
+#: would be explained if the K2000 materialises per-program state on load
+#: rather than sharing the object the way the file does. Until a disc says
+#: otherwise, this stays opt-in. See TODO "KRZ keymap sharing".
+SHARE_IDENTICAL_KEYMAPS = False
+
 KEYMAP_ENTRY_SIZE = 5  # Method2Size(0x13) = 2+2+1
 
 NUM_KEYS = 128          # K2000 keyboard range
@@ -1303,10 +1319,16 @@ def write_krz(bank: Bank, output_path: str) -> None:
     # machine -- see bank_splitter's PRAM section for the model and the
     # measurements. A preset costs 272 + voices*688 bytes; an unexpanded
     # K2000 has ~116K usable, so ~123 one-voice presets fit. The 600-preset
-    # bank that loaded here did so on a 760K expansion, and the 796-preset
-    # bank that hung needed 746K of that 760K. The default budget is 110K
-    # rather than the full ~116K usable, to leave room for setups, effects
-    # and whatever the user already has loaded.
+    # bank that loaded here did so on a 760K expansion. The default budget is
+    # 110K rather than the full ~116K usable, to leave room for setups,
+    # effects and whatever the user already has loaded.
+    #
+    # RETRACTED 2026-08-10: the 796-preset bank that hung is NOT explained by
+    # this. It came from a re-assembler carrying the source's SHARED keymaps
+    # -- 796 programs but only 52 keymaps, so 247K, 32% of that machine's
+    # 760K. The 746K figure assumed our one-keymap-per-voice shape. PRAM is
+    # the right model for what THIS writer emits, which is all this warning
+    # claims; what hung that machine is still open.
     #
     # The splitter enforces the budget (--pram); this is a last-line warning
     # for banks that reach the writer another way, and it uses the stock
@@ -1363,6 +1385,7 @@ def write_krz(bank: Bank, output_path: str) -> None:
     # overflowing the K2000 above 3 layers; fixed in _patch_layer (HW-RE'd against
     # ROM #183/#193/#194).
     preset_keymaps: list = []        # per preset: list of (voice, keymap_id)
+    _shared_keymaps: dict = {}       # entry-bytes -> id, only when sharing
     km_id = base_id
     for preset in bank.presets:
         # Split any multi-velocity-band voice into one layer per band BEFORE the
@@ -1400,8 +1423,21 @@ def write_krz(bank: Bank, output_path: str) -> None:
             voices = voices[:_MAX_KRZ_LAYERS]
         vk = []
         for voice in voices:
-            vk.append((voice, km_id))
-            km_id += 1
+            kid = None
+            if SHARE_IDENTICAL_KEYMAPS:
+                # Key on the bytes the keymap would actually contain, not on
+                # the voice: two different voices can yield the same keymap.
+                entries = _build_keymap_entries(
+                    voice, sample_id_map, samples_by_name, 0)[0]
+                kid = _shared_keymaps.get(entries)
+                if kid is None:
+                    kid = km_id
+                    _shared_keymaps[entries] = kid
+                    km_id += 1
+            else:
+                kid = km_id
+                km_id += 1
+            vk.append((voice, kid))
             if km_id - 1 > _MAX_OBJ_ID:
                 raise ValueError(
                     f"this bank needs more than {_MAX_OBJ_ID - base_id + 1} "
@@ -1431,9 +1467,13 @@ def write_krz(bank: Bank, output_path: str) -> None:
                   f"{len(sample.data)//2} words @ {sample.sample_rate} Hz"
                   + (f", {gain:+.1f} dB" if _vol_adjust_byte(gain) else ""))
 
-        # --- Keymap objects (one per voice) ---
+        # --- Keymap objects (one per voice, or one per distinct keymap) ---
+        _written_km = set()
         for pi, preset in enumerate(bank.presets):
             for voice, kid in preset_keymaps[pi]:
+                if kid in _written_km:
+                    continue            # shared: the object is already on disc
+                _written_km.add(kid)
                 lost_zones.extend(
                     (preset.name, *z) for z in _write_keymap_object(
                         f, preset.name, voice, kid,

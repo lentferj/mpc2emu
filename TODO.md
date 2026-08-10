@@ -3109,3 +3109,34 @@ axis.
 would halve the gap. It only matters for libraries producing more than 600
 presets in one bank, which is rare — every bank in either local library is far
 below it.
+
+---
+
+## KRZ keymap sharing — implemented, OFF by default, awaiting one disc
+
+**Status:** `krz_writer.SHARE_IDENTICAL_KEYMAPS`, default `False`.
+
+A keymap is **688 bytes** of PRAM against a program's 272, and we emit one per
+voice. A bank of presets that share a layout therefore spends most of its PRAM
+on byte-identical duplicates — 300 such presets carry **201 K** of them. Real
+K2000 banks share: a re-assembled bank measured 796 programs against 52
+keymaps.
+
+With the flag on, voices whose keymap entries come out byte-identical get one
+object. Default output is unchanged — the reference GIG→KRZ still hashes
+`e173c03e9caa0c23`.
+
+**Blocked on:** whether the machine really treats a shared keymap as one
+object. VinSamLib's 796-program / 52-keymap bank hung a 760 K machine at 32 %
+estimated PRAM, which would be explained if the K2000 materialises per-program
+state on load regardless of sharing. Disc `K2KSHKM`
+(`tests/re_banks/gen_k2000_shared_keymap_disk.py`) settles it: N programs all
+pointing at ONE keymap, at 200/400/600/**796**, every one smaller than the bank
+that hung.
+
+- `SK796` loads → sharing is real, the flag can become the default, and that
+  hang belongs to something specific to that bank (its ROM keymap references
+  being the obvious suspect — the axis nobody has varied).
+- `SK796` hangs → the machine charges per program, both projects' PRAM
+  estimates are optimistic for shared-keymap banks, and the splitter should
+  count programs rather than only objects.
