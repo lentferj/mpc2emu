@@ -686,6 +686,7 @@ on the K2000R.
 | "Regular" program layers | **3** | >3 *stacked/unison* layers are spread-picked to 3 so the program plays on **any** channel; >3 *split* layers (velocity/key/drum) become a **drum program** that only sounds on a drum channel (HW-confirmed) |
 | Object user id space | **200–999** | `base_id = 200`; samples/keymaps/programs each number from 200 independently (typed hash disambiguates) — HW-confirmed. Past 999 the machine **clamps**: every further object lands on 999, each overwriting the last, silently. Past 1023 the id carries into the type field of the hash and the object reads back as a different type |
 | Object memory (PRAM) | **~116 K usable** (128 K fitted); expansions to 760 K are common but not standard | Objects live in PRAM, *separately from sample RAM* — see §6.1. This, not the id space, is what a bank actually runs out of |
+| ROM references | ~**0.37 s each** of load time | A program layer whose keymap id is not in the bank resolves against ROM — see §6.2. Not a limit, but the dominant term in how long a bank takes to load |
 | Up-pitch ceiling (per sample) | `root + 12·log2(48000/sr)` semitones | keys above it are not assigned the sample (avoids losing keytracking); raise via `--max-sample-rate` |
 | FAT16 volume | **~2047 MB** | `fat16.format_new` requires cluster count 4085..65524; `build_k2000_disk` splits or errors above it |
 
@@ -715,6 +716,36 @@ sizes from the objects rather than assume them.
 
 `bank_splitter.bank_pram_bytes()` estimates this, and `--pram KB` sets the
 budget (default 110 K = stock, less headroom for setups and effects).
+
+### 6.2 ROM references dominate LOAD TIME
+
+A program layer whose keymap id is not an object in the bank resolves against
+the machine's ROM. Each such reference costs roughly **0.37 s** to load.
+
+Measured by the VinSamLib project with an mpc2emu-built control on the same
+machine, same day, varying only this axis:
+
+| bank | programs | ROM refs | load |
+|---|---|---|---|
+| control (ours) | 796 | **0** | 18–20 s |
+| theirs | 796 | **1748** | **~11 min** |
+
+`(660 − 20) / 1748 ≈ 0.37 s`. The mechanism is visible from the front panel:
+the machine displays the ROM object names it lands on, none of which are in
+the file.
+
+**This is normal, not a defect.** 168 of 201 local banks make ROM references —
+ROM-based content is an ordinary way to author for a K2000. The largest here
+is 328 (≈2 min); VinSamLib measure a maximum of 459 across 2128 banks.
+
+**It is also why a slow load looks like a hang.** A bank was twice abandoned at
+"Please wait ..." before being watched through to completion at 11 minutes.
+Past a certain size, *"hung"* and *"not finished yet"* are the same observation.
+
+Count **references**, not keymap entries: per-entry counting gives 6268 for an
+ordinary commercial bank, which at 0.37 s would be 38 minutes. The machine
+resolves references. `--info` reports the figure for any KRZ; mpc2emu's own
+output is always zero, since `write_krz` emits a keymap for every layer.
 
 ---
 
