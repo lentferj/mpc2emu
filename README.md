@@ -247,6 +247,7 @@ Positional:
 Info mode:
   --info              Inspect input file(s) without converting
   --verbose           Show per-zone detail with --info
+  --long-help         Print the full README (long-form manual) and exit
 
 Output:
   --format FORMAT     e4b | krz | eiii | talsmpl  (default: e4b)
@@ -317,6 +318,12 @@ Samples:
                       (also auto-detected for a WAV-only dir)
   --middle-c {auto,C3,C4,C5}  Octave naming for filename root notes: which C =
                       MIDI 60  (default: auto)
+  --mono              Reduce stereo samples to mono. Stereo sources are otherwise
+                      KEPT in stereo (one voice per channel on E4B, a stereo pair
+                      on KRZ), which costs two voices per note.
+  --pan-law           How panning should affect LOUDNESS on the E4XT (--format e4b
+                      only): the E4XT pans without a centre dip, so a source
+                      authored against an equal-power law needs compensating.
 
 Vintage resampling:
   --resample PROFILE  emulator2  (8-bit / 27.5 kHz, EMU Emulator II)
@@ -329,6 +336,41 @@ Vintage resampling:
 Modulation:
   --lfo-sync-bpm BPM  Reference tempo for reproducing tempo-synced MPC LFOs as a
                       fixed rate  (default: 120; see docs/lfo_sync_rates.md)
+
+Silence trimming (tighten sample starts and ends):
+  --trim [DB]         Shorthand for --trim-start DB --trim-tail DB: cleanly cut
+                      leading AND trailing silence from each sample.
+  --trim-start [DB]   Cut leading silence off the START of each sample (the MPC
+                      ONE autosampler leaves a gap before the attack). Two-stage
+                      onset detector; validated against Audacity on fast attacks.
+  --trim-start-fade MS  With --trim-start: fade-in length starting exactly at the
+                      new sample start  (default: short, click-suppressing)
+  --trim-start-keep-loops  With --trim-start: never trim a sample whose loop start
+                      lies in the region that would be cut.
+  --trim-tail [DB]    Cut the decaying tail + trailing silence off the END of each
+                      sample (gains the most RAM on long one-shots).
+  --trim-tail-fade MS   With --trim-tail: fade-out length ending exactly at the new
+                      sample end.
+  --trim-tail-keep-loops   With --trim-tail: never trim a sample whose loop end lies
+                      in the region that would be cut.
+
+Auto-loop (make held notes sustain indefinitely):
+  --auto-loop         Place a clean, seamless FORWARD sustain loop in each sample,
+                      so held notes sustain instead of running out of audio.
+                      Adaptive length; crossfaded at the splice.
+  --auto-loop-xfade MS  Crossfade length at the loop splice  (default: 25; grows
+                      with the loop where needed)
+  --auto-loop-max-ms MS  Cap on the loop length  (default: 2500). Longer = more
+                      movement retained, at the cost of RAM.
+  --auto-loop-min-quality COST  Skip a sample whose best endpoint-match cost
+                      exceeds COST, rather than force an audible seam.
+  --auto-loop-force   Loop even already-looped samples, replacing the existing loop.
+  --auto-loop-trim    Drop the audio after the loop end to save RAM (the recorded
+                      release is lost; the sampler's own release takes over).
+  --auto-loop-no-crossfade  Do NOT bake a crossfade into the sample — set the loop
+                      points only, leaving the PCM untouched.
+  --auto-loop-dump-dir DIR  Also export each looped sample to DIR as a WAV carrying
+                      its loop points, for inspection in an audio editor.
 
 Sample-count reduction (fit modern libraries into vintage memory limits):
   --reduce-key-zones PCT        Remove PCT% of per-voice key-zone samples
