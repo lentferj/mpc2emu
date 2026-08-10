@@ -1540,11 +1540,23 @@ crossfade + a `[weak match — audition]` advisory or a skip.
 Possible follow-ups (not blocking): pitch-based vibrato detection
 (amp-envelope misses pure vibrato); tuning the quality threshold.
 
-## K2000R "Object → Delete" LOCKUP (OPEN, 2026-06-25) — needs factory resets
+## K2000R "Object → Delete" LOCKUP — RESOLVED, and it was never our converter
 
-Deleting a program loaded from a converted KRZ locks up the K2000R (~2 factory-reset
-cycles to recover). **Status: unresolved, paused mid-investigation.** Full detail in
+Deleting a program loaded from a converted KRZ locked up the K2000R (~2
+factory-reset cycles to recover).
+
+**Root cause: `k2kremote`'s ~2–3 s `GETGRAPHICS` heartbeat**, which polls the
+machine for its LCD contents. Arriving while the K2000 is mid-delete, it
+crashes it. With k2kremote closed, deleting programs from converted banks is
+clean — including the banks that originally triggered this entry.
+
+**Nothing to fix here.** The fix belongs in `k2kremote` (suppress or defer the
+heartbeat while a destructive panel operation is in flight). Full detail in
 the `project_k2000_delete_lockup` memory.
+
+This entry sat marked "unresolved, paused mid-investigation" well after the
+cause was found — worth noting as the failure mode of a long TODO file, not
+just a stale line.
 
 Key points: isolated to deleting a PROGRAM object (keymap-only delete is clean);
 **reproduces on REAL soundsets** (Monotanz `acguit`, authored `SYNTHEX_1`) — so likely
