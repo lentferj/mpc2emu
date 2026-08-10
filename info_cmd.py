@@ -93,7 +93,10 @@ def _sniff_format(path: Path) -> str:
         return "Akai MPC Keygroup program (XML)"
 
     if ext == '.krz':
-        if data[:6] == b'PRAM\x00\x00':
+        # Magic is the 4-byte 'PRAM' only: bytes 4:8 are osize, a big-endian
+        # i32. The old 6-byte test demanded osize < 65536 and so called every
+        # ordinary bank "unrecognised" -- krz_parser has always checked 4.
+        if data[:4] == b'PRAM':
             return "Kurzweil KRZ (PRAM)"
         return "KRZ (unrecognised header)"
 
@@ -121,6 +124,37 @@ def _sniff_format(path: Path) -> str:
 
 
 # ── Formatting helpers ────────────────────────────────────────────────────────
+
+def _krz_rom_keymap_refs(path) -> int:
+    """Program layers whose keymap id is not an object in this bank.
+
+    Those resolve against the machine's ROM, and each costs ~0.37 s of LOAD
+    TIME on a K2000 -- by far the largest single factor in how long a bank
+    takes to appear. A bank making 1748 of them took ~11 minutes and was twice
+    mistaken for a hang; the identical bank with zero took 18-20 s.
+
+    Reported for information only. mpc2emu's own output always has zero, since
+    write_krz emits a keymap for every layer it writes.
+    """
+    try:
+        import io, contextlib
+        import parsers.krz_parser as K
+        data = open(path, 'rb').read()
+        with contextlib.redirect_stdout(io.StringIO()):
+            _osize, objs = K._read_objects(data)
+        own = {o['id'] for o in objs if o['type'] == K.T_KEYMAP}
+        n = 0
+        for o in objs:
+            if o['type'] != K.T_PROGRAM:
+                continue
+            with contextlib.redirect_stdout(io.StringIO()):
+                _name, layers = K._parse_program_object(data, o)
+            n += sum(1 for L in layers
+                     if L.keymap_id and L.keymap_id not in own)
+        return n
+    except Exception:
+        return 0            # informational only -- never break --info over it
+
 
 def _fmt_size(n_bytes: int) -> str:
     if n_bytes >= 1024 * 1024:
@@ -230,6 +264,22 @@ def print_bank_info(bank: Bank, source_path: Path,
     print(zones_line)
     print(f"  PCM data:  {_fmt_size(total_sample_bytes)}")
     print(f"  Est. E4B:  {_fmt_size(est_e4b)}")
+
+    # ── KRZ: ROM references, because they dominate LOAD TIME on a K2000 ──
+    if source_path.suffix.lower() == '.krz':
+        refs = _krz_rom_keymap_refs(source_path)
+        if refs:
+            # 0.37 s per reference, measured by the VinSamLib project against a
+            # 796-program bank (1748 refs, ~11 min) with an identical-program-
+            # count/zero-reference control at 18-20 s. The machine consults its
+            # ROM object table per reference -- it visibly displays the ROM
+            # names it lands on while it works.
+            secs = refs * 0.37
+            est = f"{secs:.0f} s" if secs < 90 else f"{secs/60:.1f} min"
+            print(f"  ROM refs:  {refs} program layer(s) reference a keymap "
+                  f"this bank does not contain")
+            print(f"             → expect roughly {est} to load on a K2000 "
+                  f"(~0.37 s each); this is normal for ROM-based banks")
 
     # ── Presets ──
     if bank.presets:
