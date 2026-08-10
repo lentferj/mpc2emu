@@ -3157,3 +3157,50 @@ for the user — editing one shared keymap on the machine then affects every
 program using it. Real K2000 banks do share (796/52 in the wild), so that is
 arguably expected rather than a regression, but it is Jan's call rather than a
 silent default flip.
+
+---
+
+## "Hang" is slowness — a real bank loaded in 11 MINUTES (2026-08-10)
+
+**Observed on the K2000R, first-hand.** A real (non-synthetic) bank finished
+loading after **11 minutes**. It did not hang. This closes the question that
+started the whole PRAM/limit investigation: past a certain size, *"the machine
+hung"* and *"the load had not finished yet"* are the same observation from the
+front panel.
+
+From the object browser:
+
+| | |
+|---|---|
+| total objects | **1048** |
+| programs | ids **200–999** — 800, exactly the per-type ceiling |
+| PRAM in use | **273 K** |
+| program sizes | 224 – 714 B |
+| keymap sizes | 178 – 1332 B |
+| effects | present, 60–68 B (ids 200–203, 908–909) |
+| samples | `Grand Piano G#1  0K` — **ROM references**, no PCM in the bank |
+
+**Load cost is driven by program CONTENT, not program count.** Our synthetic
+`SK796` — 796 programs, one shared keymap, one zone each — loads in **19 s**.
+This bank, at essentially the same program count, takes **660 s**: **35×**
+slower. Whatever the machine does per program scales with how much the program
+*refers to*, not how many there are.
+
+That also makes the ROM-reference suspicion concrete rather than a guess: this
+bank carries ROM sample references (the `0K` samples), which is exactly the
+axis VinSamLib nominated and neither project has varied.
+
+**Two corrections to our own model, neither affecting the splitter:**
+
+- **Object sizes are not fixed.** We assume program 272 B / keymap 688 B /
+  sample 84 B. Those are *our writer's* shapes and remain correct for
+  estimating *our* output — which is all `bank_pram_bytes()` is used for. Real
+  banks range 224–714 B for programs and **178–1332 B** for keymaps, so the
+  model must not be pointed at third-party banks without saying so.
+- **800 programs is confirmed on a real bank.** Ids run 200–999 exactly, which
+  independently corroborates the per-type ceiling measured synthetically.
+
+**Open:** which bank this was (VinSamLib reported theirs as 796 programs / 52
+keymaps / 11 samples = 859 objects; this one is 1048 with effects, so it may be
+a different one). Worth pinning down before the 11-minute figure is attached to
+their hang specifically.
