@@ -3126,17 +3126,34 @@ With the flag on, voices whose keymap entries come out byte-identical get one
 object. Default output is unchanged — the reference GIG→KRZ still hashes
 `e173c03e9caa0c23`.
 
-**Blocked on:** whether the machine really treats a shared keymap as one
-object. VinSamLib's 796-program / 52-keymap bank hung a 760 K machine at 32 %
-estimated PRAM, which would be explained if the K2000 materialises per-program
-state on load regardless of sharing. Disc `K2KSHKM`
-(`tests/re_banks/gen_k2000_shared_keymap_disk.py`) settles it: N programs all
-pointing at ONE keymap, at 200/400/600/**796**, every one smaller than the bank
-that hung.
+**HW-MEASURED 2026-08-10 (K2000R, disc `K2KSHKM`).** N programs all pointing
+at ONE keymap, timed:
 
-- `SK796` loads → sharing is real, the flag can become the default, and that
-  hang belongs to something specific to that bank (its ROM keymap references
-  being the obvious suspect — the axis nobody has varied).
-- `SK796` hangs → the machine charges per program, both projects' PRAM
-  estimates are optimistic for shared-keymap banks, and the splitter should
-  count programs rather than only objects.
+| programs | keymaps | load time |
+|---|---|---|
+| 200 | 1 | **< 2 s** |
+| 600 | 1 | **11–12 s** |
+| 796 | 1 | **18–20 s** |
+| 600 | 600 (disc `K2KLIMIT`) | ~20 s |
+
+**Sharing works and is worth shipping.** 796 programs sharing one keymap load
+normally, so the machine does treat a shared keymap as one object. And it is
+not only a PRAM saving: holding programs at 600, going from 600 keymaps to 1
+takes the load from ~20 s to 11.5 s — **nearly half**.
+
+**Load time is superlinear in program count:** `t ∝ n^1.71` (exponents of 1.69
+and 1.78 between consecutive pairs — a stable fit). Extrapolating, ~1000
+programs ≈ 28 s and ~1500 ≈ 56 s. There is no cliff; a large enough bank simply
+takes unbounded time, which is what "hang" looks like from the front panel.
+
+**The 796-preset hang is NOT explained by count.** This model predicts ~20 s
+for VinSamLib's 796 programs + 52 keymaps, and it hung for several minutes. So
+the cost is in what those programs *reference* — their ROM keymap references
+are the surviving suspect, and still the axis nobody has varied.
+
+**Left to decide before making sharing the default:** it changes the bytes of
+every multi-preset bank we have hardware-confirmed, and it changes *behaviour*
+for the user — editing one shared keymap on the machine then affects every
+program using it. Real K2000 banks do share (796/52 in the wild), so that is
+arguably expected rather than a regression, but it is Jan's call rather than a
+silent default flip.
