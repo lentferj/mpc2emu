@@ -153,8 +153,16 @@ block_list[7]  LE s16 each: [first_dircon_block, -1, -1, -1, -1, -1, -1]
 ```
 
 `-1` (`0xFFFF`) marks an unused slot in the folder's block list — a folder
-can reference up to 7 dir-content blocks this way, but mpc2emu only ever
-needs one (all E4B files are written into a single flat "Default Folder").
+can reference up to 7 dir-content blocks this way, so one directory addresses
+**112 banks** (7 × 16). `build_iso()` fills as many as the bank list needs;
+all banks go into a single flat "Default Folder".
+
+**HW-CONFIRMED 2026-08-10 (E4XT):** the CD reader walks this block list the
+same way the HDD reader does. A 20-bank disc with `block_list = [11, 12]`
+listed all 20 banks, and the four living in block 12 loaded and played their
+own samples. Before that fix `build_iso()` wrote one block regardless of the
+list length, so banks 17+ were on the disc, allocated and unreferenced —
+invisible.
 
 ## 2.4 Dir-content block (block 11)
 
@@ -207,12 +215,19 @@ props[5]         b'\x00E4B0' for an E4B bank; all-zero for EIII/ESI — see belo
 > already do. This section is about what to *write*, where the pattern above
 > is exactly what real hardware-authored media (and now the E4XT itself) expects.
 
-`build_iso()` only ever fills the first dir-content block — with one E4B
-file per CD image (the normal case), 16 slots is more than enough. Block 1
-(the padding block right after the superblock) carries a single non-zero
-byte at offset 0: the index of the *next free* dir-content block
-(`_DIRCON_START + 1`), mirroring what reference images contain even though
-mpc2emu never needs a second one.
+`build_iso()` fills one dir-content block per 16 banks and lists them all in
+the folder entry's 7-slot block list, so a CD image holds up to
+`EMU3_MAX_FILES_PER_DIR` = **112** banks. Block 1 (the padding block right
+after the superblock) carries a single non-zero byte at offset 0: the index of
+the *next free* dir-content block, i.e. `_DIRCON_START + n_dircon`.
+
+Two details that are easy to get wrong past the first block:
+
+- the **2-digit file id** (dir-entry offset 17) must run across the whole
+  folder. Falling back to the within-block index — correct for a single block
+  — numbers every block 00–15 again;
+- the next-free pointer above must count the blocks actually used, not be
+  hardcoded to `+ 1`.
 
 ---
 

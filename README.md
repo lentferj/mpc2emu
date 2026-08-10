@@ -1283,8 +1283,11 @@ directory entry** — so they are present on the image, invisible to the E4XT an
 impossible to load. Nothing warned, and the console still listed them as
 written.
 
-Images with 16 banks or fewer are unaffected. Current versions refuse rather
-than dropping the excess silently.
+Images with 16 banks or fewer are unaffected. **Since 2026-08-09 the CD path
+writes as many dir-content blocks as the bank list needs**, so an image holds
+up to 112 banks — HW-confirmed on the E4XT, which lists and loads banks living
+in the second block. Past 112 the excess is still dropped, but the error names
+the count.
 
 ### If you built KRZ multisample banks before 2026-08-02, regenerate them
 
