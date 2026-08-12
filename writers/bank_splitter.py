@@ -121,7 +121,33 @@ def pram_budget_bytes(pram_k: Optional[int] = None) -> int:
 
 
 def preset_pram_bytes(preset: Preset) -> int:
-    """PRAM an assembled preset occupies: its program plus one keymap per voice."""
+    """PRAM an assembled preset occupies: its program plus one keymap per voice.
+
+    **Correct only for banks THIS project writes**, and for two reasons worth
+    keeping separate:
+
+    1. The per-object sizes are OURS. `krz_writer` emits a fixed 128-entry
+       keymap, so 688 bytes every time. Real banks vary: VinSamLib matched
+       per-object PRAM to each object's OWN BLOCK SIZE against a photographed
+       K2000R object list and saw keymaps from 178 to 1976 bytes.
+
+       **That range is a disproof, not a table.** It is eight objects, one
+       bank, one machine, and VinSamLib were explicit that it is enough to
+       show a flat constant cannot be right for re-assembled banks and NOT
+       enough to compute from. Do not build a size table out of it; read the
+       object's own block size if you ever need real sizes.
+
+       Point this function at a parsed third-party bank and it misestimates in
+       both directions. Every caller here passes a bank we are about to write,
+       which is why that is not a bug today.
+
+    2. It assumes one keymap PER VOICE, which
+       `krz_writer.SHARE_IDENTICAL_KEYMAPS` makes false when enabled. With
+       sharing on, 300 presets over one keymap cost 80 K rather than the 281 K
+       this returns -- so the splitter would emit roughly three times as many
+       banks as needed. The flag is OFF by default, so this is latent rather
+       than live, but the two must be changed together.
+    """
     return _PRAM_PROGRAM + max(1, len(preset.voices)) * _PRAM_KEYMAP
 
 
