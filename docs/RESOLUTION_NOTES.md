@@ -6990,6 +6990,530 @@ Peak position within the sounding span needs no alignment, no window choice and
 no normalisation, and it separated the two cases immediately. **Prefer a
 measure with nothing to tune.**
 
+---
+
+## §AKAIIMG — AKAI disk images: written, read, and byte-identical to an independent implementation (2026-08-05)
+
+**Status:** implemented on branch `akai-s3000xl`, cross-verified, **not
+hardware-verified**. Nothing on that branch is to be pushed until the S3000XL
+confirms it.
+
+`writers/akai_s3000_image.py` builds AKAI media; `parsers/akai_image_parser.py`
+reads it. `convert.py --format akai` gains `--hda` (partitioned SCSI /
+ZuluSCSI disk), `--iso` (CD3000 CD-ROM) and `--floppy` (800 KB / 1.6 MB AKAI
+floppy); without any of them it writes the volumes as directories of `.S3` /
+`.P3` files. `.img`, `.hda` and `.iso` are claimed by more than one format, so
+all three dispatch on content — an AKAI medium is identified by its
+partition-header magic, or by the `0xFF` marker in a floppy header. A
+*directory* scan skips shared-extension files that are not AKAI, so an output
+folder full of E4B/K2000 images does not produce a parse error per file;
+naming one explicitly still gives a real message.
+
+The layout itself is in `docs/AKAI_S3000_FORMAT.md`. What is worth recording
+here is **how far the verification actually got, and what it still does not
+cover.**
+
+### The verification that was available
+
+No S3000 hardware, so the strongest available check was to build the same
+content two ways and compare every byte:
+
+| built by us | built by `akaiutil` | result |
+|---|---|---|
+| 16 MB hard disk, 1 volume, 3 files | `formatharddisk3 16M 16M` + `mkvol3` + `put` ×3 | **identical, all 16 777 216 bytes** |
+| 16 MB CD3000 CD-ROM, same content | `formatharddisk3cd` + `mkvol3cd` + `put` ×3 + `setcdinfo MYCD` | **identical, all 16 777 216 bytes** |
+| 1.6 MB floppy, 3 files | `formatfloppyh3` + `put` ×3 | **identical, all 1 638 400 bytes** |
+
+Both hashes are pinned in `tests/test_akai_image.py`. `akaiutil` is an
+independent implementation of the same undocumented format, so this is not a
+self-check — but see the limits below.
+
+Structures `akaiutil` was never asked to produce were verified the other way
+round, by having *it* read what *we* built: a 3-volume, 2-partition disk lists
+with the right partitions, volume start blocks and file sizes, and its WAV
+exporter returns PCM from inside our image byte-identical to the source.
+
+### What byte-identity caught that a header check would not
+
+Both of these produced a structurally plausible image that differed from the
+real thing:
+
+1. **The floppy header initialises all 64 file-entry slots**, not just the
+   first. Only slot 0 carries the `0xFF` S3000 marker, but every slot gets 12
+   raw `0x20` filler bytes and the OS version. Writing only slot 0 left 63
+   slots zeroed — which decode as the *valid-looking* name `"000000000000"`,
+   the same trap as the unused-velocity-zone question.
+2. **A floppy's volume directory must leave its volume-parameter area zero.**
+   The parameters live in the header label instead. Writing them in both
+   places (as the hard disk does) was a 6-byte difference that no structural
+   assertion would have flagged.
+
+### Design decisions worth not re-deriving
+
+- **A CD3000 disc is not ISO 9660.** It is the same partition format written
+  raw, so `--iso` for AKAI shares the hard-disk writer rather than going
+  anywhere near `iso_builder`. The only deltas are the volume type (`0x07`)
+  and three reserved blocks holding a flat index of every file in the
+  partition. That index is a cache — `akaiutil` leaves it stale until you run
+  `setcdinfo`, which is a foot-gun, so **our append path rebuilds it
+  automatically**; a stale index shows the sampler the disc's old contents.
+- **A volume is never split across a partition.** A volume's blocks are
+  numbered relative to its own partition, so a split volume is not
+  describable. `_plan_partitions` fills a partition and then opens the next;
+  a single volume larger than a partition is an error with an explicit
+  "split it into several volumes".
+- **Auto-sizing stays close to the content** (+25%, 8 MB floor) rather than
+  rounding up generously. These images are copied to a ZuluSCSI SD card over
+  USB, where spare megabytes are copy time — the same reasoning as the E4B
+  `.hda` sizing.
+- **The extension is load-bearing.** The directory entry stores only a type
+  byte and it is derived from the extension, so the writer emits `.S3` / `.P3`
+  (changed from `.a3s` / `.a3p`) and refuses a filename it cannot map rather
+  than guessing. The reader still accepts both conventions.
+- **`--add-to` is genuinely in place.** A free root-directory slot plus free
+  FAT blocks, no rebuild and no growth, so an existing volume keeps its
+  blocks — verified by reading the disk back and comparing the old volume's
+  files byte for byte, and by having `akaiutil` list a volume we appended to
+  a disk *it* had formatted. `overwrite` frees the old volume's directory and
+  file chains first; without that, repeated overwrites leak the disk away a
+  volume at a time.
+- **FAT walks are bounded and track visited blocks.** A thirty-year-old
+  library disk is exactly where a chain that points back into itself turns up;
+  the reader raises rather than looping.
+
+### Real library discs (2026-08-05, eight commercial CD-ROMs)
+
+Jan supplied eight real AKAI library CD-ROMs — **895 volumes, 24 334 files,
+2.2 GB**. This is the first *hardware-authored* AKAI data in the project, and
+it is a different kind of evidence from `akaiutil` agreeing with us: it is what
+the sampler was actually shipped.
+
+All eight read without error, and on one 512 MB disc our reader and `akaiutil`
+agree on **all 3 922 files** — volume, name and size. Three real samples
+exported through `akaiutil`'s WAV converter come back **PCM byte-identical**
+to ours, with the same rate, root note and loop type. Feeding real volumes
+back through our image writer and re-reading them returns every file
+byte-identical. One disc converts end to end to four E4B banks.
+
+Four things the real data settled that neither reference did:
+
+1. **The extension is a rule with exceptions, not a table.** Only `.S1`/`.P1`
+   take the generation digit in the S1000 range — an FX file is `.X`, not
+   `.X1` — and `.CD` / `.s+` are special-cased away from `.T9` / `.H3`. The
+   hardcoded five-entry table left **375 real files unnamed**: 344 `.X`, 17
+   `.M3`, 9 `.D`, 5 `.Q`. Now derived from the type byte's range.
+2. **Volume type and CD-ROM info are independent.** Seven discs are
+   CD3000-typed (`0x07`), only three carry the info block, one is plain S3000
+   with neither. Detection needs both checks, so `akai_is_cd3000()` and
+   `akai_cd_label()` are separate functions.
+3. **The 16-bit total-block cap is real** — every disc lands exactly on
+   `0xffff` or `0xfdbe`, with a deliberately short last partition. Our
+   writer's check was right, and now has evidence rather than an inference
+   from a constant in someone else's header.
+4. **Stereo is a `-L` / `-R` name-suffix convention**, not a header flag; the
+   spec's `0x88` "stereo partner" is annotated *internal*, i.e. a RAM pointer.
+   That is why the writer mixes to mono rather than guessing.
+
+Real files also carry OS version **16.50** and non-zero tags (`05 11`) where
+we write 17.00 and none, and names often have **leading** spaces for front-panel
+alignment — real data, so only trailing padding is stripped.
+
+### A third-party S1000 disc (2026-08-05)
+
+A ninth disc, mastered by a third party rather than by Akai, is **S1000
+format** — `.S1` samples and `.P1` programs, OS version 9.30 — and it exposed
+a reader bug that eight Akai-mastered S3000 discs could not.
+
+**An S1000 volume directory is one block of 126 entries; an S3000's is two
+blocks of 510.** We used the S3000 shape unconditionally, so we read past the
+end of every directory and decoded the following bytes as file entries:
+**2 606 files where there are 1 799**, the surplus carrying type bytes like
+`0xd4` and `0x89` that map to nothing.
+
+The FAT cannot be used to detect this instead of the volume type: an S1000
+harddisk terminates its directory chain with `0x4000`, the **same value** the
+S3000 uses for "reserved for system". The shape has to come from the root
+directory's type byte.
+
+After the fix all 1 799 files agree with `akaiutil` on volume, name and size,
+and the eight S3000 discs are unchanged (82 volumes / 3 922 files on the one
+re-checked). The regression test plants plausible entries in two places — past
+the 126-entry cap but inside block 1, and in block 2 — and was confirmed to
+fail with the bug reintroduced.
+
+Two lessons worth keeping:
+
+- **The corpus was homogeneous and looked diverse.** Eight discs, 895 volumes
+  and 24 334 files all shared one volume type; the ninth disc was worth more
+  than the eight for finding this.
+- The bad output was *plausible*: right file count order of magnitude, names
+  that decoded, sizes that looked sane. What gave it away was the tail of
+  unmappable type bytes — which only existed because the extension logic had
+  just been generalised to name every type instead of silently dropping the
+  ones it did not know.
+
+### The S1000 disc kept giving (2026-08-05)
+
+The same third-party disc, once its directory was read correctly, exposed
+three more faults — two of them in code that had been "verified" against
+`akaiutil` and a real S3000 disc. All three are cases where **two references
+agreed with each other and were both wrong**.
+
+**1. An S1000 block is 0x96, an S3000 block is that plus 42 bytes.**
+The sample header, program common block and keygroup are all 150 bytes on the
+S1000 and 192 on the S3000. With the S3000 lengths, 243 of 335 S1000 programs
+parsed as zero keygroups and 1 292 of 1 369 zones named samples that do not
+exist; samples lost 42 bytes off the front of their PCM. Fixed: 1 465/1 465
+zones resolve and the PCM matches `akaiutil`'s export byte-for-byte.
+
+**2. Byte 0x00 is a block id, not a generation marker.** Both references call
+it *"header id — 1 = S1000, 3 = S3000"*. It is neither: `1` = program common,
+`2` = keygroup, `3` = sample header, **identical on both generations**. An
+S1000 disc's 1 464 samples all carry 3 and its 335 programs all carry 1,
+exactly as on an S3000 disc.
+
+That misreading was also a **writer** bug: we wrote `3` into program common —
+the *sample* block id — into every program mpc2emu has ever produced.
+`akaiutil` cannot catch it, because it takes a file's type from the directory
+entry rather than from its contents. Only real files could show it.
+
+The generation is therefore **not in the file at all**; it comes from the
+directory entry's type byte. Where that is unavailable the parser infers it
+from arithmetic, which is exact on all 6 012 samples of the two discs.
+
+**3. Velocity zone 3 is at 0x52, not 0x53.** The primary spec's `0x53` made
+the stride non-uniform, and `docs/AKAI_S3000_FORMAT.md` even flagged the
+oddity while following it. Real programs settle it: at `0x52`, zone 3 resolves
+to a sample in its own volume **317 times and fails 3**; at `0x53`, **0 and
+8 462**. This was wrong in the writer too, which put zone 3's name one byte
+into its own field. Only programs actually *using* three or more velocity
+zones can show this — 318 keygroups on one disc, none at all on the other.
+
+The golden image hashes were regenerated from `akaiutil` after the writer
+changed, so they still encode agreement with an independent implementation
+rather than with our previous selves.
+
+**What to take from this:** the AKAI verification story had been "akaiutil
+agrees with us". Two implementations agreeing is one *reading* of an
+undocumented format, and every fault above survived that check. Real
+hardware-authored files are a different class of evidence, and the two that
+mattered most (the block id, zone 3) needed files that *exercise* the field —
+a corpus can be large and still not touch it.
+
+### Twelve more discs, two more libraries (2026-08-06)
+
+An orchestral library (5 discs, S1000) and a vocal library (7 discs, S3000 —
+one of which is a plain ISO 9660 PC disc) were added to the corpus. Both come
+from publishers already represented or new, but neither is Akai-mastered, so
+they are independent of the eight factory discs in what matters: whoever wrote
+the mastering tool. Together
+with the earlier nine that is **20 discs across four distinct libraries from
+three publishers, 1 835
+volumes, 56 214 files, 7.6 GB, evenly split between S1000 and S3000**.
+
+**Nothing broke.** After the fixes the earlier discs forced, this round was
+pure validation:
+
+| check | result |
+|-------|--------|
+| our reader vs `akaiutil`, all 11 new AKAI discs, file by file | **30 081 / 30 081 agree** on volume, name and size |
+| programs parsed | 2 745, **0 unparseable, 0 with zero keygroups** |
+| zones resolved to a sample on the same disc | **35 087 / 35 088 (99.997%)** |
+| samples parsed | 26 846, **0 unparseable** |
+| PCM vs `akaiutil`'s WAV export, both generations | **byte-identical** |
+| S1000 disc converted end to end to E4B | 4 banks, reads back, every zone resolves |
+| real S1000 volumes through our image writer and back | every file byte-identical |
+| the ISO 9660 disc | correctly **not** detected as AKAI |
+
+Two things this corpus adds that the earlier one could not:
+
+- **518 keygroups use velocity zone 3 or 4**, independently confirming the
+  `0x52` offset on material from two libraries that had not been seen before.
+- **Sample rates vary more than expected**: 48 000, 22 050, 11 025 and 8 000
+  all appear alongside 44 100. Nothing assumed a rate, but it is worth knowing
+  the field earns its keep.
+
+The block-id finding also held everywhere: across 31 880 files, every `.P1`
+and `.P3` carries 1, every `.S1` and `.S3` carries 3, `.X` carries 2, and
+`.T`/`.M3` carry 0 — with no relationship to generation.
+
+### Five more discs, and a zone rule the corpus had been hiding (2026-08-07)
+
+Five more S3000 discs, five publisher badges not seen before — 25 discs
+total, 2 276 volumes, 71 158 files, 9.2 GB. Four of the five validated silently. The fifth did not:
+**64.9% of its zones named samples that are not on the disc.**
+
+The names were `SAWTOOTH`, `PULSE`, `SQUARE` — the sampler's **ROM waveforms**,
+not files — and their velocity range was `lo=1, hi=0`. An inverted range: no
+velocity can fall inside it.
+
+**A velocity zone is disabled by an inverted range, not by a blank name.** Real
+programs leave whatever name was in the slot and rely on the range alone. We
+were treating any non-blank name as a live zone, so on discs that do this we
+invented three phantom zones per keygroup.
+
+Measured across the whole corpus before changing anything — 77 453 named zones:
+
+| | zones | name absent from the disc |
+|---|---|---|
+| valid range (`lo <= hi`) | 71 646 | **0.23%** |
+| inverted range (`lo > hi`) | 5 807 | **98.66%** |
+
+Every one of the 5 990 disabled zones found is exactly `(1, 0)`. After the fix
+the offending disc went 64.89% → 0.82% unresolved, the corpus total is 0.23%
+(167 of 71 646, genuinely missing samples), and **every disc that was already
+at 0.00% stayed there** — the negative control that matters, since a
+too-aggressive rule would have silently dropped real zones.
+
+Two further things fell out:
+
+- **Keygroup `0x1f` is not a count of zones in use.** It reads like one, and
+  the writer was writing one. Every keygroup on every disc carries **4**
+  regardless. The writer now writes 4 rather than inventing a meaning.
+- **This answers a question that had been open since the writer was built.**
+  `TODO.md` recorded that we write unused zones all-zero and did not know
+  whether the sampler wanted that. It does not: it wants an inverted range.
+  The old guess was actively harmful, since `0x00` decodes to the digit `0` —
+  a zeroed zone reads back as a sample named `"000000000000"`.
+
+**Why the corpus had not caught this**: 20 discs from four libraries, 56 214
+files, and none of them used the convention. It took a fifth publisher. The
+same shape as the block-id and zone-3 findings — the fault needs material that
+*exercises* the field, and more of the same material never will.
+
+### A second spelling of "disabled", and truncated images (2026-08-07)
+
+Five more discs. Two findings, one of them a correction to the fix made
+earlier the same day.
+
+**1. `hi_vel == 0` is the disabled-zone test, not `lo > hi`.** The inverted
+range `(1, 0)` was only one library's spelling. Another writes `(0, 0)` and
+leaves its own branding in the name field — a *valid* range by the earlier
+rule, so 5 686 phantom zones came back on one disc (67% of it). MIDI velocity
+0 is note-off, so any zone whose `hi_vel` is 0 is unreachable either way, and
+that is the general test. Over 54 488 named zones: `hi_vel == 0` resolves
+4.43% of the time, `hi_vel > 0` resolves 97.13%.
+
+Worth noting how this was caught: the corpus measurement was re-run after the
+first fix, and the disc still showed 66% unresolved. Had the earlier fix been
+accepted on the strength of "the offending disc now reads 0.82%", this would
+have shipped.
+
+**2. A truncated image now warns.** Two of the five discs were partial
+downloads holding **4-5% of what their own partition table declares**. The
+reader already dropped files whose data ran past the end — correct — but did
+so silently, so a half-downloaded disc converted to a plausible-looking
+subset: 55 files where the directory lists 103. It now reports both the size
+mismatch and the number of skipped files. `akaiutil`, for comparison, marks
+such a partition *invalid* and recovers nothing; we recover the intact files
+and say what was lost.
+
+The remaining unresolved zones on one disc (29%) are **not** a misread: the
+library's programs reference samples that ship on other discs of its set, with
+valid velocity ranges, and our file list matches `akaiutil` exactly. A zone
+naming an absent sample is not by itself evidence of a parsing fault.
+
+### A 16-partition disc, and a feature the corpus argued against (2026-08-07)
+
+One more orchestral disc, the 29th: 16 partitions — the most seen, against a
+format maximum of 18 — 104 volumes, 2 450 files. All 2 450 agree with
+`akaiutil`; 0 unparseable programs or samples; 4 731 zones with 52 unresolved
+(1.10%).
+
+Those 52 were checked rather than assumed. Each was matched against its
+nearest name on the disc, and the nearest is always a **different note or
+channel** (`TK FN A 4 -L` vs `TK FN G 4 -L`; `CEL.MARCG#3L` vs `…G#3R`) — the
+signature of samples the library simply omitted, not of a decode fault, which
+would corrupt characters rather than produce valid names for adjacent notes.
+
+**A feature the measurement talked me out of.** One unresolved name was
+`SINE` — a ROM waveform, which the sampler can layer with a sample and which
+is not a file. A dedicated message for those ("references the internal SINE
+waveform") looked worthwhile until it was counted: across **47 918 live zones
+in the corpus, exactly 2** name a ROM waveform. The generic "sample not found"
+warning stays.
+
+### Four more discs, three more publishers, nothing broken (2026-08-07)
+
+Discs 30-33, all S1000: 219 volumes, 5 259 files. Every one of the 3 504
+agrees with `akaiutil` on volume, name and size; 0 unparseable programs or
+samples; and **all four come in at 0.00% unresolved zones** — 6 736 zones,
+every one resolving to a sample on its own disc. PCM spot-checked against
+`akaiutil`'s WAV export: byte-identical.
+
+That is the first round where the reader was exercised on unfamiliar material
+and found nothing at all, which is what the fixes of the preceding two days
+were for. It is not evidence the format is fully understood — the two-day
+pattern was that each new *publisher* broke something — but three new
+publishers in a row passing is the first sign of the curve flattening.
+
+### Turning the corpus on the writer (2026-08-07)
+
+Everything up to here used the discs to check the **reader**. They answer a
+sharper question about the **writer**: for each byte we emit, does any real
+file ever hold that value? An offset where ours never appears is a guess the
+format disagrees with — and unlike a reader bug it produces a file that looks
+fine to us and to `akaiutil`, because both are our own interpretation.
+
+Method: byte-value distributions per offset over 11 238 real S3000 samples and
+4 433 real programs, compared against what `build_sample`/`build_program`
+emit. **26 offsets held a value no real disc writes. There is now 1.**
+
+The corrections are tabulated in `docs/AKAI_S3000_FORMAT.md` §"What the corpus
+says about the writer". The ones that matter:
+
+- **`0xFFFF` is the format's null pointer**, and we were writing `0x0000` — in
+  the sample's stereo-partner field and in two pointer fields per velocity
+  zone. Zero is not "none" here; it is a valid address.
+- **Blocks carry their own RAM address** at `0x01-0x02` in 16-byte paragraphs,
+  chained `+12` per 192-byte block. 19 553 consecutive deltas of exactly 12
+  across 2 058 programs, and **not one real file leaves it zero**. It is a
+  save-time artifact the sampler recomputes, so zero is *probably* harmless —
+  but "probably harmless" is the reasoning that produced four of the five
+  faults on this branch, and matching the observed shape costs nothing.
+- **Play range belongs wide open.** We were writing the span of the keygroups
+  actually present; 96% of real programs write `24`/`127` regardless. Ours
+  sounds identical today and silently mutes any keygroup added later on the
+  sampler itself.
+- **Unused zone names are spaces, not zeros** — the same `0x00`-is-the-digit-
+  `0` trap that has now bitten in three separate places.
+
+Two differences are deliberate and recorded so they are not "fixed" later:
+all-zero **file tags** (never observed, but the documented "free" value, and
+inventing a tag number would file the user's samples under a category they did
+not choose) and **OS version 0x1100** (the S3000 maximum; real discs span 4.30
+to 17.00 and 0x1100 occurs 335 times).
+
+The image-level structures — partition sizing, volume load numbers, the TAGS
+magic, the 48 volume-parameter bytes — were checked the same way and are all
+already within the observed range.
+
+**What this does not do** is validate the *semantics*. It shows our files now
+look like real ones byte-for-byte in every field where real ones agree with
+each other. Whether the sampler accepts them is still the open question.
+
+### Two more discs, and a re-fetched one (2026-08-08)
+
+**Ueberschall Drum'N'Bass Resonance** — a seventeenth library, a thirteenth
+publisher badge, and at 701 MB the largest file in the corpus (its AKAI area is
+still the usual `0xffff` blocks; the rest is padding). 63 volumes, 4 243 files,
+4 032 zones, **0 unresolved**, nothing unparseable, PCM byte-identical to
+`akaiutil`'s export.
+
+**E-Lab X Static Goldmine 2**, re-fetched complete.** The copy deleted on
+2026-08-07 held 4% of what its partition table declared, and the truncation
+warning added then reported it correctly: 24 volumes and 318 files, with 10
+more skipped for running past the end of the file. The complete disc holds
+**137 volumes and 3 727 files** — so that warning was the difference between
+converting a disc and converting 8% of one, silently.
+
+All 16 discs currently on disk were re-swept at the same time: every file on
+every disc still agrees with `akaiutil`, no program or sample fails to parse,
+and every disc is at 0.00–1.10% unresolved zones except the one known case —
+the drumloops disc at 29.55%, whose programs reference samples that ship on
+other discs of its set (see above; not a fault).
+
+The corpus is now **37 distinct discs**, after a two-disc bass library was
+added (below). The 18 on disk (1 432 volumes, 41 227 files) can be re-verified
+at any time; the other 19 were measured and deleted to reclaim space, and the
+two sets do not overlap.
+
+### A two-disc bass library, and the widest OS-version range yet (2026-08-08)
+
+Both discs of an eighteenth library. CD1: 58 volumes, 1 931 files, **8 740
+zones, 0 unresolved**. CD2: 34 volumes, 1 396 files, **5 790 zones, 0
+unresolved**. Every file on both agrees with `akaiutil`; nothing fails to
+parse; PCM byte-identical to `akaiutil`'s export.
+
+Three things they add that the rest of the corpus did not:
+
+- **OS versions down to 2.21.** The field had spanned 4.30 to 17.00; these
+  programs go lower. Another reason the version is read rather than assumed —
+  and a reminder that our own writer's fixed `0x1100` sits at the very top of
+  a range that is far wider than it first appeared.
+- **They exercise velocity zones 3 and 4 heavily** — 211 keygroups with three
+  zones and 6 with four, from a publisher whose other discs never used them.
+  A third independent confirmation of the `0x52` offset.
+- **Sample names beginning with `-`** (`-MM RAGG E 2`). Harmless here —
+  `safe_filename` keeps `-` and nothing shells out — but it is the kind of
+  name that reaches a real filesystem, and it did break an `ls` during the
+  check.
+
+Both carry `.D` drum files (56 and 33) which are named and carried correctly
+but never read: the known auxiliary-type gap.
+
+### What this does NOT establish
+
+That the sampler mounts any of it. Two independent implementations agreeing is
+still two readings of the same undocumented format.
+
+Specifically unverified:
+
+- Whether the sampler accepts a disk whose partitions we sized, as opposed to
+  one it formatted itself.
+- The 48 bytes of volume parameters. We reproduce the observed defaults
+  (`00 01 01 00 00 00 32 09 0c ff` then zeros) verbatim; no source names a
+  single field in them.
+- Whether a partition smaller than 60 MB, or a disk with several partly-filled
+  partitions, is handled the way the front panel expects.
+
+### First hardware checks, in order
+
+**Read the cross-project order below first.** These five are this project's
+half; the sibling s3ked has its own, and running either half straight through
+in isolation wastes the trip.
+
+1. **Does it mount?** Write an 8 MB `--hda`, put it on the ZuluSCSI as
+   `HD0_512.hda`, and see whether the sampler lists a disk at all. If it does
+   not, nothing below matters — and the first thing to try then is an image
+   `akaiutil` formatted, to separate "our writer is wrong" from "this whole
+   approach is wrong".
+2. **Does the volume list look right?** Volume names, and the empty
+   `VOLUME 002`… slots.
+3. **Does a program load and play?** This is also the file-level check the
+   AKAI TODO row asks for — the zone names on the display settle the
+   unused-velocity-zone encoding at the same time.
+4. **Format a disk on the S3000XL itself and diff it against ours.** One
+   comparison settles the volume parameters, the partition sizing and the `??`
+   regions together — the same move that settled the file format.
+5. **Floppy**, via the Gotek: same three questions, and it is the cheaper
+   medium to iterate on if step 1 fails.
+
+### The cross-project order (mpc2emu + s3ked), agreed 2026-08-08
+
+The obvious plan — confirm s3ked completely, then confirm mpc2emu — has the
+dependency backwards in one place. **s3ked's calibration sweeps need a disc
+this project wrote**: s3ked can set any parameter over SysEx but cannot put a
+sample in memory, and the family has no oscillator, so with an empty machine
+every sweep records silence. The two halves interleave.
+
+Also worth knowing when planning the evening: `s3kcli status` answers on an
+empty machine, but `programs`, `samples` and `header` all need something
+loaded. A disc goes in early regardless.
+
+| # | what | project | why here |
+|---|------|---------|----------|
+| 1 | `s3kcli ports`, `s3kcli status` | s3ked | Ten minutes, no media, read-only. Either the protocol answers or that project's whole foundation is wrong, and that is worth knowing before anything else is carried in. |
+| 2 | Load a **commercial** disc; then s3ked steps 3–6 (program list, sample list, header diff vs the panel) | both | Someone else's disc separates "the drive/ZuluSCSI path works" from "our image is wrong" — the distinction that otherwise costs an hour. |
+| 3 | **Format a disk on the S3000XL itself**, diff against ours | mpc2emu | Independent of everything else, costs one format, settles volume parameters + partition sizing + the `??` regions together. Do it while the machine is on. |
+| 4 | Our own `--hda`: mount, list volumes, load and play a program | mpc2emu | Confirms this project's disk writer. Prerequisite for 6. |
+| 5 | **The cross-check.** mpc2emu writes a program with *known* parameter values; s3ked reads that header back | both | The step worth planning around — see below. |
+| 6 | s3ked's first write + throttle floor | s3ked | |
+| 7 | Calibration sweeps | s3ked | Needs 4 (our disc loads) and 5 (offsets are right). Unattended once started. |
+
+**Why step 5 is worth more than either project's own checks.** mpc2emu's
+offsets came from `akaiutil` plus the disk-format documentation; s3ked's came
+from Akai's SysEx documents. Those are two independent sources describing the
+**same** 192-byte program and keygroup headers — one as they sit on disk, one
+as they are addressed over the wire. Agreement confirms both at once, which
+neither can achieve alone; disagreement names the field to take to the front
+panel. The caveat: where both inherited the same Akai numbering, agreement is
+not proof, so the panel stays the tiebreaker for anything surprising.
+
+**Batch by the expensive step.** The costly move here is the SD-card / media
+swap, and only this project needs it — every s3ked operation is SysEx. Run
+steps 2–4 back to back with the card out once, rather than alternating between
+projects. (Only one session may drive the sampler at a time.)
 
 ---
 

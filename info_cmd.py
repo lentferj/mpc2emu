@@ -117,8 +117,21 @@ def _sniff_format(path: Path) -> str:
     if ext == '.set':
         return "Akai MPC60 RAM set"
 
-    if ext == '.img':
-        return "Akai MPC60 FAT12 floppy image"
+    if ext in ('.img', '.hda', '.iso'):
+        # Shared extensions: identify by content, not by name.
+        from parsers.akai_image_parser import (is_akai_image, akai_cd_label,
+                                               akai_is_cd3000, _is_akai_floppy)
+        if is_akai_image(str(path)):
+            if _is_akai_floppy(data[:0x200], Path(path).stat().st_size):
+                return "AKAI S3000 floppy image (800 KB / 1.6 MB, non-DOS)"
+            label = akai_cd_label(str(path))
+            if label is not None or akai_is_cd3000(str(path)):
+                return ("AKAI CD3000 CD-ROM image (not ISO 9660)"
+                        + (f", label '{label}'" if label else ""))
+            return "AKAI S1000/S3000 disk image (partitioned, 8 KB blocks)"
+        if ext == '.img':
+            return "Akai MPC60 FAT12 floppy image"
+        return "Hard-disk image (not AKAI)"
 
     return ext.upper().lstrip('.')
 

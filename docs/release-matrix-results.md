@@ -8,32 +8,40 @@ python3 tests/release_matrix.py --markdown docs/release-matrix-results.md
 
 # Release matrix — recorded results
 
-Generated on **2026-08-09** from commit `e94b9e7` on branch `GIG_E2E`. See `docs/RELEASE_MATRIX.md` for what the axes mean and what this does
+Generated on **2026-08-09** from commit `3f269cb` on branch `akai-s3000xl`. See `docs/RELEASE_MATRIX.md` for what the axes mean and what this does
 *not* establish.
 
-Axis A: **72 of 72** attempted cells green. `--` marks a format with no local fixture — **a gap, never a pass**; the list is at
+Axis A: **130 of 130** attempted cells green. `--` marks a format with no local fixture — **a gap, never a pass**; the list is at
 the bottom.
 
-| input | e4b | eiii | krz | talsmpl |
-|---|---|---|---|---|
-| `.e3b` | OK | OK | OK | OK |
-| `.e3x` | OK | OK | OK | OK |
-| `.e4b` | OK | OK | OK | OK |
-| `.esi` | OK | OK | OK | OK |
-| `.exs (synthetic)` | OK | OK | OK | OK |
-| `.gig` | OK | OK | OK | OK |
-| `.img (MPC60)` | OK | OK | OK | OK |
-| `.krz` | OK | OK | OK | OK |
-| `.pgm` | OK | OK | OK | OK |
-| `.set` | OK | OK | OK | OK |
-| `.sf2 (synthetic)` | OK | OK | OK | OK |
-| `.sfz` | OK | OK | OK | OK |
-| `.talsmpl` | OK | OK | OK | OK |
-| `.xpj` | OK | OK | OK | OK |
-| `.xpm` | OK | OK | OK | OK |
-| `.xty` | OK | OK | OK | OK |
-| `<wavdir stereo>` | OK | OK | OK | OK |
-| `<wavdir>` | OK | OK | OK | OK |
+| input | e4b | eiii | krz | talsmpl | akai |
+|---|---|---|---|---|---|
+| `.e3b` | OK | OK | OK | OK | OK |
+| `.e3x` | OK | OK | OK | OK | OK |
+| `.e4b` | OK | OK | OK | OK | OK |
+| `.esi` | OK | OK | OK | OK | OK |
+| `.exs (synthetic)` | OK | OK | OK | OK | OK |
+| `.gig` | OK | OK | OK | OK | OK |
+| `.hda` | OK | OK | OK | OK | OK |
+| `.hda (S1000)` | OK | OK | OK | OK | OK |
+| `.img (AKAI)` | OK | OK | OK | OK | OK |
+| `.img (MPC60)` | OK | OK | OK | OK | OK |
+| `.iso` | OK | OK | OK | OK | OK |
+| `.krz` | OK | OK | OK | OK | OK |
+| `.p1` | OK | OK | OK | OK | OK |
+| `.p3` | OK | OK | OK | OK | OK |
+| `.pgm` | OK | OK | OK | OK | OK |
+| `.s1` | OK | OK | OK | OK | OK |
+| `.s3` | OK | OK | OK | OK | OK |
+| `.set` | OK | OK | OK | OK | OK |
+| `.sf2 (synthetic)` | OK | OK | OK | OK | OK |
+| `.sfz` | OK | OK | OK | OK | OK |
+| `.talsmpl` | OK | OK | OK | OK | OK |
+| `.xpj` | OK | OK | OK | OK | OK |
+| `.xpm` | OK | OK | OK | OK | OK |
+| `.xty` | OK | OK | OK | OK | OK |
+| `<wavdir stereo>` | OK | OK | OK | OK | OK |
+| `<wavdir>` | OK | OK | OK | OK | OK |
 
 | output | bank | --iso | --hda | --floppy | --add-to |
 |---|---|---|---|---|---|
@@ -41,6 +49,7 @@ the bottom.
 | `eiii` | OK | OK | OK | -- | OK |
 | `krz` | OK | OK | OK | OK | OK |
 | `talsmpl` | OK | -- | -- | -- | -- |
+| `akai` | OK | OK | OK | OK | OK |
 
 | processor | result |
 |---|---|

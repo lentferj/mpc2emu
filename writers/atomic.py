@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
-# Part of mpc2emu -- https://github.com/lentferj/mpc2emu
+# Part of mpc2emu -- https://github.com/jlentfer/mpc2emu
 # Written with assistance from Claude (Anthropic).
 """Write a file completely or not at all.
 

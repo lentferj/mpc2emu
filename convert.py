@@ -76,6 +76,7 @@ from parsers.talsmpl_parser  import write_talsmpl
 from writers.e4b_writer      import write_e4b
 from writers.krz_writer      import write_krz
 from writers.eiii_writer     import write_eiii
+from writers.akai_s3000_writer import build_akai_volume
 from writers.iso_builder     import build_iso, build_iso_9660
 from writers.hda_builder     import build_hda_fat, build_hda_emu, auto_hda_size_mb
 from writers.bank_splitter   import (split_into_banks, print_split_summary,
@@ -86,13 +87,24 @@ from info_cmd                import run_info
 from models.common           import Bank, safe_filename
 
 
+#: Extensions several formats share.  A directory scan skips the ones that
+#: are not AKAI media, because an output folder full of E4B/K2000 images would
+#: otherwise produce a parse error per file.  Named explicitly as input, they
+#: are still attempted, so the user gets a real message instead of silence.
+_SNIFFED_EXTS = {'.hda', '.iso', '.img'}
+
+
 def collect_input_files(input_path: Path) -> List[Path]:
     if input_path.is_dir():
         files = []
         for ext in INPUT_EXTS:
             files += sorted(input_path.glob(f'**/*{ext}'))
             files += sorted(input_path.glob(f'**/*{ext.upper()}'))
-        return sorted(set(files))
+        from parsers.akai_image_parser import is_akai_image
+        return sorted(f for f in set(files)
+                      if f.suffix.lower() not in _SNIFFED_EXTS
+                      or f.suffix.lower() == '.img'
+                      or is_akai_image(str(f)))
     elif input_path.suffix.lower() in INPUT_EXTS:
         return [input_path]
     return []
@@ -323,6 +335,130 @@ def parse_all_sources(files: List[Path], wav_dir: Optional[str],
     return banks
 
 
+def write_akai_output(output_banks: List[Bank], out_dir: Path, bank_name: str,
+                      args, step_n: int) -> None:
+    """AKAI S1000/S3000 output: loose files, a disk image, or floppies.
+
+    An AKAI bank is a *volume*, not a single file — one program plus its
+    samples — so this path does not go through `_bank_path`/`--add-to` the way
+    the single-file formats do.
+    """
+    from writers.akai_s3000_image import (build_akai_hd_image,
+                                          build_akai_floppy_image,
+                                          append_akai_volumes,
+                                          akai_volume_name,
+                                          AkaiImageError, HD_BLOCK)
+
+    print(f"\n[{step_n}] Writing AKAI files...")
+    volumes = []
+    for bank in output_banks:
+        files = build_akai_volume(bank, bank_name if len(output_banks) == 1 else None)
+        if files:
+            volumes.append((akai_volume_name(bank.name), files))
+    if not volumes:
+        print("  [ERROR] nothing to write")
+        return
+
+    content = sum(len(d) for _v, f in volumes for _n, d in f)
+
+    if not args.add_to:
+        planned = []
+        if args.iso:
+            planned.append(str(out_dir / f"{bank_name}.iso"))
+        if args.hda:
+            planned.append(str(out_dir / f"{bank_name}.hda"))
+        if args.floppy:
+            planned += [str(out_dir / f"{v.replace(' ', '_')}.img")
+                        for v, _f in volumes]
+        if not args.hda and not args.floppy and not args.iso:
+            planned += [str(out_dir / v.replace(' ', '_') / fn)
+                        for v, fs in volumes for fn, _d in fs]
+        if not _confirm_overwrite(planned, args.overwrite):
+            print("\nAborted — no files written. "
+                  "Re-run with --overwrite to skip this check.")
+            sys.exit(1)
+
+    if args.add_to:
+        if not Path(args.add_to).exists():
+            print(f"\n[ADD] ERROR: image not found: {args.add_to}")
+        else:
+            print(f"\n[ADD] Appending {len(volumes)} volume(s) to "
+                  f"{Path(args.add_to).name} (AKAI)...")
+            try:
+                res = append_akai_volumes(args.add_to, volumes,
+                                          args.on_duplicate)
+            except AkaiImageError as e:
+                print(f"  [ADD] ERROR: {e}")
+            else:
+                for n in res['added']:
+                    print(f"  → added volume '{n}'")
+                for n in res['skipped']:
+                    print(f"  → skipped '{n}' (already on the image)")
+        print(f"\n{'='*60}")
+        print(f"Done: {len(volumes)} volume(s) processed")
+        print(f"{'='*60}\n")
+        return
+
+    if args.iso:
+        path = out_dir / f"{bank_name}.iso"
+        print(f"\n[ISO] Building AKAI CD3000 CD-ROM image "
+              f"({len(volumes)} volume(s), {content/1048576:.1f} MB of content)...")
+        try:
+            info = build_akai_hd_image(volumes, str(path), size_mb=args.hda_size,
+                                       cdrom=True, cd_label=bank_name)
+        except AkaiImageError as e:
+            print(f"  [ISO] ERROR: {e}")
+        else:
+            print(f"  → {path.name}  ({info['bytes']/1048576:.0f} MB, "
+                  f"{info['partitions']} partition(s), {info['files']} file(s))")
+            print(f"  → Burn as a plain data image (it is NOT ISO 9660 — a "
+                  f"CD3000 disc is the AKAI partition format written raw), or "
+                  f"serve it from a ZuluSCSI CD device.")
+
+    if args.hda:
+        path = out_dir / f"{bank_name}.hda"
+        print(f"\n[HDA] Building AKAI hard-disk image "
+              f"({len(volumes)} volume(s), {content/1048576:.1f} MB of content)...")
+        try:
+            info = build_akai_hd_image(volumes, str(path), size_mb=args.hda_size)
+        except AkaiImageError as e:
+            print(f"  [HDA] ERROR: {e}")
+        else:
+            print(f"  → {path.name}  ({info['bytes']/1048576:.0f} MB, "
+                  f"{info['partitions']} partition(s), {info['files']} file(s), "
+                  f"{info['free_blocks']*HD_BLOCK/1048576:.0f} MB free)")
+            print(f"  → Copy to the ZuluSCSI SD card as HD0_512.hda (or "
+                  f"HDx-{bank_name}.hda) and set the SCSI ID to match the "
+                  f"sampler's disk ID.")
+
+    if args.floppy:
+        density = 'ld' if args.floppy in ('720', '800') else 'hd'
+        print(f"\n[FLOPPY] Writing AKAI "
+              f"{'800 KB' if density == 'ld' else '1.6 MB'} floppy image(s)...")
+        for vname, files in volumes:
+            img = out_dir / f"{safe_filename(vname.replace(' ', '_'), 'VOLUME')}.img"
+            try:
+                info = build_akai_floppy_image(files, str(img), volume_name=vname,
+                                               density=density)
+            except AkaiImageError as e:
+                print(f"  [SKIP] {vname}: {e}")
+            else:
+                print(f"  → {img.name}  ({info['files']} file(s), "
+                      f"{info['free_blocks']} KB free)")
+
+    if not args.hda and not args.floppy and not args.iso:
+        for vname, files in volumes:
+            d = out_dir / safe_filename(vname.replace(' ', '_'), 'VOLUME')
+            d.mkdir(parents=True, exist_ok=True)
+            for fn, data in files:
+                (d / fn).write_bytes(data)
+            print(f"  → {d.name}/  ({len(files)} file(s))")
+
+    print(f"\n{'='*60}")
+    print(f"Done: {len(volumes)} volume(s) written to {out_dir}/")
+    print(f"{'='*60}\n")
+
+
 def main():
     ap = argparse.ArgumentParser(
         description='mpc2emu — Multi-format Sampler Converter',
@@ -351,8 +487,8 @@ def main():
                          "object-id space does: a one-voice preset costs "
                          "~960 bytes, so ~117 fit the original hardware. "
                          "Default 110 = an unexpanded K2000 with headroom for "
-                         "setups/effects (~116 K is the usable total); raise it if "
-                         "the machine has a PRAM expansion (760 is a common one).")
+                         "setups/effects (~116 K is the usable total); raise it "
+                         "if the machine has a PRAM expansion (760 is common).")
     ap.add_argument('--bank-size', '--max-bank-size', dest='bank_size',
         type=_size_mb_type, default=32.0, metavar='SIZE',
         help='Max bank size, e.g. 64MB / 65536K / 32 (bare = MB). Default 32 MB; '
@@ -369,28 +505,34 @@ def main():
         help='Number output bank files B.NNN-NAME… starting at N so they can be '
              'copied straight onto an existing E4XT volume (e.g. 100 → '
              'B.100-NAME_01.E4B); no --iso needed')
-    ap.add_argument('--format', choices=['e4b','krz','talsmpl','eiii'], default='e4b',
+    ap.add_argument('--format', choices=['e4b','krz','talsmpl','eiii','akai'], default='e4b',
         help='Output format (default: e4b). e4b = EMU Emulator 4 / E4XT, '
              'krz = Kurzweil K2000/K2500/K2600, talsmpl = TAL-Sampler, '
-             'eiii = E-mu Emulator IIIX/ESI (also loaded natively by the E4XT).')
+             'eiii = E-mu Emulator IIIX/ESI (also loaded natively by the E4XT), '
+             'akai = AKAI S1000/S3000 family (S3000XL, S2000, S2800, S3200).')
     ap.add_argument('--eiii-variant', choices=['e3x','esi'], default='e3x',
         help="With --format eiii: 'e3x' (Emulator IIIX, default — also read "
              "by the E4XT's backward-compatibility loader and by the ESI "
              "samplers) or 'esi' (ESI-32/2000/4000's own identifier).")
     ap.add_argument('--iso',  action='store_true',
-        help='Build a ZuluSCSI CD image (e4b → EMU3 filesystem, krz → K2000 FAT16)')
-    ap.add_argument('--floppy', nargs='?', const='1440', choices=['720', '1440'],
-        metavar='KB',
-        help='Write each KRZ bank to a DOS FAT12 floppy image (.img) for a Gotek/'
-             'FlashFloppy on the K2000R  [krz only; default 1440 = 1.44 MB]')
+        help='Build a ZuluSCSI CD image (e4b → EMU3 filesystem, krz → K2000 '
+             'FAT16, akai → CD3000 AKAI-native — not ISO 9660 in that case)')
+    ap.add_argument('--floppy', nargs='?', const='1440',
+        choices=['720', '1440', '800', '1600'], metavar='KB',
+        help='Write each bank to a floppy image (.img) for a Gotek/FlashFloppy. '
+             'krz → DOS FAT12, 720 or 1440 (default 1440 = 1.44 MB). '
+             'akai → AKAI-native, 800 or 1600 (default 1600 = 1.6 MB); the AKAI '
+             'floppy is not DOS-formatted, so a PC will not mount it.')
     ap.add_argument('--hda',  action='store_true',
         help='Build a ZuluSCSI SCSI hard disk image (.hda). e4b → EMU-fs/FAT '
              'E4XT disk; krz → K2000 FAT16 disk (HW-confirmed: loads from a '
-             'ZuluSCSI HDx device).')
+             'ZuluSCSI HDx device); akai → AKAI partitioned disk, one volume '
+             'per bank (NOT hardware-confirmed).')
     ap.add_argument('--hda-size', type=int, default=None, metavar='MB',
         help='HDA image size in MB. e4b default: auto (smallest 128 MB step that '
              'fits; max 14336). krz default: content + ~50%% headroom to save '
-             'onto (FAT16 max ~2047).')
+             'onto (FAT16 max ~2047). akai default: content + 25%% (max 511 — '
+             'AKAI block numbers are 16-bit).')
     ap.add_argument('--hda-fs', choices=['fat', 'emu'], default='fat',
         help="E4B HDA filesystem: 'fat' (EOS 4.7+, default; needs mtools) or "
              "'emu' (native EMU-fs, all EOS versions). Ignored for krz (K2000 "
@@ -398,7 +540,8 @@ def main():
     ap.add_argument('--add-to', metavar='IMAGE',
         help='Append the converted bank(s) to an existing image in place (no '
              'rebuild, no emu3fs). e4b → a .hda (FAT or EMU-fs, auto-detected); '
-             'krz → a K2000 FAT16 CD (.iso) or hard-disk (.hda), into BANKS/. '
+             'krz → a K2000 FAT16 CD (.iso) or hard-disk (.hda), into BANKS/; '
+             'akai → an AKAI hard-disk image, one new volume per bank. '
              'Never overwrites existing banks unless --on-duplicate overwrite.')
     ap.add_argument('--folder', metavar='NAME',
         help='With --add-to: target folder on the image, created if absent '
@@ -641,8 +784,26 @@ def main():
         if args.trim_tail is None:
             args.trim_tail = args.trim
 
-    _hw_limits = {'e4b': 128, 'krz': 64, 'eiii': 128}
-    _hw_names  = {'e4b': 'E4XT', 'krz': 'K2000', 'eiii': 'EIIIX/ESI'}
+    # The two floppy families have different sizes, and feeding a KRZ size to
+    # the AKAI writer (or the reverse) would silently build the wrong geometry.
+    if args.floppy:
+        _fl_ok = {'akai': ('800', '1600'), 'krz': ('720', '1440')}.get(args.format)
+        if _fl_ok is None:
+            print(f"Error: --floppy is not available for --format {args.format} "
+                  f"(krz and akai only).")
+            sys.exit(1)
+        if args.floppy not in _fl_ok:
+            if args.floppy == '1440' and args.format == 'akai':
+                args.floppy = '1600'        # the default, in AKAI terms
+            else:
+                print(f"Error: --floppy {args.floppy} is not a "
+                      f"{args.format.upper()} floppy size; --format "
+                      f"{args.format} takes {' or '.join(_fl_ok)} KB.")
+                sys.exit(1)
+
+    _hw_limits = {'e4b': 128, 'krz': 64, 'eiii': 128, 'akai': 32}
+    _hw_names  = {'e4b': 'E4XT', 'krz': 'K2000', 'eiii': 'EIIIX/ESI',
+                  'akai': 'S3000XL'}
     _hw_max = _hw_limits.get(args.format)
     if _hw_max and args.bank_size > _hw_max:
         print(f"  [WARN] --bank-size {args.bank_size:.0f} MB exceeds the "
@@ -702,6 +863,7 @@ def main():
         'krz':     'Kurzweil K2000 / K2500 / K2600',
         'talsmpl': 'TAL-Sampler',
         'eiii':    'E-mu Emulator IIIX / ESI',
+        'akai':    'AKAI S1000 / S3000 family',
     }
 
     input_files = collect_input_files(input_path)
@@ -978,7 +1140,7 @@ def main():
     # A preset is never split across banks, so one too big for a bank must be
     # thinned/downsampled to fit.  Offer sized suggestions (or hard-fail a batch
     # run) BEFORE the split so no unloadable bank is ever written silently.
-    if args.format in ('e4b', 'krz', 'eiii'):
+    if args.format in ('e4b', 'krz', 'eiii', 'akai'):
         fit_oversized_presets(source_banks, args.format, args.bank_size,
                               auto_fit=args.auto_fit,
                               max_preset_bytes=args.max_preset_size)
@@ -992,11 +1154,18 @@ def main():
     for w in polyphony_warnings(source_banks, args.format):
         print(w)
     output_banks, warnings = split_into_banks(
-        source_banks, args.bank_size, bank_name, fmt=args.format,
+        source_banks, args.bank_size, bank_name, args.format,
         pram_k=args.pram)
     for w in warnings:
         print(w)
     print_split_summary(source_banks, output_banks, args.bank_size)
+
+    # ── AKAI S1000/S3000 output ───────────────────────────────────────────────
+    # A bank becomes a volume of loose files, so this path diverges from the
+    # single-file formats before the bank-path/overwrite machinery.
+    if args.format == 'akai':
+        write_akai_output(output_banks, out_dir, bank_name, args, step_n)
+        return
 
     # ── Write bank files ──────────────────────────────────────────────────────
     if args.format == 'e4b':

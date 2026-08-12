@@ -21,7 +21,7 @@ can, and writes only under `~/temp/release_matrix/`.
 
 ## Why these axes and not "every combination"
 
-The full cross-product is 32 input extensions × 4 output formats × 5 media ×
+The full cross-product is 32 input extensions × 5 output formats × 5 media ×
 a dozen independent processor flags. That is not a test plan — most of it
 exercises `argparse`, and the combinatorial cells share no code that the
 per-axis cells do not already reach. What is worth *complete* coverage is
@@ -29,8 +29,8 @@ each axis:
 
 | axis | what it answers | cells |
 |------|-----------------|-------|
-| **A** input × output | does every source format reach every target format at all | 72 |
-| **B** output × medium | bank file, `--iso`, `--hda`, `--floppy`, `--add-to` | 14 |
+| **A** input × output | does every source format reach every target format at all | 130 |
+| **B** output × medium | bank file, `--iso`, `--hda`, `--floppy`, `--add-to` | 19 |
 | **C** processors | each flag on one representative path, plus the pairs known to interact | 30 |
 
 **MPC60 is covered at last, and the gap was the corpus, not the code.** Every
@@ -41,6 +41,20 @@ all 34 parse — 34 presets, 664 samples, 40 kHz throughout — and four of them
 convert to all four targets with key coverage preserved. The fixture filters
 on the 819 200-byte size, because mixing a truncated copy back in would turn a
 declared gap into four red cells.
+
+**AKAI is exercised in both generations, and only on this branch.** Every
+AKAI cell would otherwise be S3000, because that is what this project's writer
+emits — but the disc corpus is majority **S1000** (25 407 `.S1` samples
+against 11 238 `.S3`), the parser branches three ways on the generation, and
+two of the six faults real discs found lived in exactly those branches.
+`.p1`, `.s1` and an S1000 `.hda` are separate rows. The fixture is a faithful
+truncation rather than a second writer: an S1000 program block *is* the S3000
+block without its 42 bytes of tail padding. The cells assert the S1000 branch
+is genuinely taken (`is_s3000=False`), not merely that the conversion
+succeeds.
+
+The runner detects AKAI rather than assuming it, so the same file produces
+**72** axis-A cells on `main` and **130** here.
 
 **GIG is real, and chosen by rule.** 146 GigaSampler files live in
 `~/linuxsampler`; the fixture is the smallest one carrying at least 5 samples

@@ -220,6 +220,8 @@ library (`mtools` is optional, only for one E4B HDA filesystem path).
 | Akai MPC Keygroup | `.xpm` | MPC 2.x / MPC X / Live / One (XML) |
 | Akai MPC drum program | `.pgm` | MPC 500/1000/2500, **MPC 2000/2000XL** (`.WAV`) and MPC 60 (12-bit `.SND`) |
 | Akai MPC60 SET / floppy | `.set` / `.img` | MPC 60 RAM set; `.img` = FAT12 floppy (SET auto-extracted) |
+| AKAI S1000/S3000 program / sample | `.P3` / `.S3` / `.a3p` / `.a3s` / `.p1` / `.s1` | S3000XL, S2000, S2800, S3200(XL), S1000/S1100, CD3000 |
+| AKAI S1000/S3000 disk image | `.hda` / `.iso` / `.img` | Whole SCSI disk, CD3000 CD-ROM or 800 KB / 1.6 MB floppy — every volume on it, read without the sampler. S1000 and S3000 volumes both, on the same disk if need be; all three extensions are identified by content, not by name |
 | TAL-Sampler | `.talsmpl` | TAL Software GmbH (XML + WAV) |
 | SFZ v1/v2 | `.sfz` | Open standard, `#include` supported |
 | SoundFont 2 | `.sf2` | RIFF-based, E-mu / Creative |
@@ -236,6 +238,7 @@ library (`mtools` is optional, only for one E4B HDA filesystem path).
 | Kurzweil KRZ | `.KRZ` | Kurzweil K2000 / K2500 / K2600 |
 | E-mu Emulator IIIX/ESI | `.E3X` / `.ESI` | Emulator IIIX, ESI-32/2000/4000 — also loads natively on the E4XT (its own backward-compatibility loader) |
 | TAL-Sampler | `.talsmpl` | TAL-Sampler VST/AU |
+| AKAI S1000/S3000 | `.S3` + `.P3`, `.hda`, `.iso`, `.img` | S3000XL and family — loose files, a partitioned SCSI/ZuluSCSI disk image (`--hda`), a CD3000 CD-ROM (`--iso`) or an AKAI floppy (`--floppy`). **Not hardware-confirmed yet** |
 
 ---
 
@@ -617,6 +620,61 @@ python convert.py /sfz/pianos/ --format krz --hda --hda-size 1024
 `--hda-size` sets the volume size in MB (default: content + ~50% headroom;
 FAT16 tops out near ~2047 MB).
 
+### SCSI Hard Disk (.hda) — AKAI S3000XL
+
+> **Not hardware-confirmed.** The AKAI format is not vendor-documented. Our
+> images come out **byte-identical** to images built by
+> [`akaiutil`](#reverse-engineering-credits), an independent implementation,
+> and the reader agrees with it on all **84 345 files of 33 real library
+> CD-ROMs**. That is the strongest check available without the sampler, and is
+> *not* the same as the sampler accepting them — five separate faults survived
+> the `akaiutil` comparison alone and were only caught by real discs. See
+> `docs/AKAI_S3000_FORMAT.md`.
+
+```bash
+python convert.py /mpc/programs/ --format akai --hda
+```
+
+Each bank becomes an AKAI **volume** (one program plus its samples); volumes
+are packed into 60 MB partitions, which is the sampler's maximum.
+
+1. Copy the generated `.hda` to the ZuluSCSI SD card
+2. Rename to `HD0_512.hda` (or `HDx-<name>.hda`) — pick a free SCSI ID
+3. On the sampler: **Disk → Select disk → Load volume**
+
+`--hda-size` sets the disk size in MB. The default stays close to the content
+(+25%, 8 MB floor) because these images are copied over USB, where spare
+megabytes are copy time. AKAI block numbers are 16-bit, so ~511 MB is the
+ceiling; a volume must fit inside one 60 MB partition.
+
+Without `--hda` or `--floppy` the volumes are written as plain directories of
+`.S3` / `.P3` files.
+
+### CD image — AKAI CD3000
+
+```bash
+python convert.py /mpc/programs/ --format akai --iso
+```
+
+A CD3000 disc is **not ISO 9660** — it is the AKAI partition format written
+raw, so burn the result as a plain data image (or serve it from a ZuluSCSI CD
+device). Volumes are typed CD3000 and the three blocks after each partition
+header hold a file index that the sampler browses instead of reading every
+volume directory; `--add-to` rebuilds that index automatically.
+
+The disc label comes from `--bank-name`.
+
+### Floppy — AKAI S3000XL
+
+```bash
+python convert.py Pad.xpm --format akai --floppy        # 1.6 MB (default)
+python convert.py Pad.xpm --format akai --floppy 800    # 800 KB
+```
+
+The AKAI floppy is **not DOS-formatted** (80 tracks × 2 sides × 10 sectors ×
+1024 bytes), so a PC will not mount it — use a Gotek/FlashFloppy, the same way
+as the K2000 floppy path.
+
 ### Adding banks to an existing image (`--add-to`)
 
 Append converted bank(s) to an image you already built — **in place, no rebuild,
@@ -628,13 +686,19 @@ python convert.py NewPad.xpm --format e4b --add-to /path/to/DISK.hda
 
 # KRZ → an existing K2000 image (CD .iso OR hard disk .hda — same FAT16 format)
 python convert.py NewPad.sfz --format krz --add-to /path/to/K2KBANKS.iso
+
+# AKAI → an existing S3000 hard-disk image, as a new volume
+python convert.py NewKit.xpm --format akai --add-to /path/to/AKAI.hda
 ```
 
 - `--folder NAME` targets (and creates) a sub-folder on the image.
 - `--on-duplicate {prompt,add-new,skip,overwrite}` handles name clashes; existing
   banks are **never overwritten** unless you ask.
 - E4B appends to a `.hda` (FAT or EMU-fs); KRZ appends into the `BANKS/` directory
-  of a K2000 CD or hard-disk image.
+  of a K2000 CD or hard-disk image; AKAI takes a free root-directory slot and free
+  FAT blocks in the first partition that has both — the disk keeps its size and
+  existing volumes keep their blocks. `overwrite` frees the old volume's blocks
+  first. AKAI floppies cannot be appended to.
 
 ---
 

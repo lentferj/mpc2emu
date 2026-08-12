@@ -36,7 +36,7 @@ Strategie für den E4XT, da ein Preset alle seine Samples in derselben Bank brau
 
 import math
 from dataclasses import dataclass, field, replace
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 from models.common import Bank, Preset, SampleData
 
 
@@ -59,16 +59,6 @@ _MAX_SAMPLES_PER_BANK = 1000
 # Same limit applies to presets: EOS numbers them P000-P999 (max 1000/bank).
 _MAX_PRESETS_PER_BANK = 1000
 
-# KRZ is tighter, and for two separate reasons. Object ids start at 200, and:
-#   * id > 999  -- HW-CONFIRMED 2026-08-10: the K2000 CLAMPS, putting every
-#                  further object on 999 so each overwrites the last. Silent.
-#   * id > 1023 -- the id carries into the type field of the hash
-#                  (`type << 10 | id`, krz_writer._hash) and the object reads
-#                  back as a different type entirely.
-# The lower one binds: 200..999 = 800 objects PER TYPE. write_krz refuses a
-# bank past it; splitting on the real ceiling means the user gets more banks
-# instead of an error.
-_MAX_OBJECTS_PER_KRZ_BANK = 800
 # ── KRZ: PRAM is the real limit, and it is per-machine ────────────────────────
 # A K2000 keeps its OBJECTS (programs, keymaps, sample headers) in PRAM,
 # separately from sample RAM. Object COUNT is not what binds -- PRAM BYTES are,
@@ -97,25 +87,12 @@ _PRAM_KEYMAP  = 688    # 128 entries x 5 bytes + header -- the dominant cost
 #
 # This model explains the hang that started all of this: 796 presets x 960 B =
 # 746K against that machine's 760K, i.e. 98% full. It was never an object-count
-# limit. On a stock machine the same arithmetic allows ~117 presets at the
-# 110K default, ~123 if the full 116K is claimed with --pram 116.
+# limit. On a stock machine the same arithmetic allows ~117 presets at the 110K
+# default, ~123 if the full 116K is claimed with --pram 116.
 _DEFAULT_PRAM_K = 110
 
-#: Per-format (max samples, max presets) for one output bank. The KRZ preset
-#: figure is a backstop only -- `pram_budget_bytes` is what actually binds, and
-#: is far lower on a stock machine.
-_FORMAT_LIMITS = {
-    'krz': (_MAX_OBJECTS_PER_KRZ_BANK, _MAX_OBJECTS_PER_KRZ_BANK),
-}
 
-
-def format_limits(fmt: str):
-    """(max_samples, max_presets) for one output bank of this format."""
-    return _FORMAT_LIMITS.get(fmt, (_MAX_SAMPLES_PER_BANK,
-                                    _MAX_PRESETS_PER_BANK))
-
-
-def pram_budget_bytes(pram_k: Optional[int] = None) -> int:
+def pram_budget_bytes(pram_k=None) -> int:
     """Usable PRAM in bytes. `pram_k` is the machine's USABLE PRAM in KB."""
     return int(pram_k if pram_k else _DEFAULT_PRAM_K) * 1024
 
@@ -156,6 +133,62 @@ def bank_pram_bytes(n_samples: int, presets) -> int:
     return (n_samples * _PRAM_SAMPLE
             + sum(preset_pram_bytes(p) for p in presets))
 
+
+#: Per-format bank capacity: (max samples, max presets, max samples+presets).
+#: The third is for formats where the two share one budget; None where they do
+#: not.  An unlisted format gets the EOS numbers, which is what every caller
+#: assumed before this table existed.
+_FMT_CAPACITY = {
+    'e4b':  (_MAX_SAMPLES_PER_BANK, _MAX_PRESETS_PER_BANK, None),
+    'eiii': (_MAX_SAMPLES_PER_BANK, _MAX_PRESETS_PER_BANK, None),
+    # KRZ is tighter than EOS, and for two separate reasons. Object ids start
+    # at 200, and:
+    #   * id > 999  -- HW-CONFIRMED 2026-08-10: the K2000 CLAMPS, putting
+    #                  every further object on 999 so each overwrites the
+    #                  last. Silent; it does not refuse.
+    #   * id > 1023 -- the id carries into the type field of the hash
+    #                  (`type << 10 | id`, krz_writer._hash) and the object
+    #                  reads back as a different type entirely.
+    # The lower one binds: 200..999 = 800 objects PER TYPE. write_krz refuses
+    # a bank past it; splitting here means the user gets more banks instead of
+    # an error. Samples and programs have separate id spaces, so no combined
+    # cap.
+    'krz':  (800, 800, None),
+    # An AKAI bank is one volume, and a volume directory's 510 entries hold
+    # the samples AND the programs — so unlike the others, the two compete for
+    # one budget and the combined cap is the one that bites.
+    'akai': (509, 509, 510),
+}
+
+
+def bank_limit_bytes(max_size_mb: float) -> int:
+    """Usable bytes in a bank of `max_size_mb`, after the safety margin.
+
+    The per-sample/per-preset/per-bank overhead constants below slightly
+    *under*-count the real serialized size (E4Sa headers, word alignment, the
+    mandatory trailing EMSt chunk and FORM framing), so packing right up to
+    the byte limit can spill a few KB over — and an E4B even one byte past the
+    E4XT's sample RAM will not load.
+
+    The margin used to be a flat 1 MB, which is sized for a 128 MB bank and
+    fatal for a small one: `--bank-size 1` left **one byte** usable, so nothing
+    could fit and the fit assistant looped applying reductions that could not
+    help. It is now proportional with a floor. Every default is unaffected —
+    12.5% of 8 MB is already 1 MB, and the smallest hardware limit in use is
+    32 MB.
+
+    **This is the only place the margin is computed.** `convert.py` used to
+    carry its own copy of the flat 1 MB, so the splitter and the fit assistant
+    disagreed about what fits.
+    """
+    margin = min(1024 * 1024, max(64 * 1024, int(max_size_mb * 1024 * 1024 * 0.125)))
+    return max(1, int(max_size_mb * 1024 * 1024) - margin)
+
+
+def _capacity(fmt: str):
+    return _FMT_CAPACITY.get(fmt, (_MAX_SAMPLES_PER_BANK,
+                                   _MAX_PRESETS_PER_BANK, None))
+
 # ── Polyphony (measured on the E4XT 2026-07-31) ────────────────────────────────
 # Two facts that nothing in the size/fit path used to know:
 #
@@ -180,30 +213,6 @@ def bank_pram_bytes(n_samples: int, presets) -> int:
 #:         mono reaches 24, measured identically at velocity 100, 45 and 25 so
 #:         the plateau is voice allocation rather than output clipping
 _VOICES_PER_NOTE = {'e4b': 32, 'krz': 24}
-
-
-def bank_limit_bytes(max_size_mb: float) -> int:
-    """Usable bytes in a bank of `max_size_mb`, after the safety margin.
-
-    The per-sample / per-preset / per-bank overhead constants slightly
-    *under*-count the real serialized size (E4Sa headers, word-alignment
-    padding, the mandatory trailing EMSt chunk and FORM framing), so packing
-    right up to the byte limit can spill a few KB over — and an E4B even one
-    byte past the E4XT's sample RAM will not load.
-
-    The margin used to be a flat 1 MB, which is sized for a 128 MB bank and
-    fatal for a small one: `--bank-size 1` left **one byte** usable, so nothing
-    could fit and the fit assistant looped applying reductions that could not
-    help. It is now proportional with a floor. Every default is unaffected —
-    12.5% of 8 MB is already 1 MB, and the smallest hardware limit in use is
-    64 MB.
-
-    **This is the only place the margin is computed.** `convert.py` used to
-    carry its own copy of the flat 1 MB, so the splitter and the fit assistant
-    disagreed about what fits.
-    """
-    margin = min(1024 * 1024, max(64 * 1024, int(max_size_mb * 1024 * 1024 * 0.125)))
-    return max(1, int(max_size_mb * 1024 * 1024) - margin)
 
 
 def estimate_bank_size(bank: Bank) -> int:
@@ -441,8 +450,6 @@ class TargetBank:
     current_size: int = _BANK_OVERHEAD
     #: 0 = no PRAM limit (every format but KRZ).
     pram_budget: int = 0
-    max_samples: int = _MAX_SAMPLES_PER_BANK
-    max_presets: int = _MAX_PRESETS_PER_BANK
 
     def _unique_sample_name(self, base: str) -> str:
         if base not in self._sample_names:
@@ -489,8 +496,9 @@ class TargetBank:
         self.current_size += _PRESET_CHUNK_OVERHEAD + voice_overhead
 
     def would_fit(self, preset: Preset, needed_samples: List[SampleData],
-                  limit_bytes: int) -> bool:
+                  limit_bytes: int, capacity=None) -> bool:
         """Check if adding this preset+samples would stay within the limit."""
+        max_samples, max_presets, max_files = capacity or _capacity('e4b')
         extra = _PRESET_CHUNK_OVERHEAD
         for voice in preset.voices:
             extra += 8 + len(voice.zones) * 32
@@ -504,10 +512,15 @@ class TargetBank:
                 extra += _SAMPLE_CHUNK_OVERHEAD + len(sample.data)
                 new_samples += 1
 
-        if len(self._sample_names) + new_samples > self.max_samples:
+        if len(self._sample_names) + new_samples > max_samples:
             return False
 
-        if len(self.presets) + 1 > self.max_presets:
+        if len(self.presets) + 1 > max_presets:
+            return False
+
+        if (max_files is not None
+                and len(self._sample_names) + new_samples
+                + len(self.presets) + 1 > max_files):
             return False
 
         # PRAM, not object count, is what a K2000 actually runs out of.
@@ -534,7 +547,7 @@ def split_into_banks(
     max_size_mb: float,
     base_name: str = "EMU_BANK",
     fmt: str = 'e4b',
-    pram_k: Optional[int] = None,
+    pram_k=None,
 ) -> Tuple[List[Bank], List[str]]:
     """
     Pack presets from multiple source banks into size-limited output banks.
@@ -543,11 +556,6 @@ def split_into_banks(
         source_banks:  List of Bank objects (one per XPM)
         max_size_mb:   Maximum size per output bank in megabytes
         base_name:     Base name for output banks (truncated to 12 chars)
-        fmt:           Output format -- sets the per-bank object ceiling
-                       (KRZ addresses 800 objects per type, EOS 1000)
-        pram_k:        K2000 USABLE PRAM in KB (KRZ only; default 116, the
-                       original hardware). Objects live in PRAM and it runs
-                       out long before the id space does.
 
     Returns:
         Tuple of:
@@ -555,7 +563,7 @@ def split_into_banks(
           - List of warning strings (oversized presets, etc.)
     """
     limit_bytes = bank_limit_bytes(max_size_mb)
-    _max_s, _max_p = format_limits(fmt)
+    cap = _capacity(fmt)
     _pram = pram_budget_bytes(pram_k) if fmt == 'krz' else 0
     warnings: List[str] = []
 
@@ -612,33 +620,39 @@ def split_into_banks(
                 f"  [WARN] Preset '{preset.name}' from '{source_name}' "
                 f"({preset_sz/1024/1024:.1f} MB) exceeds bank limit "
                 f"({max_size_mb:.0f} MB) — placed in its own bank. "
-                f"To fix: use --bank-size to raise the limit (E4XT max: 128 MB, K2000 max: 64 MB), "
+                f"To fix: use --bank-size to raise the limit "
+                f"(E4XT max: 128 MB, K2000 max: 64 MB, S3000XL max: 32 MB), "
                 f"or reduce preset size with --reduce-key-zones / --reduce-velocity-layers."
             )
         if _pram and preset_pram_bytes(preset) + _PRAM_SAMPLE * len(needed_samples) > _pram:
+            need = (preset_pram_bytes(preset)
+                    + _PRAM_SAMPLE * len(needed_samples)) / 1024
             warnings.append(
                 f"  [WARN] Preset '{preset.name}' from '{source_name}' needs "
-                f"{(preset_pram_bytes(preset) + _PRAM_SAMPLE * len(needed_samples))/1024:.0f} K "
-                f"of K2000 PRAM on its own, more than the "
+                f"{need:.0f} K of K2000 PRAM on its own, more than the "
                 f"{_pram/1024:.0f} K budget — the bank will not load. A single "
                 f"preset cannot be split; use --reduce-key-zones / "
-                f"--reduce-velocity-layers, or --pram if this machine has a "
-                f"PRAM expansion."
+                f"--reduce-velocity-layers, or --pram if the target machine "
+                f"has a PRAM expansion."
             )
 
-        if len(needed_samples) > _max_s:
+        if len(needed_samples) > cap[0]:
+            where = {
+                'akai': "an AKAI volume directory",
+                'krz':  "the KRZ object-id ceiling (ids 200-999)",
+            }.get(fmt, "the EOS sample-per-bank limit (S000-S999)")
             warnings.append(
                 f"  [WARN] Preset '{preset.name}' from '{source_name}' "
                 f"references {len(needed_samples)} unique samples, exceeding "
-                f"the {_max_s}-sample-per-bank limit for {fmt.upper()} "
-                f"— bank will be invalid. A single preset cannot be split, "
-                f"so use --reduce-key-zones / --reduce-velocity-layers."
+                f"{where} ({cap[0]}) — bank will be invalid. A single preset "
+                f"cannot be split, so use --reduce-key-zones / "
+                f"--reduce-velocity-layers."
             )
 
         # Find first target bank that fits
         placed = False
         for tb in target_banks:
-            if tb.would_fit(preset, needed_samples, limit_bytes):
+            if tb.would_fit(preset, needed_samples, limit_bytes, cap):
                 tb.add_preset(preset, needed_samples)
                 placed = True
                 break
@@ -646,7 +660,6 @@ def split_into_banks(
         if not placed:
             # Open a new target bank
             tb = TargetBank(index=len(target_banks) + 1,
-                            max_samples=_max_s, max_presets=_max_p,
                             pram_budget=_pram)
             tb.add_preset(preset, needed_samples)
             target_banks.append(tb)
