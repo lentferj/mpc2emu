@@ -6894,6 +6894,106 @@ not a code decision.
 
 ---
 
+## §RULER — a ruler that saturates against its source is measuring the source
+
+s3ked, 2026-08-12, after their `FILFRQ` law turned out to read 20–30 % high by
+a *growing* amount: it had been derived from a spectral centroid, and a
+centroid is the average frequency of everything the **source** contains. It
+sits above the corner by however much energy lies above it, and that mix moves
+as the corner moves — so the error is in the **slope**, not the offset, and no
+single correction factor could have removed it.
+
+Their warning to us was explicit: *if you have a filter-frequency law derived
+from any spectral-summary statistic — centroid, rolloff, brightness — it is
+probably biased the same way.*
+
+**Checked, and we are structurally clear but had a live trap.**
+`corner_frequency()` measures a −3 dB point against a reference band, which is
+a transfer-function measurement rather than a spectral summary — the right
+kind. But the source-cancelling `reference=` argument was **never passed at any
+call site**, so every corner we have measured was taken against the signal's
+own 100–500 Hz band, and that is only the filter's response if the source is
+flat there.
+
+Measured on synthetic input, wide-open filter, no reference:
+
+| source | reported corner | truth |
+|---|---|---|
+| white noise | none found (correct) | no corner |
+| sawtooth (−6 dB/oct) | **502 Hz** | no corner |
+| sawtooth, real 3 kHz filter | **502 Hz** | 3000 Hz |
+| white noise, real 3 kHz filter | 3025 Hz | 3000 Hz |
+
+With a falling source the function reports the source's own rolloff and is
+completely insensitive to the filter. The MPC cutoff work used white noise and
+is fine; anything measured on a saw through this path is not.
+
+`corner_frequency()` now refuses when the reference band tilts more than 3 dB
+without a `reference=` capture. With one, the source divides out exactly and a
+saw gives 3025 Hz for a true 3000 Hz corner — the same answer as noise.
+
+**A ceiling can fake r² 0.99999 — and one extra run exposes it (s3ked,
+2026-08-12).** Measuring envelope 3, their corner saturated at 6650 Hz at full
+modulation depth — the top of the *filter's* range, not the instrument's. The
+timings fitted an exponential at **r² 0.99999** and were wrong. What exposed it
+was repeating the sweep at a second drive level: the two disagreed by a factor
+approaching 2.0, exactly their depth ratio, which is what a linear ramp read
+through a ceiling produces, since the time to cross a fixed fraction of a
+*truncated* span scales inversely with drive.
+
+> **A law that changes when the drive changes is not a law.**
+
+An excellent r² cannot see this, because it is faithfully measuring how
+consistently the ceiling clipped. **Open for us:** our E4XT cutoff, gain and
+pan laws were each fitted at one fixed drive level, and none has been repeated
+at a second. That is one extra run per law and it is the cheapest check
+available against this whole class. Not blocked on anything but bench time.
+
+*And for the 2 dB gap it is a THREE-WAY discriminator, not a confirmation
+test* (s3ked, 2026-08-12). The ceiling hypothesis makes a **numeric**
+prediction rather than a qualitative one: with a linear ramp read through a
+ceiling, the time to cross a fixed fraction of a truncated span scales as
+1/drive exactly — which is why their two drive levels disagreed by 2.02
+against a drive ratio of 2.0. So: **halve the drive and re-measure.**
+
+| the gap becomes | conclusion |
+|---|---|
+| ~4 dB | a pure ceiling; it scales with drive |
+| ~2 dB, unmoved | a real offset between the datasets, and the shape argument keeps its force |
+| anything else | a third thing neither hypothesis covers |
+
+The null result is informative here, which is not usually true of a ceiling
+hunt: "it did not move" is positive evidence *against* a ceiling rather than an
+absence of evidence. One run separates three hypotheses instead of confirming
+one.
+
+**The one-sided case, tested 2026-08-12.** s3ked's stated range stops at
+FILFRQ 44..92 not because the machine stops there but because their sawtooth
+runs out of harmonics above the corner and drops below the lowest fundamental
+below it — *both ends fail by going one-sided, limits of the source rather than
+the method.* Asked whether ours fabricates a number in that case: with a
+`reference=` capture and **independent** noise in each capture, a corner inside
+the reference band reads 3025 Hz against a true 3000 Hz, repeatably; a corner
+at 12 kHz, beyond where the reference has any signal, returns **NaN every
+time**. It degrades to "no corner found" rather than to a wrong number, which
+is the genuine-outcome NaN this file distinguishes from the impossible-request
+one.
+
+Worth noting how that test nearly passed for the wrong reason: the first
+version built the filtered capture from the *same* noise array as the
+reference, so the noise divided out exactly and the estimator looked robust at
+12 kHz. Two captures never share a noise realisation. Same shape as the null
+pass that measured whether one path repeats.
+
+**And one thing our own headline result does not establish.** The E4XT cutoff
+ladder passed 12/12 on hardware, measured==requested. That check runs through
+the *same* estimator that produced the calibration, so per §AGREEMENT it rules
+out inversion and arithmetic error and says nothing about estimator bias. An
+independent check would need a different instrument — a tuned oscillator swept
+against the filter, or the resonance-peak differencing s3ked moved to.
+
+---
+
 ## §AGREEMENT — what a second source actually rules out
 
 A rule this project earned expensively over 2026-08-10/11, in exchange with
