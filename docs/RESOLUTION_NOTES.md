@@ -357,7 +357,36 @@ reads the playback rate from a field other than our E3S1 `[54-57]` (which came f
 emu3bm/EOS3). We currently write `[58-59]` playback_rate and `parameters[6]`
 (`[70-93]`) as 0.
 
-**RE procedure (hardware artifact — Jan).**
+**SOLVED FROM THE CORPUS, 2026-08-12 — no hardware needed.** The blocker below
+was a collapsed variable: it constrained *access to an E4XT*, while the question
+is *what value the field holds at a given rate* — and 681 real E4B files written
+by real E4XTs answer that directly.
+
+Reading `[58-59]` against `[54-57]` across every sample in the local corpus, on
+the 103 rates below 44.1 kHz where the value has not wrapped:
+
+```
+    [58-59] = round(768 * log2(rate / 44066)) mod 65536      max residual 1.32
+```
+
+768 units per octave is **64 per semitone** — a 1/64-semitone pitch offset, and
+the reference is 44066 Hz, i.e. 44.1 kHz to within 0.08 %. So the field is not a
+rate at all: it is the playback pitch relative to 44.1 kHz.
+
+**Which is exactly the bug.** We write `[58-59] = 0`, and zero means "44.1 kHz",
+so the E4XT plays every sample as though it were 44.1 kHz. A sample stored at
+27500 Hz therefore plays sharp by `12·log2(44100/27500)` = **8.18 semitones** —
+and TODO.md recorded the observed symptom, months ago, as *"27500 → +8.18 st"*.
+
+That match is the evidence, not the fit. The law was fitted to corpus field
+values and predicts an independently observed hardware symptom it was never
+fitted to — the §AGREEMENT standard for what earns trust.
+
+**The fix** is to write the field instead of zeroing it. Still worth one
+hardware confirmation, but it is now a one-line change to verify rather than the
+multi-step RE procedure below.
+
+**Superseded RE procedure (hardware artifact — Jan).**
 1. Load `K2_AUTOSAMP` on the E4XT (from the ISO / ZuluSCSI). Note a **non-resampled**
    sample's pitch — e.g. **S020** (a plain 44.1 kHz sample; plays A-something).
 2. Sample Edit key → select S020 → **Tools 1 (F2)** → **SrCnv (F4)** → enter a
