@@ -5095,6 +5095,152 @@ agreeing at both endpoints, is still unexplained.** The linear law is the one
 that verifies on hardware, so it is the one in the code; that is a stronger
 claim than understanding the discrepancy, and the discrepancy stays open.
 
+*How to actually close it (2026-08-11).* The honest description of that 2 dB
+is **two numbers, each measured exactly once, differing by an amount neither
+one carried an error bar for** — which was true of every hardware measurement
+this project had taken until today. It is not noise — but see the correction below on
+*how far* from noise.
+
+*Correction, 2026-08-11, measured not assumed.* This note first said 2 dB is
+**59×** the floor, from the 0.39 % instrument repeatability (0.034 dB). Wrong
+denominator: that figure is the recording chain alone, and the quantity that
+matters is how much the whole measurement — capture, segmentation, plateau
+estimation — moves between takes. Two takes of the same sweep are in the
+archive (`level_cal_take2/3.wav`), and running one analysis over both gives a
+per-note difference of **0.30 dB mean, 0.39 dB max**, nine notes. That is **9×
+larger** than the instrument figure, so the honest comparison is
+
+    2 dB / 0.30 dB ≈ **6.7×** take-to-take scatter, not 59×.
+
+*And 6.7× is still not the right comparison — a third denominator, 2026-08-12.*
+s3ked, measuring `FILQ`: **"the null pass's 0.016 dB measured whether one path
+repeats, not whether two paths agree — the real rms is 0.274 dB, 17× that."**
+
+That is the exact shape of the 0.30 dB above. It was take2 against take3 through
+**one** analysis, so it measures whether a single path repeats. The 2 dB gap is
+between two *datasets* that may have been reduced by two different analyses —
+and the denominator for that comparison is the **between-path** scatter on the
+same data, which nobody has ever measured here. Their two paths differed by 17×
+their within-path figure.
+
+So the honest statement of the open item is now: 2 dB against a within-path
+scatter of 0.30 dB, with the between-path scatter **unmeasured and plausibly
+several times larger**. 6.7× is an upper bound on how anomalous the gap is, not
+an estimate of it. That is the third denominator this note has used, and each
+correction has moved the same direction — toward the gap being less remarkable
+than it first looked.
+
+It also cannot be computed from the archive, for the reason recorded below:
+which analysis produced each dataset is written down nowhere.
+
+Still comfortably real, and still with a cause. But 59× was a claim about a
+quantity that was never the right comparison, and it would have made the gap
+look far more anomalous than the evidence supports. **This is the project's
+first error bar on a level measurement** — it was recoverable from the archive
+because these two takes are of the same conditions.
+
+Two things fell out of the same pass, both worth keeping:
+
+* **The self-normalisation is sound.** `analyze_envelope_recording.py --mode
+  level` divides each note's plateau by *that note's own attack peak*, valid
+  only if the peak is constant across the sweep. Measured: constant to
+  **0.01 dB** across all nine notes in both takes. A ratio pinned to its own
+  peak would have produced errors that vanish at the endpoints and concentrate
+  in the middle — exactly this discrepancy's signature — so this was a strong
+  candidate, and it is now excluded.
+* **The analyser silently drops notes.** Two of nine came back
+  `(plateau too short)` in one take and were simply absent from the output. A
+  sweep that quietly measures 7 of 9 points still prints a clean-looking
+  table. The procedure, from s3ked's `5b0fb67`, where a 17 dB version of this
+turned out to be a fault in the model rather than in the data:
+
+1. Re-measure **both** configurations back to back in one session, with every
+   parameter write read back to confirm it took.
+2. `replicate(measure, n=3)` on each condition
+   (`tests/re_banks/hw_measure.py`) so the comparison has a within-condition
+   scatter to be judged against, then `separable()` rather than eyeballing the
+   gap. Note its verdict is an effect size, not a significance test — see its
+   docstring before reading 'undecidable' as 'no difference'.
+3. Do not reach first for the ceiling explanation. A ceiling compresses the TOP
+   of a curve; ours agrees at both endpoints and diverges in the middle, which
+   is the wrong shape. A bad fit is consistent with many faults, so looking for
+   support rather than refutation will find some.
+
+Velocity and key are already excluded as confounds by direct measurement
+(above) — worth keeping, because s3ked's fault was pinning a variable at its
+extreme *without* that check.
+
+*A diagnosis added and then withdrawn the same evening, 2026-08-11 — kept
+because the withdrawal is the useful part.*
+
+For about half an hour this note said the 2 dB was most likely an
+**underdetermined quantity**, on the strength of s3ked hitting the same
+signature on `ATTAK1` (two fits, each at r² 0.99991, disagreeing 13–20 %) and
+on their 33 % disagreement between two implementations of "10–90 % rise"
+inside one project, which had been attributed to unwritten choices about
+baseline, truncation and peak estimation.
+
+**Both legs were withdrawn by s3ked within the hour.** The 33 % was a plain
+selection bug — one implementation took the last sample inside the 10–90 band
+rather than the last of the first contiguous run, which reads long, as
+predicted. `ATTAK1` and `ATTAK2` were both re-measured after the fix and
+settled; two definitions sharing no arithmetic now agree to 0.19 % on the
+exponent. Their published coefficients had never been more than 1.3 % wrong.
+What had been wrong was the *confidence interval*, built by comparing two
+implementations one of which was broken.
+
+The line that survives, and it is the one to apply here:
+
+> **A disagreement between two of your own tools bounds their difference, not
+> the measurement's uncertainty.**
+
+That is sharper than what it replaced, and it points the other way. Our two
+gain datasets disagreeing by 2 dB is, first and most cheaply, evidence that
+**one of our two analyses has a bug** — not evidence about the E4XT. s3ked
+found the same selection fault three times in three hand-rolled selections,
+each an aggregate taken over a whole record when the region of interest was a
+small and varying fraction of it. Our two runs are exactly that shape.
+
+So the revised order at the bench:
+
+1. **Instrument before theorising.** s3ked burned two hardware runs on two
+   plausible hypotheses about a NaN before a diagnostic that simply printed
+   every intermediate answered it immediately. Print the intermediates of both
+   analyses on the *same* capture first — that costs no bench time at all and
+   would settle a tool-difference without the machine.
+
+   **Attempted 2026-08-11, and it is blocked — for an avoidable reason.** The
+   July captures survive (`~/temp/amp_level_cal/*.wav`) but **their schedules
+   do not**: `play_sequence` returned the note on/off times and never wrote
+   them anywhere. Segmenting an archived capture without its schedule is
+   guesswork, and it does not degrade gently — two segmentations written half
+   an hour apart read the *same* file as −55.1/−43.1/−30.1/−19.0 dB and as
+   −24.8/−24.4/−24.6/−24.2/−19.2 dB. Both looked reasonable in isolation.
+
+   One other thing the archive shows, and it is a candidate the ceiling and
+   underdetermined-quantity hypotheses both missed: `models/common.py:434`
+   records the sweep as *narrowband-analysed against the test tone's own
+   frequency to reject recording noise floor*, while a broadband RMS of the
+   same capture is a different measurement entirely — they diverge wherever
+   the noise floor is a meaningful fraction of the signal. Whether the two
+   datasets used the same one is **not written down anywhere**, which is
+   precisely the gap. Do not treat this as the answer; treat it as the first
+   thing to check, because it is checkable from the archive.
+
+   `play_sequence` now writes a `.sched.json` sidecar beside every capture
+   (note times, program, velocity, controls, device, capture ports, UTC
+   timestamp), so this specific dead end cannot recur. It does not recover the
+   July sessions.
+2. Only if both tools agree on one capture does the disagreement become a
+   fact about the sampler worth spending a session on.
+3. Then the operational-definition question, and `replicate(n=3)`.
+
+Note that r² cannot see any of this: both runs fit beautifully, and so did
+both of s3ked's while one was broken. Goodness of fit measures agreement with
+a model, never agreement with reality.
+
+**Blocked on:** bench time only.
+
 ---
 
 ## §POLY — Per-note voice budget: teaching the size/fit path that stereo costs double (2026-08-01)
