@@ -6891,3 +6891,206 @@ dropping it right at all? `_compute_max_pitch` exists because the K2000
 cannot up-pitch a sample indefinitely; the alternative is to keep the zone and
 let it play flat above the ceiling. That is a hardware-audible judgement call,
 not a code decision.
+
+---
+
+## §AGREEMENT — what a second source actually rules out
+
+A rule this project earned expensively over 2026-08-10/11, in exchange with
+the VinSamLib and s3ked projects. Recorded here because it decided three
+separate arguments in two days and will decide more.
+
+> **Agreement between two sources rules out only what they do NOT share.**
+
+The question to ask of any corroboration is therefore not *"do these agree"*
+but *"what do these two have in common, because that is the part still
+untested."*
+
+### A corpus of authored artefacts cannot bound a tool that authors differently
+
+VinSamLib, 2026-08-12, having measured 499 real AKAI volumes from 23 images
+before deciding whether a capacity warning was worth writing:
+
+```
+    exceeding a 32 MB machine:   0 of 499
+    median 1.8 MB, largest 15.4 MB = 48 % of a 32 MB machine
+```
+
+Read carelessly that says the hazard does not exist. It says nothing of the
+kind. **Every one of those volumes was authored by somebody for a sampler, so
+of course they fit.** The corpus measures an authoring convention, and the
+thing being built — a volume assembler fed an arbitrary folder — is the first
+link in the chain not subject to that convention.
+
+> **Corpus silence about X is evidence only if the corpus population is
+> subject to the same constraints as the thing you are building.**
+
+This is the same error as the 229/191 case in the table above, in its most
+dangerous form: there it produced a wrong belief, here it would have prevented
+a correct feature. A null that argues *against* writing a guard deserves more
+scrutiny than one that argues for it, because it is self-executing — nobody
+reviews the check that was never written.
+
+**Where this bites us.** Every corpus we own is authored artefacts: 681 E4B
+files, 318 KRZ, 1017 EIII banks, 499 AKAI volumes. Each is evidence about what
+the machines and their authors did, and *none* of it bounds what our writers
+can emit — our writers are not bound by the conventions that produced it. So
+"no bank in the corpus does X" is never on its own a reason to skip a guard
+against our doing X.
+
+### The constructive half — what DOES earn trust (s3ked, 2026-08-11)
+
+Everything below this line says what fails to establish a thing. The positive
+form, which took the same two days to find:
+
+> **A law earns trust by predicting a measurement it was not fitted to.
+> Agreement among things fitted together is arithmetic.**
+
+The case that produced it: an AKAI `SUSTN1` level law and a `RELSE1` rate law
+were fitted from separate sweeps, and neither was fitted to a third dataset —
+release behaviour across five sustain levels. Both predicted it, to 0.33 dB
+and 1.8 %. The run could have refuted either and did not. That is worth more
+than any number of internally consistent checks, and it is the standard our
+own KRZ reader still does not meet (§KRZREAD — zero external evidence).
+
+Note the asymmetry in cost: a prediction test needs no new apparatus, only the
+discipline of stating the prediction **before** looking. Three of s3ked's
+passes mistook fitted-together agreement for this, and each cost a retraction.
+
+**We already have one, and it is ours: `KEY_FILTER_OCT_PER_OCT = 0.713`.**
+Measured 2026-06-12 as a slope over C2–C4 (71.3 cents/semitone, r = 0.9994).
+Independently, the `0x38` LFO→Filter sensitivity was measured at ±3.8 octaves
+per 100 %. If the Key modulation source is normalised across the full
+keyboard — ±1.0 over ~128 keys — then one octave of key moves the source
+12/128 × 2 = 0.1875, and 0.1875 × 3.8 = **0.7125 oct/oct predicted against
+0.713 measured**, from a sensitivity the keytrack fit never saw. Two different
+cords, two sessions, 0.07 % apart.
+
+So 0.713 is not "the hardware maximum, annoyingly not 1:1" as the constant's
+comment frames it. It is *what full-keyboard normalisation implies*, and the
+agreement is evidence rather than arithmetic.
+
+### A third thing a comparison cannot tell you: "none of these" (s3ked, 2026-08-12)
+
+Ranking candidate model families returns the **least wrong** one, never
+evidence that a right one was offered. s3ked's §36: four shapes fitted to a
+clipped velocity curve, all fitting badly, and the most curved won by bending
+toward the flat top. The true law — piecewise linear — was not among the four,
+and nothing in the comparison could say so.
+
+This is the same rule as the rest of this section, one level up: a comparison
+rules out only the alternatives it contains. It bites us wherever a law was
+chosen by ranking r² across families rather than by testing the winner in its
+own right.
+
+**The guard is absolute, not relative.** A best-of-N winner with all-bad
+candidates shows up as *structured residuals* — runs of the same sign, a
+visible bend, error growing with x. r² cannot see it (see the 2 dB note: both
+of s3ked's competing `ATTAK1` fits sat at r² 0.99991 while one was broken), so
+the check has to look at residual *shape*, not fit quality. Any law here whose
+provenance is "best of the shapes we tried" should carry that check before it
+is called measured.
+
+*Refuted on the way, 2026-08-11, and worth keeping.* s3ked found their AKAI
+`K_FREQ` referenced to note 64, having previously assumed 60 — an assumption
+that made full 1:1 tracking read as 8.4 semitones per octave. The obvious
+worry was that our 0.713 was the same artefact, and a reference of 64 with a
+test note of 74 does reproduce 0.714 almost exactly. **It cannot be**: ours is
+a gradient, not a point ratio, and a wrong pivot moves the intercept while
+leaving `d(shift)/d(note)` untouched. The 0.714 was found by filtering a grid
+of (reference, note) pairs for anything near 0.713, which is how numerology
+looks from the inside — the check that settled it was asking what the number
+was the answer to, not searching for a way to make it fit.
+
+Worked cases, all from this project's own history:
+
+| two sources | shared | so it rules out | and does NOT rule out |
+|---|---|---|---|
+| two parsers (ours + VinSamLib's) reaching the same AKAI zone offsets | one document | **transcription** error | the document being wrong |
+| two detectors (amplitude + filter) agreeing on an envelope law to 0.16 % | one **model**, applied to both | **detector** error | the model — and the model was wrong (durations, not rates) |
+| two corpora of commercial K2000 banks, max 229 presets / 191 samples | one **authoring convention** — both libraries written for unexpanded hardware | transcription, sampling | that 229/191 is a machine limit. **It is not.** Measurement gave 600+ |
+| our KRZ writer byte-identical to `akaiutil` | one reading of an undocumented format | our arithmetic | either implementation being right |
+| `tests/test_krz_roundtrip.py` — write a bank, read it back, compare | **our own `krz_parser`, on both sides** | **writer** error | **reader** error, at all |
+
+The third row is the one that cost real work: two independent libraries
+agreeing looked like strong evidence for a hardware ceiling, and it was
+evidence about how people authored banks in 1994. Only a disc built to exceed
+it settled the question.
+
+The KRZ round-trip row is ours and was found by VinSamLib pointing this rule
+at their equivalent tooling. It matters more than it looks: there is **no
+foreign KRZ reader anywhere** for either project to compare against, the way
+`akaiutil` serves for AKAI. A wrong offset or a wrong band decode makes both
+sides of a round trip agree — wrongly — and every check reports clean.
+
+So a round-trip pass count is a statement about the WRITER. The only thing that
+could test our KRZ **reader** structurally is a K2000 playing a bank we built
+from a PARSED KRZ source: a misread source produces a wrong-sounding bank, and
+that is the one step in the chain that does not pass through `krz_parser`.
+
+**Counted honestly, that evidence is currently ZERO.** Every hardware-confirmed
+KRZ bank in this project was built from a NON-KRZ source — XPM, E4B, GIG — so
+each one tests the writer. Our KRZ→KRZ path was checked by
+`tools/krz_to_krz_check.py`, which is parse → write → parse → write → parse:
+our reader on every side, the blind spot in its purest form, and never heard on
+hardware. (VinSamLib counted their equivalent at six programs from six source
+banks. Ours is none.)
+
+**The cheap test, and its shape is the finding** (VinSamLib, 2026-08-11):
+
+> Reader confidence scales with SOURCE DIVERSITY PER LISTENING MINUTE, not with
+> bank size. Every program from one source bank re-tests one parse of one file.
+
+So the useful experiment is one program from each of ~20 DIFFERENT source KRZ
+banks, chosen for distinguishable sounds, played briefly — roughly twenty
+minutes at the machine. A 796-program bank from 70 sources is the opposite
+shape: it tests the machine's capacity, costs eleven minutes to load, and adds
+almost nothing here.
+
+**And stated for readers in series**, which is where it gets worst. VinSamLib
+instrumented their KRZ paths on 2026-08-11 rather than re-reading the dispatch
+code, and found:
+
+| path | who reads the user's file | who reads what |
+|---|---|---|
+| whole bank | **their** reader | ours never sees it |
+| single preset | **their** reader | their assembler writes a temp KRZ, and **our `krz_parser` reads that temp** |
+
+So on the single-preset path our parser never touches the original. It reads
+their re-encoding of it. A misread by their reader is laundered through their
+own assembler into something ours parses as well-formed — **the two readers
+cannot disagree, because the second never sees what the first read.** Two
+readers in series with a re-encoding between them corroborate nothing; they
+only confirm the intermediate is self-consistent.
+
+Their first description of this — reached by reading the dispatch function and
+stopping — was "your parser reads every KRZ we convert". A correct reading of
+one function and a wrong description of the system. Executing it took one
+command.
+
+**The same shape, stated for measurement:** two runs of one instrument rule out
+noise, not bias. Bias is what the runs share. s3ked's individual fits sat at
+r² 0.943–0.957 at *every* value for three runs and they read that consistency
+as reassurance — flat mediocrity is bias, because noise varies and bias does
+not.
+
+### The four evidence boxes
+
+The companion taxonomy, which exists because two boxes are not enough:
+
+1. **Measured** — swept on hardware, with the range it was fitted over.
+2. **Structurally claimed, and confirmed on a sibling the claim also covers** —
+   e.g. the AKAI tuning fields, where one document sentence covers four fields
+   and two of the four were measured against it.
+3. **Unknown** — no law, no claim. Write a neutral default and say so.
+4. **Measured to be inert** — actively established to do nothing, e.g. AKAI
+   `STUNO`.
+
+Box 4 is load-bearing rather than a curiosity: it is what stops box 2
+collapsing back into "the neighbour looked similar". `STUNO` earns it because
+its wording *differs* from the four fields that work — had it carried identical
+wording and still done nothing, box 2 would be dead.
+
+With only boxes 1 and 3, anything unmeasured gets treated as unknowable and
+anything adjacent to a measurement gets quietly promoted. VinSamLib traced four
+separate defects in one parser to exactly that missing category.
