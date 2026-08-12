@@ -111,7 +111,7 @@ from typing import Optional, Dict, List, Tuple
 
 from models.common import (
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType,
-    hz_to_e4b_cutoff, E4B_CUTOFF_MAX_HZ
+    hz_to_e4b_cutoff, E4B_CUTOFF_MAX_HZ, walk_files_deterministic
 )
 from parsers.xpm_parser import load_wav, _safe_name
 
@@ -417,13 +417,19 @@ def _parse_exs_v11(p: Path, data: bytes,
             count = 0
             for root in ancestors:        # nearest ancestor first
                 try:
-                    subs = [d for d in root.iterdir() if d.is_dir()
-                            and any(k in d.name.lower() for k in _AUDIO_KEYWORDS)]
+                    subs = sorted(d for d in root.iterdir() if d.is_dir()
+                                  and any(k in d.name.lower()
+                                          for k in _AUDIO_KEYWORDS))
                 except OSError:
                     continue
                 for sub in subs:
                     try:
-                        for f in sub.rglob('*'):
+                        # Deterministic order -- see walk_files_deterministic().
+                        # setdefault() keeps the FIRST hit per basename and the
+                        # cap below stops the walk, so unsorted iteration made
+                        # sample resolution depend on directory order.
+                        for fp in walk_files_deterministic(sub):
+                            f = Path(fp)
                             if f.suffix.lower() in ('.wav', '.aif', '.aiff'):
                                 _audio_index.setdefault(f.name.lower(), str(f))
                                 # Prefer a loadable .wav for the stem fallback so a

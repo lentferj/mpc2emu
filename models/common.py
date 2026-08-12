@@ -847,3 +847,37 @@ class Bank:
             if s.name == name:
                 return s
         return None
+
+
+def walk_files_deterministic(root):
+    """Yield every file under `root` in a STABLE, filesystem-independent order.
+
+    `Path.rglob()` and `Path.iterdir()` return entries in directory order,
+    which on ext4 is a hash of the filename: stable while a directory is
+    untouched, different after a file is added or removed, and different again
+    on another machine or filesystem. That is fine for a scan that consumes
+    everything, and a defect for one that stops early or keeps the first match.
+
+    Both sample-index scans here do exactly that -- `setdefault()` keeps the
+    FIRST file seen for a given basename, and an 80 000-entry cap breaks out of
+    the walk -- so which file a sample reference resolved to, and above the cap
+    which files were indexed at all, rode on directory iteration order. The
+    same library could convert differently after an unrelated file was added
+    beside it.
+
+    Found 2026-08-12 from VinSamLib hitting the same defect class in corpus
+    counting: an unsorted glob truncated at 150 entries made their denominator
+    ride on iteration order, giving 448, 454 and 459 banks across three runs of
+    one evening. Ours is worse in kind, because it moves conversion OUTPUT
+    rather than a reported statistic.
+
+    Sorting `rglob()` would fix the order and defeat the cap -- it materialises
+    the whole tree before the bound applies, which is what the cap exists to
+    prevent. This walks lazily and sorts only one directory level at a time, so
+    the scan stays bounded AND repeatable.
+    """
+    import os
+    for dirpath, dirnames, filenames in os.walk(str(root)):
+        dirnames.sort()          # in place: os.walk reads this back for descent
+        for name in sorted(filenames):
+            yield os.path.join(dirpath, name)

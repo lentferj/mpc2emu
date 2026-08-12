@@ -51,7 +51,7 @@ from models.common import (
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType,
     cents_to_filter_env_amount, lfo_pitch_depth_to_amount, hz_to_e4b_cutoff,
     lfo_volume_depth_to_amount, velocity_filter_depth_to_amount, key_track_to_filter_amount,
-    cap_voices_by_coverage,
+    cap_voices_by_coverage, walk_files_deterministic,
 )
 from parsers.xpm_parser import load_wav, _safe_name
 
@@ -282,13 +282,19 @@ def parse_sfz(sfz_path: str, wav_dir: Optional[str] = None) -> Bank:
             count = 0
             for root in ancestors:
                 try:
-                    subs = [d for d in root.iterdir()
-                            if d.is_dir() and d.name.lower() in _AUDIO_DIR_NAMES]
+                    subs = sorted(d for d in root.iterdir()
+                                  if d.is_dir()
+                                  and d.name.lower() in _AUDIO_DIR_NAMES)
                 except OSError:
                     continue
                 for sub in subs:
                     try:
-                        for f in sub.rglob('*'):
+                        # Deterministic order: setdefault() keeps the FIRST hit
+                        # for a basename and the cap below stops the walk, so
+                        # unsorted iteration made both the resolution and the
+                        # index contents depend on filesystem directory order.
+                        for fp in walk_files_deterministic(sub):
+                            f = Path(fp)
                             if f.suffix.lower() in ('.wav', '.aif', '.aiff', '.flac', '.ogg'):
                                 _audio_index.setdefault(f.name.lower(), str(f))
                                 count += 1
