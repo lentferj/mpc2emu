@@ -6894,6 +6894,144 @@ not a code decision.
 
 ---
 
+## §ENVSPAN — is the EOS envelope byte a RATE or a DURATION? (OPEN, 2026-08-12)
+
+**Status:** untested assumption in shipped code. Not a demonstrated bug, and
+not safe to "fix" without the measurement below.
+
+`env_seconds_to_rate()` converts a time to an EOS envelope byte and takes **no
+span argument**. `e4b_writer` then applies it to stages whose travel distance
+is not the same:
+
+```
+pzt[0]  attack  -> level 100     distance 0 -> 100        FIXED, full
+pzt[4]  decay   -> sustain       distance 100 -> sus      VARIABLE
+pzt[8]  release -> 0             distance sus -> 0        VARIABLE
+pzt[14] filter env attack/decay, likewise
+```
+
+If the byte is a **slew rate**, the time a stage takes is `span / rate`, and a
+conversion that ignores the span is only correct where the span matches the
+calibration's. A decay to sustain 80 % travels a fifth of the distance and
+finishes in roughly a fifth of the requested time. If the byte is a
+**duration**, everything here is already right.
+
+This is the same fault s3ked established for the AKAI on 2026-08-11 — *an
+envelope value is a slew rate, so converting a time needs the span the stage
+travels* — and it is why AKAI envelope 2 is deliberately unwired here. **The
+E4B path never had that lesson applied to it.**
+
+**A tell already in our own data.** The calibration is six Decay-1
+measurements (`AMP_DECAY_CAL.E4B`, 2026-06-08) fitted at **r² = 0.96** — far
+the worst fit in this file, where the other hardware laws sit at 0.999+. If
+those six decays did not all use the same sustain level, and the byte is a
+rate, then `time = span / rate` scatters exactly that way. The sustain used is
+not recorded, which is itself the gap.
+
+**The measurement, one bank and two presets.** s3ked's discriminator for
+`DECAY2`: vary the span and see whether the time holds. Write one decay byte
+against two sustain levels — say 20 % and 80 % — and time both stages.
+
+| result | conclusion |
+|---|---|
+| time scales with the span | it is a RATE; every decay and release we write is wrong by the span ratio |
+| time holds across spans | it is a DURATION; the current conversion is correct and this closes |
+
+Their `DECAY2` result is the precedent for the first outcome: span varied 72 %,
+rate held to 1.9 %. Note their warning that the same evidence cannot settle an
+ATTACK — a stage that always travels zero-to-full has a fixed distance, and a
+fixed distance cannot distinguish a rate from a duration. So this test settles
+decay and release only, which is where the variable spans are anyway.
+
+**A SECOND question the same bank answers** (s3ked, 2026-08-12). Measuring
+all three envelope-2 stages the same way made a structure visible that no
+single stage showed: **attack and release are one law, and the decays run at
+about half that rate** — coefficients within 3.6 %, exponents within 0.35 %,
+against decays at roughly half. One time base with the decay stages halved,
+not five separate calibrations. They state its limits rather than rounding it
+up: exactly-half is supported for `DECAY2` at 1.5 % exponent agreement and
+only approximate for `ENV3R3` at 4.6 %.
+
+We apply **one curve to every stage** — `env_seconds_to_rate()` for attack,
+decay and release alike — and that curve was calibrated on **six Decay-1
+measurements**. If the E4XT has any comparable per-stage structure, every
+attack and release we write inherits a decay-derived rate and is wrong by
+whatever that factor is.
+
+So the same bank settles two things at once: time the attack and release
+stages as well as the decay, and compare against the curve. Equal → one curve
+is right. A consistent factor → we need per-stage curves, and the factor is
+sitting in the data already.
+
+Note these two faults would COMPOUND and could also partly cancel, which is
+why one bench session must answer both rather than either alone.
+
+**THE PRIOR JUST MOVED SHARPLY (s3ked, 2026-08-12 18:32).** They settled the
+same question for the AKAI, on their third attempt, and the answer is **rate**:
+
+> §28's "duration" reading is refuted, and every stage of both envelopes takes
+> `full_time * (distance / 99)`.
+
+Measured with the target levels swept together so the distance actually varied
+— time tracked distance at 4.47x against 4.76x, and again at a second fixed
+setting. Their envelope 2 turned out to be a **four-stage rate/level** envelope
+exactly like envelope 3, with ADSR-flavoured names hiding four of the eight
+fields.
+
+**Ours is that architecture too, and we already write it as one:** `pzt[0]`
+rate with `pzt[1]` level 100, `pzt[4]` rate with `pzt[5]` sustain, `pzt[8]`
+rate with `pzt[9]` level 0. So the E4B is a four-stage rate/level envelope by
+its own layout — the only thing unestablished is whether the byte means the
+time for a FULL traverse (their result) or for that stage.
+
+If it matches theirs, the correction is exactly the one this section predicts,
+and the functional form to test against is now specific: `stage_time =
+full_time * (distance / full_range)`. That is a much better test than "does it
+scale" — it names the curve, so a partial match is distinguishable from a
+different mechanism.
+
+**Their method note, which applies before ours:** two attempts failed as
+measurements; the third was preceded by a **two-minute read-back test using no
+audio**, which settled the architecture and made the measurement possible.
+Write every field, read them all back, check for aliasing and look at how the
+factory values pair up. We already know our layout from the format work, so
+that step is done for us — but the ordering is the lesson: establish the
+architecture without audio first, then measure.
+
+**TWO WARNINGS FOR THE BENCH SESSION, from s3ked failing this exact test
+twice on 2026-08-12.** They tried to settle rate-versus-duration for their own
+attack by varying its travel distance, and both attempts measured nothing:
+
+1. **Verify the span actually varied — before trusting any verdict.** Their
+   first run swept the attack's target level with the sustain pinned, so the
+   envelope always ended at full and the distance never changed: the span
+   column read 2.07 octaves at *every* setting. The second run made sustain
+   follow the target and the span still only moved 1.88..2.07. Both produced
+   five clean, well-varying readings from an independent variable that had not
+   moved. **Nothing about that looks wrong** — it passes a distinctness check,
+   a correlation check, and the eye.
+
+   For us: decide in advance how far the span must move, and check it. If
+   sustain 20 % against 80 % does not actually change the decay's travel by
+   the factor you expect, the run is void whatever it reports.
+   `sweep_is_responsive(..., min_setting_spread=...)` exists for stating that
+   expectation before the run rather than discovering it after the fit.
+
+2. **Run the discriminator at two settings where the answer must agree.**
+   What actually caught their fault was neither mechanical check — both were
+   green — but a **contradiction**: the same run returned "rate" at one fixed
+   attack value and "duration" at another. Two incompatible verdicts from one
+   experiment means the experiment is not measuring what it names, and
+   *neither* verdict is worth recording.
+
+   For us: run the sustain-20/80 comparison at two different decay bytes. If
+   they disagree about rate-versus-duration, the design is wrong and the
+   answer is not "average them". It costs one extra condition.
+
+**Blocked on:** bench time. Nothing should be changed before it.
+
+---
+
 ## §RULER — a ruler that saturates against its source is measuring the source
 
 s3ked, 2026-08-12, after their `FILFRQ` law turned out to read 20–30 % high by
