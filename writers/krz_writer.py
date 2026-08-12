@@ -421,6 +421,34 @@ def _build_keymap_entries(voice: VoiceLayer,
     a constant tuning of 100*(R_s − R_zone) cents so that key R_zone plays the
     sample at its natural pitch; R_s == R_zone ⇒ tuning 0 (the common case).
 
+    **WHAT REAL BANKS DO INSTEAD, and why it matters (VinSamLib, 2026-08-12).**
+    Over 400 real K2000 banks, restricted to drum-kit-shaped keymaps (>=8
+    consecutive keys each holding a different sample -- 286 keymaps, 4823
+    zones):
+
+        root == key    684   14.2%
+        root != key   4139   85.8%
+
+    The common real shape is a FIXED root across many keys -- one keymap has
+    root 60 on keys 36, 37 and 38. Under the automatic per-key transposition
+    described above that would transpose, so those banks must be suppressing
+    tracking by some per-program control rather than by root placement.
+
+    OUR MECHANISM IS NOT THEIRS, and that is the point. We reach native pitch
+    through the constant tuning offset, with tracking left at its default. A
+    real bank reaches it by turning tracking off. **Both sound correct as
+    written, and they diverge the moment a user edits the program** -- change
+    the sample, the root or the key on ours and the offset that was cancelling
+    the transposition is now cancelling the wrong amount.
+
+    So this is not a bug and it is not confirmed correct either. The open
+    question is which per-program control the K2000 uses for pitch tracking
+    and what our output sets it to; if it defaults ON and real banks set it
+    OFF, we are relying on a default that a user can change out from under the
+    arithmetic. Recorded rather than acted on: nothing here is known wrong,
+    and guessing at a control we have not identified is how the AKAI tuning
+    field went 100x out.
+
     CR-1: one keymap PER VOICE (not one merged keymap per preset).  Combined
     with one program layer per voice, this stops later voices overwriting
     earlier ones per key, and lets distinct voices (key splits, layers, and the

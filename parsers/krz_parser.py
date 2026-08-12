@@ -606,6 +606,37 @@ def parse_krz(path: str) -> Bank:
                   f"(type {obj.get('type')}): {exc}")
 
     extents = _pcm_extents(sample_objs, pcm_words)
+    # KEYING BY ID ALONE IS SAFE HERE **ONLY** BECAUSE EACH LIST IS ONE TYPE.
+    #
+    # The hash packs the type alongside the id (`type << 10 | id`), so the
+    # format positively PERMITS two objects with the same id and different
+    # types in one bank -- they hash differently and are both legal. An id is
+    # therefore unique only within a type, and a dict keyed by id across types
+    # would silently resolve a reference to whichever object was seen first.
+    #
+    # **AND THIS IS THE NORM, NOT AN EDGE CASE.** Measured over the 318 local
+    # KRZ files: **285 of them (90%) hold at least one id in more than one
+    # type**, and the worst carries 600 such ids -- 200, 201, 202 ... each
+    # held by types 36, 37 and 38 at once, because the three types are simply
+    # numbered from 200 in parallel. VinSamLib measured the same pattern in
+    # 1631 banks of their own corpus.
+    #
+    # So a by-id dict spanning types would not fail rarely on an exotic bank.
+    # It would pick the wrong object on nine banks in ten.
+    #
+    # VinSamLib hit exactly that on 2026-08-12: their FX lookups are keyed by
+    # id alone across two effect types, and their corpus evidence for it was
+    # "0 of 10 985 resolutions found a candidate in more than one type" -- a
+    # fact about their corpus, not about the format, which is silent in the
+    # permissive direction. They now report the collision rather than guessing
+    # a precedence, because the reference carries no type and which object is
+    # meant is genuinely undecidable from the file.
+    #
+    # We are not exposed, and the reason is the filter above: sample_objs,
+    # keymap_objs and program_objs each hold exactly ONE type, so a sample 5
+    # and a keymap 5 land in different dicts. **Do not merge these lists, and
+    # do not add a by-id dict built from more than one type without carrying a
+    # type with the key.**
     samples_by_id = {s['id']: s for s in sample_objs}
     keymaps_by_id = {k['id']: k for k in keymap_objs}
 
