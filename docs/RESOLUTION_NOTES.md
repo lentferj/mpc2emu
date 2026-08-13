@@ -5180,7 +5180,7 @@ Two things fell out of the same pass, both worth keeping:
 * **The analyser silently drops notes.** Two of nine came back
   `(plateau too short)` in one take and were simply absent from the output. A
   sweep that quietly measures 7 of 9 points still prints a clean-looking
-  table. The procedure, from s3ked's `5b0fb67`, where a 17 dB version of this
+  table. The procedure, from s3ked's V_LOUD re-measurement of 2026-08-11 (cited by date and subject, not by hash — they rebase, and every hash this file cited on 2026-08-12 was orphaned within a day), where a 17 dB version of this
 turned out to be a fault in the model rather than in the data:
 
 1. Re-measure **both** configurations back to back in one session, with every
