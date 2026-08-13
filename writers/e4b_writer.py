@@ -463,7 +463,12 @@ def _build_sample_header(sample: SampleData, sample_idx: int) -> bytes:
         lsl = sample.loop_start * 2 + STRUCT_SZ
         # loop_end_l stores the frame BEFORE the true inclusive last loop
         # frame (`sample.loop_end`), not loop_end itself — see the matching
-        # `+1` in e4b_parser._parse_sample_body / RESOLUTION_NOTES.md §E4BLOOPEND.
+        # `+1` in e4b_parser._parse_sample_body, which is where the round-trip
+        # is enforced. (This used to cite a RESOLUTION_NOTES section that was
+        # never written. The fact is stated here instead, which is what the
+        # citation was standing in for -- and naming the dead section again,
+        # even to explain its removal, is still a reference a reader will try
+        # to follow.)
         lel = (sample.loop_end - 1) * 2 + STRUCT_SZ
         options = 0x0031   # MONO_L | bit4 | LOOP (forward; ping-pong maps here)
     else:
