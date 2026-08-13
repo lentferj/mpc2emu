@@ -506,6 +506,7 @@ MIDI velocity 0 is note-off, so **any zone whose `hi_vel` is 0 can never be
 selected**, inverted or not. That is the test to use. Measured over 54 488
 named zones in the disc corpus:
 
+**These figures are not re-derivable.** The 40 library discs behind them were read once and are not on this disk; searched 2026-08-13 and every AKAI file present is test material. Treat them as a recorded measurement, not as something a disagreement can be adjudicated against. What does NOT depend on them: `hi_vel == 0` is unreachable because MIDI velocity 0 is note-off, which holds on any conforming machine, and an inverted range is dead by hardware measurement (s3ked, 2026-08-13). Only the SPELLING distribution and these percentages need the corpus.
 | | zones | name present on the disc |
 |---|---|---|
 | `hi_vel == 0` | 10 825 | **4.43%** |

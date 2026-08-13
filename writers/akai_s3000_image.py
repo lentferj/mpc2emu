@@ -48,7 +48,18 @@ FLL_SIZE = 0x0320                   # 800 blocks = 800 KB
 FLH_SIZE = 0x0640                   # 1600 blocks = 1.6 MB
 
 # ── capacity limits ────────────────────────────────────────────────────────
-PART_MAX_BLOCKS = 0x1E00            # 60 MB — the sampler's per-partition cap
+#: 60 MB. **The FORMAT screen's DEFAULT, not an established maximum** — the
+#: field is editable, with a "max:" shown beside it that we have not read.
+#: VinSamLib raised this 2026-08-12 and they are right to: treating a default
+#: as a ceiling is the same move as treating a corpus maximum as a format
+#: limit, which is what the 229/191 case turned out to be.
+#:
+#: Using it as a cap is nonetheless SAFE, and that is why it stays: it makes
+#: more and smaller partitions than strictly needed, and a sampler that
+#: accepts 120 MB partitions will still read 60 MB ones. If the true maximum
+#: is ever read off the panel, this becomes an optimisation rather than a
+#: correction. What was wrong was only the word "cap" in the old comment.
+PART_MAX_BLOCKS = 0x1E00
 HD_MAX_BLOCKS = 0xFFFF              # block numbers are 16-bit → ~512 MB
 MAX_PARTITIONS = 18
 ROOTDIR_ENTRIES = 100               # volumes per partition

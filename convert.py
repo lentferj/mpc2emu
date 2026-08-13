@@ -431,6 +431,7 @@ def write_akai_output(output_banks: List[Bank], out_dir: Path, bank_name: str,
                   f"HDx-{bank_name}.hda) and set the SCSI ID to match the "
                   f"sampler's disk ID.")
 
+    _written = 0
     if args.floppy:
         density = 'ld' if args.floppy in ('720', '800') else 'hd'
         print(f"\n[FLOPPY] Writing AKAI "
@@ -443,6 +444,7 @@ def write_akai_output(output_banks: List[Bank], out_dir: Path, bank_name: str,
             except AkaiImageError as e:
                 print(f"  [SKIP] {vname}: {e}")
             else:
+                _written += 1
                 print(f"  → {img.name}  ({info['files']} file(s), "
                       f"{info['free_blocks']} KB free)")
 
@@ -452,11 +454,32 @@ def write_akai_output(output_banks: List[Bank], out_dir: Path, bank_name: str,
             d.mkdir(parents=True, exist_ok=True)
             for fn, data in files:
                 (d / fn).write_bytes(data)
+            _written += 1
             print(f"  → {d.name}/  ({len(files)} file(s))")
 
-    print(f"\n{'='*60}")
-    print(f"Done: {len(volumes)} volume(s) written to {out_dir}/")
-    print(f"{'='*60}\n")
+    # Report what LANDED, not what was attempted. This used to print
+    # "Done: N volume(s) written" from len(volumes) -- so a run where every
+    # floppy was skipped for not fitting still reported success and produced
+    # an empty directory. A script checking the exit path saw a clean finish
+    # and no file.
+    #
+    # The --hda and --iso paths write one image for all volumes, so they count
+    # separately; only the floppy and loose-file paths are per-volume.
+    if args.floppy or not (args.hda or args.iso):
+        print(f"\n{'='*60}")
+        if _written:
+            print(f"Done: {_written} of {len(volumes)} volume(s) written "
+                  f"to {out_dir}/")
+        else:
+            print(f"NOTHING WRITTEN: all {len(volumes)} volume(s) were "
+                  f"skipped -- see the [SKIP] lines above.")
+        print(f"{'='*60}\n")
+        if not _written:
+            return 1
+    else:
+        print(f"\n{'='*60}")
+        print(f"Done: {len(volumes)} volume(s) written to {out_dir}/")
+        print(f"{'='*60}\n")
 
 
 def main():
@@ -1164,7 +1187,11 @@ def main():
     # A bank becomes a volume of loose files, so this path diverges from the
     # single-file formats before the bank-path/overwrite machinery.
     if args.format == 'akai':
-        write_akai_output(output_banks, out_dir, bank_name, args, step_n)
+        # Propagate the failure: a run where every volume was skipped must not
+        # exit 0, or a batch script sees a clean finish and no files.
+        _rc = write_akai_output(output_banks, out_dir, bank_name, args, step_n)
+        if _rc:
+            sys.exit(_rc)
         return
 
     # ── Write bank files ──────────────────────────────────────────────────────

@@ -158,6 +158,29 @@ _FMT_CAPACITY = {
     # the samples AND the programs — so unlike the others, the two compete for
     # one budget and the combined cap is the one that bites.
     'akai': (509, 509, 510),
+    #
+    # THE OTHER AKAI CEILING IS RAM, AND WE CLEAR IT BY ACCIDENT.
+    # convert.py caps AKAI output at 32 MB, the largest S3000XL, and we count
+    # FILE bytes -- which include a 150-byte header per sample and the program
+    # files, and programs cost no sample RAM at all. So our volumes under-fill.
+    #
+    # The exact cost (s3ked, 2026-08-12, from the loaded volume's directory):
+    #     audio_words = (size_bytes - 150) / 2,  summed over type 0x73 only
+    # verified by predicting a machine's loaded memory from directory records
+    # alone -- 16,424,982 words against 16,424,982 reported. Memory is counted
+    # in 16-bit words: a 32 MB machine reports 16,777,216 of them.
+    #
+    # Worth knowing what we are protecting against, because the failure is
+    # quiet. A volume needing 58.69 MB on a 32 MB machine loaded 10 programs
+    # and 60 of 88 samples, said "insufficient waveform memory!" ONCE, and then
+    # behaved normally -- every keygroup pointing at one of the 28 missing
+    # samples plays SILENCE. A half-loaded bank is not obviously broken from
+    # the front panel.
+    #
+    # Not taken: modelling RAM exactly would let a 32 MB volume carry 150 bytes
+    # more audio per sample plus the whole program budget. That is an
+    # optimisation of a limit we currently clear, and being conservative about
+    # a ceiling whose overrun is silent is the right side to err on.
 }
 
 

@@ -282,6 +282,14 @@ def _zone_of(kg: bytes, base: int) -> Optional[dict]:
     #     hi_vel == 0 :  10 825 zones,  4.43% name something on the disc
     #     hi_vel >  0 :  43 663 zones, 97.13% do
     #
+    # NOT RE-DERIVABLE: the discs behind these percentages were read once
+    # and are gone (searched 2026-08-13). They are a recorded measurement
+    # rather than something a future disagreement can be checked against.
+    # The RULE does not depend on them -- velocity 0 is note-off on any
+    # conforming machine, and s3ked measured an inverted range dead on an
+    # S3000XL. Only the spelling distribution and these figures need a
+    # corpus.
+    #
     # Trusting the name alone invents up to three phantom zones per keygroup:
     # 65% of one disc's zones, 67% of another's.
     if hi_vel == 0 or lo_vel > hi_vel:
@@ -473,6 +481,15 @@ def _refuse_wrong_type(p: Path, allowed: set, what: str) -> None:
     block id a program does, so a caller that decides by trying parsers in
     turn reads 90 `.X` files as 90 phantom programs with key ranges like
     `200-0`. Refusing here keeps that from reaching the caller at all.
+
+    Corroborated 2026-08-13 (s3ked §88), which characterised the effects
+    structure live on an S3000XL: it is a real, populated format -- a header
+    record carrying a 12-character name at offset 3, plus lists of 128-byte
+    preset entries. So the phantom programs were never corrupt data being
+    misread; they were intact data of another type, read by a parser with no
+    way to notice. That is the case extension-dispatch exists for, and it is
+    also why a content sniff would not have saved us: the bytes are valid,
+    they simply describe something else.
     """
     ext = p.suffix.lower()
     if ext and ext not in allowed:
