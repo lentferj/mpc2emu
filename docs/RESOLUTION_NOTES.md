@@ -6783,6 +6783,64 @@ measure with nothing to tune.**
 
 ---
 
+## §CWM202 — ConvertWithMoss cross-check (2026-08-13)
+
+Checkpoint moved from `8e2345fa` to `b465b8f0` (10 commits, all dated
+2026-08-13). Four touch formats we share; the rest are Waldorf and Fairlight.
+
+**Nothing here needs a change from us, and two of the four we already do.**
+
+* **#345, case-insensitive sample lookup.** Their presets could not find
+  samples on Linux because sampler CD-ROMs store names upper-case while a
+  preset may reference them lower-case. **We already do this** — the fallback
+  index keys on `f.name.lower()` and looks up `name.lower()`.
+
+* **#338, search outward from the nearest folder.** Their search jumped all
+  configured folder levels at once and took whatever a recursive walk found
+  first, so with two libraries under one download folder a preset got the
+  OTHER library's identically-named sample — and kept its own loop points, so
+  the loop wrapped in a differently-long sample and clicked. Found with two
+  Ensoniq libraries both holding `RHODES C3 FF.wav` at 42384 Hz/5280 frames
+  and 44100 Hz/5469 frames.
+
+  **We already do this too, by construction rather than by design**: the
+  ancestor list is built nearest-first and the index uses `setdefault`, so
+  first-wins IS nearest-wins. Verified by reproducing their exact layout —
+  preset at `LibA/presets/`, the name present under both `LibA/samples/` and
+  `LibB/samples/` — and we return LibA's.
+
+  Worth noting this is the same FAMILY as our own 2026-08-12 resolver bug
+  (`bd51347`), where the walk order was unsorted so resolution rode on
+  filesystem directory order. Two projects, same function, two different ways
+  for the wrong file to win.
+
+* **#340, warn when a loop will click.** NOT covered here, and the one worth
+  considering. They now check every forward loop without a crossfade for a
+  discontinuity at the wrap, having found **17 of 152 presets across three
+  commercial libraries** ship loops whose boundaries land on non-matching
+  values. Our `--auto-loop` creates click-free loops; nothing checks the loops
+  we pass THROUGH from a source, so a clicking source loop converts silently
+  and the first hint is the destination device ticking.
+
+  Cheap if wanted: `processors/auto_loop._match_cost()` already computes a
+  normalised SSD across exactly the two windows a wrap blends, and
+  `_RESCUABLE = 0.45` is already calibrated as "what a crossfade can hide".
+  A pass-through warning is that function plus a call site.
+
+* **#344, E-mu Emulator II floppy disks.** An FM decoder for HFE track
+  encoding 0x03, which is not IBM System 34: address mark `FA 96` rather than
+  a missing-clock pattern, a single track number rather than
+  cylinder/head/sector/size, one 3584-byte sector per track (no IBM size code
+  expresses it), CRC polynomial 8005 with initial value 0000 over the payload
+  alone, LSB-first at both bit and byte level.
+
+  Not ours — we read EIII/E4B disk images, not Emulator II floppies, and have
+  no HFE path at all. Recorded because it is the only E-MU work they have done
+  since our last two checkpoints, and because those parameters would be the
+  starting point if Emulator II support were ever wanted.
+
+---
+
 ## §CWM201 — ConvertWithMoss 20.1.0 cross-check (2026-08-08)
 
 Checkpoint moved from `80e6076e` to `8e2345fa` (28 commits).
