@@ -6827,6 +6827,73 @@ Checkpoint moved from `8e2345fa` to `b465b8f0` (10 commits, all dated
   `_RESCUABLE = 0.45` is already calibrated as "what a crossfade can hide".
   A pass-through warning is that function plus a call site.
 
+  **Before building it, read this (VinSamLib, 2026-08-14).** They built the
+  detector and three repairs, and their own success measurement came out
+  wrong: a cross-fade repair that works *by construction* scored as fixing
+  only 42 % of cases. The repair was correct. Their detector compares the step
+  at the wrap against a window median, and a loop start sitting on a steep
+  slope has a large natural step there — so a perfectly continuous join got
+  flagged. The number would have steered users away from the only repair that
+  always works.
+
+  Two things follow for us. A wrap-discontinuity detector must compare the
+  step against **the waveform's own local slope**, not against a window
+  statistic, or it reports the steepest material as the most broken —
+  precisely inverted. And a repair whose correctness is structural should have
+  its measured effectiveness treated as a test OF THE DETECTOR when the two
+  disagree, not as a result about the repair. `_match_cost()` is a windowed
+  SSD rather than a single-point step, so it is less exposed to this than a
+  naive step test — but "less exposed" is not "immune", and it has never been
+  measured against loops known to be fine.
+
+  Their measured repair effectiveness, for reference, on 101 clicking loops
+  from real banks: snapping both points to the nearest same-slope zero
+  crossing fixes 64 %, nudging the loop end to the best-matching position 99 %,
+  cross-fading 100 %. None applied automatically; the user chooses.
+
+  **Prevalence per format, measured 2026-08-14 across their corpus:**
+  E4B **96 of 3416** looped headers (2.8 %), EIII **1 of 237**, KRZ
+  **1545 of 11551** (13 %). So it is predominantly a KRZ-source problem, but
+  E4B is not the rarity it first appeared.
+
+  **The E4B figure was corrected within two hours of being published, and the
+  correction is the more useful half.** It was first reported as 11 of 2294 —
+  0.5 % — from a sweep whose file loader capped at 40 files, then quoted as a
+  corpus rate. Over all 131 E4B files it is 2.8 %, nearly six times the share,
+  and the difference between "vanishingly rare" and "one preset in twenty".
+  Their diagnosis: *wrong population, not wrong rule.* The KRZ row came from a
+  disk-image walk that covers everything and stands; EIII had only three files
+  to begin with and stands as the thin result it always was.
+
+  We had already copied the 0.5 % figure here. A number arriving with a
+  denominator is not the same as a number arriving with a POPULATION — 2294
+  looked like a corpus and was the output of a capped loader, and nothing in
+  the figure itself said so. Ask what was actually walked before quoting a
+  rate, including one of our own.
+
+  And a warning about building the detector, from the bug that nearly buried
+  their whole result. A `big_endian` flag landed as a third argument to
+  `max()` instead of reaching the frame decoder, so the movement window was
+  decoded big-endian while the seam frames were decoded correctly. Little-
+  endian E4B and EIII windows scrambled, the median frame-to-frame movement
+  exploded, and the ratio test could never fire: **4703 loops reported
+  perfectly clean, which is indistinguishable from a clean corpus** and was
+  believed until a known click was injected and went unnoticed. The docstring
+  warning about exactly that failure sat one line above the call that got it
+  wrong.
+
+  So if we build this: the acceptance test is an INJECTED click in a loop the
+  reader calls clean, per format, required to be found — not a corpus scan
+  that comes back quiet. A detector that cannot fire looks exactly like a
+  corpus with nothing wrong in it. Scale the injected step to the material,
+  since a fixed offset is a click in a slow waveform and nothing in a fast one.
+
+  Audited our own code for that argument-absorption shape while recording
+  this: three `min()` calls take three positional arguments
+  (`parsers/akai_image_parser.py`, `parsers/xpm_parser.py`,
+  `processors/auto_loop.py`) and all three are genuine three-way numeric
+  minimums with no flag among them.
+
 * **#344, E-mu Emulator II floppy disks.** An FM decoder for HFE track
   encoding 0x03, which is not IBM System 34: address mark `FA 96` rather than
   a missing-clock pattern, a single track number rather than
