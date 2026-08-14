@@ -3204,3 +3204,32 @@ axis VinSamLib nominated and neither project has varied.
 keymaps / 11 samples = 859 objects; this one is 1048 with effects, so it may be
 a different one). Worth pinning down before the 11-minute figure is attached to
 their hang specifically.
+
+## KRZ looped samples may carry PCM the K2000 can never reach
+
+**Status:** open question, not a known bug. **Blocked on:** a corpus of real
+K2000 soundsets, which is not on this disk.
+
+A KRZ Soundfilehead's loop end and the sample's own end are the SAME field, so
+for a looped sample `krz_writer` sets `sample_end_field = abs_loop_end` — which
+is correct and hardware-derived (the K2000 defines the loop as
+`[sampleLoopStart, sampleEnd]`, and declaring the true PCM end makes it loop
+over the decay tail instead). Independently confirmed by VinSamLib 2026-08-14.
+
+But we still write the FULL PCM, so every looped sample carries whatever
+followed the loop end — audio the sampler can never play, in a machine that
+loads samples into RAM. If real banks do not carry that tail, we are spending
+the user's sample memory on silence they cannot hear, which matters because
+the AKAI/K2000 memory ceilings are exactly what `bank_splitter` fits against.
+
+**What would settle it:** in real (not converted) K2000 soundsets, does the PCM
+of a looped sample end at `sampleEnd`, or does a tail follow it? Measuring 943
+looped samples across 60 local `.KRZ` files gave 168 with a tail — but every
+one of those files is this project's own output (`krz_batch`, `gig_e2e`,
+`k2000_loadlimit`, …), so that figure measures our writer and says nothing
+about the format. All 271 local `.KRZ` files are ours. The "201 real soundsets"
+the KRZ work was verified against are not currently on this machine.
+
+Do not truncate on the strength of the reasoning alone: the KRZ writer is
+hardware-confirmed as it stands, and a tail that real banks also carry is a
+convention rather than waste. Raised 2026-08-14.
