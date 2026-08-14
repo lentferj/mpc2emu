@@ -38,6 +38,7 @@ import os
 import struct
 from pathlib import Path
 from typing import List, Optional
+from writers.atomic import atomic_write
 
 SECTOR = 512
 _ATTR_VOLUME = 0x08
@@ -476,7 +477,7 @@ def format_new(path: str, size_mb: int, label: str = 'MPC2EMU',
     root[0:11] = lab
     root[11] = _ATTR_VOLUME
 
-    with open(path, 'wb') as f:
+    with atomic_write(path) as f:
         if partition:
             f.write(mbr)                            # sector 0: MBR
         f.seek(part_lba * SECTOR)                   # part_lba=0 → boot sector at 0

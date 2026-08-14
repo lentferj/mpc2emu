@@ -37,6 +37,7 @@ from typing import List, Optional
 
 from writers.fat16 import (SECTOR, _chs, _ATTR_VOLUME, _ATTR_DIR, _ATTR_LFN,
                            _FREE, _DELETED, Fat16)
+from writers.atomic import atomic_write
 
 _EOC = 0x0FFFFFF8          # end-of-chain (any value >= this is EOC)
 
@@ -317,7 +318,7 @@ def format_new(path: str, size_mb: int, label: str = 'MPC2EMU',
     fat = bytearray(fatsz * SECTOR)
     struct.pack_into('<III', fat, 0, 0x0FFFFFF8, 0x0FFFFFFF, 0x0FFFFFFF)
 
-    with open(path, 'wb') as f:
+    with atomic_write(path) as f:
         f.write(mbr)
         f.seek(part_lba * SECTOR);            f.write(bs)
         f.seek((part_lba + 1) * SECTOR);      f.write(fsinfo)

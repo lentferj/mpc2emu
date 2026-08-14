@@ -37,6 +37,7 @@ from typing import List, Optional
 
 from writers.fat16 import (SECTOR, _ATTR_VOLUME, _ATTR_DIR, _ATTR_LFN,
                            _FREE, _DELETED, Fat16)
+from writers.atomic import atomic_write
 
 # Standard floppy geometries: kind -> (sectors, spc, root_ents, fatsz, media, spt)
 _GEOM = {
@@ -209,7 +210,7 @@ def format_new(path: str, kind: str = '1440', label: str = '',
         root[0:11] = lab
         root[11] = _ATTR_VOLUME
 
-    with open(path, 'wb') as f:
+    with atomic_write(path) as f:
         f.write(bs)
         f.seek(rsvd * bps);                  f.write(fat)        # FAT1
         f.write(fat)                                             # FAT2

@@ -111,6 +111,7 @@ _MAX_CLUSTERS = _FAT_BLOCKS * (BSIZE // 2) - 1  # = 1279
 # geometry is constant across disk sizes; only the cluster size scales (cse
 # 5→6→7 at 1→2→4 GB) to keep the cluster count ≤ 1023 (= 4 FAT blocks × 256 − 1).
 from collections import namedtuple as _namedtuple
+from writers.atomic import atomic_write
 _Geom = _namedtuple('_Geom', 'fat_start fat_blocks root_start root_blocks '
                              'dircon_start dircon_blocks data_start max_clusters')
 _CD_GEOM  = _Geom(_FAT_START, _FAT_BLOCKS, _ROOT_START, _ROOT_BLOCKS,
@@ -565,7 +566,7 @@ def build_iso_9660(e4b_files: List[str], output_iso: str,
     ptl = struct.pack('<BIBB', 1, root_sec, 1, 1) + b'\x00'
     ptl = ptl.ljust(SEC, b'\x00')
 
-    with open(output_iso, 'wb') as f:
+    with atomic_write(output_iso) as f:
         f.write(b'\x00' * (SEC * 16))   # system area
         f.write(bytes(pvd))              # sector 16 — Primary Volume Descriptor
         f.write(bytes(vdst))             # sector 17 — Volume Descriptor Set Terminator
@@ -700,7 +701,7 @@ def build_iso(e4b_files: List[str], output_iso: str,
           f"  clusters={n_clusters}  cse={cse}  cluster_size={clust_sz//1024}KB")
 
     # ── write image ──────────────────────────────────────────────────────────
-    with open(output_iso, 'wb') as f:
+    with atomic_write(output_iso) as f:
         f.write(bytes(sb))
         f.write(bytes(pad1))
         f.write(fat)
@@ -836,7 +837,7 @@ def build_emu_hdd(e4b_files: List[str], output_path: str,
           f"  cse={cse}  cluster={clust_sz//1024}KB  used={n_used}/{disk_clusters} clusters")
     print(f"  Folders ({len(folders)}): {folder_summary}")
 
-    with open(output_path, 'wb') as f:
+    with atomic_write(output_path) as f:
         f.write(bytes(sb)); f.write(bytes(pad1)); f.write(fat); f.write(root); f.write(dircon)
         for fi in file_infos:
             total = 0

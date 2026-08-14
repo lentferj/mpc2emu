@@ -115,6 +115,7 @@ from models.common import (Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            e4xt_cutoff_position, e4xt_volume_byte, e4xt_pan_byte,
                            E4B_CUTOFF_MIN_HZ, E4B_CUTOFF_MAX_HZ)
 from processors.loop_renderer import bake_alternating_loop
+from writers.atomic import atomic_write
 
 
 # ---------------------------------------------------------------------------
@@ -1200,7 +1201,7 @@ def write_e4b(bank: Bank, output_path: str) -> None:
     form_size = pos - 12
 
     # ── stream to disk ────────────────────────────────────────────────────
-    with open(output_path, 'wb') as f:
+    with atomic_write(output_path) as f:
         f.write(FORM_MAGIC)
         f.write(struct.pack('>I', form_size))
         f.write(FORM_TYPE)

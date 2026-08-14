@@ -60,6 +60,7 @@ from typing import Dict, List, Optional, Tuple
 
 from models.common import Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType, ensure_mono
 from processors.loop_renderer import bake_alternating_loop
+from writers.atomic import atomic_write
 
 
 # ---------------------------------------------------------------------------
@@ -920,6 +921,6 @@ def write_eiii(bank: Bank, output_path: str, variant: str = 'e3x') -> None:
     _put_u32(data, BANK_TOTAL_BLOCKS, total_blocks)
 
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, 'wb') as f:
+    with atomic_write(output_path) as f:
         f.write(data)
     print(f"  Done: {output_path} ({len(data) / 1024 / 1024:.2f} MB)")
