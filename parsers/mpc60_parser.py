@@ -191,13 +191,69 @@ def _fat12_read_set(img: bytes) -> Tuple[str, bytes]:
             buf += img[off:off + spc * bps]
             clus = fat12(clus)
         return f"{name}", bytes(buf[:size])
+
+    # NAME WHAT IT ACTUALLY IS, rather than reporting a missing .SET.
+    #
+    # `.img` reaches this parser by elimination -- it is the only FAT12 floppy
+    # format the dispatcher knows -- so a K2000 floppy, WHICH THIS PROJECT
+    # ITSELF WRITES with --floppy, was announced as "Parsing MPC60 floppy
+    # image" and then rejected for lacking a .SET. The parse never went wrong;
+    # the diagnosis did, and it pointed the user at the wrong format entirely.
+    #
+    # Prompted by VinSamLib hitting the harsher version of this on 2026-08-14:
+    # their loop scan picked its module by elimination, which was correct for
+    # three formats and silently wrong the moment a fourth existed. Ours fails
+    # loudly rather than silently, so this is a message, not a misread -- but
+    # a wrong name in an error is a wrong answer to the question the user
+    # actually asked.
+    others = sorted({e for e in _fat12_extensions(img) if e and e != 'SET'})
+    if 'KRZ' in others:
+        raise ValueError(
+            "This is a Kurzweil K2000 floppy image (it holds .KRZ files), not "
+            "an MPC60 one. mpc2emu writes these with --floppy; reading them "
+            "back is not implemented.")
+    if others:
+        raise ValueError(
+            f"No .SET file in this FAT12 floppy image; it holds "
+            f"{', '.join('.' + e for e in others[:4])} instead, so it is "
+            f"probably not an MPC60 disk.")
     raise ValueError("No .SET file found in the floppy image")
+
+
+def _fat12_extensions(img: bytes) -> set:
+    """Every file extension in a FAT12 root directory, upper-case.
+
+    Used only to say what an image IS when it turns out not to be an MPC60
+    disk.  Deliberately tolerant: it runs on the failure path, so a malformed
+    directory must not replace the real error with its own.
+    """
+    import struct
+    out = set()
+    try:
+        bps   = struct.unpack_from('<H', img, 0x0B)[0]
+        rsvd  = struct.unpack_from('<H', img, 0x0E)[0]
+        nfat  = img[0x10]
+        rootn = struct.unpack_from('<H', img, 0x11)[0]
+        spf   = struct.unpack_from('<H', img, 0x16)[0]
+        root_off = (rsvd + nfat * spf) * bps
+        for e in range(rootn):
+            ent = img[root_off + e * 32: root_off + e * 32 + 32]
+            if len(ent) < 32 or ent[0] in (0x00, 0xE5) or (ent[11] & 0x08):
+                continue
+            out.add(ent[8:11].decode('ascii', 'replace').rstrip().upper())
+    except Exception:
+        pass
+    return out
 
 
 def parse_mpc60_img(img_path: str, sample_dirs: Optional[List[str]] = None) -> Bank:
     """Parse an MPC60 floppy image (.img, FAT12) by extracting its `.SET`."""
     p = Path(img_path).resolve()
-    print(f"Parsing MPC60 floppy image: {p.name}")
+    # Announce the FILE, not the format. Saying "MPC60" here asserted the
+    # conclusion before the check that establishes it, so a K2000 floppy was
+    # announced as an MPC60 disk and only contradicted afterwards.
+    print(f"Reading floppy image: {p.name}")
     name, set_bytes = _fat12_read_set(p.read_bytes())
+    print("  MPC60 floppy confirmed (.SET present)")
     print(f"  Extracted SET '{name}' ({len(set_bytes)} bytes)")
     return parse_mpc60_set_bytes(set_bytes, name or p.stem)
