@@ -31,6 +31,7 @@ obviously broken. Every default below is the one the format documentation
 lists, so an untouched field means "as the sampler would have made it".
 """
 
+import hashlib
 import math
 import struct
 import sys
@@ -62,6 +63,7 @@ _BLOCK_PARA = 12            # one 192-byte block, in 16-byte paragraphs
 #: keygroups carry in the two bytes after each velocity zone's parameters.
 _NO_POINTER = 0xFFFF
 
+_UNSET = object()          # 'this name is free', distinct from 'held by None'
 MAX_KEYGROUPS = 99          # program common 0x2a is 1-99
 MAX_ZONES_PER_KEYGROUP = len(_ZONE_OFFSETS)     # four velocity zones
 
@@ -155,6 +157,57 @@ _AK_RELSE1_RATE = (22055.3, -0.09683, 55, 70)   # dB/s,            r2 0.99956
 # a regression: writing a value derived from a retracted law is worse than
 # writing a neutral default, because it looks like intent.
 
+#: ── HOW TO TREAT AN IMPORTED "THIS FIELD DOES NOTHING" ───────────────────
+#:
+#: This file carries about twenty-five negative claims sourced from s3ked --
+#: fields measured inert, values that store cleanly and do nothing. Treat every
+#: one as PROVISIONAL, because the retraction rate on them is high and the
+#: reason is structural rather than sloppy.
+#:
+#: Retracted so far: §45's four per-zone velocity fields (the detector returned
+#: a velocity spread, which is zero at both extremes of a STATIC offset, so it
+#: read inert whether the field worked or not); three of §47's six verdicts
+#: (timing changes screened with a median centroid, which a timing change
+#: cannot move); `PRSDEP` (channel pressure has to arrive DURING the note);
+#: and on 2026-08-14 the load register, where "only value 1 acts" turned out
+#: to be "writing value n performs load type n" -- the original null measured
+#: against a machine whose memory was already fully resident, so every value
+#: reloaded what was there and netted zero.
+#:
+#: The asymmetry to remember: a POSITIVE result carries its own evidence -- a
+#: number moved, and you can ask how much. A NEGATIVE result is only ever as
+#: good as the detector's ability to have seen the alternative, and that
+#: ability is exactly what a null gives you no information about.
+#:
+#: The practical rule for this writer: never suppress a field, narrow a range,
+#: or skip a write because something was reported inert. Declining to populate
+#: a field we have no source for is fine; declining because it "does nothing"
+#: is acting on the one class of claim this channel gets wrong most often.
+#:
+#: s3ked learned this the expensive way the same day: a probe was run on the
+#: strength of a documented negative saying the write was inert, and it fired
+#: a load on real hardware that nobody intended. A stale negative is not a
+#: harmless one.
+#:
+#: **Never encode one of these in a test.** Their fourth retraction, hours
+#: later, was "the volume cannot be selected remotely" -- repeated for six days
+#: in a docstring, a CHANGELOG limitation, two screens, and a test literally
+#: named `test_there_is_no_volume_register_to_offer` that asserted the feature
+#: MUST NOT EXIST. The register had been found already and filed under the
+#: wrong name. A test that locks in a negative does not merely record the
+#: mistake, it defends it.
+#:
+#: The line to hold: a test may enforce a claim about OUR OWN code -- that we
+#: do not upsample, that no flag goes unread -- because we decide those. It
+#: must not enforce a discovery about someone else's system, because that is
+#: not ours to fix in place when it turns out wrong.
+#:
+#: (Their find also confirms the machine's convention a second time: the
+#: volume register is 0-based and the panel shows it 1-based, exactly as
+#: PRGNUM does. Two independent fields agreeing makes it a machine-wide
+#: convention rather than a quirk of one byte, which is worth knowing before
+#: reading any future panel photograph as a stored value.)
+#:
 #: References to s3ked are by SECTION (§NN in their docs/RESOLUTION_NOTES),
 #: never by commit hash. They squashed their history on 2026-08-12 and every
 #: hash this file used to cite was orphaned in one operation -- fourteen
@@ -427,7 +480,8 @@ def _akai_tune_units(cents: float) -> int:
     return math.trunc(whole_cents * _AK_TUNE_UNITS_PER_CENT)
 
 
-def build_sample(sd: SampleData, name: Optional[str] = None) -> bytes:
+def build_sample(sd: SampleData, name: Optional[str] = None,
+                 root_override: Optional[int] = None) -> bytes:
     """One SampleData -> a complete `.a3s` file.
 
     Mono only: the format carries one channel per file and pairs them via
@@ -447,7 +501,38 @@ def build_sample(sd: SampleData, name: Optional[str] = None) -> bytes:
     # bandwidth: 0 = 10 kHz, 1 = 20 kHz. Anything at or above 30 kHz is
     # full-bandwidth material.
     h[0x01] = 1 if sd.sample_rate >= 30000 else 0
-    h[0x02] = _clamp(_or_default(getattr(sd, 'root_note', None), 60), 24, 127)
+    # ROOT: the ZONE's, when the zones agree, not the sample's own.
+    #
+    # **HARDWARE-CONFIRMED 2026-08-16 on Jan's S3000XL.** A calibration volume
+    # of three pure sines, roots set to the matching MIDI notes, played at
+    # their own roots and measured with a tuner:
+    #
+    #     CALA3  root 57  ->  220 Hz   exact
+    #     CALA4  root 69  ->  440 Hz   exact
+    #     CALA2  root 45  ->  110 Hz   exact
+    #
+    # So the root byte, the key numbering and this zone-root rule are all
+    # correct end to end. It took a purpose-built bank to establish: the real
+    # bank we started from has sample names, zone roots and actual audio
+    # pitches that disagree with each other by up to 45 semitones, and no
+    # amount of listening to it could separate its faults from ours.
+    #
+    # Our E4B reader derives a sample's root from its NAME suffix ('_B3' -> 71),
+    # because that inverts our own writer's naming -- it is not a field. The
+    # machine that matters reads the ZONE's root instead, so a bank whose zone
+    # roots differ from its name suffixes plays at a different pitch on an
+    # S3000XL than on an E4XT. Jan heard exactly that.
+    #
+    # Correcting it through the per-zone tune was the first attempt and it is
+    # not safe: a 20-semitone correction is 5120 units, and the ONLY
+    # measurement of that field swept units 0..50 and produced 19.39 CENTS. Our
+    # +-50 range is semitones inferred from a document, and if the machine
+    # clamps near 50 units the correction silently vanishes -- the same
+    # too-narrow-clamp failure this field has already produced twice, in the
+    # other direction. Writing the root itself needs no such assumption.
+    h[0x02] = _clamp(_or_default(root_override,
+                                 _or_default(getattr(sd, 'root_note', None), 60)),
+                     24, 127)
     h[0x03:0x03 + AKAI_NAME_LEN] = str_to_akai(name or sd.name)
     h[0x0f] = 0x80                      # sample rate field is valid
     h[0x10] = 1                         # one active loop (internal)
@@ -662,6 +747,33 @@ def _mixdown(pcm: bytes, channels: int) -> bytes:
 #: has it — so "inert" here may mean "inert on one particular machine", which
 #: is a different thing from a fact about the format.
 #:
+#: ── IB304F / expansion boards: WHERE THIS STANDS ─────────────────────────
+#:
+#: Read this part and stop, unless you are checking the reasoning. Below it is
+#: the record of how it was arrived at, kept because four corrections came out
+#: of it and each one caught an inference reaching past its evidence. But the
+#: record is chronological, and a reader who needs the answer should not have
+#: to reconstruct it from seven dated layers -- that is the same defect as a
+#: project describing its own maturity three different ways.
+#:
+#:   1. The S3000XL these findings come from has NO expansion boards: 8 MB of
+#:      flash ROM, no EB16, no IB304F. Established by measurement, not assumed.
+#:   2. The IB304F gates the SECOND FILTER -- seven fields. It does NOT gate
+#:      envelope 3, whose every stage was measured working on that board-less
+#:      machine. The owner's manual is wrong on this point.
+#:   3. Panel behaviour is not machine behaviour, and does not even predict
+#:      itself: EFFECTS is refused outright with the lamp dark, filter 2 is
+#:      drawn with a warning line, and the mode register opens the EFFECTS page
+#:      anyway with live data behind it.
+#:   4. Fifteen fields (filter 2, TONE, ENV3) are nonetheless DANGEROUS -- an
+#:      S3000XL crashed twice while that area was exercised. s3ked fences them
+#:      behind a declaration. That is a safety interlock over a working
+#:      capability, not a claim that the fields are dead.
+#:   5. This writer populates none of them. If that changes, (4) is the reason
+#:      for care and (2) is the reason not to suppress them outright.
+#:
+#: ── how this was arrived at ──────────────────────────────────────────────
+#:
 #: **SCOPED, 2026-08-12 — and note what is and is not in doubt.** s3ked (§49)
 #: cross-checked their night run against the S2800/S3000/S3200 SysEx
 #: specification and flagged the IB304F as unsourced: it "appears in neither
@@ -820,7 +932,7 @@ _PROGRAM_HW_DEFAULTS = {
 
 
 def _program_common(name: str, n_keygroups: int, lo_key: int, hi_key: int,
-                    lfo1_rate=None) -> bytearray:
+                    lfo1_rate=None, prog_num: int = 0) -> bytearray:
     """The 192-byte program common block, filled with the format's own
     documented defaults rather than zeros."""
     p = bytearray(PROGRAM_COMMON_LEN)
@@ -830,7 +942,68 @@ def _program_common(name: str, n_keygroups: int, lo_key: int, hi_key: int,
     p[0x00] = _BLOCK_ID_PROGRAM
     struct.pack_into('<H', p, 0x01, _RAM_BASE_PARA)
     p[0x03:0x03 + AKAI_NAME_LEN] = str_to_akai(name)
-    p[0x0f] = 0                         # MIDI program number
+    # PRGNUM, the MIDI program number. **Sequential per volume, not 0 for
+    # everything**, which is what this wrote until 2026-08-14.
+    #
+    # s3ked measured the consequence on an S3000XL: loading four volumes with
+    # no CLR between them left fifteen programs resident, four of them sharing
+    # a program number, and they STACK -- one program change fires all four at
+    # once. PRGNUM is stored in the program and reloaded verbatim, so nothing
+    # renumbers on load. A volume of ours held every program on the same
+    # number, so a single program change addressed the whole volume.
+    #
+    # 0-BASED, MEASURED (s3ked, 2026-08-14). The panel's RNUM -> SEQU
+    # renumbered fifteen resident programs and displayed them as 1..15; read
+    # back over SysEx those same fifteen are 0..14. The byte is 0-based and
+    # the panel adds one for display. `% 128` is right as well: the values are
+    # 0..127, so there are 128 of them.
+    #
+    # This was written as an INFERENCE here first -- two authored programs
+    # carrying 0 and 1, plus a panel reading of "1" for each volume's first
+    # program -- and labelling it as one is what got it checked. s3ked had
+    # written their own renumber to assign 1, 2, 3... on the strength of the
+    # panel display, which would have left the machine's first program number
+    # unused and shifted every program up by one. Reading this comment
+    # surfaced the conflict; their read settled it, against themselves.
+    #
+    # Their summary of the shape, which has now caught this project twice: a
+    # conclusion drawn from a single display reading, where the display is not
+    # the storage. Bytes from files somebody authored were the better evidence
+    # the whole time.
+    #
+    # CLAMPED at 127, not wrapped. This wrapped until 2026-08-14, on the
+    # reasoning that wrapping "keeps the first 128 distinct instead of clamping
+    # them all onto 127". VinSamLib pointed out what that actually does:
+    # **wrapping puts program 128 onto program 0**, which is the collision this
+    # whole field exists to avoid, and it lands on the LOW numbers -- the ones
+    # most likely to be reached for.
+    #
+    # Past 128 programs in one volume some collision is unavoidable, since MIDI
+    # has 128 program numbers and that is the whole address space. The choice is
+    # only where to put the damage. Clamping concentrates it on the tail, so
+    # programs 0..126 stay individually addressable and the extras stack on 127
+    # together; wrapping spreads it over the beginning of the volume.
+    #
+    # NOT solved by splitting the volume at 128 programs: the machine is happy
+    # to hold more than that, they are all selectable from the panel, and
+    # splitting a volume that would have loaded is the over-tight clamp this
+    # project has recorded twice as the worse failure -- only the loose kind
+    # announces itself. The caller warns instead; see build_akai_volume.
+    #
+    # OPEN: what the machine does with a PRGNUM byte above 127 is untested. The
+    # field is a byte and MIDI is 0..127, so writing 200 is out of spec rather
+    # than out of range. Nobody has tried it.
+    #
+    # WHAT THIS CANNOT FIX, and it is worth knowing: numbering is per volume,
+    # so two volumes authored independently both start at 0 and every program
+    # in one collides with a program in the other. Loading several volumes
+    # without clearing memory between them therefore stacks programs on shared
+    # numbers -- s3ked measured fifteen resident programs with four sharing a
+    # number, and one program change fires all four at once. There is nothing a
+    # writer can do about it: a volume numbered 0..N-1 is correct in isolation.
+    # It is documented rather than solved, because the failure is silent -- the
+    # user hears four programs where they asked for one and nothing says why.
+    p[0x0f] = min(prog_num, 127)
     # PMCHAN. "255 signifies OMNI, 0 to 15 indicate MIDI channel" -- the
     # S2800/S3000/S3200 document, offset 16. Verified 2026-08-10 against a real
     # S3000XL whose own program 0 holds 0 (channel 1): that is the channel that
@@ -1119,8 +1292,54 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
     return k
 
 
-def build_program(preset, name: str) -> bytes:
+def keygroup_count(preset) -> int:
+    """How many keygroups `build_program` will emit for this preset.
+
+    Exported so the bank splitter can budget for them without a second copy of
+    the grouping rule -- the S3000XL's object pool counts every keygroup, and a
+    count that disagreed with what is actually written would be worse than no
+    count at all.
+
+    The rule must stay identical to build_program's: one keygroup per distinct
+    (lo_key, hi_key) across every voice, clamped to MAX_KEYGROUPS, since zones
+    past that are dropped on write and never become resident objects.
+    """
+    ranges = {(z.lo_key, z.hi_key)
+              for voice in getattr(preset, 'voices', []) or []
+              for z in getattr(voice, 'zones', []) or []
+              if (getattr(z, 'sample_name', '') or '').strip()}
+    return min(len(ranges), MAX_KEYGROUPS)
+
+
+def _root_offset_units(z, sample_roots: Optional[dict]) -> int:
+    """(sample root - zone root) in AKAI 1/256-semitone units.
+
+    Zero when the zone states no root of its own, or when it agrees with the
+    sample, which is the common case and why this went unnoticed: every source
+    whose zones simply inherit the sample root converted correctly.
+    """
+    if not sample_roots:
+        return 0
+    zr = getattr(z, 'root_key', None)
+    if zr is None:
+        return 0
+    sr = sample_roots.get((getattr(z, 'sample_name', '') or '').strip())
+    if sr is None:
+        return 0
+    return int(round((sr - zr))) * _AKAI_TUNE_UNITS_PER_SEMITONE
+
+
+def build_program(preset, name: str, prog_num: int = 0,
+                  sample_roots: Optional[dict] = None) -> bytes:
     """One Preset -> a complete `.a3p` file.
+
+    `prog_num` is the MIDI program number written to PRGNUM; pass each
+    program's position within its volume, or every program in the volume
+    answers to the same program change (see `_program_common`).
+
+    `sample_roots` maps sample name -> the root note written into that
+    sample's own header. It is REQUIRED to place a zone at the right pitch:
+    see the root-offset note on the tune field below.
 
     Zones are grouped into keygroups by key range: the AKAI keygroup owns a
     key span and holds up to four VELOCITY zones within it, which is the
@@ -1138,6 +1357,21 @@ def build_program(preset, name: str) -> bytes:
     # them.
     for voice in preset.voices:
         for z in voice.zones:
+            # A ZONE WITH NO SAMPLE IS NOT A KEYGROUP.
+            #
+            # Real source material carries them: the E4B preset behind Jan's
+            # 'P006' has a final zone with keys 0-0, root 0 and an EMPTY sample
+            # name. We wrote it out as a sixth keygroup with no zones, template
+            # filter and envelope, sitting on key 24 -- and since overlapping
+            # keygroups LAYER (measured), it is an extra empty voice on every
+            # note in its span rather than something inert.
+            #
+            # Dropped here rather than later so the keygroup count, the object
+            # budget and the file all agree: keygroup_count() applies the same
+            # rule, and a keygroup nothing can sound is not worth an object
+            # against a 1006 ceiling either.
+            if not (getattr(z, 'sample_name', '') or '').strip():
+                continue
             key = (z.lo_key, z.hi_key)
             if key not in by_range:
                 by_range[key] = []
@@ -1216,7 +1450,34 @@ def build_program(preset, name: str) -> bytes:
             # That is stronger than inheritance and weaker than measurement.
             # VTUNO has not been swept, and if it ever is and disagrees, this
             # is the line to change.
-            tune=_akai_tune_units(_or_default(getattr(z, 'fine_tune', None), 0)),
+            # THE ZONE'S OWN ROOT, WHICH THIS DISCARDED UNTIL 2026-08-16.
+            #
+            # An AKAI keygroup zone has no root field. Pitch comes from the
+            # SAMPLE header's "original pitch" (0x02) against the key played.
+            # Our model, and every source format that feeds it, lets a ZONE
+            # override the sample's root -- so a sample recorded at B4 can be
+            # placed in a zone whose root is 51, and the E4B means "sound this
+            # at its natural pitch when key 51 is played".
+            #
+            # We wrote the sample's root and ignored the zone's. Jan heard it
+            # on an S3000XL: 'P004 does not transpose - different sample on
+            # different octaves'. The source zones carried roots 51/56/61/66/71
+            # against sample roots 71/46/31/60/26, so every keygroup was off by
+            # a DIFFERENT amount -- 20, 10, 30, 6 and 45 semitones -- which is
+            # exactly what that sounds like.
+            #
+            # The correction goes in the tune field, because that is the only
+            # per-zone pitch control the format has:
+            #
+            #     played  = key - sample_root + tune      (what the machine does)
+            #     wanted  = key - zone_root               (what the source means)
+            #     => tune = sample_root - zone_root
+            #
+            # A sample shared by zones with different roots therefore gets a
+            # different tune per zone, which is correct and is why this cannot
+            # be fixed by rewriting the sample header instead.
+            tune=_akai_tune_units(_or_default(getattr(z, 'fine_tune', None), 0))
+                 + _root_offset_units(z, sample_roots),
             # `ZoneMapping.pan` is -1.0..+1.0 centred on 0.0; the AKAI field
             # is -50..+50 centred on 0. This used to subtract 0.5 first, on
             # the assumption of a 0..1 scale -- which put every *centred* zone
@@ -1241,7 +1502,8 @@ def build_program(preset, name: str) -> bytes:
     # PROGRAM while ours is per voice, so there is one to pick and this is it.
     _lfo = next((v.lfo1_rate for v in preset.voices
                  if getattr(v, 'lfo1_rate', None) is not None), None)
-    out = _program_common(name, len(keygroups), lo, hi, lfo1_rate=_lfo)
+    out = _program_common(name, len(keygroups), lo, hi, lfo1_rate=_lfo,
+                          prog_num=prog_num)
     dead: list = []
     for i, ((klo, khi), owner, zs) in enumerate(keygroups):
         out += _keygroup(klo, khi, zs, i, voice=owner, dead_key_ranges=dead)
@@ -1258,8 +1520,53 @@ def build_program(preset, name: str) -> bytes:
     return bytes(out)
 
 
+def sample_identity(sd) -> bytes:
+    """Everything build_sample() writes EXCEPT the name.
+
+    Two samples with this key equal produce byte-identical files under the same
+    name, so they are the same object to the sampler and must NOT be renamed
+    apart -- a load replaces an identical item with an identical item, which
+    costs one object and one copy of the audio instead of two.
+
+    Hashing the PCM alone was not enough and the corpus said so within minutes:
+    identical audio with different loop points or a different rate shares the
+    audio hash, kept one name, and then wrote different bytes -- which is the
+    data-loss case the uniquifier exists to prevent, reintroduced by a key that
+    was too narrow. Every field the header carries is in here.
+
+    **And the first count of that was badly understated.** Measuring it over
+    six split banks found ONE instance, which read as a curiosity. Measured
+    properly -- every sample occurrence on 21 library discs, 36 645 of them
+    under 34 234 distinct names:
+
+        repeats with DIFFERENT audio                   :  436
+        repeats with IDENTICAL audio, DIFFERENT HEADER : 1499
+
+    The class this key exists for is the LARGEST of the two, not a one-off.
+    VinSamLib measured the same shape independently (151 and 875) and named the
+    cause: drum-machine material files the same hit under the same name in kit
+    after kit, with different tuning or loop settings and identical audio.
+
+    Our absolute counts and theirs differ by roughly 2x with the same ratio,
+    which means one of us is counting a different population -- they report
+    13 877 distinct names where we see 34 234. Unresolved, and it does not
+    change what this function has to hash.
+    """
+    h = hashlib.sha256()
+    h.update(sd.data)
+    lt = getattr(sd, 'loop_type', LoopType.NO_LOOP)
+    for v in (getattr(sd, 'sample_rate', 0), getattr(sd, 'channels', 1),
+              getattr(sd, 'root_note', 60), getattr(sd, 'fine_tune', 0),
+              getattr(sd, 'loop_start', 0), getattr(sd, 'loop_end', 0),
+              lt.value if isinstance(lt, LoopType) else lt):
+        h.update(str(v).encode())
+    return h.digest()
+
+
 def build_akai_volume(bank: Bank, bank_name: Optional[str] = None,
-                      quiet: bool = False) -> list:
+                      quiet: bool = False,
+                      taken: Optional[set] = None,
+                      taken_prog: Optional[set] = None) -> list:
     """Build a Bank's AKAI volume contents as ``[(filename, data), ...]``.
 
     One file per program and per sample, which is how the sampler's own
@@ -1271,9 +1578,32 @@ def build_akai_volume(bank: Bank, bank_name: Optional[str] = None,
 
     # AKAI names are 12 characters, shorter than the 16 the rest of the
     # pipeline uses, so they can collide here even when they did not before.
-    taken: set = set()
+    #: NAMES MUST BE UNIQUE ACROSS EVERY VOLUME OF ONE CONVERSION, not just
+    #: within a volume, so the caller passes shared sets when it writes several.
+    #:
+    #: **A load REPLACES a resident item of the same name rather than adding a
+    #: second one** (s3ked, measured 2026-08-14: five consecutive loads of
+    #: already-resident volumes moved the object pool by exactly zero). Per
+    #: volume, uniquifying was enough. Across a split it is not, and the
+    #: consequences differ in severity:
+    #:
+    #:   * two programs sharing a name -- the second load silently REPLACES the
+    #:     first, and the user is short a program with nothing to say so.
+    #:   * two SAMPLES sharing a name and carrying different audio -- worse.
+    #:     Zones reference samples BY NAME, so the first volume's programs now
+    #:     play the second volume's audio. Silent, and wrong rather than absent.
+    #:
+    #: Measured before fixing: a 40-preset library whose names truncate alike
+    #: splits into two volumes with 17 program names and 17 sample names in
+    #: both, the samples carrying different payloads under the same name.
+    taken = taken if taken is not None else {}
+    #: Programs get their OWN namespace. Sharing one set with the samples would
+    #: rename a program merely for matching a sample's name, which nothing
+    #: requires -- they are different file types in the directory.
+    taken_prog = taken_prog if taken_prog is not None else {}
 
-    def uniq(stem: str) -> str:
+    def uniq(stem: str, taken=taken, fallback: str = 'SAMPLE',
+             content: Optional[bytes] = None) -> str:
         # KEYED ON THE WRITTEN FIELD, not on the Python string.
         #
         # str_to_akai() space-pads to 12, so 'BASS' and 'BASS ' produce
@@ -1305,26 +1635,81 @@ def build_akai_volume(bank: Bank, bank_name: Optional[str] = None,
         #
         # `stem or 'SAMPLE'` caught the empty string and nothing else, because
         # a non-empty name that ENCODES to nothing is still truthy.
-        base = (stem or 'SAMPLE').upper()[:AKAI_NAME_LEN]
+        base = (stem or fallback).upper()[:AKAI_NAME_LEN]
         if not bytes(str_to_akai(base)).strip(bytes([_AKAI_SPACE])):
-            base = 'SAMPLE'
+            base = fallback
+        # RENAME ONLY WHEN DIFFERENT CONTENT HOLDS THE NAME.
+        #
+        # Renaming on any collision was wrong in the common case, and the
+        # measurement is stark: splitting six real library banks produces 1210
+        # cross-volume sample-name collisions carrying IDENTICAL audio against
+        # 15 carrying different audio. 99 % of the renames bought nothing.
+        # (VinSamLib found the same on their corpus -- 10 identical, 0
+        # differing, on one split -- and raised it.)
+        #
+        # It is not merely wasted media. A load REPLACES a resident item of the
+        # same name, so two volumes carrying the same sample under the same
+        # name cost ONE object and one copy of the audio. Rename it and they
+        # cost two of each -- on a machine with 32 MB and a 1006-object pool,
+        # for samples the split shares precisely because both halves need them.
+        #
+        # Only a name held by DIFFERENT bytes loses data, and that is the case
+        # this guard exists for.
         cand = base
         n = 1
-        while bytes(str_to_akai(cand)) in taken:
+        while True:
+            key = bytes(str_to_akai(cand))
+            held = taken.get(key, _UNSET) if hasattr(taken, 'get') else (
+                _UNSET if key not in taken else None)
+            if held is _UNSET:
+                break                      # free
+            if content is not None and held == content:
+                return cand                # same name, same bytes: reuse it
             suf = str(n)
             cand = base[:AKAI_NAME_LEN - len(suf)] + suf
             n += 1
-        taken.add(bytes(str_to_akai(cand)))
+        if hasattr(taken, 'setdefault'):
+            taken[bytes(str_to_akai(cand))] = content
+        else:
+            taken.add(bytes(str_to_akai(cand)))
         return cand
+
+    #: source sample name -> the distinct root notes its PRESET ZONES give it.
+    #: Computed before anything is written, because the sample header needs it.
+    #: When a sample is referenced with exactly ONE root, that root goes into
+    #: its header and no per-zone tune correction is needed -- the common case,
+    #: and the one that must not depend on an unverified tune range.
+    _zone_roots: dict = {}
+    for _pr in bank.presets:
+        for _v in getattr(_pr, 'voices', []) or []:
+            for _z in getattr(_v, 'zones', []) or []:
+                _sn = (getattr(_z, 'sample_name', '') or '').strip()
+                _rk = getattr(_z, 'root_key', None)
+                if _sn and _rk is not None:
+                    _zone_roots.setdefault(_sn, []).append(int(_rk))
+
+    def _chosen_root(sd):
+        """The root to write into this sample's header.
+
+        One AKAI sample file carries ONE root, so a sample used at several
+        roots -- the same hit shared by two programs at different pitches --
+        cannot be exact for all of them. The MAJORITY root goes in the header,
+        so the fewest zones are left depending on a tune correction whose
+        range this project has not verified.
+        """
+        rs = _zone_roots.get(sd.name) or []
+        if rs:
+            return _clamp(max(set(rs), key=rs.count), 24, 127)
+        return _clamp(_or_default(getattr(sd, 'root_note', None), 60), 24, 127)
 
     renamed: dict = {}
     for sd in bank.samples:
-        nm = uniq(sd.name)
+        nm = uniq(sd.name, content=sample_identity(sd))
         if nm != sd.name.upper()[:AKAI_NAME_LEN]:
             renamed[sd.name] = nm
         # The AKAI name field tolerates characters a filename does not.
         fn = f"{safe_filename(nm.strip(), 'SAMPLE')}.S3"
-        files.append((fn, build_sample(sd, name=nm)))
+        files.append((fn, build_sample(sd, name=nm, root_override=_chosen_root(sd))))
         if not quiet:
             print(f"  Sample: {fn} ({sd.sample_rate}Hz, {len(sd.data)//2} frames)")
     if renamed and not quiet:
@@ -1333,21 +1718,97 @@ def build_akai_volume(bank: Bank, bank_name: Optional[str] = None,
 
     name_map = {sd.name: (renamed.get(sd.name) or sd.name.upper()[:AKAI_NAME_LEN])
                 for sd in bank.samples}
+    #: AKAI name -> the root note actually written into that sample's header,
+    #: so a zone can be pitch-corrected against it (see _root_offset_units).
+    _roots = {name_map[sd.name]: _chosen_root(sd) for sd in bank.samples}
+    _chosen_root_by_name = {sd.name: _chosen_root(sd) for sd in bank.samples}
+    # PRGNUM: HONOUR THE SOURCE'S OWN NUMBERS WHEN THEY ARE USABLE.
+    #
+    # `Preset.program_number` already carries what the source said -- sf2_parser
+    # takes it from the SF2 preset header, gig_parser from the instrument, and
+    # e4b_writer has always written it through. The first version of this fix
+    # ignored all that and renumbered positionally, which solved the collision
+    # by discarding the author's intent: an SF2 bank whose organ sits on program
+    # 16 would have come out on whatever slot it happened to occupy.
+    #
+    # So: use the source numbers when they are distinct and in range, and fall
+    # back to positional when they are not.
+    #
+    # **VinSamLib deliberately does the opposite -- always positional -- and
+    # both are right, because the tools are different things (Jan, 2026-08-14).**
+    # This is a BATCH CONVERTER: it is handed input it did not arrange and must
+    # treat it in a standardized, repeatable way, so the source's own numbering
+    # is information about the input and discarding it would be the converter
+    # inventing an answer. VinSamLib builds banks by hand: there is no source
+    # ordering to respect, the user arranged the programs themselves, and the
+    # position they see IS the information, so numbering from it is the thing
+    # they can predict without opening anything.
+    #
+    # Recorded because the two implementations now disagree on purpose, and the
+    # obvious tidy-up -- make them match -- would break whichever one it was
+    # applied to. Several parsers set 0 for every
+    # preset (sfz, and our own AKAI reader), which collides immediately and
+    # correctly takes the fallback -- that case is indistinguishable from "no
+    # information", which is what it is.
+    _wanted = [getattr(pr, 'program_number', 0) or 0
+               for pr in bank.presets if pr.voices]
+    _usable = (len(set(_wanted)) == len(_wanted)
+               and all(0 <= v < 128 for v in _wanted))
+    _over_127 = False            # set when a volume outruns the MIDI address space
+    n_written = 0                # PRGNUM counts programs WRITTEN, and presets
+                                 # with no voices are skipped below -- counting
+                                 # the enumeration would leave gaps in the
+                                 # numbering for no reason.
     for i, preset in enumerate(bank.presets):
         if not preset.voices:
             continue
-        pname = ((bank_name or preset.name) if len(bank.presets) == 1
-                 else preset.name)[:AKAI_NAME_LEN]
+        # UNIQUIFIED, like the samples above. Until 2026-08-14 this was a bare
+        # truncation, and three presets named 'bas:303 Spectral',
+        # 'bas:303 Spec 2V' and 'bas:303 Spec 3V' all became 'BAS_303 SPEC'
+        # -- one filename, written three times, so the volume ended up with
+        # FOUR programs where the bank had six and nothing said so. The two
+        # lost programs are not recoverable from the output.
+        #
+        # Found while fixing PRGNUM: the new sequential numbers came out
+        # 2, 3, 4, 5 on a four-program volume, and numbers starting at 2 are
+        # only possible if two earlier programs went missing. A collision that
+        # had been silent for as long as the writer existed was visible in
+        # ninety seconds once something downstream counted.
+        pname = uniq(((bank_name or preset.name) if len(bank.presets) == 1
+                      else preset.name), taken_prog, 'PROGRAM')
         # Zones address samples by name, so they must use the AKAI-shortened
         # ones or the program will reference files that were never written.
         for v in preset.voices:
             for z in v.zones:
                 z.sample_name = name_map.get(z.sample_name, z.sample_name)
         fn = f"{safe_filename((pname or f'PROGRAM{i}').strip().upper(), 'PROGRAM')}.P3"
-        files.append((fn, build_program(preset, pname)))
+        _pnum = (getattr(preset, 'program_number', 0) or 0) if _usable else n_written
+        if _pnum > 127 and not _over_127:
+            _over_127 = True
+        files.append((fn, build_program(preset, pname, prog_num=_pnum,
+                                        sample_roots=_roots)))
+        n_written += 1
         if not quiet:
             print(f"  Program: {fn} "
                   f"({sum(len(v.zones) for v in preset.voices)} zone(s))")
+    _tuned = sum(1 for pr in bank.presets
+                 for v in getattr(pr, 'voices', []) or []
+                 for z in getattr(v, 'zones', []) or []
+                 if (getattr(z, 'sample_name', '') or '').strip()
+                 and getattr(z, 'root_key', None) is not None
+                 and len(set(_zone_roots.get((z.sample_name or '').strip(), []))) > 1
+                 and int(z.root_key) != _chosen_root_by_name.get((z.sample_name or '').strip()))
+    if _tuned and not quiet:
+        print(f"  [WARN] {_tuned} zone(s) reference a sample that other zones "
+              f"use at a different root. One AKAI sample file holds one root, "
+              f"so those zones are pitched by the per-zone TUNE field, whose "
+              f"usable range is inferred rather than measured. If they sound "
+              f"transposed, that field is the reason.")
+    if _over_127 and not quiet:
+        print(f"  [WARN] this volume holds more than 128 programs, and MIDI has "
+              f"128 program numbers. Programs past the 128th all carry number "
+              f"127 and will stack on one program change; they remain "
+              f"selectable from the sampler's own panel.")
     return files
 
 

@@ -14,6 +14,7 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 | **Two third-party banks may share our old keymap off-by-12** | A guitar bank on a commercial K2000 CD-ROM library (`library disc T`, 11 of 13 zones) and one on a third-party K2000 floppy soundset (`soundset F1`, 2 of 3) are the only 2 of 2289 hardware-sourced banks that VinSamLib's `tools/check_krz_banks.py` flags as keymap-shifted, and both carry *our* exact keymap write form (method `0x13`, basePitch 0, 100 cents, 128 entries, entrySize 5) despite being third-party conversions. Play adjacent keys and listen for one sample key-tracking. **Either outcome is worth having:** if they are shifted, a third-party converter made the same `i+12` mistake and that is a format-knowledge datum like the CWM findings; if they are fine, the root-inside-zone heuristic has a ~2/2289 false-positive rate and VinSamLib's scanner should say so |
 | **KRZ program params, bandpass silence, the wide-drone preset** | several K2000-side items, all needing the K2000R |
 | **K2000R "Object → Delete" lockup** | needs factory resets; root cause was traced to k2kremote, not this project |
+| **AKAI resident P/K/S pool** | the LOAD page shows `free P/K/S: 1004`; we count directory entries and RAM but never keygroups, which outnumber files ~4:1 in real output. Load two volumes with lopsided P/K/S counts and watch which way the number moves |
 
 ### Needs the MPC (not the E4XT)
 
@@ -95,6 +96,143 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 | **The ~2 dB gain-dataset anomaly** | key, velocity and transposition all measured flat. Isolated to one early measurement that four later independent runs contradict. Recorded in case it recurs |
 
 ---
+
+## AKAI reader may emit phantom files from junk in unallocated directory slots
+
+**Status:** MEASURED 2026-08-14 — exposure is theoretical **in this corpus**,
+and the reason it is theoretical is the part that matters. **Open decision:**
+whether to add the positive guard below.
+
+`_volume_files` is length-bounded — it walks a fixed entry count over a
+fixed-size directory region — which is the right shape and protects us from the
+run-past-the-end phantom that a heuristic stop condition produces. The cost is
+that we also walk every UNALLOCATED slot, and those are not empty.
+
+VinSamLib measured what is in them across 441 498 slots on 21 discs: **27 544
+entries of type 0x00 with a non-zero size**, sizes running to 0xFFFFFF, tail
+bytes taking hundreds of distinct values that look like x86 code. Stale bytes
+left in directory capacity that was never written.
+
+We skip `ftype == 0x00`, which covers those. The gap is a junk slot whose type
+byte happens to land on a real value:
+
+| condition | odds |
+|---|---|
+| `ftype` is 0x70 / 0x73 (or the S1000 pair) | ~2 in 256 of random bytes |
+| `0 < size <= blocksize` | a small stale size, e.g. the 900 seen in their data |
+| `start < nblocks` | anywhere inside the volume |
+
+`_chain` does **not** raise when a chain runs off its end — free or reserved
+block, it returns the blocks it has. So a one-block chain comes back, we read a
+block and truncate to `size`, and the `len(raw) < size` guard never fires
+because `size` is under a block. **A phantom file is emitted with garbage
+content and nothing reports it.**
+
+A phantom program largely self-destructs: `parse_program_bytes` rejects it and
+the caller warns. **A phantom sample does not** — it is raw PCM by definition,
+so garbage audio enters the bank as an ordinary sample.
+
+**Do not "fix" this by adding a stop condition.** That trades our failure mode
+for the one s3ked spent today retracting, and theirs is worse: a heuristic stop
+invents records that are not there AND hides real ones past the first junk
+slot. If a guard is wanted it should be a positive test on the entry itself —
+a chain that terminates properly, a size consistent with the type, a name that
+decodes — not a decision about where the list ends.
+
+### The measurement, and why the answer is not reassuring
+
+VinSamLib ran it over 21 discs, 1843 volumes, 441 498 slots, using a boundary
+independent of the emit test (first slot with `type == 0 AND size == 0`):
+
+| past the boundary | count |
+|---|---|
+| slots | 375 623 |
+| with a non-zero type byte | **0** |
+| ...and non-zero size | 0 |
+| ...and `start < nblocks` (emittable) | 0 |
+
+Set of type values seen past the boundary: **empty**.
+
+**Why: the type byte is the one field the authoring tools reliably clear, and
+nothing else is.** The rest of the record is left stale — sizes to 0xFFFFFF,
+tails that look like x86 code. Both readers key on precisely the field that
+gets cleared, which is why neither has ever emitted a phantom.
+
+**That is a property of the tools that wrote these discs, not of the format.**
+A disc written by something that clears the type byte less thoroughly puts any
+length-bounded reader straight into the scenario above. Unobserved across 21
+discs is not impossible, and the mechanism on our side is intact: `_chain`
+still returns a short chain rather than raising, and the truncation guard still
+cannot fire for a size under one block.
+
+VinSamLib also measured chain delivery across all 49 984 entries their reader
+emits: **0** with a chain too short for the declared size. Same non-raising
+`_chain` behaviour as ours; it simply never meets a malformed entry.
+
+### The guard, not yet added
+
+Require a properly terminated chain covering the declared size before emitting.
+That makes a phantom impossible rather than merely unobserved, and on their
+corpus it changes **0** entries.
+
+Not added here, for a reason worth stating: it is a behaviour change to a
+reader, and it cannot be validated on this machine because the AKAI corpus is
+not on this disk. VinSamLib reached the same conclusion independently and has
+put it to Jan rather than acting. **Do NOT instead add a stop condition** —
+that trades this failure mode for the one s3ked spent 2026-08-14 retracting,
+and theirs is worse: a heuristic stop invents records that are not there and
+hides real ones behind the first junk slot.
+
+### Our corpus figure: CONFIRMED, not inflated
+
+VinSamLib's reader emits **49 984 files across 1843 volumes** over 21 disc
+images — our quoted figure exactly, both numbers, and with no entry past the
+boundary and none short-chained, it contains no phantoms. The figure stands and
+can keep being quoted. (Theirs is 21 images; the separate "375 unnamed files"
+figure came from 8.) Raised and answered 2026-08-14.
+
+
+## AKAI: the resident P/K/S object pool is not modelled — keygroups are counted nowhere
+
+**Status:** open, likely a real fitting gap. **Blocked on:** what the LOAD
+page's "free P/K/S" number actually counts.
+
+Jan noticed the S3000XL's LOAD menu carries a row reading `free P/K/S: 1004`,
+which reads as a budget over Programs, Keygroups and Samples. We model no such
+thing. For AKAI we enforce three ceilings and this is not among them:
+
+| ceiling | value | counts keygroups? |
+|---|---|---|
+| volume directory entries | 510, samples and programs competing | no |
+| keygroups per program | 99, the width of program-common `0x2a` | per program only |
+| sample RAM | 32 MB, `(size_bytes - 150) / 2` words | no |
+
+**Keygroups appear in no budget at all**, and they dominate the object count. A
+six-program test volume converted from E4B uses 21 directory entries and
+contains 112 P/K/S objects, 91 of them keygroups — roughly four keygroups per
+file. Filled to our own 509-entry cap at that ratio a volume would carry about
+4300 objects. If 1004 is a shared pool it binds more than four times tighter
+than the limit we do enforce, and nothing in the pipeline would notice.
+
+The failure mode is the one already documented for the RAM ceiling: an
+over-budget load reports once and then behaves normally, leaving programs
+resident, selectable and silent.
+
+**Not known, and not to be guessed:**
+
+1. Is `1004` one shared pool, or the first of three figures on one row?
+2. What is the total, and does it move with memory fitted?
+3. Does a keygroup cost what a program does?
+
+**Cheapest way to settle it:** watch the number while loading two volumes with
+deliberately lopsided counts — few programs of many keygroups each, against
+many programs of one keygroup. If it falls by the keygroup count, it is shared
+and we must count keygroups. Asked of s3ked 2026-08-14; they have the machine.
+
+Do not cap on a guess. An over-tight clamp silently splits banks that would
+have loaded, and this project has already recorded that as the worse bug,
+because only the loose kind announces itself. Raised 2026-08-14.
+
 
 ## Name fields destroyed a byte a real E4XT wrote — FIXED for E4B + EMU3 (2026-08-08)
 

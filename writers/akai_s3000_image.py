@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from parsers.akai_s3000_parser import AKAI_NAME_LEN, akai_to_str, str_to_akai
+from writers.atomic import atomic_write
 
 # ── block geometry ─────────────────────────────────────────────────────────
 HD_BLOCK = 0x2000                   # 8 KB
@@ -463,7 +464,7 @@ def build_akai_hd_image(volumes: Sequence[Tuple[str, Sequence[Tuple[str, bytes]]
     n_files = 0
     free_blocks = 0
 
-    with open(out, 'wb') as fh:
+    with atomic_write(out) as fh:
         for pi, (psize, pvols) in enumerate(zip(sizes, plan)):
             fat = [FAT_FREE] * PART_MAX_BLOCKS
             for b in range(sys_blocks):
@@ -644,7 +645,8 @@ def append_akai_volumes(image_path: str,
         if _is_cdrom_partition(data, base):
             _refresh_cdinfo(data, base, psize)
 
-    path.write_bytes(bytes(data))
+    with atomic_write(path) as _fh:
+        _fh.write(bytes(data))
     return {'added': added, 'skipped': skipped}
 
 
@@ -803,7 +805,7 @@ def build_akai_floppy_image(files: Sequence[Tuple[str, bytes]],
 
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
-    with open(out, 'wb') as fh:
+    with atomic_write(out) as fh:
         fh.write(head)
         fh.write(_volume_directory(entries, VOLDIR_FL_BLKS, FL_BLOCK,
                                    volparam=False))

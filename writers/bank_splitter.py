@@ -208,6 +208,94 @@ def bank_limit_bytes(max_size_mb: float) -> int:
     return max(1, int(max_size_mb * 1024 * 1024) - margin)
 
 
+#: AKAI resident-object pool: programs + keygroups + samples, one budget.
+#:
+#: MEASURED by s3ked on a 32 MB S3000XL, 2026-08-14, after Jan noticed the row
+#: on the LOAD page. It is `STAT.max_blocks`, and `free P/K/S` on the panel is
+#: `STAT.free_blocks`:
+#:
+#:     max_blocks 1006, free 884  ->  used 122
+#:     2 programs + 58 keygroups + 62 samples = 122     exact, not approximate
+#:
+#: Confirmed at a second setting: loading one sample moved free_blocks by one
+#: and the object sum by one. So a keygroup costs exactly what a program and a
+#: sample cost, and it is one shared pool rather than three figures on a row.
+#:
+#: PROVENANCE OF THE THREE TERMS, checked rather than assumed. Later the same
+#: day s3ked found their directory walk had been returning one entry too many
+#: on 98 of 100 volumes -- a phantom final record -- and reported that every
+#: item count they had quoted was one high. That would have put a constant
+#: error into this fit check on every volume, so they traced the identity's
+#: call paths: programs from RPLIST, samples from RSLIST, keygroups from the
+#: GROUPS field of each program header. None of the three comes from a
+#: directory walk, and the phantom never entered the arithmetic.
+#:
+#: The exactness was doing the checking before anyone noticed. 122, 200 and 229
+#: closed to the unit at three separate states; had any term inherited an
+#: off-by-one, none of them could have. A sum that lands exactly is evidence
+#: about its inputs, and it is worth reaching for that argument before
+#: re-deriving a number from scratch.
+#:
+#: THIS IS NOT A PROPERTY OF THE VOLUME. It is a ceiling on what is RESIDENT in
+#: the machine, so two things follow that the directory cap does not share:
+#:
+#:   * A volume can satisfy the 510-entry directory limit and still exceed the
+#:     pool -- the budgets are independent. **What the machine does then is
+#:     UNVERIFIED.** The RAM ceiling is known to half-load: one "insufficient
+#:     waveform memory!", then it behaves normally, with every keygroup
+#:     pointing at an absent sample playing silence. If the object pool
+#:     degrades the same way, "will not load" is the wrong warning and "will
+#:     load incompletely" is the right one. Raised by VinSamLib 2026-08-14;
+#:     only s3ked can settle it, and nothing here should claim either until
+#:     they do. Ours overshoot badly: a
+#:     six-program test volume uses 21 directory entries and 216 objects, about
+#:     32 keygroups per program, so filling the directory would ask for ~5200.
+#:   * The pool is shared across everything already loaded, exactly like the
+#:     RAM budget. A volume that loads onto an empty machine may not load onto
+#:     one already holding a bank, and we cannot see that from here.
+#:
+#: So this check is a FLOOR, not a guarantee: it catches a volume that cannot
+#: load onto an empty machine. It cannot promise one will load onto a full one.
+#:
+#: CORROBORATED BY AUTHORED DATA, which is a different kind of evidence from
+#: the machine reading. Across 1843 volumes on 21 commercial library discs:
+#:
+#:     volumes over 1006 objects : 0
+#:     largest volume            : 910  (23 programs, 811 keygroups, 76 samples)
+#:     median / p90 / p99        : 45 / 134 / 404
+#:
+#: Real volumes crowd up to the ceiling and never cross it, which is what a
+#: correct ceiling looks like. VinSamLib measured the same corpus with their
+#: own reader and got 910 too.
+#:
+#: That largest volume is also the whole argument for this check in one line.
+#: It uses **99 of 510 directory entries** -- 19 %, nowhere near the limit we
+#: used to enforce -- and **910 of 1006 objects**, 90 %. Its keygroups are 89 %
+#: of its object count and appear in no directory at all. A tool counting files
+#: sees a volume at a fifth of capacity; the sampler sees one nearly full.
+#:
+#: 1006 is what one 32 MB machine reports and s3ked explicitly warned against
+#: assuming it is universal -- whether it moves with fitted memory is untested,
+#: and the right number is whatever the target's own STAT says. We cannot ask a
+#: file for that, so it is a default and `--akai-max-objects` overrides it.
+_AKAI_OBJECT_POOL = 1006
+
+#: Two off-by-ones s3ked flagged as untested, both of which would LOOSEN this
+#: cap slightly if they went the other way: whether a program with zero
+#: keygroups costs 1 or 0, and whether a stereo sample costs one object or two.
+#: Neither can bite us as we write: keygroups are clamped to a minimum of 1, and
+#: AKAI stereo is written as two mono files, which are two directory entries and
+#: are counted here as two.
+
+
+def akai_object_count(presets, n_samples: int) -> int:
+    """programs + keygroups + samples, the way the S3000XL counts them."""
+    from writers.akai_s3000_writer import keygroup_count
+    return (len(presets)
+            + sum(keygroup_count(p) for p in presets)
+            + n_samples)
+
+
 def _capacity(fmt: str):
     return _FMT_CAPACITY.get(fmt, (_MAX_SAMPLES_PER_BANK,
                                    _MAX_PRESETS_PER_BANK, None))
@@ -473,6 +561,8 @@ class TargetBank:
     current_size: int = _BANK_OVERHEAD
     #: 0 = no PRAM limit (every format but KRZ).
     pram_budget: int = 0
+    #: 0 = no resident-object pool (every format but AKAI).
+    object_pool: int = 0
 
     def _unique_sample_name(self, base: str) -> str:
         if base not in self._sample_names:
@@ -546,6 +636,14 @@ class TargetBank:
                 + len(self.presets) + 1 > max_files):
             return False
 
+        # The resident-object pool, which the directory cap above says nothing
+        # about: a volume can fit the directory four times over and still be
+        # unloadable. Only applied where a pool is known.
+        if self.object_pool:
+            if akai_object_count(self.presets + [preset],
+                                 len(self._sample_names) + new_samples) > self.object_pool:
+                return False
+
         # PRAM, not object count, is what a K2000 actually runs out of.
         if self.pram_budget:
             used = bank_pram_bytes(len(self._sample_names) + new_samples,
@@ -571,6 +669,7 @@ def split_into_banks(
     base_name: str = "EMU_BANK",
     fmt: str = 'e4b',
     pram_k=None,
+    max_objects=None,
 ) -> Tuple[List[Bank], List[str]]:
     """
     Pack presets from multiple source banks into size-limited output banks.
@@ -588,6 +687,7 @@ def split_into_banks(
     limit_bytes = bank_limit_bytes(max_size_mb)
     cap = _capacity(fmt)
     _pram = pram_budget_bytes(pram_k) if fmt == 'krz' else 0
+    _pool = (max_objects or _AKAI_OBJECT_POOL) if fmt == 'akai' else 0
     warnings: List[str] = []
 
     # Flatten: collect (preset, [its samples], source_bank_name) tuples
@@ -683,7 +783,7 @@ def split_into_banks(
         if not placed:
             # Open a new target bank
             tb = TargetBank(index=len(target_banks) + 1,
-                            pram_budget=_pram)
+                            pram_budget=_pram, object_pool=_pool)
             tb.add_preset(preset, needed_samples)
             target_banks.append(tb)
 

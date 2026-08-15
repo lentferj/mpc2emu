@@ -44,6 +44,168 @@ either — Akai never published the disk format.
 **No third-party source code was copied.** Where (1) and (2) were compared they
 agree; disagreements are flagged inline below.
 
+## Repeated sample names across a corpus, and how to count them
+
+Measured over 21 library disc images, cross-checked against VinSamLib's
+independent reader. Both enumerate **36 645 sample occurrences** with the same
+generation split — **25 407 S1000, 11 238 S3000** — to the unit, which is the
+strongest agreement the two readers have produced.
+
+**Counting DISTINCT names needs a definition, and the two obvious ones differ
+by exactly 57:**
+
+| definition | distinct names |
+|---|---|
+| extension stripped (`808 COWBELL`) | 34 234 |
+| full filename (`808 COWBELL.S1`, `.S3` separately) | 34 291 |
+
+The 57 are names present in **both sampler generations** — the same sound
+shipped once for each machine, `808 COWBELL`, `808 RIM`, `AGOGO 1`,
+`BASSFLUTE C3`. Neither count is wrong; they answer different questions.
+
+**Names that repeat carrying different bytes** (the population that matters to
+any writer assembling from several sources):
+
+| | |
+|---|---|
+| repeats with DIFFERENT audio | 436 |
+| repeats with IDENTICAL audio, DIFFERENT HEADER | 1499 |
+
+The second class is the larger, and its cause is visible in the material:
+drum-machine libraries file the same hit under the same name in kit after kit,
+with different tuning or loop settings over identical audio. **A writer keying
+sample identity on the PCM alone therefore mis-merges the LARGER of the two
+classes** — see `akai_s3000_writer.sample_identity()`, which hashes every field
+the header carries for exactly this reason.
+
+**A volume MAY hold `NAME.S1` and `NAME.S3`** — two directory entries, two type
+bytes, the same 12-character name field — but **no volume in the corpus does**.
+VinSamLib checked all 1843 volumes across the 21 images, uncapped: zero. The 57
+cross-generation names are always one `.S1` volume and one `.S3` volume, the
+same library shipped twice and never mixed on the media.
+
+So the pair cannot arise from reading a disc. It can only arise from
+ASSEMBLING one, which puts it outside this project entirely — we emit S3000
+samples only and cannot produce it. A librarian staging an S1000 program beside
+an S3000 program in one volume can.
+
+**Still unmeasured for whoever can produce it:** whether the sampler's
+replace-on-load keys on the name alone or on name-and-type. The asymmetry
+decides the safe default without needing the answer — renaming when it keys on
+name+type costs one object and one copy of the audio, while not renaming when
+it keys on name alone silently loses a sound the disc offered. Pay the object.
+
+## Sample header bytes 141-191, measured over 36 645 real headers
+
+Our own table stops at offset 141. What lies past it was measured 2026-08-14
+across 21 commercial library disc images (1843 volumes, 49 984 files), after
+s3ked asked three questions from a six-sample reading on one disc.
+
+**The two sampler generations behave completely differently, and that is the
+answer to all three.**
+
+| bytes 182-187 | S3000 samples (type `0xF3`), n = 11 238 | S1000 samples (type `0x73`), n = 25 407 |
+|---|---|---|
+| all-zero | 91.3 % | 13.2 % |
+| mixed | 8.4 % | 85.9 % |
+| all-ones | 0.3 % | 0.9 % |
+
+**1. The "all-zero or all-ones" run is real for S3000 and false for S1000.**
+It holds in 91.6 % of S3000 headers, so a six-sample reading of one S3000 disc
+was representative of that generation. It is not a property of the format.
+
+Note what the remaining 8.4 % does to the inference that drew attention to it:
+"a six-byte run that is only ever all-zero or all-ones is sign extension, not
+data" — 940 S3000 headers are neither. With six samples the odds of seeing
+none of them were about three in five. The pattern is real and dominant; *only
+ever* is not, and sign extension does not follow from it.
+
+**2. `17 412` at bytes 188-191 is not a default.** Zero occurrences in 36 645
+headers across 21 discs. The dominant value there is 0 (10 262 of 11 238 S3000
+headers) and the remaining non-zero values scatter with none repeating more
+than ~350 times. Whatever that constant was on the disc it came from, it is a
+property of that library rather than of the format.
+
+**3. Position in a multisample does not predict the value.** Measured by taking
+each program's keygroup zones, resolving them to distinct samples, ordering by
+key, and comparing how often a non-zero value lands on an end against the
+`2/n` chance baseline:
+
+| | |
+|---|---|
+| multisamples (≥3 distinct members, ≥1 non-zero) | 304 |
+| non-zero members | 1730 |
+| at an extreme, observed | 427 (24.7 %) |
+| at an extreme, expected by chance | 424 (24.5 %) |
+| ratio | **1.01×** |
+
+Nothing. The observation that prompted it — two differing members of a
+six-sample multisample, both outermost — is what chance produces at that size:
+two non-zero out of six both landing on the ends happens about one time in
+fifteen.
+
+**A counting trap worth recording, because the first run here fell into it.**
+Counting each sample once per KEYGROUP REFERENCE rather than once per
+multisample gave outermost 9.13 % non-zero against inner 6.32 % — a 1.4×
+enrichment that reads as weak support for the hypothesis. A sample spanning
+eight keygroups voted eight times, so the observations were not independent.
+Deduplicating per multisample and using the right baseline collapses it to
+1.01×. The wrong version pointed the same way as the hypothesis being tested,
+which is the direction that does not get double-checked.
+
+**All 51 offsets in 141-191 are non-zero somewhere in the corpus**, so this
+region is populated rather than reserved — but nothing here decodes it, and
+nothing in this project writes it.
+
+## Directory record types, and one we cannot identify
+
+A volume directory entry carries a type byte at offset 16:
+
+| type | meaning |
+|------|---------|
+| `0x70` | program (`.P3`) |
+| `0x73` | sample (`.S3`) |
+| `0x00` | an empty slot — **and at least one real record type** |
+
+**A keygroup is never a directory entry.** Keygroups exist only inside program
+files, so a directory walk can never encounter one. Measured by s3ked
+2026-08-14 and worth stating, because the S3000XL's resident-object pool counts
+keygroups while the directory does not — the two budgets are in different units
+and a reader never has to reconcile them.
+
+### The third type
+
+s3ked found a record on a real disc that is none of the above:
+
+```
+type 0x00, 162 bytes, at most one per volume, not present on every volume
+tail bytes  1e 04     where every program and sample carries  1e 09
+```
+
+**SETTLED 2026-08-14: there is no such record type.** VinSamLib walked 21
+discs — 1843 volumes, 441 498 directory slots. 32 entries carry the `1e 04`
+tail; **31 sit past the last real entry**, and the single mid-directory one is
+a same-name, same-size shadow of the program in the very next slot. The
+original claim rested on a reader's own stop condition, which is circular, and
+was withdrawn the same day it was made.
+
+### What the junk actually is, which is worth more than the record was
+
+**The type byte is the one field the authoring tools reliably clear. Nothing
+else is.** Past the first truly empty slot (`type == 0 and size == 0`) the type
+byte is zero in **375 623 of 375 623** slots — the set of type values seen
+there is empty — while the rest of those records is left stale: sizes running
+to `0xFFFFFF`, tail bytes taking hundreds of values that look like x86 code.
+
+So `1e 04` is not a signature. It is a stale tail in a slot whose type byte was
+cleared, which is exactly why it never appears beside a live type.
+
+**And this is why no reader has emitted a phantom file from unallocated
+capacity — but it is a property of the tools that wrote these discs, not of the
+format.** A disc written by something that clears the type byte less
+thoroughly would put any length-bounded reader straight into that case.
+Unobserved across 21 discs is not the same as impossible; see `TODO.md`.
+
 ## Character encoding
 
 Names are not ASCII. Each byte maps:

@@ -355,6 +355,25 @@ Output:
                       minus headroom for setups and effects) → ~117 presets per
                       bank.  Raise it if the target machine has a PRAM
                       expansion: --pram 760 is a common one and allows ~810.
+  --akai-max-objects N  AKAI resident-object pool (--format akai).  The
+                      S3000XL counts programs, KEYGROUPS and samples against
+                      ONE budget — its LOAD page shows it as `free P/K/S` —
+                      and a keygroup costs exactly what a program or a sample
+                      costs.  Keygroups dominate: a six-program volume can
+                      hold 195 of them, so the pool binds far tighter than the
+                      510-entry volume directory and a volume can satisfy the
+                      directory and still exceed the pool.  What the sampler
+                      DOES then is unverified: the RAM ceiling is known to
+                      half-load — one warning, then it behaves normally with
+                      the absent samples playing silence — and the object pool
+                      may degrade the same way rather than refusing.  Default
+                      1006,
+                      measured on a 32 MB S3000XL; whether it moves with
+                      fitted memory is untested, so read `STAT.max_blocks`
+                      from your own machine if it disagrees.  Note the budget
+                      is for what is RESIDENT, so it is shared with anything
+                      already loaded — this fits a volume for an empty
+                      machine.
   --max-preset-size SIZE  Cap each single preset/program (e.g. 8192K) so no one
                       preset fills a whole bank; over-cap presets are thinned to
                       fit.  (default: no per-preset cap)

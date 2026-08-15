@@ -351,8 +351,17 @@ def write_akai_output(output_banks: List[Bank], out_dir: Path, bank_name: str,
 
     print(f"\n[{step_n}] Writing AKAI files...")
     volumes = []
+    # Shared across every volume: a name is unique per CONVERSION, not per
+    # volume. The sampler replaces a resident item of the same name rather than
+    # holding both, so two volumes of one split sharing a name means the second
+    # load silently overwrites the first -- and for samples, whose zones are
+    # resolved by name, it means the first volume's programs play the second
+    # volume's audio.
+    _akai_taken: dict = {}
+    _akai_taken_prog: dict = {}
     for bank in output_banks:
-        files = build_akai_volume(bank, bank_name if len(output_banks) == 1 else None)
+        files = build_akai_volume(bank, bank_name if len(output_banks) == 1 else None,
+                                  taken=_akai_taken, taken_prog=_akai_taken_prog)
         if files:
             volumes.append((akai_volume_name(bank.name), files))
     if not volumes:
@@ -379,6 +388,9 @@ def write_akai_output(output_banks: List[Bank], out_dir: Path, bank_name: str,
             sys.exit(1)
 
     if args.add_to:
+        # `added` stays None until an append actually reports one, so the
+        # summary below reports what LANDED rather than what was attempted.
+        added = None
         if not Path(args.add_to).exists():
             print(f"\n[ADD] ERROR: image not found: {args.add_to}")
         else:
@@ -390,12 +402,29 @@ def write_akai_output(output_banks: List[Bank], out_dir: Path, bank_name: str,
             except AkaiImageError as e:
                 print(f"  [ADD] ERROR: {e}")
             else:
+                added = res
                 for n in res['added']:
                     print(f"  → added volume '{n}'")
                 for n in res['skipped']:
                     print(f"  → skipped '{n}' (already on the image)")
         print(f"\n{'='*60}")
-        print(f"Done: {len(volumes)} volume(s) processed")
+        # A FULL IMAGE USED TO EXIT 0 SAYING "1 volume(s) processed".
+        #
+        # Found while building test discs: an 8 MB image filled up, every
+        # further --add-to printed its error and then the same success banner,
+        # and the shell script driving it reported nine volumes added where
+        # four existed. "Processed" was true and useless -- the conversion had
+        # run, the append had not. A caller can only act on what landed.
+        if added is None:
+            print("FAILED: nothing was added")
+            print(f"{'='*60}\n")
+            sys.exit(1)
+        n_added, n_skipped = len(added['added']), len(added['skipped'])
+        if n_added == 0 and n_skipped:
+            print(f"Nothing added: {n_skipped} volume(s) already on the image")
+        else:
+            print(f"Done: {n_added} volume(s) added"
+                  + (f", {n_skipped} skipped" if n_skipped else ""))
         print(f"{'='*60}\n")
         return
 
@@ -503,6 +532,10 @@ def main():
         metavar='DIR', help='Output directory (default: current directory)')
     ap.add_argument('--overwrite', action='store_true',
         help='Overwrite existing output files without prompting')
+    ap.add_argument('--akai-max-objects', type=int, default=None, metavar='N',
+        help='AKAI resident-object pool (programs + keygroups + samples). '
+             'Default 1006, measured on a 32 MB S3000XL; read STAT.max_blocks '
+             'from your own machine if it differs')
     ap.add_argument('--pram', type=int, default=None, metavar='KB',
                     help="K2000 usable PRAM in KB (--format krz). Objects "
                          "(programs, keymaps, sample headers) live in PRAM, "
@@ -1178,7 +1211,7 @@ def main():
         print(w)
     output_banks, warnings = split_into_banks(
         source_banks, args.bank_size, bank_name, args.format,
-        pram_k=args.pram)
+        pram_k=args.pram, max_objects=args.akai_max_objects)
     for w in warnings:
         print(w)
     print_split_summary(source_banks, output_banks, args.bank_size)

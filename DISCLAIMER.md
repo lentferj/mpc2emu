@@ -87,6 +87,39 @@ hardware:
 3. **Verify the output** with the `--info` flag and review all
    warnings before writing to hardware.
 
+### AKAI S1000 / S3000 output is NOT hardware-confirmed
+
+Every "hardware-confirmed" claim in this project comes from an E-mu E4XT or a
+Kurzweil K2000R. **No AKAI output from this tool has ever been loaded by an
+AKAI sampler.** The reader, the writer and the disk-image builders are
+cross-verified against `akaiutil`, an independent implementation of the same
+undocumented format — it accepts our files and returns our audio
+byte-identical — which means we match the best available *interpretation* of
+the format, not that Akai's ROM agrees with it.
+
+Two consequences worth stating plainly, because they are the reason this
+paragraph exists rather than a note elsewhere:
+
+- Program parameters are written through laws measured on a *different*
+  machine by a sibling project, over SysEx. The filter cutoff and amplitude
+  envelope follow the source; the filter envelope is deliberately left at
+  fixed values because the measurement for it does not exist yet.
+- Tuning is written on the sampler's one-cent grid as of 2026-08-14. That
+  change is also unconfirmed here: it corrects values the machine was
+  otherwise snapping silently, and no converted file has been played since.
+
+One behaviour to know about that no converter can prevent: **loading several
+volumes without clearing the sampler's memory between them stacks programs on
+shared MIDI program numbers.** Program numbers are assigned per volume, so
+every independently authored volume starts at the same one, and a program
+change then fires every program that shares the number — measured on an
+S3000XL as four programs sounding at once. A volume of ours is correctly
+numbered in isolation; the collision only appears when two are resident
+together, and nothing on the machine says why.
+
+If you are deciding whether to point this at an S3000XL, that is the honest
+state of it.
+
 The authors accept **no responsibility** for data loss, hardware
 damage, or any other adverse effects resulting from the use of this
 software.

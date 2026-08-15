@@ -199,7 +199,8 @@ def _read_blocks(data: bytes, base: int, blocks, blocksize: int) -> bytes:
 def _volume_files(data: bytes, base: int, fat, dirbytes: bytes, blocksize: int,
                   nblocks: int,
                   max_entries: int = VOLDIR_ENTRIES,
-                  short: Optional[list] = None) -> List[Tuple[str, int, bytes]]:
+                  short: Optional[list] = None,
+                  unknown: Optional[list] = None) -> List[Tuple[str, int, bytes]]:
     """Files of one volume.  Entries whose data runs past the end of the image
     are appended to `short` rather than returned — see `_truncation_warning`."""
     files = []
@@ -207,6 +208,68 @@ def _volume_files(data: bytes, base: int, fat, dirbytes: bytes, blocksize: int,
         e = dirbytes[24 * i:24 * i + 24]
         ftype = e[16]
         if ftype == 0x00 or ftype == _FL_S3000_FLAG_TYPE:
+            # Type 0x00 is how an EMPTY slot reads, which is why it is skipped.
+            #
+            # But it may not be ONLY that. s3ked saw an entry of this type on
+            # a disc 2026-08-14: 162 bytes, tail bytes `1e 04` where every
+            # program and sample carries `1e 09`.
+            #
+            # **Whether it is a real record is OPEN, and the first report that
+            # it was has been withdrawn.** They have one instance and it was
+            # the LAST entry in its directory, index 54 of 55 -- exactly where
+            # an off-by-one in a reader would put a phantom. Their directory
+            # walk stops on a heuristic (extension field not reading as spaces,
+            # or a record repeating an earlier one) rather than on a length, so
+            # "it satisfies both stop conditions, therefore it is real" is
+            # circular: it is real by the rule that decides where the list
+            # ends, and that rule is what would be wrong.
+            #
+            # SETTLED 2026-08-14 (VinSamLib, 21 discs, 1843 volumes, 441 498
+            # directory slots): there is no such record type. 32 entries carry
+            # the `1e 04` tail; 31 sit past the last real entry and the single
+            # mid-directory one is a same-name same-size shadow of the program
+            # in the next slot.
+            #
+            # And the reason is the useful part. **The type byte is the one
+            # field the authoring tools reliably clear; the rest of the record
+            # is left stale.** Past the first truly empty slot the type byte is
+            # zero in 375 623 of 375 623 slots, while sizes there run to
+            # 0xFFFFFF and tails take hundreds of values that look like x86
+            # code. So `1e 04` is not a record signature -- it is a stale tail
+            # in a slot whose type byte was cleared, which is exactly why it
+            # never appears beside a live type.
+            #
+            # OUR walk cannot produce that artefact -- it is length-bounded,
+            # reading a fixed entry count from a fixed-size directory region
+            # and never guessing where the list ends. So a 0x00-with-size that
+            # this reader reports is worth something, which is the reason to
+            # report it rather than to decode it.
+            #
+            # Keep the report, even though the record type turned out not to
+            # exist: what it now detects is a slot the authoring tool did NOT
+            # clear the way every tool in a 21-disc corpus did, and that is
+            # worth a line either way. See TODO for why this reader has never
+            # emitted a phantom from one, and why that is luck about the tools
+            # rather than a property of the format.
+            #
+            # We keep skipping it, deliberately: we have no disc carrying one
+            # to test against, reading a record of unknown layout is how a
+            # parser invents data, and it may yet turn out not to exist. But an
+            # empty slot has size 0 and this does not, so the two ARE
+            # separable -- and dropping a possibly-real entry without saying so
+            # is the failure the comment below is about. Report it.
+            #
+            # Reported through its OWN channel, not `short`. `short` means
+            # "this file's data runs past the end of the image", i.e. a bad
+            # copy, and an unknown record type is not that. Filing it there
+            # would surface a real finding under a warning that says something
+            # else -- which is the failure this project has spent the week
+            # cataloguing in other people's code.
+            if (unknown is not None and ftype == 0x00
+                    and _u24(e, 17) > 0
+                    and akai_to_str(e[0:AKAI_NAME_LEN]).strip()):
+                unknown.append(f"{akai_to_str(e[0:AKAI_NAME_LEN]).rstrip()} "
+                               f"(directory type 0x00, {_u24(e, 17)} bytes)")
             continue
         name = akai_to_str(e[0:AKAI_NAME_LEN]).rstrip()
         size = _u24(e, 17)
@@ -283,6 +346,12 @@ def _truncation_warning(data: bytes, sizes, short,
     return "  [WARN] " + "; ".join(parts)
 
 
+#: Directory records this reader recognises as real but cannot decode.
+#: Module-level so both media paths report through one list; see the note in
+#: _volume_files for what is actually in it.
+_unknown_records: list = []
+
+
 def _read_harddisk(data: bytes) -> List[AkaiVolume]:
     # The partition table lives in the first partition only; its entries give
     # each partition's size in blocks, and partitions are laid end to end.
@@ -329,12 +398,15 @@ def _read_harddisk(data: bytes) -> List[AkaiVolume]:
             # S3000 uses for "reserved".
             dirbytes = _read_blocks(data, base, dirblocks[:dir_blks], HD_BLOCK)
             files = _volume_files(data, base, fat, dirbytes, HD_BLOCK, nblocks,
-                                  max_entries, short)
+                                  max_entries, short,
+                                  unknown=_unknown_records)
             vols.append(AkaiVolume(name, letter, files))
 
     warn = _truncation_warning(data, sizes, short, partitions_read)
     if warn:
         print(warn)
+    for _u in _unknown_records:
+        print(f"  [NOTE] skipped an unrecognised directory record: {_u}")
     return vols
 
 
@@ -350,7 +422,8 @@ def _read_floppy(data: bytes) -> AkaiVolume:
 
     dirbytes = data[head_blks * FL_BLOCK:
                     (head_blks + VOLDIR_FL_BLKS) * FL_BLOCK]
-    files = _volume_files(data, 0, fat, dirbytes, FL_BLOCK, total)
+    files = _volume_files(data, 0, fat, dirbytes, FL_BLOCK, total,
+                          unknown=_unknown_records)
     return AkaiVolume(name or 'FLOPPY', 'FL', files)
 
 
@@ -367,6 +440,7 @@ def parse_akai_image(path: str, wav_dir: Optional[str] = None, **kw) -> Bank:
 
     p = Path(path)
     vols = read_akai_image(str(p))
+    _unknown_records.clear()
     print(f"Parsing AKAI disk image: {p.name}")
 
     bank = Bank(name=_safe_name(p.stem))
