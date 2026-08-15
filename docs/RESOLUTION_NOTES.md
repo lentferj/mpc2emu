@@ -19,11 +19,14 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 <!-- INDEX:BEGIN -->
 ## Index
 
-*84 sections, appended in the order things were found.
+*85 sections, appended in the order things were found.
 This index is generated from the headings and checked by a test: an index
 that has drifted is worse than none, because it sends a reader to a section
-that is not there. Regenerate it when you add a section.*
+that is not there. Regenerate it when you add a section — and after any
+rebase, since this file differs between branches and the index does not
+survive being carried between them.*
 
+- [§SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)](#sibcheck-three-sibling-findings-checked-against-our-own-corpora-2026-08-15)
 - [§NAMEBYTE — name fields decoded as ASCII (E4B/EMU3 DONE; EIII/SF2/MPC60 open)](#namebyte-name-fields-decoded-as-ascii-e4bemu3-done-eiiisf2mpc60-open)
 - [§KRZNAME16 — a full-length KRZ name picked up the bytes after it (2026-08-09)](#krzname16-a-full-length-krz-name-picked-up-the-bytes-after-it-2026-08-09)
 - [§ISODIR — EMU3 CD image drops banks past the 16th (how to fix)](#isodir-emu3-cd-image-drops-banks-past-the-16th-how-to-fix)
@@ -110,6 +113,94 @@ that is not there. Regenerate it when you add a section.*
 - [§AGREEMENT — what a second source actually rules out](#agreement-what-a-second-source-actually-rules-out)
 
 <!-- INDEX:END -->
+
+## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
+
+VinSamLib offered three KRZ corpus measurements and s3ked shipped a Windows
+encoding guard. All four were checked here rather than filed. **One was a real
+hole; three were not, and knowing which is which is the point of writing this
+down.**
+
+### 1. Text I/O riding the locale codec — REAL, and my first check was wrong
+
+s3ked's CI had never been green on Windows: text files written as cp1252 and
+read back as UTF-8, on em dashes, which both projects write everywhere. I
+checked this repo two nights earlier with a single-line `grep` and reported it
+clean.
+
+Their fix records that **their own grep missed two call sites because the call
+spanned lines**. Re-run over the AST, ours found one: `writers/atomic.py`,
+whose `mode` is a parameter no static check can resolve. Every caller passed
+binary, but `atomic_write(p, 'w')` reads as obviously fine and would have
+written locale-encoded bytes. Fixed by construction — text without an explicit
+encoding is UTF-8 there now — and a standing AST guard treats an unresolvable
+mode as the dangerous case rather than the safe one.
+
+The lesson is about the first check, not the bug: **a single-line regex over
+source cannot see a multi-line call, so its clean result was worth less than it
+looked.** This project already had a rule against inferring code properties
+from source text, and the grep predated applying it here.
+
+### 2. Nested / gapped stereo planes — real phenomenon, we are clean on it
+
+They found 45 of 802 multi-header samples with a gap between channels, and one
+bank where two stereo samples are NESTED inside one another. A reader taking a
+sample's length as the distance to the next sample's start gets 10 950 words
+where the sample spans 176 794. `krz_parser._pcm_extents` does exactly that,
+using the next start as a hard ceiling.
+
+Measured over **201 real soundsets**: 594 multi-header samples, 65 with a gap
+between planes — and where it matters, 529 stereo samples with two usable
+planes show **16 unequal (3.0 %), the worst a one-word difference**. No
+truncation. Our ceiling handles the gapped case correctly on this material and
+the pathological nested bank is not in this corpus.
+
+Not "fixed", because there is nothing here to fix and their safe rule
+(`max(sampleEnd) - min(sampleStart) + 1` as a floor that may extend but never
+shorten) is a change we cannot validate against a case we do not have. Recorded
+so the next person who meets a 16x-short stereo sample knows where to look.
+
+### 3. Duplicate object ids in the wild — not in our corpus
+
+They have 3 banks holding two objects of the same type and id, where a
+dict-keyed parse silently keeps the last. **Zero across our 201 soundsets.**
+Their fix (keep the FIRST, the one every reference was written against, and
+record the shadowed one) is the right behaviour if we ever meet it.
+
+### The pattern worth keeping
+
+Four findings from projects reading the same formats: one landed, three did
+not, and none could have been sorted by argument. The corpus decided each in
+minutes. **An offered finding is a hypothesis about your code, not a report
+about it** — and the one that landed was the one where I had already convinced
+myself we were clean.
+
+### A corpus figure must carry its population, in the output
+
+Six wrong numbers crossed these three projects in two days and every one was a
+truncated or mis-chosen population rather than bad arithmetic:
+
+| | |
+|---|---|
+| a 40-file loader cap | made an E4B click rate 0.5 % instead of 2.8 % |
+| an unsorted glob cut at 150 banks | a corpus figure over a sixth of it |
+| `[:30]` volumes per disc | a 2x disagreement between two readers |
+| a filter identical to its own population | returned 0/0/0 tautologically |
+| `hasattr(P, 'SAMPLE_TYPES')` — the constant is `_SAMPLE_TYPES` | silently answered from one sampler generation |
+| six split banks, described as the corpus | "exactly one" where the corpus says 1499 |
+
+The last two are ours. **None produced a crash; every one produced a plausible
+number.** And VinSamLib's diagnosis is the part to keep: these are convenience
+caps that keep an exploratory loop fast, so *the line that makes the loop usable
+is the line that makes the result wrong*, and nothing in the output says which
+mode it ran in.
+
+So: **print the denominator beside the figure** — "1843 volumes, 21 images,
+uncapped" — and write the population into any figure recorded here. A number
+that cannot be read without knowing what it is over should not be quoted, and
+a scan that prints its own population makes a truncated run visible in its own
+output rather than in a later disagreement with somebody else.
+
 
 ## §NAMEBYTE — name fields decoded as ASCII (E4B/EMU3 DONE; EIII/SF2/MPC60 open)
 
