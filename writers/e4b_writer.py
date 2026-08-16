@@ -551,6 +551,24 @@ def _zone_entry(zone: ZoneMapping, sample_idx: int, write_absolute: bool = False
         # straight in delivers only half to three-quarters of it (§E4BFILTCAL).
         entry[15] = e4xt_volume_byte(zone.volume) & 0xFF
         entry[16] = e4xt_pan_byte(zone.pan) & 0xFF
+    # HARDWARE-CONFIRMED 2026-08-16 on Jan's E4XT. This field is where the
+    # machine gets its pitch from -- the sample's own root is carried only in
+    # the NAME suffix, which EOS displays and does not play from. A calibration
+    # bank of three sines written by this writer, played on the E4XT:
+    #
+    #     CALA3 root 57 at key 57  ->  219.9 Hz     (220 exact)
+    #     CALA3 root 57 at key 69  ->  439.8 Hz     (+12 st)
+    #     CALA3 root 57 at key 45  ->  109.9 Hz     (-12 st)
+    #     CALA4 root 69 at key 69  ->  439.8 Hz
+    #
+    # A consistent ~0.8 cent flat reading, which is one digit of the tuner's
+    # 0.1 Hz display -- at 110 Hz a single digit IS 1.6 cents. Root placement
+    # and pitch ratio are both correct.
+    #
+    # Worth the note because the AKAI writer had exactly this field's analogue
+    # WRONG until the same day: it wrote the sample's root and ignored the
+    # zone's, and every multisample came out with a different error per
+    # keygroup. The two writers share the architecture; only one shared the bug.
     entry[14] = min(127, zone.root_key)
     return bytes(entry)
 
