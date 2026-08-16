@@ -175,6 +175,26 @@ minutes. **An offered finding is a hypothesis about your code, not a report
 about it** — and the one that landed was the one where I had already convinced
 myself we were clean.
 
+### A quantity can be right where it is computed and wrong where it is read
+
+`build_akai_hd_image` returned `len(plan)` as the number of partitions used.
+That was correct at the top of the function and false by the bottom: the plan
+is padded with empty partitions to fill the disk's slots on the way through, so
+by the return statement the same expression meant the SLOT count. The fix is a
+variable captured before the padding, not a cleverer expression at the end.
+
+VinSamLib named the shape after hitting several of their own this week: *a
+quantity that was correct where it was computed and wrong where it was read,
+with nothing in between to say the meaning had changed.* It is the mutable
+cousin of the wrong-population errors above — same symptom, a plausible number
+nobody can see is wrong, arrived at without a crash.
+
+Worth noticing that the same function had ALREADY exported this confusion to a
+caller: `'partitions'` meant slots, VinSamLib's layout preview read it as used,
+and they spent a debugging session on a fill-rule disagreement that did not
+exist. The ambiguity was visible from outside before it was visible from
+inside.
+
 ### A corpus figure must carry its population, in the output
 
 Six wrong numbers crossed these three projects in two days and every one was a
