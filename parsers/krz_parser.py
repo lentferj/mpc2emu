@@ -596,6 +596,7 @@ class _KrzLayer:
         self.filter_resonance = 0.0
         self.filter_env_amount = 0.0
         self.velocity_to_filter = 0.0
+        self.velocity_to_filter_min = 0.0
         # DECLARED HERE OR SILENTLY DISCARDED. This intermediate layer is not
         # the model voice: the fields below are copied across one by one when
         # the VoiceLayer is built, so a field assigned during the walk but
@@ -697,15 +698,27 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
                 # that leaves ~640 routings read and discarded -- see TODO,
                 # which carries the count so the decision is sized rather than
                 # guessed at.
-                for _src, _depth in ((seg[5], seg[6]), (seg[10], seg[9])):
+                # THE THIRD ELEMENT IS THE FLOOR, AND IT IS THE POINT.
+                # Slot 2 specifies a RANGE -- MinDpt at zero velocity, MaxDpt
+                # at full -- while slot 1 gives one Depth, which is the same
+                # shape starting from zero. Carrying only the ceiling loses
+                # whether a sweep merely opens the filter or also closes it,
+                # and a unipolar sweep re-centred on a bipolar destination
+                # drives the corner below a floor the source never crosses.
+                # That silenced a zone on an S3000XL (see AKAIVELFILT).
+                for _src, _depth, _floor in ((seg[5], seg[6], 0),
+                                             (seg[10], seg[9], seg[8])):
                     if not _src:
                         continue
                     _d = _depth - 256 if _depth >= 128 else _depth
+                    _f = _floor - 256 if _floor >= 128 else _floor
                     _amt = max(-1.0, min(1.0, _k2_depth_cents(_d) / 10800.0))
+                    _amt_min = max(-1.0, min(1.0, _k2_depth_cents(_f) / 10800.0))
                     if _src == _K2_CS_ENV2:
                         cur.filter_env_amount = abs(_amt)   # model is 0..1
                     elif _src == _K2_CS_ATTACK_VEL:
                         cur.velocity_to_filter = _amt
+                        cur.velocity_to_filter_min = _amt_min
                     elif _src == _K2_CS_LFO1:
                         cur.lfo1_to_filter = _amt
                     elif _src == _K2_CS_LFO2:
@@ -1009,6 +1022,7 @@ def parse_krz(path: str) -> Bank:
                     filter_resonance=layer.filter_resonance,
                     filter_env_amount=layer.filter_env_amount,
                     velocity_to_filter=layer.velocity_to_filter,
+                    velocity_to_filter_min=layer.velocity_to_filter_min,
                     lfo1_to_filter=layer.lfo1_to_filter,
                     lfo2_to_filter=layer.lfo2_to_filter,
                     lfo1_to_pitch=layer.lfo1_to_pitch,

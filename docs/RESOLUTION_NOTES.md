@@ -113,6 +113,8 @@ survive being carried between them.*
 - [§RULER — a ruler that saturates against its source is measuring the source](#ruler-a-ruler-that-saturates-against-its-source-is-measuring-the-source)
 - [§AGREEMENT — what a second source actually rules out](#agreement-what-a-second-source-actually-rules-out)
 - [§AKAIAUX — first read of the four auxiliary file types (2026-08-17)](#akaiaux-first-read-of-the-four-auxiliary-file-types-2026-08-17)
+- [§AKAIVELFILT — a zone that fires and makes no sound (2026-08-17)](#akaivelfilt-a-zone-that-fires-and-makes-no-sound-2026-08-17)
+- [§AKAIVELZONE — overlapping velocity zones LAYER on the S3000XL (2026-08-17)](#akaivelzone-overlapping-velocity-zones-layer-on-the-s3000xl-2026-08-17)
 - [§AKAISTEREO — the sampler does NOT pair `-L`/`-R` (2026-08-17, measured)](#akaistereo-the-sampler-does-not-pair--l-r-2026-08-17-measured)
 - [§AKAIRESAVE — the `??` regions, answered on an S3000XL (2026-08-17)](#akairesave-the-regions-answered-on-an-s3000xl-2026-08-17)
 - [§K2DSP — the K2000 F1 slot is a DSP block, not a filter (2026-08-16, measured)](#k2dsp-the-k2000-f1-slot-is-a-dsp-block-not-a-filter-2026-08-16-measured)
@@ -8473,6 +8475,217 @@ Written up as a procedure with the value choices and their reasoning:
 `MULTI FILE.M3` is 4096 bytes and almost entirely zero past its header — an
 empty multi, which is what an unconfigured machine would write, and equally
 uninformative for the same reason.
+
+## §AKAIVELFILT — a zone that fires and makes no sound (2026-08-17)
+
+**Two faithful translations composed into something the source never did, and
+nothing in our tooling could see it.**
+
+Jan auditioned a converted K2000 cymbal program on the S3000XL: three velocity
+zones, and zone 1 (velocities 0–63) produced nothing. The panel's zone-activity
+bars showed it firing.
+
+### What it was not
+
+Everything checkable from the file was correct, and the obvious explanations
+were wrong in a way worth recording:
+
+| ruled out | evidence |
+|---|---|
+| a soft sample | zone 1 carries the **loudest** of the three: peak −4.2 dBFS vs −9.8 and −6.2 |
+| leading silence | first sample over −40 dB at frame 1, peak at frame 40 |
+| play range | `start 0`, `end 491985`, against 491986 frames |
+| the two-name defect | directory, header and zone reference all read `CYMB.STICK 1` |
+| per-zone level | `VLOUD` is 0 on all four zones |
+| RAM exhaustion | 7.74 MB of samples against 31.75 MB free |
+| level generally | **Jan's test**: zones 2/3 disabled, zone 1 loudness to +50 — against a measured 39.81 dB span — still silent |
+
+### What it was
+
+The **filter**. `FILFRQ 48`, translated faithfully from the source's own cutoff
+of 0.2107 through a measured law, plus full-depth velocity tracking. At zone 1's
+velocities the filter is nearly shut, and a cymbal is nothing *but* high
+frequencies. The source is dark by design; the conversion takes it to inaudible.
+
+**Neither half is a bug on its own.** The cutoff translation is right, and the
+velocity tracking is what the source asked for.
+
+### Root cause: the model collapses a RANGE into a scalar
+
+The source does not carry "velocity→filter depth". It carries a **pair**:
+
+```
+Src2 = AttVel     MinDpt = 0 ct     MaxDpt = +10800 ct     base cutoff = 196 Hz
+```
+
+`MinDpt = 0` makes the modulation **unipolar** — velocity only ever *opens* the
+filter, and 196 Hz is a floor the K2000 never goes below:
+
+| velocity | K2000 cutoff | as an AKAI byte |
+|---:|---:|---:|
+| 0 | 196 Hz | 48 |
+| 30 | 856 Hz | 69 |
+| 64 | 4545 Hz | 99 |
+| 127 | ~100 kHz (wide open) | 99 |
+
+**`MODVFILT1` is bipolar about a velocity pivot.** We wrote `FILFRQ 48` — the
+source's value at velocity *zero* — and then hung a bipolar depth on it. So
+below the pivot our cutoff falls **below 196 Hz**, somewhere the source never
+goes, and zone 1 lives entirely down there.
+
+`velocity_to_filter` is a single scalar, so `(0, 10800)` and `(-5400, +5400)`
+both normalise to the same number. The first only opens; the second closes as
+much as it opens. **They are different patches and the model cannot tell them
+apart.**
+
+**This is the direct consequence of a decision recorded here this morning.**
+§K2DSP left `MinDpt`/`DptCtl` deliberately unwired, reasoning that "MinDpt and
+MaxDpt as a *pair* have nowhere to go in a model that carries one scalar depth."
+That was true, and the missing pair is exactly what makes a converted program
+silent. The gap was identified, the consequence was not.
+
+### CORRECTION: the `25` is measured, and it is not the fault
+
+An earlier version of this section said the `25` had "no rationale in the code",
+and that was **wrong** — written after reading the assignment and not the
+comment above it. `writers/akai_s3000_writer.py` records a hardware measurement
+on an S3000XL (P019, one keygroup, one zone) at `FILFRQ 48`:
+
+```
+byte151  0 -> v30 -68.7 dBFS   v120 -45.2
+byte151 12 -> v30 -72.8        v120 -23.1
+byte151 25 -> v30 -73.4        v120 -22.0
+byte151 50 -> v30 -72.8        v120 -22.1
+```
+
+The field **saturates**: past roughly 12–25 the sweep stops growing because the
+quiet end has bottomed out, so ±50 is mostly unusable and 25 is full scale in
+practice. `25` is calibrated to the reachable range rather than the declared
+one, and doubling it does nothing — rows 25 and 50 are the same to 0.1 dB.
+
+**And the same table contains the actual fault, unremarked at the time.** At
+`byte151 = 0` — no velocity modulation whatever — `v30` already reads
+**−68.7 dBFS**. The quiet end was inaudible *before* any modulation was applied.
+So `MODVFILT1` never silenced anything: **`FILFRQ 48` did**, and the modulation
+merely deepened it by 4 dB.
+
+The measurement showed the symptom on 2026-08-16 and it was read as a property
+of the field (saturation) rather than as a consequence of the base. It is both,
+and only the base is ours to choose.
+
+### What is actually wrong: the base is the floor of the sweep
+
+We set `FILFRQ` from the source's cutoff at velocity **zero** — the bottom of a
+unipolar sweep — and then modulate about it. For this program that is 196 Hz on
+a cymbal, which has nothing to pass. The source spends almost none of its
+velocity range there; at the pivot it is at 4.5 kHz.
+
+**The writer's own comment already anticipates the fix:** *"the saturation point
+moves with the base — at `FILFRQ` 72 it is ~25, at 48 it is ~12 — so this is
+scaled to the range that is reachable rather than the range the field
+declares."* Choose a better base and the reachable range grows, and the depth
+calibration must move with it. The two are not independent.
+
+**`MODVFILT1`'s depth in cents has still never been measured** — s3ked confirms
+it is absent from `scales.py`; §109 gives only the ±50 clamp, and a clamp is a
+range limit, not a scale. What is measured is its *audible* saturation at one
+base, which is what `25` encodes.
+
+What *is* measured is `FILFRQ` itself: `Hz = 6.4597 · exp(0.071 · FILFRQ)`,
+r² 0.99984, so one octave is **9.76 FILFRQ units**. If a `MODVFILT1` unit is a
+`FILFRQ` unit — a reasonable guess and still a guess:
+
+```
+our 25    ->  2.56 octaves
+50        ->  5.12 octaves
+source    ->  9 octaves (10800 ct) = 87.9 units
+FILFRQ 0..99 end to end = 10.14 octaves
+```
+
+**A ±9-octave sweep cannot be expressed on this machine at all** — the whole
+`FILFRQ` range is 10.14 octaves, so no centre leaves 88 units of headroom both
+ways. So the honest model is a **documented lossy clamp** that reports what it
+could not represent, not a scale factor.
+
+**Do not simply double it.** More depth closes the filter *further* below the
+pivot, which is exactly Jan's symptom — a "more faithful" constant would have
+deepened the fault it was meant to fix, and the only test that catches that is a
+listening test nobody would re-run after a constant change.
+
+### The measurement, when it happens
+
+Fix `FILFRQ` mid-range with headroom both ways, set `MODVFILT1` to a few values,
+sweep velocity, track the corner by **resonance peak** rather than spectral
+centroid (§108: the centroid misleads at both ends). That gives octaves per unit
+directly, and `FILFRQ`'s fitted law converts to cents for free.
+
+**Measure away from both ends of `FILFRQ`.** `scales.py` records an `ATTAK2`
+case where `MODVFILT1` 18 vs 25 disagreed threefold and looked like
+depth-dependence — it was the corner saturating at the top of the filter's own
+range. Measured at an end, the ceiling gets measured instead of the field.
+
+### Superseded framing: "are we writing half the authored depth"
+
+```
+K2000 VelTrk    -10800 .. +10800 cents
+krz_parser      cents / 10800    ->  -1.0 .. +1.0
+akai writer     _vf * 25         ->  -25 .. +25
+MODVFILT1       accepts          ->  -50 .. +50
+```
+
+Full K2000 depth lands on half the AKAI field, and **the `25` has no rationale
+in the code**. Raised by Jan. Blocked on measuring what `+50` spans in cents.
+
+**Do not simply double it.** The field is bipolar about a velocity pivot: more
+depth closes the filter *further* below the pivot, so a wrong guess makes soft
+notes **more** inaudible — the exact symptom this started from. The first
+instinct here was to double it, and it would have made the thing worse while
+looking like a fix.
+
+### Why no detector caught it
+
+`silence_audit.py` exists for this class and finds nothing: no dangling
+reference, no empty PCM, no velocity gap, no unreachable zone. Every check
+passes because every *component* is correct. **A converted program can be
+structurally perfect and still silent**, and the only thing that found it was a
+person playing it.
+
+## §AKAIVELZONE — overlapping velocity zones LAYER on the S3000XL (2026-08-17)
+
+**Confirmed by ear on the machine: velocity zones inside one keygroup are not
+exclusive.** Where two zones' ranges overlap, both sound.
+
+The case that raised it was a converted K2000 program whose three voices are
+authored to overlap:
+
+```
+zone1  vel  0-63    CYMB.STICK 1
+zone2  vel 64-127   CYMB.STICK 2
+zone3  vel 96-127   CYMB.STICK M     <- entirely inside zone 2's range
+```
+
+That overlap is **in the source** — the K2000 bank layers voices 2 and 3 above
+velocity 96 deliberately — and our writer reproduces it as three zones in one
+keygroup. The open question was whether the AKAI honours it or picks the first
+matching zone, because if it picked one we would be silently dropping a layer:
+every sample present, nothing dangling, no error anywhere, just a thinner sound
+than the source. Same shape as the `-L`/`-R` defect in §AKAISTEREO.
+
+It honours it. **So mapping overlapping source voices onto velocity zones within
+a keygroup is correct**, and no separate-keygroup workaround is needed for the
+overlapping case. The `>4 layers` spill into additional keygroups stays right
+for its own reason — a keygroup holds only four zones.
+
+Worth recording as a positive result rather than left as an assumption: the
+behaviour was never verified before, and "the zones are all present in the file"
+would not have detected the alternative.
+
+### Incidental, from the same program: a keygroup count is not a layer count
+
+The program is named `3-VEL...` and the panel shows **1 keygroup**, which reads
+as wrong until you look at the zone page. Three velocity layers live *inside*
+one keygroup, four to a keygroup. `KEYGROUPS: 1` is the correct display for a
+three-way velocity split.
 
 ## §AKAISTEREO — the sampler does NOT pair `-L`/`-R` (2026-08-17, measured)
 

@@ -724,7 +724,27 @@ class VoiceLayer:
     non_transpose: bool = False  # vpar[38]=1 in E4B: pitch does not follow key
     # Filter modulation (EOS mod cords into Filter-Freq; -1.0..+1.0 = ±100%)
     filter_keytrack: float = 0.0     # Key → Filter-Freq  (cord 06)
-    velocity_to_filter: float = 0.0  # Velocity → Filter-Freq (cord 04)
+    # VELOCITY -> FILTER IS A RANGE, NOT A DEPTH.
+    #
+    # `velocity_to_filter` is the depth reached at FULL velocity. The floor the
+    # modulation starts from is `velocity_to_filter_min`, and the two together
+    # are what a source actually specifies:
+    #
+    #   K2000 Src2:  (MinDpt, MaxDpt)      e.g. (0, +10800 ct) -> (0.0, +1.0)
+    #   K2000 Src1:  (0, Depth)            a single depth is the same shape
+    #
+    # CARRYING ONLY THE DEPTH LOSES THE POLARITY. `(0, +10800)` only ever OPENS
+    # the filter; `(-5400, +5400)` closes it as much as it opens. Both collapse
+    # to the same scalar, and they are different patches. A converter that
+    # re-centres a unipolar sweep on a bipolar destination drives the corner
+    # BELOW a floor the source never crosses -- which on a cymbal is silence,
+    # found on hardware 2026-08-17 (see RESOLUTION_NOTES.md AKAIVELFILT).
+    #
+    # Both are normalised on 10800 cents (+-9 octaves), the K2000's own range.
+    # Default (0.0, 0.0) is "no modulation" and is what every non-KRZ parser
+    # leaves them at, so nothing changes for those paths.
+    velocity_to_filter: float = 0.0      # depth at full velocity (cord 04)
+    velocity_to_filter_min: float = 0.0  # depth at zero velocity; 0 = unipolar
     # LFO1 (EOS Primary Zone Table PZT[42:46]; hardware-RE'd 2026-06-10 from
     # B.011-LFO1 settings.E4B).  None on a field = leave the EOS hardware default
     # (rate 4.12 Hz, triangle, no delay/variation, key-sync) so voices from

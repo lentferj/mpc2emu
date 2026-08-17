@@ -39,7 +39,7 @@ from pathlib import Path
 from typing import Optional
 
 from models.common import (Bank, LoopType, SampleData, safe_filename,
-                           E4B_CUTOFF_MIN_HZ, E4B_CUTOFF_MAX_HZ)
+                           E4B_CUTOFF_MIN_HZ, E4B_CUTOFF_MAX_HZ, hz_to_e4b_cutoff)
 from parsers.akai_s3000_parser import (
     str_to_akai, AKAI_NAME_LEN, SAMPLE_HEADER_LEN, PROGRAM_COMMON_LEN,
     KEYGROUP_LEN, _ZONE_OFFSETS, _BLOCK_ID_PROGRAM, _BLOCK_ID_KEYGROUP,
@@ -286,6 +286,63 @@ def _invert_exp_law(value: float, law) -> int:
         return lo
     param = math.log(value / a) / b
     return int(round(max(lo, min(hi, param))))
+
+
+#: VELOCITY -> FILTER, MEASURED 2026-08-17 (s3ked, sawtooth, two velocities).
+#:
+#:     cents_shift = 4.368 * MODVFILT1 * (velocity - 64.56)
+#:
+#: The PIVOT was SOLVED FOR rather than assumed -- two runs differing only in
+#: velocity, then differenced -- and it lands on 64.56 against a 64 measured
+#: independently on other fields.
+#:
+#: An earlier guess that a MODVFILT1 unit equals a FILFRQ unit was wrong by
+#: 2.2x. It was flagged as a guess and it still produced confident numbers, so
+#: nothing here is derived from it.
+#: Keygroups whose requested velocity->filter span did not fit, reported
+#: after a build rather than clipped in silence.
+_velfilt_clipped = []
+_AKAI_VELFILT_CENTS = 4.368        # cents per depth-unit per velocity-unit
+_AKAI_VELFILT_PIVOT = 64.56        # the velocity the field pivots about
+
+
+def akai_velocity_filter(cutoff_pos: float, vel_min: float, vel_max: float):
+    """(cutoff_pos, MinDpt, MaxDpt normalised on 10800 ct) -> (FILFRQ, MODVFILT1, lost_ct).
+
+    THE SOURCE SPECIFIES A LINE, NOT A POINT. A K2000 velocity->filter routing
+    runs from `vel_min` at velocity 0 to `vel_max` at velocity 127, and the
+    machine's resting cutoff is the value at velocity ZERO. `MODVFILT1` is
+    bipolar about velocity 64.56, so reproducing that line means matching its
+    SLOPE with the depth and placing `FILFRQ` where the source is AT THE PIVOT
+    -- not where the source starts.
+
+    Writing the source's velocity-zero cutoff into `FILFRQ` and hanging a
+    bipolar depth on it, which this writer did until 2026-08-17, drives the
+    corner BELOW a floor the source never crosses. On a cymbal that is silence,
+    and it was found by ear on hardware, not by any static check
+    (RESOLUTION_NOTES AKAIVELFILT).
+
+    Returns the two bytes plus how many cents of the requested span could not
+    be represented, so the caller can say so rather than clip quietly.
+    """
+    span_ct = (vel_max - vel_min) * 10800.0
+    if not span_ct:
+        return akai_filter_byte(cutoff_pos), 0, 0.0
+
+    # Depth from the SLOPE: the source covers span_ct over 127 velocity units.
+    depth = span_ct / (127.0 * _AKAI_VELFILT_CENTS)
+
+    # FILFRQ from where the source sits AT THE PIVOT, not at velocity 0.
+    base_hz = E4B_CUTOFF_MIN_HZ * (E4B_CUTOFF_MAX_HZ / E4B_CUTOFF_MIN_HZ) ** \
+        max(0.0, min(1.0, cutoff_pos))
+    pivot_ct = vel_min * 10800.0 + span_ct * _AKAI_VELFILT_PIVOT / 127.0
+    pivot_hz = base_hz * 2.0 ** (pivot_ct / 1200.0)
+    f_byte = akai_filter_byte(hz_to_e4b_cutoff(pivot_hz))
+
+    d_byte = _clamp(int(round(depth)), -50, 50)
+    # What the clamp cost, in the source's own units, for the caller to report.
+    lost = abs(depth - d_byte) * 127.0 * _AKAI_VELFILT_CENTS
+    return f_byte, d_byte, lost
 
 
 def akai_filter_byte(cutoff_pos: float) -> int:
@@ -971,7 +1028,8 @@ _PROGRAM_HW_DEFAULTS = {
 
 
 def _program_common(name: str, n_keygroups: int, lo_key: int, hi_key: int,
-                    lfo1_rate=None, prog_num: int = 0) -> bytearray:
+                    lfo1_rate=None, prog_num: int = 0,
+                    midi_channel=None) -> bytearray:
     """The 192-byte program common block, filled with the format's own
     documented defaults rather than zeros."""
     p = bytearray(PROGRAM_COMMON_LEN)
@@ -1048,7 +1106,17 @@ def _program_common(name: str, n_keygroups: int, lo_key: int, hi_key: int,
     # S3000XL whose own program 0 holds 0 (channel 1): that is the channel that
     # program was created with, not a different convention. Omni is the right
     # default for a converted program, which has no channel of its own.
-    p[0x10] = 0xff                      # MIDI channel: omni
+    # OMNI IS RIGHT FOR A CONVERTED PROGRAM AND WRONG FOR A MEASUREMENT ONE.
+    # A converted program has no channel of its own, so omni is the sane
+    # default. But omni also means EVERY resident program answers EVERY note,
+    # which is this project's worst measurement incident: s3ked's 18 is titled
+    # "RETRACTION: every audio measurement before this was of the wrong
+    # program" -- eleven programs all answering, so every note sounded program
+    # 0 buried under ten others, and two sections were withdrawn.
+    #
+    # `midi_channel` lets a bench disc give each program a channel nobody else
+    # uses. Production output keeps omni.
+    p[0x10] = 0xff if midi_channel is None else _clamp(int(midi_channel), 0, 15)
     p[0x11] = 31                        # polyphony
     p[0x12] = 1                         # priority: normal
     # Play range is a filter over the whole program, not a description of the
@@ -1169,9 +1237,19 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
     # NOT WIRED. It is twenty minutes old and retracts a law of their own; our
     # model carries `filter_resonance` and drops it for AKAI today. Recorded as
     # available.
-    k[0x07] = (akai_filter_byte(voice.filter_cutoff)
-               if voice is not None and getattr(voice, 'filter_cutoff', None) is not None
-               else 99)     # wide open (HW-confirmed) when unknown
+    # FILFRQ AND BYTE 151 ARE CHOSEN TOGETHER, because the source specifies a
+    # LINE across velocity and this machine expresses it as a resting corner
+    # plus a bipolar depth about velocity 64.56. Picking the corner without the
+    # depth is what silenced a zone: see akai_velocity_filter().
+    _cut = getattr(voice, 'filter_cutoff', None) if voice is not None else None
+    if _cut is None:
+        k[0x07] = 99                 # wide open (HW-confirmed) when unknown
+    else:
+        _vmin = getattr(voice, 'velocity_to_filter_min', 0.0) or 0.0
+        _vmax = getattr(voice, 'velocity_to_filter', 0.0) or 0.0
+        k[0x07], _vf_byte, _vf_lost = akai_velocity_filter(_cut, _vmin, _vmax)
+        if _vf_lost > 50:
+            _velfilt_clipped.append((index + 1, _vf_lost))
     # VELOCITY -> FILTER FREQUENCY, KEYGROUP BYTE 151. Written since 2026-08-16;
     # before that a source's velocity-to-cutoff modulation was silently dropped
     # and every converted program got a STATIC corner.
@@ -1204,9 +1282,11 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
     #
     # Per KEYGROUP, verified: writing keygroup 1 left keygroup 2 untouched, and
     # the field clamps to +-50 on write (90 read back as 50).
-    _vf = getattr(voice, 'velocity_to_filter', 0.0) if voice is not None else 0.0
-    if _vf:
-        k[151] = _clamp(int(round(_vf * 25)), -50, 50) & 0xFF
+    # Depth from the same joint solve as FILFRQ above. The old `_vf * 25` was
+    # calibrated to the saturation seen at ONE dark base -- and that base was
+    # itself the fault, so the constant was fitted to a symptom.
+    if _cut is not None and _vf_byte:
+        k[151] = _vf_byte & 0xFF
     # Amp envelope, from the source, through the HW-measured laws. These were
     # FIXED defaults until 2026-08-11 -- every converted program got the same
     # envelope and the same wide-open filter whatever the source asked for,
@@ -1404,7 +1484,8 @@ def _root_offset_units(z, sample_roots: Optional[dict]) -> int:
 
 
 def build_program(preset, name: str, prog_num: int = 0,
-                  sample_roots: Optional[dict] = None) -> bytes:
+                  sample_roots: Optional[dict] = None,
+                  midi_channel=None) -> bytes:
     """One Preset -> a complete `.a3p` file.
 
     `prog_num` is the MIDI program number written to PRGNUM; pass each
@@ -1607,7 +1688,7 @@ def build_program(preset, name: str, prog_num: int = 0,
     _lfo = next((v.lfo1_rate for v in preset.voices
                  if getattr(v, 'lfo1_rate', None) is not None), None)
     out = _program_common(name, len(keygroups), lo, hi, lfo1_rate=_lfo,
-                          prog_num=prog_num)
+                          prog_num=prog_num, midi_channel=midi_channel)
     dead: list = []
     for i, ((klo, khi), owner, zs) in enumerate(keygroups):
         out += _keygroup(klo, khi, zs, i, voice=owner, dead_key_ranges=dead)
