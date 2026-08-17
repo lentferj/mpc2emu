@@ -8265,22 +8265,183 @@ behaviour** — it preserves the user's settings and asks nothing of us.
 A configure-and-diff session was proposed for this and was the wrong use of
 bench time. Recorded so it is not proposed again.
 
-The layout then came free from a photograph of the `DRUM INPUT SETTINGS` page
-next to the bytes, no experiment at all. Record = `60 50 25 2 4 10 10 0 0`:
+The layout came from a photograph of the `DRUM INPUT SETTINGS` page next to the
+bytes, plus two confirmation reads over `RDDATA` (no save, no card movement).
 
-| byte | screen | note |
+**Header, `0x00`–`0x0f`:**
+
+| offset | field | evidence |
+|---|---|---|
+| `0x00` | unit marker, `01` | recurs at `0x58` — a *unit* header, not a file header |
+| `0x01`–`0x02` | `00 00` | unknown |
+| `0x03`–`0x0e` | 12-char AKAI name | decoded |
+| `0x0f` | **`chan`, GLOBAL, 0-based** | **observed**: `chan 1→9` moved this byte `0→8` |
+
+**Records, 16 of 9 bytes at `0x10 + 9(n-1)`**, in two banks of eight
+(units 1 and 2). Baseline `60 50 25 2 4 10 10 0 0`:
+
+| byte | field | evidence |
 |---:|---|---|
-| 0 | `note: C_3` = 60 | MIDI note the trigger fires |
-| 1 | `sens: 50` | |
-| 2 | `trig: 25` | |
-| 3 | `V-curve: 3` → 2 | **0-based**, displayed 1–4 |
-| 4 | `capture: 4mS` | |
-| 5 | `recover: 10mS` | |
-| 6 | `on-time: 10mS` | |
-| 7 | `chan: 1` → 0 | **0-based** |
-| 8 | — | unknown; also the byte truncated on record 16 |
+| 0 | `note`, raw MIDI number | **observed**: `C_3→C_1` moved it `60→36` |
+| 1 | `sens` | *inferred* — 50 appears once in the record and once on screen |
+| 2 | `trig` | *inferred* — same, 25 |
+| 3 | `V-curve`, **0-based** | **observed**: `3→1` moved it `2→0` |
+| 4 | `capture` (mS) | *inferred* — same, 4 |
+| 5 | `recover` **or** `on-time` | **order undetermined** — both read 10 |
+| 6 | the other of the two | " |
+| 7 | unknown | `0` in all 16 records |
+| 8 | unknown | `0` in all 16; also the byte truncated on record 16 |
 
-**And `unit: 1` explains the structure.** The two banks of eight are trigger
+So: **two fields observed directly, three inferred from a unique value match,
+two identified as a pair but not separated, and two unknown.** Stated that way
+because "seven of nine named" reads as stronger than the evidence is — bytes 5
+and 6 both hold 10, so nothing yet distinguishes `recover` from `on-time`.
+
+### Three things this got wrong before getting them right
+
+**`chan` is not per-input.** The plan was to separate bytes 7 and 8 by moving
+`chan`, since both were `0` and `chan: 1` stored 0-based is also `0`. The
+elimination was sound and its premise was false: `chan` is global, in the
+header, so *neither* byte is it and both are still open. The map came out with
+one more unknown than the experiment was designed to leave.
+
+That is worth more than the byte: **the page mixes scopes.** Editing `chan`
+rewrites a header byte, not sixteen records. Irrelevant to a converter that
+round-trips the file unchanged; the whole difference for anything that edits it.
+
+**Per-file, and per-unit was positively ruled out** rather than merely not
+supported: both `01 00 00` markers were byte-identical across the change, so the
+channel is not stored per bank of eight either. One transmit channel for the
+whole trigger interface, which fits the hardware — sixteen pads, one MIDI
+output. Bracketed across four reads (`00` before, `00` after the note and
+V-curve edits, `08` after `chan→9`, `08` again a minute later), so it is a
+stable stored value and not a transient.
+
+**0-based is now confirmed twice, independently.** `V-curve` moved two steps,
+`chan` moved eight. Two fields, different ranges, same convention.
+
+**`input: ALL` is a page scope selector, not a stored parameter.** With `input`
+set to 1, exactly one record changed — and *nothing in the 162 bytes encodes
+"input 1"*. An absence, which is not what either predicted branch looked for.
+Whether `ALL` writes all sixteen at once is untested.
+
+### Byte 7 or 8 of a record is a DIVISOR — the bytes that looked spare were the live ones
+
+**Writing 42 and 77 into a record's last two bytes crashed the firmware.** Those
+are exactly the two bytes the evidence had been pointing at as padding, and the
+crash is a better answer than the map it interrupted.
+
+Sequence, with the causality corrected after a first write-up got it wrong:
+
+```
+17:19:53  DDATA writes record 1 bytes 7,8 = 42, 77   (acked REPLY 0x16 [0])
+          Jan checks DRUM INPUT SETTINGS  -> neither value visible
+          Jan navigates to DRUM UNIT CONTROL, and onward
+~17:22    Internal Error - divide overflow
+17:23:03  a further probe script cannot even connect: the machine has
+          already stopped answering RSTAT
+```
+
+```
+Internal Error - divide overflow
+Please tell Richard the operations that you performed to reach this state
+Press F8 to continue
+```
+
+**`Press F8 to continue` does not work.** Every keypress re-raised the same
+error — the structure is re-read on each UI action, so the division recurs. It
+took a power cycle.
+
+**Only bytes 7 and 8 were ever written.** A follow-up probe of `0x01`/`0x02`/
+`0x59`/`0x5a` was *attempted and never sent* — the script died before
+connecting, because the machine was already wedged. A first version of this
+section blamed those four bytes and was reasoning from a write that does not
+exist. Corrected here rather than quietly amended, because the wrong version
+had a plausible mechanism and would have survived review.
+
+**Isolated 2026-08-17: it is BYTE 7.** The first crash wrote 42 and 77 together
+and so named neither. Jan spotted that and asked for byte 7 alone; the isolating
+run wrote `0x17 = 42` with `0x18` left at `00` — exactly one byte differing from
+a verified snapshot — and it crashed again.
+
+Same value in each position was the point: 42-then-77 could not have separated
+*position* from *value*, since a divide overflow depends on the divisor's
+magnitude as much as on which field it is. With 42 in byte 7 alone producing the
+assertion, byte 8 never needed testing.
+
+An identity write immediately beforehand round-tripped byte-for-byte, **after**
+the earlier assertion and power cycle, so the transport was demonstrably healthy
+going in and the byte is responsible rather than a machine still upset from the
+first crash. That staging was s3ked's and it is what makes this a single-variable
+result.
+
+So: **byte 7 of a drum record is a divisor in firmware, or feeds one.** Byte 8
+remains unknown and untested — not shown to be padding, merely never probed.
+`DRUM INPUT SETTINGS` never renders them — it exposes exactly seven per-input
+parameters — but another drum page does, and divides by one of them. The crash
+appeared as Jan moved *between* pages, which is what places it there.
+
+**The reading this destroys is the one that was best supported.** Seven visible
+parameters against a nine-byte record, and a write of 42/77 that changed nothing
+on the page: two independent lines both saying *spare*. They were the live
+bytes. A count of visible fields is not a count of stored fields, and a value
+not shown on the page you are looking at is not a value the machine ignores.
+
+**Both lines shared a blind spot — they were both looking at one page** — and
+that is the case cross-checking cannot catch, because agreement between two
+readings with the same blind spot is indistinguishable from confirmation. Two
+sources agreeing raises confidence only when they could have failed
+independently.
+
+**And what falsified the wrong write-up was a timestamp in a log, not anyone's
+judgement.** The account blaming `0x01`/`0x02`/`0x59`/`0x5a` had real offsets, a
+plausible mechanism and a real crash to explain; it was checked, committed, and
+wrong. It fell to the fact that the probe script's connection error was logged
+at 17:23:03 and the values were therefore never sent. Worth more attention than
+the divisor: the reasoning was sound and the premise was false, and only the
+machine's own record of what happened could tell them apart.
+
+**The structure is self-clearing, observed twice.** After each power cycle the
+page read back at factory defaults — note 60, V-curve 2, byte 7 back to `00`.
+Two different crashes, two different reboots, same result, which is the
+difference between *what happened* and *what happens*: the first was a single
+observation and would have been recorded as one.
+
+A bad write here does not persist. That is the safer of the two possibilities
+and is the whole reason this was a cheap experiment rather than an expensive
+one — the worst case was always a power cycle.
+
+### `accepted` vs `effective`, with a fourth corner
+
+The write was **accepted** — `REPLY 0x16`, payload `[0]`, no error — on a route
+that had already swallowed 15, 23 and 40 elsewhere. The firmware then divided by
+it and halted.
+
+`REPLY [0]` acknowledges that the **transfer** was well-formed. It is not a
+statement that the machine can live with the contents. Every write route tested
+here — `PHEADER` taking 15/23/40, `DDATA` taking 42/77 — acknowledges structure,
+never meaning. So acceptance says nothing about **survivability**, not merely
+nothing about effect.
+
+**Operational rule for anything writing a whole AKAI structure:** there is no
+byte-addressable route for drum data — `DDATA` sends all 162 bytes — so every
+write is a whole-structure write, and one invented byte anywhere in it can wedge
+the machine. Read, modify one field, write back. Never fill an unknown byte with
+a probe value on a live machine unless a power cycle is acceptable.
+
+### Where this stops
+
+`.D` does not matter to this converter (above). The remaining questions — what
+bytes 7 and 8 are, and which of 5/6 is `recover` — need panel time on a file we
+only ever copy verbatim. **Deliberately not pursued.** If it is ever wanted, the
+cheap form is one edit on a *different* input, say input 5: it would name the
+leftover bytes if they are fields and simultaneously check that record *n* sits
+at `0x10 + 9(n-1)` for a record other than the first — which every reading so
+far has assumed and only record 1 has demonstrated.
+
+Superseded detail, kept because the arithmetic was the clue:
+
+**`unit: 1` explains the structure.** The two banks of eight are trigger
 units 1 and 2, eight inputs each, so the recurring `01 00 00` is a *unit*
 header rather than a file header — which is why it appears at `0x00` and again
 at `0x58`.
