@@ -113,6 +113,7 @@ survive being carried between them.*
 - [§RULER — a ruler that saturates against its source is measuring the source](#ruler-a-ruler-that-saturates-against-its-source-is-measuring-the-source)
 - [§AGREEMENT — what a second source actually rules out](#agreement-what-a-second-source-actually-rules-out)
 - [§AKAIAUX — first read of the four auxiliary file types (2026-08-17)](#akaiaux-first-read-of-the-four-auxiliary-file-types-2026-08-17)
+- [§NOISESRC — a taper is a de-click on a one-shot and a tremolo on a loop (2026-08-17)](#noisesrc-a-taper-is-a-de-click-on-a-one-shot-and-a-tremolo-on-a-loop-2026-08-17)
 - [§AKAIVELFILT — a zone that fires and makes no sound (2026-08-17)](#akaivelfilt-a-zone-that-fires-and-makes-no-sound-2026-08-17)
 - [§AKAIVELZONE — overlapping velocity zones LAYER on the S3000XL (2026-08-17)](#akaivelzone-overlapping-velocity-zones-layer-on-the-s3000xl-2026-08-17)
 - [§AKAISTEREO — the sampler does NOT pair `-L`/`-R` (2026-08-17, measured)](#akaistereo-the-sampler-does-not-pair--l-r-2026-08-17-measured)
@@ -8475,6 +8476,120 @@ Written up as a procedure with the value choices and their reasoning:
 `MULTI FILE.M3` is 4096 bytes and almost entirely zero past its header — an
 empty multi, which is what an unconfigured machine would write, and equally
 uninformative for the same reason.
+
+## §NOISESRC — a taper is a de-click on a one-shot and a tremolo on a loop (2026-08-17)
+
+**Defect, found by ear.** A generated white-noise measurement source had "a
+rhythm to it" (Jan). It did: the generator faded 5 ms in and out to avoid a
+loop-point click, and on a LOOPED sample a fade at both ends is not a de-click —
+it is an amplitude dip at every seam.
+
+```
+tapered,   looped:  minimum 2 ms window  -23.1 dBFS
+untapered, looped:  minimum               -9.8 dBFS      -> 13.3 dB, once per loop
+```
+
+**The taper was never needed.** Joining two random points is a step drawn from
+the same distribution as the noise itself, indistinguishable from any other
+adjacent pair. There is nothing to click. Removed.
+
+### The verification that could not see it
+
+The generator was verified against theory — white measured +3.0 dB/octave in
+equal-width bands, pink flat within 0.5 dB — and that check **passes either
+way**. Flat per Hz, averaged over the whole sample, is entirely compatible with
+the amplitude pumping once a second. **The spectrum was checked and the fault
+was in the envelope.** A source needs both verified, and they are different
+measurements.
+
+### Two numbers that agreed from opposite ends
+
+s3ked first reported 71.2 dB of envelope spread from their recording. Our file
+measured 0.3 dB at the generator, 0.3 dB in the encoded `.S3`, and 0.3 dB
+tapered-and-looped — the dip is 0.5% of windows and cannot move a 5th
+percentile. **The two did not reconcile, and saying so rather than going hunting
+in the generator is what found it:** their analysis window began 200 ms before
+the note sounded, and the silence was the spread. Measured strictly inside the
+sound, their figure is **13.3 dB** — our file-side taper dip to the decimal.
+
+Their own conclusion, worth more than the number: *look at the recording before
+analysing it.* A coarse RMS-per-50 ms picture of the whole capture, four lines
+of text, showed the pre-note silence instantly — and would have caught all three
+of their failed analyses, each of which was an artefact of its own window.
+
+### A control has to match the thing it controls
+
+Their "≈2 dB envelope spread" control is correct for **white** and wrong for
+**pink**, which inherently swings more. A professionally-generated pink
+reference Jan supplied measures **5.7 dB** (48 kHz float, 15 s, rms −22.9 dBFS,
+octave bands flat within 0.3 dB). Our pink measures 7.2 dB — fine. Judged
+against the white control it would have looked broken, and "fixing" it would
+have turned a correct source into a wrong one.
+
+### A recurring shape: the document you reason from is not the document that decides
+
+Three instances in one day, ours and k2kremote's, with the same structure — a
+claim that is TRUE about a specific thing, widened into a false claim about a
+general thing, with the widened version never checked against the source that
+actually settles it.
+
+| the true, narrow claim | the false, widened one | what settled it |
+|---|---|---|
+| our parser treats only playback type 2 as unlooped, so the writer must not emit 0 for a one-shot | therefore 0 is the right value for a looped sample | the hardware, which loops mode 0 only in the release |
+| "the ?? regions are zero-filled by our writer" | true of the keygroup span, false of the common one, where 21 bytes carry measured values | reading the writer's actual output |
+| (k2kremote §6) the name-edit cursor is not in any device reply | therefore the parameter cursor is not readable over MIDI | the message table — `0x17` name, `0x16` value, readable all along |
+
+In every case the reasoning was sound and the premise was drawn from a document
+that did not cover the case. **A round-trip argument settles a round trip and
+says nothing about the machine.** The cost of the third was a render-to-PNG loop
+built to read a cursor the device reports, and 48 wheel clicks that silently
+changed the routing under measurement.
+
+The cheap defence is naming which authority a claim rests on when it is written
+down, so that widening it later is visibly a different claim.
+
+### OPEN: a silent lead-in that scales with pitch, cause unknown
+
+s3ked recorded the pre-correction sample and found silence before the sound
+that **halves with each octave**:
+
+```
+note 36  2070 ms      note 60   610 ms
+note 48  1190 ms      note 72   310 ms
+```
+
+Halving per octave means a fixed number of FRAMES — roughly 27000 — not a time
+constant, so it is sample-domain and not an envelope. The whole capture shows
+sound, decay, silent gap, repeat, about a quarter of each cycle silent.
+
+**This does not reconcile with the file.** Measured on the image as written:
+PCM 88200 frames, audible from frame 0 to 88199, and three independent length
+fields agreeing — `u32 @0x1a` = 88200, `@0x22` = 88199, `@0x2c` = 88200. No
+silence anywhere, and a 5 ms taper cannot produce 610 ms.
+
+Two facts bound it. The recordings predate Jan loading the corrected volume, so
+they may describe a file already replaced. And the mismatch itself is the useful
+part: **saying two measurements do not reconcile is what found the last one**,
+where a 71.2 dB figure turned out to be silence inside an analysis window.
+
+**Candidate, unverified:** `locat` — sample header `0x18`, documented here as an
+absolute RAM address with no known "none" value, which our writer sets to 0.
+§AKAI_S3000_FORMAT lists it as the one remaining offset whose real-disc value we
+have never matched. If the machine treats 0 as an address rather than as unset,
+a playback offset is the shape of fault that would follow. Recorded as a
+candidate and nothing more — the resave test showed the machine resolves pointer
+fields on load, which argues against it.
+
+**To settle it:** re-record the CORRECTED sample at two octaves. If the lead-in
+is gone, the taper explained it after all. If it persists and still halves, it is
+in the header, and `locat` is where to look first.
+
+### Rig caveat, not chased
+
+There is roughly **500 ms between note-on and audible sound** on that rig, where
+its harness assumes 0.15 s. Harmless for a spectrum measured over the held
+portion. **Anything measuring an ATTACK inherits it** — which is exactly what
+the amp- and filter-envelope calibration work does.
 
 ## §AKAIVELFILT — a zone that fires and makes no sound (2026-08-17)
 
