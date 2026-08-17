@@ -112,6 +112,8 @@ survive being carried between them.*
 - [§ENVSPAN — is the EOS envelope byte a RATE or a DURATION? (OPEN, 2026-08-12)](#envspan-is-the-eos-envelope-byte-a-rate-or-a-duration-open-2026-08-12)
 - [§RULER — a ruler that saturates against its source is measuring the source](#ruler-a-ruler-that-saturates-against-its-source-is-measuring-the-source)
 - [§AGREEMENT — what a second source actually rules out](#agreement-what-a-second-source-actually-rules-out)
+- [§AKAIAUX — first read of the four auxiliary file types (2026-08-17)](#akaiaux-first-read-of-the-four-auxiliary-file-types-2026-08-17)
+- [§AKAISTEREO — the sampler does NOT pair `-L`/`-R` (2026-08-17, measured)](#akaistereo-the-sampler-does-not-pair--l-r-2026-08-17-measured)
 - [§AKAIRESAVE — the `??` regions, answered on an S3000XL (2026-08-17)](#akairesave-the-regions-answered-on-an-s3000xl-2026-08-17)
 - [§K2DSP — the K2000 F1 slot is a DSP block, not a filter (2026-08-16, measured)](#k2dsp-the-k2000-f1-slot-is-a-dsp-block-not-a-filter-2026-08-16-measured)
 - [§AKAIVFR — S3000XL velocity→filter is keygroup byte 151 (2026-08-16, measured)](#akaivfr-s3000xl-velocityfilter-is-keygroup-byte-151-2026-08-16-measured)
@@ -8223,6 +8225,142 @@ With only boxes 1 and 3, anything unmeasured gets treated as unknowable and
 anything adjacent to a measurement gets quietly promoted. VinSamLib traced four
 separate defects in one parser to exactly that missing category.
 
+## §AKAIAUX — first read of the four auxiliary file types (2026-08-17)
+
+Saving a volume on the S3000XL produced `TL1.T`, `EFFECTS FILE.X`,
+`DRUM INPUTS.D` and `MULTI FILE.M3` unasked — **machine-authored examples of
+all four types we carry but have never read.** No reference documents any of
+them. Preserved at `/home/lentferj/temp/akai_resave_results/VOLUME_005/`.
+
+### Solid: all four share the program/sample header convention
+
+Decoded with our existing `akai_to_str`, no new charset work:
+
+| file | size | byte 0 | name at `0x03` (12 chars) |
+|---|---:|---:|---|
+| `TL1.T` | 160 | `0x00` | `TL1` |
+| `EFFECTS FILE.X` | 7312 | `0x02` | `EFFECTS FILE` |
+| `DRUM INPUTS.D` | 162 | `0x01` | `DRUM INPUTS` |
+| `MULTI FILE.M3` | 4096 | `0x00` | `MULTI FILE` |
+
+**A 12-character AKAI-charset name at offset `0x03` is universal across every
+block type this format has** — program common, keygroup, sample header, and now
+all four auxiliary types. That is enough to name these files from their own
+contents rather than from the directory entry, which is exactly the split that
+made every sharp in a volume silent (§AKAINAME).
+
+Byte 0 varies and is *not* simply the file type: `.T` and `.M3` both hold
+`0x00`. Not enough evidence to say what it is; recorded, not interpreted.
+
+### `DRUM INPUTS.D` — decoded, and NOT worth acting on
+
+**What the file is for matters more than its layout: drum inputs are a
+trigger-to-MIDI interface, not sample data.** `sens`, `trig`, `capture`,
+`recover`, `on-time` and `V-curve` are analog envelope-detection parameters
+converting a voltage spike from a drum pad into a MIDI note. Nothing this
+converter reads or writes is affected by them, and no target format has an
+equivalent. **Round-tripping `.D` byte-identically is the whole correct
+behaviour** — it preserves the user's settings and asks nothing of us.
+
+A configure-and-diff session was proposed for this and was the wrong use of
+bench time. Recorded so it is not proposed again.
+
+The layout then came free from a photograph of the `DRUM INPUT SETTINGS` page
+next to the bytes, no experiment at all. Record = `60 50 25 2 4 10 10 0 0`:
+
+| byte | screen | note |
+|---:|---|---|
+| 0 | `note: C_3` = 60 | MIDI note the trigger fires |
+| 1 | `sens: 50` | |
+| 2 | `trig: 25` | |
+| 3 | `V-curve: 3` → 2 | **0-based**, displayed 1–4 |
+| 4 | `capture: 4mS` | |
+| 5 | `recover: 10mS` | |
+| 6 | `on-time: 10mS` | |
+| 7 | `chan: 1` → 0 | **0-based** |
+| 8 | — | unknown; also the byte truncated on record 16 |
+
+**And `unit: 1` explains the structure.** The two banks of eight are trigger
+units 1 and 2, eight inputs each, so the recurring `01 00 00` is a *unit*
+header rather than a file header — which is why it appears at `0x00` and again
+at `0x58`.
+
+Eight of nine fields from a screenshot. The two 0-based fields are the kind of
+detail a configure-and-diff run would have produced expensively, and a picture
+of the page produced for nothing. **Ask what the machine already displays
+before designing an experiment to find it out.**
+
+### Superseded: the earlier partial reading
+
+From `0x10`, the unit `3c 32 19 02 04 0a 0a 00 00` repeats — eight times, then a
+3-byte `01 00 00` marker at `0x58`, then the same unit again to the end. The
+tail does not divide evenly, so **the record layout is not resolved** and the
+obvious reading (16 inputs of 9 bytes) does not survive arithmetic: `0x5b` plus
+eight records overruns the file by one byte.
+
+Deliberately left there. Every field in it is the same value in every record,
+because nothing on this machine was configured — a file that varies nowhere
+cannot distinguish a per-record field from a constant, which is the same
+"experiment with no information in it" shape as a zero-filled resave probe. **To
+make this readable, set a few drum inputs to different values on the panel and
+save again.** One volume, no card swap beyond the one already planned.
+
+Written up as a procedure with the value choices and their reasoning:
+`docs/re_procedures/akai_aux_files.md`, decoded by
+`tests/re_banks/akai_aux_diff.py`.
+
+`MULTI FILE.M3` is 4096 bytes and almost entirely zero past its header — an
+empty multi, which is what an unconfigured machine would write, and equally
+uninformative for the same reason.
+
+## §AKAISTEREO — the sampler does NOT pair `-L`/`-R` (2026-08-17, measured)
+
+**Answered on the S3000XL. There is no `-L`/`-R` convention in the firmware.**
+
+Real library discs name stereo halves with a `-L`/`-R` suffix (`PF BDF C 0-L`)
+and there is no stereo flag on disk — the sample header's `0x88` "stereo
+partner" is annotated *internal*, a RAM pointer. So the open question was
+whether writing name-suffixed pairs would be enough and the machine would pair
+them itself. It will not.
+
+Measured by loading a program that references **only the left half**, with the
+right half present on the disc but named by nothing:
+
+```
+after CLR        programs ['TEST PROGRAM'], samples []
+load STPRSHORT   samples ['STPAIR-L']          -R did NOT arrive
+after CLR        programs ['TEST PROGRAM'], samples []
+load STPRLONG    samples ['STEREOLONG-L']      -R did NOT arrive
+```
+
+The `CLR` is load-bearing: memory came back with **zero** samples both times, so
+"arrived" means arrived rather than "was already there". `Cursor Prog+Samps`
+loads exactly what the program references and nothing more.
+
+The two name forms **agree** here — directory and `RSLIST` both give
+`STPAIR-L` — so the absence is real and not the header-versus-directory
+artefact that made every sharp in a volume silent (§AKAINAME). That check is
+the reason to ask for both forms rather than a yes/no.
+
+`STEREOLONG-L` is **twelve characters exactly** and resolved correctly, so the
+name-budget edge is fine in itself: a 10-character base plus the suffix fits.
+
+### The consequence, and it is the silent kind
+
+A program referencing only the left half **loads cleanly, reports no error, is
+not dangling** — nothing it asked for is missing — and plays mono. There is no
+signal anywhere in the chain: not on the machine, not in our `collect()`, not in
+`silence_audit.py`, which looks for zones whose sample is absent.
+
+So writing stereo means **emitting both references explicitly**, and nothing
+downstream will catch a writer that emits one. Any future stereo support needs
+its own check that both halves of a pair are referenced, because the failure
+mode is a quiet halving of the material rather than an error.
+
+Our writer currently mixes stereo down to mono, which is at least honest and is
+unaffected by this. What this closes is the design question above it: the
+name-pairing route works only if we reference both halves ourselves.
+
 ## §AKAIRESAVE — the `??` regions, answered on an S3000XL (2026-08-17)
 
 **Result: our zero-fill is safe. The machine round-trips those bytes verbatim
@@ -8258,8 +8396,65 @@ values KEPT    : 0 1 2 3 4 5 6 7 13
 values CLEARED : 24 25 26 27      (and 76-88 from the other probe)
 ```
 
-So a legal source code includes **0–13**, and **≥24 is rejected**. The boundary
-lies in **14–23, untested** — neither pattern happened to land there.
+So a legal source code includes **0–13**, and **≥24 is rejected**.
+
+**Boundary closed the same day** (s3ked §114, `BOUND` volume): writing 14–23
+into the matrix and reading back showed **14 KEPT, 15–23 CLEARED**. The break is
+between 14 and 15. All three known-good controls (`5`) survived, which is what
+makes it a *per-value* rule rather than a wholesale field clear — with thirteen
+zeros and no controls the two readings are indistinguishable.
+
+**Most of the remaining gap was already answered by the control file, in a
+capture taken an hour earlier for a different purpose.** `RSCTRL` went through
+the same validating load path carrying our `_PROGRAM_HW_DEFAULTS` in that exact
+matrix:
+
+```
+off   4c 4d 4e 4f 50 51 52 53 54 55 56 57 58
+ours   8  6 12  6  3  6  6  6  5  8 10 10  5
+back   8  6 12  6  3  6  6  6  5  8 10 10  5
+```
+
+Every value survived, so **8, 10 and 12 are accepted**. Accepted set: **0–8, 10,
+12, 13, 14**. Cleared: 15–23, 24–27, 76–88. **Only 9 and 11 are untested.**
+
+A clean-0–14 reading still rests on two gaps and stays a prediction. But the
+method point outlives the number: this project ran the `RSCTRL` diff, read
+"0 differing bytes in the common block", and filed it as *nothing to see*. A
+diff that finds nothing is a positive result — it says every value in it
+survived — and we were an hour and a card write away from measuring something
+we had already captured. **Check the captures you have before proposing a
+measurement.**
+
+### Two rejection regimes: the load path validates, the write path does not
+
+s3ked then tested the *write* side (§114). `PHEADER`, the byte-offset SysEx
+write, applies **no validation at all** — 15, 23 and even 40 are all accepted
+and stick in RAM, including values the load path zeroes.
+
+So one field has two regimes depending on how the value arrived. **A value
+written over SysEx sits in RAM and appears to work; the same value written into
+a volume is discarded when that volume loads.** Nothing on the machine says so.
+
+For this converter that has a direct consequence: **the load path is the only
+authority.** We cannot validate our output by poking a value into a live machine
+and watching it stick — that tests the regime our files never travel through.
+Our own `MODSFILT1 = 5` is confirmed *through the load path*, which is the one
+that matters.
+
+### Accepted, preserved, and effective are three different things
+
+Third independent instance of the same distinction, and it is now a rule rather
+than an observation:
+
+| | what it shows | example |
+|---|---|---|
+| **accepted** | a write was not rejected | `K_FREQ` 22 against a documented 0–12 (s3ked §108) — and here it *was* also effective |
+| **preserved** | the save path kept the byte | `0x49` holding 73 through a resave — which says nothing about the machine acting on it |
+| **effective** | the machine's behaviour changed | requires measuring the sound or the display, not the bytes |
+
+`MODVFILT1` clamped to ±50 (s3ked §109) is the fourth corner: accepted, and
+silently altered. **A finding has to say which of the three it measured.**
 
 **A single probe would have got this wrong in both directions.** The offset
 probe alone shows all 13 cleared and reads as "the machine rebuilds this whole
@@ -8268,7 +8463,12 @@ not care". Only together do they show a *value*-dependent rule.
 
 ### What it does NOT validate, and one hypothesis
 
-`0x49 B_PTCHD` kept **73** where the documented range is 0–12. `0x63`–`0x65`,
+`0x49 B_PTCHD` kept **73** where the documented range is 0–12. **Kept is not
+the same as effective**, and the distinction cuts both ways: surviving a resave
+shows the *save path* preserved the byte, not that the machine acts on it.
+s3ked's §108 is the mirror image — `K_FREQ` accepted 22 against a documented
+0–12 and turned out to be genuinely effective — so neither "accepted" nor
+"preserved" settles what a field does. `0x63`–`0x65`,
 the **filter-2** modulation sources, kept values as bogus as the ones cleared
 next door. `0x67`/`0x68`/`0x6d` (reserved) and `0x72` (`PFXSLEV`) also survived.
 
