@@ -54,7 +54,8 @@ from typing import Dict, Iterator, List, Optional, Tuple
 from models.common import (Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            LoopType, Envelope, krz_cutoff_byte_to_hz,
                            krz_reson_byte_to_01, krz_env_byte_to_seconds,
-                           KRZ_RELEASE_FACTOR, hz_to_e4b_cutoff)
+                           KRZ_RELEASE_FACTOR, hz_to_e4b_cutoff,
+                           key_track_to_filter_amount)
 
 
 # ---------------------------------------------------------------------------
@@ -597,6 +598,7 @@ class _KrzLayer:
         self.filter_env_amount = 0.0
         self.velocity_to_filter = 0.0
         self.velocity_to_filter_min = 0.0
+        self.filter_keytrack = 0.0
         # DECLARED HERE OR SILENTLY DISCARDED. This intermediate layer is not
         # the model voice: the fields below are copied across one by one when
         # the VoiceLayer is built, so a field assigned during the walk but
@@ -698,6 +700,29 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
                 # that leaves ~640 routings read and discarded -- see TODO,
                 # which carries the count so the decision is sized rather than
                 # guessed at.
+                # seg[3] IS KeyTrk, IN HALF-CENTS PER KEY.
+                #
+                # Named by the same join that identified VelTrk: seg[3] against
+                # the machine's displayed KeyTrk agreed on 91 of 91 programs,
+                # and the scale is a plain doubling -- displayed cents per key
+                # is exactly seg[3] * 2, on all 45 non-zero observations, ratio
+                # 2.00 every time. Not the depth taper that VelTrk uses; a
+                # straight linear byte.
+                #
+                # Never read until 2026-08-17, and it is on 2455 of 15451
+                # filter slots (15.9%). `filter_keytrack` has existed in the
+                # model throughout and is consumed by the E4B writer, so those
+                # conversions have been losing key tracking as well.
+                #
+                # 100 cents per key is one octave of cutoff per octave of key,
+                # so the conversion goes through the existing
+                # `key_track_to_filter_amount` helper rather than inventing a
+                # scale: byte * 2 / 100 is the oct/oct ratio it expects.
+                _kt = seg[3] - 256 if seg[3] >= 128 else seg[3]
+                if _kt:
+                    cur.filter_keytrack = key_track_to_filter_amount(
+                        _kt * 2.0 / 100.0)
+
                 # seg[4] IS VelTrk: A DIRECT VELOCITY->CUTOFF AMOUNT.
                 #
                 # Read as zero until 2026-08-17, and it is the DOMINANT
@@ -1055,6 +1080,7 @@ def parse_krz(path: str) -> Bank:
                     filter_env_amount=layer.filter_env_amount,
                     velocity_to_filter=layer.velocity_to_filter,
                     velocity_to_filter_min=layer.velocity_to_filter_min,
+                    filter_keytrack=layer.filter_keytrack,
                     lfo1_to_filter=layer.lfo1_to_filter,
                     lfo2_to_filter=layer.lfo2_to_filter,
                     lfo1_to_pitch=layer.lfo1_to_pitch,

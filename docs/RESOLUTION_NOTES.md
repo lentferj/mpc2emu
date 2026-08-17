@@ -113,6 +113,7 @@ survive being carried between them.*
 - [§RULER — a ruler that saturates against its source is measuring the source](#ruler-a-ruler-that-saturates-against-its-source-is-measuring-the-source)
 - [§AGREEMENT — what a second source actually rules out](#agreement-what-a-second-source-actually-rules-out)
 - [§AKAIAUX — first read of the four auxiliary file types (2026-08-17)](#akaiaux-first-read-of-the-four-auxiliary-file-types-2026-08-17)
+- [§KRZFILL — `id − base` is not position, and the failure is silent (2026-08-17)](#krzfill-id-base-is-not-position-and-the-failure-is-silent-2026-08-17)
 - [§NOISESRC — a taper is a de-click on a one-shot and a tremolo on a loop (2026-08-17)](#noisesrc-a-taper-is-a-de-click-on-a-one-shot-and-a-tremolo-on-a-loop-2026-08-17)
 - [§AKAIVELFILT — a zone that fires and makes no sound (2026-08-17)](#akaivelfilt-a-zone-that-fires-and-makes-no-sound-2026-08-17)
 - [§AKAIVELZONE — overlapping velocity zones LAYER on the S3000XL (2026-08-17)](#akaivelzone-overlapping-velocity-zones-layer-on-the-s3000xl-2026-08-17)
@@ -8476,6 +8477,52 @@ Written up as a procedure with the value choices and their reasoning:
 `MULTI FILE.M3` is 4096 bytes and almost entirely zero past its header — an
 empty multi, which is what an unconfigured machine would write, and equally
 uninformative for the same reason.
+
+## §KRZFILL — `id − base` is not position, and the failure is silent (2026-08-17)
+
+**Measured.** A 19-entry K2000 boot macro was loaded and all 441 resident
+programs matched their files' names **positionally, 441/441, verbatim** — no
+normalisation, leading and trailing spaces and embedded quotes intact. That
+proves the join. What it also proves is that the arithmetic everyone reaches
+for first would have been wrong.
+
+```
+bank 200  KPOWFAV  200-237   SOARCFAV 238-266   KURVSFAV 267-269  SYNEXFAV 270-283
+bank 300  LFOALFAV 300-374
+bank 500  XPRGFV01 500-607        <- runs straight through the 599/600 boundary
+bank 600  ANA1FAV  608-619        <- starts after the spill, NOT at its bank base
+```
+
+**`Fill` means "continue from the highest occupied id".** The bank number in a
+macro entry is a *starting hint*, not a destination. So `position = id − base`
+holds under Overwrite into an empty range and fails under Fill — here it would
+have mis-joined **403 of 441 programs**, and mis-joined them *plausibly*: every
+id lands on a real program with a real name, simply the wrong one.
+
+**Join by name, per bank, in order.** It needs no arithmetic, needs nothing
+known about Fill's semantics, and self-checks: names agreeing across a whole
+bank proves the alignment, and names diverging is a finding rather than a silent
+mis-join. Entries that *are* clean Overwrites then serve as a test of the
+arithmetic instead of a dependency on it.
+
+### A disagreement that resolves into the right answer for a different question
+
+k2kremote's first census reported 278/441 and was nearly sent as a Fill anomaly.
+It was a malformed expectation: eighteen files flattened into one global
+sequence, ignoring that they load into different banks, so from index 38 the
+comparison was bank 200's device ids against bank 300's file.
+
+Two things caught it. The mismatch began at exactly **38**, the length of the
+first file — too clean for a loader quirk. And the device name at the first
+"mismatch" was the *next file's first program*, i.e. the chain continuing
+correctly. **A disagreement that resolves into the correct answer for a
+different question is a bug in the question**, and the tell is that the wrong
+answer is too tidy.
+
+The same run also produced a `list_bank` returning `(infos, done)` bound to one
+name, so every bank reported "2 programs" — the arity of a tuple wearing the
+costume of a count. Caught only because two banks reported 2 and the rest
+raised.
 
 ## §NOISESRC — a taper is a de-click on a one-shot and a tremolo on a loop (2026-08-17)
 
