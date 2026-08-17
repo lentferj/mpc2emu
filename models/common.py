@@ -325,7 +325,19 @@ def e4xt_pan_excess_db(pan: float) -> float:
 
 
 def safe_filename(name: str, fallback: str = 'UNNAMED') -> str:
-    """A model name made safe to use as one component of a filename.
+    """NOT FOR SAMPLER-SIDE NAME FIELDS -- host filesystems only.
+
+    This sanitises for a POSIX/Windows filename. Applied to an AKAI directory
+    entry it turned '#' into '_', and '_' is absent from the AKAI charset
+    (0123456789 A-Z#+-.), so the encoder wrote a SPACE -- giving one sample two
+    names, header '5BSHRDF#1' against directory '5BSHRDF 1'. Fifteen samples
+    then failed to load and every sharp in the volume was silent, while every
+    disc-side check passed because the zones referenced the header form.
+
+    A sampler name field has its own charset and its own rules. Encode with that
+    format's own helper, not this one.
+
+    A model name made safe to use as one component of a filename.
 
     Preset and sample names are metadata and may legitimately contain anything
     the source device allowed — an E4XT preset really is called

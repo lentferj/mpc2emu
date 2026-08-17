@@ -111,6 +111,10 @@ survive being carried between them.*
 - [§ENVSPAN — is the EOS envelope byte a RATE or a DURATION? (OPEN, 2026-08-12)](#envspan-is-the-eos-envelope-byte-a-rate-or-a-duration-open-2026-08-12)
 - [§RULER — a ruler that saturates against its source is measuring the source](#ruler-a-ruler-that-saturates-against-its-source-is-measuring-the-source)
 - [§AGREEMENT — what a second source actually rules out](#agreement-what-a-second-source-actually-rules-out)
+- [§K2DSP — the K2000 F1 slot is a DSP block, not a filter (2026-08-16, measured)](#k2dsp-the-k2000-f1-slot-is-a-dsp-block-not-a-filter-2026-08-16-measured)
+- [§AKAIVFR — S3000XL velocity→filter is keygroup byte 151 (2026-08-16, measured)](#akaivfr-s3000xl-velocityfilter-is-keygroup-byte-151-2026-08-16-measured)
+- [§E4BRATE2 — the rate-pitch formula confirmed on machine-authored material (2026-08-16)](#e4brate2-the-rate-pitch-formula-confirmed-on-machine-authored-material-2026-08-16)
+- [§AKAINAME — one sample, one name, and the cached directory that hid it (2026-08-16)](#akainame-one-sample-one-name-and-the-cached-directory-that-hid-it-2026-08-16)
 
 <!-- INDEX:END -->
 
@@ -7692,3 +7696,489 @@ wording and still done nothing, box 2 would be dead.
 With only boxes 1 and 3, anything unmeasured gets treated as unknowable and
 anything adjacent to a measurement gets quietly promoted. VinSamLib traced four
 separate defects in one parser to exactly that missing category.
+
+## §K2DSP — the K2000 F1 slot is a DSP block, not a filter (2026-08-16, measured)
+
+### Addendum 2026-08-17 — the LFO pair, one depth scale, and a lesson about wiring
+
+**A decoded field that reaches no model field is invisible.** Wiring `LFO1`
+(source 114) and `LFO2` (116) took ten minutes; finding out it had not worked
+took an hour. `krz_parser` decodes into a private mutable layer object and then
+builds a `VoiceLayer` from it with an explicit keyword per field. Assigning
+`cur.lfo1_to_filter` during the walk therefore creates an attribute on an object
+nobody reads. Python says nothing, the suite passed at 412, and **0 of the 126
+routings present in a 40-bank sample arrived**. It surfaced only because the
+change was measured on the corpus afterwards instead of being trusted to a green
+suite.
+
+The fix needs BOTH halves — declare the field in the layer's `__init__` and pass
+it to `VoiceLayer(...)`. `tests/test_krz_layer_fields_reach_the_model.py` pins
+the wire rather than these two fields: every attribute the layer declares that
+the model can hold must be forwarded, and every `cur.<name> =` in the walk must
+be declared. Each half has its own negative control, both confirmed to fire.
+
+Note the first version of that test passed vacuously — it located the layer
+class as "the first class with an `__init__`", which matched something else
+entirely, so it intersected an empty set. It is identified by content now
+(the class declaring `filter_cutoff`). A structural test that cannot see its
+subject is worse than no test, because it reports success.
+
+**One depth scale, not two.** Slot 1 read `seg[6] / 127`, slot 2 read
+`_k2_depth_cents(seg[9]) / 10800` — two scales for the same model field
+depending on which slot a program happened to use. `seg[6]` carries the SAME
+taper as `seg[9]`, exact on every measured page (62→3400ct, 46→1800, 42→1400,
+17→45), so the `/127` form was reading a cents-scaled byte as a fraction. Both
+slots now go through `_k2_depth_cents` normalised on 10800. **This also changes
+`filter_env_amount`**, which had the same fault and is populated on ~15% of
+voices.
+
+That last one is the change to watch, and it is NOT confirmed. Across 827
+ENV2→filter routings in a 40-bank sample the depth moves by **−0.114 on
+average (mean 0.776 → 0.663), never upward: 750 shallower, 77 unchanged, 0
+deeper**, worst case −0.287. So every KRZ program with a filter envelope
+converts with a less pronounced sweep than it did yesterday. The reasoning says
+this is a correction — the old `/127` reading has no basis and the cents taper
+is measured against the machine's own pages — but the argument for it is
+arithmetic, whereas the velocity fix that preceded it was settled by +25.3 dB on
+hardware. A one-directional shift across nearly the whole corpus deserves the
+same standard. **Play a KRZ-sourced filter-envelope program before this ships.**
+
+**What is still discarded, and why it is not a parser question.** Full corpus,
+201 banks, 15451 filter F1 slots, 14134 non-OFF routings: **4461 (31.6%) are
+decoded correctly and dropped** for want of a model field.
+
+| source | count | note |
+|---|---:|---|
+| `ON` | 1235 | constant-true — a STATIC corner offset |
+| `MWheel` | 710 | performance controller |
+| `Breath` | 549 | performance controller |
+| `MPress` | 546 | performance controller |
+| `Data` | 463 | performance controller |
+| `PWheel` | 331 | performance controller |
+| `ASR1` / `ENV3` | 258 | second envelope family |
+| tail | 369 | FUN1-4, RandV1, KeyNum, unidentified 8/9/37/97/105/106/126 |
+
+**`ON` should be split off from the rest.** It is always true, so its depth is
+not modulation at all — it is a fixed offset applied to the filter corner, and
+it folds into `filter_cutoff` with no new model field and no target-side
+support. 1235 routings, 8.7% of the total, currently converting as an un-shifted
+filter. That is a bounded, checkable change of exactly the shape already
+validated twice here.
+
+The performance controllers are a different problem: they need a real-time
+modulation concept `VoiceLayer` does not have, and most output targets cannot
+express one either. Deliberately left open rather than answered by inventing
+four fields — the count is recorded so the decision can be sized.
+
+**Still deliberately unwired:** the algorithm byte (a legality check for RE
+work, not a parameter), and `DptCtl`/`MinDpt` — MinDpt and MaxDpt are a *pair*
+describing a depth RANGE, and a model carrying one scalar depth has nowhere
+honest to put them.
+
+
+Three silent defects in `parsers/krz_parser.py`, all found in one evening by
+chasing a single symptom: converted cymbals were inaudible on an S3000XL.
+
+**1. An unknown block type defaulted to a bandpass.** `_K2_FILTER_TO_XPM.get(b0,
+3)` turned any unrecognised `seg[0]` into a 2-pole bandpass with `seg[1]` as its
+cutoff — **10.2% of F1 slots across 80 banks**. Not a dropped parameter, an
+invented one. It never failed loudly because plain lowpass (code 2) is 85% of the
+corpus and a fabricated bandpass sounds plausible. Now refuses and collects the
+code.
+
+**2. Non-filter blocks had their first byte read as a cutoff.** An F1 slot holds
+any DSP block, and the unit follows the block: cents on frequency, semitones on
+pitch, percent on width, dB on amplitude, a multiplier on the shaper. Verified on
+the machine — `AMP(GAIN)` byte 56 reads `56dB`, `EVN(2P SHAPER)` byte −18 reads
+`−18dB`, both 1:1 and neither in cents.
+
+**3. The second modulation source was never read.** `seg[5]`/`seg[6]` are
+Src1/Depth; `seg[10]`/`seg[9]` are Src2/MaxDpt and were ignored. One bank routes
+everything through Src2 — Src1 OFF on all 21 programs — so a 196 Hz corner swept
+open **nine octaves** by attack velocity converted as a static corner. That was
+the audible bug.
+
+### Field map, confirmed against the machine's display
+
+```
+seg[0] block type   seg[1] Coarse    seg[5] Src1     seg[6] Depth
+seg[7] DptCtl       seg[8] MinDpt    seg[9] MaxDpt   seg[10] Src2
+```
+
+Algorithm number: **tag `0x40`, offset 29** — found by intersecting 15 programs
+whose algorithm was read off the display, then validated on **1355 programs,
+100%**. It gives a legality check: a decode producing a function the program's
+algorithm cannot hold is wrong.
+
+Depth scale for frequency blocks: `100 × (byte − 28)` over the linear middle
+(floor 33), a 400-per-step tail at 125–127, compression toward zero below.
+Negatives mirror on magnitude — that branch was an untested assumption until two
+signed file values confirmed it.
+
+`seg[0]` is a **global** namespace, not a per-algorithm index: algorithm 1 carries
+codes 12 and 14, both outside its eight-option range, both on its legal list.
+
+### What was NOT concluded, deliberately
+
+Codes 8, 9 and 13 cluster on the algorithms that offer filters, and algorithm 2's
+F1 is a lowpass — so "lowpass variants" was the obvious reading. They are
+**PARA BASS, PARA TREBLE and PARAMETRIC EQ**. The clustering was evidence about
+which algorithms admit these functions and said nothing about what they are.
+F1 has no fixed chain position either: it is the first control input after pitch,
+so it is a filter on algorithm 2 and a pitch function on 9 and 28.
+
+### Validated against the machine, 574 program-x-layer rows
+
+k2kremote dumped what the K2000's editor actually renders for every layer of 255
+resident programs; `tests/re_banks/krz_machine_diff.py` joins that to our file
+bytes and checks all three source slots, MaxDpt, MinDpt and the algorithm.
+**581 joined rows, 581 agreeing, zero disagreements — every field, every layer:**
+
+```
+layer coverage   1:255  2:184  3:76  4:33  5:12  6:9  7:4  8:2  9-14:1 each
+                 all complete, matching the device's own per-layer counts exactly
+
+field coverage   algorithm 581/581   Src1 581/581   Src2 581/581   DptCtl 581/581
+                 MaxDpt    417/581   MinDpt 417/581   <- FRQ slots only, by design
+```
+
+**The depth fields remain validated on a subset**, because they are only compared
+on frequency slots — the unit differs per function type (cents on FRQ, semitones
+on PCH, percent on WID, dB on AMP/EVN, a multiplier on AMT). Correct behaviour,
+stated rather than left implicit, because the tool now reports coverage alongside
+agreement.
+
+**Getting there took two dumps and three bugs, none found by its own author.**
+The first pass read the F1 page believing it was the ALG page, so the algorithm
+was null on 322 of 577 rows — every layer but the first — and our diff *skipped*
+nulls, so that column passed **by not running**. The second pass sized a soft-key
+retry to four presses against a six-page cycle: fine for layers 1–2, 100% failure
+at layer 3, silently taking layers 4–7 with it. And our own coverage counter,
+built to catch a check that never ran, was blind to a row that never *arrived*
+until layer coverage was added.
+
+Same lesson each time: **a fix can carry a narrower version of the problem it
+fixes**, and the narrowness is invisible from inside the fix.
+
+That matters because every field had been verified on **layer 1 only**, and layer
+1 is demonstrably unrepresentative: code 2 (plain lowpass) is 67% of layer-1 slots
+against 89% of later ones, and the modulation fields are populated 50–60% of the
+time in layer 1 against 12–16% after it. One program carries three different
+functions across four layers.
+
+Getting there took four rounds, and **every disagreement was a table gap rather
+than a map error** — nine control-source codes and six depth nodes the machine
+supplied by disagreeing with us. That is what a correct map looks like when it
+meets new material.
+
+One program is **excluded, not resolved**: PMVOL075 carries two different programs
+both named `*Soft Trumpet` (ids 405 and 475, 2 layers/2P LOPASS and 1 layer/DBL
+NOTCH). The K2000 enforces no name uniqueness, so a `(name, layer)` dict silently
+keeps the last — exactly the collapse s3ked warned about and this tool did anyway
+until three "disagreements" turned out to be one program overwriting another.
+
+`(name, layer)` is therefore **not a valid join key**; the tool now joins on
+`(id, layer)`, which resolves both programs instead of dropping either.
+
+`position = id − bank_base`, **zero-based**, verified three ways: ATMOFEAR's
+programs are self-numbering (`ATMOSFEAR 00`…`50`) and 51 of 51 agree; our own
+first-object identification of another bank matches at 300/301; and diffing the
+machine's id sequence against the file's type-36 order gives **255 programs, 0
+mismatches** across all four banks.
+
+**It holds only because every load went into an EMPTY id range.** Append places
+objects at the next free id, so loading into a partly-occupied range makes ids
+skip around the existing objects and `id − base` silently stops meaning position.
+Nothing announces that.
+
+**Still open:** 4 codes (20, 23, 30, 31 now identified; 61 remains — 0.7% of
+segments) refuse rather than decode. `0x51`'s byte 0 is `0` in 606 of 627 lowpass programs while the F2
+handler only reads resonance when it sees 16, so **resonance is dropped on ~6% of
+lowpass programs**. Not fixed: reading `0x51[1]` as resonance because it sits in
+the right place is the same move that produced defect 1.
+
+## §AKAIVFR — S3000XL velocity→filter is keygroup byte 151 (2026-08-16, measured)
+
+The field is not where inherited S1000 documentation puts it. Offsets 9/10/11
+(`V_FREQ`/`P_FREQ`/`E_FREQ`) are the **S1000** positions and are genuinely dead —
+writing 0, 40 and 88 to offset 9 produced no change at two velocities. The live
+fields are in the **S3000 extension** past the S1000's 150-byte keygroup:
+
+```
+151  Velocity  -> Filter Frequency
+152  LFO2      -> Filter Frequency
+153  Envelope2 -> Filter Frequency
+```
+
+Located because Jan set those three on the panel and the values appeared at
+exactly those offsets. Per keygroup and independent (wrote KG1=40, KG2 unchanged);
+clamps to ±50 (wrote 90, read back 50).
+
+```
+FILFRQ 48   byte151  0  ->  v30 −68.7 dBFS   v120 −45.2
+            byte151 12  ->  v30 −72.8        v120 −23.1   loud end +22 dB
+            byte151 25  ->  v30 −74.1        v120  −1.0
+```
+
+**It saturates.** Past ~12–25 the sweep stops growing because the quiet end has
+bottomed out, so most of the ±50 the field accepts is unusable, and the
+saturation point moves with the base — ~25 at `FILFRQ 72`, ~12 at 48.
+
+An earlier reading at `FILFRQ 72` concluded that positive depth only darkens
+quiet notes and never opens loud ones. That was an artefact of a base already
+open enough to hit the ceiling. **Calibrate at the base the material uses.**
+
+Applied end to end: 21 programs reconverted, 24 bytes pushed to RAM over SysEx
+with no media, **+25.3 dB at v120, reproducible to 0.1 dB** over four interleaved
+A/B pairs.
+
+### Measurement traps paid for tonight
+
+* Spectral centroid is meaningless at the noise floor — a closed filter reported
+  "12429 Hz", which is the centroid of noise. Always read the peak beside it.
+* A depth must be measured at **two velocities**. At one, a live field and a dead
+  one look identical.
+* A sweep measured as the last of an ascending series read 22 dB below the same
+  configuration measured in isolation. The interleaved repeat settled it: the
+  configuration is stable to 0.1 dB and the sweep's analysis window was at fault.
+  Three explanations were proposed and wrong before the repeat was run.
+
+## §E4BRATE2 — the rate-pitch formula confirmed on machine-authored material (2026-08-16)
+
+### Addendum 2026-08-17 (later) — ANSWERED on the E4XT, in both directions
+
+**`[58-59]` is authoritative for playback pitch. `[54-57]` drives the display.**
+Both fields are load-bearing, for different things, and the writer must keep
+emitting both.
+
+eosed ran the mirror. Chain calibrated first against `CD3-PITCHCAL` (pure sines,
+440/220/110 Hz): **−0.8, −0.8, −0.6 cents**. Sines also fixed the estimator —
+harmonic-rich material had been making the autocorrelator lock an octave low.
+
+Then both presets at MIDI 72:
+
+```
+PITCH_A  rate=27500, offset=0     -> 838.84 Hz  (+817.1 cents)   SHARP
+         rate-authoritative predicts 523.25; offset-authoritative 839.1
+PITCH_B  rate=44100, offset=-523  -> 523.25 Hz  (-0.0 cents)     in tune
+         rate-authoritative predicts 839.1; offset-authoritative 523.25
+```
+
+Both followed the OFFSET and ignored the stored rate, **in opposite directions,
+within half a cent of prediction**. The two 44100 controls read −0.9 and −0.7,
+matching calibration. There is no reading of this where the rate field drives
+pitch.
+
+**But `[54-57]` is not inert, and this corrects our own wording.** Same PCM, same
+frame count, different rate field, off Sample Manage:
+
+```
+PITCH_A S002:  2.00secs, left, 27500Hz      55001 / 27500 = 2.00 s
+PITCH_B S002:  1.24secs, left, 44100Hz      55001 / 44100 = 1.247 s
+```
+
+The machine reads both and uses them for different purposes: **offset for what
+you hear, rate for what it tells you.** Calling `[54-57]` "informational" was
+right about pitch and wrong about the field. Writing it carelessly because pitch
+does not depend on it would make the machine report a wrong duration and rate.
+
+**Our writer is correct and needs no change.** `_sample_header` packs `[54-57]`
+from `sample.sample_rate` and derives `[58-59]` from the same value, so the two
+can never disagree. Verified across everything we have written — **22077 sample
+headers in 681 E4B files**: every beyond-tolerance case is either a pre-fix file
+or PITCH_A itself.
+
+**This also validates `--single-cycle` rather than breaking it.** Single-cycle
+bakes tuning into the sample rate, which would be inert if the machine ignored
+the rate entirely — but the writer emits `f58` for every rate ≠ 44100, so the
+machine plays at `44100·2^(f58/768)` = the stored rate, which is exactly what the
+baked tuning assumes. Correct by construction; not separately measured.
+
+**Stale artifacts, worth knowing before anyone reaches for a reference file:**
+~1265 sample headers under `/home/lentferj/temp` are rate=27500 with offset=0 and
+would play 817 cents sharp — the PITCH_A configuration, now measured. All date
+**2026-06-07 to 2026-07-24**, at or before the fix. `B010_hw.E4B` and
+`B011_hw.E4B` are in that set. Do not treat a pre-2026-07-24 E4B from temp as
+reference material.
+
+### Two bench traps from this run
+
+**1. Program Change is page-dependent.** Honoured on the main preset page,
+**IGNORED on Preset Manage / Sample Manage.** Jan caught it — he had to change
+preset by hand before anything sounded. Two measurements taken while it was being
+ignored came back identical to each other, which is last night's void result
+reproduced one day after it was written up. The durable fix is to step presets
+with the panel's own INC key and verify on the LCD, so selection and
+proof-of-selection come from the same place.
+
+**2. A voice's zone is not its root key.** PITCHCHK's two presets are both rooted
+at MIDI 60 but zoned C3-C3 and C4-C4, so P2 is silent at 60 and only sounds at
+72. That silence read as "this preset makes no sound" and nearly became a finding
+about the machine rejecting inconsistent metadata. It was a key range. It did
+turn out useful — the control answers only at 60 and the test only at 72, so
+sound at both proves the preset changed without consulting the display at all.
+Worth designing in deliberately on the next test bank.
+
+### Addendum 2026-08-17 — a self-consistent test file cannot attribute a field
+
+**PITCHCHK.E4B was recorded here as the instrument that would settle which field
+the E4XT reads for pitch. It cannot, and both projects signed off on that before
+anyone read the file.** eosed caught it; verified independently on this side:
+
+```
+PITCHCHK  C4_44100_C3   rate=44100  [58-59]=0     formula=0     AGREE
+          C4_27500_C3   rate=27500  [58-59]=-523  formula=-523  AGREE
+```
+
+The two fields AGREE — which is our writer behaving correctly, and precisely why
+the file answers nothing. If `[54-57]` and `[58-59]` encode the same intent, the
+machine sounds identical whichever one it reads. That is the same property that
+retired the disk route from this question in the first place; PITCHCHK has it
+unchanged, and it was queued for a hardware session anyway.
+
+**The general trap: a correctly-written file is the worst possible probe for
+which field is authoritative.** Attribution needs the fields to CONTRADICT each
+other, so the file must be deliberately malformed in one of two mirrored ways.
+
+The discriminating pair (built by eosed, PCM verified byte-identical to PITCHCHK
+on this side — same sha256 for both samples, only metadata differs):
+
+```
+PITCH_A   C4_R27500_OFF0   rate=27500  [58-59]=0     formula=-523  DISAGREE
+PITCH_B   C4_R44100_OF523  rate=44100  [58-59]=-523  formula=0     DISAGREE
+```
+
+Identical audio in both: a C4 tone laid down at 27500 Hz, rooted MIDI 60, with a
+44100 control sample alongside. Exactly one must come out **817.5 cents sharp**
+(261.63 → 419.6 Hz, ratio 44100/27500 = 1.6036):
+
+| if the machine reads | PITCH_A | PITCH_B |
+|---|---|---|
+| `[58-59]` (the offset) | **sharp** | in tune |
+| `[54-57]` (the rate)   | in tune | **sharp** |
+
+Either outcome names the field, and because it is a within-file comparison
+against the control tone, the capture chain's own tuning cancels out.
+
+**Keep PITCHCHK — just file it correctly.** It is a valid end-to-end check that
+a file we wrote plays in tune through the whole chain. It is not field
+attribution. Two different questions that a single file looked like it answered
+at once.
+
+Also on the card: `CD3-PITCHCAL`, three sine tones at 440/220/110 Hz rooted at
+69/57/45, correct by construction — an absolute calibration for the capture
+chain. **Run it first.** Last night's −14 cents could have been the chain or the
+sample, with no way to tell them apart; PITCHCAL removes that ambiguity before
+either bank is measured.
+
+All three banks are on the Zulu SD in HD0.img (plain FAT32, written with mtools,
+no existing file touched) as `B.020-PITCHCHK` / `B.021-PITCH_A` / `B.022-PITCH_B`,
+appearing as banks on D0. Every preset name states its own metadata
+(`A_R27500_OFF0`, `B_R44100_OF523`) so a loaded bank identifies itself on the
+LCD — a direct response to last night's void result, which came from an A/B
+where A and B were secretly the same thing. eosed's harness enforces the same
+thing at runtime: it re-reads the LCD after each Program Change and refuses to
+measure if the preset-name band did not change.
+
+
+`round(768 * log2(rate / 44100))` at `E3S1[58:60]` was hardware-RE'd 2026-07-24
+from the E4XT's own SrCnv output at six rates (§4.6 of `docs/E4B_FORMAT.md`). The
+eosed project has now checked it against a machine-authored HD0 backup — material
+neither project wrote — at **11 distinct rates, all within the documented ±2**.
+
+**Sample size: 20 machine-written headers.** Not thousands. eosed corrected this
+themselves after re-running with a realistic predicate: the first pass required
+`start_loop == 92`, which admits only UNLOOPED samples, and 20 headers is what a
+19 GiB disk actually yields. Twenty headers agreeing at eleven rates is real
+evidence and it is not the large independent corpus an earlier draft of this
+section implied.
+
+```
+ 25000 -627/-629   27783 -510/-512   27831 -508/-510   28000 -503/-503
+ 31524 -370/-372   31984 -354/-356   32000 -354/-355   39062 -133/-134
+ 44050    0/  -1   44100    0/   0   48000  +94/ +94        (machine/formula)
+```
+
+**Nine of these are outside the original calibration set.** `48000 → +94` is the
+valuable one: a positive offset, confirming the law holds *above* 44100, the
+direction with the least evidence behind it since every symptom lived below.
+
+Two asymmetries, recorded rather than smoothed: the machine writes `+1` at 44100
+on 2 of 3 samples where we write exactly `0`, and `0` at 44050 where the formula
+says `-1`. Both inside tolerance, both rounding toward zero. It does not change
+the fix, but *"byte-identical to what the machine would have written"* is a
+stronger claim than *"correct"* and we can only make the second.
+
+**`[18-21]` is non-deterministic — confirmed from outside our corpus.** Every
+sample on that disk has a non-zero value there, and at rates with more than one
+sample the values differ (28000: 2 distinct; 32000: 2; 44100: 2 of 3). If it were
+pitch, or any function of rate, samples at one rate would share it. Three of four
+multi-sample rates disagree internally.
+
+### The corpus-size trap eosed caught before reporting
+
+The image holds **5311** `E3S1` tag occurrences and their scanner accepted **16**.
+Rather than report a 99.7% rejection rate as either a bug or a triumph, they
+dumped the rejected sites: they are 32-byte DIRECTORY records
+(`tag|size|offset|index|name(16)|flags`) with incrementing indices — the disk's
+native EOS layout, not the E4B file layout. So the corpus is 16 real headers, not
+5311.
+
+*"Confirmed at 5311 samples"* would have sounded far better and been false, and
+nothing on our side could have caught it. The tag count is not the corpus.
+
+**And 20 headers on a 19 GiB disk holding ~5300 samples is itself a finding about
+the format**, flagged as inference rather than fact: EOS native storage evidently
+does NOT lay samples down as E4B-style headers, so those 20 are almost certainly
+`.E4B` files sitting on the FAT volume. Anyone writing a native EOS disk parser
+should know it cannot be *"find the E3S1 tags"* — which is what one would try
+first.
+
+## §AKAINAME — one sample, one name, and the cached directory that hid it (2026-08-16)
+
+**The defect.** `build_akai_volume` sanitised the AKAI *directory entry* with
+`safe_filename`, a HOST filesystem helper. It turned `#` into `_`; `_` is absent
+from the AKAI charset (`0123456789 A-Z#+-.`) so the encoder wrote a **space**.
+One sample, two names: header `5BSHRDF#1`, directory `5BSHRDF 1`.
+
+**Why every check passed anyway.** Zones reference the HEADER form, so a
+disc-side audit resolved 100% and a zone-by-zone diff against RAM came back
+70/70 identical. Neither asks whether the named samples are **resident**. A
+volume can have every zone byte-identical and still be silent.
+
+**What it cost on hardware.** `ALL PROGS+SAMPLES` resolves references by the
+**directory** name; `ENTIRE VOLUME` loads every file and takes the resident name
+from the **header**. Under the first, 15 samples never loaded and every sharp in
+the volume was silent — reported by ear, then wrongly retracted on the strength
+of the passing checks.
+
+**Fixed** by writing the AKAI name into both fields. `.` needs no escaping either
+(the reader derives the extension from the file-TYPE byte, never by splitting the
+string) — an interim `.`→`-` attempt simply moved the defect, 15 sharps becoming
+9 dots.
+
+**Confirmed on hardware 2026-08-16:** directory re-read shows 15 entries
+containing `#`; after `ALL PROGS+SAMPLES`, 6 programs and **30 samples resident,
+15 containing `#`**, with one dangling reference belonging to `clear_memory`'s own
+`TEST PROGRAM`. **`#` in a directory entry loads** — charset index 37, previously
+inferred and now demonstrated.
+
+### The cached directory, which nearly produced the opposite conclusion
+
+A card swapped while the sampler is POWERED leaves a stale directory in place:
+
+```
+select_volume(0) alone            30 samples,  0 containing '#'   <- the OLD card
+select_drive(0) then volume(0)    30 samples, 15 containing '#'   <- the card in the drive
+```
+
+`select_drive` forces a re-read; `select_volume` does not. Reading the machine
+after a swap without forcing the re-read describes the previous card, and
+everything downstream — browsers, loads, our own audits — inherits that.
+
+This produced a reading that looked exactly like *"the loader rejects `#`, the fix
+is wrong"*, on the strength of which a correct writer would have been rewritten.
+What stopped it was refusing to conclude from a machine state whose provenance had
+not been established, and s3ked reading their own data rather than sending the
+verdict line their script had printed.
+

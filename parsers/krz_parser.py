@@ -394,6 +394,84 @@ LYR_TAG, CAL_TAG = 0x09, 0x40
 ENC_AMPMODE_TAG, ENV_AMP_TAG, ENC_FILTERENV_TAG = 0x20, 0x21, 0x22
 HOB_F1_TAG, HOB_F2_TAG, HOB_F3_TAG = 0x50, 0x51, 0x52
 LFO1_TAG = 0x14
+def _k2_depth_cents(b: int) -> float:
+    """K2000 DSP depth byte -> cents, for a frequency-unit function.
+
+    Measured by the k2kremote project one alpha-wheel click at a time, and
+    anchored against byte values from this side: the click and the stored byte
+    step together (their 25 clicks matched our 127->102 difference exactly).
+
+    Linear at 100 ct per unit over the middle, a COARSER 400-per-step tail at
+    the top, and compression toward zero at the bottom. The taper is why a
+    two-point fit gave 136 ct/unit and was wrong -- one of the anchors sat in
+    the tail. Cross-checked at 98->7000, 58->3000, 54->2600, 52->2400 and, on
+    the negative side, -58->-3000 and -77->-4900.
+
+    Negatives mirror on MAGNITUDE, which was an untested assumption in the
+    original fit until two signed values from this side confirmed it.
+
+    The unit is per FUNCTION TYPE -- cents here, semitones on a pitch function,
+    percent on a width one -- so this must only be called for a frequency slot.
+    """
+    if b < 0:
+        return -_k2_depth_cents(-b)
+    if b >= 125:                       # 125/126/127 -> 10000/10400/10800
+        return 10000.0 + 400.0 * (b - 125)
+    if b >= 33:                        # the linear middle
+        # Floor is 33, not 35: k2kremote read byte 33 -> 500ct off a program's
+        # own page, exactly 100*(33-28). Their wheel-sweep reading of 32 -> 450
+        # disagrees with the law by 50ct, so the taper begins below 33 and the
+        # sweep value is the less precise of the two -- a page read beats a
+        # value counted while turning a wheel.
+        return 100.0 * (b - 28)
+    # Below ~35 the field compresses toward zero. Measured points from their
+    # sweep: 32->450, 22->80, 12->24, 2->4. Interpolated between those rather
+    # than extrapolating the linear law, which would give negative cents here.
+    # Nodes from the machine's own display. 14->30, 29->300 and 31->400 came
+    # from diffing our decode against k2kremote's correlation dump, where our
+    # old curve read 35/339/413 against those values. The remainder are from
+    # their alpha-wheel sweep. 32->450 sits exactly halfway between 31->400 and
+    # 33->500, which is a check on the two sources agreeing rather than a
+    # coincidence.
+    pts = [(0, 0.0), (2, 4.0), (12, 24.0), (14, 30.0), (15, 35.0), (19, 55.0),
+           (22, 80.0), (24, 100.0), (25, 120.0), (26, 150.0),
+           (29, 300.0), (31, 400.0), (32, 450.0)]
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        if b <= x1:
+            return y0 + (y1 - y0) * (b - x0) / (x1 - x0)
+    return 450.0
+
+
+#: Codes seen in an F1 slot that this reader cannot name. Collected rather
+#: than warned per-occurrence -- a bank can hold hundreds and the useful
+#: report is the SET, summarised once, like the skipped-object [WARN] above.
+_unknown_f1_blocks = set()
+
+
+#: K2000 control-source codes, read off the machine's own editor pages by the
+#: k2kremote project and correlated against these file bytes across 574
+#: program-x-layer rows in four banks -- every one agreeing.
+#:
+#: The table is SHARED across slots: the same code means the same source whether
+#: it appears as Src1 (seg[5]), DptCtl (seg[7]) or Src2 (seg[10]). 121=ENV2 was
+#: verified in all three positions, 1=MWheel and 127=ON in two each.
+#:
+#: Codes 99/108/115/116/117/119/124 were each found by our decode disagreeing
+#: with the machine and then being told the right answer -- table gaps, not map
+#: errors, which is what a validated map looks like when it meets new material.
+_K2_CONTROL_SOURCES = {
+    0: 'OFF',       1: 'MWheel',    2: 'Breath',    6: 'Data',
+    33: 'MPress',   35: 'PWheel',   98: 'KeyNum',   99: 'BKeyNum',
+    100: 'AttVel',  108: 'RandV1',  110: 'ASR1',    111: 'ASR2',
+    112: 'FUN1',    113: 'FUN2',    114: 'LFO1',    115: 'LFO1ph',
+    116: 'LFO2',    117: 'LFO2ph',  118: 'FUN3',    119: 'FUN4',
+    120: 'AMPENV',  121: 'ENV2',    122: 'ENV3',    124: 'PB Rate',
+    127: 'ON',
+}
+
+_K2_CS_LFO1, _K2_CS_LFO2 = 114, 116
+_K2_CS_FUN4, _K2_CS_BKEYNUM = 119, 99
+
 _K2_CS_ENV2 = 121
 _K2_CS_LFO1 = 114
 _K2_CS_ATTACK_VEL = 100
@@ -414,6 +492,33 @@ _K2_FILTER_TO_XPM = {
     55: 12,   # 4-pole TWIN PEAKS BANDPASS -> Band4 (canonical of 12-14)
     56: 15,   # 4-pole DOUBLE NOTCH W/SEP -> BS 2P (canonical of 15-18)
     50: 3,    # 4-pole LOPASS W/SEP -> Low4 (canonical "default" family)
+    # Read off the machine's own display by the k2kremote project, 2026-08-16.
+    4:  16,   # NOTCH             -> notch
+    5:  23,   # 2-pole ALLPASS    -> allpass
+    12: 19,   # HIFREQ STIMULATOR -> treated as a shelving boost
+    14: 19,   # STEEP RESONANT BASS
+    17: 23,   # ALLPASS
+    69: 2,    # LOPAS2            -> Low2
+    8:  19,   # PARA BASS      \
+    9:  19,   # PARA TREBLE     >  parametric EQ family, NOT lowpass variants --
+    13: 19,   # PARAMETRIC EQ  /   see the note on _K2_NON_FILTER below
+}
+
+#: seg[0] codes that are NOT filters at all. A K2000 F-slot holds any DSP block,
+#: and the same byte position names a pitch, width, amplitude or shaper function
+#: depending on the block. Their UNITS differ too -- cents on a frequency slot,
+#: semitones on pitch, percent on width, dB on amplitude, a multiplier on the
+#: shaper -- so seg[1] is not a cutoff on any of these and must not be read as
+#: one.
+#:
+#: Verified against the machine's display: 18 AMP(GAIN) reads 56dB where the
+#: byte is 56, and 64 EVN(2P SHAPER) reads -18dB where the byte is -18. Both
+#: 1:1 and neither in cents.
+_K2_NON_FILTER = {
+    18: 'AMP (GAIN)',        19: 'AMT (SHAPER)',      22: 'WID (PWM)',
+    24: 'PCH (LF SIN)',      25: 'PCH (SW+SHP)',      26: 'PCH (SAW+)',
+    27: 'PCH (SAW)',         29: 'PCH (SQUARE)',      33: 'PCH (SYNC M)',
+    64: 'EVN (2P SHAPER)',
 }
 
 _LFO_SHAPE_FROM_BYTE = {
@@ -491,6 +596,15 @@ class _KrzLayer:
         self.filter_resonance = 0.0
         self.filter_env_amount = 0.0
         self.velocity_to_filter = 0.0
+        # DECLARED HERE OR SILENTLY DISCARDED. This intermediate layer is not
+        # the model voice: the fields below are copied across one by one when
+        # the VoiceLayer is built, so a field assigned during the walk but
+        # missing from BOTH this __init__ and that call simply becomes a stray
+        # attribute nobody ever reads. No error, no warning, correct-looking
+        # output -- I wired the LFO pair, watched 412 tests pass, and measured
+        # zero of 126 routings arriving before finding it.
+        self.lfo1_to_filter = 0.0
+        self.lfo2_to_filter = 0.0
         self.lfo1_to_pitch = 0.0
         self.lfo1_rate: Optional[float] = None
         self.lfo1_shape: Optional[str] = None
@@ -538,15 +652,64 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
         elif tag == HOB_F1_TAG:
             hob[HOB_F1_TAG] = seg
             b0 = seg[0]
-            if b0 != _K2_FILTER_NONE:
-                cur.filter_type = _K2_FILTER_TO_XPM.get(b0, 3)
+            # AN UNRECOGNISED BLOCK MUST REFUSE, NOT DEFAULT.
+            #
+            # This used to be `_K2_FILTER_TO_XPM.get(b0, 3)` -- an unknown code
+            # became a 2-pole BANDPASS, with seg[1] read as its cutoff. That is
+            # not a dropped parameter, it is an INVENTED one: 10.2% of F1 slots
+            # across 80 banks carried a code the table did not know, and every
+            # one of them got a filter the program never had, tuned from a byte
+            # that on those blocks is a pitch, a width or a gain.
+            #
+            # It never failed loudly because the common case really is a filter
+            # (code 2, plain lowpass, is 85% of the corpus) and because a
+            # fabricated bandpass produces plausible-sounding output. The three
+            # codes I would have guessed as lowpass variants -- 8, 9, 13, which
+            # cluster on the algorithms that offer filters -- turned out to be
+            # PARA BASS, PARA TREBLE and PARAMETRIC EQ. Guessing would have been
+            # wrong in exactly the way that does not announce itself.
+            if b0 in _K2_NON_FILTER:
+                cur.filter_type = 0          # not a filter block; leave it alone
+            elif b0 != _K2_FILTER_NONE and b0 not in _K2_FILTER_TO_XPM:
+                _unknown_f1_blocks.add(b0)
+                cur.filter_type = 0
+            elif b0 != _K2_FILTER_NONE:
+                cur.filter_type = _K2_FILTER_TO_XPM[b0]
                 hz = krz_cutoff_byte_to_hz(seg[1])
                 cur.filter_cutoff = hz_to_e4b_cutoff(hz)
-                if seg[5] == _K2_CS_ENV2:
-                    cur.filter_env_amount = max(0.0, min(1.0, seg[6] / 127.0))
-                elif seg[5] == _K2_CS_ATTACK_VEL:
-                    v = seg[6] - 256 if seg[6] >= 128 else seg[6]
-                    cur.velocity_to_filter = max(-1.0, min(1.0, v / 127.0))
+                # BOTH SOURCE SLOTS, ONE SCALE.
+                #
+                # A K2000 DSP function has two modulation sources. Slot 1 is
+                # seg[5] with its depth in seg[6]; slot 2 is seg[10] with MaxDpt
+                # in seg[9]. Until 2026-08-17 this read slot 1 as `byte / 127`
+                # and slot 2 as `cents / 10800` -- two different scales for the
+                # same model field depending on which slot the routing happened
+                # to use. The /127 form treats a cents-scaled byte as a
+                # fraction, so it was simply wrong; measured against the
+                # machine's own pages, seg[6] carries the SAME taper as seg[9]
+                # (62->3400ct, 46->1800, 42->1400, 17->45, all exact).
+                #
+                # Normalised on 10800 ct, the largest value the field reaches.
+                #
+                # ONLY FOUR SOURCES ARE MAPPED, and that is a model limit rather
+                # than a reading one: LFO1/LFO2/ENV2/velocity have fields, while
+                # MWheel, MPress, Data and ON do not. Across 3612 filter layers
+                # that leaves ~640 routings read and discarded -- see TODO,
+                # which carries the count so the decision is sized rather than
+                # guessed at.
+                for _src, _depth in ((seg[5], seg[6]), (seg[10], seg[9])):
+                    if not _src:
+                        continue
+                    _d = _depth - 256 if _depth >= 128 else _depth
+                    _amt = max(-1.0, min(1.0, _k2_depth_cents(_d) / 10800.0))
+                    if _src == _K2_CS_ENV2:
+                        cur.filter_env_amount = abs(_amt)   # model is 0..1
+                    elif _src == _K2_CS_ATTACK_VEL:
+                        cur.velocity_to_filter = _amt
+                    elif _src == _K2_CS_LFO1:
+                        cur.lfo1_to_filter = _amt
+                    elif _src == _K2_CS_LFO2:
+                        cur.lfo2_to_filter = _amt
             else:
                 cur.filter_type = 0
         elif tag == HOB_F2_TAG:
@@ -558,7 +721,31 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
                     cur.filter_resonance = max(0.0, min(1.0, (seg[1] - 12) / 12.0))
                 elif b0 == 3:                       # 2-pole BP: F2 is width, not resonance
                     pass
-                elif seg[0] == 16:                  # F2 block type = RES
+                else:
+                    # RESONANCE IS IN seg[1] WHETHER OR NOT seg[0] SAYS 16.
+                    #
+                    # This used to require seg[0] == 16, which is true in 37 of
+                    # 3612 filter layer-pairs -- 1.0%. Non-zero resonance is
+                    # present in 801 of them, 22.2%. So we were reading one
+                    # resonance value in twenty-two.
+                    #
+                    # seg[0] is 0 on the overwhelming majority because F2 is the
+                    # SECOND CONTROL INPUT of the F1 block, not a block of its
+                    # own: on a 2-pole lowpass the machine shows F1 FRQ and
+                    # F2 RES, two inputs of one filter. Only when the F1 block
+                    # takes a single input does F2 begin a new block and carry a
+                    # type of its own.
+                    #
+                    # Scale confirmed on 30 distinct displayed values from -15.0
+                    # to +24.0 dB, every one exactly byte/2 -- the docstring on
+                    # krz_reson_byte_to_01 already said dB*2 and was right.
+                    #
+                    # KNOWN LOSS: 204 of the 801 are CUTS, and the model's
+                    # filter_resonance is 0..1 with no room for a negative, so
+                    # those still clamp to 0. That is a model limit, not a
+                    # reader one, and it is recorded in TODO rather than papered
+                    # over here -- the fix is a signed range on the model, which
+                    # every writer would then have to honour.
                     cur.filter_resonance = krz_reson_byte_to_01(seg[1])
         elif tag == LFO1_TAG:
             rate_byte = seg[2]
@@ -589,6 +776,35 @@ def parse_krz(path: str) -> Bank:
     data = Path(path).read_bytes()
     osize, objs = _read_objects(data)
     pcm_words = (len(data) - osize) // 2
+
+    # A BIG FILE THAT YIELDS NO OBJECTS IS NOT AN EMPTY BANK.
+    #
+    # SYNTHEX_2.KRZ is 1.4 MB and decodes to zero objects: its object table
+    # declares 36 bytes. Until now we reported that as "0 preset(s),
+    # 0 sample(s)" and exited successfully -- indistinguishable from a bank
+    # that genuinely holds nothing.
+    #
+    # Its sibling explains it, and the explanation is a format gap rather than
+    # a corrupt file: SYNTHEX_1.KRZ (Disk1) reads normally at osize=75484,
+    # SYNTHEX_2.KRZ (Disk2) is the SECOND FLOPPY of one bank. A K2000 bank too
+    # large for one disk continues onto the next, so the continuation volume
+    # carries sample DATA whose object headers stayed on disk 1. Strongly
+    # supported -- same soundset, sequential disk directories, a full-size file
+    # with a stub table -- but inferred, not confirmed against hardware.
+    #
+    # We have no multi-disk assembly, so this stays a warning rather than a
+    # fix. Reading it would mean concatenating PCM across files against disk
+    # 1's headers.
+    #
+    # The threshold is deliberately crude. A real empty bank is a few hundred
+    # bytes of header; anything past 64 KiB with no objects in it is a read
+    # failure wearing an empty bank's clothes, and the point is to say so
+    # rather than to classify it correctly.
+    if not objs and len(data) > 65536:
+        print(f"  [WARN] {len(data)} bytes but NO decodable objects (object "
+              f"table declares {osize} bytes). This file is not empty — we "
+              f"cannot read it. Treat the empty result below as a failure, "
+              f"not as the bank's contents. See TODO.md.")
 
     sample_objs = []
     keymap_objs = []
@@ -793,6 +1009,8 @@ def parse_krz(path: str) -> Bank:
                     filter_resonance=layer.filter_resonance,
                     filter_env_amount=layer.filter_env_amount,
                     velocity_to_filter=layer.velocity_to_filter,
+                    lfo1_to_filter=layer.lfo1_to_filter,
+                    lfo2_to_filter=layer.lfo2_to_filter,
                     lfo1_to_pitch=layer.lfo1_to_pitch,
                     lfo1_rate=layer.lfo1_rate,
                     lfo1_shape=layer.lfo1_shape,
@@ -873,9 +1091,21 @@ def parse_krz(path: str) -> Bank:
     if n_orphan_samples:
         print(f"  [INFO] {n_orphan_samples} sample(s) not referenced by any "
               f"keymap recovered into one multisample preset.")
-    if not samples and (sample_objs or keymap_objs):
-        print(f"  [INFO] This bank contains programs only (all samples are "
-              f"K2000 ROM or absent) — nothing to convert.")
+    # THE GUARD USED TO BE `sample_objs or keymap_objs`, WHICH IS THE EXACT
+    # NEGATION OF THE CASE THIS MESSAGE EXISTS FOR. A programs-only bank is
+    # defined by having neither, so the one diagnostic written for it could
+    # never fire for it -- it printed only when samples existed but all of them
+    # dropped out, which is a different (and much rarer) fault.
+    #
+    # 39 of 201 corpus banks are programs-only, 19.4%, referencing the K2000's
+    # ROM soundset: KPOWER.KRZ carries 100 programs and not one sample object.
+    # Every one of them converted to an empty bank whose only explanation was a
+    # row of zeros -- correct behaviour, reported identically to a failure.
+    if not samples and program_objs:
+        print(f"  [INFO] This bank holds {len(program_objs)} program(s) but no "
+              f"sample or keymap objects: it references the K2000's ROM "
+              f"soundset, which is not in the file. Nothing to convert — this "
+              f"is the bank's nature, not a read error.")
     print(f"  {len(presets)} preset(s), {len(samples)} sample(s), "
           f"{n_zones} zone(s) total")
     return bank

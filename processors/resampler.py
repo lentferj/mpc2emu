@@ -477,9 +477,28 @@ def resample_vintage(
                        keeps the boosted, "hot" level instead.
 
     Returns:
-        New SampleData with the vintage character applied and upsampled back
-        to the original sample_rate.  bit_depth stays at 16 for E4B
-        compatibility (quantization noise is baked in as signal).
+        New SampleData with the vintage character applied, STORED AT THE
+        PROFILE'S RATE (27.5 kHz for both current profiles) -- not upsampled
+        back. That halves the RAM the sample occupies on the sampler, and the
+        pitch stays correct because the E4B writer emits the rate offset the
+        machine reads: round(768 * log2(rate / 44100)) at E3S1 [58:60], 1/64
+        of a semitone per unit. See docs/E4B_FORMAT.md 4.6, hardware-RE'd from
+        the E4XT's own SrCnv output at six rates.
+
+        bit_depth stays at 16 for E4B compatibility (quantization noise is
+        baked in as signal).
+
+    This docstring said "upsampled back to the original sample_rate" until
+    2026-08-16, describing the OPPOSITE of what the code three lines below the
+    return does. It cost a sibling project's session: reading it, I concluded
+    our vintage output was stored at 44100 with the wrong pitch, called it a
+    live bug affecting every resampled conversion, and asked the eosed project
+    to spend an E4XT bench session collecting two calibration points for a
+    scale this repo had already measured at six. They checked the code instead
+    of trusting the prose, and found the fix already shipped and correct.
+
+    A stale docstring is not a cosmetic defect. It is a claim about behaviour
+    that costs whatever the reader spends acting on it.
     """
     src_rate = sample.sample_rate
     dst_rate = profile.sample_rate
