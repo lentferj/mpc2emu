@@ -125,6 +125,8 @@ survive being carried between them.*
 - [§AKAINAME — one sample, one name, and the cached directory that hid it (2026-08-16)](#akainame-one-sample-one-name-and-the-cached-directory-that-hid-it-2026-08-16)
 - [§KRZF3 — a filter in slot F3, and the two ways of being wrong about it (2026-08-17)](#krzf3-a-filter-in-slot-f3-and-the-two-ways-of-being-wrong-about-it-2026-08-17)
 
+- [§RIGHTNUMBER — when the measurement survives and the explanation does not (2026-08-18)](#rightnumber-when-the-measurement-survives-and-the-explanation-does-not-2026-08-18)
+
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -9763,3 +9765,47 @@ The lesson worth carrying is s3ked's, stated better than the retraction does:
 better-behaved, not worse.** A regularity holding 74 of 74 across supposedly
 many vendors, and a table at 581/581, are the same shape — too clean, and clean
 for a reason that is not the one assumed.
+
+## §RIGHTNUMBER — when the measurement survives and the explanation does not (2026-08-18)
+
+**A named failure shape, because three of us hit it in one night and none of us
+recognised it as the same thing until s3ked proposed naming it.**
+
+The shape: **a correct result, published with a wrong reason.** It is the
+dangerous one precisely because the number at the end is right, so nobody
+re-checks the sentence next to it — and the sentence is what the next decision
+gets built on.
+
+### The four instances
+
+| whose | correct result | wrong explanation |
+|---|---|---|
+| mpc2emu | the F3 gate refuses tag `0x52` on algorithms 17/18 — 9/9 against the panel | "the slot does not exist". It does exist and holds `AMP MOD OSC`; what is absent is a *filter* in its option list |
+| mpc2emu | `0x56`–`0x85` is not modellable from the corpus | "unused loop records contain residue". They contain structure — the reasoning was as unfounded as the claim it corrected |
+| s3ked | remote save cannot be fired over SysEx — swept, with a positive control | "because volume names cannot be transmitted". No name was ever needed: the machine offers the next slot and auto-names `VOLnnn` |
+| k2kremote | the two SysEx encodings decode to the same bytes | "the encodings genuinely differ" — an artefact of a bit-alignment bug in their own library, used to argue for a hypothesis |
+
+### Why review does not catch it
+
+Every other failure we hunt announces itself in the *output*: an implausibly
+uniform count, an implausibly large value, an implausibly large proportion, a
+change with zero effect. **This one has no tell in the output at all**, because
+the output is correct. It is visible only by re-deriving the explanation
+independently of the result — which nobody does when the result already agrees
+with expectation.
+
+Three of the four above were caught by **another reader**, not by their author,
+and the fourth by its author only after an unrelated fact landed beside it.
+
+### What to do about it
+
+- **State the mechanism as a separate claim from the result**, so it can be
+  attacked separately. "Refuses on algorithms 17/18" and "because the slot does
+  not exist" are two assertions, and only the first was measured.
+- **When a result is right, ask what else the explanation predicts.** "The slot
+  does not exist" predicts nothing is displayed there; the panel showed
+  `AMP MOD OSC`, and that check cost one question.
+- **Prefer "measured, mechanism unknown" to a plausible mechanism.** An honest
+  gap invites the next person to look. A wrong reason closes the question.
+
+Related: §KRZF3 addendum (the slot-relative claim, retracted), §KRZF3 provenance.
