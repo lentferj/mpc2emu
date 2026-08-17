@@ -22,7 +22,7 @@ Gotek / FlashFloppy emulator.
 
 The K2000R reads standard DOS **720 KB / 1.44 MB FAT12** floppies; a Gotek
 presents a raw sector image (`.img`) of exactly such a floppy.  A K2000 bank is
-a single `.KRZ` file written to the floppy's root (e.g. a 1.39 MB SYNTHEX_2.KRZ
+a single `.KRZ` file written to the floppy's root (e.g. a 1.39 MB the continuation volume of a two-disk soundset
 fills a 1.44 MB disk).  This module formats a blank FAT12 floppy image (no MBR —
 the boot sector is at LBA 0) and copies `.KRZ` files in, with VFAT long names +
 8.3 short names (DOS/K2000 reads the 8.3; PCs show the long name).

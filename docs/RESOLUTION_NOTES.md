@@ -3330,7 +3330,7 @@ coverage-remap's own output) to close for good.
 **CR-21 two real crash bugs found via VinSamLib re-processing real
 commercial content — DONE 2026-07-27.** VinSamLib's own black-box testing
 of "reprocess an existing KRZ preset through mpc2emu" (parse → optionally
-resample/reduce → write back) against a real Kurzweil SynthExpanse file
+resample/reduce → write back) against a real a commercial soundset file
 crashed with `struct.error: pack_into requires a buffer of at least 645
 bytes for packing 5 bytes at offset 640 (actual buffer size is 640)` at
 `writers/krz_writer.py._build_keymap_entries`, raised from
@@ -3340,8 +3340,8 @@ ONE-pass crash, not a multi-generation drift) — turned out to be two
 separate, independent bugs:
 
 1. **`parsers/krz_parser.py` fabricated a phantom 0-length `SampleData`.**
-   The repro file is `.../Kurzweil K2000 SynthExpanse/SynthExpanse/Disk1/
-   SYNTHEX_1.KRZ` — a multi-disk soundset. Two of its sample headers
+   The repro file is `.../a commercial two-disk soundset/<soundset>/Disk1/
+   its first disk` — a multi-disk soundset. Two of its sample headers
    (`Prodigy ShortBas`, `Sprinkle`) have `has_data=True` (flags bit 0x40
    set) but a `sampleStart` word offset (783170) that lies entirely
    outside *this file's* own PCM region (690058 words) — the sample's
@@ -7871,7 +7871,7 @@ than a map error** — nine control-source codes and six depth nodes the machine
 supplied by disagreeing with us. That is what a correct map looks like when it
 meets new material.
 
-One program is **excluded, not resolved**: PMVOL075 carries two different programs
+One program is **excluded, not resolved**: bank C carries two different programs
 both named `*Soft Trumpet` (ids 405 and 475, 2 layers/2P LOPASS and 1 layer/DBL
 NOTCH). The K2000 enforces no name uniqueness, so a `(name, layer)` dict silently
 keeps the last — exactly the collapse s3ked warned about and this tool did anyway
@@ -7880,7 +7880,7 @@ until three "disagreements" turned out to be one program overwriting another.
 `(name, layer)` is therefore **not a valid join key**; the tool now joins on
 `(id, layer)`, which resolves both programs instead of dropping either.
 
-`position = id − bank_base`, **zero-based**, verified three ways: ATMOFEAR's
+`position = id − bank_base`, **zero-based**, verified three ways: bank D's
 programs are self-numbering (`ATMOSFEAR 00`…`50`) and 51 of 51 agree; our own
 first-object identification of another bank matches at 300/301; and diffing the
 machine's id sequence against the file's type-36 order gives **255 programs, 0

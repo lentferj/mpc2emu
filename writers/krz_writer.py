@@ -5,7 +5,7 @@
 # KRZ binary layout derived from:
 #   KurzFiler (GPL-2.0), Marc Halbrügge,
 #     https://kurzfiler.sourceforge.io/
-# Structure verified against KPOWER.KRZ (K2000 production soundset).
+# Structure verified against one programs-only bank (K2000 production soundset).
 # No source code was copied.
 #
 # mpc2emu is free software: you can redistribute it and/or modify it
@@ -621,7 +621,7 @@ def _make_layer_segments(keymap_id: int, stereo: bool = False,
     segs = b''
 
     # LYRSEGTAG — per-layer ranges + Enable.  Byte map (HW-confirmed 2026-06-24
-    # via KurzFiler + KPOWER/xprogs4 + the VELAYRE.KRZ velocity diff):
+    # via KurzFiler + a programs-only bank/a third-party bank + the VELAYRE.KRZ velocity diff):
     #   [3]=loKey [4]=hiKey [5]=velocity window (packed loVel/hiVel, see _vel_byte)
     #   [6]=Enable control source (127=ON; NOT hiVel) [8]=flags(0x04 mono/0x24 stereo)
     lyr = bytearray(15)

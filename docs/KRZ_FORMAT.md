@@ -454,7 +454,7 @@ could not.
 | `4` | portamento | `64` |
 
 **LYR (0x09, 15 bytes)** — key/velocity window + enable (HW-confirmed 2026-06-24
-via KurzFiler + KPOWER + the `VELAYRE.KRZ` velocity diff):
+via KurzFiler + a programs-only bank + the `VELAYRE.KRZ` velocity diff):
 
 | Byte | Field | Notes |
 |---|---|---|
@@ -865,7 +865,7 @@ This reverse-engineering effort drew on:
   SysEx sessions — the primary source for the program-parameter byte semantics.
 - **Commercial soundset corpora**: 201 K2000 soundset `.KRZ` files (structural
   validation of the container) and 160 third-party soundsets / ~14 000 layers
-  (filter-byte and routing cross-checks), plus `KPOWER.KRZ` / third-party soundset
+  (filter-byte and routing cross-checks), plus `one programs-only bank` / third-party soundset
   `soundset 002` (RAM-sample header verification).
 - **The E-MU / Kurzweil K2000 Musician's Guide** (Ch 14 DSP Functions, Ch 23
   LFOs, Ch 25 Control Sources, Ch 26 DSP Algorithms, Ch 30 SysEx) for the

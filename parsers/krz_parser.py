@@ -779,14 +779,14 @@ def parse_krz(path: str) -> Bank:
 
     # A BIG FILE THAT YIELDS NO OBJECTS IS NOT AN EMPTY BANK.
     #
-    # SYNTHEX_2.KRZ is 1.4 MB and decodes to zero objects: its object table
+    # the continuation volume of a two-disk soundset is 1.4 MB and decodes to zero objects: its object table
     # declares 36 bytes. Until now we reported that as "0 preset(s),
     # 0 sample(s)" and exited successfully -- indistinguishable from a bank
     # that genuinely holds nothing.
     #
     # Its sibling explains it, and the explanation is a format gap rather than
-    # a corrupt file: SYNTHEX_1.KRZ (Disk1) reads normally at osize=75484,
-    # SYNTHEX_2.KRZ (Disk2) is the SECOND FLOPPY of one bank. A K2000 bank too
+    # a corrupt file: its first disk (Disk1) reads normally at osize=75484,
+    # the continuation volume of a two-disk soundset (Disk2) is the SECOND FLOPPY of one bank. A K2000 bank too
     # large for one disk continues onto the next, so the continuation volume
     # carries sample DATA whose object headers stayed on disk 1. Strongly
     # supported -- same soundset, sequential disk directories, a full-size file
@@ -893,7 +893,7 @@ def parse_krz(path: str) -> Bank:
             return None
         if h.start_w >= pcm_words:
             # start_w points entirely outside this file's own PCM region --
-            # seen in multi-disk soundsets (e.g. "SynthExpanse/Disk1/...")
+            # seen in multi-disk soundsets (e.g. "<soundset>/Disk1/...")
             # whose sample headers reference PCM that actually lives on a
             # different disk image. has_data is set, but the bytes simply
             # aren't here; treat like ROM rather than fabricating a phantom
@@ -1098,7 +1098,7 @@ def parse_krz(path: str) -> Bank:
     # dropped out, which is a different (and much rarer) fault.
     #
     # 39 of 201 corpus banks are programs-only, 19.4%, referencing the K2000's
-    # ROM soundset: KPOWER.KRZ carries 100 programs and not one sample object.
+    # ROM soundset: one programs-only bank carries 100 programs and not one sample object.
     # Every one of them converted to an empty bank whose only explanation was a
     # row of zeros -- correct behaviour, reported identically to a failure.
     if not samples and program_objs:
