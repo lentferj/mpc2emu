@@ -8526,6 +8526,33 @@ octave bands flat within 0.3 dB). Our pink measures 7.2 dB — fine. Judged
 against the white control it would have looked broken, and "fixing" it would
 have turned a correct source into a wrong one.
 
+### Noise is the right source for a spectrum and the WRONG one for a timing
+
+Recommended here for filter work on the reasoning that a broadband source makes
+the transfer function directly readable — correct, and it is what let §116 agree
+to 0.1% across two sources.
+
+**It is the wrong instrument for envelope timing, and the same property is why.**
+A noise source's amplitude fluctuates by design; an envelope sweep times a
+threshold crossing on that amplitude. Every point is a race between the envelope
+and the source's own variance.
+
+Measured: with the loop fixed and the source sustaining cleanly, `ATTAK1`,
+`DECAY1` and `RELSE1` all came back **non-monotonic**, none reaching r² 0.99,
+against existing entries fitted at 0.99988, 0.99998 and 0.99956. **`DECAY1` ran
+the wrong way** — time rising with the parameter where the recorded law has it
+falling, since the field is a rate. All three were **withheld rather than
+recorded**: a re-measurement contradicting a well-fitted law in *direction* is
+not a correction, it is a measurement of something else.
+
+**Fixing the source's silence did not make the sweeps valid.** Two independent
+faults sat on the same measurement — a loop overrun that made the note stop, and
+a source whose variance defeats threshold timing — and clearing the first felt
+like clearing the road. **Unblocking is not validating.**
+
+A sustained tone is what envelope timing wants. The ROM sawtooth measured a clean
+onset and a power cycle restores it.
+
 ### A recurring shape: the document you reason from is not the document that decides
 
 Three instances in one day, ours and k2kremote's, with the same structure — a

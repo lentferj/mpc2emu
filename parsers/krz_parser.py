@@ -698,6 +698,38 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
                 # that leaves ~640 routings read and discarded -- see TODO,
                 # which carries the count so the decision is sized rather than
                 # guessed at.
+                # seg[4] IS VelTrk: A DIRECT VELOCITY->CUTOFF AMOUNT.
+                #
+                # Read as zero until 2026-08-17, and it is the DOMINANT
+                # mechanism rather than a rare one. In one bank of 91 filter
+                # slots: Src2 = AttVel appears once, VelTrk is non-zero
+                # NINETEEN times. The routing this parser counted was the rare
+                # one and the routing it ignored was the common one.
+                #
+                # JOINED against the machine's own pages (k2kremote read all 91
+                # programs of that bank off the panel): seg[4] decoded with
+                # `_k2_depth_cents` matches the displayed VelTrk on 89 of 91.
+                # Of the two misses, one is 3 cents apart in the compressed low
+                # region, and the other is a program whose filter sits in slot
+                # F3 -- where the F1 tag is a different DSP block entirely, so
+                # seg[4] is not its VelTrk. That miss independently confirms
+                # the F3 blindness recorded in TODO.
+                #
+                # It is UNIPOLAR from the cutoff, like MinDpt 0 / MaxDpt N, so
+                # it goes in as (0, VelTrk). AND IT GOES NEGATIVE -- observed
+                # at -4600 ct and -60 ct, where velocity DARKENS. Anything
+                # assuming velocity only ever opens the filter gets those
+                # backwards rather than merely shallow.
+                #
+                # Added to whatever Src1/Src2 contribute rather than replacing
+                # it: a program may carry both, and they sum on the machine.
+                _vt = seg[4] - 256 if seg[4] >= 128 else seg[4]
+                if _vt:
+                    _vt_amt = max(-1.0, min(1.0,
+                                            _k2_depth_cents(_vt) / 10800.0))
+                    cur.velocity_to_filter = max(
+                        -1.0, min(1.0, cur.velocity_to_filter + _vt_amt))
+
                 # THE THIRD ELEMENT IS THE FLOOR, AND IT IS THE POINT.
                 # Slot 2 specifies a RANGE -- MinDpt at zero velocity, MaxDpt
                 # at full -- while slot 1 gives one Depth, which is the same

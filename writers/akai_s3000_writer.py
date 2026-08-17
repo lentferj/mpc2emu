@@ -673,7 +673,29 @@ def build_sample(sd: SampleData, name: Optional[str] = None,
     struct.pack_into('<I', h, 0x22, max(0, n_frames - 1))
 
     if looped:
-        loop_len = sd.loop_end - sd.loop_start + 1
+        # LLNGTH1 IS EXCLUSIVE OF THE LAST FRAME, and the `+ 1` here made every
+        # looped sample this writer produced overrun by one.
+        #
+        # MEASURED on an S3000XL 2026-08-17 (s3ked): with SMPEND 88199 and
+        # LLNGTH1 88200, a held note plays ~2 s, goes silent for a stretch, and
+        # repeats, with a ~500 ms silent lead-in before the first sound. At
+        # 44100 and 22050 the same sample loops CONTINUOUSLY -- no lead-in, 2%
+        # silence against 15%. Un-looped playback (SPTYPE 2 or 3) gives one
+        # clean 2 s pass, which is what proves the sample data itself is sound
+        # and looping is what introduced the silence.
+        #
+        # Diagnosed first as the wrong SPTYPE -- 0 "loop in release" against 1
+        # "loop until release" -- which was a good hypothesis from the value
+        # table and was REFUTED on the machine: 0 and 1 behave identically here
+        # and neither removes the lead-in. The mode was never the fault.
+        #
+        # 88199 itself is NOT tested. The measured points are 88200 (fails),
+        # 44100 and 22050 (work), so "one less than the length" is the minimal
+        # fix consistent with the mechanism rather than a confirmed value.
+        loop_len = sd.loop_end - sd.loop_start
+        # And guard the end against the play range regardless of how the caller
+        # set the loop, since that is the constraint that was actually violated.
+        loop_len = max(1, min(loop_len, max(0, n_frames - 1) - sd.loop_start))
         struct.pack_into('<I', h, 0x26, sd.loop_start)
         struct.pack_into('<H', h, 0x2a, 0)             # length fraction
         struct.pack_into('<I', h, 0x2c, loop_len)
@@ -1662,6 +1684,26 @@ def build_program(preset, name: str, prog_num: int = 0,
             # hard left. It went unnoticed because `or 0.5` rewrote the 0.0
             # that would have exposed it.
             pan=int(round(_or_default(getattr(z, 'pan', None), 0.0) * 50)),
+            # VLOUD1, the per-zone level offset. Dropped entirely until
+            # 2026-08-17 -- the encoder was in place and nothing ever set
+            # 'loudness', so 14.8% of corpus zones lost their level offset in
+            # silence.
+            #
+            # MEASURED (s3ked, 2026-08-17): dB = 0.60576 * VLOUD1 - 20.1778,
+            # r2 0.999896 over -50..+20, so 0.60576 dB per unit. The model
+            # carries `volume` already in dB, which makes this a division.
+            #
+            # CLAMPED AT +20, NOT +50. Above +20 the field saturates -- +30
+            # through +50 sit within 1.09 dB of each other -- because it is
+            # reaching the same output ceiling as the program level, from the
+            # zone offset instead. So the usable top MOVES with PRLOUD, and
+            # writing +50 would look like more gain while delivering none.
+            # Same base-and-depth interaction as FILFRQ with byte 151, in a
+            # second field family. Real sources sit far below it: the corpus
+            # spans -12.5..+2.5 dB, about -21..+4 units.
+            loudness=_clamp(int(round(
+                _or_default(getattr(z, 'volume', None), 0.0) / 0.60576)),
+                -50, 20),
         ) for z in zs]
         for _i in range(0, len(_zdicts), MAX_ZONES_PER_KEYGROUP):
             chunk = _zdicts[_i:_i + MAX_ZONES_PER_KEYGROUP]
