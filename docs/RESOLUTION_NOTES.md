@@ -123,6 +123,7 @@ survive being carried between them.*
 - [§AKAIVFR — S3000XL velocity→filter is keygroup byte 151 (2026-08-16, measured)](#akaivfr-s3000xl-velocityfilter-is-keygroup-byte-151-2026-08-16-measured)
 - [§E4BRATE2 — the rate-pitch formula confirmed on machine-authored material (2026-08-16)](#e4brate2-the-rate-pitch-formula-confirmed-on-machine-authored-material-2026-08-16)
 - [§AKAINAME — one sample, one name, and the cached directory that hid it (2026-08-16)](#akainame-one-sample-one-name-and-the-cached-directory-that-hid-it-2026-08-16)
+- [§KRZF3 — a filter in slot F3, and the two ways of being wrong about it (2026-08-17)](#krzf3-a-filter-in-slot-f3-and-the-two-ways-of-being-wrong-about-it-2026-08-17)
 
 <!-- INDEX:END -->
 
@@ -9560,3 +9561,205 @@ What stopped it was refusing to conclude from a machine state whose provenance h
 not been established, and s3ked reading their own data rather than sending the
 verdict line their script had printed.
 
+
+## §KRZF3 — a filter in slot F3, and the two ways of being wrong about it (2026-08-17)
+
+**Status: landed (`6c37a1e`), gated, NOT hardware-confirmed.**
+
+### What was wrong the first time
+
+The first attempt (`eb0a5b1`, reverted `7d36d1b`) read tag `0x52` as a filter
+whenever it looked like one. It invented filters in programs whose panel shows
+none. The reason is structural, and it is worth stating exactly because the
+loose version of it is also wrong:
+
+**The four HOB segments are a fixed-size array.** All four are written for every
+layer of every algorithm — measured over 1442 layers and 25 distinct algorithms
+in the local corpus, no exceptions. So the presence of a `0x52` segment carries
+no information at all about the algorithm.
+
+But the third slot is **not absent** on the algorithms where this misfired.
+k2kremote read `AMP MOD OSC` in slot 3 of an algorithm-17 program, off the
+panel. The slot exists and holds a real function. What is absent is any
+**filter** among the functions that slot can select — algorithm 17 and 18 offer
+only `SHAPE MOD OSC` / `AMP MOD OSC` / `NONE` there.
+
+So the fault was decoding a *present* slot's code through `_K2_FILTER_TO_XPM`,
+a table measured against **F1's** option list and meaningless against a list
+that shares none of its entries. Same failure as the invented bandpass, one
+level up: a value test cannot separate lists it was never measured against.
+
+### The gate
+
+`_ALG_DSP_FUNCTIONS` in `parsers/krz_parser.py` counts each algorithm's
+addressable `Fn` slots, from the manual's algorithm chapter (`26 DSP Algs.pdf`,
+extracted to `/home/lentferj/temp/k2k_full/algorithm_slots_from_manual.json`).
+`0x52` is read only at three or more.
+
+Validated 9/9 against per-layer panel observations, both directions — six
+programs whose panel shows a filter in that slot, three whose panel shows none.
+Per **layer**: an earlier attempt keyed on the program's first layer scored
+5/11 and 7/11, because a program can carry different algorithms per layer.
+
+Corpus effect: **20 layers gain a filter, 48 refused.** The reverted version
+would have invented more than twice as many as it recovered.
+
+### Independent confirmation of the extraction
+
+The manual table was cross-checked against k2kremote's panel instrument:
+
+- Four independent alg-17 panel reads (two functions × two slots, from two
+  different programs) all land inside the manual's per-slot lists.
+- Their alg-10 wheel sweep of 17 selectable functions is **set-identical** to
+  the manual's alg-10 slot-2 list.
+- Their sweep order is the manual's order **rotated by 9** — the wheel is a
+  cycle with no origin, and the rotation is just wherever the borrowed edit
+  buffer happened to sit. **The manual supplies the origin the panel cannot.**
+
+That last point matters operationally: an `(algorithm, slot) → ordered function
+list` table does not need to be swept on the instrument. It is already written
+down, ordered, and anchored.
+
+### Still open
+
+1. **The 20 recovered layers are unheard.** No listen test has been run.
+2. **No slot→code table exists.** `_K2_FILTER_TO_XPM` was measured against F1
+   alone (581/581). An F3 code is decoded through a table with no authority
+   there, so a wrong filter **type** remains possible where a wrong **presence**
+   no longer is. Codes are not a plain index into the manual's slot list —
+   algorithm 10 slot 2 shows codes `{18,19,23,24,25,27}` against a 17-entry
+   list — so the anchoring still needs doing.
+3. **Resonance is deliberately not read for an F3 filter.** F2 (`0x51`) is the
+   second control input of F1, so the F3 equivalent would be F4 at `0x53`, never
+   observed carrying one. Inferring it from the pattern is the move that
+   produced the invented bandpass.
+4. **`0x51`'s identity is not fully settled** — second control input of F1, or
+   the second DSP function? Both readings survive the current evidence and they
+   are not the same claim.
+
+### §KRZF3 addendum — the codes ARE global, and our F1 table has errors (2026-08-17)
+
+**This corrects `88e5cf0`, whose title claims a block code is slot-relative.
+It is not. I asserted that to k2kremote as well.**
+
+k2kremote supplied 40 anchor rows (`/home/lentferj/temp/k2k_full/slot_anchors.jsonl`)
+— per layer, the panel's function in every slot. Joined against our byte values
+by program id and algorithm, all 40 rows:
+
+**1. Panel `Fn` = manual slot `n+1`.** Confirmed, not assumed: `0x50` code 2 →
+`2POLE LOWPASS` ×3, code 54 → `4POLE HIPASS W/SEP` ×4, code 27 → `SAW` ×7,
+code 23 → `SINE` ×7 — all under the `n+1` reading, none under `n`. So `0x52` is
+F3 is manual **slot 4**, not slot 3.
+
+**2. The codes are a GLOBAL namespace.** The same code names the same function
+under different tags:
+
+    code 16 = HIPASS   at 0x50 and 0x51        code 17 = ALPASS at 0x50 and 0x52
+    code 15 = LOPASS   at 0x51 and 0x52        18 GAIN, 19 SHAPER, 22 PWM,
+                                               23 SINE at both 0x50 and 0x51
+
+The earlier "byte 15 is a filter under one algorithm and a shaper under another"
+was **never a slot-relative code**. It was a stale byte in a slot the algorithm
+does not have: every contradictory reading (`0x52` code 15 → `AMP` ×4, code 40 →
+`PANNER`/`AMP`, `0x51` code 0 → `AMP`/`AMP U`/`PANNER`) sits exactly where the
+gate already refuses. So the gate is confirmed a second way, and the reasoning
+that justified it was wrong. Right answer, wrong argument.
+
+**3. `_K2_FILTER_TO_XPM` is not fully correct, though it was "581/581" on F1.**
+Against the panel:
+
+| code | panel says | we say | verdict |
+|---|---|---|---|
+| 2 | `2POLE LOWPASS` ×3 | Low 2 | correct |
+| 3 | `BANDPASS FILT` ×1 | Band 2 | correct |
+| 54 | `4POLE HIPASS W/SEP` ×4 | High 4 | correct |
+| 62 | `NONE` ×1 | NONE | correct |
+| **17** | **`ALPASS` ×6** | **Model1 LP+dist** | **WRONG — an allpass converted as a distorted lowpass** |
+| **16** | **`HIPASS` ×8** | **unknown, refused** | **missing — a real filter dropped** |
+| **73** | **`LP2RES` ×1** | **unknown, refused** | **missing** |
+
+The 581/581 figure measured *self-consistency of the read*, not agreement with
+the machine. It could not have caught either row: a code we map to the wrong
+filter and a code we refuse both round-trip perfectly.
+
+**Not fixed tonight, deliberately.** Code 16 and 73 are safe additions (a
+dropped filter becomes a read one). Code 17 is a **design question for Jan**:
+an allpass does not attenuate, so mapping it to any lowpass is wrong in kind,
+and XPM has no allpass — `parsers/talsmpl_parser.py` already faces this and
+falls back to LP24. Options are that fallback, or `filter_type = 0` (no filter),
+which is arguably the honest reading. Behaviour change on real conversions;
+not a 23:00 decision.
+
+### §KRZF3 lead — the codes index one MASTER block list (2026-08-17, unproven)
+
+Not acted on, recorded because it is cheap to test and would finish the table.
+
+Against the manual's algorithm-10 slot-2 list, the observed codes are a fixed
+offset into it — until they aren't, in a specific way:
+
+    idx 0..5   LOPASS HIPASS ALPASS GAIN SHAPER DIST     code = idx + 15
+    idx 6..13  PWM SINE LF SIN SW+SHP SAW+ SAW ... SQUARE code = idx + 16
+
+The obvious reading is that my extraction dropped an option at index 6. **It did
+not** — the PDF column reads `DIST` directly followed by `PWM`, verified in the
+raw text.
+
+So the gap at code **21** is a block that exists in the global namespace but is
+**not offered in this slot**. Which gives the actual structure:
+
+> Codes index a single MASTER list of every DSP block. Each `(algorithm, slot)`
+> option list is a **subsequence** of that master list, in master order.
+
+That is consistent with everything measured: codes are global (§KRZF3 addendum),
+the panel wheel presents each slot's own subset in a fixed cyclic order, and the
+manual prints that same subset in that same order.
+
+**If true, the complete code table is derivable offline** — no instrument time.
+Merge all 31 algorithms' slot lists into one consistent total order (each is a
+subsequence, so this is a topological sort), then anchor it with the codes
+already known. Known anchors: 15 LOPASS, 16 HIPASS, 17 ALPASS, 18 GAIN,
+19 SHAPER, 20 DIST, 22 PWM, 23 SINE, 24 LF SIN, 25 SW+SHP, 26 SAW+, 27 SAW,
+29 SQUARE — which also predicts 28 = `LF SAW`, untested.
+
+**How it could fail, and the check to run first:** if the slot lists are *not*
+all subsequences of one order, the topological sort will find a cycle, and that
+cycle is the disproof. Run that before trusting any code it produces — a sort
+that silently picks an order among incomparable elements would manufacture a
+table indistinguishable from a real one, which is this project's recurring
+failure mode rather than a new one.
+
+### §KRZF3 provenance — what tonight's numbers actually rest on (2026-08-17)
+
+Written because s3ked retracted §120 and part of §119 on 2026-08-17 after their
+provenance filter let a sibling project's writer output through as third-party:
+their "74 of 74" pattern was one tool's habit, and their headline corpus result
+turned out to rest on material that was ~96% our own output — the round-trip
+mistake, made in the section written to warn about it. The same check therefore
+belongs on our own figures rather than only in their write-up.
+
+**Checked, and clean.** Every corpus number in §KRZF3 comes from
+`/home/lentferj/temp/k2k_full/objects.jsonl` — 441 program objects read off the
+K2000R **by k2kremote over SysEx**, not produced by any writer of ours. Audited
+directly: zero of the 441 names match our generated-material patterns (`B.NNN-`
+bank prefixes, `RSPROBE`, `RSTONE`, `NSWHITE`, `NSPINK`, `VF NEW`/`VF OLD`,
+probe/test markers). The panel anchors are k2kremote's own display reads of the
+same device. **No path exists by which our output could have entered either.**
+
+**But state the size honestly: it is six banks, not a corpus.** Ids 200–739
+across banks 2–7, 441 objects, 721 layers reaching the filter branch. That is
+one machine's RAM at one moment, holding whatever was loaded that evening. So:
+
+- The **filter-table corrections** (16, 73, allpass) do not depend on it at all
+  — they rest on the panel anchors, i.e. on the machine's own display.
+- The **counts** — 64 LP2RES, 11 HIPASS, 17 allpasses, 20 F3 gains, 48 refusals
+  — are "over these six banks", and should be quoted that way rather than as a
+  rate. A different six banks would give different numbers.
+- The **fixed-array fact** (all four HOB segments always written, 1442 layers,
+  25 algorithms) is the one figure whose strength genuinely comes from breadth,
+  and 25 of 31 algorithms is real breadth even from six banks.
+
+The lesson worth carrying is s3ked's, stated better than the retraction does:
+**the errors that got through were the ones that made the data look
+better-behaved, not worse.** A regularity holding 74 of 74 across supposedly
+many vendors, and a table at 581/581, are the same shape — too clean, and clean
+for a reason that is not the one assumed.

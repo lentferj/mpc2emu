@@ -394,6 +394,50 @@ def _entry_runs(entries: List[_KrzEntry]) -> Iterator[Tuple[int, int, _KrzEntry]
 LYR_TAG, CAL_TAG = 0x09, 0x40
 ENC_AMPMODE_TAG, ENV_AMP_TAG, ENC_FILTERENV_TAG = 0x20, 0x21, 0x22
 HOB_F1_TAG, HOB_F2_TAG, HOB_F3_TAG = 0x50, 0x51, 0x52
+
+# HOW MANY DSP FUNCTIONS EACH ALGORITHM ACTUALLY HAS.
+#
+# Transcribed from the K2000 manual's algorithm chapter (31 algorithms, each
+# drawn as a chain of slots with its own option list per slot), by counting the
+# slots between the PITCH/SYNC head and the trailing amplifier. Those two ends
+# are not addressable DSP functions: PITCH is the keymap's own pitch input and
+# AMP is the layer amplifier, and neither is edited on an `Fn` page.
+#
+# A slot is head or tail only if EVERY option in it is one, never merely the
+# first. Jan flagged the assumption -- position in the manual's list is not a
+# default and need not even be an ordering -- and it was load-bearing: the amp
+# tail is TWO slots on ten algorithms, `AMP U / BAL` then `AMP L / AMP`, and
+# `BAL` is not an amp name. Testing the first option alone gets the right
+# answer here only because the manual happens to print `AMP U` before `BAL`;
+# had it printed them the other way, algorithms 14, 15 and 25 would each have
+# gained a third function they do not have, and this table would have switched
+# 0x52 ON for exactly the case it exists to switch off. The counts below are
+# the order-independent ones, and they agree with the positional reading.
+#
+# The count is all this reader needs, because the only question asked of it is
+# whether tag 0x52 -- the third HOB segment -- describes a slot that exists. It
+# is deliberately NOT a full slot->option table: the manual gives one, and the
+# option lists differ per slot, which means a block code is meaningful only
+# against its own slot's list. Our _K2_FILTER_TO_XPM was measured against F1
+# alone (581/581) and carries no authority elsewhere; using it for F3 is an
+# assumption this table narrows but does not remove. Hence: gate on existence
+# here, keep the F1 table's reach honest, and let the panel settle the rest.
+#
+# Algorithms absent from the manual's 1..31 range never appear in the local
+# corpus; an unknown one is treated as having no third function, so an
+# unrecognised algorithm degrades to the old F1-only behaviour rather than
+# reading a segment we cannot vouch for.
+_ALG_DSP_FUNCTIONS = {
+    1: 1,  2: 2,  3: 1,  4: 2,  5: 2,  6: 2,  7: 2,  8: 3,
+    9: 3, 10: 3, 11: 3, 12: 3, 13: 3, 14: 2, 15: 2, 16: 2,
+    17: 2, 18: 2, 19: 2, 20: 3, 21: 3, 22: 3, 23: 3, 24: 3,
+    25: 2, 26: 1, 27: 1, 28: 1, 29: 1, 30: 1, 31: 0,
+}
+
+
+def _alg_has_third_function(alg: Optional[int]) -> bool:
+    """Does this algorithm have a third DSP function, i.e. is tag 0x52 real?"""
+    return _ALG_DSP_FUNCTIONS.get(alg, 0) >= 3
 LFO1_TAG = 0x14
 def _k2_depth_cents(b: int) -> float:
     """K2000 DSP depth byte -> cents, for a frequency-unit function.
@@ -495,11 +539,18 @@ _K2_FILTER_TO_XPM = {
     50: 3,    # 4-pole LOPASS W/SEP -> Low4 (canonical "default" family)
     # Read off the machine's own display by the k2kremote project, 2026-08-16.
     4:  16,   # NOTCH             -> notch
-    5:  23,   # 2-pole ALLPASS    -> allpass
     12: 19,   # HIFREQ STIMULATOR -> treated as a shelving boost
     14: 19,   # STEEP RESONANT BASS
-    17: 23,   # ALLPASS
     69: 2,    # LOPAS2            -> Low2
+    # Added 2026-08-17 from k2kremote's 40 panel anchor rows. Both were
+    # UNKNOWN to this table and therefore refused, so a real filter was
+    # dropped: 16 in eight observations, 73 in one.
+    16: 6,    # HIPASS -> High1. One pole, by symmetry with 15 (LOPASS -> Low1):
+              # the two are consecutive codes and consecutive entries in the
+              # manual's slot list, and 15 is measured as the 1-pole variant.
+    73: 2,    # LP2RES (2-pole resonant lowpass) -> Low2
+    # Codes 5 and 17 were HERE, both mapped to XPM 23 "Model1 LP+dist".
+    # Both are allpasses and both are now in _K2_ALLPASS -> filter off.
     8:  19,   # PARA BASS      \
     9:  19,   # PARA TREBLE     >  parametric EQ family, NOT lowpass variants --
     13: 19,   # PARAMETRIC EQ  /   see the note on _K2_NON_FILTER below
@@ -520,6 +571,32 @@ _K2_NON_FILTER = {
     24: 'PCH (LF SIN)',      25: 'PCH (SW+SHP)',      26: 'PCH (SAW+)',
     27: 'PCH (SAW)',         29: 'PCH (SQUARE)',      33: 'PCH (SYNC M)',
     64: 'EVN (2P SHAPER)',
+}
+
+#: ALPASS -- a filter with a corner frequency and NO magnitude response.
+#:
+#: Identified 2026-08-17 from k2kremote's panel anchors: code 17 reads ALPASS in
+#: six observations, under tags 0x50 and 0x52 alike. We had it in
+#: _K2_FILTER_TO_XPM as XPM 23, "Model1 LP+dist", so every allpass converted to
+#: a DISTORTED LOWPASS -- wrong in kind, not merely in slope, because an allpass
+#: does not attenuate anything.
+#:
+#: XPM has no allpass, and Jan's call is that "filter off" is the closest true
+#: equivalent. It is: both pass the whole spectrum.
+#:
+#: HANDLED HERE RATHER THAN AS `17: 0` IN THE TABLE, and the distinction is the
+#: whole point. A table entry goes through the branch that also reads seg[1] as
+#: a cutoff, so an allpass cornered at 300 Hz would arrive as XPM type Off
+#: carrying a 300 Hz cutoff -- and XPM type 0 maps to E4B 0x00, a 4-pole lowpass
+#: that is "bypass-like" only while its cutoff is wide open. The E4XT would
+#: dutifully apply a 300 Hz lowpass to a block that attenuates nothing, which is
+#: the same invented-filter bug arriving by a different road. Leaving the layer
+#: at its default wide-open cutoff is what actually makes it a bypass.
+#: Code 5 is here too: k2kremote read it off the display as "2-pole ALLPASS" on
+#: 2026-08-16, and it carried the same XPM 23 mapping. Same block, same fix.
+_K2_ALLPASS = {
+    17: 'ALPASS (no magnitude response -> filter off)',
+    5:  '2-pole ALLPASS (ditto)',
 }
 
 _LFO_SHAPE_FROM_BYTE = {
@@ -592,6 +669,10 @@ class _KrzLayer:
         self.lo_key, self.hi_key = 0, 127
         self.lo_vel, self.hi_vel = 0, 127
         self.transpose = 0
+        # Read from CAL[29] and used only to decide whether the third HOB
+        # segment describes a slot the algorithm actually has. Not forwarded to
+        # the model -- no output format has anywhere to put it.
+        self.algorithm = None
         self.filter_type = 0
         self.filter_cutoff = 1.0
         self.filter_resonance = 0.0
@@ -635,6 +716,7 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
         if cur is None:
             continue   # PGM/FX global segments
         if tag == CAL_TAG:
+            cur.algorithm = seg[29]
             t = seg[1]
             cur.transpose = t - 256 if t >= 128 else t
             cur.keymap_id = (seg[11] << 8) | seg[12]   # CAL[11:13] only, see TODO.md
@@ -652,8 +734,63 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
                 cur.amp_env = None
         elif tag == ENC_FILTERENV_TAG:
             cur.filter_env = _decode_env(seg)
-        elif tag == HOB_F1_TAG:
-            hob[HOB_F1_TAG] = seg
+        elif tag == HOB_F1_TAG or (tag == HOB_F3_TAG
+                                   and not cur.filter_type
+                                   and _alg_has_third_function(cur.algorithm)):
+            # THE FILTER IS NOT ALWAYS IN SLOT F1 -- BUT SLOT F3 IS NOT ALWAYS
+            # THERE AT ALL, AND THAT IS WHY THE FIRST ATTEMPT WAS REVERTED.
+            #
+            # The four HOB segments are a FIXED-SIZE ARRAY: all four are written
+            # for every layer of every algorithm, measured over 1442 layers of
+            # the local corpus, 25 distinct algorithms, no exceptions. So the
+            # presence of a 0x52 segment says nothing whatever about whether the
+            # algorithm has a third FILTER-CAPABLE function. Reading it
+            # regardless is what invented filters in `' Sexy Beats'` and
+            # `" Echo's II"`, whose panels show no filter anywhere: both are
+            # algorithm 18, two filter-capable functions, not three.
+            #
+            # BE PRECISE ABOUT WHY, because the loose version is wrong. The
+            # third slot of algorithm 17/18 is NOT absent -- it exists and holds
+            # a shape or amp modulator; k2kremote read `AMP MOD OSC` there off
+            # the panel. What is absent is any FILTER among the functions that
+            # slot can select. So the fault in the reverted change was not
+            # reading a slot that isn't there; it was decoding a real slot's
+            # code through _K2_FILTER_TO_XPM, a table measured against F1's
+            # option list and meaningless against a list that shares none of its
+            # entries. Same gate either way, different mechanism, and only the
+            # precise version explains why a *type* can still be wrong here.
+            #
+            # The K2000 manual's algorithm chapter gives the real structure and
+            # the gate follows from it directly (see _ALG_DSP_FUNCTIONS). Tested
+            # against nine hardware-panel observations whose algorithm is
+            # unambiguous -- per LAYER, since `' Deep +'` is [10, 24] and a
+            # per-program reading conflates two different algorithms -- the rule
+            # "0x52 is meaningful iff the algorithm has three DSP functions"
+            # agrees 9 of 9, in both directions: six programs whose panel shows
+            # a filter there, three whose panel shows none.
+            #
+            # Where BOTH slots carry a filter, F1 wins: the K2000 chains two and
+            # this model holds one, so the first in the chain is the honest
+            # choice rather than whichever was parsed last.
+            #
+            # THE GATE IS `not cur.filter_type`, NOT "no F1 segment seen". The
+            # first version of this line asked whether tag 0x50 had appeared,
+            # which made the whole branch DEAD CODE: 0x50 appears in every layer
+            # of every algorithm -- the same fixed-array fact this comment opens
+            # with -- so the condition was never true. Presence of the F1
+            # segment is not presence of an F1 FILTER; the segment is there even
+            # when its block is a shaper, a panner or nothing at all. Caught by
+            # measuring the change's effect on the corpus and getting zero.
+            #
+            # Safe because CAL precedes every HOB tag in all 1442 corpus layers,
+            # so cur.algorithm is known here, and because the F1 branch above
+            # sets cur.filter_type before 0x52 is ever reached.
+            #
+            # Resonance is still NOT read for an F3 filter. F2 is the second
+            # control input of F1, so the F3 equivalent would be F4 at 0x53, and
+            # that has never been observed carrying one. Inferring it from the
+            # pattern is the same move that produced the invented bandpass.
+            hob[tag] = seg
             b0 = seg[0]
             # AN UNRECOGNISED BLOCK MUST REFUSE, NOT DEFAULT.
             #
@@ -671,8 +808,12 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
             # cluster on the algorithms that offer filters -- turned out to be
             # PARA BASS, PARA TREBLE and PARAMETRIC EQ. Guessing would have been
             # wrong in exactly the way that does not announce itself.
-            if b0 in _K2_NON_FILTER:
-                cur.filter_type = 0          # not a filter block; leave it alone
+            if b0 in _K2_ALLPASS or b0 in _K2_NON_FILTER:
+                # Both leave the layer at its DEFAULT wide-open cutoff. For a
+                # non-filter that is because seg[1] is not a frequency at all;
+                # for an allpass it is because the frequency is real but must
+                # not become an attenuation downstream. See _K2_ALLPASS.
+                cur.filter_type = 0
             elif b0 != _K2_FILTER_NONE and b0 not in _K2_FILTER_TO_XPM:
                 _unknown_f1_blocks.add(b0)
                 cur.filter_type = 0
