@@ -362,12 +362,11 @@ Output:
                       costs.  Keygroups dominate: a six-program volume can
                       hold 195 of them, so the pool binds far tighter than the
                       510-entry volume directory and a volume can satisfy the
-                      directory and still exceed the pool.  What the sampler
-                      DOES then is unverified: the RAM ceiling is known to
-                      half-load — one warning, then it behaves normally with
-                      the absent samples playing silence — and the object pool
-                      may degrade the same way rather than refusing.  Default
-                      1006,
+                      directory and still exceed the pool.  Exceeding it causes
+                      a PARTIAL load, measured on an S3000XL — programs stay
+                      resident and selectable with keygroups or samples
+                      missing underneath them, the same quiet failure as the
+                      RAM ceiling, never a refusal.  Default 1006,
                       measured on a 32 MB S3000XL; whether it moves with
                       fitted memory is untested, so read `STAT.max_blocks`
                       from your own machine if it disagrees.  Note the budget

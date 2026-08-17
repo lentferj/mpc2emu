@@ -425,6 +425,38 @@ _AKAI_TUNE_UNITS_PER_SEMITONE = 256
 #: a clamp is a claim about the hardware. Too wide lets a bad value through;
 #: too narrow silently truncates a good one, and only the first kind announces
 #: itself.
+#:
+#: **MEASURED 2026-08-16 on Jan's S3000XL, automatically.** A ladder of six
+#: keygroups on one sine, key == root so the tune was the only variable:
+#:
+#:     tune 5120 .. 7680  (+20 .. +30 semitones)
+#:     every step sounded, every step within 1 cent of prediction,
+#:     identical on 44.1 kHz and 22.05 kHz samples
+#:
+#: So +-50 semitones stands and the field is not the constraint. A rival
+#: reading of "+-50" as UNITS (which would make this 256x too wide) is
+#: refuted: s3ked wrote raw 256 through 5120 and read the pitch back, all on
+#: target, and this ladder extends that to 7680.
+#:
+#: What silences a zone is therefore NOT the tune value -- and after four more
+#: calibration volumes, it is not any keygroup setting at all:
+#:
+#:     downward offset alone, to -40 semitones          sounds, within 1 cent
+#:     -28/-30/-36 offset WITH +30 tune                 sounds
+#:     -47 offset with +45 tune, the exact silent shape sounds
+#:     the same, with a full-length hold loop           sounds
+#:
+#: The silent keygroups were not a fault. Their samples are SUB-BASS: peak
+#: energy at 18 and 24 Hz with 99 % and 98 % of it below 50 Hz, played at a net
+#: -2 semitones. The two keygroups that DO sound in the same program carry
+#: 3 % and 11 % of their energy in 50-200 Hz, and that harmonic content is what
+#: is audible -- their fundamentals are equally inaudible at 16 and 20 Hz.
+#:
+#: Recorded because it cost five bench iterations to reach, and the evidence
+#: that settled it was in the files the whole time. A spectrum of the four
+#: samples, taken before the third calibration rather than after the fifth,
+#: would have ended it: 'is there any energy above 50 Hz' is a cheaper question
+#: than 'which keygroup parameter breaks this', and it was the right one.
 _AK_TUNE_MAX = 50 * _AKAI_TUNE_UNITS_PER_SEMITONE     # 12800
 
 
@@ -511,8 +543,15 @@ def build_sample(sd: SampleData, name: Optional[str] = None,
     #     CALA4  root 69  ->  440 Hz   exact
     #     CALA2  root 45  ->  110 Hz   exact
     #
-    # So the root byte, the key numbering and this zone-root rule are all
-    # correct end to end. It took a purpose-built bank to establish: the real
+    # And TRANSPOSITION, measured on the same 220 Hz sample an octave either
+    # side of its root -- which the three readings above could not separate
+    # from a correct root with a broken pitch ratio:
+    #
+    #     CALA3 (root 57) at key 69  = +12 st  ->  440 Hz   exact
+    #     CALA3 (root 57) at key 45  = -12 st  ->  110 Hz   exact
+    #
+    # So the root byte, the key numbering, the pitch ratio and this zone-root
+    # rule are all correct end to end. It took a purpose-built bank to establish: the real
     # bank we started from has sample names, zone roots and actual audio
     # pitches that disagree with each other by up to 45 semitones, and no
     # amount of listening to it could separate its faults from ours.
@@ -1133,6 +1172,41 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
     k[0x07] = (akai_filter_byte(voice.filter_cutoff)
                if voice is not None and getattr(voice, 'filter_cutoff', None) is not None
                else 99)     # wide open (HW-confirmed) when unknown
+    # VELOCITY -> FILTER FREQUENCY, KEYGROUP BYTE 151. Written since 2026-08-16;
+    # before that a source's velocity-to-cutoff modulation was silently dropped
+    # and every converted program got a STATIC corner.
+    #
+    # The field is not where the documentation puts it. Inherited S1000 tables
+    # name offset 9 "V_FREQ, not used, range 0..0" -- and offset 9 is genuinely
+    # dead, measured. The live field is in the S3000 EXTENSION block past the
+    # S1000's 150-byte keygroup, found by Jan setting Vel>Freq / LFO2>Freq /
+    # Env2>Freq on the panel and the three values appearing at 151/152/153.
+    #
+    # MEASURED on an S3000XL, not inferred (P019, one keygroup, one zone):
+    #
+    #   FILFRQ 48   byte151  0 -> v30 -68.7 dBFS  v120 -45.2
+    #               byte151 12 -> v30 -72.8       v120 -23.1   loud end +22 dB
+    #               byte151 25 -> v30 -73.4       v120 -22.0
+    #               byte151 50 -> v30 -72.8       v120 -22.1
+    #
+    # Two things that come only from measuring. It SATURATES: past ~12-25 the
+    # sweep stops growing because the quiet end has bottomed out, so the +-50
+    # the field accepts is mostly unusable and 25 is full scale in practice.
+    # And the saturation point moves with the base -- at FILFRQ 72 it is ~25,
+    # at 48 it is ~12 -- so this is scaled to the range that is reachable
+    # rather than to the range the field declares.
+    #
+    # An earlier reading of the same field at FILFRQ 72 concluded that positive
+    # depth only darkens quiet notes and never opens loud ones. That was an
+    # artefact of a base already open enough to hit the ceiling; at a dark base
+    # it plainly opens the top. Kept as the reason this is calibrated at the
+    # base the material actually uses.
+    #
+    # Per KEYGROUP, verified: writing keygroup 1 left keygroup 2 untouched, and
+    # the field clamps to +-50 on write (90 read back as 50).
+    _vf = getattr(voice, 'velocity_to_filter', 0.0) if voice is not None else 0.0
+    if _vf:
+        k[151] = _clamp(int(round(_vf * 25)), -50, 50) & 0xFF
     # Amp envelope, from the source, through the HW-measured laws. These were
     # FIXED defaults until 2026-08-11 -- every converted program got the same
     # envelope and the same wide-open filter whatever the source asked for,
@@ -1414,10 +1488,33 @@ def build_program(preset, name: str, prog_num: int = 0,
         pairs = sorted(by_range[key], key=lambda zv: zv[0].lo_vel)
         zs = [z for z, _ in pairs]
         owner = pairs[0][1] if pairs else None
-        if len(zs) > MAX_ZONES_PER_KEYGROUP:
-            dropped += len(zs) - MAX_ZONES_PER_KEYGROUP
-            zs = zs[:MAX_ZONES_PER_KEYGROUP]
-        keygroups.append((key, owner, [dict(
+        # MORE THAN FOUR VELOCITY LAYERS: SPLIT ACROSS KEYGROUPS, DO NOT DROP.
+        #
+        # A keygroup has four zone slots, so six layers cannot live in one.
+        # That is a real format limit and it is where this used to stop --
+        # keeping the first four and discarding the rest. Since `zs` is sorted
+        # by lo_vel, the ones discarded were the LOUDEST, taking every velocity
+        # above the last survivor's hi_vel with them: a six-layer source came
+        # out covering 0-95 with nothing from 96 up. Jan reported the program
+        # as playing nothing at all, and the machine was right.
+        #
+        # The four-zone limit is per KEYGROUP, not per program. Several
+        # keygroups may cover the SAME key range -- that is how this writer
+        # already layers articulations -- so the layers go four at a time into
+        # as many keygroups as they need. Their velocity ranges do not overlap,
+        # so exactly one sounds at a time and the switching is preserved
+        # exactly as the source meant it.
+        #
+        # An intermediate fix stretched the last survivor to cover the dropped
+        # layers' velocities. It removed the silence but still threw two of six
+        # layers away, and widened a third over a dynamic range it was not
+        # recorded for. Kept here only as the note that the format was never
+        # the thing preventing this.
+        #
+        # The cost is keygroups, which are bounded by MAX_KEYGROUPS and by the
+        # sampler's resident object pool -- both checked below, and both far
+        # from binding on the programs that need this.
+        _zdicts = [dict(
             sample_name=z.sample_name,
             lo_vel=z.lo_vel, hi_vel=z.hi_vel,
             # VTUNO1..4 (offsets 48/72/96/120). VinSamLib's parser, written
@@ -1484,11 +1581,18 @@ def build_program(preset, name: str, prog_num: int = 0,
             # hard left. It went unnoticed because `or 0.5` rewrote the 0.0
             # that would have exposed it.
             pan=int(round(_or_default(getattr(z, 'pan', None), 0.0) * 50)),
-        ) for z in zs]))
+        ) for z in zs]
+        for _i in range(0, len(_zdicts), MAX_ZONES_PER_KEYGROUP):
+            chunk = _zdicts[_i:_i + MAX_ZONES_PER_KEYGROUP]
+            if _i:
+                dropped += len(chunk)      # counted as "carried into an extra
+                                           # keygroup", reported as such below
+            keygroups.append((key, owner, chunk))
 
     if dropped:
-        print(f"    [WARN] {dropped} velocity zone(s) dropped — an AKAI keygroup "
-              f"holds at most {MAX_ZONES_PER_KEYGROUP}")
+        print(f"    [INFO] {dropped} velocity layer(s) beyond "
+              f"{MAX_ZONES_PER_KEYGROUP} per keygroup carried into additional "
+              f"keygroups over the same key range — all layers kept")
     if len(keygroups) > MAX_KEYGROUPS:
         print(f"    [WARN] {len(keygroups)} key ranges — AKAI allows "
               f"{MAX_KEYGROUPS}; the highest {len(keygroups)-MAX_KEYGROUPS} dropped")
@@ -1707,8 +1811,28 @@ def build_akai_volume(bank: Bank, bank_name: Optional[str] = None,
         nm = uniq(sd.name, content=sample_identity(sd))
         if nm != sd.name.upper()[:AKAI_NAME_LEN]:
             renamed[sd.name] = nm
-        # The AKAI name field tolerates characters a filename does not.
-        fn = f"{safe_filename(nm.strip(), 'SAMPLE')}.S3"
+        # THIS IS AN AKAI DIRECTORY ENTRY, NOT A HOST FILENAME.
+        #
+        # It used to run through `safe_filename`, which sanitises for a PC
+        # filesystem. That turned '#' into '_', and '_' is not in the AKAI
+        # charset (0123456789 A-Z#+-.), so the encoder then wrote it as a
+        # SPACE. The result: a sample whose header says '5BSHRDF#1' sitting in
+        # a directory entry that says '5BSHRDF 1'. One sample, two names.
+        #
+        # The zones reference the header form, so the volume looked correct on
+        # disc -- every zone resolved, and a diff of zone bytes against the
+        # machine came back 70/70 identical. What that check could not see is
+        # whether the named samples were RESIDENT. s3ked loaded the volume and
+        # found 15 of them absent from RAM and 34 zone references dangling:
+        # every sharp in the volume silent, which is what Jan reported by ear
+        # this morning and what I then wrongly talked myself out of.
+        #
+        # '#' is legal here -- charset index 37 -- and so is '.'. The reader
+        # takes the name from the entry's 12 bytes and derives the extension
+        # from the file-TYPE byte, never by splitting the string, so nothing in
+        # the AKAI charset needs escaping. Replacing '.' with '-' was my first
+        # attempt and it simply moved the defect: 15 sharps became 9 dots.
+        fn = f"{nm.strip()}.S3"
         files.append((fn, build_sample(sd, name=nm, root_override=_chosen_root(sd))))
         if not quiet:
             print(f"  Sample: {fn} ({sd.sample_rate}Hz, {len(sd.data)//2} frames)")

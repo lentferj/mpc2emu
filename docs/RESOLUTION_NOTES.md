@@ -104,6 +104,7 @@ survive being carried between them.*
 - [§XPMTRUNC — head-vs-tail sample-name truncation, decided per program (2026-08-04)](#xpmtrunc-head-vs-tail-sample-name-truncation-decided-per-program-2026-08-04)
 - [§XPMXFADE — HW-2 answered: the MPC does not apply the loop crossfade (2026-08-04, measured)](#xpmxfade-hw-2-answered-the-mpc-does-not-apply-the-loop-crossfade-2026-08-04-measured)
 - [§XPMREV — HW-1 answered: the MPC does reverse on `Direction` (2026-08-04, measured)](#xpmrev-hw-1-answered-the-mpc-does-reverse-on-direction-2026-08-04-measured)
+- [§AKAIIMG — AKAI disk images: written, read, and byte-identical to an independent implementation (2026-08-05)](#akaiimg-akai-disk-images-written-read-and-byte-identical-to-an-independent-implementation-2026-08-05)
 - [§CWM202 — ConvertWithMoss cross-check (2026-08-13)](#cwm202-convertwithmoss-cross-check-2026-08-13)
 - [§CWM201 — ConvertWithMoss 20.1.0 cross-check (2026-08-08)](#cwm201-convertwithmoss-2010-cross-check-2026-08-08)
 - [§GIGE2E — GigaSampler end to end, over 146 real files (2026-08-09)](#gige2e-gigasampler-end-to-end-over-146-real-files-2026-08-09)

@@ -363,12 +363,75 @@ def _plan_partitions(volumes, part_blocks, size_limited=False,
     return [p for p in parts if p] or [[]]
 
 
+def _plan_given(volumes, groups, part_blocks, size_limited=False,
+                sys_blocks=PARTHEAD_BLKS):
+    """Use a caller's partition grouping verbatim, after checking it fits.
+
+    `groups` is a sequence of index sequences into `volumes`:
+    ``[[0, 1], [2]]`` puts the first two volumes in partition A and the third
+    in partition B.
+
+    A converter has no view about which partition a volume lands in -- the
+    grouping falls out of what is being converted, and _plan_partitions' fill
+    rule is right for that. A LIBRARIAN's user does have a view: keep this
+    library together, leave A short so it can be appended to later, and
+    stepping to partition B is a different gesture on the front panel from
+    stepping to volume 7 of A. Requested by VinSamLib 2026-08-16 for exactly
+    that.
+
+    Validated against the same limits the planner enforces, and refusing for
+    the same reasons, so a hand-made grouping cannot produce an image the
+    automatic one would have refused to build.
+    """
+    seen: set = set()
+    plan: List[list] = []
+    for gi, group in enumerate(groups):
+        part: list = []
+        used = sys_blocks
+        for idx in group:
+            if not 0 <= idx < len(volumes):
+                raise AkaiImageError(
+                    f"partition {chr(ord('A') + gi)} names volume index {idx}, "
+                    f"but there are {len(volumes)} volume(s)")
+            if idx in seen:
+                raise AkaiImageError(
+                    f"volume index {idx} ('{volumes[idx][0]}') appears in more "
+                    f"than one partition")
+            seen.add(idx)
+            name, files = volumes[idx]
+            need = VOLDIR_HD_BLKS + sum(_blocks(len(d), HD_BLOCK) for _n, d in files)
+            if need > part_blocks - sys_blocks:
+                raise AkaiImageError(
+                    f"volume '{name}' needs {need} blocks "
+                    f"({need * HD_BLOCK / 1048576:.1f} MB) but a partition holds "
+                    f"at most {part_blocks - sys_blocks} "
+                    f"({(part_blocks - sys_blocks) * HD_BLOCK / 1048576:.1f} MB)"
+                    + (" — raise --hda-size" if size_limited else ""))
+            if used + need > part_blocks:
+                raise AkaiImageError(
+                    f"partition {chr(ord('A') + gi)} was given "
+                    f"{len(group)} volume(s) needing more than the "
+                    f"{(part_blocks - sys_blocks) * HD_BLOCK / 1048576:.1f} MB a "
+                    f"partition holds; '{name}' does not fit. Split the group.")
+            used += need
+            part.append((name, files))
+        plan.append(part)
+    missing = [i for i in range(len(volumes)) if i not in seen]
+    if missing:
+        raise AkaiImageError(
+            f"{len(missing)} volume(s) are in no partition: "
+            + ", ".join(volumes[i][0] for i in missing[:4])
+            + (" ..." if len(missing) > 4 else ""))
+    return [p for p in plan if p] or [[]]
+
+
 def build_akai_hd_image(volumes: Sequence[Tuple[str, Sequence[Tuple[str, bytes]]]],
                         output_path: str,
                         size_mb: Optional[int] = None,
                         part_mb: int = 60,
                         cdrom: bool = False,
-                        cd_label: Optional[str] = None) -> Dict:
+                        cd_label: Optional[str] = None,
+                        partitions: Optional[Sequence[Sequence[int]]] = None) -> Dict:
     """Write an AKAI S3000 SCSI hard-disk or CD3000 CD-ROM image.
 
     ``volumes`` is ``[(volume_name, [(filename, data), ...]), ...]`` where each
@@ -378,6 +441,20 @@ def build_akai_hd_image(volumes: Sequence[Tuple[str, Sequence[Tuple[str, bytes]]
     content.  ``part_mb`` sets the partition size — 60 MB is the sampler's
     maximum and the usual choice, since a smaller one only means more
     partitions to step through on the front panel.
+
+    ``partitions`` overrides the automatic layout with an explicit grouping:
+    ``[[0, 1], [2]]`` puts the first two volumes in partition A and the third
+    in B.  Left as ``None`` the volumes are packed by filling each partition
+    before opening the next, which is right for a converter, where the grouping
+    simply falls out of what is being converted.  A librarian's user has a view
+    about it — keep this library together, leave A short so it can be appended
+    to later — and the front panel agrees with them: stepping to partition B is
+    a different gesture from stepping to volume 7 of A.
+
+    A supplied grouping is validated against the same limits the planner
+    enforces and refused for the same reasons, plus two of its own: a volume
+    named twice, and a volume named in no partition.  Silently dropping a
+    volume is the one outcome this must not have.
 
     With ``cdrom``, three blocks after each partition header are reserved for
     the CD-ROM info index and volumes are typed CD3000.  The result is *not*
@@ -403,10 +480,16 @@ def build_akai_hd_image(volumes: Sequence[Tuple[str, Sequence[Tuple[str, bytes]]
         # partition, not a partition hanging off the end of the disk.
         part_blocks = min(part_blocks, total_blocks)
 
-    plan = _plan_partitions(volumes, part_blocks,
-                            size_limited=total_blocks is not None
-                            and part_blocks == total_blocks,
-                            sys_blocks=sys_blocks)
+    if partitions is None:
+        plan = _plan_partitions(volumes, part_blocks,
+                                size_limited=total_blocks is not None
+                                and part_blocks == total_blocks,
+                                sys_blocks=sys_blocks)
+    else:
+        plan = _plan_given(volumes, partitions, part_blocks,
+                           size_limited=total_blocks is not None
+                           and part_blocks == total_blocks,
+                           sys_blocks=sys_blocks)
     used = [sys_blocks + sum(VOLDIR_HD_BLKS
                                 + sum(_blocks(len(d), HD_BLOCK) for _n, d in f)
                                 for _v, f in p) for p in plan]
@@ -419,6 +502,32 @@ def build_akai_hd_image(volumes: Sequence[Tuple[str, Sequence[Tuple[str, bytes]]
         # copy time.  The floor is just enough to save a program back.
         content = int(sum(used) * 1.25)
         total_blocks = max(content, _AUTO_MIN_MB * (1048576 // HD_BLOCK))
+
+        # AN EXPLICIT GROUPING NEEDS SLOTS THE CONTENT WOULD NOT HAVE CREATED.
+        #
+        # Partition SLOTS follow from the disk SIZE; the auto-size follows the
+        # CONTENT. So a caller who asks for three partitions of small volumes
+        # gets a disk with room for one, and a correct-but-baffling refusal:
+        # "content needs 3 partitions but a 16 MB disk with 60 MB partitions
+        # has 1". VinSamLib hit it on their first end-to-end run, and it is
+        # the common case for a librarian rather than an edge one -- the
+        # reason to force a boundary is usually that the content would NOT
+        # have produced it.
+        #
+        # The requested slot count is knowable from the grouping, so this
+        # computes it rather than documenting the trap. Documenting would have
+        # left every future caller a test run to spend, and this is the same
+        # class of fault as 'partitions' meaning slots: correct behaviour, no
+        # crash where the confusion is, visible only from outside.
+        #
+        # The first N-1 partitions are full and the last is sized to its own
+        # content, keeping the disk close to the material for the ZuluSCSI
+        # copy-time reason above rather than rounding every partition up.
+        if partitions is not None and len(plan) > 1:
+            last = used[-1] if used else sys_blocks
+            need = (len(plan) - 1) * part_blocks + max(last, sys_blocks + VOLDIR_HD_BLKS)
+            total_blocks = max(total_blocks, need)
+
         total_blocks = _blocks(total_blocks * HD_BLOCK, 1048576) * (1048576 // HD_BLOCK)
 
     if total_blocks > HD_MAX_BLOCKS:
@@ -456,6 +565,10 @@ def build_akai_hd_image(volumes: Sequence[Tuple[str, Sequence[Tuple[str, bytes]]
                 f"partition {chr(ord('A') + i)} needs "
                 f"{need * HD_BLOCK / 1048576:.1f} MB but is "
                 f"{sizes[i] * HD_BLOCK / 1048576:.1f} MB — raise --hda-size")
+    # Count the partitions that HOLD something before padding the plan out to
+    # the disk's slot count -- after this line len(plan) is the slot count and
+    # the distinction the return value documents would be lost.
+    n_used = len(plan)
     plan += [[] for _ in range(len(sizes) - len(plan))]
     tail_blocks = remaining             # addressable by nothing; zero padding
 
@@ -520,7 +633,21 @@ def build_akai_hd_image(volumes: Sequence[Tuple[str, Sequence[Tuple[str, bytes]]
         fh.write(b'\0' * (tail_blocks * HD_BLOCK))
 
     return {
+        # TWO DIFFERENT NUMBERS, AND CALLERS ASSUME THE WRONG ONE.
+        #
+        # 'partitions' is how many partition SLOTS the disk is carved into,
+        # which follows from the disk size. 'partitions_used' is how many of
+        # them actually hold a volume. They differ whenever the auto-size adds
+        # headroom: six 25 MB volumes fill three partitions on a disk that HAS
+        # four, and both numbers are correct.
+        #
+        # VinSamLib built a layout preview against 'partitions', got 4 where
+        # their reader found 3, and spent the difference looking for a
+        # fill-rule disagreement that did not exist. A caller drawing a preview
+        # wants 'partitions_used'; a caller describing the disk wants
+        # 'partitions'.
         'partitions': len(sizes),
+        'partitions_used': n_used,
         'blocks': total_blocks,
         'bytes': total_blocks * HD_BLOCK,
         'volumes': sum(len(p) for p in plan),

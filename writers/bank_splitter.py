@@ -240,14 +240,19 @@ def bank_limit_bytes(max_size_mb: float) -> int:
 #: the machine, so two things follow that the directory cap does not share:
 #:
 #:   * A volume can satisfy the 510-entry directory limit and still exceed the
-#:     pool -- the budgets are independent. **What the machine does then is
-#:     UNVERIFIED.** The RAM ceiling is known to half-load: one "insufficient
-#:     waveform memory!", then it behaves normally, with every keygroup
-#:     pointing at an absent sample playing silence. If the object pool
-#:     degrades the same way, "will not load" is the wrong warning and "will
-#:     load incompletely" is the right one. Raised by VinSamLib 2026-08-14;
-#:     only s3ked can settle it, and nothing here should claim either until
-#:     they do. Ours overshoot badly: a
+#:     pool -- the budgets are independent. **MEASURED 2026-08-16 on Jan's
+#:     S3000XL: exceeding the pool causes a PARTIAL LOAD, not a refusal.**
+#:
+#:     A volume needing 967 objects loaded whole and left `free P/K/S` at 39,
+#:     matching this model to the unit. Loading a further volume needing 88
+#:     took `free P/K/S` to 0 -- it consumed the remaining 39 and stopped. A
+#:     refusal would have left 39 untouched.
+#:
+#:     So the honest wording is "will load INCOMPLETELY", never "will not
+#:     load", and the failure is the quiet kind: programs stay resident and
+#:     selectable with keygroups or samples missing underneath them, exactly
+#:     as the RAM ceiling behaves. Two independent budgets, the same silent
+#:     degradation. Ours overshoot badly: a
 #:     six-program test volume uses 21 directory entries and 216 objects, about
 #:     32 keygroups per program, so filling the directory would ask for ~5200.
 #:   * The pool is shared across everything already loaded, exactly like the
@@ -256,6 +261,10 @@ def bank_limit_bytes(max_size_mb: float) -> int:
 #:
 #: So this check is a FLOOR, not a guarantee: it catches a volume that cannot
 #: load onto an empty machine. It cannot promise one will load onto a full one.
+#:
+#: THE POOL SIZE IS ALSO CONFIRMED DIRECTLY: a volume this model counts at 967
+#: objects left the machine reporting `free P/K/S: 39`, and 967 + 39 = 1006.
+#: The count here IS what the sampler counts.
 #:
 #: CORROBORATED BY AUTHORED DATA, which is a different kind of evidence from
 #: the machine reading. Across 1843 volumes on 21 commercial library discs:
@@ -323,7 +332,15 @@ def _capacity(fmt: str):
 #:         sample plateaus at 12 simultaneous notes where the same material in
 #:         mono reaches 24, measured identically at velocity 100, 45 and 25 so
 #:         the plateau is voice allocation rather than output clipping
-_VOICES_PER_NOTE = {'e4b': 32, 'krz': 24}
+#:   akai — 32, the S3000XL's entire polyphony. NOT a bench measurement like
+#:         the two above: Jan states (2026-08-17) that polyphony is settable
+#:         per program within a multi and that 32 is the maximum there, which
+#:         matches the machine's 32-voice architecture. Same reasoning that
+#:         gives krz its 24 (that machine's whole voice budget), so the number
+#:         is an architectural ceiling rather than a measured steal point. It
+#:         is an upper bound either way — a program allocated fewer voices in a
+#:         multi steals SOONER, so this warns late, never early.
+_VOICES_PER_NOTE = {'e4b': 32, 'krz': 24, 'akai': 32}
 
 
 def estimate_bank_size(bank: Bank) -> int:
