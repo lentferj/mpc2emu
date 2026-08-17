@@ -112,6 +112,7 @@ survive being carried between them.*
 - [§ENVSPAN — is the EOS envelope byte a RATE or a DURATION? (OPEN, 2026-08-12)](#envspan-is-the-eos-envelope-byte-a-rate-or-a-duration-open-2026-08-12)
 - [§RULER — a ruler that saturates against its source is measuring the source](#ruler-a-ruler-that-saturates-against-its-source-is-measuring-the-source)
 - [§AGREEMENT — what a second source actually rules out](#agreement-what-a-second-source-actually-rules-out)
+- [§AKAIRESAVE — the `??` regions, answered on an S3000XL (2026-08-17)](#akairesave-the-regions-answered-on-an-s3000xl-2026-08-17)
 - [§K2DSP — the K2000 F1 slot is a DSP block, not a filter (2026-08-16, measured)](#k2dsp-the-k2000-f1-slot-is-a-dsp-block-not-a-filter-2026-08-16-measured)
 - [§AKAIVFR — S3000XL velocity→filter is keygroup byte 151 (2026-08-16, measured)](#akaivfr-s3000xl-velocityfilter-is-keygroup-byte-151-2026-08-16-measured)
 - [§E4BRATE2 — the rate-pitch formula confirmed on machine-authored material (2026-08-16)](#e4brate2-the-rate-pitch-formula-confirmed-on-machine-authored-material-2026-08-16)
@@ -8221,6 +8222,95 @@ wording and still done nothing, box 2 would be dead.
 With only boxes 1 and 3, anything unmeasured gets treated as unknowable and
 anything adjacent to a measurement gets quietly promoted. VinSamLib traced four
 separate defects in one parser to exactly that missing category.
+
+## §AKAIRESAVE — the `??` regions, answered on an S3000XL (2026-08-17)
+
+**Result: our zero-fill is safe. The machine round-trips those bytes verbatim
+and validates only one 13-byte field inside them.**
+
+Method: `docs/re_procedures/akai_resave_diff.md`. Jan loaded volume `RESAVE`
+with **LOAD ENTIRE VOLUME + CLR** and saved it back to `VOLUME 005` on the same
+disc; the two were then byte-diffed. Three programs — a control written exactly
+as we write today, and two whose `??` bytes were stamped with different known
+patterns (`offset` and `offset ^ 0x55`).
+
+### What the machine preserved
+
+| span | stamped | kept | cleared |
+|---|---:|---:|---:|
+| program common `0x48`–`0xbf` | 120 | **107** | 13 |
+| keygroup `0x96`–`0xbf` (×4) | 168 | **168** | 0 |
+
+Nothing was rewritten to a third value, and **nothing moved** — the `MOVED`
+case the two-pattern design existed to detect did not occur. Every unknown byte
+came back exactly as written, including deliberately absurd values.
+
+### The one field it does validate — and its boundary
+
+The 13 contiguous bytes `0x4c`–`0x58`, the modulation-source matrix
+(`MODSPAN1-3`, `MODSAMP1-2`, `MODSLFOT/L/D`, `MODSFILT1-3`, `MODSPITCH`,
+`MODSAMP3`). Illegal source codes are **zeroed on load**. The two probes
+disagreed here, and that disagreement is the finding rather than a problem —
+`offset` stamping produces large values, `offset ^ 0x55` small ones:
+
+```
+values KEPT    : 0 1 2 3 4 5 6 7 13
+values CLEARED : 24 25 26 27      (and 76-88 from the other probe)
+```
+
+So a legal source code includes **0–13**, and **≥24 is rejected**. The boundary
+lies in **14–23, untested** — neither pattern happened to land there.
+
+**A single probe would have got this wrong in both directions.** The offset
+probe alone shows all 13 cleared and reads as "the machine rebuilds this whole
+field". The XOR probe alone shows 9 of 13 kept and reads as "it mostly does
+not care". Only together do they show a *value*-dependent rule.
+
+### What it does NOT validate, and one hypothesis
+
+`0x49 B_PTCHD` kept **73** where the documented range is 0–12. `0x63`–`0x65`,
+the **filter-2** modulation sources, kept values as bogus as the ones cleared
+next door. `0x67`/`0x68`/`0x6d` (reserved) and `0x72` (`PFXSLEV`) also survived.
+
+The filter-2 asymmetry has an obvious candidate explanation — **this machine has
+no additional filter board fitted** (Jan ordered one 2026-08-17), so there may be
+nothing to validate against. That is a hypothesis, not a finding; re-run when the
+board arrives, and if `0x63`–`0x65` start being validated it is confirmed.
+
+### Two internal pointers the machine rewrites, both of them ours to leave alone
+
+**Block base, `0x01`–`0x02`.** We write `_RAM_BASE_PARA` 0x900c; the machine
+relocated to 0x9054 in RAM and 0x9048 on this save. **The `0x0c` paragraph
+stride is identical to ours** — our block-layout model is confirmed against
+hardware, only the base is machine-assigned.
+
+**Per-zone pointer, `zone_base + 0x16`** (`0x38`/`0x50`/`0x68`/`0x80`). We write
+the `0xFFFF` null sentinel; the machine writes a live RAM address (`0x90b4`).
+It rewrites **exactly one per USED zone** — the keygroups with 1/2/3/4 zones
+came back with 2/4/6/8 differing bytes, and unused zones kept `0xFFFF`. That
+scaling is what identifies it as a per-zone resolved pointer rather than a
+format constant, and it is why the probe carried a spread of zone counts.
+
+Both are re-resolved on load, so writing `0xFFFF` is correct and our files are
+not made wrong by differing here.
+
+### Consequences for the writer
+
+- **Zero-filling `??` is safe.** Nothing there is required, and the machine
+  imposes nothing.
+- **But those bytes are carried.** They survive a load-and-save round trip
+  untouched, so anything meaningful a real disc holds there we would drop by
+  writing zeros. That is a reason to keep the `_PROGRAM_HW_DEFAULTS` copies, not
+  to add more guesses.
+- **Do not rely on the machine to correct anything we write** — outside
+  `0x4c`–`0x58` it corrects nothing, not even a documented range violation.
+
+### Incidental: machine-authored auxiliary files
+
+Saving the volume produced `TL1.T`, `EFFECTS FILE.X`, `DRUM INPUTS.D` and
+`MULTI FILE.M3` alongside the programs — **machine-written examples of all four
+auxiliary types we carry but do not read.** They arrived free with this session
+and are the reference material that TODO item was blocked on.
 
 ## §K2DSP — the K2000 F1 slot is a DSP block, not a filter (2026-08-16, measured)
 
