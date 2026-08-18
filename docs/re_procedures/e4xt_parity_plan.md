@@ -93,7 +93,7 @@ that cannot fail is not a check.
 | **D** | E4B stereo | **already on `main`** — `stereoE2E` no longer exists (Jan, 2026-08-17). Corpus-RE'd over 473 files / 20,383 samples, implemented, **never hardware-confirmed** | listen |
 | **E** | Single-cycle oscillators | implemented, unheard | listen |
 | **F** | `filter_env_amount` −0.114 shift | on main, unheard | listen |
-| **G** | `VF NEW` / `VF OLD` | built, unheard | listen |
+| ~~**G**~~ | ~~`VF NEW` / `VF OLD`~~ | **NOT AN E4XT ITEM — filed here in error.** `FILFRQ`/`MODVFILT1` are AKAI registers (s3ked's §116 law); the two volumes sit on the S3000XL's HD4 and are still unheard. Moved to the AKAI side | — |
 
 **A is the only one that is a suspected defect in shipped output.** B is the
 one with the largest unknown upside. C–G are confirmations of work already
@@ -537,6 +537,193 @@ Neither is a defect. They are the honest boundary of a first pass, and the
 `frontier.json` output exists so the boundary is visible in the result rather
 than in someone's memory of this document.
 
+### 2b.4c PASS A RAN, AND IT CORRECTED THE SEQUENCING (2026-08-18)
+
+**It touched nothing** — RAM byte-identical before and after, which is what a
+program that cannot press a soft key looks like from outside. It **aborted on a
+modal rather than guessing a dismissal**, exactly where guessing cost us. The control
+reported a pass — **and that was wrong, see below.**
+
+```
+pages 5   steps 36   edges 35   soft-key cells 20
+ABORTED: a modal opened after SAMPLE_EDIT
+IMPLAUSIBLE: only 5 pages
+```
+
+**The implausibility alarm fired and the threshold was not the problem.** Of 35
+edges only 9 changed the page; 26 were self-loops. And the diagnosis:
+**`PAGE_NEXT` and `PAGE_PREV` changed the page zero times.** Cursor and mode keys
+moved fine, so navigation was not stuck and the frame was not static — the pages
+are genuinely absent.
+
+**Because RAM was empty, the menu tree is degenerate.** No preset content to page
+through, no samples for Sample Edit — hence the modal that aborted the run,
+almost certainly a "no samples" dialog rather than a page.
+
+**This breaks B11's documented route.** EOS 4.0 ch.8 says to reach the Filter
+screen *"use the Previous and Next Page buttons"* — the exact operation that does
+nothing in this state. B11 would have surveyed one page, found no filter screen,
+and the session would have gone on debugging a script that was working. **A walk
+that pressed nothing saved a whole hardware session.**
+
+**So the order inverts: LOAD FIRST, then recon, then B11.** My "recon first" was
+wrong for a reason neither of us considered — a walk of an empty machine maps
+the wrong machine.
+
+**~~The generalisable form...~~ RETRACTED.** I wrote up "start from a clean
+machine is right for safety and wrong for coverage" as the transferable lesson.
+It may well be true in general; **the evidence I cited for it was wrong**, and a
+lesson resting on a refuted observation is worth less than no lesson. See
+2b.4e — the load did not change paging at all, so nothing here demonstrated
+anything about clean-machine hygiene. Recon must walk the state B11 will run in, and that state
+includes the bank.
+
+**Who performs the load is a safety question, not a convenience one.** `HD0.img`
+is mounted as SCSI ID 0 and is not to be touched (Jan, 2026-08-18); on the disk
+pages `Load` and `Save` are adjacent soft keys. A load cannot write to HD0; a
+**mis-pressed Save can**, with a 98-preset bank in RAM to write. The exposure is
+the neighbourhood of the load rather than the load. Either a human commits it at
+the panel, **or `HD0.img` is renamed `XX_HD0.img.disabled` so ZuluSCSI never
+mounts it** — the latter removes the class for every future session and is the
+standing preference.
+
+**DECISION, Jan 2026-08-18: HD0 stays mounted and eosed loads remotely.** Three
+options were put to him — rename `HD0.img` to disable it, a human commits the
+load at the panel, or accept the residual — and he chose the third. Recorded
+with the residual stated rather than absorbed: HD0 mounted as SCSI ID 0, no
+backup by instruction, `Load` and `Save` adjacent, and a 98-preset bank in RAM
+afterwards worth writing. eosed's observation that `Save` renders **greyed** on
+a read-only CD drive narrows this and does not remove it — greyed is a
+rendering, not proven inertness, and the drive-selection page lists D0 before
+the CD is chosen.
+
+**Standing instruction if a press goes somewhere unexpected: stop and report,
+do not recover.** The entire value of the 2026-08-18 incident was the
+completeness of the report; a recovery attempt would have destroyed the evidence
+of what happened.
+
+**A boundary worth recording separately.** I proposed the rename as "better,
+because it retires the class". eosed refused to treat it as within scope: the
+instruction was *do not use HD0 at all*, a rename modifies that file, and
+**"the rule's purpose licenses an action against its letter" is how a clear
+instruction becomes negotiable.** They were right and asked Jan instead. The
+same move, in the other direction, is what stopped me reasoning past a boundary
+rather than through it.
+
+### 2b.4d THE RECON CONTROL WAS NOT A CONTROL EITHER (2026-08-18)
+
+**I repeated eosed's claim that this control "cannot pass by coincidence". It
+can, and it did.**
+
+A second recon run reproduced the first almost exactly (34 edges vs 35, paging
+dead both times) but reported **CONTROL DRIFTED** where the first reported a
+pass — same machine, same empty RAM, minutes apart. eosed measured rather than
+explained, and pressed `PRESET_MANAGE` five times in a row:
+
+```
+b1e70b -> 2419a7 -> b1e70b -> 2419a7 -> b1e70b
+```
+
+**`PRESET_MANAGE` TOGGLES between two pages.** It is not a canonical
+destination. So a control that presses it once at each end and compares
+fingerprints is testing **the parity of how many times it has been pressed**,
+not the state of the machine. Run A passed on parity; run B failed on parity;
+neither said anything about drift.
+
+**That is the third control in two days that did not measure what it claimed** —
+after the transport-not-measurement control (§WRONGLAYER) and the start-page
+control that returned via a fixed route. eosed's own diagnosis is the useful
+part and it is not carelessness:
+
+> I keep validating the control against the *idea* of the mechanism rather than
+> against the machine.
+
+`PRESET_MANAGE` toggling took **one five-press test** to establish, and nobody
+ran it — including me, when I signed off and then wrote "a real control this
+time" into this document.
+
+**Fixed by observation rather than assumption**, the same principle recon
+already uses for presses: press CANON twice, sample both sides, compare the
+resulting SET. The pair is identical whichever side you start from, so it is
+start-independent, and a two-member set only matches when both members match —
+parity cannot carry it. It warns if CANON turns out *not* to toggle at reference
+time rather than silently degrading.
+
+**The general form:** a control is a measuring instrument, and it needs
+validating against the machine exactly as any other measurement does. "This
+returns to a known page" is a claim about the machine, not a property of the
+code that presses the key.
+
+### 2b.4e THE PAGING DIAGNOSIS WAS AN INSTRUMENT ARTEFACT, NOT A MACHINE FACT
+
+```
+reconA (empty)   edges 35   changed  9   paging-that-worked 0
+reconB (empty)   edges 34   changed  8   paging-that-worked 0
+reconC (LOADED)  edges 49   changed 11   paging-that-worked 0
+```
+
+**Zero in 118 edges. Loading 98 presets made no difference to paging.**
+
+The real cause is recon's own boundary: **it can only reach TOP-LEVEL pages,
+because entering an editor's multi-page area requires a soft key, which recon
+cannot press by construction.** Paging applies *inside* those areas. So "paging
+does nothing" was never a fact about the machine or about empty RAM — it was
+recon truthfully reporting that it never got anywhere paging applies.
+
+eosed's framing: *"I reached for a machine-state explanation when the
+explanation was in the instrument."* That is §WRONGLAYER one level up — there
+the control measured the transport instead of the experiment; here the
+observation described the instrument's reach and was read as a property of the
+subject.
+
+**The load was still right, for a reason that survives the wrong argument:** 7
+pages against 5, 27 soft-key cells against 20, `SAMPLE_EDIT` reaching a real
+page instead of a modal, and B11 needs the bank resident regardless. A correct
+decision reached by a wrong route is still worth separating from its reasoning
+(§RIGHTNUMBER).
+
+**5 pages is a floor, not a census** — the run aborted at step 36 of 120, so the
+map is incomplete as well as shallow, and it is not coverage of anything.
+
+### 2b.4f WHAT THE WALK WAS FOR — B11's documented route is wrong (2026-08-18)
+
+**This is the payoff, and it arrived from a program that pressed nothing.**
+
+Recon captured the Preset Edit landing page, titled **`Voices-Main`**
+(`V1 G1 S001 Harm_C3  volume pan ctune ftune xpose orig`). Its soft-key row:
+
+```
+F1 Utils^   F2 SZone^   F3 [ Global   F4 Links   F5 Voices ]   F6 EditVce
+```
+
+**`b_sweep.py`'s B11 route was `PRESET_EDIT` then `F3`. On this page F3 is
+`[ Global`, not Amp/Filt.** The route would have entered the Global subtree and
+`--survey` would have paged through the wrong pages entirely — producing a
+plausible, complete, wrong table, which is this project's signature failure.
+
+The manual is not wrong: *"press the Amp/Filt function key (F3)"* applies at the
+**Dynamic Processing level**, one level deeper than where `PRESET_EDIT` lands.
+The missing step is the manual's own *"select the voice(s) using the voice
+selection screen"* — and `Voices-Main` is plainly that screen, so the entry is
+almost certainly **`EditVce` (F6)**.
+
+**Not verified.** That EditVce leads to a page with Amp/Filt on F3 is the strong
+hypothesis from the evidence, not a measured fact, and eosed flagged it as such.
+`EditVce` sits in their denied list, labelled *"unclear, escalated rather than
+guessed"* — it is precisely the key B11 needs, and it was correctly refused by a
+program with no authority to press it.
+
+**Two more things recon surfaced without pressing anything:**
+
+- A modal reading **`Sample: S001 Harm_C3 / Mono Start Zero!!`**, informational
+  rather than an error, dismissed by **OK on F6**. This is what aborted reconC.
+  Worth knowing before anything else meets it, since guessing a dismissal is the
+  specific mistake that turned a wrong press into a confirmed Load.
+- **`Sample Edit` carries `Utils^ / Tools1^ / Tools2^ / Tools3^ / Tools4^`** —
+  four submenu groups nobody has enumerated, and a plausible home for parameters
+  the converter does not model. **That is the Phase 1b coverage-gap deliverable
+  appearing on its own**, before the walk was even able to enter them.
+
 ### 2b.5 Sequencing
 
 Run it **before** the targeted B-section sweeps — but eosed corrected my reason,
@@ -646,6 +833,38 @@ that will have produced findings.
 
 ---
 
+## 5c. Phase 3 batch — built 2026-08-18, needs a card slot
+
+`/home/lentferj/temp/re_e4xt_confirm/CONFIRM.iso`. Six presets, three A/B pairs,
+each pair on two ADJACENT keys so an A/B is two notes rather than a preset
+change:
+
+```
+ST MONO 48 / ST WIDE 49    D  stereo -- WIDE must be audibly wider
+SC OFF  52 / SC ON   53    E  single-cycle -- ON sustains, steady pitch
+FE OLD  57 / FE NEW  58    F  filter_env_amount 0.776 vs 0.663
+```
+
+**Every pair carries its predicted direction, written before any listening**,
+because "they sound different" is not a result if nobody said which way first.
+
+**FE is deliberately synthetic rather than KRZ-sourced.** The change is to the
+KRZ read path, so the obvious test converts a real KRZ program twice — which
+couples the test to a particular file. The decision-relevant question is
+cheaper and self-contained: **is a 0.114 depth difference audible at all?** If
+not, the correction is arithmetic housekeeping and needs no ground truth. Only
+if it is does the KRZ A/B become worth building.
+
+Verified before shipping: round-trips through our parser, the stereo sample
+survives as genuine 2-channel, the single cycle is 401 frames with a forward
+loop, one key per preset all distinct. The two depths land **0.118 apart** after
+byte quantisation rather than the 0.114 corpus mean — so the test asks about a
+marginally larger difference than the corpus average, which is worth knowing if
+the answer comes back "barely".
+
+**Not on the card**: it was built while the card was in the machine. Needs a
+free slot (CD0 is unused) next time the card is in the PC.
+
 ## 5b. Staged on the ZuluSCSI card, 2026-08-18
 
 Both banks are written to the E4XT card and its `whatiswhat.txt` slot map is
@@ -665,7 +884,7 @@ wants no bank at all. It is still first.
 |---|---|---|
 | `gen_e4xt_ftype_anchors.py` | **built**, staged as CD2 | Phase 1 bank |
 | `gen_e4xt_envspan_bank.py` | **built**, staged as CD6 | Phase 2 bank |
-| `gen_e4xt_confirm_batch.py` | **to build** | Phase 3 bank |
+| `gen_e4xt_confirm_batch.py` | **built + round-tripped** | Phase 3 bank |
 | `e4xt_display_join.py` | **built + self-tested** | joins eosed's display dump to our written bytes; reports disagreements, like the K2000 anchor join |
 | `gen_hw_confirm_batch.py` | exists | precedent to follow |
 | `fit_e4b_rate_fields.py` | exists | precedent for corpus-first analysis |
