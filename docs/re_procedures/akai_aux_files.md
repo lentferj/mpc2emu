@@ -157,3 +157,81 @@ establishes whether these types share a record convention.
 `.T` (take list) and `.X` (effects) are not covered here. `.X` is 7312 bytes and
 would need its own session; `.T` is 160 bytes and may well be trivial once `.D`
 is understood.
+
+---
+
+## Ready to decode — what to run when the card is next in the PC (2026-08-18)
+
+**Everything on the machine side is done.** s3ked configured both pages over
+SysEx, unattended, and saved two type-0 volumes. Nothing further needs the
+sampler; the remaining work is a diff and it needs the card in the reader.
+
+### The three volumes form a ladder
+
+| volume | drum inputs | multi | role |
+|---|---|---|---|
+| `VOLUME_005` | default | default | the unconfigured baseline, already extracted to `/home/lentferj/temp/akai_resave_results/VOLUME_005/` |
+| `AUXKEY 1` | **configured** | default | isolates the drum-input layout |
+| `AUXKEY 2` | configured | **configured** | isolates the multi layout |
+
+**`AUXKEY 1` vs `AUXKEY 2` is the valuable pair and nobody designed it** — it
+fell out of doing the two files in sequence. Same everything, multi alone
+differs, so the multi's disk layout is isolated with the drum changes held
+constant. A single-file diff with a built-in control.
+
+### Run these three
+
+```bash
+# 1. drum inputs: baseline -> configured
+python3 tests/re_banks/akai_aux_diff.py \
+    "/home/lentferj/temp/akai_resave_results/VOLUME_005/DRUM INPUTS.D" \
+    "<HD4>#AUXKEY 1/DRUM INPUTS.D"
+
+# 2. multi: configured against the SAME disc's unconfigured multi
+python3 tests/re_banks/akai_aux_diff.py \
+    "<HD4>#AUXKEY 1/MULTI FILE.M3" \
+    "<HD4>#AUXKEY 2/MULTI FILE.M3"
+
+# 3. what a type-0 volume actually contains, vs what we build
+#    AUXKEY 2 is a nine-entry type-0 volume written by the instrument.
+```
+
+### The keys, and how to read them
+
+`~/temp/s3ked-logs/aux_specimen.json` and `~/temp/s3ked-logs/multi_key.json`.
+Both carry `original`, `readback`, `refused` and `controls_held`. **Both were
+verified here before the card ever moved:** the drum key changes 13 bytes, all
+inside inputs 1–6, nothing outside; the multi key changes 24 bytes in part 1 at
+exactly the specified offsets, one byte at offset 70 in each of parts 2 and 3,
+and parts 0 and 4–15 byte-identical.
+
+The keys are **read back off the machine, not transcribed by anyone** — which
+matters, because all three of the corrections made on 2026-08-17/18 were faults
+in records rather than in measurements (§WRONGLAYER part 2).
+
+### What the diff can and cannot settle
+
+It will give the field map: a changed byte whose value equals what was written
+names that field.
+
+**It cannot settle the signed encoding.** `PANPOS = −13` was written as `243`
+and `PTUNOCM = −37` as `219` using s3ked's `params.encode_field`, which assumes
+two's complement. A readback agreeing with that confirms their encoder against
+itself and nothing else. The three candidates give:
+
+```
+PANPOS  −13  ->  offset-by-50: 37   two's complement: 243   sign-magnitude: 141
+PTUNOCM −37  ->  offset-by-50: 13   two's complement: 219   sign-magnitude: 165
+```
+
+**Settling it takes five seconds at the front panel:** show `PANPOS` for part 1
+of the multi in `AUXKEY 2`. If it reads −13, two's complement is right and all
+three signed fields are settled at once. `TRANSPOSE = +19` reads 19 under every
+candidate and is the positive control that the field is where we think it is.
+**Add that look to the same crossing.**
+
+### One transport caveat
+
+`243` and `219` both exceed 127. They nibble fine but would be illegal as raw
+SysEx header bytes, so if a reader ever shows those offsets clamped to 127 that
+is a transport artefact, not the machine.

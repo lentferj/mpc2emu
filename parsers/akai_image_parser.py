@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # SPDX-FileCopyrightText: Copyright (C) 2026  mpc2emu contributors
 #
-# Part of mpc2emu — https://github.com/jlentfer/mpc2emu
+# Part of mpc2emu — https://github.com/lentferj/mpc2emu
 # Contributions: Jan Lentfer, with AI assistance (see README).
 """Reader for AKAI S1000/S3000 disk images — hard disk, CD-ROM and floppy.
 

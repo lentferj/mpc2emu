@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # SPDX-FileCopyrightText: Copyright (C) 2026  mpc2emu contributors
 #
-# Part of mpc2emu — https://github.com/jlentfer/mpc2emu
+# Part of mpc2emu — https://github.com/lentferj/mpc2emu
 # Contributions: Jan Lentfer, with AI assistance (see README).
 """AKAI S1000/S3000 disk-image writer — hard disk (SCSI/ZuluSCSI) and floppy.
 
@@ -105,11 +105,29 @@ _FTYPE_CDSAMPLE = ord('h') | 0x80               # CD3000 sample params -> .s+
 def ftype_to_ext(ftype: int) -> str:
     """The extension for a file-type byte.
 
-    Only `.S1`/`.P1` carry the generation digit in the S1000 range — an FX
-    file is `.X`, not `.X1` — which is why this is a rule rather than a table.
-    Reading a real library disc turns up `.X`, `.D`, `.Q` and `.M3` alongside
-    the samples and programs, and dropping their extension would lose the one
-    thing that says what they are.
+    WHAT THE BYTE ACTUALLY IS, established with s3ked 2026-08-18 by reading
+    directories the S3000XL wrote itself: **it is an ASCII letter naming the
+    file, and bit 7 marks the S3000 generation.** Masked to 7 bits it reads
+    plainly:
+
+        'p' program   's' sample   'm' multi
+        't' take list 'x' effects  'd' drum inputs
+
+    That is why this is a RULE over ranges rather than a table of known types.
+    A table is a list of what somebody has seen; the ranges are a model of what
+    the format is, so an unseen letter still yields an extension instead of
+    vanishing, and the fix is never to keep adding rows.
+
+    Only `.S1`/`.P1` carry the generation digit in the S1000 range — an FX file
+    is `.X`, not `.X1`. Reading a real library disc turns up `.X`, `.D`, `.Q`
+    and `.M3` alongside the samples and programs, and dropping their extension
+    would lose the one thing that says what they are. That is how this shape was
+    arrived at: from the reading side, where the problem is visible.
+
+    The multi is high-bit set — `0xed`, confirmed raw on two machine-written
+    directories (the flash BOOT SYSTEM# volume and an HD volume the sampler
+    saved). It is NOT `0x6d`: program, sample and multi arrive with bit 7 set,
+    while take list, effects and drum inputs do not.
     """
     if ftype == _FTYPE_CDSETUP:
         return 'CD'

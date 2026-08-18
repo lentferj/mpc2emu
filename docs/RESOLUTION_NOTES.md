@@ -127,6 +127,8 @@ survive being carried between them.*
 
 - [§RIGHTNUMBER — when the measurement survives and the explanation does not (2026-08-18)](#rightnumber-when-the-measurement-survives-and-the-explanation-does-not-2026-08-18)
 
+- [§WRONGLAYER — a positive control on the transport is not one on the measurement (2026-08-18)](#wronglayer-a-positive-control-on-the-transport-is-not-one-on-the-measurement-2026-08-18)
+
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -9809,3 +9811,92 @@ and the fourth by its author only after an unrelated fact landed beside it.
   gap invites the next person to look. A wrong reason closes the question.
 
 Related: §KRZF3 addendum (the slot-relative claim, retracted), §KRZF3 provenance.
+
+## §WRONGLAYER — a positive control on the transport is not one on the measurement (2026-08-18)
+
+**s3ked's, from a false negative that survived a control they were pleased with.**
+Recorded here because the same mistake is available in the E4XT plan and was
+nearly made there.
+
+They concluded a sampler could not be made to save over SysEx. They had a
+positive control: the identical raw poke, on a different page, loaded an item —
+559 kB consumed, sample resident. Frames were arriving, the route was live, so
+the negative looked like the machine's answer.
+
+**It was a control on the wire, not on the experiment.** "Frames arrive" says
+nothing about whether the detector could observe a save. Three independent
+errors were stacked underneath it: the wrong register was written (they believed
+four neighbouring registers were mirrors of one; the save was two along), aimed
+at the wrong destination (an empty slot, where a working trigger also shows
+nothing), while watching the wrong variable (a directory, when the register
+under test loads into RAM). Remote save exists. So does remote rename.
+
+### The distinction, stated so it is usable
+
+- **Transport control:** proves the message reached the device. Answers *is my
+  cable plugged in*.
+- **Measurement control:** proves that IF the effect occurred, this apparatus
+  would see it. Answers *would I know*.
+
+A negative result needs the second. The first is worth having and is not
+evidence about the finding.
+
+**The cheapest form of a measurement control is to produce the effect by a route
+already known to work, and check the detector fires.** For a save: save from the
+panel, then run the detector unchanged. If it does not see that, it cannot see
+anything.
+
+### Where this already applies to us
+
+`docs/re_procedures/e4xt_parity_plan.md`, Phase 1b. The staged walk aborts if
+the display fails to change between steps — which detects a dead panel route,
+i.e. transport. **It does not detect a crop sitting on the wrong field**, and
+eosed said as much: with the byte varying per preset, a wrong-but-changing field
+sails through. So the walk needs a measurement control too: navigate to a page
+whose content is known, and confirm the crop reports it.
+
+Related: §RIGHTNUMBER. Both are failures with no tell in the output — that one
+publishes a right answer with a wrong reason, this one publishes a wrong answer
+with a control that looked valid.
+
+### The technique that broke it open, worth stealing
+
+They found it by **writing every register its own current value**. State-neutral
+by construction, but any write-triggered action still fires, because the write
+*is* the trigger. It separates "this register acts" from "this value is valid" —
+which every value sweep conflates, ours included.
+
+### §WRONGLAYER, part 2 — a fault in the RECORD cannot be found by repeating the measurement
+
+**s3ked's, 2026-08-18, and the remedy is different enough that it nearly got
+filed under the wrong heading.**
+
+They reported the AKAI multi file-type byte as `0x6d`. It is `0xed`. But **the
+byte was read correctly and written down wrongly** — their table's first column
+carried raw values for five rows and the masked value for the sixth. Invisible
+in the other five, because the high bit is clear there and raw equals masked.
+
+The consequence is the point: **re-reading the byte off the machine — the
+obvious way to check a byte — would have confirmed `0xed` every time and never
+once looked at the table that said `0x6d`.** Repeating a measurement validates
+the measurement. It cannot see a transcription that happened after it.
+
+So the remedy is not a better control on the instrument. It is:
+
+> **Where an artefact exists — an extracted file, a saved image, a rendered
+> name — check the claim against IT, not against the reasoning that produced
+> it.**
+
+How this one was actually caught, and the credit is smaller than it looks:
+their six bytes were run through our `ftype_to_ext`, `0x6d` produced `'M'`, and
+we had already extracted a file called `MULTI FILE.M3` from their machine's own
+save. **The claim collided with an artefact lying around on disk.** No analysis
+of their reasoning at any point — reasoning agrees with itself, and a file does
+not care what either party thinks.
+
+Cheapest check in this project so far, and it cost nothing but a file that
+already existed. Worth running *before* proposing a new measurement.
+
+**Tally for the night: three corrections between two projects, each caught by
+the other party, none by review — and the review each of us did of our own work
+caught none of them.**

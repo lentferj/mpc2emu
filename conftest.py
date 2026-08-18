@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # SPDX-FileCopyrightText: Copyright (C) 2026  mpc2emu contributors
 #
-# Part of mpc2emu — https://github.com/jlentfer/mpc2emu
+# Part of mpc2emu — https://github.com/lentferj/mpc2emu
 # Contributions: Jan Lentfer, with AI assistance (see README).
 """Keep the test suite's scratch space off the system temp volume.
 
