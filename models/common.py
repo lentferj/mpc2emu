@@ -411,6 +411,79 @@ ENV_RATE_A = 0.0310
 ENV_RATE_K = 0.0581
 
 
+# ---------------------------------------------------------------------------
+# EOS envelope: the byte is a RATE, not a duration  (§ENVSPAN, hardware 2026-08-18)
+# ---------------------------------------------------------------------------
+#
+# Measured on an E4XT: the same rate byte with a 15.0 dB span took 0.540 s and
+# with a 3.7 dB span took 0.135 s -- 4.00x the time for 4.09x the dB distance.
+# So the decay is LINEAR IN dB and the time is the dB distance over a constant
+# rate. A duration model predicts 1.00x and is dead.
+#
+# LEVEL LAW, fitted over sustain bytes 80-116 across three banks and two sources
+# (SUSLEVEL relabelled, SUSANCHOR sine and harmonic), R^2 = 0.9983:
+#
+#     dB below peak = 97.82 - 0.7718 x level_byte
+#
+# It extrapolates to 0 dB at byte 126.7 -- and byte 127 is full sustain, where
+# the plateau must EQUAL the peak. That point was not in the fit and was not
+# told to agree; the byte-127 controls measured 0.27 dB below peak. Two
+# independent routes to the same place.
+#
+# Below the fit window it still holds: bytes 64-80 agree to 0.6 dB uncorrected,
+# with the residual in the direction noise contamination predicts (a noise floor
+# ADDS to the plateau, shrinking the apparent span). Above it the plateau
+# saturates against the peak it is divided by.
+#
+# RATE LAW, from ENVSPAN and confirmed on SUSLEVEL's decay times at 26.5 dB/s
+# against 27.9 (5%, unexplained and not worth chasing):
+#
+#     dB per second = 27.9 x 2 ** (-(byte - 72) / 12.3)
+#
+#: NAMED FOR THE BYTE, not just 'level'. `ENV_LEVEL_DB_INTERCEPT` already
+#: exists below for the sustain-PERCENT law and silently shadowed these when
+#: they were first written -- the module defined mine, then redefined the
+#: name 80 lines later, and every reading came out 0 dB. Python said nothing.
+ENV_LEVELBYTE_DB_INTERCEPT = 97.82   #: dB below peak at level byte 0
+ENV_LEVELBYTE_DB_PER_BYTE  = 0.7718  #: dB recovered per level byte
+ENV_RATE_DB_PER_S_REF  = 27.9     #: dB/s at ENV_RATE_BYTE_REF
+ENV_RATE_BYTE_REF      = 72
+ENV_RATE_HALVING_BYTES = 12.3     #: +12.3 on the byte halves the rate
+
+
+def env_level_byte_to_db(level_byte: int) -> float:
+    """How far below the attack peak a sustain LEVEL byte sits, in dB."""
+    b = max(0, min(127, int(level_byte)))
+    return max(0.0, ENV_LEVELBYTE_DB_INTERCEPT
+                    - ENV_LEVELBYTE_DB_PER_BYTE * b)
+
+
+def env_rate_byte_to_db_per_s(rate_byte: int) -> float:
+    """The slew rate a rate byte produces, in dB per second."""
+    b = max(0, min(127, int(rate_byte)))
+    return ENV_RATE_DB_PER_S_REF * 2.0 ** (
+        -(b - ENV_RATE_BYTE_REF) / ENV_RATE_HALVING_BYTES)
+
+
+def env_span_seconds_to_rate(span_db: float, seconds: float) -> int:
+    """Rate byte for travelling `span_db` in `seconds`.
+
+    THE SPAN IS NOT OPTIONAL and that is the whole point of this function.
+    `env_seconds_to_rate()` below takes a time alone, which is only correct at
+    the span its calibration happened to use -- `AMP_DECAY_CAL.E4B` set
+    sustain=0 deliberately so the decay was audible, i.e. a full ~55 dB fall to
+    silence. Every decay to a non-zero sustain was therefore too fast, by 1.5x
+    at sustain byte 80 and 15x at byte 122, and the error is worst exactly where
+    real presets live.
+    """
+    if seconds <= 0.0 or span_db <= 0.0:
+        return 0
+    needed = span_db / seconds
+    b = ENV_RATE_BYTE_REF - ENV_RATE_HALVING_BYTES * math.log2(
+        needed / ENV_RATE_DB_PER_S_REF)
+    return max(0, min(127, round(b)))
+
+
 def env_seconds_to_rate(seconds: float) -> int:
     """Envelope time (seconds) → EOS rate byte (0 = instant, higher = slower)."""
     if seconds <= 0.0:

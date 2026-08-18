@@ -113,7 +113,9 @@ from models.common import (Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            env_seconds_to_rate, env_rate_to_seconds,
                            env_level_to_byte, env_sustain_to_byte, cord_amount_to_byte,
                            e4xt_cutoff_position, e4xt_volume_byte, e4xt_pan_byte,
-                           E4B_CUTOFF_MIN_HZ, E4B_CUTOFF_MAX_HZ)
+                           E4B_CUTOFF_MIN_HZ, E4B_CUTOFF_MAX_HZ,
+                           env_level_byte_to_db,
+                           env_span_seconds_to_rate)
 from processors.loop_renderer import bake_alternating_loop
 from writers.atomic import atomic_write
 
@@ -588,7 +590,14 @@ def _zone_entry(zone: ZoneMapping, sample_idx: int, write_absolute: bool = False
 _fenv_level   = env_level_to_byte
 _fenv_rate    = env_seconds_to_rate
 _fenv_seconds = env_rate_to_seconds
-_fenv_sustain = env_sustain_to_byte  # amp-envelope sustain only -- see models.common
+_fenv_sustain = env_sustain_to_byte
+_env_level_db = env_level_byte_to_db      #: level byte -> dB below peak
+_env_span_rate = env_span_seconds_to_rate #: (span_dB, seconds) -> rate byte
+
+#: Peak-to-silence distance, used only for the RELEASE complement. Taken as the
+#: level law's own value at byte 0, so the two stages are internally consistent
+#: rather than using two different notions of "silence". Inferred, not measured.
+_ENV_FULL_SPAN_DB = env_level_byte_to_db(0)
 
 
 # Primary zone table template (64 bytes) — regular key-tracking voice.
@@ -905,11 +914,34 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
     # a naive linear encoding plays far quieter than intended. Attack/Release
     # below stay on _fenv_level since 100%/0% are unaffected endpoints.
     sus = _fenv_sustain(voice.env_sustain)
+    # THE RATE BYTE NEEDS THE SPAN. §ENVSPAN, hardware 2026-08-18: the byte is a
+    # slew rate and the decay is linear in dB, so a stage's time is its dB
+    # distance over that rate. `_fenv_rate` takes a time alone and is therefore
+    # only right at the span its calibration used -- AMP_DECAY_CAL.E4B set
+    # sustain=0 so the decay was audible, i.e. a full fall to silence. Every
+    # decay to a non-zero sustain was too fast: 1.5x at sustain byte 80, 15x at
+    # byte 122, worst exactly where real presets live.
+    #
+    # ATTACK IS DELIBERATELY UNCHANGED. It rises from silence, where the dB
+    # distance is unbounded, so the model cannot apply as written. eosed's panel
+    # evidence says attack is NOT a different mechanism -- the machine's own
+    # page shows every segment as `seg | rate | level%` alike -- so it probably
+    # obeys the same law from a floor, and that floor is simply unmeasured. The
+    # fix is one measurement, not a new model.
+    decay_span = _env_level_db(sus)
     pzt[0] = min(127, _fenv_rate(voice.env_attack)); pzt[1] = _fenv_level(100.0)  # Atk1 → full
     pzt[2] = 0;                                      pzt[3] = _fenv_level(100.0)  # Atk2 hold full
-    pzt[4] = min(127, _fenv_rate(voice.env_decay));  pzt[5] = sus                 # Dcy1 → sustain
+    pzt[4] = _env_span_rate(decay_span, voice.env_decay);        pzt[5] = sus     # Dcy1 → sustain
     pzt[6] = 0;                                      pzt[7] = sus                 # Dcy2 hold sustain
-    pzt[8] = min(127, _fenv_rate(voice.env_release)); pzt[9] = _fenv_level(0.0)   # Rls1 → 0
+    # RELEASE: sustain -> silence, i.e. the COMPLEMENT of the decay span.
+    # INFERRED, not measured. What eosed measured is that release rate is
+    # INDEPENDENT of the sustain level -- t-40dB held at 0.193 s +/- 0.022
+    # across the whole sustain sweep, flat with the scatter of a 10 ms metric
+    # rather than a trend. That constrains the independence; the span
+    # arithmetic `full - decay` is the part still unmeasured, and it is one
+    # cheap bank to settle (fixed sustain, sweep the release byte, read t-40dB).
+    rel_span = max(0.0, _ENV_FULL_SPAN_DB - decay_span)
+    pzt[8] = _env_span_rate(rel_span, voice.env_release);        pzt[9] = _fenv_level(0.0)
     pzt[10] = 0;                                     pzt[11] = _fenv_level(0.0)   # Rls2 stay 0
     # Filter-envelope SHAPE — always written (§O, 2026-06-13).  Its depth/sign is
     # the Cord 05 (FilterEnv→FilterFreq) amount in the mod table (set below only
@@ -919,9 +951,17 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
     sus = 100.0 * max(0.0, min(1.0, voice.filter_env_sustain))
     pzt[14] = _fenv_rate(voice.filter_env_attack);  pzt[15] = _fenv_level(100.0)
     pzt[16] = 0;                                     pzt[17] = _fenv_level(100.0)
-    pzt[18] = _fenv_rate(voice.filter_env_decay);   pzt[19] = _fenv_level(sus)
-    pzt[20] = 0;                                     pzt[21] = _fenv_level(sus)
-    pzt[22] = _fenv_rate(voice.filter_env_release); pzt[23] = _fenv_level(0.0)
+    # Filter envelope: same span treatment as the amp envelope above. Its level
+    # byte comes from _fenv_level rather than _fenv_sustain, but the span is
+    # still the dB distance that byte represents.
+    _fsus_byte = _fenv_level(sus)
+    _fdecay_span = _env_level_db(_fsus_byte)
+    pzt[18] = _env_span_rate(_fdecay_span, voice.filter_env_decay)
+    pzt[19] = _fsus_byte
+    pzt[20] = 0;                                     pzt[21] = _fsus_byte
+    pzt[22] = _env_span_rate(max(0.0, _ENV_FULL_SPAN_DB - _fdecay_span),
+                             voice.filter_env_release)
+    pzt[23] = _fenv_level(0.0)
     pzt[24] = 0;                                     pzt[25] = _fenv_level(0.0)
 
     # ── LFO1 (PZT[42:46]) + LFO2 (PZT[50:54], +8 mirror) ───────────────────

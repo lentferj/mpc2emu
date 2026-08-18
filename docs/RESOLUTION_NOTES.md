@@ -141,6 +141,8 @@ survive being carried between them.*
 
 - [§FECLAMP — a real difference, measured with a ruler that had hit its ceiling (2026-08-18)](#feclamp-a-real-difference-measured-with-a-ruler-that-had-hit-its-ceiling-2026-08-18)
 
+- [§GRANULARITY — one false member says nothing about its neighbours (2026-08-18)](#granularity-one-false-member-says-nothing-about-its-neighbours-2026-08-18)
+
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -10466,6 +10468,63 @@ What unlocked it was noticing that **two different depths produced an identical
 ceiling**, which is not something the parameter can do. That number was in the
 first report and was read as incidental.
 
+### The rate law is CONFIRMED on a second dataset and a second source
+
+**No hardware. eosed extracted decay times from the SUSLEVEL captures** — rate
+byte 72 throughout — and tested each against `span / 27.9 dB/s` using that
+preset's own measured span:
+
+```
+n = 11 usable points   mean meas/pred 0.951   sd 0.048   -> implied 26.5 dB/s
+                                                            ENVSPAN gave 27.9
+```
+
+**Two experiments, two banks, two sources, one rate byte: 5% apart.** The
+ENVSPAN result is not an artefact of that bank.
+
+### The exclusions validate themselves, and this is the strongest part
+
+The noise-floor and ceiling exclusions were chosen from the LEVEL data, before
+any timing analysis. Ranked afterwards, **both groups fail in the direction
+their exclusion predicts, on a measurement that knows nothing about them:**
+
+```
+bytes 64, 68, 72   meas/pred 0.607, 0.682, 0.753   run SHORT   noise floor
+byte 120           meas/pred 1.624                 runs LONG   ceiling
+usable band 80-116                    0.95 +/- 0.05
+```
+
+The floor cases **must** run short: the envelope decays into noise, so the
+plateau reads too high, the span too small, the predicted time too long. The
+trend is monotonic exactly as contamination predicts — 0.607, 0.682, 0.753, then
+0.853 climbing out at byte 76. The ceiling case runs long for the mirror reason:
+a tiny span measured at 10 ms resolution.
+
+**The boundaries were not fitted to make the answer tidy** — they were set by one
+kind of evidence and confirmed by another.
+
+### The offered explanation for the 5% does NOT fit, and that is worth saying
+
+eosed attributed the 0.951 to their estimator firing early: a threshold at 5% of
+the linear distance above the plateau. **Computed, that mechanism predicts a
+much larger and strongly span-dependent bias than the data shows:**
+
+```
+span 30 dB   model predicts ratio 0.730   measured 0.853
+span  4 dB   model predicts ratio 0.937   measured 0.907
+span-vs-ratio correlation: -0.452 (n=11), weak
+```
+
+The model spans 0.73-0.94 where the data spans 0.85-0.99, and the data is much
+flatter than a threshold rule would make it. **So the direction is right and the
+magnitude is wrong by a factor of three to five, and the residuals carry far
+less span-dependence than the mechanism requires.**
+
+Their conclusion — *do not quote 26.5 as a competing figure* — still stands, and
+for a better reason than the one given: **the 5% is not explained**, rather than
+explained by a known bias. Two independent measurements agreeing to 5% is the
+result; attributing the remainder is not yet possible.
+
 ### The fix to the experiment — now optional
 
 The floor already answers it. A rebuild with a lower base cutoff would give a
@@ -10477,3 +10536,47 @@ Re-run with the base cutoff low enough that the peak is nowhere near the ceiling
 a transfer-function measurement rather than a spectral summary. `corner_frequency()`
 already does the right thing, and §RULER records that its source-cancelling
 `reference=` argument has never been passed at any call site.
+
+## §GRANULARITY — one false member says nothing about its neighbours (2026-08-18)
+
+**eosed's, from a README sentence, and it is not a prose lesson.**
+
+A Support section bundled three claims into one sentence: the S3000XL, the E4XT
+and the K2000R were all "bought for the purpose". Two were false — both the
+E4XT and the K2000R were already owned — and **one was true**, confirmed twice
+by Jan directly.
+
+**The safe-looking response to discovering the error was to distrust the whole
+sentence.** That would have deleted a true, well-sourced claim. The instinct to
+re-confirm rather than accept a transcript was right; the instinct to strip the
+lot would have been an over-correction, and it was the advice in circulation for
+about an hour.
+
+> **A compound claim has to be falsified per element. Discovering one member is
+> wrong tells you nothing about its neighbours, in either direction.**
+
+### The same shape, twice already this week, in measurements
+
+- **§SUSLEVEL relabelling.** A byte-labelling fault made one bank look like a
+  2.25x outlier. The correct response was not to distrust the bank — every
+  measurement in it was sound, and relabelled it agreed with two others to
+  0.4%. **The fault was in one part of the record and the surrounding data was
+  fine.**
+- **recon's excluded byte ranges.** Each exclusion — noise floor below, ceiling
+  above — was justified on its own evidence, and confirmed later by a timing
+  measurement that knew nothing about them. Excluding by *association* with a
+  neighbouring bad point would have thrown away good data at the boundary.
+
+### Why the wrong instinct is attractive
+
+Distrusting a whole compound feels like the conservative move, and conservatism
+is usually right when a fault appears. **It is not conservative here — it
+destroys evidence.** The conservative act is to re-derive each member
+separately, which costs more and looks less decisive.
+
+### And the part neither party resolved
+
+The S3000XL was settled by **Jan volunteering it**, not by either session
+asking. Two of us had it flagged as open and were being careful about it; what
+closed it was the person concerned mentioning it in passing. Worth knowing that
+the correct process here did not actually produce the answer.
