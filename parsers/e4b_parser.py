@@ -122,7 +122,13 @@ _E4B_TO_XPM_FILTER_TYPE = {
     0x40: 3, 0x41: 3, 0x42: 3,   # Phaser 1/2/Bat → Low 4 (no XPM equiv, lossy)
     0x48: 3,                     # Flanger Lite   → Low 4 (no XPM equiv, lossy)
     0x50: 26, 0x51: 27,          # Vocal Ah-Ay-Ee/Oo-Ah → XPM Vocal-formant
-    0x60: 3, 0x61: 3, 0x62: 3,   # EQ-Morph types → Low 4 (no XPM equiv, lossy)
+    # Morph family, all four HARDWARE-CONFIRMED 2026-08-18 on an E4XT by
+    # reading the runtime parameter and the panel name together:
+    #   0x60 rt17 "Dual EQ Morph"      0x61 rt18 "2EQ+Lowpass Morp"
+    #   0x62 rt19 "2EQMorph+Exprssn"   0x68 rt20 "Peak/Shelf Morph"
+    # 0x68 was absent from this table until that run. No XPM equivalent for
+    # any of them, so all four degrade to Low 4 -- lossy but not invented.
+    0x60: 3, 0x61: 3, 0x62: 3, 0x68: 3,
     0x68: 3,                     # Peak/Shelf Morph → Low 4 (no XPM equiv, lossy)
 }
 

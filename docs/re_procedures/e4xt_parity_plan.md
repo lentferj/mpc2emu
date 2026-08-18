@@ -724,6 +724,34 @@ program with no authority to press it.
   the converter does not model. **That is the Phase 1b coverage-gap deliverable
   appearing on its own**, before the walk was even able to enter them.
 
+### 2b.4g THE E4XT STOPS ANSWERING SYSEX — second occurrence (2026-08-18)
+
+**Both protocols dead at once**, editor and panel: `memory` and `catalog` time
+out, a `51h` screen request returns nothing, and a passive listen shows the bus
+silent so nothing else is driving it. Discovered by eosed while confirming they
+were idle for a card pull.
+
+**Second occurrence. Cause unestablished both times, cleared by a power cycle
+the first time.** Nothing of ours was running on either occasion; this time the
+last activity was the 16-preset display sweep, which completed normally and
+reported its own control clean.
+
+**Not offered as evidence: silence on played notes.** Program Change is
+page-dependent and the machine's page is unknown, so a note may simply have
+gone to a preset with no zone at those keys — and the output level had been
+turned down earlier. eosed flagged their own observation as inconclusive rather
+than reaching for it, which is the right handling of a datum that would have
+supported the alarming reading.
+
+**PROCEDURE, from here on: power the E4XT DOWN before the card is removed.**
+Right practice on a live SCSI bus regardless, and doubly right when the device
+is in an unknown state — nobody can assert the bus is idle, only that *they* are
+not driving it. The power cycle doubles as the known fix.
+
+*(On 2026-08-18 the card was pulled hot, before this was known. Recorded so the
+next occurrence is not read as the first, and so the pull is not silently
+assumed harmless.)*
+
 ### 2b.5 Sequencing
 
 Run it **before** the targeted B-section sweeps — but eosed corrected my reason,
@@ -864,6 +892,74 @@ the answer comes back "barely".
 
 **Not on the card**: it was built while the card was in the machine. Needs a
 free slot (CD0 is unused) next time the card is in the PC.
+
+## 5a. ZuluSCSI NUMBERING IS ONE NAMESPACE — CD and HD share it
+
+**Jan, 2026-08-18: "when creating disks and isos, the numbering needs to be
+unique among them, so you cannot have HD0 and CD0."**
+
+A ZuluSCSI id is claimed by whatever image names it, hard disk or CD alike.
+`HD0.img` and `CD0-anything.iso` are the same id, and one of them will simply
+not mount.
+
+**I broke this within an hour of reading the rule.** I staged a bank as
+`CD0-F58MORPH.iso` having "checked" that CD0 was free with
+`ls | grep -oE '^CD[0-9]'` — a filter that enumerates CD-prefixed files and is
+therefore **blind to a hard disk occupying an id**. Two records in front of me
+said id 0 was taken: the card's own map opens with `ID0 - HD0.img, the hard
+disk`, and the ZuluSCSI boot log I had read that morning lists
+`SCSI ID: 0 ... Size: 18874368kB`. I had quoted the first and printed the
+second.
+
+**It failed safe, and that is luck rather than design.** HD0 won the collision,
+so the new image simply never appeared and eosed noticed within minutes. Had it
+gone the other way, an ISO would have **shadowed the one object on that card we
+are instructed never to touch**, and nothing would have announced it.
+
+**Fixed in the tool rather than the habit:** `tests/re_banks/whichcard.py` now
+enumerates **SCSI ids across CD and HD images together**, flags collisions
+explicitly, and lists genuinely free ids. Verified against a synthetic card
+carrying the exact fault.
+
+    id 0: CD0-F58MORPH.iso, HD0.img   <-- COLLISION
+
+**Permanently spoken for on this card: id 0 (HD0), and id 6 which must stay
+EMPTY.**
+
+**id 6 is the E4XT itself**, and the EOS 4.0 manual states it outright in its
+default SCSI ID table:
+
+```
+ID - 7   Macintosh
+ID - 6   Emulator (this number can be changed)
+ID - 1   Internal Emulator HD
+```
+
+and names the failure directly — the ID utility exists *"in the event that it
+conflicts with a device on the SCSI bus having the same ID number."*
+
+**SCSI is SCSI: every device on the bus, the initiator included, holds a unique
+id.** There is no platform-specific variation to appeal to, and E-MU used a SCSI
+controller also used in computers. `CD6-ENVSPAN.iso` sat on id 6 from 09:14
+until 12:42 and was **invisible to the sampler while disrupting the bus** — moved
+off, and id 6 stays empty.
+
+**ZuluSCSI reports no conflict for this and mounts it happily** (`Opening
+/CD6-ENVSPAN.iso for id:6`), because ITS numbering is unique on the SD card. The
+collision is one layer down, on the real bus. I used that clean log line to
+overturn eosed's drive list — which showed no D6 and was the HOST's view, the
+layer that actually matters — and removed a correct warning on the strength of
+it. §WRONGLAYER in the other direction: a lower layer's success does not
+validate a higher layer's behaviour.
+
+**And I searched the web before reading the manual we already have on this
+disk**, indexed in memory, where the answer is a plain table. That is the exact
+inversion of the lesson this project has been repeating for two days.
+
+Worth noting eosed diagnosed this **without reading HD0** — they inferred it
+from the drive list and from D2 being CONFIRM, and said explicitly that browsing
+D0's contents would be using HD0 and therefore not theirs to do. The instruction
+held under a circumstance that gave a good reason to bend it.
 
 ## 5b. Staged on the ZuluSCSI card, 2026-08-18
 

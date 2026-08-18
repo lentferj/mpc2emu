@@ -600,17 +600,87 @@ def build_iso_9660(e4b_files: List[str], output_iso: str,
 # EMU3 Public API  (E4XT / ZuluSCSI CD emulation)
 # ---------------------------------------------------------------------------
 
+#: `vpar[58]` values that are DANGEROUS to put in front of an E4XT.
+#:
+#: 0x7F CRASHES THE MACHINE. Confirmed 2026-08-18: it is not clamped like other
+#: invalid bytes -- it passes through as runtime 21, past the end of the
+#: implemented filter table, the machine has no name for it, and rendering that
+#: page takes the firmware out with `FATAL ERROR: Gen Trap error`, D2 holding
+#: 0x0000007F. Only a power cycle clears it.
+#:
+#: This matters here and not in the writer, because `write_e4b` can only emit
+#: from `_XPM_FILTER_TYPE` and 0x7F is not in it. `build_iso` takes .E4B files
+#: AS THEY ARE -- that is the point of it, and banks have deliberately been
+#: carried unmodified so two machines play the same bytes. A third-party or
+#: corrupt file can therefore put a crasher on a disc that we then hand to the
+#: hardware.
+#:
+#: WARN RATHER THAN REFUSE. Our own RE banks sweep the byte space on purpose and
+#: must still be buildable; F58MORPH carries 0x7F by design. A refusal would
+#: block the work that found this.
+_E4B_CRASHER_FTYPE = {0x7F: 'runtime 21 -- unnamed, renders blank, then Gen Trap'}
+
+
+def scan_e4b_filter_bytes(path: str) -> dict:
+    """Every `vpar[58]` value in an .E4B, counted. Empty dict if unreadable.
+
+    Deliberately tolerant: a file this cannot parse is not the caller's problem
+    and must not stop an image being built.
+    """
+    import struct as _s
+    from collections import Counter as _C
+    try:
+        from parsers.e4b_parser import (_walk_chunks, PRES_TAG, PRES_HDR,
+                                        VOICE_FIXED, ZONE_ENTRY)
+        data = Path(path).read_bytes()
+    except Exception:
+        return {}
+    out = _C()
+    try:
+        for tag, body in _walk_chunks(data):
+            if tag != PRES_TAG or len(body) < PRES_HDR:
+                continue
+            nv = _s.unpack_from('>H', body, 20)[0]
+            if not 1 <= nv <= 1024:
+                continue
+            off = PRES_HDR
+            for _ in range(nv):
+                if off + VOICE_FIXED > len(body):
+                    break
+                t = (body[off + 2] << 8) | body[off + 3]
+                if t < VOICE_FIXED or (t - VOICE_FIXED) % ZONE_ENTRY:
+                    break
+                out[body[off + 58]] += 1
+                off += t
+    except Exception:
+        return dict(out)
+    return dict(out)
+
+
 def build_iso(e4b_files: List[str], output_iso: str,
               volume_label: str = "EMU_BANK") -> None:
     """
     Build an EMU3 filesystem image containing the given E4B files.
     The image can be renamed to CDx.iso and placed on a ZuluSCSI SD card.
 
+    Warns if any file carries a `vpar[58]` byte known to crash an E4XT --
+    see `_E4B_CRASHER_FTYPE`. Warns; does not refuse.
+
     Args:
         e4b_files:    List of paths to .E4B files to include
         output_iso:   Output path for the image file
         volume_label: Volume label (max 16 chars, will be uppercased)
     """
+
+    for _f in e4b_files:
+        _seen = scan_e4b_filter_bytes(_f)
+        _bad = {b: n for b, n in _seen.items() if b in _E4B_CRASHER_FTYPE}
+        for _b, _n in sorted(_bad.items()):
+            print(f"  [!!] {Path(_f).name}: vpar[58] = 0x{_b:02X} on {_n} voice(s)")
+            print(f"       {_E4B_CRASHER_FTYPE[_b]}")
+            print(f"       THIS BYTE CRASHES AN E4XT. Building anyway -- RE banks")
+            print(f"       sweep it deliberately -- but do not hand this disc to")
+            print(f"       the hardware casually.")
     print(f"\nBuilding EMU3 image: {output_iso}")
     label = volume_label[:16].upper()
     print(f"  Volume label: {label}")

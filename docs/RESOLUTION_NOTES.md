@@ -135,6 +135,8 @@ survive being carried between them.*
 
 - [§AKAIDELETE — the delete-type enum, and why it must never be swept (2026-08-18)](#akaidelete-the-delete-type-enum-and-why-it-must-never-be-swept-2026-08-18)
 
+- [§E4BFTYPE — `vpar[58]` is a GROUPED code, not a sequential index (2026-08-18)](#e4bftype-vpar58-is-a-grouped-code-not-a-sequential-index-2026-08-18)
+
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -10174,3 +10176,197 @@ is not** — a way to make progress without ever writing a value that could act.
 Page also confirms that
 that its softkeys are `SAVE VOLS REN DEL SCSI FORM` with `GO` on F8 — **`FORM`
 (format) on F6**, with the trigger a separate key.
+
+## §E4BFTYPE — `vpar[58]` is a GROUPED code, not a sequential index (2026-08-18)
+
+**Measured on the E4XT by eosed, reading `E4_VOICE_FTYPE` (id 82) for all 98
+presets of `F58ANCHOR` and joining to the expectation table.**
+
+```
+file byte -> runtime   our table's name
+0x00 -> 1   4-Pole Lowpass      0x20 -> 8   Swept EQ 1-oct
+0x02 -> 2   6-Pole Lowpass      0x21 -> 9   Swept EQ 2->1
+0x08 -> 3   HP 2nd Order        0x22 -> 10  Swept EQ 3->1
+0x09 -> 4   HP 4th Order        0x40 -> 11  Phaser 1
+0x10 -> 5   BP 2nd Order        0x41 -> 12  Phaser 2
+0x11 -> 6   BP 4th Order        0x42 -> 13  Bat Phaser
+0x12 -> 7   Contrary Bandpass   0x48 -> 14  Flanger Lite
+                                0x50 -> 15  Vocal Ah-Ay-Ee
+80 of 98 bytes -> runtime 0     0x51 -> 16  Vocal Oo-Ah
+```
+
+**The high nibble is the filter FAMILY, the low nibble selects within it** —
+`0x0x` lowpass, `0x08/09` highpass, `0x1x` bandpass, `0x2x` swept EQ, `0x4x`
+phaser/flanger, `0x5x` vocal. A writer treating this as a sequential index emits
+a valid-looking byte from an unrelated family, or an invalid one that silently
+renders as 2-Pole Lowpass.
+
+### Our writer is CLEAN — checked, not assumed
+
+Every byte `_XPM_FILTER_TYPE` can emit, against the confirmed-valid set:
+
+```
+emit: 0x00 0x01 0x02 0x08 0x09 0x10 0x11 0x20 0x50 0x51
+outside the valid set:  0x01 only, for XPM types 1, 2 and 29
+```
+
+**And `0x01` is harmless either way**, which is worth spelling out rather than
+leaving as an open worry. It reads back runtime 0, and eosed correctly notes the
+experiment cannot distinguish *"0x01 is legitimately runtime 0"* from *"0x01 is
+rejected"*. But runtime 0 and a rejected byte **both render as 2-Pole Lowpass**,
+and XPM types 1, 2 and 29 all intend a 2-pole lowpass. The outcome is correct
+down either branch, so the ambiguity does not reach the output.
+
+### The real finding is a coverage gap, not a defect
+
+**Seven confirmed-valid filters our writer can never emit:**
+
+```
+0x12  Contrary Bandpass       0x41  Phaser 2
+0x21  Swept EQ 2->1 octave    0x42  Bat Phaser
+0x22  Swept EQ 3->1 octave    0x48  Flanger Lite
+0x40  Phaser 1
+```
+
+No source format we read maps onto them today, so this is a "what could we
+offer" item rather than a bug — but it is the first hard list of what the E4XT
+has and we do not use.
+
+### B11's original question: answered YES
+
+**`id == list position` HOLDS for the runtime parameter** — runtime 1..16 land on
+our table's names in order. Anchored to the display at one point: preset P000
+reads runtime 1 and the Filter page shows `4 Pole Low-pass`. The surprise was one
+layer below the question, in the file byte rather than the runtime id.
+
+### The display half: 16 of 16, and `id == list position` is now OBSERVED
+
+Swept on 16 presets rather than 98 — the other 82 read runtime 0 and could teach
+nothing. Result: **14 exact, 2 abbreviated, 0 disagreements.**
+
+```
+0x00  4-Pole Lowpass        -> 4 Pole Low-pass       0x40  Phaser 1
+0x02  6-Pole Lowpass        -> 6 Pole Low-pass       0x41  Phaser 2
+0x08  2nd Order Highpass    -> 2nd Order High-pass   0x42  Bat-Phaser
+0x09  4th Order Highpass    -> 4th Order High-pass   0x48  Flanger Lite
+0x10  2nd Order Bandpass    -> 2nd Order Band-pass   0x50  Vocal Ah-Ay-Ee
+0x11  4th Order Bandpass    -> 4th Order Band-pass   0x51  Vocal Oo-Ah
+0x12  Contrary Bandpass     -> Contrary Band-pass
+0x20  Swept EQ, 1-octave    -> Swept EQ 1 octave
+0x21  Swept EQ, 2->1-octave -> Swept EQ 2->1 oct     ABBREVIATED
+0x22  Swept EQ, 3->1-octave -> Swept EQ 3->1 oct     ABBREVIATED
+```
+
+**Fifteen of those sixteen rows were previously ordering, not observation.** They
+are observation now, and the sweep cost 16 screenshots.
+
+### Two defects in OUR joiner, found by running it on the real data
+
+It reported **7 disagreements on a table that is completely correct**, where
+eosed's independent join reported none. Both faults were ours:
+
+1. **`_norm` replaced separators with a SPACE instead of deleting them**, so
+   `Lowpass` and `Low-pass` normalised differently — and the E4XT hyphenates
+   exactly where the manual does not (`Low-pass`, `High-pass`, `Band-pass`,
+   `Bat-Phaser`). The function written to prevent false mismatches was
+   generating them.
+2. **A hardcoded `_BELIEVED` table disagreed with the capture's own
+   `our_table_name` column** — ours said `Highpass 2nd Order`, the manual says
+   `2nd Order Highpass`. A second copy of a fact, trusted over the first. The
+   joiner now prefers the column and keeps the table only as a fallback.
+
+After both fixes it reproduces eosed's result exactly: 14 / 2 / 0. **Two
+independent implementations agreeing is worth more than either.**
+
+3. A third, found in the same run: with both control rows blank the tool printed
+   `controls agree: ''` — **a reassuring line for a check that never ran.** It
+   now says so loudly. Same shape as §PROSEGUARD, in our own output.
+
+### Route correction, for anyone repeating this
+
+`EditVce` returns to the group's **last-viewed** page, and paging **clamps**
+rather than wrapping. So "two `PAGE_NEXT` from the landing page" is correct
+exactly once; after that it lands wherever the previous preset left off. The
+route is **`F6`, rewind to the clamp (`PAGE_PREV` ×4, a no-op past the start),
+then forward exactly two.** eosed's first attempt captured all sixteen on
+`Filter Envelope` and their title check passed it — the crop included a
+per-voice field whose content varied per preset, so distinctness came from the
+preset rather than the page. **A control measuring the wrong region, giving a
+confident pass.** Now split: page title must be IDENTICAL across captures, name
+band is the measurement.
+
+### The morph filters: all four found, and `0x7F` CRASHES THE MACHINE
+
+**Hardware-confirmed 2026-08-18 on the `0x60-0xFF` sweep, which the crash ended
+early.** Six captures survived and they include everything that mattered:
+
+```
+0x60  rt 17  "Dual EQ Morph"       exact
+0x61  rt 18  "2EQ+Lowpass Morp"    TRUNCATED at 16 chars
+0x62  rt 19  "2EQMorph+Exprssn"    TRUNCATED, spaces DROPPED
+0x68  rt 20  "Peak/Shelf Morph"    exact
+0x63  rt  0  "2 Pole Low-pass"     the zero-reading control
+0x7F  rt 21  ""                    BLANK -- no name at all
+```
+
+**`0x7F` is not clamped like other invalid bytes.** Most are: they read runtime 0
+and render `2 Pole Low-pass`, exactly as the format notes say. `0x7F` passes
+through as **runtime 21**, past the end of the implemented table, the machine has
+no name for it, and rendering that page kills the firmware:
+
+```
+FATAL ERROR: Gen Trap error
+PC:107FFA50  Eaddr:107FFA50  SR:007F
+D0:00000018  D1:00000001  D2:0000007F      <- D2 holds the byte
+```
+
+Only a power cycle clears it. **This is the second Gen Trap this project has
+recorded and the first with a trigger and a register dump** — the earlier one,
+from an unattended amp-envelope run, was never root-caused.
+
+**Our exposure, checked rather than assumed:**
+
+- **Writer: none.** `write_e4b` can only emit from `_XPM_FILTER_TYPE`, which does
+  not contain `0x7F`.
+- **Round-trip: safe.** Reading a file carrying `0x7F` gives an unknown byte →
+  XPM 0 → written back as `0x00`. We launder it rather than propagate it.
+- **`build_iso`: REAL, and now guarded.** It takes `.E4B` files as they are —
+  that is the point of it, and banks have deliberately been carried unmodified
+  so two machines play identical bytes. A third-party or corrupt file could put
+  a crasher on a disc we then hand to the hardware. It now scans every voice's
+  `vpar[58]` and warns loudly. **Warns, does not refuse** — our own RE banks
+  sweep the byte space on purpose and `F58MORPH` carries `0x7F` by design.
+
+**`0x68` was missing from `_E4B_TO_XPM_FILTER_TYPE`** and is now added; `0x60`,
+`0x61`, `0x62` were already there and are confirmed correct.
+
+**The abbreviation bucket earned itself properly here.** `2EQ+Lowpass Morp` and
+`2EQMorph+Exprssn` are real 16-character truncations, and the second one **drops
+the spaces the prose has** — so a naive prefix compare fails on it too.
+Normalisation has to *delete* separators, not merely compare prefixes, which is
+exactly the bug found and fixed in our joiner a day earlier. It would have bitten
+here for real.
+
+**`0x01` remains open, and now we know why this could not close it.** The zero
+control worked — `0x63` displays `2 Pole Low-pass` — but clamped-invalid and
+genuine-2-pole both land on runtime 0 and render identically. Only a byte *known*
+to be 2-pole by construction can separate them.
+
+### Two things still open
+
+- **The four morphing filters (runtime 17-20) were not reached.** `F58ANCHOR`
+  sweeps `0x00-0x5F`; their codes must be above that. A second bank covering
+  `0x60-0xFF` would close it — and those four are exactly the ones whose names
+  differ most between the manual's prose and its screen illustrations, so the
+  abbreviation handling in `e4xt_display_join.py` gets its real test there.
+- **Runtime 0 may be unreachable or indistinguishable from invalid.** Worth
+  knowing before anyone writes a byte intending 2-Pole Lowpass and believes the
+  readback.
+
+### Free, for §ENVSPAN
+
+The `Amp Envelope` and `Filter Envelope` pages label their columns
+**`seg | rate | level%`**. **The machine's own word for the field is `rate`.**
+That is the machine's claim rather than a measurement of behaviour — it does not
+establish that the byte *behaves* as a slew rate — but it is a strong prior for
+the CD6 experiment, and it cost nothing.
