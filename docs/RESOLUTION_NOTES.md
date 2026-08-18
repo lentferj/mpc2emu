@@ -130,11 +130,13 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAINAME12 — two bench samples truncated to the same 12-character name (2026-08-18, FIXED)](#akainame12-two-bench-samples-truncated-to-the-same-12-character-name-2026-08-18-fixed)
 - [§AKAILOADTYPE — LOAD type 1 loads no samples, contradicting our SAVE-type note (2026-08-18, OPEN)](#akailoadtype-load-type-1-loads-no-samples-contradicting-our-save-type-note-2026-08-18-open)
 - [§AKAIFILTQTY — two AKAI filter laws that disagree, for a principled reason (2026-08-18, OPEN — DEFINITIONAL)](#akaifiltqty-two-akai-filter-laws-that-disagree-for-a-principled-reason-2026-08-18-open-definitional)
-- [§AKAILOOPCROSS — a LOOPED program plays the sample loaded immediately BEFORE the one it names (2026-08-18, RULE CONFIRMED, CAUSE OPEN)](#akailoopcross-a-looped-program-plays-the-sample-loaded-immediately-before-the-one-it-names-2026-08-18-rule-confirmed-cause-open)
+- [§AKAILOOPCROSS — the pool-base conclusion is REFUTED BY THE CORPUS; loop_start is the suspect (2026-08-18, REOPENED)](#akailoopcross-the-pool-base-conclusion-is-refuted-by-the-corpus-loop_start-is-the-suspect-2026-08-18-reopened)
 - [§AKAIRATEQUANT — sample-header byte 0x01 selects the playback rate; SSRATE is descriptive only (2026-08-18, CONFIRMED — FIXED)](#akairatequant-sample-header-byte-0x01-selects-the-playback-rate-ssrate-is-descriptive-only-2026-08-18-confirmed-fixed)
 - [§AKAISDATA — we write 0 into the sample-data address; it is a real deviation with no effect (2026-08-18, CLOSED — COSMETIC)](#akaisdata-we-write-0-into-the-sample-data-address-it-is-a-real-deviation-with-no-effect-2026-08-18-closed-cosmetic)
 - [§AKAIAUXDEFAULT — `.X` and `.T` do not need decoding to be written correctly (2026-08-18)](#akaiauxdefault-x-and-t-do-not-need-decoding-to-be-written-correctly-2026-08-18)
 - [§AKAIUNKNOWNDUP — the undecodable-record diagnostic multiplied across reads (2026-08-18, FIXED)](#akaiunknowndup-the-undecodable-record-diagnostic-multiplied-across-reads-2026-08-18-fixed)
+- [§ASKFORDEFINITIONS — the two corrections that came from questions, not measurements (2026-08-18)](#askfordefinitions-the-two-corrections-that-came-from-questions-not-measurements-2026-08-18)
+- [§AKAILOOPSEM — our loop convention is the reverse of the factory one (2026-08-18, ESTABLISHED; NOT the cause of the silence)](#akailoopsem-our-loop-convention-is-the-reverse-of-the-factory-one-2026-08-18-established-not-the-cause-of-the-silence)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -11012,7 +11014,7 @@ response predicts. That is testable offline from the two laws plus a filter orde
 and would turn a plausible explanation into a checked one. Until then this is
 recorded as a definitional conflict, not a correction to either side.
 
-## §AKAILOOPCROSS — a LOOPED program plays the sample loaded immediately BEFORE the one it names (2026-08-18, RULE CONFIRMED, CAUSE OPEN)
+## §AKAILOOPCROSS — the pool-base conclusion is REFUTED BY THE CORPUS; loop_start is the suspect (2026-08-18, REOPENED)
 
 **Three artefacts that cannot all be true, recorded before any of them is
 explained away.**
@@ -11174,7 +11176,353 @@ invisible from inside the analysis. The two-valued observable was a property of
 the disc supplied, not of the method applied to it, and neither project noticed
 until the constraint was load-bearing.
 
-### The live hypothesis: loop EXTENT
+> **REOPENED WITHIN THE HOUR. Jan asked whether the corpus represents this, and
+> it does not.**
+>
+> ```
+> 768 factory volumes with samples
+> the FIRST sample in directory order is LOOPED in 700 of them   (91.1%)
+> ```
+>
+> If "a looped sample at the pool base does not play" were a property of the
+> machine, **nine in ten commercial library discs would have a silent first
+> instrument.** That would be notorious, not a discovery. The conclusion below is
+> therefore wrong as stated, however clean the measurement was — and the
+> measurement is not in doubt; its *generalisation* is.
+>
+> **What is actually different about our discs:**
+>
+> ```
+> FACTORY looped samples, loop_start == 0 :   1.2%   (204 of 16493, S3000 only)
+> OUR bench discs                          : 100%   -- every loop we have written
+> ```
+>
+> Factory loops start INSIDE the sample, at a sustain point. Every loop this
+> project has ever written starts at frame 0. Restricted to real S3000 material
+> with a genuine loop, the number of factory volumes whose FIRST sample is looped
+> with `loop_start 0` is **six across 43 discs — and all six carry
+> `loop_length == 1`**, degenerate rather than looped.
+>
+> **No factory volume is in the condition our silent samples were in.** That is
+> the answer to "why is this not common knowledge": nobody makes discs like ours.
+>
+> **The test, which needs no disc** (Jan's suggestion, and the method lesson
+> applied): write `loop_start` on the RESIDENT sample over SysEx and replay — the
+> same route that settled the rate question in twenty minutes. `loop_start = 1`
+> is the sharpest probe, since a single frame separates "at the base" from "not
+> at the base" with everything else identical.
+>
+> **THE FIX IS PULLED BACK PENDING THAT.** Reordering our volumes to put a
+> one-shot first makes them unlike 91% of factory volumes, to dodge a symptom
+> whose cause we had wrong. If `loop_start` is the trigger, the correct fix is to
+> stop writing `loop_start 0` — a different change, in a different place, and
+> much closer to what the format evidently expects.
+>
+> **A standing rule for the probe, Jan's, 2026-08-18:** a SysEx write must be
+> **re-read and confirmed** before anything is concluded from what follows. A
+> capture cannot distinguish *"the write took and the hypothesis is wrong"* from
+> *"the write never took"*, and only the readback can. Read the NEIGHBOURING
+> fields too — if setting `loop_start` also moves `loop_length`, the result
+> belongs to two changes and would be credited to one.
+>
+> This is not a general caution. `loop_start` has obvious constraints (below the
+> loop end, below the sample length), so it is a plausible candidate for silent
+> clamping — and we know this machine *accepts* without validating (255 written
+> to byte `0x01`, read back as 255) but nothing yet says a write is never
+> silently dropped. A value that will not stick would itself be a finding worth
+> more than the capture.
+>
+> **The lesson, and it is Jan's:** ask whether the corpus represents a finding
+> before building on it. A hardware measurement can be perfectly real and still
+> not generalise, and 16493 factory samples were sitting on this disk the whole
+> time.
+
+### THE MEASUREMENT (sound) AND ITS GENERALISATION (refuted)
+
+**A LOOPED sample placed at the base of the sampler's object pool does not play
+correctly — sometimes silence, sometimes degraded non-periodic audio. Move it off
+the base and it is fine.**
+
+The decisive pair. Same volume, same file, same lone-loop arrangement, same
+loader, byte-identical loop record; only the address differs:
+
+```
+SOLO LOOP at SLOCAT 131072 (the base)   SILENT   -72.8 dBFS
+SOLO LOOP at SLOCAT 483872              PLAYS    -8.2 dBFS, period 5.000 s
+                                                 at corr 0.967
+```
+
+**"Positional, not ordinal" OVERSTATES IT, and Jan's question is what exposed
+that.** In every test the two properties moved together:
+
+```
+SOLOLOOP alone           loop is 1st loaded AND at the base    silent
+SOLOSHOT then SOLOLOOP   loop is 2nd loaded AND above the base plays
+```
+
+The machine assigns addresses in load order, so **a sample cannot be first
+without landing at the base.** The two are not merely unseparated by our tests —
+they may be structurally inseparable by any ordinary load. Telling them apart
+would need something artificial: load two samples, free the first, and load a
+loop into the freed space.
+
+So the supported claim is the narrower one: **a looped sample that is the first
+one loaded — and therefore the one at the base — does not play correctly.**
+Which of the two is the operative property is open.
+
+**This changes nothing about the fix.** Emitting a one-shot first makes the loop
+neither first nor at the base, so it is correct under either reading. The
+distinction would only matter for explaining the mechanism, which we do not have
+either way: nothing here says *why* — a wrap in the loop-pointer arithmetic, a
+reserved region below 0x20000, an off-by-one at the boundary, all remain
+possible and none is evidenced.
+
+Everything trustworthy fits: `SDZERO`/`SDADDR` (loop at base, silent),
+`SOLOLOOP` (both loaders, silent), `WHOLELOOP`/`PARTLOOP` bulk (one-shot at base,
+all correct), `PARTLOOP` item-loaded (loop at base, **degraded** — correlation
+0.29 against 0.77–0.99 everywhere else, and playing neither of the other resident
+samples). That last one had looked like a counter-example until s3ked asked what
+it was *actually* playing rather than accepting that it made a noise.
+
+**Two loose ends closed by the same finding:**
+
+* `SLOCAT` is §AKAISDATA's field at header `0x16-0x18`. The machine recomputes it
+  and ignores what we store — which is exactly why `SDADDR` played identically to
+  `SDZERO`: both had their loop placed at the base by the loader whatever address
+  we wrote. That result becomes a corroboration rather than a dead end.
+* The resident loop record is **byte-identical to what we wrote**, field for
+  field (`loop_start 0`, `loop_length 220500` at `0x2c`, `loop_times 9999` at
+  `0x30`). s3ked's `0x2a` reading had straddled the 16-bit fraction and the low
+  half of the length; our layout is correct.
+
+### THE FIX, in the writer
+
+`build_akai_volume` now emits an **unlooped sample first** when the volume has
+one. Under the bulk load a user performs from the front panel the machine takes
+directory order, so the one-shot takes the base and no loop can land there.
+
+Deliberately a **reorder, not a filter**: nothing is added, removed or altered. A
+volume with no one-shot at all is left exactly as it was and **warned about**,
+because inventing a dummy one-shot to occupy the base would put content on the
+disc the source never had.
+
+**Not verified:** whether the machine assigns the base to the first *directory*
+entry or the first *sample* entry. Our volumes have always emitted samples before
+programs so the two have never differed — and the fix is correct under either
+reading, since the sample moved to the front is both.
+
+**Still wanted:** hardware confirmation of a *converted* volume ordered this way.
+The mechanism is confirmed; the fix built on it is not yet.
+
+### SUPERSEDED: THE SLOT-0 RULE IS CONTRADICTED — DO NOT CITE IT (2026-08-18, later the same evening)
+
+**A loop at slot 0 sounded.** s3ked loaded items individually, choosing the
+order, and put a LOOP first:
+
+```
+samples loaded : LOOP 3S, SHOT 2S, LOOP 4S     -> a LOOP at slot 0
+prg  names     slot   peak    lasts   reading
+ 85  SHOT 2S      1   -8.5     1.90   correct
+ 86  LOOP 3S      0   -0.0    12.70   SOUNDED
+ 87  LOOP 4S      2   -8.2    12.40   3.500 s, its own, correct
+```
+
+So the rule stated below is **not supported** and must not be used. It is left
+visible rather than deleted, because the observations it was built on are real
+and the next rule has to explain them too.
+
+**One thing it DID settle, and that survives:** "the first loaded LOOP is silent
+wherever it sits" is false — on `WHOLELOOP`/`PARTLOOP` the first loaded loop sits
+at slot 1 and sounds. That was one of the two premises the writer-side workaround
+needs, and it holds.
+
+### STEP BACK (2026-08-18, at Jan's request): the method is the problem, not the disc
+
+**The load-method hypothesis is already contradicted by data we had.**
+
+```
+SDZERO / SDADDR    4 samples, BULK, loop at slot 0     SILENT
+PARTLOOP items     3 samples, ITEM, loop at slot 0     SOUNDED
+CALNOISE 'alone'   1 sample,  ITEM, loop at slot 0     SILENT   <-- same loader
+```
+
+Rows two and three share a loader and disagree, so the loader is not the whole
+story. What they do not share is the number of resident samples. That is one
+observation and not a rule — the point is that the hypothesis we were about to
+spend a crossing on was already refuted by a capture taken hours earlier, and
+nobody re-read the old data before proposing the next test.
+
+**A control was never run:** every "alone" observation used a LOOPED sample, so
+"a lone looped sample is silent" and "a lone sample is silent" are not separated
+by anything we have. `SOLOLOOP` / `SOLOSHOT` now exist for exactly that — same
+seed, same audio, same length, differing only in `SPTYPE` and the loop record.
+
+### THE METHOD CHANGE, which is the real answer
+
+Every investigation today compared **files on a disc** against **captures from a
+speaker** and inferred what happened in between. Each round therefore cost a card
+crossing, and the inference step is where all three withdrawn rules died.
+
+**The machine will say what it loaded, and the one question that matters has
+never been asked: in a silent case, what does the RESIDENT sample's loop record
+say?**
+
+```
+read before playing any note, in a silent AND a sounding configuration:
+    resident loop record    loop start, loop end, loop times, SPTYPE
+    resident data address   header 0x16-0x18, which the machine recomputes
+```
+
+A difference there is the mechanism, read directly rather than triangulated
+across two discs. No difference is nearly as valuable: it excludes the whole
+class and points at the data address or the voice allocator instead.
+
+**Why it took until now, which is the transferable part.** A disc-building loop
+was available and each round produced a clean-looking result, so building became
+the method. Reading the machine's own state was always cheaper, needed no
+crossing, and was reached for only when a disc could not answer. **The tool that
+is already working is the one that stops you looking for a better one** — and
+three of the day's rules were wrong in ways only the next disc revealed, which is
+exactly the cost of an inference-heavy loop that feels productive.
+
+### SUPERSEDED: the live hypothesis was the LOAD METHOD, not the slot
+
+The variable s3ked can see between the runs:
+
+```
+SDZERO / SDADDR   bulk: all samples, then all programs   -> loop at slot 0 SILENT
+this run          per-item, chosen order                 -> loop at slot 0 SOUNDS
+```
+
+Every observation of the silence is consistent with that split. **If it holds,
+the fault belongs to the bulk loader rather than to slot 0.**
+
+**AGREED BY BOTH PROJECTS after an exchange that went the other way.** s3ked
+first held that a loader-dependent fault is not something a file writer can order
+its way around, then corrected it: *"I collapsed 'the loader is the variable'
+into 'the loader is opaque to us', which does not follow at all."*
+
+**And the meta-point they drew from it is worth more than the correction**, because
+it names a failure this project has no habit of watching for:
+
+> An overstated limitation is as wrong as an overstated finding, and it is easier
+> to get away with, because nobody argues with someone talking their own result
+> down.
+
+Every other correction today ran the usual way — a claim was too strong and got
+narrowed. This one ran backwards: a capability was written off too early, and the
+under-claim went unchallenged for longer than an over-claim would have, precisely
+because it sounded like caution. Scepticism aimed only at optimism is not
+scepticism.
+
+**Note what that does NOT do: it does not kill the writer-side workaround.**
+Under a bulk load the machine takes directory order, and directory order is
+`build_akai_volume`'s — so emitting a one-shot first still puts a non-loop at
+slot 0 for exactly the load path where the silence appears. A user loading a
+whole volume from the front panel is doing the bulk load, which is the case that
+matters. The workaround would be unnecessary for item loads and effective for
+bulk ones.
+
+**The test, no rebuild needed:** CLR and bulk-load `PARTLOOP`, then CLR and load
+the same five items individually in directory order. Same slots, different
+loader. If the silence follows the loader, slot 0 is a red herring.
+
+### THE PATTERN, and it is not about discs (s3ked's framing, kept verbatim in substance)
+
+Two of this project's own instruments limited conclusions today in ways invisible
+from inside the analysis, and **both flaws were in the SAFEGUARDS rather than in
+the experiments**:
+
+* CALNOISE's shared PCM was in the thing meant to *identify content*
+* the harmonic overlap was in the thing meant to make a leak *unmissable*
+
+An experiment gets re-derived every time someone reads it. **A safeguard is the
+one part nobody re-derives** — it is trusted precisely so that attention can go
+elsewhere — which is what makes it the expensive place to be wrong. Both faults
+here were silent, plausible, and load-bearing for hours.
+
+The corollary for this project: a check must be verified in both directions
+before it is relied on, and the properties it *claims* must be tested as
+arithmetic, not asserted in prose. "The period sets are disjoint" was true and
+insufficient; nobody had asked whether their harmonics were.
+
+(s3ked adds that their detector's argmax and my period set had to coincide to
+produce the false leak — either alone would have been caught. That is true and
+does not soften it: safeguards fail together because each is trusted to cover
+the other.)
+
+### An anomaly worth its own look: the hot, poorly-correlated capture
+
+PRGNUM 86 sounded at **−0.0 dBFS with 0.01% pinned**, where every other capture
+sat at −8, and its autocorrelation peaked at **2.542 s with only 0.29** where
+everything else gave its own period to three decimals at 0.77–0.99. The written
+files are all peak 0.350 — verified — so the level difference is not in what we
+wrote.
+
+**Both symptoms fall out of one cause: two voices sounding instead of one.** Two
+copies of the same noise at different phase sum to roughly +6 dB (−8.5 + 6 ≈
+−2.5, and clipping would take the rest of the way to 0.0) *and* smear the
+periodicity, because the autocorrelation of a sum of two offset copies is much
+weaker than of either alone. Clipping alone would not explain a correlation
+collapse from 0.98 to 0.29.
+
+If that is right it is a second finding hiding inside this one, and it is
+testable on the capture already taken: cross-correlate it against itself and look
+for **two** peaks rather than one.
+
+### SUPERSEDED RULE, kept for the observations it must still explain
+
+`WHOLELOOP` and `PARTLOOP` came back **indistinguishable** — every loop plays
+its own sample in both — so **loop extent is excluded**. And the one-shot placed
+at slot 0 **sounds**, in both volumes, stopping at 1.90 s as a 2 s one-shot must.
+
+```
+A LOOPED sample at slot 0 is silent.
+A loop at any other slot plays its own sample.
+A one-shot at slot 0 sounds.
+```
+
+Every trustworthy observation fits: `SDZERO`/`SDADDR` (loop at slot 0 silent,
+loops at 1-3 correct) and `WHOLELOOP`/`PARTLOOP` (one-shot at slot 0 sounds,
+loops at 1-4 correct). **CALNOISE is excluded** — its shared PCM means nothing it
+showed can be trusted, by the criterion set before the result was known.
+
+So the bug is bounded to **one silent instrument per volume, and only when the
+first thing loaded is a looped sample** — far smaller than the "every sustained
+instrument plays the wrong sample" this started as.
+
+**A workaround we control:** slot order is directory order, and the directory
+order is `build_akai_volume`'s. Emitting a one-shot first would avoid the fault
+entirely for any volume containing one. Two things must be confirmed before
+building it, and both were asked rather than assumed: whether it is *slot 0* or
+*the first loaded LOOP* (identical on every disc so far), and whether it follows
+the sample's slot or the program's load order.
+
+### A DESIGN FLAW IN THE DISJOINT-PERIOD DISCS, found by s3ked
+
+The period sets were chosen pairwise disjoint, and that is **not sufficient**:
+
+```
+2 x 2.5 = 5.0   in the other set
+2 x 3.5 = 7.0   in the other set
+```
+
+An autocorrelation detector taking the **argmax** can score a harmonic above the
+fundamental on a clean loop, so two captures were flagged as cross-volume leaks
+by the very check built to make a leak unmissable. **The check manufactured the
+alarm it existed to prevent** — the second time in one day that a disc of this
+project's own making constrained a conclusion invisibly from inside the analysis.
+
+Two fixes, both adopted:
+
+* **Take the FIRST autocorrelation peak above threshold, never the largest.** A
+  fundamental is always the earliest peak; harmonics are later by construction.
+* **Choose period sets disjoint under integer multiples**, not merely pairwise.
+
+CALNOISE v2 is rebuilt on both: six distinct seeds (highest correlation between
+any two files 0.047), periods 2/5/7 with no collision under x2/x3/x4.
+
+### SUPERSEDED hypothesis: loop EXTENT
 
 The one structural difference left between the two discs is that **CALNOISE's
 loops span the whole sample while SDZERO's span a part of it.** The sample-data
@@ -11772,4 +12120,150 @@ tractable one: a single disc to study rather than a systemic reader fault.
 The existing decision not to *decode* unknown records stands and is well argued
 where it sits: reading a record of unknown layout is how a parser invents data.
 This section only corrects what is being counted.
+
+## §ASKFORDEFINITIONS — the two corrections that came from questions, not measurements (2026-08-18)
+
+Seven claims were corrected on 2026-08-18. Five fell to measurements. **Two fell
+to someone asking what a phrase meant**, and both were later and cheaper than
+they needed to be.
+
+```
+"a caveat in a docstring does not defend against a printed number"   measurement
+"the block codes are slot-relative"                                  measurement
+"the loop plays 11% fast"                                            measurement
+"the duplicate name caused the crossing"                             measurement
+"the sample-data address is the cause"                               measurement
+"a looped program plays the sample before the one it names"          QUESTION
+"positional, not ordinal"                                            QUESTION
+```
+
+The last one is the clearest case. Nothing about *"positional, not ordinal"*
+looked shaky: it had a confirmed hardware measurement under it, it had survived
+review by both projects, and it was written into four files across two
+repositories. Jan asked **what "a looped sample at the pool base" meant** — not
+whether it was true — and the phrase did not survive being made precise. Stating
+it exactly revealed that both properties had moved together in every test, and
+that the machine's own address assignment makes them inseparable by construction.
+
+**Why a request for a definition is a sharper instrument than a request for
+evidence, and why it gets asked less:**
+
+* It costs the asker nothing. They need no competing hypothesis, no data, and no
+  standing in the argument — only the observation that they cannot restate the
+  claim in their own words.
+* **It cannot be deflected by pointing at the data**, which is the usual escape
+  for a claim whose evidence is real but whose wording overreaches. Both of these
+  claims had genuine measurements behind them; the measurements simply did not
+  support the sentence that had been built on top.
+* It is uncomfortable to ask between people who both know the material, because
+  it can read as not having followed. That is precisely why neither project
+  asked it of the other all day: **both asked for evidence, and evidence was
+  always available.**
+
+s3ked's summary, which belongs here in their words: *"a confound dressed as a
+control"* — the test built to discriminate the two properties moved both together
+and discriminated neither.
+
+**The practice to adopt:** before a finding is written into a notes file, restate
+it in one sentence without reusing any of its own terms. A claim that cannot
+survive that has a definition problem, and no amount of confirming data will
+surface it.
+
+## §AKAILOOPSEM — our loop convention is the reverse of the factory one (2026-08-18, ESTABLISHED; NOT the cause of the silence)
+
+Offsets validated against a file where every value is known (`0x1a` SLNGTH,
+`0x22` play end, `0x26` LOOPAT1, `0x2c` LLNGTH1) — not another offset error.
+Across **16493 factory S3000 samples with a real loop**:
+
+```
+LLNGTH <= LOOPAT                    98.6%
+LOOPAT + LLNGTH <= SLNGTH           11.2%     <- what OUR writer assumes
+```
+
+Under our reading — `LOOPAT` is where the loop begins and `LLNGTH` is how long it
+runs — **89% of all factory loops would run off the end of their own sample.**
+Under the reading that `LOOPAT` is the point *at which it loops* and `LLNGTH`
+measures backwards from there, 98.6% are consistent. The name is suggestive too:
+"loop at" reads as a point, not a start.
+
+### RESOLVED, and the first framing above was too crude
+
+**The backwards-semantics hypothesis is REFUTED by a positive control that was on
+disk the whole time.** Every loop that demonstrably played its own period on
+hardware — `SDZERO`'s and `PARTLOOP`'s, measured at 4.000 / 5.000 / 7.001 s and
+corr 0.97+ — carries:
+
+```
+LOOPAT 0,  LLNGTH 176400,  SLNGTH 352800
+   LLNGTH <= LOOPAT          False
+   LOOPAT + LLNGTH <= SLNGTH True     <- our model, and it WORKS
+```
+
+s3ked's point that the experiment had **no positive control** was exactly right,
+and supplying one needed no hardware at all: a loop known to work was sitting in
+an image on this disk.
+
+**What the corpus actually shows is a different convention, not a wrong one:**
+
+```
+LOOPAT within 1% of SLNGTH   82.9%
+LOOPAT 90-99% of SLNGTH       9.6%
+LOOPAT 50-90%                 5.6%
+LOOPAT below half             1.9%
+```
+
+**In factory material `LOOPAT` sits at the END of the sample and `LLNGTH` runs
+back from it** — the loop is the sample's tail, which is what a sustain loop is.
+We write `LOOPAT 0` with the length running forward. Both evidently play (ours
+do, away from the pool base), but they are opposite conventions, and ours is
+shared by roughly 1% of factory samples.
+
+`SLNGTH` at `0x1a` was validated against **18293 factory samples, 100% matching
+`(filesize - 192) / 2`**, so none of this rests on an unchecked offset.
+
+### What this does and does not explain
+
+**It does NOT explain the silence.** Our loops work at non-base positions with
+this exact convention, so the convention alone is not the fault. Recorded as a
+compatibility finding, not a cause — and the temptation to make it the cause is
+precisely what eight withdrawn rules today should inoculate against.
+
+**It is still worth acting on eventually**: writing loops the way 92% of factory
+material does is more likely to be right in cases we have not tested, and it
+costs nothing but arithmetic. Not tonight, and not without a hardware test.
+
+### Deliberately NOT acted on, and the reason matters
+
+Eight claims were stated and withdrawn on 2026-08-18. This one has the same shape
+as the last three that died: a clean corpus number, an obvious mechanism, and no
+test. It is also **not sufficient on its own** — `SDZERO`'s loops carried
+`LOOPAT 0` and played their own periods to three decimals at non-base positions,
+which a straightforwardly backwards loop record would not do.
+
+**Two probes would separate it from the pool-base story, neither needing a disc:**
+the same `loop_start` sweep on a sample that is *not* at the pool base, and one
+probe with `LLNGTH` set smaller than `LOOPAT` so the loop-END reading is actually
+satisfiable. Both are SysEx writes on a resident sample.
+
+### A correction to the sweep that produced this
+
+The `loop_start = 132300` capture was read as "SUSTAINS" from its 7.95 s in a 9 s
+recording. Measured directly: active region **8.00 s — the whole sample — and no
+autocorrelation peak above 0.35 anywhere between 0.2 s and 9 s.**
+
+```
+loop_start      0 / 1 / 64 / 512   active 0.05-0.06 s
+loop_start   4410                  active 0.15 s
+loop_start  22050 (0.500 s)        active 0.56 s   no period
+loop_start  44100 (1.000 s)        active 1.03 s   no period
+loop_start 132300 (3.000 s)        active 8.00 s   no period
+```
+
+**In none of the eight probes did the sample ever loop.** Duration tracks
+`loop_start` and then the whole sample plays once, but nothing repeats anywhere.
+
+That is the same failure as reading "it made a noise" for "it played correctly",
+one level up: *it played for a long time* is not *it sustained*. Only a period
+measurement separates them — and the tooling for that was built this evening and
+not pointed at this capture.
 

@@ -69,6 +69,9 @@ from parsers.akai_s3000_parser import (
 #: appear, this constant changes and nothing else does.
 AKAI_PLAYBACK_RATES = (22050, 44100)
 
+#: SPTYPE value meaning "no looping" -- what build_sample writes for a one-shot.
+_SPTYPE_NO_LOOP = 2
+
 #: Derive sample-header 0x10 (active-loop count) from the loop state rather than
 #: writing 1 unconditionally. Real output always wants True; the akaiutil
 #: byte-identity tests flip it off, because akaiutil writes 1 for everything and
@@ -2182,6 +2185,55 @@ def build_akai_volume(bank: Bank, bank_name: Optional[str] = None,
               f"128 program numbers. Programs past the 128th all carry number "
               f"127 and will stack on one program change; they remain "
               f"selectable from the sampler's own panel.")
+
+    # A LOOPED SAMPLE MUST NOT BE THE FIRST ONE IN THE VOLUME.
+    #
+    # HARDWARE-CONFIRMED 2026-08-18 on an S3000XL, after a day in which four
+    # other explanations were stated and withdrawn. The machine places the first
+    # sample it loads at the base of its object pool, and **a looped sample at
+    # that base does not play correctly** -- sometimes silence, sometimes
+    # degraded non-periodic audio. The decisive pair, same file, same lone-loop
+    # arrangement, same loader, byte-identical loop record, only the address
+    # differing:
+    #
+    #     SOLO LOOP at SLOCAT 131072 (the base)   silent, -72.8 dBFS
+    #     SOLO LOOP at SLOCAT 483872              plays, -8.2 dBFS, period
+    #                                             5.000 s at corr 0.967
+    #
+    # It is POSITIONAL, not ordinal: the same sample loaded second, above a
+    # one-shot, is fine. So emitting any unlooped sample first keeps a loop off
+    # the base, and under the bulk load a user performs from the front panel the
+    # machine takes directory order -- which is ours.
+    #
+    # This is deliberately a REORDER and not a filter: no file is added, removed
+    # or altered, and a volume with no one-shot at all is left exactly as it was
+    # and warned about, because inventing a dummy one-shot to occupy the base
+    # would put content on the disc that the source never had.
+    #
+    # NOT VERIFIED: whether the machine assigns the base to the first DIRECTORY
+    # entry or to the first SAMPLE entry. Our volumes have always emitted
+    # samples before programs, so the two have never differed -- and this fix is
+    # correct under either reading, since the one-shot moved to the front is both.
+    _smp = [(fn, d) for fn, d in files if fn.upper().endswith('.S3')]
+    if _smp:
+        _unlooped = [i for i, (_fn, d) in enumerate(_smp)
+                     if len(d) > 0x13 and d[0x13] == _SPTYPE_NO_LOOP]
+        if not _unlooped:
+            if not quiet:
+                print(f"    [WARN] every sample in this volume is looped, so one "
+                      f"of them will sit at the sampler's object-pool base and "
+                      f"will not play correctly (silent, or audibly degraded). "
+                      f"There is no unlooped sample to put there instead. "
+                      f"Hardware-confirmed 2026-08-18; see AKAILOOPCROSS.")
+        elif _unlooped[0] != 0:
+            first = _smp[_unlooped[0]]
+            files.remove(first)
+            files.insert(files.index(_smp[0]), first)
+            if not quiet:
+                print(f"    [INFO] moved the unlooped sample {first[0]!r} to the "
+                      f"front of the volume: the first sample loaded takes the "
+                      f"sampler's pool base, and a LOOPED sample there does not "
+                      f"play correctly.")
 
     if type0:
         # Appended AFTER programs and samples, which is the order the
