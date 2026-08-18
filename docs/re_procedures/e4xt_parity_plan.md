@@ -448,6 +448,69 @@ after someone configures it correctly.
   missed are the measure of coverage; pages the walk found and the manual does
   not document are the find.
 
+### 2b.4a THE WALK PRESSED LOAD — incident, 2026-08-18
+
+**It reached the DISK subtree the design excludes, opened the "Destroys current
+RAM bank" dialog, and confirmed a load.** RAM went from empty to one preset plus
+~1.59 MB of samples. No Erase. CD slots are read-only images; **whether anything
+reached HD0 is UNKNOWN and stays unknown**, because no backup of that card
+existed to compare against.
+
+**Root cause: the queue stored a key NAME but not the page it was validated on.**
+A soft key checked against the library on one page was pressed later from
+wherever the walk had since wandered — where the same key number means something
+else. eosed had written the warning that a key-number blacklist is meaningless
+because soft-key meaning is page-dependent, then built a whitelist that presses
+key numbers. Compounding it: `PAGE_EXIT` does **not** dismiss that dialog
+(`Cancel` on F1 does), so the walk was in the key-swallowing state and a later
+queued press landed on Load.
+
+**My share:** I took a full byte backup of the AKAI card before letting another
+session near it, and wrote that this was "the reason I took it rather than
+asking you to be careful" — then authorised this walk with no backup of HD0. The
+rule was mine, stated hours earlier, and not applied to my own next piece of
+work. **The general form, eosed's phrasing:** *both of us failed to apply a rule
+we had just articulated, to our own next work.* Not fixable by more care; the
+rule has to be in the shape of the thing.
+
+**Consequences, now binding:**
+
+1. **Recon and traversal are separate programs.** Recon (`recon.py`) contains no
+   soft-key constant at all — audited independently: the only strings reaching
+   `tap` are seven movement and five mode keys, `tap` sends exactly one key via
+   `getattr(pp.Key, name)` and raises on an unknown name, and **no move or mode
+   shares a code with any soft key**. The capability is absent, not guarded.
+2. **Queue pages, not presses.** No stored intention outlives the screen it came
+   from; the move is chosen from the page in front of you, now.
+3. **Recon does not attempt modal dismissal.** It aborts and reports which move
+   opened the dialog. Guessing a dismissal is what turned a wrong press into a
+   confirmed one.
+4. **No hardware session without a current image backup**, taken first.
+
+**Wire-level adjacency, computed (not a defect, a property to know):** the panel
+button message `40 <key> 00 <01|00>` carries **no checksum**, and three of
+recon's seven movement keys sit one bit from a soft key —
+
+```
+CURSOR_UP  0x6E  ->  F3, F5, F6      (three, the worst)
+PAGE_NEXT  0x6B  ->  F5
+PAGE_PREV  0x69  ->  F4
+F1 and F2 are NOT reachable by any single-bit flip from any recon key.
+```
+
+No guard is added, deliberately: a read-back **detects and cannot prevent** —
+the press has happened by the time the fingerprint returns — and there is no
+protocol-level check to reject a corrupted byte. What actually bounds the risk
+is that recon never visits the disk subtree, so a bit flip reaches
+Name/New/Copy/Export/Place/Info rather than Load/Save/Erase. That F1 (`Cancel`)
+is unreachable is a small mercy in the wrong direction: a flip can open trouble
+and never dismiss it.
+
+**And the condition to respect after the backup:** with **RAM empty, Load fires
+with NO confirmation dialog** — the dialog appears only when there is something
+to destroy. The state we will be in after a backup and power cycle is precisely
+the state in which a stray Load is least survivable.
+
 ### 2b.4b What the staged walk script actually does, and what it does not
 
 `/home/lentferj/temp/re_e4xt_walk/walk.py` (eosed, 2026-08-17). Parses and runs
@@ -583,14 +646,27 @@ that will have produced findings.
 
 ---
 
+## 5b. Staged on the ZuluSCSI card, 2026-08-18
+
+Both banks are written to the E4XT card and its `whatiswhat.txt` slot map is
+updated to match (the old `CD2 - DIRCON` entry retired, since those files are
+`XX_*.disabled` and slot CD2 was free).
+
+    CD2-F58ANCHOR.iso            98 presets, vpar[58] 0x00-0x5F   Phase 1
+    CD2-F58ANCHOR_expected.csv   the join's expectation table
+    CD6-ENVSPAN.iso              4 presets, rate-vs-duration      Phase 2
+
+**Phase 1b, the screen walk, needs neither** — it runs on a scratch preset and
+wants no bank at all. It is still first.
+
 ## 6. Tools to build (offline deliverables)
 
 | tool | status | purpose |
 |---|---|---|
-| `gen_e4xt_display_anchors.py` | **to build** | Phase 1 bank |
-| `gen_e4xt_envspan_bank.py` | **to build** | Phase 2 bank |
+| `gen_e4xt_ftype_anchors.py` | **built**, staged as CD2 | Phase 1 bank |
+| `gen_e4xt_envspan_bank.py` | **built**, staged as CD6 | Phase 2 bank |
 | `gen_e4xt_confirm_batch.py` | **to build** | Phase 3 bank |
-| `e4xt_display_join.py` | **to build** | joins eosed's display dump to our written bytes; reports disagreements, like the K2000 anchor join |
+| `e4xt_display_join.py` | **built + self-tested** | joins eosed's display dump to our written bytes; reports disagreements, like the K2000 anchor join |
 | `gen_hw_confirm_batch.py` | exists | precedent to follow |
 | `fit_e4b_rate_fields.py` | exists | precedent for corpus-first analysis |
 

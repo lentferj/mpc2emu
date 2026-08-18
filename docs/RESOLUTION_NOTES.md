@@ -129,6 +129,12 @@ survive being carried between them.*
 
 - [§WRONGLAYER — a positive control on the transport is not one on the measurement (2026-08-18)](#wronglayer-a-positive-control-on-the-transport-is-not-one-on-the-measurement-2026-08-18)
 
+- [§AKAIAUX-DECODED — the drum-input and multi files, read off the disk (2026-08-18)](#akaiaux-decoded-the-drum-input-and-multi-files-read-off-the-disk-2026-08-18)
+
+- [§PROSEGUARD — a caveat in a docstring does not defend against a printed number (2026-08-18)](#proseguard-a-caveat-in-a-docstring-does-not-defend-against-a-printed-number-2026-08-18)
+
+- [§AKAIDELETE — the delete-type enum, and why it must never be swept (2026-08-18)](#akaidelete-the-delete-type-enum-and-why-it-must-never-be-swept-2026-08-18)
+
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -9900,3 +9906,271 @@ already existed. Worth running *before* proposing a new measurement.
 **Tally for the night: three corrections between two projects, each caught by
 the other party, none by review — and the review each of us did of our own work
 caught none of them.**
+
+## §AKAIAUX-DECODED — the drum-input and multi files, read off the disk (2026-08-18)
+
+**Both formats are decoded.** s3ked configured the pages over SysEx (writable
+`DDATA` / `MULTIDATA`, unattended) and saved two type-0 volumes; the diff below
+ran against the card on 2026-08-18.
+
+### `DRUM INPUTS.D` — 16 records of 9 bytes from `0x10`
+
+```
+14 changed bytes, 5 runs, stride 9 (x3 support)
+record 0 (input 1)  +0x00..+0x08  36 51 26 3 5 11 12 7 9
+record 1..5         +0x00 only    38 41 47 55 99
+```
+
+**Every one of the nine values is stored verbatim.** Not scaled, not packed,
+not offset — the byte on disk equals the number set on the panel-equivalent
+register. That is the whole field map for the record, and the two positions
+that read `0` in every previous capture (`+0x07`, `+0x08`) are decoded here for
+the first time because the procedure required input 1 to set *every* field.
+
+Layout confirmed: stride 9 from `0x10`, second bank at `0x5b`, and input 16 one
+byte short at `0x9a` — the "16 records of 9 from `0x10` overruns the file by
+one byte" arithmetic, seen from the disk side and matching the RAM side.
+
+### `MULTI FILE.M3` — 1024-byte header, then 16 parts of 192
+
+```
+1024 + 16 x 192 = 4096   exactly the file size
+part 0 base 0x0400   part 1 base 0x04c0   stride 192 (measured, x2)
+```
+
+The stride was **measured, not assumed**: `VOSCL` was planted at three parts
+with distinct values (83 / 62 / 88) and read back at `0x506`, `0x5c6`, `0x686`
+— differences of exactly 192, twice.
+
+**Every field sits at the same intra-part offset on disk as in RAM**, verified
+for all thirteen:
+
+```
+PRNAME +3   PMCHAN +16  PRIORT +18  PLAYLO +19  PLAYHI +20  OUTPUT +22
+STEREO +23  PANPOS +24  VOSCL  +70  TRANSPOSE +75  PFXCHAN +113
+PFXSLEV +114  PTUNOCM +115
+```
+
+**So the disk stores the same representation as RAM.** That was the open
+question the diff existed to answer, and `PANPOS` = `243` and `PTUNOCM` = `219`
+appear on disk byte-for-byte as they were written. It does **not** settle what
+`243` MEANS — those bytes were produced by s3ked's encoder, which assumes two's
+complement, so the semantic label is still interpretation. **That needs the
+front panel** (see §AKAIAUX, the five-second look).
+
+### A tool bug this exposed
+
+`akai_aux_diff.py` inferred the stride as **1**, not 9. Its heuristic took the
+commonest gap between consecutive changed offsets, and input 1's nine adjacent
+fields produced nine gaps of 1 that outvoted the four gaps of 9. **The
+docstring already warned that adjacent changes inside one record are not
+strides** — the warning was correct and the code shipped the wrong number
+anyway, because a caveat in prose does not stop a number being read.
+
+Fixed to collapse each run of adjacent changed bytes to a single point first,
+so the gaps measured are between *records* rather than between bytes. Re-run:
+stride 9 with support 3. It now also refuses to name a stride at all when no
+gap repeats, rather than reporting the first one it sees.
+
+Related: §RIGHTNUMBER — the tool's *output* was wrong here, which is the easy
+case. The dangerous version is the one where the number is right.
+
+## §PROSEGUARD — a caveat in a docstring does not defend against a printed number (2026-08-18)
+
+**s3ked's generalisation of a bug in our own tool, and it is a different failure
+from §RIGHTNUMBER or §WRONGLAYER: this one is about tool design.**
+
+`akai_aux_diff.py` infers a record stride from the spacing of changed bytes. Its
+docstring said, correctly and in advance:
+
+> two changed fields inside one record produce small gaps that are not strides
+> at all, and this cannot tell those apart on its own
+
+Run against the first real specimen it printed **`taking 1 as the stride`** and
+laid out fourteen changes as fourteen one-byte records. The true stride was 9.
+The warning was right, was written before the failure, sat directly above the
+code — and the wrong number shipped anyway.
+
+**Because the reader believes the figure, not the paragraph above it.** A
+printed number carries the authority of a computation; a docstring carries the
+authority of a note. When they disagree, the number wins, and it wins silently.
+
+### The same shape elsewhere
+
+`_MISC_LOAD_TYPE = (6,7,8,9)` in s3ked's bridge, described in a comment as "the
+load type, mirrored". They were four independent action registers — load, delete
+from memory, save-create, save-overwrite. Anything iterating that tuple, which
+is the obvious thing to do with a tuple of mirrors, would have deleted resident
+data and then written to a disk. **A `[:1]` slice was the only thing between
+that comment and a user's medium.** The comment was doing safety work and the
+code was not acting on it.
+
+### The rule
+
+**If a caveat is load-bearing, it must be in the control flow, not in the
+prose.** Concretely:
+
+- Refuse to answer when the data cannot support the answer. Our fix makes the
+  differ print *"No gap repeats, so the stride is NOT established"* rather than
+  naming the first gap it sees.
+- Prefer a structure that cannot express the bad case over a comment warning
+  about it — s3ked's own-value sweep detects *"this register acts"* and cannot
+  claim *"this value is valid"*, because it never varies the value.
+- eosed's soft-key template library ships **empty**, so deny-by-default is the
+  initial state rather than a documented policy someone must implement.
+
+All three are the same move: a tool declining to answer a question its data
+cannot answer.
+
+### The part worth keeping
+
+The specimen designed to make *fields* findable is what made the *bug* findable.
+"Set every field of one record" is precisely the input that breaks a naive
+stride inference, so the procedure's most demanding clause was load-bearing
+twice over — once for the format, once for the tool reading it.
+
+### §AKAIAUX-DECODED addendum — the panel readings, 2026-08-18 (Jan)
+
+**Read off the S3000XL's own display for multi part #2 (our part index 1), the
+part carrying the planted values. Five confirmations and two corrections.**
+
+```
+panel            planted                verdict
+name ABCDEF...   PRNAME ABCDEFGHIJKL    match
+Pan L13          PANPOS(@24)  = 243     match -- 243 IS -13
+Lev 61           "STEREO"(@23) = 61     match, but the field is LEVEL
+Send 71          PFXSLEV(@114) = 71     match
+FX RV4           PFXCHAN(@113) = 4      match
+Ch 16            PMCHAN(@16)  = 22      MISMATCH -- clamped
+```
+
+**1. The signed encoding is TWO'S COMPLEMENT, settled.** `243` displays as
+`L13`, and only two's complement gives −13 (offset-by-50 gives 193,
+sign-magnitude 115). So `PTUNOCM` = `219` is −37 as intended, and all three
+signed fields are settled by one reading. This was the open half that no amount
+of file diffing could reach — the disk faithfully stored s3ked's encoder's
+assumption, and a medium that copies bytes cannot validate their meaning.
+**Part #1, unconfigured, reads `Pan MID` for byte 0** — consistent with 0 =
+centre.
+
+**2. `@23` is LEVEL, not "stereo".** It was carried in the parameter table as
+`STEREO` with range 0..99; the panel calls it `Lev` and shows our 61. A field
+name that was never checked against the machine.
+
+**3. `PMCHAN` is clamped: we stored 22, the panel shows `Ch 16`.** The value was
+accepted and stored verbatim — s3ked confirmed the readback — so *the register
+holds 22 and the machine does not honour it.* This is the `K_FREQ 0..12` shape
+that s3ked flagged in their own `params.py`, now demonstrated rather than
+suspected: **a declared range describing what a register will store, not what
+the machine will act on.** Storage is not acceptance.
+
+**4. CORRECTION TO THIS SECTION'S OWN CLAIM ABOUT THE DRUM FILE.** Above it says
+every one of the nine drum fields is "stored verbatim". That is true and it is
+narrower than it reads. Jan reports **no drum parameter displays as 7 or 9** —
+the values we planted at `+0x07` and `+0x08`. So:
+
+- **file byte == register value** — measured, and what "verbatim" meant here
+- **register value == displayed parameter** — NOT established, and false for at
+  least those two fields
+
+The two positions are located, and their scale or meaning is not. §RIGHTNUMBER
+in miniature: the sentence was accurate about what was measured and invites a
+broader reading. Photograph pending.
+
+**5. The machine HAS an `ENTIRE VOLUME` delete** (s3ked's open item 3). So a
+per-volume delete exists and the remote hunt was looking for something real
+rather than something absent. Photograph pending.
+
+### §AKAIAUX-DECODED addendum 2 — the drum record, from a photograph (2026-08-18)
+
+Jan photographed `DRUM INPUT SETTINGS` for input 1 with the planted values live
+on the panel. **Six of the nine bytes are named:**
+
+```
++0x00  36  ->  note      displayed C_1     MIDI 36 renders as C_1 here
++0x01  51  ->  sens      verbatim
++0x02  26  ->  trig      verbatim
++0x03   3  ->  V-curve   displayed 4 -- stored 0-based, displayed 1-based
++0x04   5  ->  capture   verbatim, unit mS
++0x05  11  ->  recover   verbatim, unit mS
++0x06  12  ->  ?
++0x07   7  ->  ?         nothing on the page reads 7
++0x08   9  ->  ?         nothing on the page reads 9
+```
+
+Unattributed on the display: `on-time 804mS`, `chan 1`, `unit 1`, `input ALL`.
+`on-time` was tried as a u16 across every adjacent byte pair — 1804, 3079, 2311,
+1801 — and **none gives 804**, so it is scaled, table-indexed, or not in those
+bytes.
+
+**This corrects the parent section's "stored verbatim".** That claim was true of
+what was measured — *file byte equals register value* — and false as anyone
+would naturally read it. Six display verbatim, one is off by one, three do not
+appear on the page at all. Three distinct relationships were collapsed into one
+word. The measurement stands; the sentence was doing more work than the evidence.
+
+`MIDI 36 -> C_1` is worth keeping on its own: the same octave-convention
+question that cost time on the K2000 (`24-108` against a panel saying `C0-C_7`),
+answered for this machine from its own display.
+
+## §AKAIDELETE — the delete-type enum, and why it must never be swept (2026-08-18)
+
+Photographed from the DELETE page. **The type is a five-value enum:**
+
+```
+0  cursor item only
+1  all programs only
+2  all samples
+3  ENTIRE VOLUME
+4  OPERATING SYSTEM
+```
+
+**Value 4 deletes the operating system FILE on the selected medium** — not the
+sampler's boot code.
+
+**CORRECTED 2026-08-18, and the overstatement was mine.** I first wrote this as
+"not the disc, not a volume — the machine's firmware", and s3ked carried it into
+their TODO as erasing the firmware of an irreplaceable instrument. Jan queried
+it and was right.
+
+The evidence was already in our own code: `LOAD_TYPES[6] = "Operating System"`.
+**An OS that can be LOADED FROM a medium is a file on that medium**, so the
+symmetric delete removes that file. `bridge.py` has guarded load type 6 behind
+an explicit flag all along for exactly that reason. The `BOOT SYSTEM#` volume's
+nine directory entries contain no OS-typed file either, so the OS sits outside
+the volume directory.
+
+**A warning is a claim, and being cautious does not exempt it from having to be
+true.** An overstated hazard spends the same credibility as an overstated
+finding, and the next warning is read in its light. This is the purest instance
+of that on this project: the measurement was right, the alarm was not, and the
+alarm is what would have been remembered.
+
+**The conclusion is unchanged at the corrected size.** Value 3, `ENTIRE
+VOLUME`, destroys a volume outright, and value 4 can strip a boot medium's OS,
+recoverable only if an OS file exists elsewhere. Neither is a power-cycle
+recovery, and one of them is one integer from the other.
+
+s3ked's untried next step for the remote delete hunt was *"byte[8]/byte[9] at
+values other than 0 and 1"*. A five-value type field adjacent to a delete action
+is exactly the shape that hunt expected to find, and **an unbounded sweep of it
+reaches value 4.** Warned before they resumed; recorded here so the reason
+survives the conversation.
+
+This is §105's "a reachable page does not imply a reachable softkey" with much
+sharper teeth: an inert-looking value is not merely inert. It is also the
+strongest possible case for the asymmetry argument (§KRZF3-era): a moderate
+convenience against an unrecoverable outcome is the wrong trade, and here the
+unrecoverable outcome is one integer away from the useful one.
+
+**Two structural results better than the enum itself.** `ENTIRE VOLUME` exists,
+so the capability is real and only the remote route is missing — that reframes
+the hunt from *does it exist* to *where is it*. And **the trigger is a separate
+key**: type selection, then `GO` on F8, unlike the load and save registers where
+the write IS the operation. If the remote form mirrors the panel there is an
+arm-then-fire pair, and **the arming half is safe to hunt while the firing half
+is not** — a way to make progress without ever writing a value that could act.
+
+Page also confirms that
+that its softkeys are `SAVE VOLS REN DEL SCSI FORM` with `GO` on F8 — **`FORM`
+(format) on F6**, with the trigger a separate key.
