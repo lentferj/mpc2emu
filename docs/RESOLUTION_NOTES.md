@@ -109,7 +109,7 @@ survive being carried between them.*
 - [§CWM201 — ConvertWithMoss 20.1.0 cross-check (2026-08-08)](#cwm201-convertwithmoss-2010-cross-check-2026-08-08)
 - [§GIGE2E — GigaSampler end to end, over 146 real files (2026-08-09)](#gige2e-gigasampler-end-to-end-over-146-real-files-2026-08-09)
 - [KRZ keymap: reporting the up-pitch ceiling clamp](#krz-keymap-reporting-the-up-pitch-ceiling-clamp)
-- [§ENVSPAN — is the EOS envelope byte a RATE or a DURATION? (OPEN, 2026-08-12)](#envspan-is-the-eos-envelope-byte-a-rate-or-a-duration-open-2026-08-12)
+- [§ENVSPAN — ANSWERED: the EOS envelope byte is a RATE (2026-08-18, hardware)](#envspan-answered-the-eos-envelope-byte-is-a-rate-2026-08-18-hardware)
 - [§RULER — a ruler that saturates against its source is measuring the source](#ruler-a-ruler-that-saturates-against-its-source-is-measuring-the-source)
 - [§AGREEMENT — what a second source actually rules out](#agreement-what-a-second-source-actually-rules-out)
 - [§AKAIAUX — first read of the four auxiliary file types (2026-08-17)](#akaiaux-first-read-of-the-four-auxiliary-file-types-2026-08-17)
@@ -136,6 +136,10 @@ survive being carried between them.*
 - [§AKAIDELETE — the delete-type enum, and why it must never be swept (2026-08-18)](#akaidelete-the-delete-type-enum-and-why-it-must-never-be-swept-2026-08-18)
 
 - [§E4BFTYPE — `vpar[58]` is a GROUPED code, not a sequential index (2026-08-18)](#e4bftype-vpar58-is-a-grouped-code-not-a-sequential-index-2026-08-18)
+
+- [§POWEROFF — every symptom fitted, and nobody enumerated the cheapest cause (2026-08-18)](#poweroff-every-symptom-fitted-and-nobody-enumerated-the-cheapest-cause-2026-08-18)
+
+- [§FECLAMP — a real difference, measured with a ruler that had hit its ceiling (2026-08-18)](#feclamp-a-real-difference-measured-with-a-ruler-that-had-hit-its-ceiling-2026-08-18)
 
 <!-- INDEX:END -->
 
@@ -7803,143 +7807,82 @@ not a code decision.
 
 ---
 
-## §ENVSPAN — is the EOS envelope byte a RATE or a DURATION? (OPEN, 2026-08-12)
+## §ENVSPAN — ANSWERED: the EOS envelope byte is a RATE (2026-08-18, hardware)
 
-**Status:** untested assumption in shipped code. Not a demonstrated bug, and
-not safe to "fix" without the measurement below.
-
-`env_seconds_to_rate()` converts a time to an EOS envelope byte and takes **no
-span argument**. `e4b_writer` then applies it to stages whose travel distance
-is not the same:
+**Measured on the E4XT by eosed. Both controls pass, each preset twice.**
 
 ```
-pzt[0]  attack  -> level 100     distance 0 -> 100        FIXED, full
-pzt[4]  decay   -> sustain       distance 100 -> sus      VARIABLE
-pzt[8]  release -> 0             distance sus -> 0        VARIABLE
-pzt[14] filter env attack/decay, likewise
+LO   sustain 20%  byte 72   0.540 0.540  -> 0.540s
+HI   sustain 80%  byte 72   0.140 0.130  -> 0.135s
+CTL  duplicate of LO        0.550 0.560  -> 0.555s     CONTROL 1: 15 ms from LO   PASS
+REF  sustain 20%  byte 84   1.070 1.050  -> 1.060s     CONTROL 2: 1.96x from LO   PASS
+
+RESULT  LO/HI = 4.00x        DURATION predicts 1.00x
 ```
 
-If the byte is a **slew rate**, the time a stage takes is `span / rate`, and a
-conversion that ignores the span is only correct where the span matches the
-calibration's. A decay to sustain 80 % travels a fifth of the distance and
-finishes in roughly a fifth of the requested time. If the byte is a
-**duration**, everything here is already right.
+**Same rate byte, four times the time. DURATION is dead.**
 
-This is the same fault s3ked established for the AKAI on 2026-08-11 — *an
-envelope value is a slew rate, so converting a time needs the span the stage
-travels* — and it is why AKAI envelope 2 is deliberately unwired here. **The
-E4B path never had that lesson applied to it.**
+### The law, which fell out because no ratio was predicted
 
-**A tell already in our own data.** The calibration is six Decay-1
-measurements (`AMP_DECAY_CAL.E4B`, 2026-06-08) fitted at **r² = 0.96** — far
-the worst fit in this file, where the other hardware laws sit at 0.999+. If
-those six decays did not all use the same sustain level, and the byte is a
-rate, then `time = span / rate` scatters exactly that way. The sustain used is
-not recorded, which is itself the gap.
+```
+LO  sustain/peak 0.177 -> dB span 15.0      dB-span ratio  4.09
+HI  sustain/peak 0.655 -> dB span  3.7      measured time  4.00     agree to 2%
+                                             LINEAR span ratio 2.38  <- would be wrong
+```
 
-**The measurement, one bank and two presets.** s3ked's discriminator for
-`DECAY2`: vary the span and see whether the time holds. Write one decay byte
-against two sustain levels — say 20 % and 80 % — and time both stages.
+**The decay is linear in dB, and the time is the dB distance over a constant
+rate.** The plan deliberately refused to predict a numeric ratio because the
+level is a dB law and a linear guess would have been a number invented from an
+assumption — that refusal is what makes this readable. A "roughly 4x" prediction
+from linear percentages would have been **right for the wrong reason**, and
+nobody would have noticed.
 
-| result | conclusion |
-|---|---|
-| time scales with the span | it is a RATE; every decay and release we write is wrong by the span ratio |
-| time holds across spans | it is a DURATION; the current conversion is correct and this closes |
+### Free calibration from the REF control
 
-Their `DECAY2` result is the precedent for the first outcome: span varied 72 %,
-rate held to 1.9 %. Note their warning that the same evidence cannot settle an
-ATTACK — a stage that always travels zero-to-full has a fixed distance, and a
-fixed distance cannot distinguish a rate from a duration. So this test settles
-decay and release only, which is where the variable spans are anyway.
+Byte 84 against byte 72, same span, 1.96x the time. **+12 on the rate byte
+halves the rate** — one data point, but the first anyone has on that axis.
 
-**A SECOND question the same bank answers** (s3ked, 2026-08-12). Measuring
-all three envelope-2 stages the same way made a structure visible that no
-single stage showed: **attack and release are one law, and the decays run at
-about half that rate** — coefficients within 3.6 %, exponents within 0.35 %,
-against decays at roughly half. One time base with the decay stages halved,
-not five separate calibrations. They state its limits rather than rounding it
-up: exactly-half is supported for `DECAY2` at 1.5 % exponent agreement and
-only approximate for `ENV3R3` at 4.6 %.
+```
+rate(72) = 27.9 dB/s     rate(84) = 14.2 dB/s     halving every ~12.3 bytes
+```
 
-We apply **one curve to every stage** — `env_seconds_to_rate()` for attack,
-decay and release alike — and that curve was calibrated on **six Decay-1
-measurements**. If the E4XT has any comparable per-stage structure, every
-attack and release we write inherits a decay-derived rate and is wrong by
-whatever that factor is.
+Our existing `ENV_RATE_K` implies a doubling every **11.9** bytes, so **the SHAPE
+of our byte↔time model is very nearly right**. What is wrong is what it is
+anchored to.
 
-So the same bank settles two things at once: time the attack and release
-stages as well as the decay, and compare against the curve. Equal → one curve
-is right. A consistent factor → we need per-stage curves, and the factor is
-sitting in the data already.
+### What is actually broken in shipped code
 
-Note these two faults would COMPOUND and could also partly cancel, which is
-why one bench session must answer both rather than either alone.
+`env_seconds_to_rate()` takes no span argument. Solving for the span at which our
+model and the machine agree gives **≈55 dB — i.e. decay all the way to silence.**
+That is exactly how the original calibration was built: `AMP_DECAY_CAL.E4B` set
+`sustain=0` deliberately "so decay is audible". **The calibration is correct for
+its own span and wrong for every other**, and every decay to a non-zero sustain
+is therefore too fast.
 
-**THE PRIOR JUST MOVED SHARPLY (s3ked, 2026-08-12 18:32).** They settled the
-same question for the AKAI, on their third attempt, and the answer is **rate**:
+### THE FIX IS BLOCKED, and by a second discrepancy this exposed
 
-> §28's "duration" reading is refuted, and every stage of both envelopes takes
-> `full_time * (distance / 99)`.
+The obvious repair is `env_seconds_to_rate(seconds, span_db)`. **It cannot be
+written yet**, because computing the span needs the achieved sustain level, and
+our model disagrees with the measurement:
 
-Measured with the target levels swept together so the distance actually varied
-— time tracked distance at 4.47x against 4.76x, and again at a second fixed
-setting. Their envelope 2 turned out to be a **four-stage rate/level** envelope
-exactly like envelope 3, with ADSR-flavoured names hiding four of the eight
-fields.
+```
+model 0.20 -> byte 107 -> we predict 0.208   eosed MEASURED 0.177
+model 0.80 -> byte 122 -> we predict 0.821   eosed MEASURED 0.655
+```
 
-**Ours is that architecture too, and we already write it as one:** `pzt[0]`
-rate with `pzt[1]` level 100, `pzt[4]` rate with `pzt[5]` sustain, `pzt[8]`
-rate with `pzt[9]` level 0. So the E4B is a four-stage rate/level envelope by
-its own layout — the only thing unestablished is whether the byte means the
-time for a FULL traverse (their result) or for that stage.
+Our own numbers give a span ratio of **8.0x** where the machine gives **4.00x**.
+A span-aware conversion built on `env_sustain_to_byte` would be **wrong by a
+factor of two** — a correction that looks principled and is not.
 
-If it matches theirs, the correction is exactly the one this section predicts,
-and the functional form to test against is now specific: `stage_time =
-full_time * (distance / full_range)`. That is a much better test than "does it
-scale" — it names the curve, so a partial match is distinguishable from a
-different mechanism.
+**So the rate question is closed and the fix waits on a sustain-LEVEL sweep.**
+§E4BLEVEL records that law as hardware-measured; these two points disagree with
+it, and two points cannot re-fit it. That is the next bank: sustain across its
+range, achieved level measured, at a single fixed rate byte.
 
-**Their method note, which applies before ours:** two attempts failed as
-measurements; the third was preceded by a **two-minute read-back test using no
-audio**, which settled the architecture and made the measurement possible.
-Write every field, read them all back, check for aliasing and look at how the
-factory values pair up. We already know our layout from the format work, so
-that step is done for us — but the ordering is the lesson: establish the
-architecture without audio first, then measure.
+**Do not "fix" the decay conversion before that exists.** The temptation is
+strong because the rate finding is solid, and the result would be a
+confidently-wrong number in place of a confidently-wrong number.
 
-**TWO WARNINGS FOR THE BENCH SESSION, from s3ked failing this exact test
-twice on 2026-08-12.** They tried to settle rate-versus-duration for their own
-attack by varying its travel distance, and both attempts measured nothing:
-
-1. **Verify the span actually varied — before trusting any verdict.** Their
-   first run swept the attack's target level with the sustain pinned, so the
-   envelope always ended at full and the distance never changed: the span
-   column read 2.07 octaves at *every* setting. The second run made sustain
-   follow the target and the span still only moved 1.88..2.07. Both produced
-   five clean, well-varying readings from an independent variable that had not
-   moved. **Nothing about that looks wrong** — it passes a distinctness check,
-   a correlation check, and the eye.
-
-   For us: decide in advance how far the span must move, and check it. If
-   sustain 20 % against 80 % does not actually change the decay's travel by
-   the factor you expect, the run is void whatever it reports.
-   `sweep_is_responsive(..., min_setting_spread=...)` exists for stating that
-   expectation before the run rather than discovering it after the fit.
-
-2. **Run the discriminator at two settings where the answer must agree.**
-   What actually caught their fault was neither mechanical check — both were
-   green — but a **contradiction**: the same run returned "rate" at one fixed
-   attack value and "duration" at another. Two incompatible verdicts from one
-   experiment means the experiment is not measuring what it names, and
-   *neither* verdict is worth recording.
-
-   For us: run the sustain-20/80 comparison at two different decay bytes. If
-   they disagree about rate-versus-duration, the design is wrong and the
-   answer is not "average them". It costs one extra condition.
-
-**Blocked on:** bench time. Nothing should be changed before it.
-
----
 
 ## §RULER — a ruler that saturates against its source is measuring the source
 
@@ -10370,3 +10313,167 @@ The `Amp Envelope` and `Filter Envelope` pages label their columns
 That is the machine's claim rather than a measurement of behaviour — it does not
 establish that the byte *behaves* as a slew rate — but it is a strong prior for
 the CD6 experiment, and it cost nothing.
+
+## §POWEROFF — every symptom fitted, and nobody enumerated the cheapest cause (2026-08-18)
+
+**The E4XT was reported hung for the third time. It was switched off.**
+
+Between two sessions we produced, and each of these is a real observation:
+
+```
+eoscli memory     -> timeout, three consecutive attempts
+eoscli inquire    -> timeout
+panel 51h         -> no screen
+passive listen    -> silent bus, no second client
+our processes     -> none running
+```
+
+then an ALSA topology audit, an interface-sharing hypothesis involving another
+project's known-harmful polling heartbeat, and an `a2jmidid` bridge as a
+secondary suspect. A caveat was correctly attached about mid-boot SCSI scanning.
+
+**Every one of those is equally consistent with "the power is off", and neither
+of us enumerated it.**
+
+### Why, because "be more careful" is not the lesson
+
+**Both of us were reasoning FORWARD from a known failure mode.** eosed had seen
+this signature twice; I had a candidate I had just watched die and was looking
+for what was *different* this time. Neither asked **what is the cheapest
+hypothesis that explains all of this** — and "off" explains every symptom with
+no mechanism at all, no interaction, and no prior.
+
+A forward search from a remembered failure enumerates causes *similar to the one
+you remember*. It does not enumerate causes that are simpler than any failure,
+because those were never in the reference class.
+
+### The shape it shares with the rest of this week
+
+§WRONGLAYER from a third direction. There, a positive control validated the
+transport rather than the experiment. Here, **every measurement was of a system
+that was not running**, and each returned exactly what the interesting
+hypothesis predicted. The measurements were not wrong; they were of nothing.
+
+### The fix, and it is cheaper than any of the above
+
+**A liveness check before any diagnostic sequence, distinguishing NO ANSWER from
+NO DEVICE.** A timeout on the first command should ask *is it on* before it asks
+*why did it hang*. eosed's harness already refuses to start when a modal is open
+— this is the same instinct one step earlier in the chain.
+
+### What survives
+
+**Occurrences 1 and 2 are real** — the machine was demonstrably working, then
+stopped — so the count is two, not three. And the id-6 elimination stands
+untouched: that test was clean, the prediction was recorded before the outcome
+was known, and this changes nothing about it.
+
+## §FECLAMP — a real difference, measured with a ruler that had hit its ceiling (2026-08-18)
+
+**CONFIRM's filter-env pair came back contradicting the prediction, and the
+contradiction is in the instrument.**
+
+Prediction: `FE NEW` (depth 0.663) sweeps LESS than `FE OLD` (0.776).
+Measured centroid excursion: **OLD 212 Hz, NEW 246 Hz** — NEW sweeps *more*,
+with a run-to-run spread of 1–2 Hz. Seventeen times the noise, so the difference
+is real.
+
+### The tell is in the trajectories
+
+```
+FE OLD  541 522 525 545 585 685 670 520    peak 708
+FE NEW  513 531 548 586 673 706 586 477    peak 709
+```
+
+**The peaks are 1 Hz apart across two different envelope depths.** That cannot be
+right: we write `filter_env_amount × 127` as the Cord-05 depth, so OLD (byte 99)
+should peak *higher* than NEW (byte 84), not identically.
+
+**Something clamps the top — and once it does, excursion INVERTS with depth.**
+Our filter env sustains at 0.2, so the resting cutoff sits at
+`base + amount × 0.2`: a deeper envelope raises the **floor** while the peak
+cannot move, and the measured excursion shrinks. That is exactly the observed
+ordering.
+
+### Which ceiling — not established, and not guessed
+
+The tidy story is that the centroid saturates against the source's own
+bandwidth. **It does not survive its own arithmetic**: the test tone (110 Hz,
+harmonics 1..13, 1/h amplitudes) has an unfiltered centroid of ~450 Hz, and the
+measured peaks are ~708. Resonance at 0.4 is probably lifting it. Candidates
+remain the source content, the filter's own frequency ceiling, or the centroid
+going insensitive once the corner sits above most of the energy.
+
+### This is §RULER's family
+
+*A ruler that saturates against its source is measuring the source.* Recorded
+after s3ked's `FILFRQ` law read 20–30 % high from a centroid, biased in **slope**
+rather than offset. Their warning was explicit: any filter-frequency law derived
+from a spectral summary is probably biased the same way. **We checked and
+declared ourselves structurally clear because `corner_frequency()` measures a
+−3 dB point — then built a listen test on a centroid anyway.**
+
+### RESOLVED — the floor carried the signal, and the correction is NOT backwards
+
+**eosed tested the clamp model against their existing captures. No new hardware
+run was needed, because the model made a prediction the data could already
+answer.** Floor taken from the settled sustain phase rather than the release
+tail, three repeats each:
+
+```
+FE OLD  depth 0.776   peak 707.5 (spread 1.2)   floor 617.1 (spread 1.9)
+FE NEW  depth 0.663   peak 709.5 (spread 0.6)   floor 554.3 (spread 2.5)
+```
+
+**Peaks differ by 2.0 Hz. Floors differ by 62.8 Hz.** The top is pinned; the
+bottom carries everything — and **the floors order exactly as depth predicts**,
+the deeper envelope resting *higher* at `base + amount × sustain`.
+
+**The clamp is now quantified rather than inferred.** Solving the floor
+difference for the modulation range gives ~2779 Hz per unit depth; that same
+range predicts a **314 Hz** peak difference at `env = 1.0`.
+
+```
+predicted peak movement   314 Hz
+actual peak movement        2 Hz      short by a factor of 157
+```
+
+**The ceiling swallowed 314 Hz of movement and returned 2.**
+
+**So the −0.114 correction is NOT backwards.** "FE NEW sweeps more" was excursion
+inverting under a pinned ceiling. The 34 Hz was real, the direction check was
+worth running, and only the reading of it as *depth* was wrong.
+
+**And the floor is a usable ruler now**: unclamped, 63 Hz of travel for 0.113 of
+depth, ~2 Hz noise — signal-to-noise around 30, on captures that already exist.
+
+### What this does and does not establish
+
+- **Establishes:** the −0.114 shift reaches the audio, decisively. The
+  "indistinguishable, therefore arithmetic housekeeping" branch is **closed**,
+  and the KRZ-sourced A/B is worth building after all.
+- **Establishes, after the floor analysis:** the direction. The correction is
+  right. `FE NEW sweeps more` was an artefact of the clamped metric.
+
+**The general form, and it cost two sessions to see:** *the apparatus answered a
+question adjacent to the one being asked, and the answer looked clean.* Same as
+the 4-second sustain hold, where a window shorter than the source manufactured a
+null. eosed's own summary is the one to keep — **"I was measuring excursion
+because excursion is what the metric produced, not because it was the right
+quantity."**
+
+What unlocked it was noticing that **two different depths produced an identical
+ceiling**, which is not something the parameter can do. That number was in the
+first report and was read as incidental.
+
+### The fix to the experiment — now optional
+
+The floor already answers it. A rebuild with a lower base cutoff would give a
+cleaner measurement *and* restore the peak as an independent check, which is
+worth having, but the answer no longer waits on the card.
+
+Re-run with the base cutoff low enough that the peak is nowhere near the ceiling,
+**or** measure the −3 dB corner against a reference band rather than a centroid —
+a transfer-function measurement rather than a spectral summary. `corner_frequency()`
+already does the right thing, and §RULER records that its source-cancelling
+`reference=` argument has never been passed at any call site.

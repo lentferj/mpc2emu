@@ -87,12 +87,12 @@ that cannot fail is not a check.
 
 | # | item | kind | blocked on |
 |---|---|---|---|
-| **A** | **§ENVSPAN** — is the envelope byte a RATE or a DURATION? | untested assumption **in shipped code** | audio timing, 2 presets |
-| **B** | Byte↔display join for EOS parameters | never attempted | LCD mirror |
+| **A** | **§ENVSPAN** — RATE or DURATION? | **ANSWERED 2026-08-18: it is a RATE.** Same byte, 4.00× the time for 4.09× the dB span. Decay is linear in dB. **The FIX is blocked**: computing a span needs the achieved sustain level, and our model gives an 8.0× span ratio where the machine gives 4.00× | a sustain-LEVEL sweep at a fixed rate byte |
+| ~~**B**~~ | ~~Byte↔display join~~ **CLOSED 2026-08-18** — B11 ran 16/16, 14 exact + 2 abbreviated + 0 mismatches; `id == list position` confirmed for runtime 1–16. Also found `vpar[58]` is a grouped family code and that `0x7F` crashes the machine | — |
 | ~~**C**~~ | ~~"voice count = 1" — zone-table trailer~~ | **CLOSED 2026-08-17 from the corpus — see §1.4** | — |
-| **D** | E4B stereo | **already on `main`** — `stereoE2E` no longer exists (Jan, 2026-08-17). Corpus-RE'd over 473 files / 20,383 samples, implemented, **never hardware-confirmed** | listen |
-| **E** | Single-cycle oscillators | implemented, unheard | listen |
-| **F** | `filter_env_amount` −0.114 shift | on main, unheard | listen |
+| ~~**D**~~ | ~~E4B stereo~~ **CLOSED 2026-08-18** — L/R correlation +1.0000 (mono) vs −0.1954 (wide). Hardware-confirmed. | **already on `main`** — `stereoE2E` no longer exists (Jan, 2026-08-17). Corpus-RE'd over 473 files / 20,383 samples, implemented, **never hardware-confirmed** | listen |
+| ~~**E**~~ | ~~Single-cycle oscillators~~ **CLOSED 2026-08-18** — holds 0.836 to the end of a 10 s capture where the non-looped pair dies at ~6 s; pitch 110.1 Hz over six points, no drift | — |
+| ~~**F**~~ | ~~`filter_env_amount` −0.114 shift~~ **CLOSED 2026-08-18** — the correction is correct. The centroid's peak was pinned (predicted 314 Hz of movement, delivered 2), so excursion inverted with depth; the FLOOR carries the signal and orders exactly as depth predicts, 62.8 Hz for 0.113 of depth at ~2 Hz noise. §FECLAMP | — |
 | ~~**G**~~ | ~~`VF NEW` / `VF OLD`~~ | **NOT AN E4XT ITEM — filed here in error.** `FILFRQ`/`MODVFILT1` are AKAI registers (s3ked's §116 law); the two volumes sit on the S3000XL's HD4 and are still unheard. Moved to the AKAI side | — |
 
 **A is the only one that is a suspected defect in shipped output.** B is the
@@ -720,9 +720,25 @@ program with no authority to press it.
   Worth knowing before anything else meets it, since guessing a dismissal is the
   specific mistake that turned a wrong press into a confirmed Load.
 - **`Sample Edit` carries `Utils^ / Tools1^ / Tools2^ / Tools3^ / Tools4^`** —
-  four submenu groups nobody has enumerated, and a plausible home for parameters
-  the converter does not model. **That is the Phase 1b coverage-gap deliverable
-  appearing on its own**, before the walk was even able to enter them.
+  four submenu groups nobody has enumerated. I called this "the Phase 1b
+  coverage-gap deliverable appearing on its own" and **that was wrong.**
+
+  **Jan, 2026-08-18: these are DESTRUCTIVE SAMPLE OPERATIONS** — sample-rate
+  conversion, reverse, loop and the like. They edit sample DATA; they are not
+  preset parameters.
+
+  **Which inverts their value and their risk at the same time.** They are not a
+  coverage gap: a converter has nothing to store for "reverse" or "SR convert",
+  because those change the audio rather than a field. Everything in that subtree
+  that bears on us is already settled — the E4XT's own SrCnv output is what
+  verified our sample-rate pitch field (§E4BRATE), and reverse and auto-loop are
+  processing we already do ourselves.
+
+  And they are the **most dangerous** subtree on the machine after DISK: a walk
+  that wandered in could destroy resident samples with a single press.
+
+  **So the strongest argument for building Pass B turns out to be an argument
+  against it.** See §1b-VERDICT.
 
 ### 2b.4g THE E4XT STOPS ANSWERING SYSEX — second occurrence (2026-08-18)
 
@@ -751,6 +767,29 @@ not driving it. The power cycle doubles as the known fix.
 *(On 2026-08-18 the card was pulled hot, before this was known. Recorded so the
 next occurrence is not read as the first, and so the pull is not silently
 assumed harmless.)*
+
+### 2b.6 VERDICT ON PASS B — probably do not build it (2026-08-18)
+
+**Recorded as a decision rather than left as an open item, because "unexplored"
+reads as "worth exploring" to whoever picks this up next.**
+
+Pass A has run and earned its keep: it caught B11's documented route being wrong
+before that burned a hardware session, and it pressed nothing to do it. That was
+the walk's real payoff and it has been collected.
+
+**What is left unexplored is mostly `Sample Edit`'s four tool groups, and Jan
+has identified them as destructive sample operations** — SR conversion, reverse,
+loop. They are not parameters, so there is nothing for a converter to model, and
+the parts that touch us are already settled by other means.
+
+So the remaining coverage gap is **smaller than assumed and more dangerous than
+average**. Pass B would need the queue-pages redesign, a populated and
+human-reviewed label library, and HD0 handled — real work — to explore a subtree
+whose contents we now know we do not need.
+
+**Recommendation: do not build Pass B.** If a specific parameter is ever
+suspected missing, a targeted route with a fingerprint guard (the B11 shape) is
+cheaper and safer than an exhaustive walk.
 
 ### 2b.5 Sequencing
 
