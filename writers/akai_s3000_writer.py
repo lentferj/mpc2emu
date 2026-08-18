@@ -808,13 +808,38 @@ def build_sample(sd: SampleData, name: Optional[str] = None,
         # 88199 itself is NOT tested. The measured points are 88200 (fails),
         # 44100 and 22050 (work), so "one less than the length" is the minimal
         # fix consistent with the mechanism rather than a confirmed value.
+        # 0x26 IS THE LOOP **END**, NOT THE START. This wrote `loop_start`
+        # there until 2026-08-18, which is the field's opposite meaning.
+        #
+        # The AKAI loop record is a marker plus a length running BACKWARDS from
+        # it -- "loop AT x, length y" means the loop is [x - y, x]. Four
+        # independent sources, after a day of measuring the symptom:
+        #
+        #  * the S3000XL manual: "when playback reaches this point, it will go
+        #    back to the point determined by the field described below"
+        #  * the corpus: across 16493 factory S3000 loops, LOOPAT sits within
+        #    1% of SLNGTH in 82.9% and within 10% in 92.5% -- i.e. at the END of
+        #    the sample, which is where a sustain loop's end belongs. Under the
+        #    start reading, 89% of factory loops would run off their own end.
+        #  * ConvertWithMoss, an independent implementation, names the field
+        #    `getEndMarker()` with the docstring "the end of the looped region
+        #    (not the start!)" -- the exclamation mark is theirs
+        #  * and its converter: `setStart(marker - coarseLength); setEnd(marker)`
+        #
+        # WHY THIS SURVIVED SO LONG. With `loop_start` written into the marker,
+        # the resulting loop is [loop_start - length, loop_start] -- which for
+        # our usual `loop_start == 0` is a region ending at frame 0. The machine
+        # evidently coped with that in some configurations (SDZERO's loops
+        # measured their intended periods to three decimals) and not in others,
+        # which is exactly what feeding a field values outside its domain looks
+        # like: it works until it does not, for reasons that look like something
+        # else entirely.
         loop_len = sd.loop_end - sd.loop_start
-        # And guard the end against the play range regardless of how the caller
-        # set the loop, since that is the constraint that was actually violated.
-        loop_len = max(1, min(loop_len, max(0, n_frames - 1) - sd.loop_start))
-        struct.pack_into('<I', h, 0x26, sd.loop_start)
+        loop_end = min(sd.loop_end, max(0, n_frames - 1))
+        loop_len = max(1, min(loop_len, loop_end))
+        struct.pack_into('<I', h, 0x26, loop_end)      # LOOPAT1 -- the loop END
         struct.pack_into('<H', h, 0x2a, 0)             # length fraction
-        struct.pack_into('<I', h, 0x2c, loop_len)
+        struct.pack_into('<I', h, 0x2c, loop_len)      # LLNGTH1 -- back from it
         struct.pack_into('<H', h, 0x30, 9999)          # 9999 = hold
     # loops 2-8 stay zeroed: `loop times` 0 means "no loop", which is the
     # correct unused state for them.
@@ -2185,55 +2210,6 @@ def build_akai_volume(bank: Bank, bank_name: Optional[str] = None,
               f"128 program numbers. Programs past the 128th all carry number "
               f"127 and will stack on one program change; they remain "
               f"selectable from the sampler's own panel.")
-
-    # A LOOPED SAMPLE MUST NOT BE THE FIRST ONE IN THE VOLUME.
-    #
-    # HARDWARE-CONFIRMED 2026-08-18 on an S3000XL, after a day in which four
-    # other explanations were stated and withdrawn. The machine places the first
-    # sample it loads at the base of its object pool, and **a looped sample at
-    # that base does not play correctly** -- sometimes silence, sometimes
-    # degraded non-periodic audio. The decisive pair, same file, same lone-loop
-    # arrangement, same loader, byte-identical loop record, only the address
-    # differing:
-    #
-    #     SOLO LOOP at SLOCAT 131072 (the base)   silent, -72.8 dBFS
-    #     SOLO LOOP at SLOCAT 483872              plays, -8.2 dBFS, period
-    #                                             5.000 s at corr 0.967
-    #
-    # It is POSITIONAL, not ordinal: the same sample loaded second, above a
-    # one-shot, is fine. So emitting any unlooped sample first keeps a loop off
-    # the base, and under the bulk load a user performs from the front panel the
-    # machine takes directory order -- which is ours.
-    #
-    # This is deliberately a REORDER and not a filter: no file is added, removed
-    # or altered, and a volume with no one-shot at all is left exactly as it was
-    # and warned about, because inventing a dummy one-shot to occupy the base
-    # would put content on the disc that the source never had.
-    #
-    # NOT VERIFIED: whether the machine assigns the base to the first DIRECTORY
-    # entry or to the first SAMPLE entry. Our volumes have always emitted
-    # samples before programs, so the two have never differed -- and this fix is
-    # correct under either reading, since the one-shot moved to the front is both.
-    _smp = [(fn, d) for fn, d in files if fn.upper().endswith('.S3')]
-    if _smp:
-        _unlooped = [i for i, (_fn, d) in enumerate(_smp)
-                     if len(d) > 0x13 and d[0x13] == _SPTYPE_NO_LOOP]
-        if not _unlooped:
-            if not quiet:
-                print(f"    [WARN] every sample in this volume is looped, so one "
-                      f"of them will sit at the sampler's object-pool base and "
-                      f"will not play correctly (silent, or audibly degraded). "
-                      f"There is no unlooped sample to put there instead. "
-                      f"Hardware-confirmed 2026-08-18; see AKAILOOPCROSS.")
-        elif _unlooped[0] != 0:
-            first = _smp[_unlooped[0]]
-            files.remove(first)
-            files.insert(files.index(_smp[0]), first)
-            if not quiet:
-                print(f"    [INFO] moved the unlooped sample {first[0]!r} to the "
-                      f"front of the volume: the first sample loaded takes the "
-                      f"sampler's pool base, and a LOOPED sample there does not "
-                      f"play correctly.")
 
     if type0:
         # Appended AFTER programs and samples, which is the order the

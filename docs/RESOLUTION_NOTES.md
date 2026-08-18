@@ -137,6 +137,8 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIUNKNOWNDUP — the undecodable-record diagnostic multiplied across reads (2026-08-18, FIXED)](#akaiunknowndup-the-undecodable-record-diagnostic-multiplied-across-reads-2026-08-18-fixed)
 - [§ASKFORDEFINITIONS — the two corrections that came from questions, not measurements (2026-08-18)](#askfordefinitions-the-two-corrections-that-came-from-questions-not-measurements-2026-08-18)
 - [§AKAILOOPSEM — our loop convention is the reverse of the factory one (2026-08-18, ESTABLISHED; NOT the cause of the silence)](#akailoopsem-our-loop-convention-is-the-reverse-of-the-factory-one-2026-08-18-established-not-the-cause-of-the-silence)
+- [§AKAILOOPAT — LOOPAT1 is the loop END; we wrote the loop START into it (2026-08-18, FIXED)](#akailoopat-loopat1-is-the-loop-end-we-wrote-the-loop-start-into-it-2026-08-18-fixed)
+- [§LOOKITUP — why two sessions ground for six hours on something that was written down (2026-08-18)](#lookitup-why-two-sessions-ground-for-six-hours-on-something-that-was-written-down-2026-08-18)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -12266,4 +12268,188 @@ That is the same failure as reading "it made a noise" for "it played correctly",
 one level up: *it played for a long time* is not *it sustained*. Only a period
 measurement separates them — and the tooling for that was built this evening and
 not pointed at this capture.
+
+## §AKAILOOPAT — LOOPAT1 is the loop END; we wrote the loop START into it (2026-08-18, FIXED)
+
+**The real bug, found by asking whether it would be documented rather than by
+measuring it.** Jan's question — *"wouldn't something like that be in a manual?
+that's such important information for someone working with the device"* — took
+about fifteen minutes to answer and settled what a day of hardware work had not.
+
+`LOOPAT1` (0x26) is the **end** of the loop. `LLNGTH1` (0x2a fine + 0x2c coarse)
+runs **backwards** from it. The loop is `[LOOPAT - LLNGTH, LOOPAT]`. Our writer
+put `loop_start` there and our parser read it back the same way, so both halves
+were consistently wrong and the round-trip test passed.
+
+### Four independent confirmations
+
+1. **The S3000XL manual:** *"when playback reaches this point, it will go back to
+   the point determined by the field described below and will loop either for as
+   long as the time: field is set or for as long as you hold the note(s) if HOLD
+   is selected."* — playback *reaches* the point and goes *back*.
+2. **The corpus.** Across **16493 factory S3000 loops**, `LOOPAT` sits within 1%
+   of `SLNGTH` in **82.9%** and within 10% in 92.5% — at the sample's END, where
+   a sustain loop ends. Under the start reading, **89% of factory loops would run
+   off the end of their own sample**, which was visible all along and never
+   questioned because nothing depended on it being sensible.
+3. **ConvertWithMoss**, an independent implementation: the accessor is
+   `getEndMarker()`, docstring *"Get the end of the looped region (not the
+   start!)"* — the exclamation mark is theirs, which suggests we are not the
+   first to walk into it.
+4. **Its converter:** `setStart(marker - coarseLength); setEnd(marker)`.
+
+### It retro-explains the entire evening
+
+Every probe in s3ked's sweep carried `LLNGTH 220500` with `LOOPAT` below it:
+
+```
+LOOPAT      0 -> loop [-220500,      0]   invalid
+LOOPAT   4410 -> loop [-216090,   4410]   invalid
+LOOPAT 132300 -> loop [ -88200, 132300]   invalid
+```
+
+**All ten probes asked for a loop starting before the sample begins**, which is
+why not one of them ever looped, and why duration grew with `LOOPAT` — the end
+marker was moving, so there was progressively more sample to play before reaching
+an unusable loop record. s3ked's instinct that the experiment had *no positive
+control* was exactly right, and stronger than they put it: there was never a
+valid loop record among them.
+
+It also plausibly subsumes the silence, the degraded audio and the pool-base
+story: a loop whose start is negative, behaving differently depending on where
+the sample sits in memory, is precisely the kind of fault that looks positional.
+
+### The fix, and what it validates
+
+Writer and parser both corrected; the round trip is now exact at both ends rather
+than losing a frame to a documented "bounded inconsistency between two
+conventions" — that inconsistency was the bug. Factory loops now parse as sustain
+loops occupying the **last 12–25%** of their samples, which is what a sustain loop
+is; under the old reading they began at 99% and ran past the end.
+
+### HARDWARE-CONFIRMED 2026-08-18
+
+```
+LOOPAT 220500  LLNGTH 44100  SLNGTH 352800   (both read back before playing)
+
+vs the FORWARD region [220500, 264600]   +0.0412   noise floor
+vs the END     region [176400, 220500]   +0.7998   MATCH
+references orthogonal after resampling:   0.0032
+```
+
+**The machine played `[LOOPAT - LLNGTH, LOOPAT]`.** Documentation, corpus and
+ConvertWithMoss all agree with the measurement.
+
+**A trap s3ked caught in the correlation:** the references are 44100 Hz and the
+captures 48000 Hz. The sampler plays in real time, so a 1.000 s loop is 48000
+frames in the capture and 44100 in the reference — correlating them raw compares
+different time scales and returns noise for *both*, which would have read as "it
+matches neither". They resampled the references first and **re-checked
+orthogonality afterwards (0.0032)**, so the resampling could not have
+manufactured the discrimination.
+
+**Open oddity, deliberately not explained:** the capture has no periodicity —
+self-similarity max 0.0407 across 0.3–9 s where a 1.000 s loop should peak at
+1.000. It sustained 13.95 s and contains the end-region audio, matching at one
+lag rather than repeatedly. That may be the analysis window, or the same
+"sustains but does not repeat" behaviour the out-of-range probes showed. Recorded
+as an observation, not a theory.
+
+### Documentary support was NOT hardware evidence, and I nearly merged them
+
+The manual, the corpus and ConvertWithMoss are three independent statements of
+the semantics and they stand. A **hardware measurement distinguishing the two
+readings does not exist**, and the first attempt at one was worthless.
+
+That test — mine — set `LOOPAT = LLNGTH` and expected a 5.000 s loop. It
+sustained at 5.000 s, and proves nothing: **the period is `LLNGTH` under either
+reading.** The only thing making it look decisive was an assumption that the
+forward arrangement would be *rejected* as out of range — on a machine that has
+not validated a single field all night. *Acceptance is not validation* was
+established hours earlier and then leaned on backwards.
+
+**A test whose two hypotheses predict the same observation is not a test.** The
+check costs one line: write down what each reading predicts, before running.
+
+s3ked's control is the data that matters:
+
+```
+LOOP 4S  LOOPAT 0  LLNGTH 176400  ->  4.000 s
+LOOP 5S  LOOPAT 0  LLNGTH 220500  ->  5.000 s
+LOOP 7S  LOOPAT 0  LLNGTH 308700  ->  7.001 s
+```
+
+With `LOOPAT 0` the END reading gives `[-LLNGTH, 0]`, invalid — yet these loop
+correctly. So either the machine clamps a negative start to 0, collapsing both
+readings onto identical behaviour, or the END reading is wrong. **Every working
+loop we have ever produced sits exactly where the two cannot be told apart.**
+
+**The discriminating test is content, not period:** `LOOPAT 220500, LLNGTH 44100`
+puts the loop at 5.0–6.0 s under one reading and 4.0–5.0 s under the other.
+References regenerated from the sample's own seed and verified against the disc
+at **correlation 1.000000**; the two candidate regions cross-correlate at
+**0.0018**, so a capture can match only one. Checked before proposing the test
+this time.
+
+**Also new:** `LOOPAT 352800` — exactly `SLNGTH` — does not loop while 220500
+does, which reads as an off-by-one at the top end if the field is an offset.
+
+**Still to confirm on hardware:** one write, on material already resident — set
+`LOOPAT = LLNGTH` on the silent `SOLOLOOP` and it should sustain with a 5.000 s
+period. That would be the first working loop produced by writing header fields.
+
+### The lesson
+
+Nine claims were stated and withdrawn on 2026-08-18, every one of them about the
+*symptom*. The cause was in a public manual, in an open-source converter, and
+implicit in a corpus sitting on this disk — and none of that was consulted until
+somebody asked whether a thirty-year-old sampler's loop behaviour might be
+documented somewhere. **Check what is already known before measuring**, which is
+the same lesson as the corpus and the readback arriving a fourth time.
+
+## §LOOKITUP — why two sessions ground for six hours on something that was written down (2026-08-18)
+
+Jan's question after the fact: *"I am just a bit puzzled that two Claude Opus
+instances would grind on this for hours, without looking left or right and using
+knowledge sources available at hand (documents, CWM repo)."*
+
+It is the right question and the answer is not flattering. Four causes, each
+individually reasonable, which is what made it survive.
+
+**1. The reverse-engineering frame carries a hidden premise.** This project's
+identity is decoding undocumented formats; `docs/AKAI_S3000_FORMAT.md` says
+"reverse-engineered" at the top. That frame quietly asserts *the information is
+not written down*, and once accepted it stops the question being asked. It was
+false here: the S3000XL manual describes the loop behaviour in plain English.
+
+**2. The bench loop was self-reinforcing.** Hardware, a disc pipeline and a peer
+to argue with meant building and measuring were the *available* actions, so they
+became the method. Each round produced a clean-looking result on schedule, which
+felt like progress and was nine wrong answers.
+
+**3. Mutual verification produced false confidence.** Two sessions checked each
+other hard and generated seven corrections — all within the same evidence base.
+**Rigorous peer review of a closed system does not detect that the system is
+closed; it increases confidence in what is inside it.**
+
+**4. The reference implementation was already known and not consulted.** There is
+a standing crosscheck note recording the last ConvertWithMoss commit diffed
+against this project. It is checked out locally. `AkaiS1000SampleLoop.java`
+answers the question in a docstring — *"the end of the looped region (not the
+start!)"* — whose exclamation mark suggests its author hit the same trap and left
+a warning. It went unread because the problem had been framed as *ours to
+measure*.
+
+### The rule
+
+**Before building anything to answer a format question, spend ten minutes on
+what is already known:** the device's own manual, the corpus already on disk, and
+any independent implementation available locally. That is a lookup, not research,
+and it is cheap enough that skipping it can only be a framing error.
+
+The same lesson arrived four times on 2026-08-18 from four directions — the
+corpus refuting a rule, the readback closing in ten minutes what three discs
+could not, a positive control sitting in a build artefact, and finally the manual
+— and each time it was recorded as a local insight rather than as the general
+one. **Check what is already known before measuring.**
 

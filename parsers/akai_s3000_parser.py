@@ -241,9 +241,26 @@ def parse_sample_bytes(data: bytes, fallback_name: str = '',
     loop_at = _u32(data, 0x26)
     loop_len = _u32(data, 0x2c)
     loop_times = _u16(data, 0x30)
+    # LOOPAT1 IS THE LOOP **END**, and the length runs BACKWARDS from it, so
+    # the loop is [loop_at - loop_len, loop_at]. This read it as the start
+    # until 2026-08-18 -- the field's opposite meaning, mirroring the same
+    # error in the writer.
+    #
+    # Confirmed four ways: the S3000XL manual ("when playback reaches this
+    # point, it will go back to the point determined by the field described
+    # below"); the corpus, where LOOPAT sits within 1% of SLNGTH in 82.9% of
+    # 16493 factory loops and within 10% in 92.5%, i.e. at the sample's END;
+    # and ConvertWithMoss, which names it `getEndMarker()` with the docstring
+    # "the end of the looped region (not the start!)" and computes
+    # `setStart(marker - coarseLength); setEnd(marker)`.
+    #
+    # Under the old reading, 89% of factory loops appeared to run off the end
+    # of their own sample -- which was visible in the corpus the whole time and
+    # was never checked, because nothing depended on it being sensible.
     if play_type != 2 and loop_len > 0 and loop_times != 0:
-        start = min(loop_at, max(0, len(pcm) // 2 - 1))
-        end = min(start + loop_len, len(pcm) // 2) - 1
+        n_frames = len(pcm) // 2
+        end = min(loop_at, max(0, n_frames - 1))
+        start = max(0, end - loop_len)
         if end > start:
             sd.loop_type = LoopType.FORWARD
             sd.loop_start = start
