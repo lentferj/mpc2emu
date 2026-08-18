@@ -20,6 +20,22 @@ die Kurzweil-K2000-Serie.
 
 ---
 
+### Teil einer Familie von Vintage-Sampler-Werkzeugen
+
+Fünf Projekte, ein Messplatz, nebeneinander entstanden — die Formatarbeit und
+die Messungen an der Hardware fließen zwischen ihnen hin und her, weshalb
+dieselbe Erkenntnis oft in mehr als einem davon landet:
+
+| Projekt | Wofür |
+|---|---|
+| **[mpc2emu](https://github.com/lentferj/mpc2emu)** | *(dieses hier)* konvertiert Sample-Libraries zwischen Formaten und schreibt ladbare Disk-Images |
+| **[VinSamLib](https://github.com/lentferj/VinSamLib)** | Librarian und Bank-Builder — eine ganze Library aus Bänken, Discs und Floppy-Images auf einmal durchsehen, Presets in eine neue Bank ziehen, echte Medien bauen |
+| **[eosed](https://github.com/lentferj/eosed)** | Terminal-Explorer und -Editor für die E-mu-**EOS**-Familie (E4, E4XT, E6400 …) über MIDI-SysEx |
+| **[k2kremote](https://github.com/lentferj/k2kremote)** | Terminal-Fernsteuerung für den Kurzweil **K2000 / K2000R** — spiegelt das Hardware-LCD pixelgenau und bedient jeden Frontpanel-Taster |
+| **[s3ked](https://github.com/lentferj/s3ked)** | Terminal-Editor für die **Akai-S1000/S3000**-Familie — Programme, Keygroups, Samples, über SysEx |
+
+---
+
 ## ⚠️ Nutzung auf eigene Gefahr — vorher Backups anlegen
 
 mpc2emu wird **ohne jede Gewährleistung und ohne Haftung** bereitgestellt — für
@@ -170,7 +186,7 @@ E4B-HDA-Dateisystem-Pfad nötig).
 ## Installation
 
 ```bash
-git clone https://github.com/youruser/mpc2emu.git
+git clone https://github.com/lentferj/mpc2emu.git
 cd mpc2emu
 ```
 
