@@ -97,9 +97,16 @@ CD-ROMs at IDs 0–3 and `HD5.img` is a disk at ID 5, so **ID 4 is free**. Check
 -- Opening /HD4.img for id:4 lun:0
 ```
 
-If the drive does not appear at all, check the **sampler's own** SCSI ID — an
-S3000XL is commonly ID 6, but if it is set to 4 it will collide with this
-image and neither will work.
+If the drive does not appear at all, check the **sampler's own** SCSI ID.
+**Our S3000XL is ID 6** — confirmed by Jan 2026-08-18, no longer the
+"commonly ID 6" guess this paragraph used to carry. Leave id 6 empty on the
+card. An image there collides with the host one layer below ZuluSCSI, which
+sees no conflict (its numbering is unique on the SD) and logs a perfectly
+clean `Opening ... for id:6`. The same guess put an image on the E4XT's own
+id the same morning and cost three hours against a clean log.
+
+`python3 tests/re_banks/whichcard.py` enumerates the ids across CDs and HDs
+together — they are ONE namespace — and flags a host-id collision.
 
 ## What can and cannot be driven remotely
 

@@ -353,6 +353,18 @@ _unknown_records: list = []
 
 
 def _read_harddisk(data: bytes) -> List[AkaiVolume]:
+    # CLEAR THE DIAGNOSTIC ACCUMULATOR FIRST. `_unknown_records` is module
+    # level, and until 2026-08-18 only the floppy path cleared it -- so every
+    # hard-disk read re-reported everything the previous reads had found.
+    # Sweeping N images printed each finding N, N-1, N-2 ... times.
+    #
+    # The cost was not the noise. It was that a rate computed from those lines
+    # is wrong by a factor of the number of images read: a corpus sweep here
+    # reported 4267 "skipped records" across six discs where the true figure is
+    # 54, and the 36% loss rate derived from it sent an investigation after a
+    # reader fault that does not exist. A duplicated diagnostic is worse than a
+    # missing one, because it is quantitatively believable.
+    _unknown_records.clear()
     # The partition table lives in the first partition only; its entries give
     # each partition's size in blocks, and partitions are laid end to end.
     # A corrupt count must not walk off the end of the table into the tag

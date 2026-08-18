@@ -17,15 +17,6 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 ---
 
 <!-- INDEX:BEGIN -->
-## Index
-
-*85 sections, appended in the order things were found.
-This index is generated from the headings and checked by a test: an index
-that has drifted is worse than none, because it sends a reader to a section
-that is not there. Regenerate it when you add a section — and after any
-rebase, since this file differs between branches and the index does not
-survive being carried between them.*
-
 - [§SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)](#sibcheck-three-sibling-findings-checked-against-our-own-corpora-2026-08-15)
 - [§NAMEBYTE — name fields decoded as ASCII (E4B/EMU3 DONE; EIII/SF2/MPC60 open)](#namebyte-name-fields-decoded-as-ascii-e4bemu3-done-eiiisf2mpc60-open)
 - [§KRZNAME16 — a full-length KRZ name picked up the bytes after it (2026-08-09)](#krzname16-a-full-length-krz-name-picked-up-the-bytes-after-it-2026-08-09)
@@ -124,25 +115,26 @@ survive being carried between them.*
 - [§E4BRATE2 — the rate-pitch formula confirmed on machine-authored material (2026-08-16)](#e4brate2-the-rate-pitch-formula-confirmed-on-machine-authored-material-2026-08-16)
 - [§AKAINAME — one sample, one name, and the cached directory that hid it (2026-08-16)](#akainame-one-sample-one-name-and-the-cached-directory-that-hid-it-2026-08-16)
 - [§KRZF3 — a filter in slot F3, and the two ways of being wrong about it (2026-08-17)](#krzf3-a-filter-in-slot-f3-and-the-two-ways-of-being-wrong-about-it-2026-08-17)
-
 - [§RIGHTNUMBER — when the measurement survives and the explanation does not (2026-08-18)](#rightnumber-when-the-measurement-survives-and-the-explanation-does-not-2026-08-18)
-
 - [§WRONGLAYER — a positive control on the transport is not one on the measurement (2026-08-18)](#wronglayer-a-positive-control-on-the-transport-is-not-one-on-the-measurement-2026-08-18)
-
 - [§AKAIAUX-DECODED — the drum-input and multi files, read off the disk (2026-08-18)](#akaiaux-decoded-the-drum-input-and-multi-files-read-off-the-disk-2026-08-18)
-
 - [§PROSEGUARD — a caveat in a docstring does not defend against a printed number (2026-08-18)](#proseguard-a-caveat-in-a-docstring-does-not-defend-against-a-printed-number-2026-08-18)
-
 - [§AKAIDELETE — the delete-type enum, and why it must never be swept (2026-08-18)](#akaidelete-the-delete-type-enum-and-why-it-must-never-be-swept-2026-08-18)
-
 - [§E4BFTYPE — `vpar[58]` is a GROUPED code, not a sequential index (2026-08-18)](#e4bftype-vpar58-is-a-grouped-code-not-a-sequential-index-2026-08-18)
-
 - [§POWEROFF — every symptom fitted, and nobody enumerated the cheapest cause (2026-08-18)](#poweroff-every-symptom-fitted-and-nobody-enumerated-the-cheapest-cause-2026-08-18)
-
 - [§FECLAMP — a real difference, measured with a ruler that had hit its ceiling (2026-08-18)](#feclamp-a-real-difference-measured-with-a-ruler-that-had-hit-its-ceiling-2026-08-18)
-
 - [§GRANULARITY — one false member says nothing about its neighbours (2026-08-18)](#granularity-one-false-member-says-nothing-about-its-neighbours-2026-08-18)
-
+- [§AKAILOOPRATE — RETRACTED: the loop does not play 11% fast; I measured a stacked sine (2026-08-18)](#akailooprate-retracted-the-loop-does-not-play-11-fast-i-measured-a-stacked-sine-2026-08-18)
+- [§AKAIPRGCLAMP — WITHDRAWN: the clamp is not silent and the fix I proposed was already rejected (2026-08-18)](#akaiprgclamp-withdrawn-the-clamp-is-not-silent-and-the-fix-i-proposed-was-already-rejected-2026-08-18)
+- [§AKAIIDTHIEF — a sidecar file stole the SCSI id and the image was never served (2026-08-18, FIXED — HARDWARE-CONFIRMED)](#akaiidthief-a-sidecar-file-stole-the-scsi-id-and-the-image-was-never-served-2026-08-18-fixed-hardware-confirmed)
+- [§AKAINAME12 — two bench samples truncated to the same 12-character name (2026-08-18, FIXED)](#akainame12-two-bench-samples-truncated-to-the-same-12-character-name-2026-08-18-fixed)
+- [§AKAILOADTYPE — LOAD type 1 loads no samples, contradicting our SAVE-type note (2026-08-18, OPEN)](#akailoadtype-load-type-1-loads-no-samples-contradicting-our-save-type-note-2026-08-18-open)
+- [§AKAIFILTQTY — two AKAI filter laws that disagree, for a principled reason (2026-08-18, OPEN — DEFINITIONAL)](#akaifiltqty-two-akai-filter-laws-that-disagree-for-a-principled-reason-2026-08-18-open-definitional)
+- [§AKAILOOPCROSS — a LOOPED program plays the sample loaded immediately BEFORE the one it names (2026-08-18, RULE CONFIRMED, CAUSE OPEN)](#akailoopcross-a-looped-program-plays-the-sample-loaded-immediately-before-the-one-it-names-2026-08-18-rule-confirmed-cause-open)
+- [§AKAIRATEQUANT — sample-header byte 0x01 selects the playback rate; SSRATE is descriptive only (2026-08-18, CONFIRMED — FIXED)](#akairatequant-sample-header-byte-0x01-selects-the-playback-rate-ssrate-is-descriptive-only-2026-08-18-confirmed-fixed)
+- [§AKAISDATA — we write 0 into the sample-data address; it is a real deviation with no effect (2026-08-18, CLOSED — COSMETIC)](#akaisdata-we-write-0-into-the-sample-data-address-it-is-a-real-deviation-with-no-effect-2026-08-18-closed-cosmetic)
+- [§AKAIAUXDEFAULT — `.X` and `.T` do not need decoding to be written correctly (2026-08-18)](#akaiauxdefault-x-and-t-do-not-need-decoding-to-be-written-correctly-2026-08-18)
+- [§AKAIUNKNOWNDUP — the undecodable-record diagnostic multiplied across reads (2026-08-18, FIXED)](#akaiunknowndup-the-undecodable-record-diagnostic-multiplied-across-reads-2026-08-18-fixed)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -9752,7 +9744,33 @@ with expectation.
 Three of the four above were caught by **another reader**, not by their author,
 and the fourth by its author only after an unrelated fact landed beside it.
 
-### What to do about it
+### MEASURED: a plausible address changes nothing
+
+`SDADDR` and `SDZERO` are identical discs but for this field. Captured minutes
+apart in one session:
+
+```
+            prg  names      SBADD   peak dBFS   period   sounding
+SDZERO       94  LOOP 3S    36888       -71.7      --     SILENT
+             95  LOOP 4S    36900        -8.5   4.000     its OWN
+             96  LOOP 5S    36912        -7.9   5.000     its OWN
+             97  LOOP 7S    36924        -8.0   7.001     its OWN
+SDADDR       90  LOOP 3S    36888       -72.8      --     SILENT
+             91  LOOP 4S    36900        -8.2   4.000     its OWN
+             92  LOOP 5S    36912        -7.9   5.000     its OWN
+             93  LOOP 7S    36924        -8.0   7.001     its OWN
+```
+
+Same periods to three decimals, same SBADD, same silence at slot 0. **The field
+is written by every factory sample and read by nothing we can observe.** Closed
+as cosmetic; the prediction above — that trusting a stored zero could not explain
+the observations — held.
+
+`0x10` (0 for a one-shot, 1 for a loop, where we write 1 unconditionally) is
+still worth correcting for correctness against the machine's own example, and is
+equally unlikely to change behaviour.
+
+### What to do about it (superseded by the measurement above)
 
 - **State the mechanism as a separate claim from the result**, so it can be
   attacked separately. "Refuses on algorithms 17/18" and "because the slot does
@@ -10580,3 +10598,1178 @@ The S3000XL was settled by **Jan volunteering it**, not by either session
 asking. Two of us had it flagged as open and were being careful about it; what
 closed it was the person concerned mentioning it in passing. Worth knowing that
 the correct process here did not actually produce the answer.
+
+## §AKAILOOPRATE — RETRACTED: the loop does not play 11% fast; I measured a stacked sine (2026-08-18)
+
+> **RETRACTED the same day it was written. There is no 11% pitch error, no
+> +1.82 semitones, and no reason to suspect the AKAI rate field.** Everything
+> below the banner is the original text, kept unedited so the reasoning stays
+> inspectable — but its conclusion is wrong and it must not be cited.
+>
+> **What actually happened.** The autocorrelation was arithmetically correct and
+> its premise was false. It assumed the captured audio was our white noise,
+> whose only periodicity is the loop, so a correlation peak could only be the
+> loop period. **The capture was not our white noise.** It carried a stacked
+> sine on top of it, and a sine correlates at ~1.0 at *every* integer multiple
+> of its own period — so `r = 0.9999 at lag 1.8004 s` measured the tone, and
+> would have landed on some equally convincing lag whatever our sample did.
+>
+> **Where the tone came from.** `NSWHITE.P3` on the old `NOISE` volume is
+> **PRGNUM 0**, re-confirmed from the image bytes 2026-08-18 17:54 —
+>
+> ```
+> HD4.img  volume 'NOISE'
+>   NSWHITE.P3   PRGNUM   0   PMCHAN 0 (ch 1)
+>   NSPINK.P3    PRGNUM   1   PMCHAN 1 (ch 2)
+> ```
+>
+> — and programs sharing a PRGNUM all sound together. It stacked with the boot
+> TEST PROGRAM and with a resident library program on `PMCHAN 255` (OMNI), which
+> answers every channel and so cannot be escaped by choosing a different one.
+> s3ked reached the same conclusion independently and retracted their §135.
+>
+> **The tell I walked straight past, and the lesson.** The section's own "What
+> has NOT been ruled out" list opens with *"the note s3ked actually played —
+> unknown to me"*. I recorded that the identity of the sounding thing was
+> unverified, and then reasoned about its pitch anyway. **An unverified premise
+> noted in prose does not become verified by being noted** (cf. §PROSEGUARD);
+> it should have blocked the measurement, not annotated it.
+>
+> Note also how well the wrong answer behaved: 1.8004 s is *nearly* a clean
+> semitone ratio, close enough to feel like a real physical effect with a small
+> residual. Plausibility was the trap, not sloppiness in the arithmetic.
+>
+> **The fix is already on the card.** `CALNOISE` (HD7, id 7) puts its four
+> programs on PRGNUM 120-123 with explicit channels 0-3 and **no OMNI**, and
+> ships `HD7.manifest.json` carrying the spectrum and lag-1 correlation measured
+> on the frames actually written (white -0.0022, pink +0.8713). A capture of the
+> WHITE source reading lag-1 near +1 now means the sampler is not playing what
+> we wrote — which is the check that would have caught this in one line.
+>
+> **The damage is wider than this section, checked rather than assumed.** After
+> retracting the above I compared every capture in `~/temp/s3ked-logs/` (50 wavs)
+> against the octave-band spectrum of the frames we actually wrote. **Not one of
+> them contains our noise.** Two populations:
+>
+> ```
+> ctl_nswhite / test2_clean / gainhold / playagain / pf_*  100.0% in ONE band -> pure sine
+> new-NSWHITE / ns-60 / sptype-0 / iso_* / loop-*           ~80% in one 8-16 kHz spike
+> our written NOISEW1S.S3                    slope +3.1 dB/band, lag-1 -0.002  (white)
+> ```
+>
+> The sine TRACKS THE PLAYED NOTE -- 48 -> 131.0 Hz, 60 -> 261.5, 72 -> 523.0,
+> exact octaves -- so it is a resident program answering, not rig hum, and it is
+> a *pure* sine (harmonics all below -60 dB), so it is not our own `_gen_tone`
+> either. **This means TEST 2's "loop mode 0 sustains" rests on the same void
+> evidence** and its TODO row has been reopened. Note the direction: the original
+> "loop in release" claim is not restored, it is *unmeasured*.
+>
+> **`tests/re_banks/is_it_our_noise.py` now exists so this cannot recur.** It
+> compares octave-band shape and lag-1 against what noise must look like, which
+> no tone can fake, and it is verified both ways: PASS on the written white and
+> pink frames, FAIL on every capture above. Run it BEFORE any analysis --
+> a plausible wrong result is the failure mode here, not an implausible one.
+>
+> **Still genuinely open, and untouched by this retraction:** whether the
+> S3000XL honours the stored rate field at `0x8a` at all. That question came
+> from §E4BRATE on the E-MU side, not from this measurement, and it needs a
+> deliberate two-rate test on `CALNOISE`.
+
+
+**Found while verifying s3ked's TEST 2 capture rather than accepting its
+summary.** The loop-mode question it was built for is settled — mode 0 sustains
+— but the same capture carries a discrepancy nobody was looking for.
+
+`NSWHITE` is 88200 frames, looped whole, stored at 44100 Hz. **That is 2.0000 s
+per loop.** Autocorrelating a 100 ms window from the sustain against itself at
+varying lags:
+
+```
+lag 1.8004 s   r = +0.9999      <- the loop period
+lag 2.0000 s   r = +0.2203
+```
+
+**r = 0.9999 is not ambiguous.** It is genuinely looping, and the period is
+1.8004 s, not 2.0000. That is `2.0000 / 1.8004 = 1.1109`, i.e. **+1.82
+semitones sharp**, or an implied playback rate of ~48990 Hz against a stored
+44100.
+
+### What has been ruled out, from the file
+
+Read from our own written bytes on the pre-session backup:
+
+```
+root note (0x02)  60        correct, and what the generator asked for
+zone tune (+0x0e)  0
+STUNO (0x14)       0
+rate  (0x8a)   44100 Hz
+zone1 sample  'NSWHITE'     resolves correctly
+key range      24..127
+```
+
+**Nothing in the file is transposing it.** And it is not a played-note effect
+either, at least not a clean one — against root 60 the integer semitones give
+2.0000, 1.8877, 1.7818, 1.6818 s, and **1.8004 sits between two of them**,
+1% from note 62 and 5% from note 61.
+
+### What has NOT been ruled out
+
+- **The note s3ked actually played.** Unknown to me, and the cheapest thing to
+  ask. If it was 62 the residual is 1%, which is a different and much smaller
+  problem than 11%.
+- **A global tune on the machine**, master or program level, that we do not read.
+- **The capture clock.** The wav is 48 kHz nominal; an 11% error is far beyond
+  plausible drift, so this is unlikely rather than excluded.
+- **The same class as §E4BRATE on the E-MU side** — where EOS ignored the
+  stored rate field and played everything as though it were 44.1 kHz, making
+  sub-44.1 samples play sharp by exactly `src/dst`. **That bug had this shape**:
+  a stored rate that the machine does not honour. Worth checking whether the
+  S3000XL derives playback rate from `0x8a` at all.
+
+### Why it matters beyond a bench sample
+
+If a converted sample plays 11% sharp, **every pitched AKAI conversion is out by
+nearly two semitones** and nobody has noticed because the corpus work has been
+about names, zones and filters rather than tuning. `CD3-PITCHCAL` exists on the
+E-MU card for exactly this kind of question and there is an AKAI equivalent
+volume — that is the instrument to point at this.
+
+**Do not act on this yet.** One measurement, on one sample, with the played note
+unknown.
+
+## §AKAIPRGCLAMP — WITHDRAWN: the clamp is not silent and the fix I proposed was already rejected (2026-08-18)
+
+> **WITHDRAWN the same evening. This filed a bug against code that was already
+> correct, for the second time today.** Both of its claims are wrong:
+>
+> **1. It is not silent.** `build_akai_volume` already warns:
+> *"this volume holds more than 128 programs, and MIDI has 128 program numbers.
+> Programs past the 128th all carry number 127 and will stack on one program
+> change; they remain selectable from the sampler's own panel."* The final
+> clause is a nuance this section missed entirely — the programs are not lost,
+> only unreachable by program change.
+>
+> **2. The fix it proposed was already considered and rejected, with better
+> reasoning.** The writer's own note says splitting at 128 is *"NOT"* the
+> solution: the machine holds more than 128 happily, they are all selectable
+> from the panel, and *"splitting a volume that would have loaded is the
+> over-tight clamp this project has recorded twice as the worse failure"*. It
+> also explains why clamping beats wrapping — damage lands on the tail, so
+> 0..126 stay individually addressable, rather than being spread over the
+> low numbers most likely to be reached for.
+>
+> **Why it looked silent:** the bench generator that hit it calls
+> `build_program` directly and never reaches `build_akai_volume`, which is where
+> the warning lives. That is the same bypass that defeated the name-uniqueness
+> defence in §AKAINAME12 — a second path to the disc that skips the writer's
+> judgement, and a second wrong conclusion drawn from it.
+>
+> **The transferable part:** a bug found through a bench script must be
+> reproduced through the production path before it is filed. Twice today a
+> working component was blamed because the harness went around it, and both
+> times the evidence looked clean.
+>
+> The observation below about the clamp's mechanics is accurate and is kept;
+> only the "silent" framing and the proposed fix are withdrawn.
+
+`writers/akai_s3000_writer.py`, in `build_program`:
+
+```python
+p[0x0f] = min(prog_num, 127)
+```
+
+**The clamp is correct and the silence is not.** MIDI program numbers are seven
+bits; there is no byte value that addresses a 129th program. So the writer cannot
+give every program a unique number once a volume passes 128 — but it can stop
+pretending it did.
+
+**Why it matters.** Programs sharing a PRGNUM do not merely become hard to
+select: they **stack**, and one program change fires all of them together. That
+is measured on the S3000XL, not inferred, and it is the mechanism behind the
+retracted §AKAILOOPRATE — an evening of measurement made on three programs
+sounding at once. Reproduced directly against the writer:
+
+```
+132 programs requested 0..131  ->  128 distinct PRGNUM values
+PRGNUM 127 shared by requested 127..131  (5 programs)
+```
+
+### How it was found, which is the transferable part
+
+Staging `RATECAL` I asked for PRGNUM 130-133. The generator printed:
+
+```
+RATE  44100  PRGNUM 130  ch 8
+RATE  22050  PRGNUM 131  ch 9
+RATE  11025  PRGNUM 132  ch 10
+RATE  32000  PRGNUM 133  ch 11
+```
+
+— four distinct numbers, exactly as intended. The image held **127 four times**.
+Every line of that log was true about the *request* and false about the *bytes*,
+and no amount of re-reading it would have shown the difference. Reading the
+finished image back with the ordinary parser took one call and showed it at once.
+
+**So the rule is: a generator is not finished when it has written; it is finished
+when it has read back.** `gen_akai_ratecal_disc.py::_verify_written` now does
+this and raises rather than warns, because a measurement disc that is quietly
+wrong is worse than no disc. Worth porting to the other `gen_*` scripts.
+
+### Two candidate fixes
+
+1. **Warn at write time.** Cheapest, and it converts a silent stack into a
+   visible one. `build_akai_volume` knows how many programs it is emitting, so
+   the check belongs there rather than in `build_program`, which sees one at a
+   time and cannot know it is the 129th.
+2. **Split the volume at 128 programs**, the way `bank_splitter.py` already
+   splits E4B banks at their limits. Structurally the honest fix — 128 is a real
+   hardware addressing limit, exactly like the 1000-sample E4B ceiling — and it
+   keeps every program reachable by program change. More work, and it needs a
+   naming convention for the overflow volume.
+
+**Recommendation: do both, warn first.** The warning is a few lines and removes
+the silence today; the split can follow. Note that a volume can legitimately hold
+far more than 128 *files* (an S3000 directory holds 510 entries), so this is not
+a rare edge — a large drum library converted into one volume reaches it.
+
+**Not yet checked:** whether the machine's own SAVE renumbers on the way out, and
+what a real library disc does with its 129th program. Both are one look at a
+corpus volume with more than 128 programs, offline, no hardware needed.
+
+## §AKAIIDTHIEF — a sidecar file stole the SCSI id and the image was never served (2026-08-18, FIXED — HARDWARE-CONFIRMED)
+
+**Confirmed on the machine 2026-08-18 19:5x:** with the manifests moved out of the root, the S3000XL sees drive 7 and loads volume `CALNOISE`. The disc had existed and been byte-correct for nearly three hours before that; only the id was being taken from it.
+
+**Symptom.** s3ked swept every SCSI id with the sampler and found `CALNOISE` and
+`RATECAL` on none of them. Drive 7 returned HD4's twelve volumes on two reads and
+errored on a third — an absent device, not a damaged disc.
+
+**Everything we would normally check said the disc was fine.** `HD7.img` was on
+the card, 67 108 864 bytes, md5 identical to the local build; `whichcard.py`
+reported `id 7: HD7.img` and no collision; the volumes read back correctly
+through our own parser. All true, and all irrelevant.
+
+**Cause, from the ZuluSCSI log — the one artefact nobody had read:**
+
+```
+-- Opening 'HD7.ratecal.json' for id: 7
+---- Configuring as disk drive drive
+---- Drive geometry from image size: SectorsPerTrack=1 HeadsPerCylinder=2 total sectors 2
+-- Ignoring /HD7.img, SCSI ID 7 is already in use!
+```
+
+ZuluSCSI claims an id from **any root file whose name starts `HD<n>` or `CD<n>`**
+and does not check that it is an image. The 1245-byte manifest I had deliberately
+placed *beside* the image — so that the disc's measured flatness would travel
+with it — became a 1 kB disk at id 7, and the real image was refused.
+
+**The manifest discipline defeated itself.** Putting the measurement beside the
+artefact was right; putting it in the emulator's scan path was not, and nothing
+about the naming looked dangerous. `HD7.manifest.json` had been on the card since
+17:03, so the CALNOISE disc was never visible either — the first staging failed
+silently too, and was not noticed because Jan happened to be on another volume
+both times.
+
+**Fix.** Manifests moved to `/manifests/` on the card; subdirectories are not
+scanned, which is what makes that a fix rather than a rename.
+
+**Guard.** `whichcard.py` now enumerates ids by the EMULATOR'S rule — glob
+`[HC]D[0-9]*` and judge the extension afterwards — and reports a non-image file
+as stealing that id. It previously globbed `CD*.iso`/`HD*.img` only, so the thief
+was invisible to it *precisely because it was not an image*. That is the same
+structural blindness as the `^CD[0-9]` grep that could not see `HD0.img` owning
+id 0: **a check written in terms of what we expect to find cannot see the thing
+that does not look like it.** Verified in both directions — it fires on a planted
+`HD5.notes.txt` and clears when removed.
+
+**The general lesson, which cost the most.** Three independent verifications
+passed (file present, md5 identical, parser reads both volumes) and the disc
+still did not exist as far as the sampler was concerned, because every one of
+them verified OUR side of the interface. The emulator's log was the only artefact
+that described the other side, and it says plainly, on every boot, which file
+owns which id. **Read the log of the thing that actually serves the data.**
+
+## §AKAINAME12 — two bench samples truncated to the same 12-character name (2026-08-18, FIXED)
+
+`NOISE W SHORT1` and `NOISE W SHORTL` both store as **`NOISE W SHOR`**. AKAI names
+are 12 characters and zones reference samples BY NAME, so the machine resolved
+both programs to one sample. The one-shot that had to fall silent at t=2.000 —
+the entire point of the pair — played the looped audio instead.
+
+Measured by s3ked on the S3000XL: PRGNUM 124 held flat to 3.95 s, and the two
+captures correlated **+0.6133** despite being built from deliberately different
+seeds. That number is the signature of one sample answering twice with
+independent note-on phase. Confirmed here from the image, which is unambiguous:
+
+```
+NOISEWS1.S3  stored 1819131d0f0a210a1d12191c
+NOISEWSL.S3  stored 1819131d0f0a210a1d12191c    identical
+```
+
+**The defence already existed and was bypassed.** `akai_s3000_writer.uniq()`
+handles exactly this for real conversions, and its own comment states the failure
+mode — *"two SAMPLES sharing a name and carrying different audio ... zones
+reference samples BY NAME ... silent, and wrong rather than absent"*. The bench
+generator called `build_sample` directly with hand-written names and never
+reached it. So this is not a writer regression; it is a second path to the disc
+that skipped the writer's judgement.
+
+**Fix:** `NOISE2S 1SHT` / `NOISE2S LOOP`, differing at character 9 rather than
+character 14, so nothing depends on the exact ceiling.
+
+**Guard:** `tests/re_banks/akai_disc_verify.py`, shared by both bench generators,
+reads the built image back and refuses it on duplicate stored names (compared as
+raw bytes, after truncation and charset mapping — decoding first would hide
+either), duplicate PRGNUMs, PMCHAN 255, or a PRGNUM sitting at the 127 clamp. It
+reproduces this defect on the shipped disc and passes the corrected one.
+
+**Why a shared module rather than a check in each generator:** the two discs built
+that day shipped *different* defects — this one, and §AKAIPRGCLAMP's collapsed
+PRGNUMs — so neither script would have caught the other's. Both were invisible in
+everything the builds printed, because both printed the request rather than the
+stored byte.
+
+## §AKAILOADTYPE — LOAD type 1 loads no samples, contradicting our SAVE-type note (2026-08-18, OPEN)
+
+s3ked measured on the S3000XL: `trigger_load(1)`, documented as ALL PROGS+SAMPLES,
+loaded six programs and **zero** samples — free memory unchanged, capture silent
+at −70.3 dBFS. `trigger_load(3)` then loaded all six samples. Reproduced on the
+machine's own `BOOT SYSTEM#` volume, so it is not a property of our disc.
+
+This contradicts the TODO row on §AKAIAUX, which has **type 1 writing programs and
+samples**. That reading came from SAVE behaviour. Two possibilities, and nothing
+yet distinguishes them:
+
+1. LOAD and SAVE type numbers are **separate namespaces** that happen to overlap,
+   in which case our note is right about SAVE and says nothing about LOAD.
+2. One of the two readings is simply wrong.
+
+**Deliberately recorded as a contradiction rather than folded into the existing
+note.** s3ked's evidence is a direct measurement, repeated, on two volumes; ours
+is an inference from the save page. Overwriting one with the other would destroy
+the disagreement, which is the only thing currently pointing at the answer.
+
+**Cheap next step, no hardware:** a real library disc saved as ENTIRE by the
+machine tells us what a type-0 volume contains; comparing the LOAD menu's own
+labels against the SAVE menu's, on the panel, settles whether the numbering is
+shared. Until then, use LOAD type 3 for samples.
+
+## §AKAIFILTQTY — two AKAI filter laws that disagree, for a principled reason (2026-08-18, OPEN — DEFINITIONAL)
+
+s3ked swept `FILFRQ` on a gate-verified 20 s white-noise source (CALNOISE PRGNUM
+120) and took the −3 dB point of *filtered spectrum ÷ filter-open spectrum*, which
+cancels source, rumble and rig response together:
+
+```
+FILFRQ   corner Hz   peak/median
+    40      134          5963
+    50      282          4548
+    60      595          1586
+    70     1195           458
+    80     2518           106
+    90     5493            20
+    99       --             4     (reference)
+
+Hz = 7.00 * exp(0.07381 * FILFRQ)     r2 0.99981, max error 2.6%
+9.39 units per octave, 1.278 semitones per unit
+```
+
+**This reproduces §20 to three significant figures** (`6.998 * exp(0.07384 * x)`)
+— and §20 was superseded by §54, which measured 111 Hz where this measures 134 at
+FILFRQ 40 and argued §20 was wrong by 20–30% and growing.
+
+**Neither is wrong. They measure different quantities.**
+
+* **§54 measures the RESONANCE PEAK**: raise `FILQ`, difference against `FILQ 0`,
+  and the peak sits at the pole frequency — the filter's own corner.
+* **This measures the −3 dB point of the transfer function**, which for a damped
+  multi-pole lowpass is a different frequency, and is closely related to what
+  §20's centroid method was tracking. That is why it reproduces §20 rather than
+  §54, and the agreement is *not* a vindication of §20's method.
+
+**Which one our writer needs, decided rather than left open.** `akai_filter_byte()`
+maps a **source instrument's stated cutoff** onto `FILFRQ`, and XPM, EXS24, SFZ and
+the rest all express that as the filter's corner/pole. So the pole frequency is the
+right quantity and **§54 remains the writer's law**. `akai_filter_byte()` is already
+derived from the resonance peak, so it stays as it is. The −3 dB law would be the
+right one for matching perceived brightness or a −3 dB spec, and for nothing we
+currently convert.
+
+### Two traps for anyone repeating the sweep
+
+1. **`peak/median` is not an intruder detector on a filter sweep.** Closing a
+   lowpass over noise raises peak-to-median *by construction* — it ran 5963 down
+   to 4 as the filter opened, far above the ~500 watch-line agreed for ordinary
+   captures. Below about `FILFRQ 60` the statistic says nothing about identity.
+   The usable signature is that it must move **smoothly with the control**: a ramp
+   is the filter, a step is a program answering.
+2. **Below `FILFRQ 40` the readings flatten at ~90 Hz and that is the measurement
+   floor, not the filter** — the corner drops under the rumble. Fitting those
+   points yields a shallower law. Discard 0–30.
+
+**Open:** whether the pole-vs-−3 dB gap is exactly what a damped multi-pole
+response predicts. That is testable offline from the two laws plus a filter order,
+and would turn a plausible explanation into a checked one. Until then this is
+recorded as a definitional conflict, not a correction to either side.
+
+## §AKAILOOPCROSS — a LOOPED program plays the sample loaded immediately BEFORE the one it names (2026-08-18, RULE CONFIRMED, CAUSE OPEN)
+
+**Three artefacts that cannot all be true, recorded before any of them is
+explained away.**
+
+**What the machine says** (s3ked, S3000XL):
+
+* its own selected-program register reads **PRGNUM 122** after the program
+  change — the machine naming its own selection, not an inference from audio
+* a 25 s hold runs to 25.20 s with no discontinuity at 20.00 s, so the thing
+  sounding is **looped**, which excludes the 20 s pink one-shot at PRGNUM 121
+* the resident sample names read back **distinct**, so no collision in that pair
+* the audio measures lag-1 +0.863, matching our written pink's +0.868
+
+**What the image says**, by two independent extraction routes:
+
+```
+parser:  NOISEWLP.S3  stored 'NOISE W LOOP'  lag-1 -0.0024  white
+raw:     header@0x0036a000  PCM@0x0036a0c0   lag-1 -0.0021  white
+         header@0x0051a000  PCM@0x0051a0c0   lag-1 +0.8684  PINK  ('NOISE P LOOP')
+```
+
+The raw route searches the image bytes for the stored name and reads PCM at
+`header + SAMPLE_HEADER_LEN`, so name and audio necessarily come from the same
+physical object — the failure mode s3ked proposed. The two loop samples are
+**1.8 MB apart** on the image with the one-shots between them, so an
+off-by-one-directory-entry read is not available as an explanation either.
+
+**One real slip found while checking, which changes nothing:** the PCM slice had
+been `0x8a+0x2e = 0xB8` where `SAMPLE_HEADER_LEN` is `0xC0`. Eight bytes. It did
+not affect any measurement, but it was an unverified offset, which is what the
+challenge was actually about.
+
+### SETTLED HALF: the served content IS crossed, at sample level
+
+s3ked cross-correlated the captures, with controls:
+
+```
+CONTROLS
+  120 ref vs itself      +1.0000 at lag 0
+  120 white vs 121 pink  +0.0335
+THE TEST
+  PRGNUM 122 capture vs 121 PINK   +0.9992 at 0.8 ms
+  PRGNUM 122 capture vs 120 white  +0.0330
+  PRGNUM 123 capture vs 120 WHITE  +0.7329 at 1.7 ms
+```
+
++0.9992 is the same waveform, not a similar one, and no spectrum is read
+anywhere — so the pink/lowpassed-white confound is irrelevant to it. (Their first
+attempt failed its own control: a 64-sample lag grid never landed on lag 0, so a
+signal against itself scored −0.008 while still giving +0.43 for the real pair.
+That is how correlated pink is, and why the control mattered.)
+
+**So both facts stand: the disc is correct and the machine serves crossed
+content.** No single artefact is being discounted.
+
+### The disc is now verified at EVERY level, including the machine's own route
+
+s3ked's hypothesis was that the directory entries might carry each other's start
+blocks — which would satisfy both findings, since the parser and the raw search
+both read a file's bytes rather than following the directory. Tested by parsing
+the 24-byte entries and following each start block:
+
+```
+entry NOISEW1S  start blk   5 -> 0x0000a000  header 'NOISE W 1SHOT'  white
+entry NOISEP1S  start blk 221 -> 0x001ba000  header 'NOISE P 1SHOT'  PINK
+entry NOISEWLP  start blk 437 -> 0x0036a000  header 'NOISE W LOOP'   white
+entry NOISEPLP  start blk 653 -> 0x0051a000  header 'NOISE P LOOP'   PINK
+entry NOISEWS1  start blk 873 -> 0x006d2000  header 'NOISE W SHOR'   white
+entry NOISEWSL  start blk 895 -> 0x006fe000  header 'NOISE W SHOR'   white
+```
+
+Entry -> start block -> header name -> audio, correct at every link. The
+hypothesis was the right shape and is not the fault.
+
+### TESTED AND DISPROVEN: this is NOT §AKAINAME12 — they are two defects
+
+The hypothesis below was that the duplicate stored name was the only abnormal
+condition in the volume and might have disturbed the machine's name table.
+**s3ked tested it and it is wrong.** They CLR'd and loaded only the four 20 s
+files individually, so the colliding pair never entered memory — resident
+duplicate names: none — and the crossing persisted:
+
+```
+CONTROLS
+  120 vs itself          +1.0000 at lag 0
+  120 white vs 121 pink  +0.0343
+THE TEST
+  PRGNUM 122 'NOISE W LOOP' vs 121 PINK   +0.9818    matches pink
+  PRGNUM 123 'NOISE P LOOP' vs 120 WHITE  +0.9144    matches white
+```
+
+Peak levels agree independently: white returns at −9.5/−9.2 dBFS and pink at
+−17.6/−17.3, and 122 sits on the pink level.
+
+**The rebuild fixes §AKAINAME12 and NOTHING ELSE. The crossing will still be
+there afterwards.** Recorded explicitly at s3ked's request, because "the rebuild
+fixed both" is exactly the story that gets told later.
+
+### ALSO DISPROVEN: there is no data pointer in the sample header
+
+s3ked's next hypothesis was that the header might carry its own pointer to the
+audio — which both extraction routes would have missed, since both assume the PCM
+is contiguous at `header + SAMPLE_HEADER_LEN`. Diffing the full 192-byte headers:
+
+```
+1 differing byte out of 192
+0x09:  NOISEWLP 33 (0x21 'W')    NOISEPLP 26 (0x1a 'P')
+```
+
+Character 7 of the name, and nothing else. No `u16`/`u24`/`u32` differs anywhere,
+so nothing can carry the 0x1B0000 block distance between them. **The stronger
+form:** if a data pointer existed it would have to be *identical* in both, and
+then both would play the same audio — which they demonstrably do not.
+
+### The disc is now exhausted
+
+Following s3ked's point that the directory had been followed to the header but
+not the header to the data, the one remaining partial check was closed too — zone
+1 of keygroup 1 had been read and the rest assumed:
+
+```
+all six programs: 1 keygroup, zone1 correct, zones 2-4 empty
+```
+
+Verified end to end: entry → start block → header → name → PCM → program →
+keygroup → all four zones. **Nothing on the medium is wrong**, and the machine
+still serves crossed audio for the loop pair while serving the one-shot pair
+correctly.
+
+### AMENDED 2026-08-18 — the rule is NARROWER than stated, and was UNDER-DETERMINED
+
+`SDZERO` (partial loops) does **not** reproduce the off-by-one:
+
+```
+prg  names      period   sounding
+ 94  LOOP 3S       --    SILENT
+ 95  LOOP 4S    4.000    its OWN
+ 96  LOOP 5S    5.000    its OWN
+ 97  LOOP 7S    7.001    its OWN
+```
+
+Three of four looped programs play the sample they name. Only the first loaded
+is silent. So the observed behaviour there is "the first-loaded looped sample is
+silent, the rest are correct" — not the rule below.
+
+**And the CALNOISE evidence could not have established that rule anyway.** On
+that disc each one-shot and its matching loop carried IDENTICAL PCM — a
+deliberate choice of this project's own bench disc, and the cross-correlation
+test was then proposed *resting on* that sharing. It made the observable
+two-valued (white or pink) while the question was four-way: "122 sounded pink"
+cannot separate slot 1 from slot 3, so **"plays the slot before" and "plays the
+slot after" fit that data equally**. The rule was under-determined in its central
+claim, not merely over-generalised. (`SDZERO` does rule out `+1`: at slot 0 that
+reading predicts LOOP 4S, and the capture is silent.)
+
+**The lesson worth keeping, in s3ked's words:** careful analysis cannot exceed
+what the instrument can express, and the instrument's limits are usually
+invisible from inside the analysis. The two-valued observable was a property of
+the disc supplied, not of the method applied to it, and neither project noticed
+until the constraint was load-bearing.
+
+### The live hypothesis: loop EXTENT
+
+The one structural difference left between the two discs is that **CALNOISE's
+loops span the whole sample while SDZERO's span a part of it.** The sample-data
+address is excluded (§AKAISDATA: `SDADDR` ≡ `SDZERO`).
+
+**This is not academic — our converter emits both shapes.** `auto_loop` finds a
+sustain portion and produces partial loops, but a source whose own loop points
+span the file is written through whole, and the real converted volumes on HD4
+(`VF NEW` / `VF OLD`) hold **two whole-sample loops** among eighteen one-shots.
+
+`~/temp/HD7_r4.img` carries `WHOLELOOP` and `PARTLOOP` to settle it: five
+distinct seeds, no shared PCM anywhere, and **disjoint loop-period sets** —
+3.0/4.0/5.0/7.0 against 2.5/3.5/4.5/6.5 — so a measured period names both which
+sample sounded and which volume it came from, and a leak announces itself as an
+impossible number instead of hiding as a plausible reading.
+
+**Slot 0 in both is a ONE-SHOT** (s3ked's addition), because every disc so far
+put a loop there and so could never separate "silent because it is slot 0" from
+"silent because it is a loop". If it sounds, the silence belongs to looping.
+
+### SUPERSEDED: the rule as first stated, at nine observations
+
+**s3ked, §136 (their commit 784e3dc):**
+
+> A LOOPED program plays the sample loaded immediately BEFORE the one it names.
+> One-shots are correct.
+
+Every observation of the evening follows, including all three silences — which
+are simply the off-by-one reaching past the start of the pool when the named
+looped sample is the first one loaded:
+
+```
+load W1S,P1S,WLP,PLP   122 names slot2 -> plays slot1 = P1S   PINK     observed
+                       123 names slot3 -> plays slot2 = WLP   WHITE    observed
+load PLP,WLP,P1S,W1S   122 names slot1 -> plays slot0 = PLP   PINK     observed
+                       123 names slot0 -> plays slot-1        SILENT   observed
+WLP alone              122 names slot0 -> plays slot-1        SILENT   observed
+load WLP,PLP           122 names slot0 -> plays slot-1        SILENT   PREDICTED
+                       123 names slot1 -> plays slot0 = WLP   WHITE    PREDICTED
+```
+
+The last two were written into the capture script's docstring **before** the
+capture: measured −71.2 dBFS (silent) and slope +3.00 (white to two decimals) —
+the exact reverse of what the same two programs did earlier, produced by nothing
+but a swapped load order.
+
+`SBADD` resolves correctly by name and is order-independent, so the *name* half
+of the binding is sound; `0xFFFF` there simply means unresolved.
+
+**Standing limit, recorded rather than discovered later:** not reproduced on
+factory material. Until it is, "the S3000XL does this" is a claim about discs
+written by one writer — ours.
+
+### THE SAVES: the machine's own copies are CORRECT
+
+`XCROSS 1` (four 20 s objects resident, crossing present) and `XCROSS 2` (one
+sample resident, SILENT), both type-0 saves read back here:
+
+```
+XCROSS 1  NOISE W LOOP.S3  lag-1 -0.0023  white   zone1 -> 'NOISE W LOOP'
+          NOISE P LOOP.S3  lag-1 +0.8685  PINK    zone1 -> 'NOISE P LOOP'
+XCROSS 2  NOISE W LOOP.S3  lag-1 -0.0023  white   zone1 -> 'NOISE W LOOP'
+```
+
+Right audio, right name, right zone reference — **including in the silent
+state**. So the fault is not in the medium, the directory, or the load into the
+pool. It is in what the PLAY path binds to.
+
+### ISOLATION: PRGNUM 122 alone is SILENT — neither predicted branch
+
+s3ked loaded only `NOISEWLP.S3` + `NOISEWLP.P3`. Both load orders, three
+captures: −69.9 / −71.2 / −72.8 dBFS against an −86 floor. Everything reads
+correct while it is silent — zone `SNAME1` and the resident sample name match
+exactly, `SLNGTH 882000`, `SSRATE 44100`, and free memory dropped 1.68 MB, so the
+audio really is resident.
+
+**A zone does not bind to a resident sample whose name it matches exactly.** That
+is a failure to resolve, not a swap — and the "crossing" may be what that failure
+looks like when other samples happen to be present to bind to instead.
+
+### LEADING SUSPECT: the zone pointer at `zone_base+0x16`, which we null out
+
+```
+OUR DISC   all six programs        0xFFFF
+XCROSS 1   PRGNUM 120 -> 36984
+           PRGNUM 121 -> 36996     spaced 12 paragraphs apart
+           PRGNUM 122 -> 37008     12 x 16 = 192 bytes = ONE SAMPLE HEADER
+           PRGNUM 123 -> 37020     sequential in LOAD ORDER
+XCROSS 2   PRGNUM 122 -> 36888
+```
+
+§AKAIRESAVE called this field "machine-owned and correctly left alone by us".
+The overwrite was measured; **"correctly" was an inference from it and was never
+tested.** If resolution of our `0xFFFF` is order- or slot-sensitive rather than
+by name, both observations follow: wrong neighbour with four resident, nothing at
+all with one.
+
+### THE CORPUS ANSWER: 0xFFFF is normal, so the pointer is probably NOT the cause
+
+With a real factory corpus available (43 discs), scanned properly through the
+parser — **10 discs, 5628 programs, 90328 used zones**:
+
+```
+value at zone+0x16       count      share
+0xFFFF                   31891      35.3%   <- what WE write
+0x0000                   27121      30.0%
+0x0a0a                   11299      12.5%
+everything else          ~20000
+```
+
+**`0xFFFF` is the single most common value in factory material.** Writing it is
+normal and is not our deviation. Two-thirds of factory zones carry one of the two
+null-ish values, which reads as a scratch/RAM pointer that a disc simply carries
+in whatever state it was saved in.
+
+This does not fully exonerate the field — a factory disc carrying `0xFFFF` might
+resolve correctly for some other reason — but it removes the explanation that
+made it the leading suspect, namely "we write something no real disc writes".
+**Recorded as evidence against my own hypothesis**, which is the reason the check
+was worth running.
+
+(`+0x16` is the last two bytes of each 24-byte zone, `_ZONE_OFFSETS` being
+0x22/0x3a/0x52/0x6a — checked, so this is a real field and not name overlap.)
+
+### A corpus check that FAILED FIRST, recorded so it is not repeated
+
+Whether factory discs carry a real value there would settle whether `0xFFFF` is
+our deviation. Our reader cannot parse the factory discs available locally — one
+is recognised as an AKAI image and then every directory record is skipped as
+"directory type 0x00" (its own TODO row). A raw-scan fallback appeared to work,
+reporting 191 programs and a tidy pointer distribution of 1/2/3/4 —
+**and it was false positives.** Its name validator only checked that bytes fell
+in the AKAI charset range, which arbitrary binary passes, and the "zone names" it
+produced read `408090 0 080` and `D0C0F0H0F0F0`. Discarded rather than reported.
+
+The tell was in the output the whole time and only visible because the sample
+rows were printed. A detector that reports a plausible distribution is not
+evidence that it found anything.
+
+**A second error compounded it:** the parser could read those discs all along.
+The zero-program count that sent me to a raw scan was mine — it looked only for
+S3000 type codes while the discs hold **S1000** volumes (`0x70` = 'p', the same
+ASCII letter *without* bit 7). So a working component was blamed, a TODO row was
+filed against it, and a hand-rolled replacement produced false data. The row has
+been withdrawn rather than deleted.
+
+### Next test: one sample, alone
+
+CLR, load only `NOISEWLP.S3` + `NOISEWLP.P3`. Nothing to cross with.
+
+* **plays pink** → the fault is in loading that single object; nothing is being
+  swapped because there is nothing to swap with, and the machine is reading audio
+  from somewhere other than where its entry points
+* **plays white** → the crossing *requires* the other object present, which puts
+  it in the pool or name table and makes load ORDER the next variable — then load
+  the two in the opposite order and see whether it follows order or name
+
+### The asymmetry is probably not evidence
+
+```
+whole-volume:  122->pink +0.9992   123->white +0.7329
+single-file:   122->pink +0.9818   123->white +0.9144
+```
+
+The white side is lower in both. Likely a property of white noise rather than of
+the swap: correlation against white is dominated by its **high frequencies**,
+where most of its energy sits (+3 dB per octave band), and HF decorrelates fast
+under even parts-per-million clock drift between two captures, while pink's
+energy is spread evenly per octave and dominated by LF. **Testable on existing
+captures:** lowpass both to ~2 kHz before correlating; if the white match climbs
+toward the pink one it is drift, not information.
+
+### SUPERSEDED HYPOTHESIS (kept for the reasoning): this defect and §AKAINAME12 are ONE defect
+
+The last two rows are the only abnormal condition in the volume: **two distinct
+samples at distinct blocks claiming one 12-byte name**. The machine's name table
+must do something with the second, and if that handling displaces or overwrites a
+slot, samples *other* than the colliding pair can bind to the wrong data — with
+every resident name still reading back correctly, which is what is observed.
+
+Treating the two as independent defects was an assumption, and they were
+introduced in the same build. **Test, no crossing needed:** load only the four
+20 s files individually (LOAD SINGLE), leaving the colliding pair out, and repeat
+the correlation. Correct pairing implicates the duplicate name and makes the
+corrected disc fix both; still crossed means a genuine load-time or pool-level
+fault.
+
+**Also requested while the card is in:** save the loaded state to a scratch volume
+so the machine's OWN copy can be dissected offline. If its copy has pink under
+'NOISE W LOOP', the crossing is at or before load; if correct, the capture path is
+implicated. Doing it before the answer is known is what stops a second crossing
+being spent on it.
+
+### The remaining asymmetry
+
++0.9992 for 122-vs-pink against **+0.7329** for 123-vs-white. A clean swap should
+be symmetric. A loop seam falling inside one reference window would do it (the
+20 s sample seams once per 20 s), as would the FILFRQ difference between swept and
+unswept programs. If the load test returns "still crossed", this asymmetry is the
+next thread.
+
+### The test that should settle it
+
+A property of the disc, built in for a different reason: **`NOISEW1S` and
+`NOISEWLP` contain the same PCM** (both the `w` array), as do `NOISEP1S` and
+`NOISEPLP`. One-shot and loop differ only in `SPTYPE` and the loop fields.
+
+So a **sample-level cross-correlation of the byte-2 capture against the byte-1
+and byte-0 captures** identifies the content outright — no spectral
+interpretation, no lag-1, no slope. A filter lowers the correlation peak but
+cannot move it to the wrong source. Awaiting that result.
+
+### The largest uncontrolled variable
+
+`lag-1` and a fitted octave slope **cannot separate these two shapes**:
+
+```
+true pink         flat across all nine bands
+lowpassed WHITE   rises ~3 dB/band, then falls off a cliff above the corner
+```
+
+Both fit to a shallow slope and both push lag-1 high. And the two capture sets
+are not obviously comparable: the one-shot captures (which read CORRECTLY) were
+taken before the FILFRQ sweep, the loop captures (which read CROSSED) after it.
+PRGNUM 120 was swept and left at 99, fully open; 122 and 123 were never swept and
+still carry whatever default the writer wrote.
+
+**Asked for, not assumed:** the nine octave-band values rather than the fitted
+slope, and a FILFRQ readback at the moment of capture.
+
+**Deliberately left unresolved.** The machine-register reading is the strongest
+single artefact in the set and is not being discounted; the image is verified
+twice by independent routes and is not being discounted either. Preferring one
+now would destroy the only thing pointing at the answer — the same discipline as
+§AKAILOADTYPE one row up.
+
+## §AKAIRATEQUANT — sample-header byte 0x01 selects the playback rate; SSRATE is descriptive only (2026-08-18, CONFIRMED — FIXED)
+
+**Round 1, measured by s3ked on the S3000XL** (RATECAL, fingerprint OK on all
+four, `SSRATE` read back correctly off every resident header):
+
+```
+stored   f0 measured   implied playback rate
+44100      300.0 Hz    44100      HONOURED
+22050      300.0 Hz    22050      HONOURED
+11025      600.0 Hz    22050      x2 fast
+32000      413.4 Hz    44100      x1.378
+```
+
+**This is NOT §E4BRATE.** There, playback is always 44100 and a 22050 sample comes
+out an octave sharp. Here 22050 is dead on. The stored field is honoured for the
+supported rates and something else happens for the rest.
+
+### Two models fit those four points equally well
+
+**A — `h[0x01]` is the playback-rate selector**, 0 = 22050, 1 = 44100, and
+`SSRATE` at `0x8a` is descriptive only. `build_sample` writes that byte itself:
+
+```python
+# bandwidth: 0 = 10 kHz, 1 = 20 kHz. Anything at or above 30 kHz is
+# full-bandwidth material.
+h[0x01] = 1 if sd.sample_rate >= 30000 else 0
+```
+
+11025 → flag 0 → 22050 (×2). 32000 → flag 1 → 44100 (×1.378). Both exact.
+
+**B — the machine reads `SSRATE` and quantises to a supported neighbour** ("next
+one up"), which gives the identical four numbers.
+
+### Why the difference matters more than a bench curiosity
+
+Under **A the threshold is arbitrary and ours** — 30000 is a number that exists
+only in our source file — and **nothing in the pipeline forces an AKAI sample to a
+supported rate.** `build_sample` writes `sd.sample_rate` verbatim; `convert.py`
+resamples only under `--max-sample-rate` or the KRZ-specific headroom path. So a
+48 kHz source, which is most modern material, gets flag 1 and plays at 44100:
+**147 cents flat, silently.** Under B the machine's own choice would be sane.
+
+### CONFIRMED IN RAM, both directions, no disc needed
+
+s3ked wrote byte 0x01 over SysEx on a **resident** sample, leaving SSRATE
+untouched (it read 44100 / 22050 correctly throughout), and measured:
+
+```
+SSRATE 44100, byte 0x01 = 1  ->  300.0 Hz   baseline
+SSRATE 44100, byte 0x01 = 0  ->  150.0 Hz   half speed
+SSRATE 22050, byte 0x01 = 0  ->  300.0 Hz   baseline
+SSRATE 22050, byte 0x01 = 1  ->  600.0 Hz   double speed
+```
+
+Model A confirmed, model B withdrawn. **The whole question was settled in twenty
+minutes because the field is writable** — the disc had been built and never
+needed to leave the desk.
+
+**The transferable rule:** if a hypothesis is about a FIELD the protocol can
+write, build the contradiction in the machine rather than on the medium. It is
+faster, it is reversible, and control and test share every other condition
+exactly. A disc is only necessary when the thing under test is the DATA itself,
+or when the question is about what LOADING does.
+
+### The field is one bit, and the machine does not validate it
+
+Enum probe on a resident sample, values 0–7 and 255:
+
+```
+wrote   reads   f0        plays
+    0       0   150.0 Hz  22050        even -> 22050
+    1       1   300.0 Hz  44100        odd  -> 44100
+    2       2   150.0 Hz  22050
+    3       3   300.0 Hz  44100
+  ...
+  255     255   300.0 Hz  44100
+```
+
+**Rate follows bit 0 and nothing else.** No third rate, no silence, no hang, and
+identical level (−15.8 dBFS) at every value, so nothing else in the sample path
+reads the other seven bits either. **The supported set is exactly
+{22050, 44100}.**
+
+**255 was stored verbatim and read back as 255** — no clamp, no wrap, no error.
+So on this machine *acceptance is not validation*, and a value reading back
+correctly proves storage and says nothing about meaning. This is the second
+instance from a different field (PMCHAN 22 was stored verbatim and clamped in
+use), which makes it a property of the machine rather than a quirk of one byte.
+
+### THE FIX, applied
+
+* `writers/akai_s3000_writer.py` — `AKAI_PLAYBACK_RATES = (22050, 44100)`,
+  `akai_target_rate()`, `akai_playback_rate()`. Byte 0x01 is now derived from the
+  rate the audio **actually is**; the 30000 threshold is gone. `build_sample`
+  warns, naming both supported rates, if handed anything else — it does not
+  resample, because that is a processor's job and doing it there would hide the
+  change from `--dry-run` and from the size accounting.
+* `convert.py` — an AKAI playback-rate snap before the writer, running **after**
+  `--max-sample-rate` and the vintage `--resample` profiles so a user's explicit
+  choice is honoured first and only then made playable.
+
+Verified end to end: a 48 kHz source now reports
+`'tone48': 48000 -> 44100 Hz (unresampled it would sound -147 cents)` and writes
+`SSRATE 44100, byte 0x01 = 1`. Full suite 417 passed.
+
+`akai_target_rate` deliberately is **not** "nearest": nearest sends 32000 down to
+22050 and lowpasses it to 11 kHz. Up to 44100 above 22050, 22050 at or below, so
+no bandwidth the machine could have played is discarded and a low-rate sample is
+not inflated fourfold on a 32 MB machine.
+
+### The experiment that would have separated them (round-2 disc, superseded)
+
+Round 1 never contradicted the two fields. Round 2 does:
+
+```
+F1 SR22050  PRGNUM 108  flag forced 1   A -> 600.0 Hz   B -> 300.0 Hz
+F0 SR44100  PRGNUM 109  flag forced 0   A -> 150.0 Hz   B -> 300.0 Hz
+```
+
+An octave apart under A, identical under B. Corroborated by straddling **our**
+threshold, which the machine has no reason to know about:
+
+```
+RATE 29999  flag 0   A -> 220.5 Hz    an octave of pitch across
+RATE 30001  flag 1   A -> 441.0 Hz    2 Hz of stored rate
+```
+
+plus `48000` (the practical case, A → 275.6 Hz) and `16000`. The flag is patched
+**after** `build_sample` rather than through a new argument, so the eight control
+cases keep computing it exactly as production does.
+
+**Read the measured f0 for 108/109, not `--check`'s verdict line** — it phrases
+everything as honoured/not-honoured against `SSRATE`, which is the right question
+for the other eight and the wrong one for those two.
+
+### If A is confirmed
+
+`build_sample` must stop writing an arbitrary threshold into a field that selects
+playback rate. The fix is a real decision, not a constant: either resample to the
+nearest supported rate at write time (correct pitch, costs a resample), or refuse
+and warn. Either way `--max-sample-rate` stops being optional for AKAI output.
+
+**Not yet checked:** whether `h[0x01]` also does what its comment says — a
+bandwidth/anti-alias setting — in which case it is doing both jobs and the two
+cannot be separated by choosing a different value.
+
+## §AKAISDATA — we write 0 into the sample-data address; it is a real deviation with no effect (2026-08-18, CLOSED — COSMETIC)
+
+**Found by doing what s3ked suggested:** diff a looped sample header against a
+one-shot of identical length and identical PCM, and see what differs beyond
+`SPTYPE` and the loop record. Ours differ in 10 bytes; **the machine's own saved
+pair differ in 14** — and the four extra are `0x10` and `0x16`–`0x18`.
+
+### The field
+
+`0x16`–`0x18` is a little-endian **u24 sample-data address**. From the machine's
+own `XCROSS 1` save, four samples of 882000 frames each:
+
+```
+NOISE W 1SHO   131072
+NOISE P 1SHO  1013072    +882000
+NOISE W LOOP  1895072    +882000
+NOISE P LOOP  2777072    +882000
+```
+
+The advance is exactly the frame count. **We write 0 in every sample we produce.**
+
+### The corpus is unanimous
+
+12965 factory sample headers across 8 discs:
+
+```
+0x16-0x18 == 0     0        0.0%    <- what WE write, in 100% of ours
+0x16-0x18 != 0     12965  100.0%
+```
+
+Rule derived from 5097 consecutive pairs, each hypothesis tested independently
+rather than first-match (the first attempt cascaded through alignments and made
+64 look like 42%):
+
+```
+delta == frames rounded UP to a multiple of 64     97.1%
+delta >= frames                                    97.9%
+```
+
+The volume's first address is commonly `0x300100` or `0x000100` — a base plus
+`0x100`.
+
+`0x10` also differs: the machine writes **0 for a one-shot and 1 for a loop**,
+where we write 1 unconditionally.
+
+### THIS DOES NOT EXPLAIN s3ked's RULE, and saying so is the point
+
+s3ked established that a **looped** program plays the sample loaded immediately
+*before* the one it names, while one-shots are correct. If the machine simply
+trusted our stored 0, every looped sample would play from the pool base — i.e.
+all of them would play slot 0's audio. Checked against both observed load orders:
+
+```
+forward order,  slot 0 = W1S (white)   predicts 122 -> white    observed PINK
+reversed order, slot 0 = PLP (pink)    predicts 123 -> pink     observed SILENT
+```
+
+It fails in both. So this is a **real deviation and a separate defect**, not a
+demonstrated cause. Recorded that way deliberately: this is the third hypothesis
+of the evening for §AKAILOOPCROSS and the previous two — the duplicate name, and
+the zone pointer at `+0x16` — were both killed by measurement after looking
+compelling. A 100%-versus-0% corpus split is the most striking evidence produced
+all night, and it still does not predict the observation.
+
+### MEASURED: a plausible address changes nothing
+
+`SDADDR` and `SDZERO` are identical discs but for this field. Captured minutes
+apart in one session:
+
+```
+            prg  names      SBADD   peak dBFS   period   sounding
+SDZERO       94  LOOP 3S    36888       -71.7      --     SILENT
+             95  LOOP 4S    36900        -8.5   4.000     its OWN
+             96  LOOP 5S    36912        -7.9   5.000     its OWN
+             97  LOOP 7S    36924        -8.0   7.001     its OWN
+SDADDR       90  LOOP 3S    36888       -72.8      --     SILENT
+             91  LOOP 4S    36900        -8.2   4.000     its OWN
+             92  LOOP 5S    36912        -7.9   5.000     its OWN
+             93  LOOP 7S    36924        -8.0   7.001     its OWN
+```
+
+Same periods to three decimals, same SBADD, same silence at slot 0. **The field
+is written by every factory sample and read by nothing we can observe.** Closed
+as cosmetic; the prediction above — that trusting a stored zero could not explain
+the observations — held.
+
+`0x10` (0 for a one-shot, 1 for a loop, where we write 1 unconditionally) is
+still worth correcting for correctness against the machine's own example, and is
+equally unlikely to change behaviour.
+
+### What to do about it (superseded by the measurement above)
+
+**Not simply "write the address".** The values are plainly RAM-pool positions:
+the machine's own start at 131072, factory discs start at `0x300100`, and neither
+is a disc-format constant. The machine must recompute them on load, or nothing
+would ever load into a differently-filled pool. So the open questions are:
+
+1. does the machine recompute unconditionally, in which case our 0 is harmless
+   and this is cosmetic?
+2. or does it recompute only for one-shots and trust the stored value for loops —
+   which would tie this to §AKAILOOPCROSS after all, though not by the simple
+   mechanism ruled out above?
+
+**Cheap test, no crossing:** write a bench sample carrying a *plausible*
+`0x16`–`0x18` (base `0x100`, advancing by frames rounded to 64) and see whether a
+looped program that names it plays correctly. If it does, this is the bug and the
+fix is to compute the field. `0x10` should be corrected regardless — writing "one
+active loop" on a one-shot is wrong by the machine's own example and costs
+nothing to fix.
+
+## §AKAIAUXDEFAULT — `.X` and `.T` do not need decoding to be written correctly (2026-08-18)
+
+§AKAIAUX has blocked type-0 volume support on *"deciding what to write into
+`.X`/`.M3`/`.D`/`.T` — an aux file with invented contents is worse than an absent
+one."* That framing assumed the choice was between decoding the formats and
+inventing plausible values. **There is a third option, and the corpus supplies
+it: reproduce what the machine itself writes.**
+
+Measured across 45 specimens — the S3000XL's own saves (`VOLUME 001`,
+`XCROSS 1`, `XCROSS 2`) plus six factory discs:
+
+```
+.T   160 bytes    45 specimens, ONE distinct content     -> a format CONSTANT
+.X  7312 bytes    45 specimens, 9 distinct contents      -> varies with content
+                  but the machine's own default (md5 dc6a0c4d) appears in
+                  exactly the three machine-written volumes and nowhere else
+.D   162 bytes    78 specimens, 2 distinct               -> already decoded
+.M3 4096 bytes     3 specimens, 2 distinct               -> already decoded
+```
+
+**`.T` is invariant.** Every take-list file on every disc examined — the
+machine's and the factory's — is byte-identical, 160 bytes with 34 non-zero. So
+writing a correct one requires no understanding of it at all, only reproduction.
+That is not a decode, and it should not be recorded as one; it is the weaker and
+sufficient claim that the file does not vary.
+
+**`.X` varies, but the right value for a volume WE create is not in question.**
+A converted volume has no effects assigned, so the machine's own power-on default
+is exactly right — and we have it, from three independently saved volumes that
+agree.
+
+### Why this is a real unblock rather than a shortcut
+
+The objection §AKAIAUX raised was against *invented* contents, and it was
+correct. Reproducing bytes the instrument itself wrote is the opposite of
+invention: it is the same standard as the golden `akaiutil` hashes, or as
+copying an existing volume, which we already round-trip byte-identically.
+
+**What it does not buy:** any ability to write a *meaningful* effects file, or a
+take list that reflects real takes. A user who wants effects still has to set
+them on the machine. The claim is only that a volume we create will carry the
+four files a type-0 save carries, with the contents the machine would have put
+there itself, instead of lacking them.
+
+### Implementation note, before anyone builds it
+
+The blobs are ~7.5 KB together. They are machine-default configuration from
+Jan's own instrument, not third-party library content, so embedding them is a
+licensing non-issue — but they should be embedded with their provenance recorded
+next to them (which machine, which OS version, extracted when and from which
+volumes), because a default that silently belongs to one OS release is exactly
+the kind of thing that ages badly and cannot be diagnosed later.
+
+**Still genuinely undecoded:** what the fields inside `.X` and `.T` MEAN. This
+section deliberately does not claim otherwise. `.X`'s nine distinct contents
+across the corpus are the material for that decode whenever someone wants it,
+and they are a far better starting point than the two identical specimens we had
+this morning.
+
+## §AKAIUNKNOWNDUP — the undecodable-record diagnostic multiplied across reads (2026-08-18, FIXED)
+
+`_unknown_records` is module-level and, until tonight, only the **floppy** path
+cleared it. Every hard-disk read therefore re-reported everything the previous
+reads had found: sweeping N images printed each finding N, N-1, N-2 … times.
+
+```
+before   read #1 of one image -> 9 lines   #2 -> 18   #3 -> 27
+after    read #1 -> 9          #2 -> 9     #3 -> 9
+```
+
+**The cost was not the noise, it was a number.** A corpus sweep counted those
+lines and derived "4267 skipped records across six discs, a 36.5% loss rate",
+which sent an investigation after a reader fault that does not exist — three
+separate probes, one of which also mistook 3707 empty directory slots for
+dropped content because an all-zero name decodes as `'000000000000'` in the AKAI
+charset. **A duplicated diagnostic is worse than a missing one: it is
+quantitatively believable.**
+
+### What the corpus actually shows, once counted correctly
+
+```
+disc 1   read 2458   skipped    9  ( 0.4%)   1350B x4, 2550B x3, 3150B x2
+disc 2   read 1936   skipped  100  ( 4.9%)   162B x100
+disc 3   read  522   skipped    2  ( 0.4%)
+disc 4   read  580   skipped 4155  (87.8%)   249982B x57, 543402B x50, ...
+disc 5   read  519   skipped    1  ( 0.2%)
+disc 6   read 1396   skipped    0  ( 0.0%)
+```
+
+**It is not a 36% loss spread over the corpus — it is one disc in six that we
+largely cannot read**, plus a small tail elsewhere. That is a completely
+different problem from the one the bad number described, and a far more
+tractable one: a single disc to study rather than a systemic reader fault.
+
+* **disc 4** — 87.8% undecodable, and the sizes are *sample-sized* (250 KB,
+  543 KB). Something about that disc's authoring is not handled at all.
+* **disc 2** — 100 records of exactly **162 bytes**, which is the `DRUM INPUTS.D`
+  size. On that disc the aux files carry type `0x00` where elsewhere they carry
+  `0x64`.
+* **disc 1** — 9 records at 1350 / 2550 / 3150 bytes, all multiples of **150**,
+  which is the S1000 program block size rather than the S3000's 192.
+
+The existing decision not to *decode* unknown records stands and is well argued
+where it sits: reading a record of unknown layout is how a parser invents data.
+This section only corrects what is being counted.
+

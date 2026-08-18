@@ -361,6 +361,7 @@ def write_akai_output(output_banks: List[Bank], out_dir: Path, bank_name: str,
     _akai_taken_prog: dict = {}
     for bank in output_banks:
         files = build_akai_volume(bank, bank_name if len(output_banks) == 1 else None,
+                                  type0=getattr(args, 'akai_type0', False),
                                   taken=_akai_taken, taken_prog=_akai_taken_prog)
         if files:
             volumes.append((akai_volume_name(bank.name), files))
@@ -532,6 +533,12 @@ def main():
         metavar='DIR', help='Output directory (default: current directory)')
     ap.add_argument('--overwrite', action='store_true',
         help='Overwrite existing output files without prompting')
+    ap.add_argument('--akai-type0', action='store_true',
+        help='AKAI: also write the four auxiliary files a type-0 SAVE produces '
+             '(effects, multi, drum inputs, take list), using the contents the '
+             'S3000XL itself writes. Without this a built volume is a type-1 '
+             'save and lacks them, which every real library volume carries. '
+             'Adds ~11.7 KB per volume. NOT yet hardware-verified.')
     ap.add_argument('--akai-max-objects', type=int, default=None, metavar='N',
         help='AKAI resident-object pool (programs + keygroups + samples). '
              'Default 1006, measured on a 32 MB S3000XL; read STAT.max_blocks '
@@ -1220,6 +1227,41 @@ def main():
     # A bank becomes a volume of loose files, so this path diverges from the
     # single-file formats before the bank-path/overwrite machinery.
     if args.format == 'akai':
+        # THE S3000XL CAN ONLY PLAY 22050 AND 44100, hardware-confirmed
+        # 2026-08-18: sample-header byte 0x01 SELECTS the rate and SSRATE at
+        # 0x8a is descriptive only (§AKAIRATEQUANT). So a sample at any other
+        # rate plays at the wrong speed no matter what the header says -- a
+        # 48 kHz source came out 147 cents flat with a header that read back
+        # perfectly correct.
+        #
+        # This has to be a RESAMPLE, not a classification, and it belongs here
+        # rather than in the writer: resampling inside build_sample would hide
+        # the change from --dry-run, from the size accounting and from every
+        # caller that reasons about sample rates.
+        #
+        # Runs LAST, after --max-sample-rate and the vintage --resample
+        # profiles, so a user's explicit rate choice is honoured first and only
+        # then snapped to something the machine can actually play.
+        from writers.akai_s3000_writer import (akai_target_rate,
+                                               AKAI_PLAYBACK_RATES)
+        _fixed = 0
+        for bank in output_banks:
+            for i, s in enumerate(bank.samples):
+                if s.sample_rate in AKAI_PLAYBACK_RATES:
+                    continue
+                tgt = akai_target_rate(s.sample_rate)
+                if _fixed == 0:
+                    print(f"\n[{step_n}] AKAI playback-rate snap (the S3000XL "
+                          f"plays only {AKAI_PLAYBACK_RATES[0]} and "
+                          f"{AKAI_PLAYBACK_RATES[1]} Hz)...")
+                print(f"    {s.name!r}: {s.sample_rate} -> {tgt} Hz"
+                      f"   (unresampled it would sound "
+                      f"{1200 * math.log(tgt / float(s.sample_rate), 2):+.0f} cents)")
+                bank.samples[i] = resample_to_rate(s, tgt)
+                _fixed += 1
+        if _fixed:
+            print(f"    {_fixed} sample(s) snapped.")
+            step_n += 1
         # Propagate the failure: a run where every volume was skipped must not
         # exit 0, or a batch script sees a clean finish and no files.
         _rc = write_akai_output(output_banks, out_dir, bank_name, args, step_n)

@@ -355,6 +355,20 @@ Output:
                       minus headroom for setups and effects) → ~117 presets per
                       bank.  Raise it if the target machine has a PRAM
                       expansion: --pram 760 is a common one and allows ~810.
+  --akai-type0        AKAI: also write the four auxiliary files an S3000XL's own
+                      type-0 SAVE produces — effects file, multi, drum-input
+                      page and take list.  Without it a volume built from
+                      scratch is a *type-1* save: programs and samples only,
+                      which is valid but lacks the four files every real
+                      library volume carries, so a user reloading it finds the
+                      effects and the multi gone.  The contents are not
+                      invented and not decoded — they are the bytes the
+                      instrument itself writes, measured across 45 specimens
+                      (the machine's own saves plus six factory discs, where
+                      the take list is byte-identical on all 45).  Adds about
+                      11.7 KB and four directory entries per volume.  Off by
+                      default: no volume written this way has yet been loaded
+                      by real hardware.
   --akai-max-objects N  AKAI resident-object pool (--format akai).  The
                       S3000XL counts programs, KEYGROUPS and samples against
                       ONE budget — its LOAD page shows it as `free P/K/S` —

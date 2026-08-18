@@ -46,6 +46,63 @@ from parsers.akai_s3000_parser import (
     _BLOCK_ID_SAMPLE,
 )
 
+#: THE ONLY RATES THE S3000XL CAN PLAY. **Hardware-confirmed 2026-08-18** by
+#: s3ked, who wrote sample-header byte 0x01 over SysEx on a RESIDENT sample and
+#: measured the pitch, in both directions, with SSRATE untouched throughout:
+#:
+#:     SSRATE 44100, byte 0x01 = 1  ->  300.0 Hz   (baseline)
+#:     SSRATE 44100, byte 0x01 = 0  ->  150.0 Hz   half speed
+#:     SSRATE 22050, byte 0x01 = 0  ->  300.0 Hz   (baseline)
+#:     SSRATE 22050, byte 0x01 = 1  ->  600.0 Hz   double speed
+#:
+#: **Byte 0x01 SELECTS the playback rate. SSRATE at 0x8a is descriptive only.**
+#: It had been commented here as "bandwidth: 0 = 10 kHz, 1 = 20 kHz" and written
+#: from `1 if sample_rate >= 30000 else 0` -- a threshold that exists nowhere but
+#: in this file. That produced a header which reads back perfectly correct and a
+#: sample which plays at the wrong pitch: a 48 kHz source, i.e. most modern
+#: material, got flag 1, played at 44100 and came out **147 cents flat, silently**.
+#:
+#: A CLASSIFICATION CANNOT FIX THIS -- the audio has to BE one of these rates.
+#: `akai_target_rate()` says which one to resample to; the flag then merely
+#: reports it. Kept as a set rather than two literals because whether the field
+#: is one bit or a small enum is still open (§AKAIRATEQUANT): if more rates
+#: appear, this constant changes and nothing else does.
+AKAI_PLAYBACK_RATES = (22050, 44100)
+
+#: Derive sample-header 0x10 (active-loop count) from the loop state rather than
+#: writing 1 unconditionally. Real output always wants True; the akaiutil
+#: byte-identity tests flip it off, because akaiutil writes 1 for everything and
+#: those hashes are only worth keeping while they compare us against an
+#: INDEPENDENT implementation rather than against our own last output.
+_ACTIVE_LOOP_COUNT_FROM_STATE = True
+
+#: byte 0x01 value for each playable rate.
+_AKAI_RATE_FLAG = {22050: 0, 44100: 1}
+
+
+def akai_target_rate(rate: int) -> int:
+    """The supported rate a sample at `rate` should be resampled to.
+
+    Up to 44100 for anything above 22050, so no bandwidth the machine could
+    have played is thrown away; 22050 for anything at or below, so a low-rate
+    sample is not inflated fourfold on a machine with 32 MB.  Deliberately not
+    "nearest": nearest sends 32000 down to 22050 and lowpasses it to 11 kHz.
+    """
+    return 22050 if rate <= 22050 else 44100
+
+
+def akai_playback_rate(rate: int) -> int:
+    """The rate the machine will ACTUALLY play a sample stored at `rate`.
+
+    Equal to `rate` only when `rate` is supported; otherwise the flag we write
+    picks a neighbour and the sample plays at the wrong speed.  This is what
+    makes the warning in `build_sample` able to state the error in cents.
+    """
+    if rate in _AKAI_RATE_FLAG:
+        return rate
+    return akai_target_rate(rate)
+
+
 #: Blocks carry their own RAM address at 0x01-0x02, in **16-byte paragraphs**
 #: (12 paragraphs = 192 bytes = one S3000 block).  Confirmed on the disc
 #: corpus: across 2 058 programs the value steps by exactly 12 from the
@@ -304,6 +361,9 @@ def _invert_exp_law(value: float, law) -> int:
 _velfilt_clipped = []
 _AKAI_VELFILT_CENTS = 4.368        # cents per depth-unit per velocity-unit
 _AKAI_VELFILT_PIVOT = 64.56        # the velocity the field pivots about
+#: FILFRQ units of corner movement per depth-unit at full velocity swing,
+#: = 4.368 cents * (127 - 64.56) / 1200 * 9.76 units-per-octave.
+_AKAI_VELFILT_FILFRQ_PER_UNIT = 2.22
 
 
 def akai_velocity_filter(cutoff_pos: float, vel_min: float, vel_max: float):
@@ -340,9 +400,34 @@ def akai_velocity_filter(cutoff_pos: float, vel_min: float, vel_max: float):
     f_byte = akai_filter_byte(hz_to_e4b_cutoff(pivot_hz))
 
     d_byte = _clamp(int(round(depth)), -50, 50)
-    # What the clamp cost, in the source's own units, for the caller to report.
-    lost = abs(depth - d_byte) * 127.0 * _AKAI_VELFILT_CENTS
-    return f_byte, d_byte, lost
+
+    # TWO SEPARATE LIMITS, AND ONLY ONE OF THEM IS THE FIELD'S RANGE.
+    #
+    # The rate is base-independent -- re-measured at FILFRQ 60 and 75 and
+    # agreeing to 0.60%, so 4.368 applies wherever the corner sits. The
+    # REACHABLE RANGE is not: the corner ceilings at the ends of FILFRQ, so the
+    # headroom depends entirely on the base chosen. Measured: 39 units of swing
+    # available at base 60 (3.99 octaves), 24 at base 75 (2.46).
+    #
+    # Those two facts look contradictory and never were -- a fixed rate with a
+    # moving ceiling -- and the same holds for VLOUD1, whose rate is fixed
+    # while its headroom moves with PRLOUD. Reporting only the +-50 clamp would
+    # have counted the smaller limit and missed the one that usually binds: a
+    # depth of 19 is nowhere near +-50 and still drives the corner off the top
+    # of FILFRQ well before full velocity.
+    # The two halves ceiling INDEPENDENTLY, and conflating them over-reports.
+    # From the pivot the corner rises toward full velocity and falls toward
+    # zero; a base near the top clips only the rising half and leaves the
+    # falling half intact -- which is the half that matters, since it is where
+    # the silent-zone fault lived.
+    _U = _AKAI_VELFILT_FILFRQ_PER_UNIT
+    want_up = abs(d_byte) * _U * (127.0 - _AKAI_VELFILT_PIVOT) / 62.44
+    want_dn = abs(d_byte) * _U * _AKAI_VELFILT_PIVOT / 62.44
+    lost_units = (max(0.0, want_up - (99 - f_byte))
+                  + max(0.0, want_dn - f_byte))
+    lost_range = lost_units / 9.76 * 1200.0          # FILFRQ units -> cents
+    lost_clamp = abs(depth - d_byte) * 127.0 * _AKAI_VELFILT_CENTS
+    return f_byte, d_byte, lost_clamp + lost_range
 
 
 def akai_filter_byte(cutoff_pos: float) -> int:
@@ -587,9 +672,23 @@ def build_sample(sd: SampleData, name: Optional[str] = None,
     n_frames = len(pcm) // 2
 
     h[0x00] = _BLOCK_ID_SAMPLE      # block id: 3 = sample header
-    # bandwidth: 0 = 10 kHz, 1 = 20 kHz. Anything at or above 30 kHz is
-    # full-bandwidth material.
-    h[0x01] = 1 if sd.sample_rate >= 30000 else 0
+    # PLAYBACK RATE SELECT -- see AKAI_PLAYBACK_RATES. Derived from the rate the
+    # audio ACTUALLY is, never from a threshold: the machine plays at whatever
+    # this byte says, so classifying a 48 kHz sample as "full bandwidth" simply
+    # makes it play 147 cents flat with a header that looks right.
+    played = akai_playback_rate(sd.sample_rate)
+    h[0x01] = _AKAI_RATE_FLAG[played]
+    if sd.sample_rate not in AKAI_PLAYBACK_RATES:
+        # WARN RATHER THAN RESAMPLE. Resampling is a processor's job and doing
+        # it here would hide the problem from every other output path; warn
+        # rather than raise so a bench script or a caller that knows what it is
+        # doing is not blocked. `convert.py` resamples before reaching here, so
+        # in ordinary use this never fires.
+        cents = 1200.0 * math.log2(played / float(sd.sample_rate))
+        print(f"    [WARN] {sd.name!r}: stored at {sd.sample_rate} Hz, which the "
+              f"S3000XL cannot play. It will sound at {played} Hz -- "
+              f"{cents:+.0f} cents. Resample to one of "
+              f"{AKAI_PLAYBACK_RATES} first (convert.py does this).")
     # ROOT: the ZONE's, when the zones agree, not the sample's own.
     #
     # **HARDWARE-CONFIRMED 2026-08-16 on Jan's S3000XL.** A calibration volume
@@ -631,7 +730,21 @@ def build_sample(sd: SampleData, name: Optional[str] = None,
                      24, 127)
     h[0x03:0x03 + AKAI_NAME_LEN] = str_to_akai(name or sd.name)
     h[0x0f] = 0x80                      # sample rate field is valid
-    h[0x10] = 1                         # one active loop (internal)
+    # ACTIVE-LOOP COUNT: 0 for a one-shot, 1 for a looped sample. This wrote 1
+    # unconditionally until 2026-08-18, which is wrong for every one-shot we
+    # emit. Settled from two independent sources rather than from the manual:
+    #
+    #   the machine's own saves (XCROSS 1/2)   one-shot 0, loop 1
+    #   factory material, 6 discs              one-shot 0 x1038 / 1 x56
+    #                                          loop     1 x4094 / 0 x143
+    #
+    # Nothing is known to read it -- a one-shot carries SPTYPE 2 and no loop
+    # record, so the count is redundant with what is already there. Corrected
+    # for fidelity to the format, not to fix an observed fault.
+    looped_now = (sd.loop_type != LoopType.NO_LOOP
+                  and sd.loop_end > sd.loop_start >= 0
+                  and sd.loop_end < n_frames)
+    h[0x10] = (1 if looped_now else 0) if _ACTIVE_LOOP_COUNT_FROM_STATE else 1
     h[0x11] = 0                         # first active loop (internal)
 
     looped = (sd.loop_type != LoopType.NO_LOOP
@@ -1793,13 +1906,26 @@ def sample_identity(sd) -> bytes:
 def build_akai_volume(bank: Bank, bank_name: Optional[str] = None,
                       quiet: bool = False,
                       taken: Optional[set] = None,
-                      taken_prog: Optional[set] = None) -> list:
+                      taken_prog: Optional[set] = None,
+                      type0: bool = False) -> list:
     """Build a Bank's AKAI volume contents as ``[(filename, data), ...]``.
 
     One file per program and per sample, which is how the sampler's own
     volumes are laid out.  Names carry the canonical `.S3` / `.P3` extensions:
     those are not decoration, the directory-entry file-type byte is derived
     from them, so a file without one cannot be placed on a disk at all.
+
+    ``type0`` additionally writes the four auxiliary files the instrument's own
+    **type-0** save produces -- effects, multi, drum inputs, take list -- using
+    the contents the machine itself writes (`akai_aux_defaults`).  Without it a
+    volume we build is a **type-1** save, which is valid but lacks the four
+    files every real library volume carries; a user reloading it finds the
+    effects and the multi gone.
+
+    OFF BY DEFAULT, deliberately.  It adds ~11.7 KB and four directory entries
+    to every volume and changes the on-disk layout, and as of 2026-08-18 no
+    volume written this way has been loaded by an S3000XL.  It is a capability
+    to be tested, not yet a recommendation.
     """
     files: list = []
 
@@ -2056,6 +2182,13 @@ def build_akai_volume(bank: Bank, bank_name: Optional[str] = None,
               f"128 program numbers. Programs past the 128th all carry number "
               f"127 and will stack on one program change; they remain "
               f"selectable from the sampler's own panel.")
+
+    if type0:
+        # Appended AFTER programs and samples, which is the order the
+        # instrument's own type-0 volumes carry them.
+        from writers.akai_aux_defaults import AUX_FILES
+        files.extend((name, bytes(data)) for name, data in AUX_FILES)
+
     return files
 
 
