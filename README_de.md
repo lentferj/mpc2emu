@@ -36,6 +36,73 @@ dieselbe Erkenntnis oft in mehr als einem davon landet:
 
 ---
 
+## Dieses Projekt unterstützen
+
+mpc2emu ist freie Software und bleibt es. Nichts liegt hinter einer
+Bezahlschranke, keine Funktion wird zurückgehalten, und daran ändert das
+Folgende nichts.
+
+Wenn dir das Projekt aber etwas gebracht hat — wenn es dir einen Abend
+Zonen-Mapping von Hand erspart hat, oder eine Library auf ein Gerät gebracht
+hat, das sie gar nicht lesen konnte, oder **im besten Fall: wenn dein
+Vintage-Sampler seitdem öfter eingeschaltet ist als vorher und dir mehr Spaß
+macht** — dann überleg dir, die Arbeit zu unterstützen.
+
+**Denn das hier hat es gekostet:**
+
+- **Echte Geräte auf einem echten Messplatz.** Vieles von dem, was dieses
+  Projekt über diese Formate weiß, wurde an Hardware gemessen statt irgendwo
+  nachgelesen — weil es für das meiste davon nichts nachzulesen gibt. Dafür
+  braucht es die Geräte — einen E-MU E4XT, einen Kurzweil K2000R und einen AKAI
+  S3000XL — und es bedeutet Betriebsstunden an dreißig Jahre alten Instrumenten,
+  die sich dabei mehr als einmal aufgehängt haben und wiederbelebt werden
+  mussten. Der **S3000XL** wurde eigens angeschafft, um dieses Format
+  hinzuzufügen und zu verifizieren; die anderen waren ohnehin da, weil hier in
+  erster Linie ein Sampler-Enthusiast sitzt und die Projekte überhaupt nur
+  entstanden sind, weil die Instrumente im Raum standen.
+- **Dutzende — realistisch Hunderte — Stunden Lebenszeit.** Format-Reverse-
+  Engineering ist langsam: messen, falsch liegen, nochmal messen. Ein einziges
+  Parametergesetz in dieser README kann einen Abend am Messplatz bedeuten.
+- **KI-Unterstützung, und die ist ein kostenpflichtiger Dienst**, hier
+  durchgehend und in einem Umfang genutzt, der nicht billig ist.
+
+**Das ist Unterstützung und keine Spende — und der Unterschied ist ein
+rechtlicher, keine Formulierungsfrage.** Der Entwickler sitzt in Deutschland,
+und Zahlungen dieser Art sind steuerlich *keine* Spenden: sie sind
+**steuerpflichtige Einnahmen** beim Empfänger und beim Geber **nicht
+absetzbar**. Deshalb heißt dieser Abschnitt bewusst *Unterstützen*, und eine
+Spendenbescheinigung kann es nicht geben. (Das beschreibt die Handhabung hier
+und ist keine Steuerberatung.)
+
+Wer sich die Arbeit gespart hat, kann das Projekt über
+**[GitHub Sponsors](https://github.com/sponsors/lentferj)** unterstützen — über
+den *Sponsor*-Button oben im Repository. Die Zahlung wickeln GitHub und Stripe
+ab; Bank- und Steuerdaten werden nie an die zahlende Person weitergegeben.
+
+**Unterstützung wird nicht erwartet, und Geld ist nicht die einzige Währung.**
+
+- **Fehlerberichte** — am besten mit der Bank, dem Preset oder dem Disk-Image,
+  das den Fehler ausgelöst hat. Fehler eines Konverters hängen meist an einer
+  bestimmten Datei und nicht am Allgemeinen; ohne diese Datei sind sie kaum
+  reproduzierbar.
+- **Bestätigungen von Hardware, die hier nicht auf der Werkbank steht.** Das
+  wiegt hier schwerer als bei einem Werkzeug für ein einzelnes Gerät: mpc2emu
+  schreibt für ganze *Familien* — E-mu EOS, Kurzweil K2000, AKAI S1000/S3000,
+  Akai MPC — und auf der Werkbank stehen genau drei Maschinen, eine je Familie.
+  Ob ein E6400, ein K2vx, ein S2000 oder ein S3200 annimmt, was wir schreiben,
+  ist schlicht unbekannt; etliche Notizen sagen aus genau diesem Grund „an
+  diesem Gerät". Ein „lädt hier auch" oder ein „nein, meiner verweigert das"
+  ist sehr viel wert.
+- **Korrekturen an den Reverse-Engineering-Notizen.** Die Irrwege stehen in
+  [`docs/RESOLUTION_NOTES.md`](docs/RESOLUTION_NOTES.md) neben den Ergebnissen
+  — Widerrufe eingeschlossen, denn eine zurückgezogene Erkenntnis ist so
+  nützlich wie eine bestätigte. Wenn davon etwas falsch ist und jemanden Zeit
+  kostet, verbessert ein Hinweis den Bestand.
+
+---
+
+---
+
 ## ⚠️ Nutzung auf eigene Gefahr — vorher Backups anlegen
 
 mpc2emu wird **ohne jede Gewährleistung und ohne Haftung** bereitgestellt — für
