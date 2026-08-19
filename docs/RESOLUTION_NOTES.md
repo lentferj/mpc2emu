@@ -139,6 +139,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAILOOPSEM — our loop convention is the reverse of the factory one (2026-08-18, ESTABLISHED; NOT the cause of the silence)](#akailoopsem-our-loop-convention-is-the-reverse-of-the-factory-one-2026-08-18-established-not-the-cause-of-the-silence)
 - [§AKAILOOPAT — LOOPAT1 is the loop END; we wrote the loop START into it (2026-08-18, FIXED)](#akailoopat-loopat1-is-the-loop-end-we-wrote-the-loop-start-into-it-2026-08-18-fixed)
 - [§LOOKITUP — why two sessions ground for six hours on something that was written down (2026-08-18)](#lookitup-why-two-sessions-ground-for-six-hours-on-something-that-was-written-down-2026-08-18)
+- [§AKAIRELTEST — the release test, and the artefact that was my own disc (2026-08-18, PASSED)](#akaireltest-the-release-test-and-the-artefact-that-was-my-own-disc-2026-08-18-passed)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -12452,4 +12453,64 @@ corpus refuting a rule, the readback closing in ten minutes what three discs
 could not, a positive control sitting in a build artefact, and finally the manual
 — and each time it was recorded as a local insight rather than as the general
 one. **Check what is already known before measuring.**
+
+## §AKAIRELTEST — the release test, and the artefact that was my own disc (2026-08-18, PASSED)
+
+A bank converted by `convert.py` from an SFZ source — deliberately not a bench
+generator — written to a volume, bulk-loaded from the front panel the way a user
+would, and played.
+
+```
+key 60  RELLOOPA  8 s sample, loop [1.00, 3.00]  period 2.000 s   at the POOL BASE
+key 61  RELLOOPB  8 s sample, loop [1.00, 6.00]  period 5.000 s
+key 62  RELLOOPC  9 s sample, loop [1.00, 8.00]  period 7.000 s
+```
+
+**All three loop correctly, including key 60 at the pool base — the case that was
+silent before the `LOOPAT` correction.** No clicks, no silence, no drift over
+15 s. That is the release gate.
+
+### The one artefact, and it was the test disc
+
+Jan heard a level change on key 60 only. Measured from the captures:
+
+```
+rel_60   -16.5 dB for 2.0 s, then -19.55 dB flat for 13 s   (step -3.1 dB)
+rel_61   -19.5 dB flat throughout
+```
+
+Cause:
+
+```
+keygroup 0  keys 60-60
+    zone1: RELLOOPA   vel 0-127
+    zone2: RELSHOT    vel 0-127      <- both fire on key 60
+```
+
+The SFZ gave `RELSHOT` `key=60`, colliding with `RELLOOPA`. The converter
+faithfully produced two full-velocity zones and the machine correctly **layers**
+them. Two equal incoherent noise sources sum to **+3.01 dB**, and `RELSHOT` is
+**2.00 s** long — so the step's magnitude and its timing are both predicted
+exactly. Neither the converter nor the sampler did anything wrong.
+
+### Two wrong hypotheses, and where the answer actually was
+
+* s3ked's: the source's first 1.25 s is louder. Refuted — regenerating
+  `RELLOOPA` gives **+0.01 dB** across that boundary.
+* mine: a loop-seam artefact, since `RELLOOPA` wraps most often. Refuted by the
+  envelope: the step happens **once** and never recurs at 2 s multiples.
+
+**The answer was in the disc's own keygroup table, checkable offline in one
+command** — the fourth time in a day that the evidence was already held. And it
+was missed once more for the same reason as the afternoon's PARTLOOP confusion: I
+read **zone 1** of each keygroup and stopped. Zones 2–4 existed, and zone 2 was
+the answer. A partial read of a structure is not a read of it.
+
+### Carried forward as the top open AKAI item
+
+`TEST PROGRAM` survives every CLR and sits on **PRGNUM 0**; our converter also
+writes **PRGNUM 0 with PMCHAN 255 (OMNI)**. They stack. s3ked moved the boot
+program to 100 before capturing — and said so, which is the only reason this
+capture is interpretable — but **a user loading a converted volume gets that
+stack with whatever their boot program is.** That is ours, not the machine's.
 
