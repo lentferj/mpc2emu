@@ -140,6 +140,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAILOOPAT — LOOPAT1 is the loop END; we wrote the loop START into it (2026-08-18, FIXED)](#akailoopat-loopat1-is-the-loop-end-we-wrote-the-loop-start-into-it-2026-08-18-fixed)
 - [§LOOKITUP — why two sessions ground for six hours on something that was written down (2026-08-18)](#lookitup-why-two-sessions-ground-for-six-hours-on-something-that-was-written-down-2026-08-18)
 - [§AKAIRELTEST — the release test, and the artefact that was my own disc (2026-08-18, PASSED)](#akaireltest-the-release-test-and-the-artefact-that-was-my-own-disc-2026-08-18-passed)
+- [§PRESETORDER — preset order and program numbers survive the trip](#presetorder-preset-order-and-program-numbers-survive-the-trip)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -12573,3 +12574,78 @@ program to 100 before capturing — and said so, which is the only reason this
 capture is interpretable — but **a user loading a converted volume gets that
 stack with whatever their boot program is.** That is ours, not the machine's.
 
+
+## §PRESETORDER — preset order and program numbers survive the trip
+
+Two TODO rows, one theme: **the number a user dials to hear a converted preset
+should be the number the source had.** Found 2026-08-19 while building the
+hardware test set, because the sheet put source and output numbers in adjacent
+columns and they did not line up.
+
+### 1. Restore source order within each target bank (E4B, and every writer)
+
+`writers/bank_splitter.py:749`:
+
+```python
+all_items.sort(key=item_size, reverse=True)   # First-Fit Decreasing
+```
+
+Keep it. FFD is the right way to decide *which* bank a preset lands in, and
+the packing quality is why it is there. What is wrong is that the packing
+order then becomes the *written* order, including in the overwhelmingly common
+case where everything fits one bank and no packing decision was made at all.
+
+The fix is at the end of packing, not in the sort: remember each preset's index
+in its source bank, and sort each `TargetBank.presets` by it before writing.
+
+```python
+# before packing
+for i, preset in enumerate(source_bank.presets):
+    preset._src_order = (source_bank.name, i)
+...
+# after packing, per target bank
+tb.presets.sort(key=lambda p: getattr(p, '_src_order', ('', 0)))
+```
+
+Bank *assignment* is untouched, so every existing size/limit test keeps its
+result; only the order inside a bank moves. Sorting by `(source_bank, index)`
+keeps a multi-source conversion grouped by source rather than interleaved.
+
+**Test:** convert a 7-preset bank that fits one bank and assert the output
+preset names equal the input's, in order. That test fails today.
+
+**Do not do this without also re-issuing the hardware test set** — the workbook
+`~/temp/mpc2emu_hw_testcases.ods` records the numbers as built on 2026-08-19,
+and a renumbering would silently invalidate every remark filled into it.
+
+### 2. Honour K2000 object ids in `krz_writer`
+
+The parser side is already done (2026-08-19): `_parse_program_object`'s call
+site now carries `obj['id']` into `Preset.program_number`. Object ids are what
+the K2000 dials — 200, 201, … for user objects, below 200 for ROM.
+
+`krz_writer` assigns sequentially from 200 regardless. Apply the policy
+`akai_s3000_writer` already uses for PRGNUM, and which is documented there at
+length: **use the source's own numbers when they are distinct and in range,
+fall back to positional when they are not.**
+
+```python
+_wanted = [getattr(p, 'program_number', 0) or 0 for p in bank.presets]
+_usable = (len(set(_wanted)) == len(_wanted) and all(v >= 200 for v in _wanted))
+```
+
+`>= 200` and not `> 0`: an id below 200 addresses a ROM object on the K2000, so
+a source that numbers from 0 (any non-KRZ input, since only the KRZ parser sets
+this) must take the fallback rather than write ids that collide with ROM.
+
+**Test:** parse a KRZ whose programs are 202..210, write it, re-parse, assert
+the ids come back 202..210 — and a second case from an E4B source, asserting
+the fallback still produces 200, 201, ….
+
+### Why neither was done the night it was found
+
+Both are small and neither is blocked. The test set built that evening carries
+the current numbering in a workbook Jan is filling in by hand at the machines;
+changing the numbering while that is in flight would mean every remark points
+at a program that has moved. Fix both, then rebuild the set and re-issue the
+workbook in one step.

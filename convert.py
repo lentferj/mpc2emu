@@ -394,6 +394,13 @@ def write_akai_output(output_banks: List[Bank], out_dir: Path, bank_name: str,
         added = None
         if not Path(args.add_to).exists():
             print(f"\n[ADD] ERROR: image not found: {args.add_to}")
+            # Exit non-zero.  Until 2026-08-19 this printed and carried on at
+            # rc=0, so a batch that appended seven banks to a mistyped path
+            # reported seven successes and left an empty disk -- found exactly
+            # that way.  The bank files already written stay on disk; what
+            # failed is the append the user asked for, and only a non-zero rc
+            # says so to a script.
+            sys.exit(1)
         else:
             print(f"\n[ADD] Appending {len(volumes)} volume(s) to "
                   f"{Path(args.add_to).name} (AKAI)...")
@@ -1353,6 +1360,13 @@ def main():
     if args.add_to and out_paths:
         if not Path(args.add_to).exists():
             print(f"\n[ADD] ERROR: image not found: {args.add_to}")
+            # Exit non-zero.  Until 2026-08-19 this printed and carried on at
+            # rc=0, so a batch that appended seven banks to a mistyped path
+            # reported seven successes and left an empty disk -- found exactly
+            # that way.  The bank files already written stay on disk; what
+            # failed is the append the user asked for, and only a non-zero rc
+            # says so to a script.
+            sys.exit(1)
         elif args.format == 'krz':
             # K2000 CD (.iso) and hard-disk (.hda) are the same FAT16 disk-image;
             # append into BANKS/ in place — no rebuild, no emu3fs.

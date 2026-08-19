@@ -167,8 +167,18 @@ def _decode_name(raw: bytes) -> str:
     codepoint, which under latin-1 now includes 0xA0 (NBSP) and 0x85 (NEL) --
     real name bytes that the old ASCII decode turned into U+FFFD and therefore
     happened to keep.  It would fix 0xA5 while opening a hole one byte away.
+
+    The trailing NUL is stripped as well, and that is a separate pad
+    character, not whitespace: EOS writes its own default preset name as the
+    15 characters 'Untitled Preset' followed by 0x00 rather than a space.
+    Measured over 381 local banks (16 741 names), a NUL appears in 4 names and
+    all four are exactly that string, so this is the machine's own terminator
+    and not part of any name.  Left in, it reaches filenames and comparisons
+    as an invisible sixteenth character.  Bare rstrip() would not have caught
+    it either -- NUL is not whitespace -- so this was never covered by the
+    choice above.
     """
-    return raw.decode('latin-1').rstrip(' ')
+    return raw.rstrip(b'\x00 ').decode('latin-1').rstrip(' ')
 
 
 def _decode_root_and_name(display_name: str) -> tuple:

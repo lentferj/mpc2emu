@@ -1027,7 +1027,16 @@ def parse_krz(path: str) -> Bank:
             elif obj['type'] == T_KEYMAP:
                 keymap_objs.append(_parse_keymap_object(data, obj))
             elif obj['type'] == T_PROGRAM:
-                program_objs.append(_parse_program_object(data, obj))
+                # Carry the K2000 object id alongside: it is the number the
+                # user dials on the front panel, and until 2026-08-19 it was
+                # dropped here, so every KRZ-sourced preset reached the model
+                # as program 0. Both consumers already cope with an id above
+                # the MIDI range -- e4b_writer clamps to 127, and the AKAI
+                # writer's "distinct and in range" test falls back to
+                # positional numbering -- so carrying the true id cannot make
+                # either worse, and makes both right whenever the bank happens
+                # to number below 128.
+                program_objs.append((obj['id'],) + _parse_program_object(data, obj))
         except (struct.error, IndexError, ValueError) as exc:
             print(f"  [WARN] Skipping malformed object '{obj.get('name','?')}' "
                   f"(type {obj.get('type')}): {exc}")
@@ -1234,7 +1243,7 @@ def parse_krz(path: str) -> Bank:
 
     presets: List[Preset] = []
     used_keymap_ids: set = set()
-    for name, layers in program_objs:
+    for prog_id, name, layers in program_objs:
         voices: List[VoiceLayer] = []
         for layer in layers:
             km = keymaps_by_id.get(layer.keymap_id)
@@ -1243,7 +1252,8 @@ def parse_krz(path: str) -> Bank:
             used_keymap_ids.add(layer.keymap_id)
             voices += _voices_from_keymap(layer, km)
         if voices:
-            presets.append(Preset(name=name[:MAX_NAME], voices=voices))
+            presets.append(Preset(name=name[:MAX_NAME], voices=voices,
+                                  program_number=prog_id))
 
     # Orphan recovery: a keymap no program references still has playable
     # sample data -- synth one full-range preset per orphan keymap so a
