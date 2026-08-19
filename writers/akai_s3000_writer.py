@@ -72,6 +72,11 @@ AKAI_PLAYBACK_RATES = (22050, 44100)
 #: SPTYPE value meaning "no looping" -- what build_sample writes for a one-shot.
 _SPTYPE_NO_LOOP = 2
 
+#: PMCHAN for a converted program: MIDI channel 1. Measured from 1545 factory
+#: volumes that put every program on channel 0, against ~35 using several and 3
+#: programs in 11410 using OMNI.
+_AKAI_DEFAULT_PMCHAN = 0
+
 #: Derive sample-header 0x10 (active-loop count) from the loop state rather than
 #: writing 1 unconditionally. Real output always wants True; the akaiutil
 #: byte-identity tests flip it off, because akaiutil writes 1 for everything and
@@ -1269,17 +1274,38 @@ def _program_common(name: str, n_keygroups: int, lo_key: int, hi_key: int,
     # S3000XL whose own program 0 holds 0 (channel 1): that is the channel that
     # program was created with, not a different convention. Omni is the right
     # default for a converted program, which has no channel of its own.
-    # OMNI IS RIGHT FOR A CONVERTED PROGRAM AND WRONG FOR A MEASUREMENT ONE.
-    # A converted program has no channel of its own, so omni is the sane
-    # default. But omni also means EVERY resident program answers EVERY note,
-    # which is this project's worst measurement incident: s3ked's 18 is titled
-    # "RETRACTION: every audio measurement before this was of the wrong
-    # program" -- eleven programs all answering, so every note sounded program
-    # 0 buried under ten others, and two sections were withdrawn.
+    # CHANNEL 0, NOT OMNI -- what every commercial disc does.
     #
-    # `midi_channel` lets a bench disc give each program a channel nobody else
-    # uses. Production output keeps omni.
-    p[0x10] = 0xff if midi_channel is None else _clamp(int(midi_channel), 0, 15)
+    # This wrote 0xFF (omni) until 2026-08-18, on the reasoning that "a
+    # converted program has no channel of its own, so omni is the sane
+    # default". Plausible, and never checked against a real disc. The corpus is
+    # emphatic:
+    #
+    #   factory volumes with 2+ programs, all programs on channel 0   1545
+    #   the same with 2 or more DIFFERENT channels                     ~35
+    #   factory programs using OMNI (255)          3 of 11410        0.03%
+    #
+    # and the large ones are unanimous -- 20- and 21-program volumes with every
+    # program on channel 0 and PRGNUMs running 0,1,2,3..., which is exactly the
+    # shape this writer produces except for the channel.
+    #
+    # OMNI IS NOT BROKEN, and that was tested rather than assumed before
+    # changing it: a 21-program converted volume was bulk-loaded on an S3000XL
+    # and program change still selected correctly, with unrelated programs
+    # correlating at 0.002 and nothing stacking. So this is not a bug fix.
+    #
+    # It is changed because omni means every program answers every part, which
+    # makes MULTITIMBRAL use impossible -- the whole point of a program's
+    # channel is that part 1 plays the bass and part 2 the pads. A user with our
+    # volume in a multi would find every program on every part, and nothing in a
+    # program list would look wrong. That is also the mechanism behind this
+    # project's worst measurement incident (s3ked's 18, "every audio measurement
+    # before this was of the wrong program": eleven programs all answering).
+    #
+    # `midi_channel` still lets a bench disc give each program a channel nobody
+    # else uses, which measurement discs need and libraries do not.
+    p[0x10] = (_AKAI_DEFAULT_PMCHAN if midi_channel is None
+               else _clamp(int(midi_channel), 0, 15))
     p[0x11] = 31                        # polyphony
     p[0x12] = 1                         # priority: normal
     # Play range is a filter over the whole program, not a description of the

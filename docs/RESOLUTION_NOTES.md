@@ -12539,10 +12539,31 @@ PMCHAN 255 (OMNI):                 3 of 11410 programs         ( 0.03%)
 
 **PRGNUM 0 is normal**, so the boot-program stack noted below is ordinary AKAI
 behaviour rather than our deviation — that half of the concern is withdrawn.
-**OMNI is not normal**: we write it on 100% of programs and factory material
-essentially never does. The writer's reasoning for it is plausible and was never
-checked against a real disc, which is the same gap that produced everything else
-today.
+**OMNI is not normal**: we wrote it on 100% of programs and factory material
+essentially never does.
+
+**Tested before changing, and it is not broken.** A 21-program converted volume
+(`VF NEW`) was bulk-loaded and program change still selected correctly —
+unrelated programs correlating at 0.002, PRGNUM 3 sitting 4 dB below 0 and 1,
+and "as loaded" measuring the same level as a single selection rather than the
+~+13 dB that 21 simultaneous programs would give. So nothing stacks and
+selection works.
+
+**Changed anyway, for a reason the single-channel test cannot show:** omni means
+every program answers every part, so a converted volume in a MULTI puts every
+program on every part, and nothing in a program list looks wrong. The default is
+now `PMCHAN 0`:
+
+```
+factory volumes with 2+ programs, all on channel 0   1545
+the same using 2 or more different channels           ~35
+factory programs using OMNI            3 of 11410   0.03%
+```
+
+And the machine agrees with the corpus: `test_only_two_bytes_differ_from_the_real_machine`
+had recorded for months that *"we write 0xff (MIDI omni); the machine holds 0"* —
+the disagreement was written down and nobody asked which side was right. It is
+now one byte, not two.
 
 ### Carried forward as the top open AKAI item
 
