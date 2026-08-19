@@ -12506,6 +12506,44 @@ was missed once more for the same reason as the afternoon's PARTLOOP confusion: 
 read **zone 1** of each keygroup and stopped. Zones 2–4 existed, and zone 2 was
 the answer. A partial read of a structure is not a read of it.
 
+### CONFIRMED BY REMOVAL, not by fit
+
+Zone 2 was silenced on the **resident** program (velocity 0-127 -> 1-0, the
+machine's own idiom for an unused zone, read back before playing):
+
+```
+key 60 held 10 s:  first 1.5 s -19.40 dBFS,  after 2.5 s -19.48 dBFS
+                   step +0.08 dB   (was -3.1 dB with zone 2 live)
+                   sd 0.089 dB, and Jan confirms by ear: "it's gone"
+```
+
+Prediction was "flat at about −19.55, no step at 2.0 s, matching key 61". All
+three held, and the step is not merely smaller but **at the noise floor of the
+measurement**.
+
+**Three explanations were offered for one 3 dB step and two of them fitted the
+data when proposed.** The seam theory and the source-is-louder theory were both
+consistent with everything known at the time; the layering theory won because it
+predicted that *removing a specific zone would remove the step*, and because
+somebody insisted on performing that removal instead of admiring the fit. Jan
+asked for it to be confirmed rather than explained — the second time that day the
+step from "this accounts for it" to "this predicts something I can switch off"
+came from outside the two sessions doing the work.
+
+### And the conventions checked against the corpus, which corrected this row
+
+```
+lowest PRGNUM per factory volume:  0 in 2366 of 2408 volumes   (98.3%)
+PMCHAN 255 (OMNI):                 3 of 11410 programs         ( 0.03%)
+```
+
+**PRGNUM 0 is normal**, so the boot-program stack noted below is ordinary AKAI
+behaviour rather than our deviation — that half of the concern is withdrawn.
+**OMNI is not normal**: we write it on 100% of programs and factory material
+essentially never does. The writer's reasoning for it is plausible and was never
+checked against a real disc, which is the same gap that produced everything else
+today.
+
 ### Carried forward as the top open AKAI item
 
 `TEST PROGRAM` survives every CLR and sits on **PRGNUM 0**; our converter also
