@@ -1244,7 +1244,7 @@ def main():
         # then snapped to something the machine can actually play.
         from writers.akai_s3000_writer import (akai_target_rate,
                                                AKAI_PLAYBACK_RATES)
-        _fixed = 0
+        _fixed = _failed = 0
         for bank in output_banks:
             for i, s in enumerate(bank.samples):
                 if s.sample_rate in AKAI_PLAYBACK_RATES:
@@ -1257,10 +1257,25 @@ def main():
                 print(f"    {s.name!r}: {s.sample_rate} -> {tgt} Hz"
                       f"   (unresampled it would sound "
                       f"{1200 * math.log(tgt / float(s.sample_rate), 2):+.0f} cents)")
-                bank.samples[i] = resample_to_rate(s, tgt)
-                _fixed += 1
-        if _fixed:
-            print(f"    {_fixed} sample(s) snapped.")
+                out = resample_to_rate(s, tgt, allow_upsample=True)
+                # VERIFY, DO NOT ASSUME. The first version of this counted every
+                # sample it TRIED and reported them as snapped -- while
+                # resample_to_rate silently returned the input unchanged for any
+                # upsample, which is most of the cases here. It printed
+                # "31 sample(s) snapped" and 31 samples went to the writer at
+                # 27777 Hz. Same failure as a build log echoing the request
+                # instead of the byte.
+                if out.sample_rate != tgt:
+                    print(f"    [ERROR] {s.name!r} did not resample: still "
+                          f"{out.sample_rate} Hz, wanted {tgt}. It will not play "
+                          f"correctly on the sampler.")
+                    _failed += 1
+                else:
+                    bank.samples[i] = out
+                    _fixed += 1
+        if _fixed or _failed:
+            print(f"    {_fixed} sample(s) snapped"
+                  + (f", {_failed} FAILED" if _failed else "") + ".")
             step_n += 1
         # Propagate the failure: a run where every volume was skipped must not
         # exit 0, or a batch script sees a clean finish and no files.

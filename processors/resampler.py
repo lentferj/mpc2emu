@@ -648,7 +648,8 @@ def resample_vintage(
 
 
 def resample_to_rate(sample: SampleData, dst_rate: int,
-                     verbose: bool = True) -> SampleData:
+                     verbose: bool = True,
+                     allow_upsample: bool = False) -> SampleData:
     """Clean band-limited downsample to `dst_rate` (no vintage coloring).
 
     Unlike resample_vintage (which deliberately aliases + requantizes for
@@ -664,8 +665,22 @@ def resample_to_rate(sample: SampleData, dst_rate: int,
     rate costs only high-frequency detail, not pitch tracking.
     """
     src_rate = sample.sample_rate
-    if dst_rate >= src_rate:
-        return sample  # never upsample here
+    if dst_rate == src_rate:
+        return sample
+    if dst_rate > src_rate and not allow_upsample:
+        # DEFAULT STAYS DOWN-ONLY. The KRZ headroom path calls this to buy
+        # up-pitch range and must never be handed a higher rate silently.
+        #
+        # `allow_upsample` exists for the AKAI writer, whose target machine
+        # plays only 22050 and 44100: a 27777 Hz sample from the emulator2
+        # profile has to go UP to be playable at all, and there is no
+        # down-only route to a rate the hardware supports.
+        #
+        # Added 2026-08-18 after the AKAI rate snap was found to be a silent
+        # no-op for exactly that case -- it called this function, got the same
+        # object back unchanged, and reported "31 sample(s) snapped". Only the
+        # writer's own warning caught it.
+        return sample
 
     signal = _pcm_to_float(sample.data)
     if verbose:
