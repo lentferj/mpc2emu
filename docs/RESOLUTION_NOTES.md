@@ -13031,6 +13031,32 @@ accelerates in a way a correct one does not, because a correct account usually
 has an awkward detail in it that makes you stop. Two of the six were transmitted
 between projects within minutes, by both sides, neither short of time.
 
+### An eighth, of a different kind: invariance answers a question it was not asked
+
+Not a wrong object — a right observation pointed at a question it cannot
+settle. s3ked read "all 35 990 `.S1` headers carry index 1" as evidence the
+byte may carry no rate meaning in that generation. It is not:
+
+**A field constant across 35 990 specimens bounds the CORPUS, not the machine.**
+
+Invariance is the single observation that cannot distinguish *"this field does
+nothing"* from *"nothing here exercised this field"*, and it is seductive
+exactly because the sample size feels overwhelming. Our corpus is library
+CD-ROMs mastered at 44100 — precisely where an invariant 1 is expected — and
+ConvertWithMoss saw the same byte varying on machine-recorded S1000 material,
+where a 22050 recording leaves SSRATE at zero and is marked by the index alone.
+Two observations, no contradiction; the inference was what failed.
+
+The uncomfortable detail, which is theirs and which they recorded: they wrote
+§140 that same afternoon, establishing that a corpus cannot separate a hardware
+law from a library's taste in material — and then read a corpus invariance as a
+hardware property inside the hour.
+
+**This project's own §AKAIVFR turns on the same trap from the other side**:
+offsets 9/10/11 measured inert on an S3000XL, which is a real measurement of
+absence, and the live fields were elsewhere. Absence of variation and absence
+of effect are both evidence about the instrument first.
+
 ### The limit of writing any of this down
 
 s3ked's §87 named this failure mode on 2026-08-13, in the same file, about the
