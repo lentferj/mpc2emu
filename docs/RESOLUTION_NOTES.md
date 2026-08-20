@@ -145,6 +145,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIRATEREAD — the reader takes SSRATE, the writer trusts byte 0x01](#akairateread-the-reader-takes-ssrate-the-writer-trusts-byte-0x01)
 - [§AKAIENV2 — the filter envelope: measured for eight days, unwired for two stale reasons](#akaienv2-the-filter-envelope-measured-for-eight-days-unwired-for-two-stale-reasons)
 - [§IDENTIFIERS — six wrong objects, zero wrong sums (2026-08-19/20)](#identifiers-six-wrong-objects-zero-wrong-sums-2026-08-1920)
+- [§AKAIFILTREAD — the reader reads the filter and drops it, and the law it would need may be stale](#akaifiltread-the-reader-reads-the-filter-and-drops-it-and-the-law-it-would-need-may-be-stale)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -13116,3 +13117,73 @@ The controls carried that interpretation instead, and more cheaply — RR1 and
 RR2 are the same material at both rates, so the reference is measured rather
 than predicted. A future rate disc should use a harmonic-rich tone so both
 discriminators are available; the controls are not optional either way.
+
+
+## §AKAIFILTREAD — the reader reads the filter and drops it, and the law it would need may be stale
+
+Two findings, one dependent on the other. Found 2026-08-20 while testing
+whether real `.P1` files could carry the proposed S1000 filter experiment —
+i.e. by accident, while doing something else, which is how both halves of the
+attack bug surfaced too.
+
+### 1. `filter_freq` is read into a dict and never consumed
+
+`parsers/akai_s3000_parser.py:407`:
+
+```python
+keygroups.append(dict(
+    lo_key=kg[0x03], hi_key=kg[0x04],
+    tune=_s16(kg, 0x05),
+    filter_freq=kg[0x07],        # <- read here, used nowhere
+    ...
+```
+
+Grepping `filter_freq` in that file returns exactly one line. Measured over
+three factory discs: **`filter_cutoff` is 1.0 on all 16 020 AKAI-sourced
+voices.** Every AKAI → E4B/KRZ/XPM conversion loses the programme's filter and
+comes out fully open.
+
+**Exactly symmetric to §AKAIATTACK.** There the WRITER emitted a constant it
+never varied; here the READER takes a value it never uses. In both cases the
+field was measured, available, and quietly dropped — and in both cases the loss
+is silent, because "wide open" and "no filter information" look identical in
+the output.
+
+### 2. The law it would need has two competing measurements
+
+The fix is the inverse of `akai_filter_byte()`, so it needs FILFRQ → Hz. There
+are two:
+
+    ours, writer  _AK_FILTER = 6.4597  * exp(0.07100 v)   fitted 44..92
+                  documented as re-derived from the RESONANCE PEAK, §54
+    s3ked §139    7.60732 * exp(0.07245 v)                fitted 40..84
+                  the CORNER, from a sawtooth harmonic comb divided by its own
+                  spectrum at FILFRQ 99, r2 0.99981
+
+        FILFRQ 44   146.9 Hz    184.4 Hz    ratio 1.255
+        FILFRQ 60   457.4 Hz    587.6 Hz    ratio 1.285
+        FILFRQ 80  1892.4 Hz   2502.7 Hz    ratio 1.323
+        FILFRQ 92  4436.3 Hz   5970.1 Hz    ratio 1.346
+
+Ours reads 25–35% low against theirs, drifting with the setting. **A resonance
+peak is not a −3 dB corner**, so this may be a definitional difference rather
+than an error — but our writer uses the older one and **nothing in our file
+records that a newer measurement exists**. That is the §31-versus-§141 pattern
+again: a section never retracted because it is still correct as written, whose
+constants have nonetheless been superseded.
+
+§139 also settled the **pole count at two** (−12.2 dB/octave), against the three
+the S1000 specification claims — which is what explained the constant 1.76×
+offset against ConvertWithMoss's firmware-derived table.
+
+### What to do, in order
+
+1. **Decide what `filter_cutoff` means** — a corner or a resonance peak. Reader
+   and writer must agree, and today they would not.
+2. Wire the reader for **S3000 sources only**. The S1000 corner law is the open
+   question the proposed S1000 disc exists to settle, and §139 measured an
+   S3000XL. Same shape as the generation split in §AKAIRATEREAD.
+3. Only then revisit whether `_AK_FILTER` should move.
+
+Not done tonight: a 16 020-voice behaviour change on a law whose definition is
+unsettled is not a thing to ship at 23:20 on the strength of noticing it.
