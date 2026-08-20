@@ -13063,3 +13063,56 @@ s3ked's §87 named this failure mode on 2026-08-13, in the same file, about the
 same board. Seven days later they made it again and sent it here, having read
 it. **Naming a failure mode in a resolution note does not inoculate anyone
 against it** — including this note.
+
+
+### Answered on hardware, 2026-08-20 (s3ked §143)
+
+Loaded from the disc built for it, which is the point — every earlier
+measurement of this byte was a SysEx write into a resident program, and the
+open question was the load path.
+
+    program        0x01   SSRATE     measured        verdict
+    RR1 CONTROL      1    44100      300.0 Hz        control passes
+    RR2 CONTROL      0    22050      150.0 Hz        control passes
+    RR3 CONFLICT     1    22050      300.0 Hz        the INDEX
+    RR4 CONFLICT     0    44100      150.0 Hz        the INDEX
+
+**Both conflicts resolve to the index, in opposite directions**, so this is not
+a default or a coincidence of one direction. The controls ran first under a
+stop rule, so the conflicts are read against measured references rather than
+predictions.
+
+`_playback_rate()` in the parser now returns the index for S3000 samples.
+S1000 keeps SSRATE for the reason recorded above — the byte is invariant across
+all 35 990 `.S1` headers here, which bounds the corpus rather than the machine,
+and §143 is an S3000XL measurement.
+
+### The attack half, also answered
+
+`ATTAK1` read back over SysEx from the LOADED programs before any note played:
+**72, 85, 96 — exactly what the disc holds.** So the load path preserves the
+envelope field.
+
+    program        ATTAK1   t90 measured   predicted   ratio
+    RR5 ATK SHORT     72        0.44 s       0.45 s     0.978
+    RR6 ATK MID       85        1.86 s       1.82 s     1.022
+    RR7 ATK LONG      96        6.18 s       6.01 s     1.028
+
+Within 2.8% over a fourteen-fold span, and **not instant** — which was the
+quiet failure worth guarding against, since a sign error would reproduce the
+old fixed default exactly. Those three values were written by our own converter
+from source times of 0.5 / 2.0 / 6.554 s, so one note verified the law, the
+writer and the load path together.
+
+### One design note for the next rate disc
+
+s3ked recommended taking the second partial as well as the fundamental, so a
+playback-rate change is distinguishable from a reinterpreted pitch. **It did
+not apply here and they said so rather than letting it stand**: these tones are
+pure sines and every partial after the first sits at 0.00 of the peak. The
+check needs harmonic content.
+
+The controls carried that interpretation instead, and more cheaply — RR1 and
+RR2 are the same material at both rates, so the reference is measured rather
+than predicted. A future rate disc should use a harmonic-rich tone so both
+discriminators are available; the controls are not optional either way.

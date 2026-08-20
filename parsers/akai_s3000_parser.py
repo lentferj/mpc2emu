@@ -182,6 +182,52 @@ def _s8(v: int) -> int:
     return v - 256 if v > 127 else v
 
 
+#: Playback rates the machine actually has. Byte 0x01 selects between them.
+_AKAI_PLAYBACK_RATES = (22050, 44100)
+
+
+def _playback_rate(data: bytes, s3000: bool) -> int:
+    """The rate the sample will SOUND at, which is not always what it declares.
+
+    **HARDWARE-CONFIRMED 2026-08-20 (s3ked §143), on the LOAD PATH
+    specifically.** Four programs were loaded from a disc with byte `0x01` and
+    `SSRATE` deliberately contradictory, and both conflicts resolved to the
+    index byte, in opposite directions:
+
+        0x01=1  SSRATE 22050  ->  300.0 Hz    the index, not SSRATE
+        0x01=0  SSRATE 44100  ->  150.0 Hz    the index, not SSRATE
+
+    with controls at 300.0 and 150.0 Hz passing first under a stop rule. **The
+    loader reads byte 0x01 and ignores SSRATE**, which is descriptive only.
+
+    It matters because the two disagree often: over 19 340 factory headers,
+    4242 (22.0%) carry an SSRATE contradicting the index, including 1290
+    declaring 48000 -- a rate the machine cannot produce at all. Reading SSRATE
+    gave every one of those a rate the sampler never plays.
+
+    **S1000 media is deliberately excluded, and the reason is measurable.**
+    Byte 0x01 reads 1 in **35 990 of 35 990** `.S1` headers here, and varies
+    only on `.S3` (961 of 18 293 at 0). A field constant across 35 990
+    specimens bounds the CORPUS, not the machine: ConvertWithMoss saw the byte
+    varying on machine-recorded S1000 material, where a 22050 recording leaves
+    SSRATE at zero and is marked by the index alone. Ours are library CD-ROMs
+    mastered at 44100, exactly where an invariant 1 is expected.
+
+    So on `.S1` the index is a FALLBACK for an absent SSRATE -- CWM's case,
+    where it is the only information present -- and not a preference.
+    Preferring it outright would move 3242 of 35 990 `.S1` read rates, 1503 of
+    them from a declared 22050 up to 44100, on an inference from a machine of
+    the other generation. §143 was measured on an S3000XL, and s3ked's §139
+    established that this family shares a protocol without sharing its
+    hardware. **Blocked on:** the same disc test carrying `.S1` files.
+    """
+    declared = _u16(data, 0x8a)
+    index = _AKAI_PLAYBACK_RATES[1 if (data[0x01] & 1) else 0]
+    if s3000:
+        return index
+    return declared or index
+
+
 # ── sample ─────────────────────────────────────────────────────────────────
 
 def parse_sample_bytes(data: bytes, fallback_name: str = '',
@@ -204,7 +250,7 @@ def parse_sample_bytes(data: bytes, fallback_name: str = '',
     root = data[0x02]
     play_type = data[0x13]
     n_samples = _u32(data, 0x1a)
-    rate = _u16(data, 0x8a) or 44100
+    rate = _playback_rate(data, s3000)
 
     # pitch offset: byte 0x14 is the /256 part, 0x15 the whole -- i.e. a
     # 16-bit fixed-point cents value, low byte first like every other number
