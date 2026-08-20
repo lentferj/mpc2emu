@@ -13187,3 +13187,46 @@ offset against ConvertWithMoss's firmware-derived table.
 
 Not done tonight: a 16 020-voice behaviour change on a law whose definition is
 unsettled is not a thing to ship at 23:20 on the strength of noticing it.
+
+
+### Fixed 2026-08-20, and the fit range turned out to miss the data
+
+s3ked's answer on the law: **use §139**, the -3 dB corner, because that is what
+every source format means by "cutoff" — and their correction that §54 is *not*
+a different quantity, since it argues the resonance peak sits AT the corner.
+So the 1.29x is an unexplained disagreement between two measurements of the
+same thing, open on their side, one sweep from resolution.
+
+`AKAI_FILTER_LAW` therefore moved to `models/common.py`: the writer imports the
+parser, so the parser cannot import back, and a shared constant is the
+structural guarantee that reader and writer cannot drift. If the sweep moves
+the constant it moves once, and an AKAI round trip stays self-consistent
+meanwhile because the same law cancels — which is s3ked's argument for
+adopting §139 now rather than waiting.
+
+**What the corpus said about the fit.** Four S3000 factory discs, 1555
+keygroups:
+
+    FILFRQ  0..39      0
+    FILFRQ 40..84      2      <- the entire fitted range
+    FILFRQ 85..98    685      <- mostly 90 and 92
+    FILFRQ 99        868
+
+The fit covers **two** of 1555. Clamping to its top put 685 voices on a single
+cutoff, all darker than they sound. The top decade is now interpolated in
+position between the fit at 84 and hardware-confirmed wide open at 99 — both
+endpoints measured, only the shape between them assumed, and assumed to be the
+straight line in position the rest of the scale already is.
+
+**Worth a sweep of 85..98 on s3ked's side.** It would replace an interpolation
+with measurement on 44% of real voices, and their existing sweep covered a
+range the factory discs barely use.
+
+### The test caught the same mistake twice in one day
+
+The first version exercised `_cutoff_of()` directly and **passed with the
+wiring torn out** — identical to the attack test that morning, which called
+`akai_attack_byte()` and would have survived the very revert it existed to
+catch. Caught here only because the earlier one had already taught it. The
+assertion now parses a written program through `parse_akai_program` and checks
+the value that reaches the model.

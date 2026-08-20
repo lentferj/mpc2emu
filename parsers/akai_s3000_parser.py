@@ -39,7 +39,7 @@ from typing import Optional
 
 from models.common import (
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType,
-)
+    akai_filfrq_to_hz, hz_to_e4b_cutoff, AKAI_FILTER_LAW)
 
 # ── AKAI character encoding ────────────────────────────────────────────────
 # Not ASCII: names are a 41-symbol alphabet packed one byte per character.
@@ -229,6 +229,65 @@ def _playback_rate(data: bytes, s3000: bool) -> int:
 
 
 # ── sample ─────────────────────────────────────────────────────────────────
+#: FILFRQ the machine treats as wide open. HW-confirmed: s3ked took a sweep's
+#: 0 dB reference at 99 and found no attenuation until the band edge, and 99
+#: is the value the machine itself rests at.
+_AKAI_FILTER_OPEN = 99
+
+
+def _cutoff_of(filfrq: int, s3000: bool) -> float:
+    """FILFRQ -> the model's 0..1 cutoff position.
+
+    **Until 2026-08-20 this did not exist**: the keygroup's `filter_freq` was
+    read into a dict and never consumed, so `filter_cutoff` stayed at its
+    default and **all 16 020 AKAI-sourced voices across three factory discs
+    converted fully open** (§AKAIFILTREAD). The mirror of the attack bug fixed
+    the same day, where the writer emitted a constant instead of dropping a
+    value -- and silent for the same reason: an open filter reads as a bright
+    sample, not as missing information.
+
+    Uses `AKAI_FILTER_LAW`, shared with the writer so the two are exact
+    inverses by construction rather than by agreement.
+
+    **S1000 returns the default, deliberately.** Both of our laws were measured
+    on an S3000XL, and §139 found 12 dB/octave there against the S1000's
+    specified 18 -- a different filter order is a different filter. Converting
+    a `.P1` with an S3000XL law would be the rate-byte mistake in a new field,
+    and the S1000 corner law is precisely what the proposed S1000 disc exists
+    to measure. Until then a `.S1`/`.P1` source keeps today's behaviour.
+
+    **Between the top of the fit (84) and wide open (99) the POSITION is
+    interpolated, not clamped, and that band is where the corpus actually
+    lives.** Measured over four S3000 factory discs, 1555 keygroups:
+
+        FILFRQ  0..39      0
+        FILFRQ 40..84      2      <- the entire fitted range
+        FILFRQ 85..98    685      <- mostly 90 and 92
+        FILFRQ 99        868
+
+    Clamping to the fitted top put 685 voices on one value, all reading darker
+    than they sound. Interpolating between **two measured endpoints** -- the
+    fit at 84 and the hardware-confirmed wide open at 99 -- is not the
+    unsampled extrapolation this project has been burned by, because both ends
+    are known; only the shape between them is assumed, and it is assumed to be
+    the straight line in POSITION that the rest of the scale already is.
+
+    Worth telling s3ked: their sweep covered 40..84 and the factory data is
+    almost entirely 85..99, so a sweep of the top decade would replace this
+    interpolation with measurement and would move 44% of real voices.
+    """
+    if not s3000:
+        return VoiceLayer().filter_cutoff
+    if filfrq >= _AKAI_FILTER_OPEN:
+        return 1.0
+    _a, _b, _lo, _hi = AKAI_FILTER_LAW
+    if filfrq > _hi:
+        top = hz_to_e4b_cutoff(akai_filfrq_to_hz(_hi))
+        span = _AKAI_FILTER_OPEN - _hi
+        return top + (1.0 - top) * (filfrq - _hi) / span
+    return hz_to_e4b_cutoff(akai_filfrq_to_hz(filfrq))
+
+
 
 def parse_sample_bytes(data: bytes, fallback_name: str = '',
                        s3000: Optional[bool] = None) -> Optional[SampleData]:
@@ -480,6 +539,7 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
 
     for kg in prog['keygroups']:
         voice = VoiceLayer()
+        voice.filter_cutoff = _cutoff_of(kg['filter_freq'], prog['is_s3000'])
         for z in kg['zones']:
             src = z['sample_name']
             if src not in cache:

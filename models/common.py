@@ -394,6 +394,47 @@ def e4xt_byte_to_volume_db(byte: int) -> float:
     return _E4XT_VOL_C1 * b + _E4XT_VOL_C2 * b * b
 
 
+#: AKAI FILFRQ <-> Hz. **ONE definition, used by BOTH the reader and the
+#: writer**, because they must be exact inverses and until 2026-08-20 only the
+#: writer had a law at all -- the reader read FILFRQ into a dict and dropped
+#: it, so every AKAI-sourced voice converted fully open (§AKAIFILTREAD).
+#:
+#: It lives here rather than in either module because `akai_s3000_writer`
+#: imports `akai_s3000_parser`, so the parser cannot import back from the
+#: writer without a cycle. A shared constant is also the structural guarantee
+#: the two cannot drift apart, which matters more here than tidiness: a reader
+#: and writer disagreeing about a hardware law is silent in both directions.
+#:
+#: **The CONSTANT is disputed and the QUANTITY is not.** Two of our own
+#: measurements of the same S3000XL disagree by a constant 1.29x (sd 0.031
+#: over FILFRQ 40..84):
+#:
+#:     s3ked §54  (2026-08-12)  6.4597  * exp(0.07100 v)   via the resonance
+#:                                                          peak as an indicator
+#:     s3ked §139 (2026-08-20)  7.60732 * exp(0.07245 v)   the -3 dB corner,
+#:                                                          measured directly
+#:
+#: §54 argues the peak sits AT the corner and does not move with FILQ, so it
+#: claims the SAME quantity by another route -- it is not a definitional
+#: offset, it is an unexplained disagreement, and s3ked has it open with one
+#: sweep yielding both numbers.
+#:
+#: **§139 is used** because it measures the -3 dB point directly, which is what
+#: every source format means by "cutoff". If the sweep moves it, it moves here
+#: once and both directions follow -- and an AKAI round trip stays
+#: self-consistent meanwhile, because the same law cancels.
+#:
+#: S3000XL ONLY. §139 measured 12 dB/octave against the S1000's specified 18,
+#: so neither law belongs on a `.P1`. See the generation branch in the parser.
+AKAI_FILTER_LAW = (7.60732, 0.07245, 40, 84)      # Hz = a*exp(b*FILFRQ)
+
+
+def akai_filfrq_to_hz(byte: int) -> float:
+    """FILFRQ -> the -3 dB corner in Hz. Clamped to the FITTED range."""
+    a, b, lo, hi = AKAI_FILTER_LAW
+    return a * math.exp(b * max(lo, min(hi, byte)))
+
+
 def hz_to_e4b_cutoff(hz: float) -> float:
     """Map a cutoff frequency in Hz to the E4B exponential cutoff position
     (0.0-1.0, where the writer does round(pos*255) → vpar[60])."""
