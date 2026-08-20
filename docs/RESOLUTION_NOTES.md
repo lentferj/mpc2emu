@@ -141,6 +141,8 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§LOOKITUP — why two sessions ground for six hours on something that was written down (2026-08-18)](#lookitup-why-two-sessions-ground-for-six-hours-on-something-that-was-written-down-2026-08-18)
 - [§AKAIRELTEST — the release test, and the artefact that was my own disc (2026-08-18, PASSED)](#akaireltest-the-release-test-and-the-artefact-that-was-my-own-disc-2026-08-18-passed)
 - [§PRESETORDER — preset order and program numbers survive the trip](#presetorder-preset-order-and-program-numbers-survive-the-trip)
+- [§AKAIATTACK — the attack we throw away, and the first law anyone has offered for it](#akaiattack-the-attack-we-throw-away-and-the-first-law-anyone-has-offered-for-it)
+- [§AKAIRATEREAD — the reader takes SSRATE, the writer trusts byte 0x01](#akairateread-the-reader-takes-ssrate-the-writer-trusts-byte-0x01)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -12649,3 +12651,106 @@ the current numbering in a workbook Jan is filling in by hand at the machines;
 changing the numbering while that is in flight would mean every remark points
 at a program that has moved. Fix both, then rebuild the set and re-issue the
 workbook in one step.
+
+
+## §AKAIATTACK — the attack we throw away, and the first law anyone has offered for it
+
+`akai_env_bytes()` computes decay, sustain and release from the source and then
+returns `_AK_FIXED_ATTACK = 0` for the attack. Deliberate: s3ked's varying-span
+test found the attack stage fits neither a rate nor a duration, and inventing a
+law is how the AKAI tuning field went 100x out.
+
+**What was never measured is what the default costs.** On Jan's own E4B
+material: 39 voices, every one with an attack over 10 ms, five over half a
+second, the longest **6.554 s**. All 39 are written instant. The largest hole in
+our AKAI output is a parameter we decided not to guess at, which is the right
+decision producing a bad outcome — the fix is to measure, not to relax the rule.
+
+### The candidate law
+
+ConvertWithMoss derived one accumulator model from S1000 firmware v4.40 for all
+three stages of both envelopes:
+
+    time = ENVELOPE_FULL_SWING / (ENVELOPE_RATE[99 - setting] * 44100)
+    ENVELOPE_FULL_SWING = 32767 * 128        # their emulator's accumulator width
+    ENVELOPE_RATE spans 16384 .. 1 over the 100 settings
+
+They flag the accumulator width as the one part the OS does not state, taken
+from an emulation — so the RATIOS between settings are firmer than the absolute
+times. Our own measurements already agree with the shared table on the other
+five stages to within 1.2% (DECAY1 0.09776, RELSE1 0.09683, ATTAK2 0.09703,
+DECAY2 0.09844, RELSE2 0.09692 against a predicted 0.09802), which is what makes
+the model worth testing on attack. **ATTAK1 is the one stage that disagrees:
+s3ked fit 0.10844, +10.6% off.**
+
+### The test, which needs no disc
+
+Set ATTAK1 over SysEx on a resident sample and measure time to peak:
+
+    ATTAK1     predicted
+        40       0.146 s
+        60       1.045 s
+        80       7.316 s
+        90      19.021 s
+        99      47.553 s
+
+Over two decades between 40 and 90, so order of magnitude is enough; precision
+is not needed to kill a wrong law.
+
+**Run ATTAK1 99 first.** It is the cheapest falsification available: if a held
+note reaches full level in much under 47 seconds, the linear-accumulator model
+does not describe the attack stage and the +10.6% anomaly is explained.
+
+**Two traps, both from s3ked's own record.** Gate on absolute level before
+believing any time-to-peak — a note that never rises yields a confident number
+from noise, and at ATTAK1 90 you wait 19 seconds to discover it. And do not fit
+the exponent globally: an ill-conditioned fit landing near 0.098 would
+"confirm" the shared table and close the question the wrong way, which is
+exactly how their pole count came back as N = 3.12.
+
+### If it holds
+
+Replace `_AK_FIXED_ATTACK` with the same `_rate_law_value()` inversion the other
+stages use. Note the attack travels from silence to peak, so its span is fixed
+rather than sustain-dependent — simpler than decay and release, not harder.
+
+
+## §AKAIRATEREAD — the reader takes SSRATE, the writer trusts byte 0x01
+
+Our writer acts on §AKAIRATEQUANT: byte `0x01` selects the playback rate and
+SSRATE at `0x8a` is descriptive. `akai_s3000_parser.py:207` does the opposite —
+`rate = _u16(data, 0x8a) or 44100` — so the two halves of this project disagree
+about which field is real.
+
+Measured over 19 340 sample headers on 43 factory discs:
+
+* **SSRATE == 0 in exactly 1.** The 0 Hz case ConvertWithMoss fixed (commit
+  c5df170d, 2026-08-20, independent work — they hit it on machine-recorded
+  material) barely occurs on library CD-ROMs, so our `or 44100` fallback is not
+  causing visible damage today.
+* **4242 headers (22.0%) carry a nonzero SSRATE that contradicts byte 0x01**:
+  1538 have index 1 (44100) with SSRATE 22050, and 1290 declare 48000, which the
+  machine cannot play at all.
+
+Under our own reading those 4242 play at the rate the index picks, an octave
+from what we read.
+
+### What is actually unknown
+
+**Which field the machine honours for a sample loaded FROM DISK.** s3ked
+measured a RESIDENT sample by writing `0x01` over SysEx; that does not settle
+the load path, and the machine may well rewrite one field from the other on
+load. Note also that **all 5331 `.S1` headers carry index 1**, so the byte may
+carry no rate meaning at all in the S1000 generation — in which case the reader
+is right for S1000 files and wrong only for S3000 ones.
+
+### The test
+
+Build a volume with two samples whose index and SSRATE deliberately contradict
+(index 0 / SSRATE 44100, and index 1 / SSRATE 22050), load it from disc, and
+play both. An octave separates the two readings, so one note settles it. Do NOT
+write the fields over SysEx for this — the whole question is what the LOAD does.
+
+Until then, do not "fix" the reader to prefer `0x01`: on this corpus that would
+change the read rate of 22% of all samples on the strength of a measurement
+taken through a different path.
