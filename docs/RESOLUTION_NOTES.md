@@ -12754,3 +12754,56 @@ write the fields over SysEx for this — the whole question is what the LOAD doe
 Until then, do not "fix" the reader to prefer `0x01`: on this corpus that would
 change the read rate of 22% of all samples on the strength of a measurement
 taken through a different path.
+
+
+### Outcome, 2026-08-20 — the candidate law is dead and ours is confirmed
+
+s3ked ran the test the same afternoon (§141, `e47955c`). Resident sine, SUSTN1
+99 so the note holds at full, V_LOUD 0, note-on to 90% of plateau:
+
+    ATTAK1   measured t90   CWM predicts   ratio
+        70          0.320          2.797    0.11
+        80          1.060          7.316    0.14
+        90          3.140         19.021    0.17
+        99          8.600         47.553    0.18
+
+**The free falsification named above was the one that landed**: ATTAK1 99
+reaches full level in 8.6 s, not 47.6. The linear-accumulator model is roughly
+7x too slow for the attack stage throughout. It remains the best available
+account of decay and release, where it agrees with our measurements to 1.2% —
+so this is a limit on one stage, not a refutation of their firmware reading.
+
+Our own law fits, including outside its fitted range: against
+`0.9 * 0.000201173 * exp(0.10844 * ATTAK1)` the ratio is 0.982, sd 0.06, with
+ATTAK1 99 at 1.033 despite the fit running only 55..90. Reproduced here
+independently before wiring.
+
+**The shape test is the part worth keeping**, because it needs no law:
+
+    t50/t90:   linear ramp 0.5/0.9 = 0.556      exponential ln2/ln10 = 0.301
+    measured (ATTAK1 70..99):  0.500  0.547  0.548  0.558
+
+A ratio of two numbers from one capture cancels the level calibration, the
+plateau definition and the entire rig, so it identifies the amplitude attack as
+a linear ramp independently of whether any constant is right.
+
+Below ATTAK1 70 the times collapse into the 20 ms analysis window and are
+floor-limited. Recorded as unmeasurable, **not** as disagreement.
+
+### Why it was broken, which outlasts the fix
+
+The writer's justification quoted the varying-span finding — which is about
+**ATTAK2**, the filter envelope — against **ATTAK1**, the amplitude attack.
+A correct fact attached to the wrong object. It passed every check available
+from inside the project, including a unit test that faithfully pinned
+`fast[0] == slow[0]`: a test only ever checks the claim it was given.
+
+This is the third instance in two days of the same failure — a sample name
+agreed across a session boundary that identified two different samples, S3000
+keygroup offsets read across S1000 files, and now a field name quoted at the
+level of the parameter family. **Not one was a calculation error.** The
+countermeasure that keeps working is to take the identifier from the
+authoritative table rather than from prose or memory, and, when citing a
+finding across a project boundary, to carry the exact field it applies to.
+`ATTAK1` and `ATTAK2` are no more interchangeable than two samples that happen
+to share a name.

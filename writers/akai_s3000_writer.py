@@ -205,13 +205,46 @@ _AK_FILTER = (6.4597,     0.07100, 44, 92)    # Hz
 _AK_DECAY1_RATE = (23525.6, -0.09776, 45, 85)   # dB/s,            r2 0.99998
 _AK_RELSE1_RATE = (22055.3, -0.09683, 55, 70)   # dB/s,            r2 0.99956
 
+#: ATTAK1 -> seconds: `t = a * exp(b * ATTAK1)`, a RISE TIME and not a rate.
+#: HW-MEASURED by s3ked (§141, 2026-08-20), time from note-on to 90% of the
+#: plateau on a resident sine held at SUSTN1 99:
+#:
+#:      ATTAK1 70  0.320 s      ATTAK1 90  3.140 s
+#:      ATTAK1 80  1.060 s      ATTAK1 99  8.600 s
+#:
+#: against `0.9 * a * exp(b * ATTAK1)` -- the 0.9 because t90 is 90% of a
+#: LINEAR ramp -- the ratio is 0.982, sd 0.06, reproduced here independently.
+#: ATTAK1 99 sits outside the 55..90 fit and still lands at 1.033.
+#:
+#: **The ramp is linear in amplitude, and that was established without any
+#: fitted constant**: t50/t90 measured 0.500/0.547/0.548/0.558 over ATTAK1
+#: 70..99, against 0.556 predicted for a linear ramp and 0.301 for an
+#: exponential approach. A ratio of two numbers from one capture cancels the
+#: level calibration, the plateau definition and the rig.
+#:
+#: Below ATTAK1 70 the times collapse into the 20 ms analysis window and are
+#: floor-limited -- recorded as unmeasurable, NOT as disagreement, so the law
+#: is extrapolated there and the clamp below is the only guard.
+_AK_ATTAK1_TIME = (0.000201173, 0.10844, 0, 99)   # seconds,  s3ked §141
+
 # NOT WIRED, and each for its own reason rather than as a batch:
 #
-#   ATTAK1, ATTAK2  s3ked's varying-span test says attack fits NEITHER a rate
-#       nor a duration -- across a 99% change in span the rate moved 29% and
-#       the time 11%, both sub-linearly. They recorded it unresolved rather
-#       than forcing it, which is right, and it leaves us nothing to convert
-#       with. Fixed defaults until it is resolved.
+#   ATTAK2  s3ked's varying-span test says the FILTER envelope's attack fits
+#       NEITHER a rate nor a duration -- across a 99% change in span the rate
+#       moved 29% and the time 11%, both sub-linearly. They recorded it
+#       unresolved rather than forcing it, which is right, and it leaves us
+#       nothing to convert with. Fixed default until it is resolved.
+#
+#       **ATTAK1 WAS LISTED HERE UNTIL 2026-08-20 AND SHOULD NEVER HAVE BEEN.**
+#       The varying-span finding is about ATTAK2. ATTAK1, the AMPLITUDE
+#       attack, is a different field and has been a measured rise time
+#       throughout -- s3ked's own note calls it "a genuine RISE TIME, and the
+#       only envelope stage that has one". Quoting the finding against the
+#       parameter FAMILY rather than the exact field cost us every source
+#       attack for twelve days: 39 of 39 voices in real E4B material, five of
+#       them over half a second and one at 6.554 s, all written instant. A
+#       correct fact attached to the wrong object passes every check that a
+#       correct fact passes -- see the §AKAIATTACK note in RESOLUTION_NOTES.
 #
 #   DECAY2, RELSE2  the replacement rates are in FILFRQ units (octaves, 9.4
 #       units to the octave). Converting a time needs the SPAN the filter
@@ -503,11 +536,32 @@ def akai_env_bytes(env) -> tuple:
     r = _rate_law_value(getattr(env, 'release', 0.5) or 0.5,
                         span_rel_db, _AK_RELSE1_RATE, default=45)
 
-    return _AK_FIXED_ATTACK, d, sus, r
+    # Attack rises from silence to the peak, so unlike decay and release its
+    # span is fixed and it needs no sustain-dependent distance.
+    a = akai_attack_byte(getattr(env, 'attack', 0.0) or 0.0)
+
+    return a, d, sus, r
 
 
-#: Attack has no usable law -- see the envelope-timing note above.
-_AK_FIXED_ATTACK = 0
+def akai_attack_byte(seconds: float) -> int:
+    """Amplitude attack time in seconds -> ATTAK1.
+
+    Inverts `t = a * exp(b * ATTAK1)`. **Higher ATTAK1 is a SLOWER attack**,
+    which is the opposite sense to the decay and release fields beside it --
+    those store a rate, this stores a time. Confirmed against the measured
+    points before wiring (0.320 s at 70 rising to 8.600 s at 99), because a
+    sign error here would be silent: the previous behaviour was a fixed 0, so
+    an inverted law would still give fast attacks on most material and would
+    only look wrong on the slowest sources.
+
+    ATTAK1 0 is 0.2 ms, i.e. instant, so clamping a very fast source to the
+    floor loses nothing audible.
+    """
+    a, b, lo, hi = _AK_ATTAK1_TIME
+    if seconds <= a:
+        return lo
+    v = math.log(seconds / a) / b
+    return int(round(max(lo, min(float(hi), v))))
 
 
 def _rate_law_value(seconds: float, span: float, law, default: int) -> int:
