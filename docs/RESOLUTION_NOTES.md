@@ -12790,20 +12790,57 @@ a linear ramp independently of whether any constant is right.
 Below ATTAK1 70 the times collapse into the 20 ms analysis window and are
 floor-limited. Recorded as unmeasurable, **not** as disagreement.
 
-### Why it was broken, which outlasts the fix
+### Why it was broken — corrected, because the first account was wrong too
 
-The writer's justification quoted the varying-span finding — which is about
-**ATTAK2**, the filter envelope — against **ATTAK1**, the amplitude attack.
-A correct fact attached to the wrong object. It passed every check available
-from inside the project, including a unit test that faithfully pinned
-`fast[0] == slow[0]`: a test only ever checks the claim it was given.
+The writer's justification quoted s3ked **§29**, "attack fits neither a rate
+nor a duration". That was true when written, and **their §31 withdrew it the
+same day**: four models fitted per curve identified the amplitude attack as a
+linear ramp, and a linear-in-amplitude ramp read on a dB axis is a *curve*, so
+a slope taken from its middle depends on how far the curve extends. The
+span-dependence was the detector. §31 states in as many words that `ATTAK1` is
+a genuine duration, and gives a law.
 
-This is the third instance in two days of the same failure — a sample name
-agreed across a session boundary that identified two different samples, S3000
-keygroup offsets read across S1000 files, and now a field name quoted at the
-level of the parameter family. **Not one was a calculation error.** The
-countermeasure that keeps working is to take the identifier from the
-authoritative table rather than from prose or memory, and, when citing a
-finding across a project boundary, to carry the exact field it applies to.
-`ATTAK1` and `ATTAK2` are no more interchangeable than two samples that happen
-to share a name.
+So we cited the **right field** and a **superseded version** of the finding.
+Verified against their `docs/RESOLUTION_NOTES.md` here rather than taken on
+report.
+
+**The first version of this section said something else** — that the
+justification quoted the `ATTAK2` finding against `ATTAK1`, a field mix-up.
+That account came from s3ked, who withdrew it within the hour after opening
+their own section, having produced it (their words) *"while writing up a
+section whose entire subject is correct facts attached to wrong objects"*. The
+fields were never confused. It is recorded rather than deleted because the
+wrong story was tidier than the true one — two field names differing by one
+character is a better story than a nine-day-old citation — and tidier stories
+survive review.
+
+While correcting it I found a **second stale citation of the same §29** in the
+same comment block, this one attached to `ATTAK2`: it said the filter attack
+fits neither a rate nor a duration, when §31 settles its *shape* and leaves
+only its **depth-scaling** open (the same value reads 0.38 s at MODVFILT1 25
+against 1.14 s at 18). `ATTAK2` stays unwired either way, but for the true
+reason now.
+
+### The rule this yields, which is about time and not fields
+
+**A finding quoted across a project boundary must carry when it was true.**
+
+An append-only investigation log is mostly intermediate states, written in the
+same voice as the conclusions. §29 does not announce that it is about to be
+superseded, because at the time it was not. A reader who does not read *forward*
+from a section cannot distinguish a retracted step from a settled one — and a
+consumer in another repo, who receives sections quoted rather than the file,
+cannot see it at all. **A section number alone is not a citation**; a
+superseding section can exist and usually does.
+
+Note also that the constants moved without the section being retracted: §31's
+law is `0.000150326 * exp(0.11175 v)` and §141's refit is `0.000201173 *
+exp(0.10844 v)`. They agree to 2.5% at ATTAK1 80, so nothing was wrong — but a
+citation of §31 alone would now be quoting superseded constants from a section
+that still stands.
+
+This remains the fourth instance in two days of a correct fact attached to the
+wrong object; only the *object* here is a moment in time rather than a field or
+a sample. **Not one of the four was a calculation error.** The countermeasure
+has not changed and was not applied by either of us: go and read the source.
+Restating the rule is not the same as following it.

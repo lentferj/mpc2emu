@@ -225,27 +225,48 @@ _AK_RELSE1_RATE = (22055.3, -0.09683, 55, 70)   # dB/s,            r2 0.99956
 #: Below ATTAK1 70 the times collapse into the 20 ms analysis window and are
 #: floor-limited -- recorded as unmeasurable, NOT as disagreement, so the law
 #: is extrapolated there and the clamp below is the only guard.
+#: **WHY THIS WAS A FIXED 0 FOR TWELVE DAYS, corrected 2026-08-20.** The
+#: writer's justification quoted s3ked §29 -- "attack fits neither a rate nor a
+#: duration" -- which was true when written and **withdrawn the same day by
+#: their §31**, once four models were fitted per curve: a linear-in-amplitude
+#: ramp read on a dB axis is a curve, and a slope taken from the middle of a
+#: curve depends on how far the curve extends, so the span-dependence was the
+#: detector rather than the field. §31 names ATTAK1 a genuine DURATION and
+#: gives a law. We cited the right field and a superseded version of the
+#: finding.
+#:
+#: An earlier version of this note blamed an ATTAK1/ATTAK2 field mix-up. That
+#: account came from s3ked, who corrected it within the hour after reading
+#: their own section; the fields were never confused. Recorded because the
+#: wrong story is tidier than the true one and would have survived.
+#:
+#: **The transferable rule is about TIME, not fields: a finding quoted across a
+#: project boundary must carry WHEN it was true.** An append-only log is mostly
+#: intermediate states written in the same voice as the conclusions -- §29 does
+#: not announce that it is about to be superseded, because it was not. A
+#: section number alone is not a citation; a superseding section can exist and
+#: usually does.
+#:
+#: Constants are §141's refit (2026-08-20), superseding §31's (0.000150326,
+#: 0.11175, fitted 55..90). The two agree to 2.5% at ATTAK1 80 and 3.5% at 99,
+#: and §141 validated against ATTAK1 99 directly, which §31 never fitted.
 _AK_ATTAK1_TIME = (0.000201173, 0.10844, 0, 99)   # seconds,  s3ked §141
 
 # NOT WIRED, and each for its own reason rather than as a batch:
 #
-#   ATTAK2  s3ked's varying-span test says the FILTER envelope's attack fits
-#       NEITHER a rate nor a duration -- across a 99% change in span the rate
-#       moved 29% and the time 11%, both sub-linearly. They recorded it
-#       unresolved rather than forcing it, which is right, and it leaves us
-#       nothing to convert with. Fixed default until it is resolved.
+#   ATTAK2  the filter attack. Its SHAPE is settled (s3ked §31: a linear ramp
+#       in OCTAVES, not hertz -- r2 0.998 against 0.912) but its DEPTH-SCALING
+#       is not: sweeping MODVFILT1 with the value fixed gave neither a constant
+#       rate nor a constant duration, and the same value read 0.38 s at depth
+#       25 against 1.14 s at depth 18 -- three times apart for one setting.
+#       Their measured seconds hold at MODVFILT1 18 and nowhere else, so there
+#       is no law to convert with until the depth-scaling is one. Fixed default.
 #
-#       **ATTAK1 WAS LISTED HERE UNTIL 2026-08-20 AND SHOULD NEVER HAVE BEEN.**
-#       The varying-span finding is about ATTAK2. ATTAK1, the AMPLITUDE
-#       attack, is a different field and has been a measured rise time
-#       throughout -- s3ked's own note calls it "a genuine RISE TIME, and the
-#       only envelope stage that has one". Quoting the finding against the
-#       parameter FAMILY rather than the exact field cost us every source
-#       attack for twelve days: 39 of 39 voices in real E4B material, five of
-#       them over half a second and one at 6.554 s, all written instant. A
-#       correct fact attached to the wrong object passes every check that a
-#       correct fact passes -- see the §AKAIATTACK note in RESOLUTION_NOTES.
-#
+#       **This entry said "fits neither a rate nor a duration" until
+#       2026-08-20, and that was a STALE CITATION of the same §29 described
+#       below.** The current reason ATTAK2 stays unwired is depth-scaling, not
+#       shape.
+
 #   DECAY2, RELSE2  the replacement rates are in FILFRQ units (octaves, 9.4
 #       units to the octave). Converting a time needs the SPAN the filter
 #       envelope sweeps, and our model carries no filter-envelope amount --
