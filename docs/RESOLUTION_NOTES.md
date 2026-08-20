@@ -143,6 +143,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§PRESETORDER — preset order and program numbers survive the trip](#presetorder-preset-order-and-program-numbers-survive-the-trip)
 - [§AKAIATTACK — the attack we throw away, and the first law anyone has offered for it](#akaiattack-the-attack-we-throw-away-and-the-first-law-anyone-has-offered-for-it)
 - [§AKAIRATEREAD — the reader takes SSRATE, the writer trusts byte 0x01](#akairateread-the-reader-takes-ssrate-the-writer-trusts-byte-0x01)
+- [§AKAIENV2 — the filter envelope: measured for eight days, unwired for two stale reasons](#akaienv2-the-filter-envelope-measured-for-eight-days-unwired-for-two-stale-reasons)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -12844,3 +12845,59 @@ wrong object; only the *object* here is a moment in time rather than a field or
 a sample. **Not one of the four was a calculation error.** The countermeasure
 has not changed and was not applied by either of us: go and read the source.
 Restating the rule is not the same as following it.
+
+
+## §AKAIENV2 — the filter envelope: measured for eight days, unwired for two stale reasons
+
+`_keygroup` writes fixed defaults for `ATTAK2`, `DECAY2`, `SUSTN2` and
+`RELSE2`. Audited 2026-08-20 against s3ked's `s3k/scales.py` — their
+authority, not their prose — and **every time stage has current, non-provisional
+constants** for a full 0..99 traverse:
+
+    ATTAK2  0.001363 * exp(0.09703 v) s   40..85   r2 0.99981
+    DECAY2  0.002464 * exp(0.09844 v) s   40..80   r2 0.99997
+    RELSE2  0.001344 * exp(0.09692 v) s   40..80   r2 0.99998
+
+Both reasons this project gave for not wiring them were false:
+
+**"ATTAK2's depth-scaling is open"** — §28's numbers, retracted by **§58** on
+2026-08-12. The threefold spread (0.38 s at MODVFILT1 25 against 1.14 s at 18)
+was the filter's own corner ceiling saturating at the top of its range, not
+depth-dependence; swept at MODVFILT1 5 and 10 the times agree to 1.00 ± 0.01
+across nine values. §67 then settled ATTAK2 as a **rate**. I wrote this stale
+reason into the file on 2026-08-20 while correcting a *different* stale
+citation, from a report I did not check.
+
+**"Our model carries no filter-envelope amount"** — and this one is ours, about
+our own model. `VoiceLayer.filter_env_amount` exists, **eight parsers populate
+it**, and it is non-zero on **20 of 39 voices** in real E4B material. The claim
+appears to have been true once and was never revisited.
+
+### The real blocker, which has never been costed
+
+These are **rates over a variable distance**: a stage takes
+`full_time * (distance / 99)`. `ATTAK1` is a duration precisely because it
+always travels zero-to-peak; envelope 2 does not. Wiring them needs envelope
+2's level architecture — a four-stage rate/level envelope (s3ked §67) — and a
+decision about how our two-parameter `Envelope` maps onto four stages with
+independent levels.
+
+That is design work, not a missing measurement, and it is a different kind of
+task from the one this row has been deferring. Cost it before deciding.
+
+**Note what did NOT change**: no hardware is needed. The filter board Jan
+ordered on 2026-08-17 was recorded as the blocker for measuring envelope 2 —
+s3ked measured it with a resonance tracker instead, and that blocker is stale
+too.
+
+### Why this section exists
+
+Sixth instance in two days of a correct fact attached to the wrong object, and
+the first where the wrong object was **our own model**. The pattern across all
+six: a sample name, byte offsets, a field name, a section number, a section's
+vintage, and now a model capability. **Not one was a calculation error.**
+
+The countermeasure that worked here is worth naming precisely: I checked
+`scales.py` and `VoiceLayer.__dataclass_fields__` — the places where the answer
+is *executable* — rather than the notes describing them. Prose goes stale
+silently; a dataclass field either exists or it does not.

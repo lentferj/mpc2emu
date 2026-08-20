@@ -254,23 +254,34 @@ _AK_ATTAK1_TIME = (0.000201173, 0.10844, 0, 99)   # seconds,  s3ked §141
 
 # NOT WIRED, and each for its own reason rather than as a batch:
 #
-#   ATTAK2  the filter attack. Its SHAPE is settled (s3ked §31: a linear ramp
-#       in OCTAVES, not hertz -- r2 0.998 against 0.912) but its DEPTH-SCALING
-#       is not: sweeping MODVFILT1 with the value fixed gave neither a constant
-#       rate nor a constant duration, and the same value read 0.38 s at depth
-#       25 against 1.14 s at depth 18 -- three times apart for one setting.
-#       Their measured seconds hold at MODVFILT1 18 and nowhere else, so there
-#       is no law to convert with until the depth-scaling is one. Fixed default.
+#   ATTAK2, DECAY2, RELSE2  the filter envelope's three time stages.
+#       **NOT WIRED, AND BOTH REASONS THIS FILE GAVE FOR THAT ARE STALE.**
+#       Audited 2026-08-20 against s3ked's `s3k/scales.py`, which is their
+#       authority rather than their prose:
 #
-#       **This entry said "fits neither a rate nor a duration" until
-#       2026-08-20, and that was a STALE CITATION of the same §29 described
-#       below.** The current reason ATTAK2 stays unwired is depth-scaling, not
-#       shape.
-
-#   DECAY2, RELSE2  the replacement rates are in FILFRQ units (octaves, 9.4
-#       units to the octave). Converting a time needs the SPAN the filter
-#       envelope sweeps, and our model carries no filter-envelope amount --
-#       there is no span to divide by. Fixed defaults until there is.
+#           ATTAK2  0.001363 * exp(0.09703 v) s   40..85   r2 0.99981
+#           DECAY2  0.002464 * exp(0.09844 v) s   40..80   r2 0.99997
+#           RELSE2  0.001344 * exp(0.09692 v) s   40..80   r2 0.99998
+#
+#       all for a FULL 0..99 traverse, none provisional.
+#
+#       Stale reason 1, ATTAK2 "depth-scaling is open": those were §28's
+#       numbers and §58 retracted them on 2026-08-12 -- the threefold spread
+#       was the filter's own corner ceiling, not depth-dependence. §67 then
+#       settled ATTAK2 as a RATE by varying the distance.
+#
+#       Stale reason 2, and this one is ours: "our model carries no
+#       filter-envelope amount -- there is no span to divide by". It does.
+#       `VoiceLayer.filter_env_amount` exists, EIGHT parsers populate it, and
+#       it is non-zero on 20 of 39 voices in real E4B material.
+#
+#       So the honest current blocker is neither of those. It is that these
+#       are RATES over a VARIABLE distance -- a stage takes
+#       `full_time * (distance / 99)` -- so wiring them needs envelope 2's
+#       level architecture (a four-stage rate/level envelope, s3ked §67) and
+#       a decision about how our two-parameter model maps onto it. That is
+#       real work, not a missing measurement, and it has never been costed.
+#       See §AKAIENV2 in RESOLUTION_NOTES.
 #
 # Both were wired from the withdrawn model earlier today. Unwiring them is not
 # a regression: writing a value derived from a retracted law is worse than
