@@ -12757,6 +12757,35 @@ Until then, do not "fix" the reader to prefer `0x01`: on this corpus that would
 change the read rate of 22% of all samples on the strength of a measurement
 taken through a different path.
 
+### The generation constrains the fix, whatever the disc says
+
+s3ked flagged the S1000 question after §142; measured here over the **whole**
+disc corpus rather than the twelve discs of the first pass:
+
+    .S1   byte 0x01 == 1 in 35 990 of 35 990 headers   (0.00% at 0)
+    .S3   byte 0x01 == 1 in 17 332, == 0 in 961        (5.25% at 0)
+
+**The byte does not vary at all in the S1000 generation.** A field constant
+across 35 990 specimens carries no information, so on `.S1` files it cannot be
+read as a rate selector — and 1503 of those headers declare SSRATE 22050 while
+the index says 44100, so preferring the index there would read every one of
+them an octave high.
+
+Cost of a naive "prefer 0x01" fix, per generation:
+
+    .S1   3242 of 35 990 samples change read rate   (9.0%)
+    .S3   3744 of 18 293                            (20.5%)
+
+**So the fix must be generation-aware whatever the disc returns**, and the disc
+can only speak for S3000 — it is an S3000XL, and §139 showed this family shares
+a protocol without sharing its hardware.
+
+One consistency check worth keeping: ConvertWithMoss hit the index byte varying
+on **machine-recorded** S1000 material (SSRATE 0 for 22050 recordings). Our
+corpus is entirely library CD-ROMs, mastered at 44100, which is exactly where a
+constant 1 would be expected. The two observations do not conflict; they say the
+byte is meaningful on S1000 but exercised only outside our corpus.
+
 ### The disc also carries an attack check, and why it belongs here
 
 s3ked raised it and it is the same question wearing different clothes: **every
