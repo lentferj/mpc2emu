@@ -12757,6 +12757,25 @@ Until then, do not "fix" the reader to prefer `0x01`: on this corpus that would
 change the read rate of 22% of all samples on the strength of a measurement
 taken through a different path.
 
+### The disc also carries an attack check, and why it belongs here
+
+s3ked raised it and it is the same question wearing different clothes: **every
+attack measurement on their side was made by writing the field over SysEx into
+a resident program.** So was the filter law, the level scales and the tuning
+constants. If a disk load can transform one header field, assuming it leaves
+the envelope fields alone is the assumption this section exists to doubt.
+
+`RR5`/`RR6`/`RR7` therefore carry ATTAK1 72/85/96, written by our own converter
+from source times of 0.5 / 2.0 / 6.554 s — so the check tests the load path and
+the writer's conversion in one note. Predicted t90 is 0.45 / 1.82 / 6.01 s
+against `0.000201173 * exp(0.10844 * ATTAK1)`, and reading ATTAK1 back after
+the load settles the load-path half directly.
+
+**The failure this defends against is quiet.** A sign error in the conversion
+gives every program an instant attack — which is exactly what the old fixed
+default gave — so the disc would sound like a clean conversion of a bank that
+happened to have no attacks. Nothing about it would look wrong.
+
 
 ### Outcome, 2026-08-20 — the candidate law is dead and ours is confirmed
 
@@ -12958,6 +12977,19 @@ sample names, `VoiceLayer.__dataclass_fields__` instead of a comment about the
 model, s3ked's `scales.py` instead of the section prose, the source file
 instead of the report about it. Prose goes stale silently. A dataclass field
 either exists or it does not.
+
+### A test for corrections, which came out of getting one wrong
+
+s3ked's formulation, from the board correction: not *"is this correction
+true"* but **"if the circumstance that made the workaround necessary went away,
+would the claim come back?"** If it would, the premise has not been addressed.
+
+That is checkable on a correction in isolation, without knowing the underlying
+fact, which is what makes it worth having. The failing example is ours: saying
+the board blocker was stale *because s3ked measured it another way* is true and
+leaves the premise standing, so anyone who later obtained a board would
+reasonably reinstate it — and it would come back wearing the authority of
+having been reviewed once.
 
 ### The one that generalises
 
