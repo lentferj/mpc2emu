@@ -144,6 +144,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIATTACK — the attack we throw away, and the first law anyone has offered for it](#akaiattack-the-attack-we-throw-away-and-the-first-law-anyone-has-offered-for-it)
 - [§AKAIRATEREAD — the reader takes SSRATE, the writer trusts byte 0x01](#akairateread-the-reader-takes-ssrate-the-writer-trusts-byte-0x01)
 - [§AKAIENV2 — the filter envelope: measured for eight days, unwired for two stale reasons](#akaienv2-the-filter-envelope-measured-for-eight-days-unwired-for-two-stale-reasons)
+- [§IDENTIFIERS — six wrong objects, zero wrong sums (2026-08-19/20)](#identifiers-six-wrong-objects-zero-wrong-sums-2026-08-1920)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -12885,10 +12886,23 @@ independent levels.
 That is design work, not a missing measurement, and it is a different kind of
 task from the one this row has been deferring. Cost it before deciding.
 
-**Note what did NOT change**: no hardware is needed. The filter board Jan
-ordered on 2026-08-17 was recorded as the blocker for measuring envelope 2 —
-s3ked measured it with a resonance tracker instead, and that blocker is stale
-too.
+**Note what did NOT change**: no hardware is needed, and the reason is not the
+one given in the first version of this note. I wrote that s3ked "measured it
+with a resonance tracker instead" — true but beside the point. **The IB304F
+gates the second filter** (`FLT2GAIN`, `FLT2MODE`, `FLT2Q`, `FIL2FR` and
+neighbours) and never gated envelope 2 at all. Every envelope-2 measurement was
+taken on a machine that has never had the board, routed to filter 1.
+
+Their §87 records them making the identical error seven days earlier, flagging
+fifteen fields as board-dependent on a citation to §19 — the FILFRQ
+measurement, which never mentions the board. Its verdict is the best sentence
+either project has produced on this: *"the claim was an assumption wearing a
+citation — the most persuasive form a wrong claim can take in this project,
+because the reference makes it look checked."*
+
+Note that §87 predates our error by seven days and s3ked had read it. **Naming
+a failure mode in a resolution note does not inoculate anyone against it**,
+which is worth knowing about this entire file.
 
 ### Why this section exists
 
@@ -12901,3 +12915,64 @@ The countermeasure that worked here is worth naming precisely: I checked
 `scales.py` and `VoiceLayer.__dataclass_fields__` — the places where the answer
 is *executable* — rather than the notes describing them. Prose goes stale
 silently; a dataclass field either exists or it does not.
+
+
+## §IDENTIFIERS — six wrong objects, zero wrong sums (2026-08-19/20)
+
+Two days of AKAI work with s3ked produced six errors between the two projects.
+Recorded together because the pattern is sharper than any of them alone.
+
+    a sample name        F5-3 at key 89 -- two sessions naming one thing and
+                         meaning different objects, because no one asked the
+                         program which key addresses which sample
+    a byte offset        S3000 keygroup positions read across S1000 files,
+                         giving 36% where the real answer was 0 of 23 901
+    a field name         "the ATTAK2 finding was quoted against ATTAK1" -- a
+                         tidy story, invented and forwarded without reading
+                         the section it described
+    a section number     §29 cited where §31 held, stale by nine days, which
+                         cost every source attack for twelve
+    a section's vintage  §31's constants quoted against §141's refit, from a
+                         section that was never retracted and never will be,
+                         because it is still correct as written
+    a self-description   "our model carries no filter-envelope amount" --
+                         true once, never revisited, while eight parsers
+                         populated the field
+    a hardware premise   "envelope 2 cannot be measured without the filter
+                         board" -- the board gates the second FILTER
+
+**Not one was an arithmetic error.** Every number computed in those two days
+was right. Every one of these passed its internal checks, and had to: a correct
+fact checks out no matter what it is attached to. Internal consistency tests
+the measurement, never the specimen.
+
+### What actually caught them
+
+Not review, and not the test suite — a passing unit test held one of these in
+place for twelve days, faithfully pinning a behaviour whose justification had
+been withdrawn. **A test only checks the claim it was given.**
+
+What caught them, every time, was going to the place where the answer is
+*executable* rather than described: the machine's keygroup table instead of the
+sample names, `VoiceLayer.__dataclass_fields__` instead of a comment about the
+model, s3ked's `scales.py` instead of the section prose, the source file
+instead of the report about it. Prose goes stale silently. A dataclass field
+either exists or it does not.
+
+### The one that generalises
+
+**The identifiers that bit us were the ones that felt too obvious to check.**
+Nobody re-reads a field name. That is precisely why it is the surface where
+errors survive longest.
+
+And a tidy causal story is cheap to believe *and* cheap to forward. It
+accelerates in a way a correct one does not, because a correct account usually
+has an awkward detail in it that makes you stop. Two of the six were transmitted
+between projects within minutes, by both sides, neither short of time.
+
+### The limit of writing any of this down
+
+s3ked's §87 named this failure mode on 2026-08-13, in the same file, about the
+same board. Seven days later they made it again and sent it here, having read
+it. **Naming a failure mode in a resolution note does not inoculate anyone
+against it** — including this note.
