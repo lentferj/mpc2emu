@@ -13554,3 +13554,56 @@ else plays, the rule is confirmed and the cost is a sample nobody listens to.
 
 Kept on the list at Jan's instruction, 2026-08-21, rather than fixed
 immediately.
+
+
+### WITHDRAWN the same evening: the symptom was not there
+
+s3ked measured `bass A` on the machine and it is the **loudest** program in
+the volume — **-15.8 dBFS**, centroid 152 Hz. It is not silent at note 69,
+velocity 100, and they flagged it against my brief rather than fitting the
+measurement to it.
+
+**And Jan's own remark for PRG 0, written after he reported the silence, is
+"a bit muddy compared to E4. Filter cutoff and Q?"** He described its tone. I
+had read that remark, printed it, and quoted it in a message — without noticing
+it contradicted the bug report I had filed an hour earlier.
+
+So this section stands only as a record of how it was written. What actually
+happened:
+
+1. one report of silence on one program
+2. a known bug whose **preconditions fit exactly** — first sample in the
+   volume, looped, at the pool base
+3. a resolution note, a reopened TODO row and a commit message built on the
+   match
+
+**The preconditions did fit. The symptom was not there.** Every check I ran
+confirmed the conditions and none of them asked whether the effect was present,
+because the effect had been reported and I treated a report as an observation.
+
+The likely real cause of what Jan heard is separate and now visible: **channel 1
+is silent on that machine tonight** — s3ked found every program silent on
+channel 1 and every one sounding on channels 2..16. That would have produced
+exactly one thing: a program that did not sound when tried.
+
+### What survives
+
+* §AKAILOOPCROSS itself is untouched. It was established by a decisive pair
+  with the address as the only difference, and nothing here bears on it.
+* The **fix recorded there still does not exist in the code**, which I found by
+  grep and which is independent of this. `build_akai_volume` has no reorder and
+  no warning. That part of the TODO correction stands.
+* The pad-sample proposal stands as a *design* for that unimplemented fix, and
+  is now clearly untested against any observed symptom.
+
+### The lesson, which is not the one I wrote the first time
+
+A report is not a measurement. Jan's "no sound" was a real thing he
+experienced, and it was the best available evidence at the time — but I
+promoted it to an observed symptom, matched it to preconditions I could verify,
+and never asked whether anything had reproduced it. **Matching preconditions is
+not evidence that the effect occurred**, and it is seductive precisely because
+the preconditions ARE checkable and the symptom is not.
+
+The check that would have caught it costs one message: ask whether it still
+does that.
