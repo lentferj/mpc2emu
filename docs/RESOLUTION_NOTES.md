@@ -13064,8 +13064,30 @@ s3ked's generalisation, 2026-08-20, and the sharpest thing to come out of the
 FILFRQ distribution.
 
 Their filter law is fitted 40..84. Across four S3000 factory discs, **685 of
-1555 keygroups sit in 85..98 and TWO inside 40..84.** So 0.1% of real voices
-sit where the law was measured and 44% sit where it is an interpolation.
+1555 keygroups sit in 85..98 and TWO inside 40..84** — 0.1% of *those* voices
+sit where the law was measured.
+
+**Corrected 2026-08-21, because the first version of this paragraph committed
+the error the paragraph is about.** It went on to say "0.1% of real voices",
+dropping the population between the data sentence and the conclusion. That is
+false for the other generation: of the 76 086 `.P1` keygroups in the corpus,
+14 661 carry a real setting and **6869 of those are inside 40..84** — 47%,
+against 0.1% on the S3000 discs.
+
+    generation   keygroups   40..84   85..98   99 (open)
+    .P3 (S3000)       1555        2      685         868
+    .P1 (S1000)      76086     6869     6541       61425
+
+So the fit is badly placed for S3000 material and well placed for S1000
+material, and the unqualified claim was true of one generation and false of the
+other. s3ked made the same slip in their own entry the same morning and
+corrected it in place; **twice in two days a lesson about over-generalising was
+over-generalised inside itself.**
+
+Their conclusion, which is better than more care: a claim about "the material"
+needs the population named **in the sentence**, the way a measurement needs its
+units. A qualifier in the paragraph above does not travel with the sentence
+that gets quoted.
 
 **The fit range was never chosen.** §54's own bounds note states the limits
 honestly: below 44 the corner drops under the lowest note's fundamental, above
@@ -13089,6 +13111,31 @@ what the corpus actually uses. We had the corpus the whole time.
 Consequence for our own discs: the 40 Hz sawtooth on `HD_s1000import.img`
 carries the same ceiling if the acoustic path is ever used from it. Recorded in
 that procedure rather than discovered again.
+
+### A tenth, and it is about NULL results: identity needs a positive control
+
+From §144, where the S3000XL's `.P1` import returned all twenty fields
+unchanged. s3ked reported the two fields that *did* move — `KGRP1@`/`NXTKG@`,
+the object-pool addresses, 24 bytes apart per program — as a footnote meaning
+"not a mapping, ignore".
+
+They are the positive control, and without them the result is much weaker.
+
+**A readback in which nothing changed is indistinguishable from a readback that
+was not live.** The same numbers come back from a stale directory cache, from
+the wrong device, and from a load that silently did nothing — and all three
+have happened in these two projects, the middle one the day before. The pool
+addresses moving prove the machine wrote where it owns memory while leaving
+every semantic field alone.
+
+> An all-identity result needs something in it that changed, or it is only
+> evidence that the measurement was inert.
+
+This is the same instinct as designing a negative control (rule 4 of the bench
+traps) but it applies **after collection rather than during design**: given a
+null result already in hand, ask what in it demonstrates the instrument was
+connected. Often something already in the data does, unremarked, because it was
+filed as noise.
 
 ### The limit of writing any of this down
 
