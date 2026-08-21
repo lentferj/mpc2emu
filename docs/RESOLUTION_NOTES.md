@@ -146,6 +146,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIENV2 — the filter envelope: measured for eight days, unwired for two stale reasons](#akaienv2-the-filter-envelope-measured-for-eight-days-unwired-for-two-stale-reasons)
 - [§IDENTIFIERS — six wrong objects, zero wrong sums (2026-08-19/20)](#identifiers-six-wrong-objects-zero-wrong-sums-2026-08-1920)
 - [§AKAIFILTREAD — the reader reads the filter and drops it, and the law it would need may be stale](#akaifiltread-the-reader-reads-the-filter-and-drops-it-and-the-law-it-would-need-may-be-stale)
+- [§AKAIPOOLBASE — the silent first program, and a fix that was only ever described](#akaipoolbase-the-silent-first-program-and-a-fix-that-was-only-ever-described)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -13496,3 +13497,60 @@ checked independently.** Their "99 cannot divide the top rungs" was
 unfalsifiable until the run happened, so the mechanism was the only examinable
 part. When a conclusion *is* independently checkable, checking it beats
 reasoning about its derivation.
+
+
+## §AKAIPOOLBASE — the silent first program, and a fix that was only ever described
+
+**Jan, 2026-08-21, at the machine:** `TC1 E4B BASS`, PRGNUM 0, `bass A` —
+no sound. First program of the first volume he tried.
+
+`bass A.S3` is the **first sample in the volume and it is looped**, which
+is precisely the condition §AKAILOOPCROSS established on hardware: a looped
+sample at the base of the sampler's object pool plays silent or degraded.
+
+So this is not a new bug. It is the old one, arriving as the hardware
+confirmation that row had been waiting for — in the form of a failure rather
+than a pass.
+
+### The fix was recorded as shipped and does not exist
+
+TODO said: *"Fixed: `build_akai_volume` emits an unlooped sample first, so
+under the bulk load a user performs the one-shot takes the base — a reorder,
+not a filter, with a warning when a volume is all loops."*
+
+`build_akai_volume` iterates `for sd in bank.samples` in plain order. There is
+no reorder. `grep` for the warning across `writers/`, `convert.py` and
+`processors/` finds nothing. **The row read FIXED for three days on the
+strength of a description of a fix.**
+
+That is the same shape as three other things this week — a claim that reads as
+checked because it is specific and confident — but it is the first where the
+claim was about *our own code* and a single `grep` would have settled it. The
+others at least needed a measurement.
+
+### A reorder would not have been enough here
+
+**All ten samples in `TC1 E4B BASS` are looped.** There is no one-shot to
+promote, which is exactly the case the recorded fix said it would only *warn*
+about. So even the described fix, had it existed, would have printed a warning
+and produced this disc.
+
+### What would actually work
+
+Emit a **tiny disposable one-shot as the first sample of every volume**, so the
+pool base is always occupied by something whose silence costs nothing. A few
+dozen frames, clearly named. It works whether or not the volume contains any
+one-shot of its own, which the reorder does not.
+
+Costs: one extra sample per volume in the sampler's list, and a few hundred
+bytes. Against: a silent program in a converted volume, which is what we have.
+
+**Do not implement it on the strength of this note.** The pool-base finding
+itself came with a warning that five rules were stated and withdrawn before the
+surviving one, and the mechanism — whether it is the pool base, the load order,
+or the first-loaded sample specifically — is still not separated. A pad sample
+tests the fix and the mechanism at once: if the pad is silent and everything
+else plays, the rule is confirmed and the cost is a sample nobody listens to.
+
+Kept on the list at Jan's instruction, 2026-08-21, rather than fixed
+immediately.
