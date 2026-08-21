@@ -38,7 +38,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from models.common import (Bank, LoopType, SampleData, safe_filename,
+from models.common import (
+    AKAI_FILTER_LAW, AKAI_FILTER_OPEN,Bank, LoopType, SampleData, safe_filename,
                            E4B_CUTOFF_MIN_HZ, E4B_CUTOFF_MAX_HZ, hz_to_e4b_cutoff)
 from parsers.akai_s3000_parser import (
     str_to_akai, AKAI_NAME_LEN, SAMPLE_HEADER_LEN, PROGRAM_COMMON_LEN,
@@ -183,7 +184,14 @@ def _put_s16(buf: bytearray, off: int, v: int) -> None:
 #: it predicted FILFRQ 44, 50 and 56 to -0.2%, +0.5% and +2.2%, and an
 #: independently fitted damping law predicts its damping to 0.7%. Nothing
 #: reaches a user regardless -- this branch is gated on hardware.
-_AK_FILTER = (6.4597,     0.07100, 44, 92)    # Hz
+#: SUPERSEDED 2026-08-12 -> 2026-08-20, kept only so the long provenance note
+#: above still has its subject. **The writer no longer uses it.** s3ked §54
+#: fitted this to the RESONANCE PEAK as an indicator of the corner; their §139
+#: measured the corner directly and the two disagree by a constant 1.29x, which
+#: is open on their side. §54 was never retracted, because it is still correct
+#: as written -- which is exactly the trap §IDENTIFIERS records, so it is
+#: marked here rather than left to be discovered by using it.
+_AK_FILTER_SUPERSEDED = (6.4597, 0.07100, 44, 92)    # Hz -- see AKAI_FILTER_LAW
 # ── Envelope timing: RATES, not durations (s3ked retraction, 2026-08-11) ─────
 # An AKAI envelope value sets a SLEW RATE. How long a stage takes therefore
 # depends on how far it has to travel, and a "decay time" alone does not
@@ -513,11 +521,16 @@ def akai_filter_byte(cutoff_pos: float) -> int:
     same reason: the position is shared across formats and the machines do not
     agree about what it sounds like.
 
-    The measured curve covers FILFRQ 44..92, i.e. 147 Hz .. 4.4 kHz. Outside
-    it we do NOT extrapolate, and the two ends are handled differently because
-    they are not symmetrical:
+    The measured curve covers FILFRQ 40..84, i.e. 138 Hz .. 3.3 kHz. Outside
+    it the two ends are handled differently, because they are not symmetrical:
 
-      above 4.4 kHz -> **99**, not 92. 99 is the machine's own resting value
+      above the fit -> the position is INTERPOLATED across 84..99 rather than
+                       clamped, mirroring the reader exactly so the two are
+                       inverses across the unmeasured decade as well. That band
+                       carries 44% of S3000 factory voices, and clamping it
+                       made 9 of 10 FILFRQ values fail an AKAI round trip,
+                       drifting +3 to +11 and brightening on every pass.
+                       Position 1.0 is **99**, the machine's own resting value
                        and is known to be wide open (s3ked took the sweep's
                        0 dB reference there and found no attenuation until the
                        band edge). Clamping to 90 instead would make every
@@ -529,11 +542,19 @@ def akai_filter_byte(cutoff_pos: float) -> int:
                        an unsampled extrapolation can be wrong by 5x.
     """
     pos = max(0.0, min(1.0, cutoff_pos))
+    a, b, lo, hi = AKAI_FILTER_LAW
+    if pos >= 1.0:
+        return AKAI_FILTER_OPEN        # wide open, HW-confirmed
+    top = hz_to_e4b_cutoff(a * math.exp(b * hi))
+    if pos > top:
+        # Mirror of the reader's interpolation across the unmeasured top
+        # decade, so the two remain exact inverses THERE too -- the band
+        # carries 44% of S3000 factory voices and is where the round trip was
+        # worst (FILFRQ 88 came back 99).
+        span = AKAI_FILTER_OPEN - hi
+        return int(round(hi + (pos - top) / (1.0 - top) * span))
     hz = E4B_CUTOFF_MIN_HZ * (E4B_CUTOFF_MAX_HZ / E4B_CUTOFF_MIN_HZ) ** pos
-    a, b, lo, hi = _AK_FILTER
-    if hz >= a * math.exp(b * hi):
-        return 99                       # wide open, HW-confirmed
-    return _invert_exp_law(hz, _AK_FILTER)
+    return _invert_exp_law(hz, AKAI_FILTER_LAW)
 
 
 def akai_lfo_rate_byte(hz: float) -> int:

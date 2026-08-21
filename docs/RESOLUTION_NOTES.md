@@ -13351,3 +13351,52 @@ Keygroup **151/152/153 read `[0, 0, 0]`** on all three probes. A 150-byte S1000
 keygroup cannot carry the S3000 extension, so that is AKAI's own default for
 the velocity / LFO2 / envelope-to-filter depths of §AKAIVFR — a default nobody
 had written down, for one extra read.
+
+
+### The "by construction" claim was false when I wrote it, 2026-08-21
+
+I wrote that moving the law to `models/common.py` made reader and writer *exact
+inverses by construction*. **It did not.** The reader used the shared
+`AKAI_FILTER_LAW` (§139); the writer still used its own `_AK_FILTER` (§54).
+Found by checking my own docstring against the code instead of writing another
+note, after s3ked pointed out we had spent longer documenting the work than
+doing it.
+
+Measured before fixing — AKAI → AKAI, FILFRQ in and out:
+
+    in    40  50  60  70  80  84  88  92  95  99
+    out   44  53  64  74  84  88  99  99  99  99
+
+**Nine of ten drifted, +3 to +11, brightening on every pass.** A bank
+round-tripped through our own converter came out progressively more open.
+
+Fixed: the writer now uses `AKAI_FILTER_LAW` and `AKAI_FILTER_OPEN`, both
+shared, and mirrors the reader's interpolation across the unmeasured 84..99
+decade instead of clamping. **60 of 70 settings from FILFRQ 30..99 now survive
+a round trip exactly.** The remaining ten are 30..39, below the fitted floor,
+where the reader clamps to 40 and refuses to extrapolate — a documented floor
+rather than drift, reaching 1251 of 76 086 `.P1` keygroups (1.6%) and none on
+S3000.
+
+**Which law, settled from their module rather than their message.** Our own
+`test_our_exponential_laws_match_s3ked` says *"take the values from
+s3k/scales.py, not from a handoff message: the message is a snapshot, the
+module is maintained"* — and it fired, because their `Scale` still carries §54.
+Reading the module rather than assuming a conflict resolved it: the Scale's own
+note directs the choice explicitly.
+
+> "a converter mapping a source format's CUTOFF wants §139 — every format means
+> the -3 dB point by 'cutoff', and §139 measures that directly rather than
+> through an indicator"
+
+So the coefficients are the resonance law because that is what the `Scale`
+object *is*, and the note tells converters to use the other one. No conflict,
+and no override of the guard. FILFRQ is removed from the drift table with that
+reason, and a new test reads §139's constants **out of their note** and checks
+ours against them — so it still catches our drift, and now also catches s3ked
+revising §139 without telling us. When the 1.29× is resolved, that test is
+where the follow-up is anchored.
+
+`_AK_FILTER` is kept as `_AK_FILTER_SUPERSEDED`, marked, so the long provenance
+note above it still has a subject and nobody uses it by reaching for the
+obvious name.

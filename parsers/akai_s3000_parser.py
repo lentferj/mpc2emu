@@ -39,7 +39,7 @@ from typing import Optional
 
 from models.common import (
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType,
-    akai_filfrq_to_hz, hz_to_e4b_cutoff, AKAI_FILTER_LAW)
+    akai_filfrq_to_hz, hz_to_e4b_cutoff, AKAI_FILTER_LAW, AKAI_FILTER_OPEN)
 
 # ── AKAI character encoding ────────────────────────────────────────────────
 # Not ASCII: names are a 41-symbol alphabet packed one byte per character.
@@ -229,10 +229,6 @@ def _playback_rate(data: bytes, s3000: bool) -> int:
 
 
 # ── sample ─────────────────────────────────────────────────────────────────
-#: FILFRQ the machine treats as wide open. HW-confirmed: s3ked took a sweep's
-#: 0 dB reference at 99 and found no attenuation until the band edge, and 99
-#: is the value the machine itself rests at.
-_AKAI_FILTER_OPEN = 99
 
 
 def _cutoff_of(filfrq: int, s3000: bool) -> float:
@@ -296,12 +292,12 @@ def _cutoff_of(filfrq: int, s3000: bool) -> float:
     almost entirely 85..99, so a sweep of the top decade would replace this
     interpolation with measurement and would move 44% of real voices.
     """
-    if filfrq >= _AKAI_FILTER_OPEN:
+    if filfrq >= AKAI_FILTER_OPEN:
         return 1.0
     _a, _b, _lo, _hi = AKAI_FILTER_LAW
     if filfrq > _hi:
         top = hz_to_e4b_cutoff(akai_filfrq_to_hz(_hi))
-        span = _AKAI_FILTER_OPEN - _hi
+        span = AKAI_FILTER_OPEN - _hi
         return top + (1.0 - top) * (filfrq - _hi) / span
     return hz_to_e4b_cutoff(akai_filfrq_to_hz(filfrq))
 

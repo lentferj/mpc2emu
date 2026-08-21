@@ -428,6 +428,12 @@ def e4xt_byte_to_volume_db(byte: int) -> float:
 #: so neither law belongs on a `.P1`. See the generation branch in the parser.
 AKAI_FILTER_LAW = (7.60732, 0.07245, 40, 84)      # Hz = a*exp(b*FILFRQ)
 
+#: FILFRQ the machine treats as wide open. HW-confirmed: s3ked took a sweep's
+#: 0 dB reference here and found no attenuation until the band edge, and it is
+#: the value the machine itself rests at. Lives beside the law because both the
+#: reader and the writer need it to agree about where the curve ends.
+AKAI_FILTER_OPEN = 99
+
 
 def akai_filfrq_to_hz(byte: int) -> float:
     """FILFRQ -> the -3 dB corner in Hz. Clamped to the FITTED range."""
