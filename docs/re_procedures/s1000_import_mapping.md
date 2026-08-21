@@ -78,3 +78,12 @@ The sample is a 40 Hz sawtooth precisely so this disc also supports it: a
 harmonic comb every 40 Hz samples the filter's transfer function densely enough
 to fit both a corner and a slope. The `HD8_rateread.img` sines left that
 discriminator unavailable, which s3ked pointed out after the fact.
+
+**Caveat on that sawtooth, added after s3ked explained their fit range.** A
+sawtooth runs out of harmonics above the corner at high FILFRQ — that is
+exactly why their filter law is fitted only to 84, and why 44% of real voices
+fall outside it. So this disc's acoustic path inherits the same ceiling and
+would measure the top decade no better. If the acoustic version is wanted for
+FILFRQ 85..98, it needs a brighter source than this: a lower root, richer
+harmonics, or noise. **The SysEx readback this disc is actually for has no such
+limit** — it does not sound a note at all.

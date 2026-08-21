@@ -13058,6 +13058,38 @@ offsets 9/10/11 measured inert on an S3000XL, which is a real measurement of
 absence, and the live fields were elsewhere. Absence of variation and absence
 of effect are both evidence about the instrument first.
 
+### A ninth: calibrated over the range we could measure, not the range in use
+
+s3ked's generalisation, 2026-08-20, and the sharpest thing to come out of the
+FILFRQ distribution.
+
+Their filter law is fitted 40..84. Across four S3000 factory discs, **685 of
+1555 keygroups sit in 85..98 and TWO inside 40..84.** So 0.1% of real voices
+sit where the law was measured and 44% sit where it is an interpolation.
+
+**The fit range was never chosen.** §54's own bounds note states the limits
+honestly: below 44 the corner drops under the lowest note's fundamental, above
+92 the source runs out of harmonics above the corner. **The sawtooth set the
+range** — not the machine, and not the question. The material then turned out
+to live almost entirely outside it, and nothing anywhere warned that the two
+did not overlap.
+
+> Calibrating over the range you can measure is not the same as calibrating
+> over the range that is used.
+
+Every bounds note in both projects records the first honestly. None of them
+knows to ask the second. It is the same family as the wrong-specimen errors —
+the measurement is sound and it is about the wrong part of the domain — and it
+is invisible from inside the measurement, because a bounds note reads as
+diligence.
+
+**The check that would have caught it costs nothing**: before fitting, count
+what the corpus actually uses. We had the corpus the whole time.
+
+Consequence for our own discs: the 40 Hz sawtooth on `HD_s1000import.img`
+carries the same ceiling if the acoustic path is ever used from it. Recorded in
+that procedure rather than discovered again.
+
 ### The limit of writing any of this down
 
 s3ked's §87 named this failure mode on 2026-08-13, in the same file, about the
