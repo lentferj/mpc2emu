@@ -249,12 +249,32 @@ def _cutoff_of(filfrq: int, s3000: bool) -> float:
     Uses `AKAI_FILTER_LAW`, shared with the writer so the two are exact
     inverses by construction rather than by agreement.
 
-    **S1000 returns the default, deliberately.** Both of our laws were measured
-    on an S3000XL, and §139 found 12 dB/octave there against the S1000's
-    specified 18 -- a different filter order is a different filter. Converting
-    a `.P1` with an S3000XL law would be the rate-byte mistake in a new field,
-    and the S1000 corner law is precisely what the proposed S1000 disc exists
-    to measure. Until then a `.S1`/`.P1` source keeps today's behaviour.
+    **S1000 sources use the same law, since 2026-08-21, and the reason is
+    measured rather than assumed.** This returned the default for `.P1` until
+    then, on the grounds that both laws are S3000XL measurements. s3ked §144
+    settled it: the S3000XL loads `.P1` natively and **its import is a
+    pass-through** -- a FILFRQ ladder of 14 values came back exact and
+    monotonic, and three probe programs setting all twenty semantic fields to
+    20, 50 and 80 returned every one unchanged. So AKAI's own importer treats
+    an S1000 FILFRQ as an S3000 FILFRQ, and that is the manufacturer's answer
+    to the question this branch was waiting on.
+
+    It reached 14 661 keygroups: 19.3% of the 76 086 `.P1` keygroups in the
+    corpus carry a real setting, and every one of them was converting fully
+    open.
+
+    **What this does NOT establish, and must be said whenever it is quoted:
+    identity is not equivalence.** The importer not altering the number does
+    not make the number sound the same -- §139 measured 12 dB/octave on this
+    machine against the S1000's specified 18, so FILFRQ 60 can import untouched
+    and still produce a different corner on the two machines. What we now
+    reproduce for a `.P1` is **what an S3000XL makes of that file**, which is
+    what anyone playing these discs on S3000-family hardware hears. What an
+    S1000 made of it is still open and still needs an S1000.
+
+    The `s3000` argument is kept although the filter no longer branches on it:
+    the question was live for a day and a signature that never had the
+    information would read as though it had never been asked.
 
     **Between the top of the fit (84) and wide open (99) the POSITION is
     interpolated, not clamped, and that band is where the corpus actually
@@ -276,8 +296,6 @@ def _cutoff_of(filfrq: int, s3000: bool) -> float:
     almost entirely 85..99, so a sweep of the top decade would replace this
     interpolation with measurement and would move 44% of real voices.
     """
-    if not s3000:
-        return VoiceLayer().filter_cutoff
     if filfrq >= _AKAI_FILTER_OPEN:
         return 1.0
     _a, _b, _lo, _hi = AKAI_FILTER_LAW

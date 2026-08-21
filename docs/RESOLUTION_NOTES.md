@@ -13262,3 +13262,45 @@ wiring torn out** — identical to the attack test that morning, which called
 catch. Caught here only because the earlier one had already taught it. The
 assertion now parses a written program through `parse_akai_program` and checks
 the value that reaches the model.
+
+
+### S1000 sources joined it, 2026-08-21, on a measurement
+
+This note said `.P1` keeps the default because both laws are S3000XL
+measurements. **s3ked §144 settled that in ninety seconds and without audio**,
+on Jan's idea: if the S3000 reads `.P1` natively then AKAI's own import routine
+IS the S1000 → S3000 mapping, and a SysEx readback states it.
+
+It does, and it is a pass-through:
+
+* a FILFRQ ladder of 14 values, 30..99, came back **exact and monotonic**
+* three probe programs setting **all twenty semantic fields** to 20, 50 and 80
+  returned every one **unchanged**
+* the only fields that moved were `PRGNUM` (by design) and `KGRP1@`/`NXTKG@`,
+  which are object-pool addresses the machine owns — 24 bytes apart per
+  program, i.e. the pool laying out three programs
+
+So the manufacturer's own answer is that an S1000 FILFRQ is an S3000 FILFRQ.
+The branch is removed and it reached **14 661 keygroups** — 19.3% of the 76 086
+`.P1` keygroups in the corpus carry a real setting and every one had been
+converting fully open. On three S1000 discs, voices reading fully open fall from
+100% to 62.8%.
+
+**Identity is not equivalence, and this is the result most likely to be
+over-read.** s3ked flagged it before I could: the importer not altering the
+number does not make the number sound the same. §139 measured 12 dB/octave on
+this machine against the S1000's specified 18, so FILFRQ 60 imports untouched
+and can still produce a different corner on the two machines.
+
+What we now reproduce for a `.P1` is **what an S3000XL makes of that file** —
+which is what anyone playing these discs on S3000-family hardware hears, and
+what Jan hears. What an *S1000* made of it is untouched by this and still needs
+an S1000. Both halves belong in any quotation of this result, or the volunteer
+disc gets retired on the strength of it.
+
+### The free result: AKAI defaults the extension bytes to zero
+
+Keygroup **151/152/153 read `[0, 0, 0]`** on all three probes. A 150-byte S1000
+keygroup cannot carry the S3000 extension, so that is AKAI's own default for
+the velocity / LFO2 / envelope-to-filter depths of §AKAIVFR — a default nobody
+had written down, for one extra read.
