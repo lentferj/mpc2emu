@@ -13607,3 +13607,43 @@ the preconditions ARE checkable and the symptom is not.
 
 The check that would have caught it costs one message: ask whether it still
 does that.
+
+
+### Wired 2026-08-21, and the measurement is why
+
+This section argued the blocker was design work in our model, not a missing
+measurement. That was right, and what unblocked it was a number: Jan's A/B of
+ten programs against their E4XT originals, at three pitches.
+
+    sources WITH a filter envelope (3 of 10)   -17.3 / -20.6 / -17.8 dB HF
+    sources without one            (7 of 10)    -3.6 /  -6.5 /  -7.8 dB HF
+
+**Flat across pitch** on the envelope group, which is what distinguishes a
+missing modulation from a mis-set corner: a wrong cutoff opens or closes as the
+note moves relative to it, a missing envelope costs the same everywhere. And
+Jan picked those three out of ten **by ear, before anything was measured**.
+
+The mapping, which is the design work this section was waiting on:
+
+* **stage distance.** The published laws are full 0..99 traverse times, so a
+  stage covering less takes proportionally less: scale the wanted time up by
+  `99/distance` and invert. Attack climbs the full range, decay falls from the
+  top to the sustain level, release falls from sustain to zero -- the same
+  shape `akai_env_bytes` already uses for envelope 1's dB spans.
+* **SUSTN2** is a level, linear, `v/99` of full excursion.
+* **the depth at keygroup 153 is not optional.** §144 measured AKAI's own
+  import defaulting 151/152/153 to zero, so an envelope written without it
+  modulates nothing -- silent in precisely the way the fixed default was, and
+  indistinguishable from not having done the work. The regression test asserts
+  the routing separately for that reason and was confirmed to fail without it.
+* **written only where the source has one.** Seven of the ten presets have no
+  filter envelope; they keep neutral defaults rather than being handed one.
+
+**Known limit, stated rather than hidden:** a 30 ms filter attack wants a byte
+below the fitted floor and clamps to ATTAK2 40, about 66 ms. Slower than asked
+by roughly 2x on fast attacks. That is the refusal-to-extrapolate rule this
+project applies everywhere else, and the fix is a measurement below 40 rather
+than a formula.
+
+**Not yet heard on hardware.** The disc must be rebuilt and reloaded before
+anyone knows whether 20 dB came back.

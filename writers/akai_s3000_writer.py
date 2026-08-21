@@ -673,6 +673,72 @@ def _rate_law_value(seconds: float, span: float, law, default: int) -> int:
     return int(round(max(lo, min(hi, v))))
 
 
+#: ENVELOPE 2, the FILTER envelope. Times for a FULL 0..99 traverse, from
+#: s3ked's `s3k/scales.py` -- their authority, taken from the module rather
+#: than from prose:
+#:
+#:     ATTAK2  0.001363 * exp(0.09703 v) s   fitted 40..85  r2 0.99981
+#:     DECAY2  0.002464 * exp(0.09844 v) s   fitted 40..80  r2 0.99997
+#:     RELSE2  0.001344 * exp(0.09692 v) s   fitted 40..80  r2 0.99998
+#:     SUSTN2  a LEVEL, linear, v/99 of full excursion
+#:
+#: These are RATES over a VARIABLE distance -- a stage takes
+#: `full_time * (distance / 99)` -- which is why this was harder than the amp
+#: attack and why it sat unwired. ATTAK1 is a duration because it always
+#: travels zero-to-peak; envelope 2 does not.
+#:
+#: **Wired 2026-08-21, on a measurement rather than a guess.** Jan A/B-ed ten
+#: converted programs against their E4XT originals and the three whose source
+#: carries a filter envelope came back **~20 dB darker in HF, flat across
+#: three pitches** -- the signature of a missing modulation rather than a
+#: mis-set corner. He picked those three out of ten by ear alone.
+_AK_ATTAK2_FULL = (0.001363, 0.09703, 40, 85)   # s, full traverse
+_AK_DECAY2_FULL = (0.002464, 0.09844, 40, 80)
+_AK_RELSE2_FULL = (0.001344, 0.09692, 40, 80)
+
+#: Envelope2 -> Filter Frequency depth, keygroup 153, +-50 (§AKAIVFR).
+#: §144 measured AKAI's own import defaulting 151/152/153 to 0, so an envelope
+#: written without this routes nowhere and is silent in exactly the way the
+#: unwired envelope was.
+_AK_ENV2_DEPTH_OFF = 153
+_AK_ENV2_DEPTH_MAX = 50
+
+
+def _env2_stage_byte(seconds: float, distance: float, law) -> int:
+    """Invert a full-traverse time law for a stage covering `distance`/99.
+
+    The published law is the time for the whole 0..99 sweep, so a stage that
+    travels less takes proportionally less: scale the wanted time UP by
+    99/distance before inverting, and the byte that results is the one whose
+    full traverse would take that long.
+    """
+    a, b, lo, hi = law
+    if seconds <= 0 or distance <= 0:
+        return lo
+    full = seconds * (99.0 / distance)
+    v = math.log(max(full, 1e-9) / a) / b
+    return int(round(max(lo, min(hi, v))))
+
+
+def akai_filter_env_bytes(env, amount: float):
+    """Filter envelope -> (ATTAK2, DECAY2, SUSTN2, RELSE2, depth byte).
+
+    Distances mirror `akai_env_bytes`: attack climbs the full range, decay
+    falls from the top to the sustain level, release falls from sustain to
+    zero. Returns the depth separately because an envelope with no routing is
+    inaudible, which is indistinguishable from the fixed defaults this
+    replaced.
+    """
+    sus = int(round(max(0.0, min(1.0, getattr(env, 'sustain', 0.5))) * 99))
+    a = _env2_stage_byte(getattr(env, 'attack', 0.0) or 0.0, 99, _AK_ATTAK2_FULL)
+    d = _env2_stage_byte(getattr(env, 'decay', 0.0) or 0.0,
+                         max(1, 99 - sus), _AK_DECAY2_FULL)
+    r = _env2_stage_byte(getattr(env, 'release', 0.0) or 0.0,
+                         max(1, sus), _AK_RELSE2_FULL)
+    depth = int(round(max(-1.0, min(1.0, amount)) * _AK_ENV2_DEPTH_MAX))
+    return a, d, sus, r, depth
+
+
 def akai_sustain_byte(fraction: float) -> int:
     """Sustain 0..1 (a level fraction) -> SUSTN1, which is dB-LINEAR.
 
@@ -1671,10 +1737,21 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
     # carries no filter-envelope amount -- there is nothing to divide by.
     # Reverting is not a regression: a value derived from a retracted law is
     # worse than a neutral default because it looks like intent.
-    k[0x14] = 0                         # ATTAK2  -- no usable law
-    k[0x15] = 50                        # DECAY2  -- no span in our model
-    k[0x17] = 45                        # RELSE2  -- no span in our model
-    k[0x16] = 99                        # SUSTN2  -- unmeasured, fixed
+    # ENVELOPE 2 (filter), wired 2026-08-21. Written ONLY when the source
+    # actually carries one and routes it: an envelope with zero depth is
+    # inaudible, and writing one anyway would replace a fixed default with a
+    # fixed default that merely looks converted.
+    _fe = getattr(voice, 'filter_env', None) if voice is not None else None
+    _famt = (getattr(voice, 'filter_env_amount', 0.0) or 0.0) if voice else 0.0
+    if _fe is not None and abs(_famt) > 0.001:
+        _a2, _d2, _s2, _r2, _dep = akai_filter_env_bytes(_fe, _famt)
+        k[0x14], k[0x15], k[0x16], k[0x17] = _a2, _d2, _s2, _r2
+        k[_AK_ENV2_DEPTH_OFF] = _dep & 0xFF
+    else:
+        k[0x14] = 0                     # ATTAK2  -- no envelope in the source
+        k[0x15] = 50                    # DECAY2
+        k[0x17] = 45                    # RELSE2
+        k[0x16] = 99                    # SUSTN2, open: no filter movement
     k[0x1c] = 25                        # velocity > filter envelope
     k[0x1e] = 0                         # velocity zone crossfade off
     struct.pack_into('<H', k, 0x20, _NO_POINTER)    # 0xFFFF on every real keygroup
