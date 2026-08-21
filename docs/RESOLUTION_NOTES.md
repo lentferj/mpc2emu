@@ -147,6 +147,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§IDENTIFIERS — six wrong objects, zero wrong sums (2026-08-19/20)](#identifiers-six-wrong-objects-zero-wrong-sums-2026-08-1920)
 - [§AKAIFILTREAD — the reader reads the filter and drops it, and the law it would need may be stale](#akaifiltread-the-reader-reads-the-filter-and-drops-it-and-the-law-it-would-need-may-be-stale)
 - [§AKAIPOOLBASE — the silent first program, and a fix that was only ever described](#akaipoolbase-the-silent-first-program-and-a-fix-that-was-only-ever-described)
+- [§SILENCEGATE — silence does not clip](#silencegate-silence-does-not-clip)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -13647,3 +13648,58 @@ than a formula.
 
 **Not yet heard on hardware.** The disc must be rebuilt and reloaded before
 anyone knows whether 20 dB came back.
+
+
+## §SILENCEGATE — silence does not clip
+
+Four appearances in one evening, across three sessions, of one failure:
+
+* **eosed's capture script** passed thirty silent takes as *"no clipping,
+  peaks -70.3..-65.2 dBFS, RESULT: usable"*. It checked whether the audio was
+  too loud and never whether there was any.
+* **s3ked** captured thirty on a MIDI channel the sampler was not answering.
+* **s3ked** captured thirty more on a note above the mapped key range.
+* and their **§138**, a week earlier, read silence as **+31 cents of pitch
+  drift**, because the estimator's threshold scaled to its own window's peak.
+
+Ours the same night, in a different medium: I filed a bug from a *reported*
+silence that had never been observed (§AKAIPOOLBASE).
+
+**A measurement of silence is confident, well-behaved and worthless, and it
+looks exactly like a measurement of a very dark sound.** Every check involved
+tested the measurement rather than the specimen.
+
+### The fix, and why this form of it travels
+
+eosed's: **lift over the take's own pre-roll.**
+
+    lift_over_preroll(env, t, on)   dB the note rises above its own pre-roll
+    sounded(env, t, on)             against SOUNDED_MIN_LIFT_DB = 20
+
+Comparing a take with *itself* needs no absolute reference, no level
+calibration, and survives a change of rig or gain — none of which a peak
+threshold does. Across 150 takes on 2026-08-21 the two populations did not
+overlap: real notes lifted 50–70 dB, dropped ones zero, and no tuning was
+required.
+
+Ported into `tests/re_banks/hw_measure.py` because that is the one that runs
+**unattended**, where a confident "usable" on silence costs a session rather
+than a take. s3ked has it in `probes/calibrate.py`; the constant and the
+reasoning are duplicated deliberately so neither project depends on the other's
+tree.
+
+### The threshold, and which way it should fail
+
+20 dB, not higher. A sparse percussive source over a fixed window lifted only
+**23.3 dB** (s3ked's rainsticks) where bass material lifted 62–69, so the
+margin is thinner than the first dataset suggests. **If it starts rejecting
+real takes the fix is a longer window, not a lower bar** — the failure that
+matters is passing silence, and refusing a quiet note is loud and immediate
+where accepting a silent one is neither.
+
+### The part worth keeping
+
+s3ked wrote §138 a week before repeating its lesson twice in one night. **Naming
+a failure mode is not the same as building a gate against it** — and this note
+is no exception, which is why the gate is code in two repositories rather than
+a paragraph in one.
