@@ -39,7 +39,10 @@ from typing import Optional
 
 from models.common import (
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType,
-    akai_filfrq_to_hz, hz_to_e4b_cutoff, AKAI_FILTER_LAW, AKAI_FILTER_OPEN)
+    akai_filfrq_to_hz, hz_to_e4b_cutoff, AKAI_FILTER_LAW, AKAI_FILTER_OPEN,
+    AKAI_ENV2_ATTACK, AKAI_ENV2_DECAY, AKAI_ENV2_RELEASE,
+    AKAI_ENV2_DEPTH_OFFSET, AKAI_ENV2_DEPTH_MAX, akai_env2_stage_seconds,
+    Envelope)
 
 # ── AKAI character encoding ────────────────────────────────────────────────
 # Not ASCII: names are a 41-symbol alphabet packed one byte per character.
@@ -229,6 +232,32 @@ def _playback_rate(data: bytes, s3000: bool) -> int:
 
 
 # ── sample ─────────────────────────────────────────────────────────────────
+
+
+def _filter_env_of(env2, depth):
+    """Keygroup envelope-2 bytes -> (Envelope, amount), or (None, 0).
+
+    **Depth 0 means NO filter envelope**, not a full-depth one. §144 measured
+    AKAI's own import defaulting keygroup 151/152/153 to zero, and our writer
+    leaves 153 alone unless the source had an envelope -- so an unrouted
+    envelope modulates nothing and reading one out would invent a modulation
+    the program does not make. That also makes this correct for S1000
+    programs, whose 150-byte keygroup cannot carry 153 at all.
+
+    Exact inverse of `akai_filter_env_bytes`, through the SAME shared laws:
+    the published times are full 0..99 traverses, so each stage is scaled by
+    the distance it really covers.
+    """
+    if not env2 or not depth:
+        return None, 0.0
+    a, d, sus, r = env2
+    sustain = max(0.0, min(1.0, sus / 99.0))
+    return (Envelope(
+        attack=akai_env2_stage_seconds(a, 99, AKAI_ENV2_ATTACK),
+        decay=akai_env2_stage_seconds(d, max(1, 99 - sus), AKAI_ENV2_DECAY),
+        sustain=sustain,
+        release=akai_env2_stage_seconds(r, max(1, sus), AKAI_ENV2_RELEASE)),
+        max(-1.0, min(1.0, depth / float(AKAI_ENV2_DEPTH_MAX))))
 
 
 def _cutoff_of(filfrq: int, s3000: bool) -> float:
@@ -476,6 +505,9 @@ def parse_program_bytes(data: bytes, fallback_name: str = '',
             filter_freq=kg[0x07],
             amp_attack=kg[0x0c], amp_decay=kg[0x0d],
             amp_sustain=kg[0x0e], amp_release=kg[0x0f],
+            env2=(kg[0x14], kg[0x15], kg[0x16], kg[0x17]),
+            env2_depth=(_s8(kg[AKAI_ENV2_DEPTH_OFFSET])
+                        if len(kg) > AKAI_ENV2_DEPTH_OFFSET else 0),
             zones=zones,
         ))
 
@@ -550,6 +582,10 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
     for kg in prog['keygroups']:
         voice = VoiceLayer()
         voice.filter_cutoff = _cutoff_of(kg['filter_freq'], prog['is_s3000'])
+        _fe, _amt = _filter_env_of(kg.get('env2'), kg.get('env2_depth', 0))
+        if _fe is not None:
+            voice.filter_env = _fe
+            voice.filter_env_amount = _amt
         for z in kg['zones']:
             src = z['sample_name']
             if src not in cache:

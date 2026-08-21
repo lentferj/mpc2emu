@@ -39,7 +39,9 @@ from pathlib import Path
 from typing import Optional
 
 from models.common import (
-    AKAI_FILTER_LAW, AKAI_FILTER_OPEN, akai_filfrq_to_hz,Bank, LoopType, SampleData, safe_filename,
+    AKAI_FILTER_LAW, AKAI_FILTER_OPEN, akai_filfrq_to_hz,
+    AKAI_ENV2_ATTACK, AKAI_ENV2_DECAY, AKAI_ENV2_RELEASE,
+    AKAI_ENV2_DEPTH_OFFSET, AKAI_ENV2_DEPTH_MAX,Bank, LoopType, SampleData, safe_filename,
                            E4B_CUTOFF_MIN_HZ, E4B_CUTOFF_MAX_HZ, hz_to_e4b_cutoff)
 from parsers.akai_s3000_parser import (
     str_to_akai, AKAI_NAME_LEN, SAMPLE_HEADER_LEN, PROGRAM_COMMON_LEN,
@@ -692,16 +694,17 @@ def _rate_law_value(seconds: float, span: float, law, default: int) -> int:
 #: carries a filter envelope came back **~20 dB darker in HF, flat across
 #: three pitches** -- the signature of a missing modulation rather than a
 #: mis-set corner. He picked those three out of ten by ear alone.
-_AK_ATTAK2_FULL = (0.001363, 0.09703, 40, 85)   # s, full traverse
-_AK_DECAY2_FULL = (0.002464, 0.09844, 40, 80)
-_AK_RELSE2_FULL = (0.001344, 0.09692, 40, 80)
+#: Aliases onto the SHARED laws in models.common -- see there for why.
+_AK_ATTAK2_FULL = AKAI_ENV2_ATTACK
+_AK_DECAY2_FULL = AKAI_ENV2_DECAY
+_AK_RELSE2_FULL = AKAI_ENV2_RELEASE
 
 #: Envelope2 -> Filter Frequency depth, keygroup 153, +-50 (§AKAIVFR).
 #: §144 measured AKAI's own import defaulting 151/152/153 to 0, so an envelope
 #: written without this routes nowhere and is silent in exactly the way the
 #: unwired envelope was.
-_AK_ENV2_DEPTH_OFF = 153
-_AK_ENV2_DEPTH_MAX = 50
+_AK_ENV2_DEPTH_OFF = AKAI_ENV2_DEPTH_OFFSET
+_AK_ENV2_DEPTH_MAX = AKAI_ENV2_DEPTH_MAX
 
 
 def _env2_stage_byte(seconds: float, distance: float, law) -> int:

@@ -486,6 +486,33 @@ AKAI_FILTER_LAW_TRUSTED_TO = 80
 #: inventing three numbers the machine does not distinguish.
 AKAI_FILTER_SATURATED = 96
 
+#: ENVELOPE 2 (filter) -- times for a FULL 0..99 traverse, from s3ked's
+#: `s3k/scales.py`. Shared by the reader and the writer for the same reason
+#: AKAI_FILTER_LAW is: two hand-derived inverses of one curve drifted apart on
+#: 2026-08-20 and nine of ten values failed a round trip while a docstring
+#: claimed they could not.
+#:
+#: A stage covering less than the full range takes proportionally less:
+#: `full_time * distance / 99`. Attack climbs the whole range, decay falls
+#: from the top to the sustain level, release falls from sustain to zero.
+AKAI_ENV2_ATTACK  = (0.001363, 0.09703, 40, 85)     # s, r2 0.99981
+AKAI_ENV2_DECAY   = (0.002464, 0.09844, 40, 80)     # s, r2 0.99997
+AKAI_ENV2_RELEASE = (0.001344, 0.09692, 40, 80)     # s, r2 0.99998
+
+#: Envelope2 -> Filter Frequency depth: keygroup 153, +-50 (§AKAIVFR).
+#: §144 measured AKAI's own import defaulting 151/152/153 to ZERO, so an
+#: envelope with no depth here modulates nothing -- which is why the reader
+#: must treat depth 0 as "no filter envelope" rather than as a full-depth one.
+AKAI_ENV2_DEPTH_OFFSET = 153
+AKAI_ENV2_DEPTH_MAX = 50
+
+
+def akai_env2_stage_seconds(byte: int, distance: float, law) -> float:
+    """A stage byte -> the seconds it takes to cover `distance` of 99."""
+    a, b, lo, hi = law
+    full = a * math.exp(b * max(lo, min(hi, byte)))
+    return full * (max(0.0, distance) / 99.0)
+
 
 def akai_filfrq_to_hz(byte: int):
     """FILFRQ -> the -3 dB corner in Hz, or None when it is wide open.
