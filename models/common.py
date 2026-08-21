@@ -455,8 +455,29 @@ AKAI_FILTER_OPEN = 99
 #: the band where most S3000 factory material sits. These points replace the
 #: extrapolation. 90..94 are marked marginal by s3ked -- they are still far
 #: better than a law known to be 7..23% low there.
-AKAI_FILTER_MEASURED = {86: 3984.0, 88: 4643.0, 90: 5512.0, 92: 6888.0,
-                        94: 8481.0}
+AKAI_FILTER_MEASURED = {84: 3421.0, 86: 3984.0, 88: 4643.0, 90: 5512.0,
+                        92: 6888.0, 94: 8481.0}
+
+#: The law is used only up to HERE, which is **one rung below its own fitted
+#: top** (s3ked §146 refined, 2026-08-21). The departure begins AT 84, not
+#: above it:
+#:
+#:      68..80   mean 0.9996  sd 0.0085     flat
+#:      68..84   mean 1.0043  sd 0.0128     §139's own fitted range
+#:      68..88   mean 1.0131  sd 0.0184
+#:
+#: Point by point the flat region scatters 0.987..1.007, and 84 sits at 1.023 --
+#: outside it, and the first step of a monotone run (1.023, 1.031, 1.039,
+#: 1.067, 1.154, 1.229). **A fit's upper bound is where it is least
+#: constrained**, with the fewest neighbours holding it, so it is the first
+#: point to go and the one an average over the range is least able to show.
+#:
+#: Both projects computed the same "1.004 across the fitted range" and neither
+#: looked at its last point until an outlier forced it. A mean over a range
+#: answers a question about the range, not about its endpoints.
+#:
+#: Nothing is lost by moving the boundary down: 84 has a measured corner.
+AKAI_FILTER_LAW_TRUSTED_TO = 80
 
 #: At and above this, the filter is INDISTINGUISHABLE FROM WIDE OPEN and is
 #: treated as such rather than given a frequency. FILFRQ 98 differs from 99 by
@@ -477,8 +498,8 @@ def akai_filfrq_to_hz(byte: int):
         geometrically between them (the scale is logarithmic in frequency, so
         a straight line in log Hz is the right interpolation and a straight
         line in Hz is not).
-      * at or below the fitted range -> the §139 law, confirmed to 1.0042
-        against this same run.
+      * at or below `AKAI_FILTER_LAW_TRUSTED_TO` (80) -> the §139 law, which
+        is flat against measurement to 0.9996, sd 0.0085, over 68..80.
     """
     a, b, lo, hi = AKAI_FILTER_LAW
     if byte >= AKAI_FILTER_SATURATED:
@@ -493,10 +514,11 @@ def akai_filfrq_to_hz(byte: int):
                 f = (byte - x0) / (x1 - x0)
                 return math.exp(math.log(y0) + f * (math.log(y1) - math.log(y0)))
         return AKAI_FILTER_MEASURED[pts[-1]]
-    if byte > hi:                       # between the fit top and the first
-        y0 = a * math.exp(b * hi)       # measured point: 84..86
+    top = AKAI_FILTER_LAW_TRUSTED_TO
+    if byte > top:                      # between the trusted top and the first
+        y0 = a * math.exp(b * top)      # measured point
         y1 = AKAI_FILTER_MEASURED[pts[0]]
-        f = (byte - hi) / (pts[0] - hi)
+        f = (byte - top) / (pts[0] - top)
         return math.exp(math.log(y0) + f * (math.log(y1) - math.log(y0)))
     return a * math.exp(b * max(lo, byte))
 

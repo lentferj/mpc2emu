@@ -13454,3 +13454,45 @@ very law the run was built to test — which is circular, and invisible, because
 **a correct prediction from a wrong mechanism leaves nothing in the outcome to
 expose it.** The disc was built correctly on it regardless, which is the part
 that makes it worth writing down.
+
+
+### Refined the same hour: the departure begins AT 84, so the law is used to 80
+
+My first pass computed 1.0131 by including 86 and 88, and I "corrected" it to
+s3ked's 68..84 window. **The first number was the finding and the correction
+buried it.** They checked what the window was hiding rather than accepting the
+agreement:
+
+    68  0.987      80  1.002    <- last flat point
+    72  1.007      84  1.023    <- departure begins, INSIDE the fit
+    76  1.002      86  1.031
+
+    68..80   mean 0.9996  sd 0.0085
+    68..84   mean 1.0043  sd 0.0128     <- §139's own fitted range
+    68..88   mean 1.0131  sd 0.0184
+
+The flat region scatters 0.987..1.007. **84 sits at 1.023 — outside it, and the
+first step of a monotone run** (1.023, 1.031, 1.039, 1.067, 1.154, 1.229).
+
+So the law is now used only to **80**, one rung below its own fitted top, and 84
+takes its measured corner. Nothing is lost: 84 was measured.
+
+**A fit's upper bound is where it is least constrained** — fewest neighbours
+holding it — so it is the first point to fail, and it is exactly the point a
+mean over the fitted range is least able to reveal. "1.004 across the fitted
+range" reads as uniform agreement and was four flat points plus one already
+leaving.
+
+Both projects computed that average and neither looked at its last point until
+an outlier forced it. **A mean over a range answers a question about the range,
+not about its endpoints** — and the endpoint is where a fitted law is most
+likely to be wrong.
+
+### Narrowing the wrong-mechanism lesson
+
+s3ked's refinement of my own framing, and it is better: stating the mechanism
+is not a general virtue, it is what matters **when the conclusion cannot be
+checked independently.** Their "99 cannot divide the top rungs" was
+unfalsifiable until the run happened, so the mechanism was the only examinable
+part. When a conclusion *is* independently checkable, checking it beats
+reasoning about its derivation.
