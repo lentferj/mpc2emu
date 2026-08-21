@@ -39,7 +39,7 @@ from pathlib import Path
 from typing import Optional
 
 from models.common import (
-    AKAI_FILTER_LAW, AKAI_FILTER_OPEN,Bank, LoopType, SampleData, safe_filename,
+    AKAI_FILTER_LAW, AKAI_FILTER_OPEN, akai_filfrq_to_hz,Bank, LoopType, SampleData, safe_filename,
                            E4B_CUTOFF_MIN_HZ, E4B_CUTOFF_MAX_HZ, hz_to_e4b_cutoff)
 from parsers.akai_s3000_parser import (
     str_to_akai, AKAI_NAME_LEN, SAMPLE_HEADER_LEN, PROGRAM_COMMON_LEN,
@@ -511,6 +511,57 @@ def akai_velocity_filter(cutoff_pos: float, vel_min: float, vel_max: float):
     return f_byte, d_byte, lost_clamp + lost_range
 
 
+def _filfrq_positions():
+    """FILFRQ -> the model position it reads as, for every settable value.
+
+    Built from `akai_filfrq_to_hz`, the SAME function the reader uses, so the
+    writer is the inverse of the reader by SEARCH rather than by a second
+    formula. That is the lesson of 2026-08-20: two hand-derived inverses of one
+    curve drifted apart and nine of ten FILFRQ values failed a round trip,
+    while a docstring claimed they were inverses by construction. A search
+    cannot drift.
+    """
+    # Domain starts at the FITTED FLOOR, not 0. Below it the reader clamps,
+    # so every setting from 0 to the floor reads as the same position -- and a
+    # search over all of them would return 0 for any dark source, which is a
+    # legal byte and a silent lie. The floor is the darkest thing we can
+    # honestly write.
+    out = {}
+    for v in range(AKAI_FILTER_LAW[2], AKAI_FILTER_OPEN + 1):
+        hz = akai_filfrq_to_hz(v)
+        out[v] = 1.0 if hz is None else hz_to_e4b_cutoff(hz)
+    return out
+
+
+_FILFRQ_POS = None
+
+
+def _nearest_filfrq(pos: float) -> int:
+    """Position -> the FILFRQ whose own position is closest.
+
+    Fully open is written as 99, the machine's own resting value, rather than
+    as the lowest saturated setting -- 96..99 are indistinguishable to the
+    machine (98 differs from 99 by 2.2 dB across the whole band), so any of
+    them is correct and 99 is the one a user's machine sits at.
+
+    Below that, **ties go to the LOWER setting**, which keeps a measured point
+    in preference to a clamp: FILFRQ 95 has no measurement and takes 94's
+    corner, so the two share a position, and 94 is the one that was actually
+    measured.
+    """
+    global _FILFRQ_POS
+    if _FILFRQ_POS is None:
+        _FILFRQ_POS = _filfrq_positions()
+    if pos >= 1.0:
+        return AKAI_FILTER_OPEN
+    best, best_d = 0, 9e9
+    for v in sorted(_FILFRQ_POS):
+        d = abs(_FILFRQ_POS[v] - pos)
+        if d < best_d - 1e-12:
+            best, best_d = v, d
+    return best
+
+
 def akai_filter_byte(cutoff_pos: float) -> int:
     """0..1 shared cutoff position -> FILFRQ.
 
@@ -542,19 +593,7 @@ def akai_filter_byte(cutoff_pos: float) -> int:
                        an unsampled extrapolation can be wrong by 5x.
     """
     pos = max(0.0, min(1.0, cutoff_pos))
-    a, b, lo, hi = AKAI_FILTER_LAW
-    if pos >= 1.0:
-        return AKAI_FILTER_OPEN        # wide open, HW-confirmed
-    top = hz_to_e4b_cutoff(a * math.exp(b * hi))
-    if pos > top:
-        # Mirror of the reader's interpolation across the unmeasured top
-        # decade, so the two remain exact inverses THERE too -- the band
-        # carries 44% of S3000 factory voices and is where the round trip was
-        # worst (FILFRQ 88 came back 99).
-        span = AKAI_FILTER_OPEN - hi
-        return int(round(hi + (pos - top) / (1.0 - top) * span))
-    hz = E4B_CUTOFF_MIN_HZ * (E4B_CUTOFF_MAX_HZ / E4B_CUTOFF_MIN_HZ) ** pos
-    return _invert_exp_law(hz, AKAI_FILTER_LAW)
+    return _nearest_filfrq(pos)
 
 
 def akai_lfo_rate_byte(hz: float) -> int:

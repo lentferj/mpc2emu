@@ -434,11 +434,71 @@ AKAI_FILTER_LAW = (7.60732, 0.07245, 40, 84)      # Hz = a*exp(b*FILFRQ)
 #: reader and the writer need it to agree about where the curve ends.
 AKAI_FILTER_OPEN = 99
 
+#: MEASURED corners above the fitted range (s3ked §146, 2026-08-21, from the
+#: FILTERTOP disc: a Schroeder complex flat to 18 kHz, adjacent-setting ratios,
+#: anchored on 68..84 where the corner was already known).
+#:
+#: **§139 was confirmed to 1.0042, sd 0.0136 inside 68..84** -- four parts in a
+#: thousand, a different source and a different session -- and then **stops
+#: being right immediately above it.** The measured corner rises faster than
+#: the exponential and the gap grows monotonically:
+#:
+#:      FILFRQ   measured   §139 law   ratio
+#:          84       3421       3344   1.023
+#:          86       3984       3865   1.031
+#:          88       4643       4468   1.039
+#:          90       5512       5165   1.067
+#:          92       6888       5970   1.154
+#:          94       8481       6901   1.229
+#:
+#: So extrapolating the law understates the corner by up to 23% across exactly
+#: the band where most S3000 factory material sits. These points replace the
+#: extrapolation. 90..94 are marked marginal by s3ked -- they are still far
+#: better than a law known to be 7..23% low there.
+AKAI_FILTER_MEASURED = {86: 3984.0, 88: 4643.0, 90: 5512.0, 92: 6888.0,
+                        94: 8481.0}
 
-def akai_filfrq_to_hz(byte: int) -> float:
-    """FILFRQ -> the -3 dB corner in Hz. Clamped to the FITTED range."""
+#: At and above this, the filter is INDISTINGUISHABLE FROM WIDE OPEN and is
+#: treated as such rather than given a frequency. FILFRQ 98 differs from 99 by
+#: **2.2 dB across the whole band** -- they are the same filter, and 96 was not
+#: measurable against the reference either. Assigning them corners would be
+#: inventing three numbers the machine does not distinguish.
+AKAI_FILTER_SATURATED = 96
+
+
+def akai_filfrq_to_hz(byte: int):
+    """FILFRQ -> the -3 dB corner in Hz, or None when it is wide open.
+
+    Measured everywhere, extrapolated nowhere:
+
+      * at or above `AKAI_FILTER_SATURATED` -> **None**, i.e. open. The machine
+        does not distinguish these settings from 99.
+      * inside `AKAI_FILTER_MEASURED` -> the measured corners, interpolated
+        geometrically between them (the scale is logarithmic in frequency, so
+        a straight line in log Hz is the right interpolation and a straight
+        line in Hz is not).
+      * at or below the fitted range -> the §139 law, confirmed to 1.0042
+        against this same run.
+    """
     a, b, lo, hi = AKAI_FILTER_LAW
-    return a * math.exp(b * max(lo, min(hi, byte)))
+    if byte >= AKAI_FILTER_SATURATED:
+        return None
+    pts = sorted(AKAI_FILTER_MEASURED)
+    if byte >= pts[0]:
+        if byte in AKAI_FILTER_MEASURED:
+            return AKAI_FILTER_MEASURED[byte]
+        for x0, x1 in zip(pts, pts[1:]):
+            if x0 <= byte <= x1:
+                y0, y1 = AKAI_FILTER_MEASURED[x0], AKAI_FILTER_MEASURED[x1]
+                f = (byte - x0) / (x1 - x0)
+                return math.exp(math.log(y0) + f * (math.log(y1) - math.log(y0)))
+        return AKAI_FILTER_MEASURED[pts[-1]]
+    if byte > hi:                       # between the fit top and the first
+        y0 = a * math.exp(b * hi)       # measured point: 84..86
+        y1 = AKAI_FILTER_MEASURED[pts[0]]
+        f = (byte - hi) / (pts[0] - hi)
+        return math.exp(math.log(y0) + f * (math.log(y1) - math.log(y0)))
+    return a * math.exp(b * max(lo, byte))
 
 
 def hz_to_e4b_cutoff(hz: float) -> float:

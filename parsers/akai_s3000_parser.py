@@ -292,14 +292,10 @@ def _cutoff_of(filfrq: int, s3000: bool) -> float:
     almost entirely 85..99, so a sweep of the top decade would replace this
     interpolation with measurement and would move 44% of real voices.
     """
-    if filfrq >= AKAI_FILTER_OPEN:
-        return 1.0
-    _a, _b, _lo, _hi = AKAI_FILTER_LAW
-    if filfrq > _hi:
-        top = hz_to_e4b_cutoff(akai_filfrq_to_hz(_hi))
-        span = AKAI_FILTER_OPEN - _hi
-        return top + (1.0 - top) * (filfrq - _hi) / span
-    return hz_to_e4b_cutoff(akai_filfrq_to_hz(filfrq))
+    hz = akai_filfrq_to_hz(filfrq)
+    if hz is None:                      # saturated: the machine does not
+        return 1.0                      # distinguish these from wide open
+    return hz_to_e4b_cutoff(hz)
 
 
 

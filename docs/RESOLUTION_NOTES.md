@@ -13400,3 +13400,57 @@ where the follow-up is anchored.
 `_AK_FILTER` is kept as `_AK_FILTER_SUPERSEDED`, marked, so the long provenance
 note above it still has a subject and nobody uses it by reaching for the
 obvious name.
+
+
+### Measured, 2026-08-21 (s3ked §146): the law is right to 84 and wrong above it
+
+The FILTERTOP disc ran. **§139 reproduced at 1.0042, sd 0.0136 across 68..84**
+— four parts in a thousand, a different source, a different session, a
+different anchoring. That is the strongest confirmation it has had, and it
+settles that our reader and writer are on the right law.
+
+**It stops being right immediately above its fitted range.** The measured
+corner rises faster than the exponential and the gap grows monotonically:
+
+    FILFRQ   measured   §139 law   ratio
+        84       3421       3344   1.023
+        86       3984       3865   1.031
+        88       4643       4468   1.039
+        90       5512       5165   1.067
+        92       6888       5970   1.154
+        94       8481       6901   1.229
+
+So extrapolating understated the corner by up to 23% across exactly the band
+where most S3000 factory material sits — the 685 of 1555 keygroups this disc
+was built for.
+
+**And the top saturates.** FILFRQ 98 differs from wide-open 99 by 2.2 dB across
+the entire band: they are the same filter. 96..99 are now treated as **open**
+rather than assigned corners, because giving them frequencies would invent
+three numbers the machine does not distinguish.
+
+`akai_filfrq_to_hz` now returns the law to 84, the **measured corners** from 86
+to 94, and **None** — open — at 96 and above. Measured everywhere,
+extrapolated nowhere.
+
+**The writer's inverse is now a search over the reader's forward map**, not a
+second formula. That is the direct fix for 2026-08-20, when two hand-derived
+inverses of one curve drifted apart, nine of ten values failed a round trip,
+and a docstring claimed they were inverses by construction. A search cannot
+drift. 56 of 70 settings now survive a round trip exactly and all fourteen
+exceptions are correct by design: 30..39 clamp to the fitted floor, 95 takes
+94's corner because 95 was never measured, and 96..98 write back as 99.
+
+### s3ked's own objection was right in prediction and wrong in mechanism
+
+Worth recording because it is a new failure shape. They argued FILFRQ 99 could
+not serve as the divisor because its own corner sat near 9.9 kHz. **It does
+not** — 99 is flat to 18 kHz and is a perfectly good divisor. The top rungs are
+unmeasurable because *they* converge on the reference, not because the
+reference falls away.
+
+Same observation, opposite cause. And the reasoning came from extrapolating the
+very law the run was built to test — which is circular, and invisible, because
+**a correct prediction from a wrong mechanism leaves nothing in the outcome to
+expose it.** The disc was built correctly on it regardless, which is the part
+that makes it worth writing down.
