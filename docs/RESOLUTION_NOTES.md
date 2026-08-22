@@ -164,6 +164,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§BUILDAROUND — three test-material failures, one cause (2026-08-22)](#buildaround-three-test-material-failures-one-cause-2026-08-22)
 - [§STALEREPORT — the failures that outlive their truth (2026-08-22)](#stalereport-the-failures-that-outlive-their-truth-2026-08-22)
 - [§ENVRATESLOPE — the two envelopes share a slope, not a law (2026-08-22)](#envrateslope-the-two-envelopes-share-a-slope-not-a-law-2026-08-22)
+- [§FENVORDER2 — the traversal order is measured, and our parser had it right (2026-08-22, RESOLVED)](#fenvorder2-the-traversal-order-is-measured-and-our-parser-had-it-right-2026-08-22-resolved)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -15007,3 +15008,67 @@ its traverse distance is ambiguous*, and the AKAI side already carries
 side has `env_span_seconds_to_rate(span_db, seconds)` whose docstring says **"THE
 SPAN IS NOT OPTIONAL and that is the whole point of this function"** — the
 knowledge is in the tree; the comparison just has to use it.
+
+## §FENVORDER2 — the traversal order is measured, and our parser had it right (2026-08-22, RESOLVED)
+
+§FENVORDER recorded the E4XT filter envelope's traversal order as **not
+established**, after eosed's first attempt was withdrawn on its own reversed
+control. It is now measured (their §44):
+
+    SEG0 -> SEG1 -> SEG2 -> SEG3 while held,
+    hold at SEG3's target until note-off,
+    SEG4 -> SEG5 on release.
+
+**Sequential in id order** — and their own parameter table had the stage *names*
+interleaved, which put "Atk2" exactly where the sustain lives. Corrected:
+
+    id 93/94   SEG0  Atk1        id 99/100  SEG3  Dcy2   <- the SUSTAIN
+    id 95/96   SEG1  Atk2        id 101/102 SEG4  Rls1
+    id 97/98   SEG2  Dcy1        id 103/104 SEG5  Rls2
+
+### Our parser was already on the measured structure
+
+eosed flagged this morning that our "filter env sustain" reads **id 100**, which
+under their labelling was "Atk2 Level" — an odd place to find sustain that
+happened to match. Under the measured mapping id 100 is SEG3's target, which *is*
+the sustain. **Our field was right and their label was wrong**; that flag is
+withdrawn.
+
+More than the one field: `parsers/e4b_parser.py` derives every stage from the
+**segment order in the file**, not from anyone's stage names —
+
+    env_attack  = rate[SEG0] + rate[SEG1]
+    env_decay   = rate[SEG2] + rate[SEG3]
+    env_release = rate[SEG4] + rate[SEG5]
+    env_sustain = level[SEG3]
+
+— which is exactly the measured traversal. `_PZT_FENV_DEFAULT`'s inline comments
+have carried the correct names (Attack1, Attack2, Decay1, Decay2, Release1,
+Release2, in order) since the parser was written.
+
+**So eosed's closing caveat does not reach us.** They warned that the voice and
+aux envelopes (ids 67–80, 117–128) keep the unverified labels, and that a
+converter mapping stages *from their labels* would still be on the old mapping.
+Ours never used the labels — it uses the file's segment order, and the amp
+envelope is read by the same rule as the filter one. The measurement corroborates
+our structure rather than requiring a change.
+
+### Why §41's knock-out could not have answered it
+
+Recorded because it is a clean example of a design that cannot separate its
+hypotheses regardless of data quality. That experiment held all six segments at
+one level and dropped one to zero. **A segment already at its target travels zero
+distance, and zero distance takes zero time** — so every at-target stage completed
+instantly and the dip landed at the same instant whichever segment carried it.
+That is why SEG1, SEG2 and SEG3 all read 5.6 s. The data were fine.
+
+The idea it was missing is the one `akai_env2_stage_seconds(byte, distance, law)`
+already encodes on the AKAI side: **distance is a term, not a detail.** Same
+lesson as §ENVRATESLOPE's prefactor, arriving from a third direction.
+
+### And §41's loose end closes
+
+*"Three of six inert on a held note"* — weakened in §FENVORDER to "reasons not
+established" — now has its cause. SEG4 and SEG5 are release stages and do not run
+while a note is held; SEG0 was inert in that experiment because it began and
+ended at the same level. The observation was right all along.
