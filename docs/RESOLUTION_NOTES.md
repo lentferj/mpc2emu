@@ -14672,6 +14672,49 @@ Measure the corner on each and the position→Hz curve that falls out **is** the
 calibration — after which `_cutoff_byte` can be routed through Hz against
 measured endpoints rather than assumed ones.
 
+### CONFIRMED ON HARDWARE (2026-08-22) — the fix is right to 0.08%
+
+k2kremote read **each program's own filter page off the device** (SysEx 0x16/17),
+which is the machine stating what it believes its cutoff to be, independent of
+any audio measurement. All eleven show `4P LOPASS` on F1, and the `Coarse:`
+field's own Hz label against our law:
+
+    prg  byte   device Hz   our law   error
+    300   -26          58      58.3   -0.46%
+    302    -6         185     185.0   +0.00%
+    305    24        1047    1046.5   +0.05%
+    307    45        3520    3520.0   +0.00%
+    310    75       19912   19912.1   -0.00%
+
+**Max |error| 0.46%, mean 0.08% — 0.0067 octaves, against the 1.80-octave bug it
+replaced.** So `krz_cutoff_byte_to_hz`'s `Hz = 440 · 2^((b−9)/12)` is confirmed
+on hardware, and with it the writer's route through Hz.
+
+The residual against *what the model asked for* is larger — max 2.79%, mean
+1.29% — and that is **inherent, not error**: the byte is an integer number of
+semitones, so the worst case is half a semitone, 2.9%. We are already at the
+quantisation floor of the format.
+
+### A detector artefact worth recording, and the low end has an explanation
+
+k2kremote's own audio corners agree in shape (monotonic, right magnitude,
+take-to-take spread ≤7%) but deviate from the device label by −26% to +40% in a
+pattern that is not a constant ratio. They flagged it rather than reporting it as
+a filter characteristic — the same "clean number, wrong thing" trap as the rest of
+the day, caught in their own script this time after an earlier version latched
+onto a noise dip at ~126 Hz for every preset above 302.
+
+**At least the low end has a concrete cause: their −3 dB reference band is
+20–80 Hz, and program 300's corner is 58 Hz — inside the reference band.** The
+"passband" reference is therefore measured partly on the rolloff itself, which
+biases the corner high, and 300 reads +31%. The same contamination shrinks as the
+corner leaves the band, which fits the errors falling through 301–304.
+
+The device label is the stronger ground truth here and it settles the question, so
+the detector was not chased further. Recorded because a −3 dB-from-passband
+detector needs its reference band chosen against the corner being measured, and
+that is not obvious until it bites.
+
 ## §CUTCALDEAD — a calibration disc whose parameter was not wired (2026-08-22)
 
 **The first CUTCAL_01 measured nothing, and the fault was mine.** All eleven
