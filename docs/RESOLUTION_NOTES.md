@@ -152,6 +152,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§TC3STEREO — the AKAI half could never have answered the stereo question (2026-08-22, CORRECTION)](#tc3stereo-the-akai-half-could-never-have-answered-the-stereo-question-2026-08-22-correction)
 - [§K2KMONO — the "Mono" presets are anti-phase, and the pairs really do differ (2026-08-22, MEASURED)](#k2kmono-the-mono-presets-are-anti-phase-and-the-pairs-really-do-differ-2026-08-22-measured)
 - [§AKAISTEREO2 — the layout, read off real library discs (2026-08-22, READY TO IMPLEMENT)](#akaistereo2-the-layout-read-off-real-library-discs-2026-08-22-ready-to-implement)
+- [§ABDISC — the A/B disc: new code beside the build that was actually heard (2026-08-22)](#abdisc-the-ab-disc-new-code-beside-the-build-that-was-actually-heard-2026-08-22)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -14054,3 +14055,64 @@ across 188 volumes. The asymmetry is unexplained — it may be name truncation
 collapsing distinct `-R` names, or genuinely unpaired halves. Worth resolving
 before trusting any corpus-wide count of stereo material, but it does not
 affect the layout above, which was read from programs whose halves both exist.
+
+## §ABDISC — the A/B disc: new code beside the build that was actually heard (2026-08-22)
+
+Jan's remarks on the first bank were made against a build that no longer
+existed anywhere except on the SD card. The `.hda` in `~/temp/testcases/` had
+been rebuilt at 23:46 on 2026-08-21 — **23 minutes after** the captures behind
+those remarks — so the local image already carried the envelope-2 fix while the
+card did not. Comparing the two would have compared new against new.
+
+**HD4 (SCSI id 4) now carries nine volumes.** TC1–TC7 unchanged; two added:
+
+    TC8 FILTOLD   PRGNUM 20-29
+    TC9 STEREO    PRGNUM 30/31 stereo, 40/41 the same material in mono
+
+### TC8 is copied, not rebuilt
+
+The obvious way to make an "old" volume is to check out yesterday's commit and
+build. That was tried and **it produced the wrong bytes**: a worktree at
+`4ca48cf` wrote `FILFRQ 96` where the card holds `99`. So the build Jan heard
+was not any commit we could name, and a reconstruction would have been a third
+thing being passed off as the original.
+
+TC8 is therefore the card's own TC1, read off the card and re-emitted with only
+its name and PRGNUM changed — keygroups **byte-identical**. Verified as such
+before writing.
+
+### The pairing, and why it is not positional
+
+`new k` pairs with `old 20+k`, arranged at build time. The source bank's preset
+order is *not* the disc's program order — the bank splitter reorders between
+parse and write — so pairing by position would mismatch five of ten. That exact
+mechanism has already produced one wrong conclusion in this project, and on a
+listening test nothing downstream would catch it.
+
+### The negative control is free
+
+Only PRGNUM 0/1/2 differ at all: they gained the filter envelope (env2 depth
+43/41/27 against 0). **Programs 3–9 are byte-identical to 23–29.** So those
+seven pairs must measure the same, and if they do not, the rig, the load or the
+pairing is wrong and nothing else in the run is interpretable.
+`tests/re_banks/compare_akai_ab.py` checks that first and refuses to interpret
+the rest if it fails.
+
+### A build trap worth recording
+
+The first attempt built the volumes by calling `build_akai_volume` directly.
+That **skips `convert.py`'s sample-rate snapping**, and the disc's existing
+volumes were built through `convert.py` — so a 23939 Hz sample stayed unsnapped
+where TC1 had it resampled to 44100, and the A/B would have compared two
+different sounds and called the difference a filter change. Build test media the
+way the media under test was built.
+
+`--add-to` could not carry the program numbers either: the E4B parser does not
+read `program_number` back, so convert.py fell to positional numbering. The
+PRGNUM was instead embedded in each preset NAME and patched into the written
+`.a3p` before appending — which also puts the number on the sampler's display.
+
+### Card layout
+
+Every SCSI id on the card is occupied — 0–3 the CD images, 4/5/7 the disks, 6
+the sampler itself. There is no free id, so a new image always **replaces** one.
