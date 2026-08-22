@@ -13984,3 +13984,69 @@ Summed to mono it very nearly cancels.
 conversion writes four mono samples for these nine programs, and all 81 AKAI
 captures are single-channel. Both facts independently put this difference out of
 reach. It took the K2000's own captures, in stereo, to see it at all.
+
+## §AKAISTEREO2 — the layout, read off real library discs (2026-08-22, READY TO IMPLEMENT)
+
+§AKAISTEREO closed the design question — the machine will not pair `-L`/`-R`
+itself, so we must reference both halves. This section records **how real discs
+actually build a stereo program**, read out of a commercial S3000 library
+volume, so an implementation copies a working example instead of inventing one.
+
+**The layout. Both halves live in the SAME keygroup, as zones 1 and 2:**
+
+    keygroup 0   zone 1   <base>-L     lo_vel 0  hi_vel 127   pan -50
+                 zone 2   <base>-R     lo_vel 0  hi_vel 127   pan +50
+                 zone 3   (empty)
+                 zone 4   (empty)
+    keygroup 1   zone 1   <base2>-L    ...                    pan -50
+                 zone 2   <base2>-R    ...                    pan +50
+
+Not two keygroups, not a velocity split: **one keygroup, two zones, full
+velocity range on both, hard-panned to the extremes.** Pan is the zone byte at
+`base + 0x12`, signed, -50..+50.
+
+**Every piece this depends on is already settled:**
+
+* **Zone pan works.** The `VPANO1` field measured **118.57 dB** of span across
+  its range, the same as `PANPOS` — s3ked, 2026-08-12, in the measurement that
+  *retracted* their own §45 "these fields are inert" finding. Our writer already
+  carries that retraction in a comment at the zone loop. Had §45 stood, this
+  layout could not work at all, so it is worth naming as load-bearing.
+* **The name budget fits.** Names are 12 characters, so the base truncates to 10
+  plus the suffix. §AKAISTEREO measured a 12-character `-L` name resolving
+  correctly on hardware, so the edge case is tested rather than assumed.
+* **The `0x88` "stereo partner" word stays `0xFFFF`.** It is an internal RAM
+  pointer, not on-disk state; nothing about pairing goes through it.
+
+**What it costs, and these are real:**
+
+* **2x sample memory.** On a machine measured in megabytes this is the dominant
+  cost, not a rounding error.
+* **Two of four zone slots per keygroup.** Velocity layering drops from 4 to 2
+  for any stereo keygroup. `--reduce-velocity-layers` and the bank-fit
+  assistant both need to know this.
+* **The failure mode is silent** (§AKAISTEREO): a program referencing only the
+  left half loads cleanly, raises no error, is not dangling, and plays mono.
+  Nothing downstream catches it — not `collect()`, not `silence_audit.py`. An
+  implementation needs its own both-halves-referenced check.
+
+**A precedent worth noting, from the same volume.** The disc ships the *same
+material twice*: one program with `zone 1 = -L, zone 2 = -R`, and a sibling
+program with `zone 1 = -L` only and the other zones empty. A third layers a
+third mono sample into zone 3 alongside a stereo pair. So the vendors themselves
+treated stereo as a choice per program — presumably trading it against memory
+and polyphony — rather than as the correct rendering of stereo material. That is
+an argument for an opt-in flag rather than a default.
+
+**One caution on motive.** §K2KMONO is what makes this worth doing, but note
+exactly what it showed: the presets we cannot currently distinguish are
+**anti-phase**, and reproducing them faithfully means reproducing programs that
+very nearly cancel on a mono system. Stereo support would represent them
+correctly. Whether representing them correctly is *desirable* is a separate
+question and Jan's to answer.
+
+**Survey note.** One library disc carried 324 `-L` samples against 255 `-R`
+across 188 volumes. The asymmetry is unexplained — it may be name truncation
+collapsing distinct `-R` names, or genuinely unpaired halves. Worth resolving
+before trusting any corpus-wide count of stereo material, but it does not
+affect the layout above, which was read from programs whose halves both exist.
