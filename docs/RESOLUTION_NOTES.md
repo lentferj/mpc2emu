@@ -173,6 +173,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§ATKMEAS — the filter-envelope attack, measured at last (2026-08-22)](#atkmeas-the-filter-envelope-attack-measured-at-last-2026-08-22)
 - [§ENV2DEPTH — the E4B side is a product too, so the fix is a constant (2026-08-22)](#env2depth-the-e4b-side-is-a-product-too-so-the-fix-is-a-constant-2026-08-22)
 - [§ENV2DEPTH2 — the compression was three points, and the fix is shipped (2026-08-22)](#env2depth2-the-compression-was-three-points-and-the-fix-is-shipped-2026-08-22)
+- [§MATRIX — the conversion matrix: four sources, eight conversions (2026-08-22)](#matrix-the-conversion-matrix-four-sources-eight-conversions-2026-08-22)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -15764,3 +15765,77 @@ the input, check the axis — would have passed it.
 What caught it was **asking for more samples where a claim rested on very few**.
 That is neither a better instrument nor a better control, and it is the one move
 none of today's other lessons contains.
+
+## §MATRIX — the conversion matrix: four sources, eight conversions (2026-08-22)
+
+Jan's design. Instead of three one-way original→conversion checks, **four source
+banks each converted to the two formats they are not**, so every conversion is
+bounded by two independent references and the two conversions of one source can
+also be compared with each other.
+
+### Why the matrix beats three separate checks
+
+Two conversions of one source **will differ even if both are perfect**, because
+the target machines differ — §ENV2CONTOUR measured the AKAI and E4XT 3–8 dB apart
+on programs with no envelope at all. A pairwise comparison alone cannot separate
+"our conversion is wrong" from "the machines are different".
+
+**The matrix separates them.** A difference that appears in *every* row is the
+machine pair; one that appears in *one* row is that source's conversion. With
+four sources each machine pair is measured repeatedly and independently.
+
+### The fourth row, which was Jan's addition
+
+**S1000 and S3000 originals are different reader paths, not just different
+vintages.** Three functions in `akai_s3000_parser` branch on the generation:
+block length (150 vs 192 bytes), playback rate (byte `0x01` authoritative on
+S3000, `SSRATE` on S1000) and **cutoff**.
+
+The corpus splits cleanly — 6 500 `.P1` programs across 15 S1000-only discs,
+4 433 `.P3` across 6 S3000-only discs, **no mixed discs**.
+
+**One limitation, stated up front rather than discovered later: for the S1000 row
+there is no true original.** `.P1` material can only be played here on the
+S3000XL, which applies its own filter. So that row tests *"does our conversion
+match the S3000XL's import of an S1000 program"* — a real question, and the same
+one our converter answers — but it **cannot settle** whether the S1000's own
+18 dB/octave differs audibly from the S3000XL's 12 (§AKAIFILTREAD's *"identity is
+not equivalence"*).
+
+### Sources, chosen on measurable criteria
+
+Picked for few layers, a filter that is actually doing something, and comparable
+structure — **not by name**. Two of them are near-identical in shape, which is
+what makes the S1000/S3000 row a generation comparison rather than a complexity
+one:
+
+    E4B      10 presets, 10 samples   (the bank behind TC1/TC8, parameters known)
+    KRZ      12 presets, <=2 layers, 10 samples, 1.0 MB
+    S3000     6 programs, 27 keygroups, 16 samples, 1.20 MB
+    S1000     6 programs, 30 keygroups, 15 samples, 1.45 MB
+
+The id→name map is kept local, out of tracked files.
+
+### Built and verified
+
+All eight preserve program and sample counts exactly:
+
+    MXE4toKRZ    10/10 -> 10/10        MXS3toKRZ     6/16 -> 6/16
+    MXE4toAKAI   10/10 -> 10/10        MXS3toE4B     6/16 -> 6/16
+    MXKRtoAKAI   12/10 -> 12/10        MXS1toKRZ     6/15 -> 6/15
+    MXKRtoE4B    12/10 -> 12/10        MXS1toE4B     6/15 -> 6/15
+
+**One warning across all eight, and the matrix is the right test for it:** ten
+zones reference a sample that other zones use at a *different root*, so they are
+pitched by the per-zone `TUNE` field **whose usable range is inferred rather than
+measured**. If those zones sound transposed on the AKAI, that field is the cause —
+and this is the first material that would show it.
+
+### Machine cost
+
+Three crossings, unchanged by the fourth row since both AKAI sources target the
+same two machines.
+
+    AKAI    Conv<-E4B, Conv<-KRZ, + both AKAI originals as their own volumes
+    E4XT    Conv<-KRZ, Conv<-S3000, Conv<-S1000, + the E4B original
+    K2000   Conv<-E4B, Conv<-S3000, Conv<-S1000, + the KRZ original from HD0
