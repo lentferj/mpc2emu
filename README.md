@@ -14,7 +14,6 @@ to hardware memory limits. Produces ZuluSCSI-ready CD ISO images, SCSI hard
 disk images, and Gotek floppies for the EMU Emulator 4 / E4XT and Kurzweil
 K2000 series.
 
-> **See also:** [README_de.md](README_de.md) — German / Deutsche Version  
 > **Legal:** [DISCLAIMER.md](DISCLAIMER.md) · [LICENSE](LICENSE)
 
 ---
@@ -1271,9 +1270,7 @@ assistant above doesn't yet know about the tighter 256-preset ceiling.
 mpc2emu/
 ├── LICENSE
 ├── DISCLAIMER.md
-├── DISCLAIMER_de.md
 ├── README.md
-├── README_de.md
 ├── convert.py                  # CLI entry point
 ├── info_cmd.py                 # --info mode implementation
 ├── test_pipeline.py            # Smoke tests
