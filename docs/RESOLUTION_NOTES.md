@@ -14413,12 +14413,37 @@ expressible — which is worth knowing and recording rather than chasing.
 This ranks above the depth constant. A depth error scales a contour; this
 inverts one.
 
+### STILL OPEN — the first answer was withdrawn by its author (2026-08-22)
+
+s3ked reported "not floored, fast attacks reachable below byte 40" and then
+**withdrew the half the clamp decision rests on**, unprompted:
+
+* **"the field is live and slow values are slow" STANDS.** `ATTAK2` 70 rose 44.7
+  → 64.4 dB over 540 ms, monotonically — and a chirp artefact oscillates rather
+  than rising monotonically, so the Schroeder source cannot have manufactured it.
+* **"0 is faster than 40" DOES NOT STAND.** That comparison was read off data
+  visibly oscillating between 28 and 44 dB, on the Schroeder complex, which
+  §NOISESRC establishes cannot support a time-resolved measurement at all.
+
+**Nothing shipped on it.** `_env2_stage_byte`'s clamp is untouched; the only
+commit to that writer today was the stereo feature. So the correction costs
+nothing but the note.
+
+The measurement then failed to reproduce at all: with FILTERTOP and TC10 loaded
+together and PRGNUM 70 and 50 configured identically over SysEx, **neither
+swept — including the program that had swept earlier the same evening.** That
+also exonerates our noise disc: not the loop, not the one-shot-versus-looped
+difference, not anything in the program bytes.
+
+So the clamp question is **open again**, and the honest state is: our 66 ms floor
+is a fact about our code, and whether the machine shares it is unknown.
+
 ## §NOISESRC — building a measuring instrument, and rejecting two versions of it (2026-08-22)
 
-§ENV2FLOOR asked whether `ATTAK2` below 40 attacks faster. s3ked answered
-qualitatively — **it does, the field is live below 40, there is no 66 ms floor
-in the machine** — but could not give a time, and stopped rather than iterate.
-Their reason is the useful part:
+§ENV2FLOOR asked whether `ATTAK2` below 40 attacks faster. s3ked first answered
+qualitatively — the field is live below 40 — **and then withdrew the load-bearing
+half of it themselves (see §ENV2FLOOR's own correction below)**. What follows is
+about the instrument, and stands regardless:
 
 **The FILTERTOP Schroeder complex cannot support a time-resolved measurement.**
 Schroeder phase spreads each period's energy into a chirp — that is exactly what
