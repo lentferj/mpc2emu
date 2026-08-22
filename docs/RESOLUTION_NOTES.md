@@ -13703,3 +13703,61 @@ s3ked wrote §138 a week before repeating its lesson twice in one night. **Namin
 a failure mode is not the same as building a gate against it** — and this note
 is no exception, which is why the gate is code in two repositories rather than
 a paragraph in one.
+
+## §CAPTUREPORTS — proving an instrument is silent, rather than assuming a port (2026-08-22, MEASURED)
+
+**Status:** the scanner exists and is proven; the K2000's own fault is still open.
+
+The rig model in `tests/re_banks/hw_measure.py` names a capture pair per device.
+Each pairing was established once, by hand, and nothing re-checks it. The K2000
+is not in that table at all — the three entries are MPC One 5/6, S3000XL 13/14,
+E4XT 15/16 — so when k2kremote recorded the K2000 as pure silence at
+`system:capture_17/18`, the pairing itself was a guess with nothing behind it.
+
+`tests/re_banks/scan_capture_ports.py` settles that class of question without
+anyone in the room. It registers one JACK client, connects to **every** system
+capture port at once, and reports peak and RMS per port over a window. Play the
+device during the window: the pair that lights up is the device's pair. If no
+pair lights up, the fault is upstream of the interface and no amount of
+port-hunting will reach it.
+
+**The K2000 measurement.** Across a 15 s note run (program 200, note 69,
+retriggered every 1.5 s), every one of 20 ports sat within ~1 dB of its own
+no-signal baseline, drifting in both directions — noise, not signal.
+
+**The positive control, which is the part that matters.** A negative result
+from a scanner never once seen to produce a positive is worth very little: a
+deaf scanner and a silent instrument are indistinguishable. s3ked played the
+S3000XL for 90 s (they chose 90 s over 15 s deliberately, so a missed sync
+could not masquerade as a dark scanner):
+
+    capture_13    -19.6 dBFS peak    idle -70.9
+    capture_14    -19.4 dBFS peak    idle -71.6
+
+51 dB of lift, within 0.5 dB of the level s3ked predicted from their own end
+*before* seeing ours. Two independent measurements agreeing that closely is the
+evidence; either alone is not.
+
+One further reading fell out of the control. `capture_17/18` read **-87.8 dBFS
+during the K2000's own note run** and **-79.7 dBFS during the AKAI burst** — it
+picks up 8 dB of bleed from an instrument on a different pair. An input that
+hears another box's crosstalk but not its own source is not miswired. The K2000
+is making no sound.
+
+**Leads still open, both upstream of the audio path:**
+
+1. **MIDI channel.** s3ked's S3000XL did not answer on channel 1 that night
+   although every program header reads `PMCHAN 0`; thirty captures came back as
+   noise floor first. SysEx is channel-independent — it carries its own device
+   id — so k2kremote's SysEx-confirmed preset selection proves the cable and
+   the id and proves *nothing* about the channel its note-ons go out on. From
+   outside, that gap looks exactly like a healthy MIDI link.
+2. **Output routing.** K2000 program 200 reads `Pair: A(FX)` on both layers —
+   through the effects bus, not a dry main pair. Same shape as the trap s3ked
+   recorded for the S3000XL: a program on an individual output measures as
+   silence on the mains, with the panel showing nothing wrong.
+
+**The general rule, which is the reusable part:** when a device measures as
+silence, prove the measuring path can see *something* before concluding
+anything about the device. The control costs one message to a session whose
+instrument already works.
