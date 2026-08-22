@@ -13746,18 +13746,46 @@ is making no sound.
 
 **Leads still open, both upstream of the audio path:**
 
-1. **MIDI channel.** s3ked's S3000XL did not answer on channel 1 that night
-   although every program header reads `PMCHAN 0`; thirty captures came back as
-   noise floor first. SysEx is channel-independent — it carries its own device
-   id — so k2kremote's SysEx-confirmed preset selection proves the cable and
-   the id and proves *nothing* about the channel its note-ons go out on. From
-   outside, that gap looks exactly like a healthy MIDI link.
+1. **MIDI channel.** s3ked's S3000XL stopped answering on channel 1 partway
+   through 2026-08-21 — channel 1 worked at 17:07, when the §146 filter sweep
+   ran twelve measured corners on it, and did not at 23:11, costing thirty
+   captures that came back as noise floor. What changed between is not
+   established.
+
+   State this narrowly, and s3ked's §147 is the authority: **this is not "the
+   S3000XL ignores channel 1".** That would be a larger claim than the evidence
+   carries and would be wrong at the next boot. The durable finding is that
+   **`PMCHAN` is a value in a header, and reading it does not establish which
+   channel the device is currently listening on.** They agreed for weeks and
+   then did not.
+
+   SysEx is channel-independent — it carries its own device id — so
+   k2kremote's SysEx-confirmed preset selection proves the cable and the id and
+   proves *nothing* about the channel its note-ons go out on. From outside,
+   that gap looks exactly like a healthy MIDI link, which is why nobody looks
+   there.
+
+   **The check: play a note and confirm sound, rather than reading `PMCHAN` and
+   believing it.** If nothing sounds, sweep all sixteen channels before
+   suspecting the audio path at all. Sixteen notes is cheaper than one wrong
+   conclusion about routing, and it separates "not listening where I am
+   sending" from every other cause of silence in a single pass.
 2. **Output routing.** K2000 program 200 reads `Pair: A(FX)` on both layers —
    through the effects bus, not a dry main pair. Same shape as the trap s3ked
    recorded for the S3000XL: a program on an individual output measures as
    silence on the mains, with the panel showing nothing wrong.
 
-**The general rule, which is the reusable part:** when a device measures as
-silence, prove the measuring path can see *something* before concluding
-anything about the device. The control costs one message to a session whose
-instrument already works.
+**Two reusable rules, and the second was free.**
+
+*Prove the measuring path can hear something before concluding anything about
+the device.* A control costs one message to a session whose instrument already
+works, and without it a negative result is indistinguishable from a broken
+measurement.
+
+*When you cannot make an instrument sound, look at what its input hears from
+other instruments.* s3ked's point, from the crosstalk reading above: an input
+carrying 8 dB of another box's bleed is demonstrably connected, powered and
+converting, so its silence on its own source cannot be a dead input. **A truly
+dead input hears nothing from anything.** That rules out the whole "the port is
+broken" class using somebody else's signal, with no second run and no
+coordination — a control nobody had to design.
