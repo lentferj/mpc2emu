@@ -13775,6 +13775,53 @@ is making no sound.
    recorded for the S3000XL: a program on an individual output measures as
    silence on the mains, with the panel showing nothing wrong.
 
+**Both leads came back clean (k2kremote, 2026-08-22).** The channel is right:
+`MIDI Mode:Multi`, and the `CHANLS` page shows channel 9's slot device-confirmed
+as `Enable:On  Program:200  Volume:127  OutPair:Prog`. (Worth knowing for next
+time: the `Channel:9` in ProgramMode's header is the **TRANSMIT** channel, not
+the receive one — and in Multi mode `RECV BasicChannel` is not what governs
+local play either.) The routing is right too: switching a layer from `A(FX)` to
+`B(DRY)`, each step confirmed by a fresh device read, gave -88.0/-88.3 dBFS —
+the noise floor, identical to `A(FX)`. Restored to `A(FX)` and confirmed; the
+bank never reached persistence.
+
+### What 17/18 actually is (2026-08-22, MEASURED — this is the answer)
+
+The Scarlett exposes its own capture routing matrix, so the pairing question is
+readable rather than guessable. `amixer -c USB sget "PCM nn"`:
+
+    capture_5/6    <- Analogue 5 / 6
+    capture_9/10   <- Off
+    capture_13/14  <- ADAT 1 / 2      S3000XL
+    capture_15/16  <- ADAT 3 / 4      E4XT
+    capture_17/18  <- ADAT 5 / 6      the K2000's supposed pair
+    capture_19/20  <- ADAT 7 / 8
+
+`Clock Source: ADAT`, `Sync Status: Locked` — the ADAT expander is connected,
+locked and converting. Two independent checks say the matrix read is right:
+capture_9..12 route from `Off` and read exactly **-240.0 dBFS** (true digital
+zero), which is precisely the anomaly noticed before the matrix was read; and
+the 8 dB of AKAI bleed on 17/18 is ADAT 1/2 crosstalking into ADAT 5/6 inside
+the *same expander's analog front end*, which is where analog crosstalk can
+happen and ADAT itself cannot.
+
+**So the fault is now located to a specific pair of physical jacks.** The three
+instruments are not on the Scarlett's own analogue inputs at all — they arrive
+over ADAT from an expander, and the K2000 is expected on that expander's
+**inputs 5 and 6**. The expander is alive and converting on those channels; the
+K2000's audio is not reaching them. That is a cable, a jack, or the expander's
+input gain for those two channels — Jan's hands, and nothing further is
+readable from software.
+
+### Procedural note, recorded by k2kremote
+
+Never leave an edit session open across script boundaries. Their first OUTPUT
+read closed the connection without pressing Exit, leaving the device in the edit
+buffer; a later script's `select_program()` digit-presses then landed *inside*
+that stale editor and were taken as direct numeric entry into the Pair field.
+The tell was a spurious `D(DRY)` that should not have existed, caught only
+because ground truth was re-established before the reading was trusted.
+
 **Two reusable rules, and the second was free.**
 
 *Prove the measuring path can hear something before concluding anything about
