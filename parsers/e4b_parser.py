@@ -422,6 +422,26 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
             filter_type      = _E4B_TO_XPM_FILTER_TYPE.get(filter_byte, 0)
     else:
         filter_type      = _E4B_TO_XPM_FILTER_TYPE.get(filter_byte, 0)
+    # AN UNRECOGNISED FILTER BYTE IS NOT "FILTER OFF", AND 0 MEANS EXACTLY THAT.
+    #
+    # `.get(byte, 0)` collapses "this E4XT filter is not in our 21-entry map"
+    # onto XPM type 0, which the enumeration defines as **Off**. The KRZ writer
+    # then gates its whole filter block on `if voice.filter_type:` -- correctly,
+    # since 0 means off -- and writes a program with NO FILTER IN THE CHAIN.
+    # The result plays wide open, and nothing anywhere says so.
+    #
+    # Measured 2026-08-22: **zero** unmapped bytes across 2408 voices in every
+    # non-sweep E4B under ~/temp, so no real conversion has hit this. The only
+    # hits are our own every-byte test banks, which exist to contain them.
+    # Latent, not live -- but silent, and the same shape as the CUTCAL bank that
+    # measured nothing for a whole capture session (§CUTCALDEAD).
+    #
+    # Warn rather than guess a shape: an unmapped byte tells us nothing about
+    # whether it is a lowpass, and substituting one would trade a silent wrong
+    # answer for a confident wrong answer.
+    if filter_byte not in _E4B_TO_XPM_FILTER_TYPE and filter_byte != 0:
+        print(f"    [WARN] unknown E4B filter type 0x{filter_byte:02x} — treated "
+              f"as OFF, so KRZ/EIII output will carry no filter for this voice")
 
     # Mod cords into Filter-Freq (voice[190:270]).  Each cord amount is a signed
     # byte → ±1.0.  The filter-env SHAPE is at PZT[14:26] but its depth/sign is
