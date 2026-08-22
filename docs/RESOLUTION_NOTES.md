@@ -163,6 +163,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§CUTCALDEAD — a calibration disc whose parameter was not wired (2026-08-22)](#cutcaldead-a-calibration-disc-whose-parameter-was-not-wired-2026-08-22)
 - [§BUILDAROUND — three test-material failures, one cause (2026-08-22)](#buildaround-three-test-material-failures-one-cause-2026-08-22)
 - [§STALEREPORT — the failures that outlive their truth (2026-08-22)](#stalereport-the-failures-that-outlive-their-truth-2026-08-22)
+- [§ENVRATESLOPE — the two envelopes share a slope, not a law (2026-08-22)](#envrateslope-the-two-envelopes-share-a-slope-not-a-law-2026-08-22)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -14945,3 +14946,64 @@ log, at the enum, at the commit.
 The asymmetry worth remembering: a stale "this is broken" costs work that need
 not happen and is rarely questioned, because nobody investigates a warning they
 complied with.
+
+## §ENVRATESLOPE — the two envelopes share a slope, not a law (2026-08-22)
+
+eosed measured the E4XT **filter** envelope's rate byte in seconds and found
+
+    log2(seconds) = 0.08184 * byte - 3.9893     R^2 0.9998
+    -> doubling every 12.22 bytes
+
+and noted it against §37's ~12.3 for the **amp** envelope, suggesting the two
+envelopes share a rate law and that our converter may be carrying separate
+constants for no reason. Worth checking, and the check splits the claim in two.
+
+### The slope agrees three ways, independently
+
+    ours (ENV_RATE_K = 0.0581)   11.93 bytes / doubling
+    eosed, filter envelope       12.22
+    §37, amp envelope           ~12.3
+
+Three measurements, different experiments, different observables, no shared
+constants. **That is real and worth having.**
+
+### The prefactor does not, and it is out by a factor of two
+
+    byte   ours    eosed measured   ratio
+      24   0.13 s        0.25 s     0.51
+      40   0.32 s        0.61 s     0.52
+      56   0.80 s        1.51 s     0.53
+      72   2.03 s        3.74 s     0.54
+      88   5.15 s        9.27 s     0.56
+
+A near-constant 0.52, which is what a *scale* difference looks like, not a
+disagreement about the curve.
+
+### Why that is expected, and why adopting their constant would be wrong
+
+**For `t = A·e^(K·b)`, a partial traverse of distance `d` scales the prefactor
+and leaves the slope untouched:** `t = (d/full)·A·e^(K·b)`. So slope is
+distance-independent evidence and prefactor is not — and the two claims have to
+be judged separately.
+
+`ENV_RATE_A` was calibrated from **Decay-1** measurements (`AMP_DECAY_CAL.E4B`),
+a decay segment travelling peak→sustain. eosed's design deliberately produces
+**one full segment traversal** — all six segments at the same target so exactly
+one transition occurs. Those are different distances, and a factor near 2 is the
+expected consequence rather than a contradiction.
+
+Independent support: `P4ENVTIME` hardware-confirmed `env_seconds_to_rate` at
+**~20% long on attack, ~15% short on release** across 0.1–5 s. A prefactor that
+was genuinely 2× wrong could not have measured 20%.
+
+**So: adopt the slope agreement as corroboration, do not adopt the constant.**
+Replacing `ENV_RATE_A` with a value fitted over a different traverse would double
+every E4B envelope time we write, against a field measurement that already says
+we are within 20%.
+
+This is the §AKAIENV2 lesson arriving on the other machine: *a rate law without
+its traverse distance is ambiguous*, and the AKAI side already carries
+`akai_env2_stage_seconds(byte, distance, law)` for exactly this reason. The E4B
+side has `env_span_seconds_to_rate(span_db, seconds)` whose docstring says **"THE
+SPAN IS NOT OPTIONAL and that is the whole point of this function"** — the
+knowledge is in the tree; the comparison just has to use it.
