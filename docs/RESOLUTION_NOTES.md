@@ -166,6 +166,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§ENVRATESLOPE — the two envelopes share a slope, not a law (2026-08-22)](#envrateslope-the-two-envelopes-share-a-slope-not-a-law-2026-08-22)
 - [§FENVORDER2 — the traversal order is measured, and our parser had it right (2026-08-22, RESOLVED)](#fenvorder2-the-traversal-order-is-measured-and-our-parser-had-it-right-2026-08-22-resolved)
 - [§ATKCAL — closing the attack timing: put the sweep on the disc (2026-08-22)](#atkcal-closing-the-attack-timing-put-the-sweep-on-the-disc-2026-08-22)
+- [§ENVLEVELAGREE — two independent fits agree, and neither is §39's (2026-08-22)](#envlevelagree-two-independent-fits-agree-and-neither-is-39s-2026-08-22)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -15165,3 +15166,58 @@ Two outcomes, both worth having: if the corner rises faster below byte 40, our
 clamp is costing the snap and the fix is one line. If it does not, 66 ms is a
 real limit of the S3000XL, the snap is not expressible, and we record that and
 stop.
+
+## §ENVLEVELAGREE — two independent fits agree, and neither is §39's (2026-08-22)
+
+eosed refitted the E4XT's envelope-level law after finding that the 2.58×
+ENVSPAN/SUSLEVEL discrepancy was **an artefact of a mislabelled axis** — the bank
+has no byte-108 preset, its sweep spacing is non-uniform, and a preset index had
+been converted to a byte as if the steps were even. The banks agree to 0.69%.
+
+They flagged the refit as possibly reaching us, since a 38% slope error in
+`ENV_LEVEL_DB_SLOPE` would land in every bank we write via `_fenv_sustain`'s
+pre-compensation. **Checked, and we do not carry §39's number.**
+
+    §39 (superseded)   0.547  dB/byte
+    eosed refit        0.7539 dB/byte   R2 0.9999, n=14, bytes 64-122
+    ours               0.7953 dB/byte   from ENV_LEVEL_DB_SLOPE = 1.010 dB/%
+                                        (byte = pct x 127/100)
+
+Ours was fitted independently on **our own** hardware — a 9-point sweep bank
+(`gen_amp_level_cal.py`), narrowband-analysed against the test tone's own
+frequency to reject the recording noise floor, R² 0.996.
+
+**The two independent fits agree where it matters:**
+
+    byte    ours      eosed     diff
+      96   -22.39     -21.84   -0.56
+     107   -13.65     -13.54   -0.10
+     116    -6.49      -6.76   +0.27
+     122    -1.72      -2.23   +0.52
+
+At byte 107 we predict **−13.65 dB** against their measured **−13.78 / −13.84**.
+Slopes differ 5.5%; both are ~45% from §39.
+
+Two projects, different hardware sessions, different methods, different
+observables, agreeing to a tenth of a dB in the working range — **and jointly
+disagreeing with the superseded value by 45%.** That is worth as much as the
+correction would have been, and neither would carry the same weight alone.
+
+The divergence grows toward the bottom (−1.88 dB at byte 64), which is where a
+recording noise floor bites hardest and where both fits are weakest. Neither law
+should be trusted below ~byte 80 without more measurement.
+
+**No change to our constant.** It is used only by `env_sustain_to_byte`, writer-
+side, for the amp-envelope sustain target.
+
+### The fourth family member, and the one nothing built today would catch
+
+eosed's own framing: the instrument was fine, the specimen was fine, **and the
+axis was mislabelled.** A wrong *x* is invisible to any amount of care about *y* —
+the machine faithfully reported what byte 107 does, twice, and the number was
+filed under 108.
+
+Everything this project built today aims at *y*: verify the artefact as written,
+assert the parameter is live, gate on staleness, flip the input. **None of it
+touches a mislabelled axis.** What caught this one was re-measuring both specimens
+through one path and finding they had never disagreed.
