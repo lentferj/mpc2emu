@@ -13862,3 +13862,56 @@ converting, so its silence on its own source cannot be a dead input. **A truly
 dead input hears nothing from anything.** That rules out the whole "the port is
 broken" class using somebody else's signal, with no second run and no
 coordination — a control nobody had to design.
+
+## §TC3STEREO — the AKAI half could never have answered the stereo question (2026-08-22, CORRECTION)
+
+**What I claimed, and why it was misleading.** From s3ked's 81 TC3 captures I
+reported that each stereo preset and its `Mono` sibling measure as the same
+sound on the AKAI — centroids within 1–2 Hz, HF within 0.1 dB:
+
+    200/205   6912 / 6885 Hz    both -1.6 dB
+    201/206  13068 / 13087 Hz   both -0.3 dB
+    202/207   8097 / 8031 Hz    both -0.6 dB
+    203/208  13114 / 13114 Hz   both -0.2 dB
+
+Those numbers are right. Presenting them as *evidence about a K2000 parameter
+our model fails to read* was not.
+
+**Two facts, either of which alone makes the result a foregone conclusion.**
+
+1. **The AKAI volume holds nine programs and only four samples.** The nine TC3
+   programs share four `.S3` files, no `-L`/`-R` pairs among them. Each pair
+   member literally references the same sample, so identical measurements are
+   arithmetic, not a finding.
+2. **`build_sample()` mixes every stereo sample down to mono, by design** — see
+   its docstring and `_mixdown()`. This is the tracked, deliberate behaviour in
+   `TODO.md` under *AKAI stereo samples are mixed down to mono*, whose hardware
+   question §AKAISTEREO answered on 2026-08-17: the sampler does not pair
+   `-L`/`-R` by itself, so stereo needs both references emitted explicitly.
+
+So the AKAI cannot express the difference at all, whatever the K2000 does with
+it. A measurement that agrees to 1 Hz across four independent pairs should have
+prompted that suspicion by itself — four *different* sounds do not land that
+close by luck, and the reason they did is that they were not four different
+sounds.
+
+**A third reason the AKAI side could not have shown it even in principle:** all
+81 captures are single-channel WAVs. Stereo width is a between-channel property,
+and a one-channel recording has nowhere to put it. So even had the writer
+preserved stereo, this capture set could not have measured it.
+
+**What the K2000 captures are still worth, and it is more than before.** The
+open question is unchanged — does preset 200 differ from 205 *on the K2000* —
+but it now bears directly on a tracked item rather than on a hypothetical
+missing field:
+
+* if they sound the **same**, the mixdown costs this bank nothing audible, and
+  §AKAISTEREO stays a correctness nicety;
+* if they **differ**, the mixdown is discarding something real, and implementing
+  AKAI stereo has a measured value rather than an assumed one.
+
+`tests/re_banks/compare_k2000_akai.py` measures L/R correlation and side-to-mid
+ratio per preset, not only spectrum, because the stereo/mono question is a
+between-channel one and a mono sum is exactly where it cancels. The script
+mono-summed in its first version — the same mistake as the capture set, made
+independently an hour after warning k2kremote against it.
