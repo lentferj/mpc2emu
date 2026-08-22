@@ -14809,6 +14809,37 @@ So the rule is really about **which layer you verified**:
 > re-encode; if it must not be re-encoded, use the writer that embeds it
 > verbatim.
 
+### The rule pointing the other way: do not rewrite the specimen
+
+eosed found the case where the same principle forbids re-encoding entirely.
+Re-measuring the 2.58x ENVSPAN/SUSLEVEL discrepancy needs both banks; the
+tempting build is a third bank holding one preset from each on adjacent keys —
+the SUSANCHOR design, one pass, one capture path.
+
+**That would destroy the measurement.** The question is *why two banks disagree*.
+Building a third from their parts puts our writer between the question and the
+answer: if the merged bank then showed no discrepancy, nobody could tell whether
+the banks never really differed or whether the re-encode normalised away
+whatever made them differ.
+
+So both banks travel **verbatim** on one EMU3 disc — one slot, no collision,
+riding the same crossing as the noise ISO — and get loaded one after the other
+through one capture path. Verified byte-for-byte at their offsets inside the
+image rather than assumed.
+
+> Verify the artefact as written — and **where the artefact IS the question, do
+> not rewrite it at all.**
+
+### A related trap on the analysis side
+
+Captures do not say which disc they came from. The 33 takes of the dead CUTCAL
+bank sit in the same directory as everything else, and
+`analyse_krz_cutoffcal.py` would have consumed them, fitted a curve and
+described a bank no longer on the machine. The only discriminator available is
+that a capture of the rebuilt disc cannot predate the rebuild, so the analysis
+now compares each capture's mtime against the image's and **refuses outright**
+when nothing postdates it.
+
 ### The fourth instance, and the sharpest statement of the class
 
 eosed's own account of their ISO, which is the best one-line form of all four:
