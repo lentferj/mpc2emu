@@ -1,5 +1,7 @@
 # mpc2emu — Open Items
 
+| **AKAI filter-envelope DEPTH scale is unmeasured** | *(open 2026-08-22, §ENV2RESULT)* `akai_filter_env_bytes()` maps the E4B envelope amount to the AKAI depth byte as a straight `amount * 50`, assuming full depth means the same span on both machines. **Neither side has ever been measured.** Hardware A/B on 2026-08-22 showed the wired envelope moves the sound in the right bands (+3.1/+5.9/+2.4 dB across 200 Hz–4 kHz on the three affected programs, against a byte-identical control that measured +0.0 dB in every band) but closes only 4–8 dB of an ~90 dB total gap, leaving −35 dB at 1–4 kHz. The cutoff mapping is NOT at fault — both machines land within 0.05 octaves. Blocked on: sweep AKAI env2 depth at fixed FILFRQ and track the filter corner, to get octaves-per-depth-unit; then the same for the E4B side. |
+
 ## Open at a glance (2026-08-01)
 
 This file is long and mostly archive — resolved entries are kept for their

@@ -153,6 +153,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§K2KMONO — the "Mono" presets are anti-phase, and the pairs really do differ (2026-08-22, MEASURED)](#k2kmono-the-mono-presets-are-anti-phase-and-the-pairs-really-do-differ-2026-08-22-measured)
 - [§AKAISTEREO2 — the layout, read off real library discs (2026-08-22, READY TO IMPLEMENT)](#akaistereo2-the-layout-read-off-real-library-discs-2026-08-22-ready-to-implement)
 - [§ABDISC — the A/B disc: new code beside the build that was actually heard (2026-08-22)](#abdisc-the-ab-disc-new-code-beside-the-build-that-was-actually-heard-2026-08-22)
+- [§ENV2RESULT — the filter envelope works, and is not enough (2026-08-22, MEASURED)](#env2result-the-filter-envelope-works-and-is-not-enough-2026-08-22-measured)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -14116,3 +14117,79 @@ PRGNUM was instead embedded in each preset NAME and patched into the written
 
 Every SCSI id on the card is occupied — 0–3 the CD images, 4/5/7 the disks, 6
 the sampler itself. There is no free id, so a new image always **replaces** one.
+
+## §ENV2RESULT — the filter envelope works, and is not enough (2026-08-22, MEASURED)
+
+**Measured on hardware, against the build Jan actually heard.** TC1 (current
+code) and TC8 (the previous build, copied verbatim off the card) captured in one
+session on one rig, note 69, three takes each — so the comparison is free of the
+cross-session confound that Q2 below still carries.
+
+### The control passes, and it needed a better yardstick
+
+Programs 3–9 are byte-identical to 23–29. Program 3 measured **+0.0 dB in every
+band** against program 23, so identical bytes really do produce identical
+measurements and the rig, the load and the pairing are all sound.
+
+The first run reported the control as FAILED on a spectral `r` of 0.9871 against
+a hard-coded 0.99 bar. **The bar was wrong, not the control.** These programs
+vary far more between takes than a clean tone does — p0 and p1 sit at r
+0.78–0.80 *take to take* — so the yardstick has to be each program's own
+take-to-take spread. Judged that way every pair, including 0/1/2, sits inside
+its own noise on `r`; the real evidence is the band table, not the correlation.
+
+### The envelope moved the sound, in the right direction, in the right bands
+
+New minus old, per band (dB):
+
+    prg   0-200  200-1k   1k-4k   4k-8k  8k-20k
+      0    -0.0    +3.1    +1.8    -0.4    -0.4
+      1    -0.1    +5.9    +4.3    -1.1    -0.8
+      2    +0.0    -0.0    +2.4    +2.3    +0.3
+      3    -0.0    -0.0    +0.0    +0.0    +0.0   <- control
+
+**The campaign's own `HF > 4 kHz` metric shows almost none of this** (−1.1,
+−2.6, +1.6 dB). These are bass programs whose filter action lives between 200 Hz
+and 4 kHz, so a metric that only looks above 4 kHz measures the wrong band. Any
+future filter work here should report bands, not a single HF figure.
+
+### But the gap to the E4XT is barely dented
+
+Total absolute gap summed over the five bands, old → new:
+
+    prg 0   88.7 -> 84.8   (+4.0 closed)
+    prg 1   94.3 -> 86.0   (+8.3 closed)
+    prg 2   69.1 -> 64.1   (+5.0 closed)
+    prg 3    5.0 ->  5.0   (control, already matching)
+
+Still **−35 dB at 1–4 kHz on prg 1** after the fix. The envelope is worth
+having and it is not the answer.
+
+### The cutoff mapping is NOT the cause — it is very good
+
+    prg   source pos   E4XT Hz   FILFRQ   AKAI Hz   octaves off
+      0        0.145       133       40       138        +0.05
+      1        0.173       157       42       159        +0.02
+      2        0.516      1169       69      1128        -0.05
+
+Both machines put the filter within 0.05 octaves of each other. Whatever is
+left is not where the filter sits.
+
+### What is left: the envelope DEPTH scale has never been measured
+
+`akai_filter_env_bytes()` converts the E4B amount to the AKAI depth byte as
+
+    depth = amount * AKAI_ENV2_DEPTH_MAX      # 0..1 -> 0..50
+
+a straight linear map, on the assumption that "full depth" means the same span
+on both machines. **Nothing has ever measured what it means on either.** If the
+E4B's amount 0.87 sweeps five octaves and the AKAI's depth 43 sweeps one and a
+half, the AKAI stays dark exactly as measured — and the remaining 25–35 dB is
+the right order for that kind of mismatch.
+
+So the open question is specific and answerable: **how many octaves does AKAI
+env2 depth N move the filter?** Sweep depth at a fixed base FILFRQ and a fixed
+envelope, and track the corner. The E4B side needs the same treatment before the
+two can be mapped onto each other rather than assumed equal.
+
+Until then the depth conversion is a guess that happens to point the right way.
