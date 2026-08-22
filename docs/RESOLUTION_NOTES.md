@@ -159,6 +159,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§ENV2FLOOR — the filter envelope cannot attack faster than 66 ms, and that is the missing "snap" (2026-08-22)](#env2floor-the-filter-envelope-cannot-attack-faster-than-66-ms-and-that-is-the-missing-snap-2026-08-22)
 - [§NOISESRC — building a measuring instrument, and rejecting two versions of it (2026-08-22)](#noisesrc-building-a-measuring-instrument-and-rejecting-two-versions-of-it-2026-08-22)
 - [§FENVORDER — the E4XT filter envelope's traversal order is NOT established (2026-08-22, NEGATIVE)](#fenvorder-the-e4xt-filter-envelopes-traversal-order-is-not-established-2026-08-22-negative)
+- [§KRZCUTCAL — the K2000 cutoff mapping is out by up to 1.8 octaves (2026-08-22)](#krzcutcal-the-k2000-cutoff-mapping-is-out-by-up-to-18-octaves-2026-08-22)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -14573,3 +14574,77 @@ The magnitude argues the same way independently: +6/127 ≈ 5% tracking across
 So `K_FREQ` stays worth implementing on its own merits, and is not the
 explanation for either symptom. §ENV2FLOOR remains the better candidate for
 program 2.
+
+## §KRZCUTCAL — the K2000 cutoff mapping is out by up to 1.8 octaves (2026-08-22)
+
+**Jan asked whether the envelope/depth calibration we did for the AKAI and E4XT
+today had already been done for the KRZ side, since I had said the K2000 needed
+no new material. It has not, and I was wrong.** Checking rather than asserting
+turned up a bigger error than anything found on the AKAI.
+
+### The bug
+
+`krz_writer._cutoff_byte` maps the model's 0..1 cutoff position **linearly** onto
+the K2000's signed-semitone byte:
+
+    clamp(-48..79, round(-48 + cutoff01 * 127))
+
+Both scales are logarithmic in frequency, so the *shape* is right. The
+**endpoints are not**: the model's position spans **57 Hz–20 kHz (8.45 octaves)**
+and the byte range spans **16 Hz–25088 Hz (10.61 octaves)**. Stretching one onto
+the other misplaces every interior value:
+
+    position   model wants   byte   K2000 gives    error
+        0.0         57 Hz     -48        16 Hz    -1.80 oct
+        0.2        184 Hz     -23        69 Hz    -1.41 oct
+        0.3        331 Hz     -10       147 Hz    -1.17 oct
+        0.5       1068 Hz      16       659 Hz    -0.70 oct
+        0.7       3447 Hz      41      2794 Hz    -0.30 oct
+        0.8       6194 Hz      54      5920 Hz    -0.07 oct
+        1.0      20000 Hz      79     25088 Hz    +0.33 oct
+
+**Worst case 1.80 octaves, and the error is worst exactly where filtered
+material lives** — a source asking for a 331 Hz corner gets 147 Hz.
+
+For scale, the AKAI cutoff mapping was checked against hardware today and came
+back within **0.05 octaves**. The two writers were held to very different
+standards.
+
+### It was known, and neither quantified nor fixed
+
+`docs/KRZ_FORMAT.md` already records it:
+
+> **`filter_cutoff` does not round-trip its 0..1 value.** The writer maps it onto
+> a *linear semitone* scale; the reader decodes through E4B's *log-Hz* cutoff
+> scale … Both are correct on their own terms, but they are different curves …
+> A follow-up (not yet done) would route `krz_writer._cutoff_byte` through Hz
+> too, making the two exact inverses.
+
+Framed as a round-trip inconsistency, which understates it: it is not only that
+KRZ→KRZ fails to round-trip, it is that **every KRZ we write puts the filter in
+the wrong place**, and nothing downstream would notice because the reader uses
+the other curve.
+
+### Two more of the same kind, self-flagged in the code
+
+    hob_f1[6] = round(amt * 127)              # depth (approx; see TODO)
+    cal[22]   = round(lfo1_to_pitch * 79)     # depth (approx; TODO)
+
+The filter-envelope depth and the LFO→pitch depth are both unmeasured linear
+scalings — the identical shape to the AKAI's `amount * 50`, which today's
+measurement showed delivers about 3 octaves where the source may mean five.
+
+### The material
+
+`tests/re_banks/gen_krz_cutoffcal.py` → `CUTCAL_01.img`, a 1.44 MB Gotek floppy
+(269 KB used), on the stick under `MPC2EMU_TEST/`. Extracted back out of the
+FAT12 image and md5-compared against the source: identical.
+
+Eleven presets, `CUT 000` … `CUT 100`, one per cutoff position 0.0–1.0, over a
+**stationary white-noise sample** (§NOISESRC) root-matched at note 60 so nothing
+is resampled. Resonance, filter envelope, velocity→filter and the amp envelope
+are all neutral, so the only thing differing across the set is the cutoff.
+
+Measure the corner on each and the position→Hz curve that falls out **is** the
+calibration — after which `_cutoff_byte` can be routed through Hz against
+measured endpoints rather than assumed ones.
