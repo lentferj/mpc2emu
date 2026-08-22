@@ -170,6 +170,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§N79NOREVERSAL — the note-79 sign reversal does not reproduce (2026-08-22)](#n79noreversal-the-note-79-sign-reversal-does-not-reproduce-2026-08-22)
 - [§PRG8 — the one unexplained program was not anomalous either (2026-08-22, RESOLVED)](#prg8-the-one-unexplained-program-was-not-anomalous-either-2026-08-22-resolved)
 - [§ATKCAL2 — the on-disc sweep failed its own gate, and the design was mine (2026-08-22)](#atkcal2-the-on-disc-sweep-failed-its-own-gate-and-the-design-was-mine-2026-08-22)
+- [§ATKMEAS — the filter-envelope attack, measured at last (2026-08-22)](#atkmeas-the-filter-envelope-attack-measured-at-last-2026-08-22)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -15513,3 +15514,62 @@ measurement design has to be checked against what the *instrument under test*
 actually does with the settings, not only against what the settings mean. I
 verified the source, the sample, the parameter's presence and its variation
 across the sweep — and still built a bank whose steady state hid the effect.
+
+## §ATKMEAS — the filter-envelope attack, measured at last (2026-08-22)
+
+Third attempt, and the one that worked. s3ked found why the first two could not:
+**`ENV2L1` ships at 0**, so the attack stage travels no distance — and a rate over
+zero distance takes zero time, whatever `ATTAK2` says. With `ENV2L1` 99,
+`SUSTN2` 25 and `DECAY2` 73 set live, and `ATTAK2` left at the disc's 0→72 sweep,
+the machine was handed to me and I captured all ten programs, three takes each.
+
+    ATTAK2   t90 raw   minus offset   our law predicts
+         0     0.58s          0.00s            0.066s   (we clamp here)
+         8     0.60s          0.02s            0.066s
+        16     0.60s          0.02s            0.066s
+        24     0.60s          0.02s            0.066s
+        32     0.60s          0.02s            0.066s
+        40     0.62s          0.04s            0.066s
+        48     0.64s          0.06s            0.144s
+        56     0.68s          0.10s            0.312s
+        64     0.76s          0.18s            0.678s
+        72     0.92s          0.34s            1.474s
+
+Monotonic across the whole range, three takes each, HF band 2–12 kHz, rise of
+~34 dB on every program.
+
+### 1. The field IS live below byte 40 — but only just, at this resolution
+
+Byte 0 reaches t90 **0.04 s sooner** than byte 40. That is real and monotonic,
+and it settles the question §ENV2FLOOR asked. **But it is two analysis hops at a
+20 ms resolution**, so the low end is barely resolved and bytes 0–32 are
+indistinguishable from each other here. The honest form: *the clamp costs about
+40 ms of attack range, and how that range is distributed below byte 40 is not
+resolved by this measurement.*
+
+### 2. Our law's slope is wrong, and it over-predicts badly at the top
+
+    measured   t = 0.00250 * exp(0.06723 * byte)    doubling every 10.3 bytes
+    shipped    t = 0.001363 * exp(0.09703 * byte)   doubling every  7.1 bytes
+
+At byte 72 we predict 1.47 s where the machine takes **0.34 s — 4.3× out**. The
+direction matters: we *invert* the law to choose a byte, so over-predicting the
+time means picking too low a byte, and **long filter attacks come out far shorter
+than the source asked for.** At the short end the error is small (byte 40, 66 ms
+predicted against 40 ms measured).
+
+### What this measurement does not establish
+
+* **The offset.** `t90 raw` carries ~0.58 s of MIDI-anchor and latency, removed
+  by taking byte 0 as instant. If byte 0 is *not* instant, every corrected figure
+  shifts and the fitted prefactor moves with it. The slope is unaffected.
+* **Resolution.** A 40 ms analysis window cannot resolve differences below about
+  20 ms, which is most of the range below byte 40.
+* **One session, one operator, one method.** §ENVRATESLOPE showed a prefactor
+  disagreement of 2× between two projects that turned out to be a traverse-
+  distance difference. This law should not replace the shipped one until someone
+  measures it independently — the slope disagreement is large enough to act on,
+  the constant is not.
+
+**No code change yet.** Recorded as a measurement, with the shipped law flagged
+rather than replaced.
