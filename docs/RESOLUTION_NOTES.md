@@ -174,6 +174,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§ENV2DEPTH — the E4B side is a product too, so the fix is a constant (2026-08-22)](#env2depth-the-e4b-side-is-a-product-too-so-the-fix-is-a-constant-2026-08-22)
 - [§ENV2DEPTH2 — the compression was three points, and the fix is shipped (2026-08-22)](#env2depth2-the-compression-was-three-points-and-the-fix-is-shipped-2026-08-22)
 - [§MATRIX — the conversion matrix: four sources, eight conversions (2026-08-22)](#matrix-the-conversion-matrix-four-sources-eight-conversions-2026-08-22)
+- [§KRZENVDEPTH — the K2000 filter-envelope depth, measured but not yet usable (2026-08-22)](#krzenvdepth-the-k2000-filter-envelope-depth-measured-but-not-yet-usable-2026-08-22)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -15839,3 +15840,71 @@ same two machines.
     AKAI    Conv<-E4B, Conv<-KRZ, + both AKAI originals as their own volumes
     E4XT    Conv<-KRZ, Conv<-S3000, Conv<-S1000, + the E4B original
     K2000   Conv<-E4B, Conv<-S3000, Conv<-S1000, + the KRZ original from HD0
+
+## §KRZENVDEPTH — the K2000 filter-envelope depth, measured but not yet usable (2026-08-22)
+
+k2kremote measured the K2000's ENV2→FilFreq depth on a dedicated scratch program
+(id 250: ROM Sawtooth, algorithm 1's 4-pole lowpass, base 1047 Hz, ENV2 parked at
+a constant 100% and **confirmed so before sweeping** — no envelope-travel trap
+this time).
+
+    cents   corner   harmonic   octaves   naive(ct/1200)   diff   one bin
+        0   1045.9H      4.0     0.000        0.000       +0.000    0.322
+      600   1307.4H      5.0     0.322        0.500       -0.178    0.263
+     1200   2091.8H      8.0     1.000        1.000       +0.000    0.170
+     1800   3137.8H     12.0     1.585        1.500       +0.085    0.115
+     2400   4968.1H     19.0     2.248        2.000       +0.248    0.074
+
+**Read the deviations against the bin width, not against zero.** The corners are
+quantised to the sawtooth's harmonic grid, so the −0.178 octave gap at 600 ct is
+**smaller than one bin** and cannot distinguish cents-linear from anything else.
+The +0.248 at 2400 ct is about three bins and is likely real. `1200 ct = exactly
+1.000 octaves` is the strongest single point. Safe reading: **linear in cents to
+~2 octaves, with a possible excess above that.**
+
+### Why it cannot be applied yet
+
+The sweep is in **cents**; our writer sets a **byte**:
+
+    krz_writer:  hob_f1[6] = round(filter_env_amount * 127)
+
+Without the byte↔cents mapping the law cannot be turned into a constant. If
+byte 127 is the 10800 ct (9 octave) maximum k2kremote mentions, then at full
+envelope level:
+
+    amount 1.0 -> byte 127 -> 9.00 octaves
+    E4XT at full level, amount 1.0 -> 5.14 octaves   (eosed §46)
+    -> over-delivering ~1.75x on every KRZ bank with a filter envelope
+
+Same shape as the AKAI's 2.8× fixed earlier today (§ENV2DEPTH2), in a second
+format. **Asked rather than assumed** — the arithmetic above is prepared, not
+shipped.
+
+### Two findings worth keeping regardless
+
+**A sawtooth's own 1/k rolloff can manufacture a flat sweep.** k2kremote's first
+pass compared raw harmonic magnitude against a flat threshold and got an
+*identical* corner at all seven depths — because harmonic 4 was already below
+threshold from the source's natural rolloff alone, at every depth. Fixed by
+correcting each harmonic by `k` first, which flattens the passband so a threshold
+trips only on the filter.
+
+That is the **third appearance today** of one signature — *a monotonic parameter
+sweep producing an identical result* — after `PITCH NONE AMP` (§CUTCALDEAD) and a
+126 Hz noise latch. Three different causes, one tell. **The signature is reliable
+even though no single cause is.**
+
+**The K2000's panel does not show a live ENV2-modulated value.** Held for 3 s at
+9 octaves of depth, `Coarse` never moved off its static 1047 Hz. For CUTCAL the
+panel *was* the ground truth and gave 0.08% agreement (§KRZCUTCAL); here it would
+have reported no modulation at all. **Same instrument, opposite verdict, turning
+only on whether the value is static or modulated** — worth recording precisely
+because the CUTCAL success invites over-generalising it.
+
+### And the limit k2kremote stopped at
+
+3600 and 4800 ct both read an identical 6537 Hz with a >25× cliff between
+harmonics 24 and 28, and a ceiling that does not move with depth. **That is the
+ROM Sawtooth's own bandlimit, not the filter** — ordinary anti-aliasing for a
+wavetable played across octaves. Reporting it as a corner would have put a
+fabricated compression knee into our converter.
