@@ -155,6 +155,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§ABDISC — the A/B disc: new code beside the build that was actually heard (2026-08-22)](#abdisc-the-ab-disc-new-code-beside-the-build-that-was-actually-heard-2026-08-22)
 - [§ENV2RESULT — the filter envelope works, and is not enough (2026-08-22, MEASURED)](#env2result-the-filter-envelope-works-and-is-not-enough-2026-08-22-measured)
 - [§ENV2CONTOUR — the envelope works better than §ENV2RESULT said, and the metric was the problem (2026-08-22, CORRECTION)](#env2contour-the-envelope-works-better-than-env2result-said-and-the-metric-was-the-problem-2026-08-22-correction)
+- [§AKAISTEREO3 — stereo output confirmed on the S3000XL, first load (2026-08-22)](#akaistereo3-stereo-output-confirmed-on-the-s3000xl-first-load-2026-08-22)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -14301,3 +14302,50 @@ is a refinement, not the missing piece, and the priority was overstated.
 **Use the centroid contour for filter work, not band dB and not a single HF
 figure.** Three metrics have now each pointed somewhere different on the same
 captures, and only the contour tracks the thing the filter actually does.
+
+## §AKAISTEREO3 — stereo output confirmed on the S3000XL, first load (2026-08-22)
+
+**The `-L`/`-R` pair layout works on hardware.** TC9 was written by the new
+stereo path this morning and had never been loaded by this sampler. It loaded
+clean: 5 programs, 114 samples, no stacking, no complaint, and the only dangling
+reference was the resident TEST PROGRAM's SINE, expected after `CLR`.
+
+**And it is genuinely stereo.** Measured on unsummed two-channel captures at
+note 69, three takes each — s3ked's figures and our own independent pass over
+the same files, which agree:
+
+    PRGNUM   kind     L/R corr   side/mid
+        30   stereo     0.4611     -4.3 dB
+        31   stereo     0.4841     -4.5 dB
+        40   mono       1.0000    -33.0 dB
+        41   mono       1.0000    -33.0 dB
+
+**The mono programs are the control and they are exact.** `corr = 1.0000` with
+side content 33 dB down is what "no stereo" measures as on this rig, so the
+0.46/0.48 on the stereo programs cannot be rig imbalance — it is a real image.
+Both halves of the volume came from the same source material, one converted with
+the default stereo path and one with `--mono mix`, which is what makes the
+comparison need no assumption about the rig.
+
+`PANPOS` is 0 and `OUTPUT` 255 on all four programs, so the image comes from the
+hard-panned **zone** pans, exactly as §AKAISTEREO2 read off the real library
+disc — not from anything at program level.
+
+### What this closes
+
+`TODO.md`'s *AKAI stereo samples are mixed down to mono* is now implemented AND
+hardware-confirmed, which are different claims: the tests proved the bytes, this
+proves the sampler agrees with our reading of the format.
+
+### A near-miss worth recording, from s3ked
+
+Their pre-flight printed **"NOTE OUT OF RANGE"** for all four programs and it was
+wrong — it read the key span from **keygroup 0 only**, and these are 18–20
+keygroup programs where note 69 falls in a later one. Their TC1/TC8 check read
+every keygroup; this one did not.
+
+The captures went ahead and every take lifted 48–59 dB, so the silence gate
+contradicted the range check and the gate was right. Two independent checks
+disagreeing is what caught it. Had the range check been trusted alone, a working
+volume would have been reported as unplayable — a false negative on a feature's
+first hardware test, which is the expensive direction to be wrong in.
