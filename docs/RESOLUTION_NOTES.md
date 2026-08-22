@@ -165,6 +165,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§STALEREPORT — the failures that outlive their truth (2026-08-22)](#stalereport-the-failures-that-outlive-their-truth-2026-08-22)
 - [§ENVRATESLOPE — the two envelopes share a slope, not a law (2026-08-22)](#envrateslope-the-two-envelopes-share-a-slope-not-a-law-2026-08-22)
 - [§FENVORDER2 — the traversal order is measured, and our parser had it right (2026-08-22, RESOLVED)](#fenvorder2-the-traversal-order-is-measured-and-our-parser-had-it-right-2026-08-22-resolved)
+- [§ATKCAL — closing the attack timing: put the sweep on the disc (2026-08-22)](#atkcal-closing-the-attack-timing-put-the-sweep-on-the-disc-2026-08-22)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -15097,3 +15098,70 @@ lesson as §ENVRATESLOPE's prefactor, arriving from a third direction.
 established" — now has its cause. SEG4 and SEG5 are release stages and do not run
 while a note is held; SEG0 was inert in that experiment because it began and
 ended at the same level. The observation was right all along.
+
+## §ATKCAL — closing the attack timing: put the sweep on the disc (2026-08-22)
+
+Jan asked what it would take to close the AKAI attack timing. **The blocker is
+not the measurement design — it is that nobody can currently make the filter
+envelope sweep at all over SysEx.** Nine consecutive live-configuration attempts
+failed, ending with FILTERTOP failing on a program that had swept an hour
+earlier in the same session.
+
+### The discriminator nobody had drawn
+
+**Envelope 2 written by us to a disc demonstrably works.** TC1's programs 0/1/2
+carry depth 43/41/27, and measured a real contour change on hardware this
+morning — r 0.78 → 0.97 against the E4XT (§ENV2CONTOUR).
+
+    disc-written env2    sweeps       (measured, §ENV2CONTOUR)
+    SysEx-written env2   does not     (nine attempts, §ENV2FLOOR)
+
+So the machine can do it and our bytes are right; what is failing is live
+configuration. **Putting the whole sweep on a disc sidesteps the failure entirely
+rather than solving it** — and the same move is what made CUTCAL work on its
+first properly-built attempt after the live approach had stalled.
+
+### What was built
+
+`tests/re_banks/gen_akai_atkcal.py` → volume `TC11 AtkCal`, 0.36 MB, staged at
+`~/temp/tc_src/AKAI_AtkCal/TC11_ready.pkl`.
+
+Ten programs, PRGNUM 60–69, **`ATTAK2` swept 0/8/16/24/32/40/48/56/64/72** with
+everything else identical. The sweep reaches well below 40 because below 40 is
+the question, and includes 40+ as the anchor against the existing fitted law.
+
+    FILFRQ  40      base ~142 Hz, so the sweep has somewhere to travel
+    depth   20      99 x 20 = 5.6 octaves -> ~6.8 kHz: high but IN BAND.
+                    Above ~20 saturates at this base (s3ked §148), which
+                    would flatten the very transition being timed.
+    SUSTN2  99      attack to full and HOLD
+    DECAY2   0      so no decay leg falls inside the measurement window
+
+The envelope bytes are **patched directly rather than through
+`akai_filter_env_bytes()`**. This is the one place §BUILDAROUND's rule inverts:
+the writer's clamp at byte 40 *is* the thing under test, so a disc built through
+it could not ask the question. Everything else still comes from the writer.
+
+Ship guard as §CUTCALDEAD requires — reads its own output back and refuses if
+env2 depth is 0 or if `ATTAK2` does not vary across the sweep. Both passed.
+
+The sample carries a **short sustain loop near the end** rather than TC10's
+whole-sample loop from frame 0. That shape was exonerated as the cause of the
+sweep failure, but there is no reason to carry an odd variable into a fresh
+measurement.
+
+### What closing it now costs
+
+One card crossing and one capture run. No live parameter writes, so the thing
+that failed nine times is not in the path.
+
+The measurement itself: play note 60 on each of the ten, and time the corner's
+rise. **Measure at the END of the transition, not a t10** — eosed hit exactly
+this on the E4XT, where a contour sat flat near 470 Hz for 0.9 s while the
+envelope was already travelling, and a t10 would have folded that floor into the
+law (§43).
+
+Two outcomes, both worth having: if the corner rises faster below byte 40, our
+clamp is costing the snap and the fix is one line. If it does not, 66 ms is a
+real limit of the S3000XL, the snap is not expressible, and we record that and
+stop.
