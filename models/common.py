@@ -875,6 +875,70 @@ def krz_reson_byte_to_01(b: int) -> float:
     return max(0.0, min(1.0, b / 48.0))
 
 
+#: K2000 DSP depth byte -> cents, for a frequency-unit function slot.
+#:
+#: COMPLETE AND MEASURED, no interpolation. k2kremote read program 250 back at
+#: every consecutive byte across the whole range, single-clicking one step at a
+#: time (2026-08-21). That confirmed every point the earlier partial fit had
+#: (32->450, 29->300, 22->80, 12->24, 2->4, and the 100 ct/unit middle) and
+#: filled in the rest, so the interpolation this table replaces is gone.
+#:
+#: The byte is a plain 0..127 index; "cents" is the panel's own NONLINEAR
+#: display of that index -- compressed near zero, exactly 100 ct/unit through
+#: the middle, coarser again in the last three steps. An earlier reading that
+#: called the compressed stretch an "anomaly" rested on two points and was
+#: withdrawn once the range was walked; there is no anomaly, only a curve.
+#:
+#: The unit is per FUNCTION TYPE -- cents on a frequency slot, semitones on a
+#: pitch one, percent on a width one -- so only call this for a frequency slot.
+KRZ_DEPTH_CENTS = (
+    [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 27, 30, 35, 40, 45, 50,
+     55, 60, 70, 80, 90, 100, 120, 150, 200, 250, 300, 350, 400, 450, 500]
+    + [(b - 28) * 100 for b in range(34, 125)]   # exact closed form, 34..124
+    + [10000, 10400, 10800]                      # 125..127; the formula breaks
+)
+
+#: The ceiling, 10800 ct = exactly 9.000 octaves. Named because it is a
+#: property of the BYTE, not of any destination -- see KRZ_FENV_FULL_CENTS for
+#: why the two must not be confused.
+KRZ_DEPTH_MAX_CENTS = 10800.0
+
+#: Cents that a full (1.0) filter-envelope cord amount is worth on the K2000,
+#: so a converted program sweeps as far as the E4XT would: 5.14 octaves, from
+#: E4B_FENV_OCT_PER_UNIT at envelope level 100%. Both machines multiply level
+#: by depth, so the level cancels -- the same reasoning behind
+#: AKAI_ENV2_DEPTH_MAX, and deliberately the same source constant, so all three
+#: writers move together if that measurement is ever revised.
+#:
+#: NOT the byte's ceiling. Reader and writer both used KRZ_DEPTH_MAX_CENTS for
+#: this until 2026-08-22, which normalised the model's amount on how far the
+#: FIELD reaches rather than on what the amount MEANS -- 9.000 octaves against
+#: 5.14, and, because the display curve is compressed near zero, ~23x too
+#: LITTLE at small amounts rather than uniformly too much.
+#:
+#: See TODO "FILTER_ENV_FULL_CENTS disagrees with E4B_FENV_OCT_PER_UNIT": the
+#: model carries a second, older value for this same quantity (3.65 oct) on the
+#: cents->amount input path, and the two need reconciling.
+KRZ_FENV_FULL_CENTS = E4B_FENV_OCT_PER_UNIT * 100.0 * 100.0 * 1200.0
+
+
+def krz_depth_byte_to_cents(b: int) -> float:
+    """K2000 DSP depth byte -> cents. Negatives mirror on MAGNITUDE (confirmed
+    against two signed values read off the machine)."""
+    if b < 0:
+        return -krz_depth_byte_to_cents(-b)
+    return float(KRZ_DEPTH_CENTS[min(b, 127)])
+
+
+def krz_cents_to_depth_byte(cents: float) -> int:
+    """Cents -> the K2000 depth byte that lands nearest. Exact inverse of
+    krz_depth_byte_to_cents on every value the table holds."""
+    if cents < 0:
+        return -krz_cents_to_depth_byte(-cents)
+    return min(range(len(KRZ_DEPTH_CENTS)),
+               key=lambda b: abs(KRZ_DEPTH_CENTS[b] - cents))
+
+
 # K2000 envelope-time display grid (seconds per editor step); env time byte =
 # steps(seconds) + 3. Shared with krz_writer._ENV_TIME_GRID.
 KRZ_ENV_TIME_GRID = [(0, 2, 0.02), (2, 5, 0.04), (5, 10, 0.10),

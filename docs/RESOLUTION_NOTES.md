@@ -175,6 +175,8 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§ENV2DEPTH2 — the compression was three points, and the fix is shipped (2026-08-22)](#env2depth2-the-compression-was-three-points-and-the-fix-is-shipped-2026-08-22)
 - [§MATRIX — the conversion matrix: four sources, eight conversions (2026-08-22)](#matrix-the-conversion-matrix-four-sources-eight-conversions-2026-08-22)
 - [§KRZENVDEPTH — the K2000 filter-envelope depth, measured but not yet usable (2026-08-22)](#krzenvdepth-the-k2000-filter-envelope-depth-measured-but-not-yet-usable-2026-08-22)
+- [§KRZENVDEPTH2 — the byte↔cents mapping arrived, and the ceiling was never the full scale (2026-08-22)](#krzenvdepth2-the-bytecents-mapping-arrived-and-the-ceiling-was-never-the-full-scale-2026-08-22)
+- [§FENVFULLSCALE — two values for one quantity, 41% apart (2026-08-22)](#fenvfullscale-two-values-for-one-quantity-41-apart-2026-08-22)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -15908,3 +15910,119 @@ harmonics 24 and 28, and a ceiling that does not move with depth. **That is the
 ROM Sawtooth's own bandlimit, not the filter** — ordinary anti-aliasing for a
 wavetable played across octaves. Reporting it as a corner would have put a
 fabricated compression knee into our converter.
+
+
+## §KRZENVDEPTH2 — the byte↔cents mapping arrived, and the ceiling was never the full scale (2026-08-22)
+
+k2kremote closed §KRZENVDEPTH by reading program 250's depth byte at **every
+consecutive value** across the whole range, single-clicking one step at a time.
+The byte is a plain 0–127 index; "cents" is the panel's own **nonlinear display**
+of that index — compressed near zero, exactly 100 ct/unit through the middle,
+coarser again in the last three steps. Their earlier "anomaly" in the 0–300 ct
+stretch was two points and is withdrawn: there is no anomaly, only a curve.
+
+    byte 0..33    0,2,4,6,8,10,12,14,16,18,20,22,24,27,30,35,40,45,50,55,
+                  60,70,80,90,100,120,150,200,250,300,350,400,450,500
+    byte 34..124  cents = (byte - 28) * 100        exact at every point checked
+    byte 125..127 10000, 10400, 10800              the closed form breaks here
+
+**Byte 127 = 10800 ct = exactly 9.000 octaves**, verified by single-clicking up
+from 9300 rather than by jumping to max.
+
+### What this side had wrong, in both directions
+
+`hob_f1[6] = round(amount * 127)` treated the byte's **numerical maximum** as
+"full envelope amount". It is not: a full EOS FilterEnv cord is 5.14 octaves
+(eosed §46), so full amount is byte **90**, not 127.
+
+And the reader had the same error mirrored — `_k2_depth_cents(d) / 10800.0`,
+normalising the model's amount on how far the **field** reaches rather than on
+what the amount **means**. The two were exact inverses of each other, so a
+KRZ→KRZ round-trip was clean and nothing in 433 tests noticed. **Self-consistency
+is not correctness**, and a round-trip test is precisely the test that cannot
+tell the difference.
+
+### The error was a SHAPE error, not a scale one
+
+The obvious framing — "1.75× too much sweep" — is only true at full amount, and
+it is the least damaging end:
+
+    amount   wanted     old byte -> wrote      new byte -> writes
+      0.05    308 ct       6 ->    12 ct        25 ->   120 ct     26x too little
+      0.10    617 ct      13 ->    27 ct        34 ->   600 ct     23x too little
+      0.25   1542 ct      32 ->   450 ct        43 ->  1500 ct      3.4x too little
+      0.50   3084 ct      64 ->  3600 ct        59 ->  3100 ct      1.2x too much
+      1.00   6168 ct     127 -> 10800 ct        90 ->  6200 ct      1.75x too much
+
+Because the display curve is compressed near zero, the old mapping **crossed
+over**: it under-delivered small amounts by more than 20×, and over-delivered
+large ones. No single correction factor would have found that, and a test written
+only at full scale would have passed a 23× error. Subtle filter envelopes — the
+common case in real programs — were effectively absent from every KRZ we wrote.
+
+For scale on the ceiling: with a 1047 Hz base cutoff, byte 127 asks the filter
+for ~536 kHz. The K2000 is far past its own usable range long before that, which
+is independent evidence that the maximum was never meant as "full amount".
+
+### The fix, and where it lives
+
+The law was already in `parsers/krz_parser._k2_depth_cents` — I duplicated it in
+the writer before noticing, which is the failure the KRZ codec section of
+`models/common.py` exists to prevent. Corrected shape:
+
+- `models/common.py` gains `KRZ_DEPTH_CENTS` (the full 128-entry measured
+  table), `krz_depth_byte_to_cents`, `krz_cents_to_depth_byte`,
+  `KRZ_DEPTH_MAX_CENTS` (the byte's ceiling) and `KRZ_FENV_FULL_CENTS` (what a
+  full cord is worth) — **named separately on purpose**, since conflating them
+  is the whole bug.
+- `_k2_depth_cents` becomes a thin delegate. Its interpolation below byte 33 is
+  gone: the dense read makes it unnecessary, and confirms every anchor this side
+  had (98→7000, 62→3400, 46→1800, 42→1400, 17→45, −58→−3000, −77→−4900).
+- `KRZ_FENV_FULL_CENTS` is **derived in code** from `E4B_FENV_OCT_PER_UNIT` —
+  the same constant `AKAI_ENV2_DEPTH_MAX` is derived from — so all three writers
+  move together if that measurement is ever revised.
+
+Reader and writer are now exact inverses across bytes 0–90; above 90 a K2000
+program sweeps further than an EOS cord amount can express and clamps to 1.0.
+Four tests, three confirmed to fail with the writer reverted (the fourth is a
+structural property of the shared table and would not).
+
+**Not hardware-confirmed end to end.** The byte↔cents table is measured and the
+5.14 oct full scale is measured; the arithmetic joining them has not been
+listened to. §MATRIX is what checks it.
+
+## §FENVFULLSCALE — two values for one quantity, 41% apart (2026-08-22)
+
+Wiring the KRZ depth surfaced a conflict that predates it. The model carries
+**two constants for the same physical quantity** — how many cents a full
+FilterEnv→Filter-Freq cord is worth on the E4XT:
+
+    FILTER_ENV_FULL_CENTS  = 4383 ct = 3.65 oct   MOD_DEPTH_CAL, 2026-06-12,
+                                                  "four independent cords agree"
+    E4B_FENV_OCT_PER_UNIT  -> 6168 ct = 5.14 oct  eosed §46, 12 levels,
+                                                  132 captures, median resid 7.4%
+
+They are 41% apart, and **they are on opposite sides of the pipeline**:
+
+- `FILTER_ENV_FULL_CENTS` is the **input** path — `cents_to_filter_env_amount`,
+  used by `sfz_parser` for `fileg_depth` and `sf2_parser` for
+  `modEnvToFilterFc`.
+- `E4B_FENV_OCT_PER_UNIT` is the **output** path — `AKAI_ENV2_DEPTH_MAX` and now
+  `KRZ_FENV_FULL_CENTS`.
+
+So the errors **compose rather than cancel**: an SFZ asking for 4383 cents of
+filter envelope becomes amount 1.0, and the AKAI or KRZ writer then delivers
+6168 — 1.41× what the source asked for. E4B→anything is unaffected, because the
+E4B parser reads the cord amount directly and neither constant enters.
+
+**Which is right is not ours to decide alone.** §46 is denser, more recent, and
+specifically about the filter envelope; MOD_DEPTH_CAL measured four cords and
+may have used a source whose "full unit" is not the envelope's level 100%, in
+which case both readings are correct about different things and only the name
+`FILTER_ENV_FULL_CENTS` is wrong. **For eosed:** does §46 supersede MOD_DEPTH_CAL
+for the FilterEnv→Filter-Freq cord specifically, or do they measure different
+paths?
+
+Deliberately **not** changed here: it would move sfz/sf2 input depths by 41% on
+the strength of a question nobody has answered yet, and it is a separate claim
+from the one k2kremote delivered.

@@ -87,7 +87,8 @@ from typing import List, Tuple
 
 from models.common import (Bank, Preset, SampleData, VoiceLayer, LoopType,
                           KRZ_ENV_TIME_GRID, KRZ_RELEASE_FACTOR,
-                          E4B_CUTOFF_MIN_HZ, E4B_CUTOFF_MAX_HZ
+                          E4B_CUTOFF_MIN_HZ, E4B_CUTOFF_MAX_HZ,
+                          krz_cents_to_depth_byte, KRZ_FENV_FULL_CENTS
 )
 from processors.loop_renderer import bake_alternating_loop
 # The K2000 and the E4B both store stereo PCM planar (whole left channel, then
@@ -874,6 +875,30 @@ def _reson_byte(reson01: float) -> int:
     return max(0, min(48, round(reson01 * 48)))             # dB*2, max 24 dB
 
 
+def _filter_env_depth_byte(amount: float) -> int:
+    """FilterEnv->cutoff cord amount 0..1 -> K2000 ENV2->FilFreq depth byte.
+
+    **This used to be `round(amount * 127)`**, which treated the byte's
+    numerical maximum as "full envelope amount". It is not: byte 127 is
+    10800 cents = exactly 9.000 octaves, against the 5.14 an EOS 100% cord
+    delivers. And because the byte's display curve is compressed near zero the
+    error was not a clean 1.75x -- at amount 0.10 the old code wrote 27 cents
+    where 617 were wanted, ~23x too LITTLE. It was a shape error, not a scale
+    one, so no single correction factor would have found it.
+
+    With a 1047 Hz base cutoff, byte 127 asks the filter for ~536 kHz; the
+    K2000 is far past its own usable range long before that, which is a second
+    reason the old mapping could not have been what full amount meant.
+
+    Routed through cents via the shared codec, so this is the exact inverse of
+    what `krz_parser` reads. Only the byte->cents table is hardware-measured
+    (k2kremote, 2026-08-21); the 5.14 oct full scale is the E4XT's (eosed §46)
+    and is NOT yet confirmed end to end -- §MATRIX is what checks that.
+    """
+    return krz_cents_to_depth_byte(
+        max(0.0, min(1.0, amount)) * KRZ_FENV_FULL_CENTS)
+
+
 # K2000 DSP filter-type bytes — HOB0(0x50)[0] — and the algorithm they live in.
 # Hardware-RE'd 2026-06-16 (FILTERS.KRZ 312-315; POLE1LP.KRZ 323; POLE2A5.KRZ 320/324):
 #   Alg 1  (4-pole, 24 dB/oct): 4POLE LOPASS=50, HIPASS=54, TWIN PEAKS BP=55,
@@ -1096,7 +1121,7 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False):
         if amt > 0.0:
             _fill_env(seg(0x22), voice.filter_env)
             hob_f1[5] = _K2_CS_ENV2                          # source = ENV2
-            hob_f1[6] = max(0, min(127, round(amt * 127)))  # depth (approx; see TODO)
+            hob_f1[6] = _filter_env_depth_byte(amt)         # depth (measured; see above)
 
     # --- LFO1 + vibrato (LFO1 -> Pitch) ---
     lfo = seg(0x14)

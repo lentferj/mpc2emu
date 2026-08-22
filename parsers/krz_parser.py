@@ -55,7 +55,9 @@ from models.common import (Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            LoopType, Envelope, krz_cutoff_byte_to_hz,
                            krz_reson_byte_to_01, krz_env_byte_to_seconds,
                            KRZ_RELEASE_FACTOR, hz_to_e4b_cutoff,
-                           key_track_to_filter_amount)
+                           key_track_to_filter_amount,
+                           krz_depth_byte_to_cents, KRZ_DEPTH_MAX_CENTS,
+                           KRZ_FENV_FULL_CENTS)
 
 
 # ---------------------------------------------------------------------------
@@ -442,49 +444,15 @@ LFO1_TAG = 0x14
 def _k2_depth_cents(b: int) -> float:
     """K2000 DSP depth byte -> cents, for a frequency-unit function.
 
-    Measured by the k2kremote project one alpha-wheel click at a time, and
-    anchored against byte values from this side: the click and the stored byte
-    step together (their 25 clicks matched our 127->102 difference exactly).
-
-    Linear at 100 ct per unit over the middle, a COARSER 400-per-step tail at
-    the top, and compression toward zero at the bottom. The taper is why a
-    two-point fit gave 136 ct/unit and was wrong -- one of the anchors sat in
-    the tail. Cross-checked at 98->7000, 58->3000, 54->2600, 52->2400 and, on
-    the negative side, -58->-3000 and -77->-4900.
-
-    Negatives mirror on MAGNITUDE, which was an untested assumption in the
-    original fit until two signed values from this side confirmed it.
-
-    The unit is per FUNCTION TYPE -- cents here, semitones on a pitch function,
-    percent on a width one -- so this must only be called for a frequency slot.
+    Now a thin delegate to `models.common.krz_depth_byte_to_cents`, which the
+    KRZ WRITER inverts -- the CR-13/CR-18 single-home pattern the rest of the
+    KRZ codecs already follow. This function used to carry its own copy of the
+    law, interpolating between measured nodes below byte 33; k2kremote's
+    2026-08-21 walk of every consecutive byte removed the need to interpolate
+    and confirmed all of this side's anchors (98->7000, 62->3400, 46->1800,
+    42->1400, 17->45, and on the negative side -58->-3000, -77->-4900).
     """
-    if b < 0:
-        return -_k2_depth_cents(-b)
-    if b >= 125:                       # 125/126/127 -> 10000/10400/10800
-        return 10000.0 + 400.0 * (b - 125)
-    if b >= 33:                        # the linear middle
-        # Floor is 33, not 35: k2kremote read byte 33 -> 500ct off a program's
-        # own page, exactly 100*(33-28). Their wheel-sweep reading of 32 -> 450
-        # disagrees with the law by 50ct, so the taper begins below 33 and the
-        # sweep value is the less precise of the two -- a page read beats a
-        # value counted while turning a wheel.
-        return 100.0 * (b - 28)
-    # Below ~35 the field compresses toward zero. Measured points from their
-    # sweep: 32->450, 22->80, 12->24, 2->4. Interpolated between those rather
-    # than extrapolating the linear law, which would give negative cents here.
-    # Nodes from the machine's own display. 14->30, 29->300 and 31->400 came
-    # from diffing our decode against k2kremote's correlation dump, where our
-    # old curve read 35/339/413 against those values. The remainder are from
-    # their alpha-wheel sweep. 32->450 sits exactly halfway between 31->400 and
-    # 33->500, which is a check on the two sources agreeing rather than a
-    # coincidence.
-    pts = [(0, 0.0), (2, 4.0), (12, 24.0), (14, 30.0), (15, 35.0), (19, 55.0),
-           (22, 80.0), (24, 100.0), (25, 120.0), (26, 150.0),
-           (29, 300.0), (31, 400.0), (32, 450.0)]
-    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
-        if b <= x1:
-            return y0 + (y1 - y0) * (b - x0) / (x1 - x0)
-    return 450.0
+    return krz_depth_byte_to_cents(b)
 
 
 #: Codes seen in an F1 slot that this reader cannot name. Collected rather
@@ -910,10 +878,24 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
                         continue
                     _d = _depth - 256 if _depth >= 128 else _depth
                     _f = _floor - 256 if _floor >= 128 else _floor
-                    _amt = max(-1.0, min(1.0, _k2_depth_cents(_d) / 10800.0))
-                    _amt_min = max(-1.0, min(1.0, _k2_depth_cents(_f) / 10800.0))
+                    # TWO SCALES, AND THE DIFFERENCE IS THE POINT.
+                    #
+                    # KRZ_DEPTH_MAX_CENTS is how far the FIELD reaches (9.000
+                    # octaves). The filter-envelope amount is an EOS cord
+                    # amount, and a full one is worth 5.14 octaves, so
+                    # normalising it on the field's ceiling understated every
+                    # converted sweep -- and, because the byte's display curve
+                    # is compressed near zero, understated SMALL amounts by
+                    # ~23x rather than uniformly by 1.75x. The other three
+                    # destinations keep the ceiling for now; each needs its own
+                    # measured full scale (TODO: KRZ depth normalisation).
+                    _amt = max(-1.0, min(1.0,
+                                         _k2_depth_cents(_d) / KRZ_DEPTH_MAX_CENTS))
+                    _amt_min = max(-1.0, min(1.0,
+                                             _k2_depth_cents(_f) / KRZ_DEPTH_MAX_CENTS))
                     if _src == _K2_CS_ENV2:
-                        cur.filter_env_amount = abs(_amt)   # model is 0..1
+                        cur.filter_env_amount = min(1.0, abs(
+                            _k2_depth_cents(_d) / KRZ_FENV_FULL_CENTS))
                     elif _src == _K2_CS_ATTACK_VEL:
                         cur.velocity_to_filter = _amt
                         cur.velocity_to_filter_min = _amt_min
