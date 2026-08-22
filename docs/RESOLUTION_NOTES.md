@@ -162,6 +162,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§KRZCUTCAL — the K2000 cutoff mapping is out by up to 1.8 octaves (2026-08-22)](#krzcutcal-the-k2000-cutoff-mapping-is-out-by-up-to-18-octaves-2026-08-22)
 - [§CUTCALDEAD — a calibration disc whose parameter was not wired (2026-08-22)](#cutcaldead-a-calibration-disc-whose-parameter-was-not-wired-2026-08-22)
 - [§BUILDAROUND — three test-material failures, one cause (2026-08-22)](#buildaround-three-test-material-failures-one-cause-2026-08-22)
+- [§STALEREPORT — the failures that outlive their truth (2026-08-22)](#stalereport-the-failures-that-outlive-their-truth-2026-08-22)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -14856,3 +14857,48 @@ the question.
 Corollary, from §CUTCALDEAD: verifying the *source* harder does not help. Three
 noise constructions were measured and two rejected for that disc, and none of it
 could detect that the filter was not in the chain.
+
+## §STALEREPORT — the failures that outlive their truth (2026-08-22)
+
+Distinct from the measurement failures of §BUILDAROUND, and eosed drew the line:
+
+> Those measured the wrong thing; these measured the right thing and then
+> **outlived it**. Both end with someone confidently acting on something false,
+> but only the first kind is caught by better instruments.
+
+Three today, all acted on after they stopped being true:
+
+**1. `whichcard.py` naming the wrong victim.** It reported
+`CD2-SUSANCHOR_expected.csv` as stealing id 2 from the ISO. The boot log says the
+opposite — the ISO was scanned first and won, the csv was refused. I relayed the
+tool's inference to Jan as *"SUSANCHOR is probably not mounting"*, which would
+have made an un-run disc look broken. The tool infers from filenames; the log
+states the outcome.
+
+**2. eosed's filter-slope flag.** They read `4 Pole Low-pass` off the E4XT
+against our model's `3` and flagged a latent slope error. Three numberings name
+the same filter and ours was right; the hazard did not exist. Their own account:
+*"your 3 matches neither of my two numberings" is a statement about my coverage,
+not about your value.*
+
+**3. This project's own TODO on the 16-bank EMU3 limit.** Fixed in `7942c61` —
+the limit is the structural 112 and the failure is loud — but the row stayed
+open, and I warned eosed off building a 20-bank disc on the strength of it. They
+checked the tree and corrected me.
+
+### Why this class is harder than the measurement one
+
+Everything §BUILDAROUND describes is catchable by pointing a better instrument at
+the thing: verify the artefact as written, check the parameter is live, gate on
+staleness. **None of that touches this class**, because the report *was* correct
+when made and the artefact it described *has* changed. The instrument is fine;
+the world moved.
+
+What does catch it is cheap and unglamorous: **re-read the source before quoting
+a stored conclusion**, particularly when the conclusion is about to stop someone
+doing something. All three were caught in under a minute by looking — at the boot
+log, at the enum, at the commit.
+
+The asymmetry worth remembering: a stale "this is broken" costs work that need
+not happen and is rarely questioned, because nobody investigates a warning they
+complied with.
