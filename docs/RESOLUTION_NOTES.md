@@ -156,6 +156,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§ENV2RESULT — the filter envelope works, and is not enough (2026-08-22, MEASURED)](#env2result-the-filter-envelope-works-and-is-not-enough-2026-08-22-measured)
 - [§ENV2CONTOUR — the envelope works better than §ENV2RESULT said, and the metric was the problem (2026-08-22, CORRECTION)](#env2contour-the-envelope-works-better-than-env2result-said-and-the-metric-was-the-problem-2026-08-22-correction)
 - [§AKAISTEREO3 — stereo output confirmed on the S3000XL, first load (2026-08-22)](#akaistereo3-stereo-output-confirmed-on-the-s3000xl-first-load-2026-08-22)
+- [§ENV2FLOOR — the filter envelope cannot attack faster than 66 ms, and that is the missing "snap" (2026-08-22)](#env2floor-the-filter-envelope-cannot-attack-faster-than-66-ms-and-that-is-the-missing-snap-2026-08-22)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -14349,3 +14350,57 @@ contradicted the range check and the gate was right. Two independent checks
 disagreeing is what caught it. Had the range check been trusted alone, a working
 volume would have been reported as unplayable — a false negative on a feature's
 first hardware test, which is the expensive direction to be wrong in.
+
+## §ENV2FLOOR — the filter envelope cannot attack faster than 66 ms, and that is the missing "snap" (2026-08-22)
+
+**Found by resolving the attack transient at 20 ms instead of 100 ms.** The
+contour comparison in §ENV2CONTOUR showed program 2 anticorrelating with its
+source in both builds. At finer resolution the reason is plain — the two are
+doing opposite things in the first 200 ms:
+
+    first 320 ms, centroid Hz, 20 ms steps
+                     0   20   40   60   80  100  120  140  160  180  200  220  240  260  280  300
+    AKAI new p2    227  225  225  227  226  223  222  228  239  242  240  245  261  277  277  266
+    E4XT src3      318  299  290  289  294  295  283  269  269  272  267  258  254  258  265  271
+
+**The E4XT is open at note-on and closes. The AKAI sits flat for ~140 ms and
+then opens.** Program 0 shows the same lateness in a milder form.
+
+### The cause is our own clamp, not the machine
+
+`_env2_stage_byte()` clamps the byte it computes into the fitted range of the
+measured law, and all three envelope-2 laws are fitted from **byte 40 upward**:
+
+    AKAI_ENV2_ATTACK  = (0.001363, 0.09703, 40, 85)
+    AKAI_ENV2_DECAY   = (0.002464, 0.09844, 40, 80)
+    AKAI_ENV2_RELEASE = (0.001344, 0.09692, 40, 80)
+
+Byte 40 is **66 ms** for a full traverse — the *fastest* time the fitted range
+can express. So a source asking for an instant filter attack gets 66 ms, and one
+asking for 1 ms gets 66 ms. Every one of these presets asks for instant: eosed's
+device dump shows `Atk1 rate 0` and `Dcy1 rate 0`, so the E4XT's filter envelope
+reaches full immediately.
+
+**This is what Jan heard.** His remark on program 1 was *"similar, but no filter
+'snap' at the beginning?"* — the snap is the attack, and it is floored.
+
+Wiring the envelope (§ENV2CONTOUR) fixed the sweep's overall shape, which is why
+programs 0 and 1 improved so much. It could not fix the snap, because the snap
+was never reachable.
+
+### What is not yet known
+
+**Whether bytes below 40 work on the machine.** The law was *fitted* over 40–85;
+below that is unmeasured, not established as invalid. Extrapolating the
+exponential gives byte 0 ≈ 1.4 ms and byte 20 ≈ 9.5 ms, but §146 already showed
+one of these laws departing from its own fit near an edge, so extrapolation is
+exactly what should not be trusted here.
+
+The question for hardware is narrow: **does ATTAK2 below 40 produce a faster
+attack, or does the machine floor it too?** If it does, the clamp should follow
+the machine rather than the fit, and the fix is one line. If the machine floors
+it as well, then 66 ms is a real limit of the S3000XL and the snap is simply not
+expressible — which is worth knowing and recording rather than chasing.
+
+This ranks above the depth constant. A depth error scales a contour; this
+inverts one.
