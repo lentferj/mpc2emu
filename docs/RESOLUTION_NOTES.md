@@ -167,6 +167,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§FENVORDER2 — the traversal order is measured, and our parser had it right (2026-08-22, RESOLVED)](#fenvorder2-the-traversal-order-is-measured-and-our-parser-had-it-right-2026-08-22-resolved)
 - [§ATKCAL — closing the attack timing: put the sweep on the disc (2026-08-22)](#atkcal-closing-the-attack-timing-put-the-sweep-on-the-disc-2026-08-22)
 - [§ENVLEVELAGREE — two independent fits agree, and neither is §39's (2026-08-22)](#envlevelagree-two-independent-fits-agree-and-neither-is-39s-2026-08-22)
+- [§N79NOREVERSAL — the note-79 sign reversal does not reproduce (2026-08-22)](#n79noreversal-the-note-79-sign-reversal-does-not-reproduce-2026-08-22)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -14975,6 +14976,39 @@ The asymmetry worth remembering: a stale "this is broken" costs work that need
 not happen and is rarely questioned, because nobody investigates a warning they
 complied with.
 
+### A fourth, and the worst of them (2026-08-22, same day)
+
+**The AKAI resident P/K/S pool.** Our TODO said we "count directory entries and
+RAM but never keygroups" and proposed loading two lopsided volumes to find out
+which way the counter moves. On the strength of it I offered that experiment to
+s3ked as free work, and later re-offered it to k2kremote.
+
+**It had been answered on 2026-08-14 — s3ked's §98, settled and exact — and this
+project contributed the corroborating measurement.** The pool is
+`STAT.free_blocks`, one shared pool, and a keygroup costs exactly what a program
+and a sample cost:
+
+    blocks = programs + keygroups + samples,  ceiling STAT.max_blocks = 1006
+
+Measured exactly (2 + 58 + 62 = 122 used), confirmed in a second setting, and
+independently corroborated **on Jan's machine by us**: a 967-object volume left
+`free P/K/S: 39`, and 967 + 39 = 1006 to the unit.
+
+`bank_splitter.akai_object_count()` has counted programs + keygroups + samples
+all along, docstring *"the way the S3000XL counts them"*, with
+`--akai-max-objects` defaulting to 1006. **The code was never wrong; only the row
+was.**
+
+s3ked caught it by checking the record before running. Had they not, it would
+have cost a card crossing, two loads and an evening to reproduce a number already
+written down in both projects' notes.
+
+This is the worst of the four because the others were *reports* that outlived
+their truth. This was a **question asked, measured, recorded — and then asked
+again by one of the people who answered it.** The finding did not survive the
+trip back to whoever needed it, and the failure is not staleness in the record
+but staleness in the reader.
+
 ## §ENVRATESLOPE — the two envelopes share a slope, not a law (2026-08-22)
 
 eosed measured the E4XT **filter** envelope's rate byte in seconds and found
@@ -15221,3 +15255,53 @@ Everything this project built today aims at *y*: verify the artefact as written,
 assert the parameter is live, gate on staleness, flip the input. **None of it
 touches a mislabelled axis.** What caught this one was re-measuring both specimens
 through one path and finding they had never disagreed.
+
+## §N79NOREVERSAL — the note-79 sign reversal does not reproduce (2026-08-22)
+
+§ENV2RESULT recorded, from s3ked's late-window centroid figures, that the
+new-versus-old difference **reverses sign at note 79** on programs 0 and 1:
+
+    pair          n69          n57          n79
+     0 vs 20   +97 (±2)    +128 (±1)   -218 (±1)
+     1 vs 21   +43 (±1)     +72 (±1)   -156 (±0)
+
+**Re-measured here as a contour, it does not reverse. It grows.** Signed centroid
+difference (new − old), median of three takes, in 0.5 s blocks across the note:
+
+    prg  note   0.0s   0.5s   1.0s   1.5s   2.0s   2.5s
+      0    57     +5    +15    +19     +6    +19    +28
+      0    69    +18    +34    +72    +82    +87    +81
+      0    79     +6   +118   +144   +145   +151   +131
+      1    57    +23    +32    +41    +41    +42    +42
+      1    69    +44   +104   +102   +102   +103   +104
+      1    79    +66   +127   +126   +127   +127   +126
+
+**Positive everywhere** — the new build is brighter than the old at every note
+and every point in the note, and the effect **increases with pitch** rather than
+inverting.
+
+The control is exact at all three notes: programs 3 and 23 are byte-identical and
+their contours differ by **0.1 / 0.0 / 0.1 Hz**. So the rig is sound and the
+comparison is correctly paired.
+
+### Which leaves a disagreement, not a finding
+
+Two measurements of the same captures disagree in **sign**. One of them is
+wrong and this note does not establish which. The candidates:
+
+* **a different window.** "Late-window centroid" was not defined to me in
+  frames; if it reaches past the note's decay into the release or the noise
+  floor, the two builds' tails could well order differently from their bodies.
+* **a centroid over the whole spectrum versus a contour of it.** Once a note has
+  decayed, a whole-spectrum centroid is dominated by whatever noise remains, and
+  the two builds do not decay identically.
+
+**It is not the sign reversal that needs explaining — it is the discrepancy
+between two analyses of one capture set.** Recorded that way rather than as a
+resolved item, because the earlier framing had it as a physical property of the
+machine, and it is not established that there is anything physical here at all.
+
+That is the day's fourth "discrepancy" to dissolve on re-measurement, after the
+2.58× (a mislabelled axis), the −20.6 dB HF deficit (a band holding nothing), and
+the P/K/S question (already answered). **The prior for "surprising difference"
+should be bookkeeping, not physics.**
