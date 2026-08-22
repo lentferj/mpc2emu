@@ -14550,10 +14550,30 @@ knowing whether that is 0.2 s or 2 s, so a dip at 5.6 s cannot be mapped to a
 stage index. Calibrate one segment's rate → time first, and the ordering
 experiment becomes readable.
 
-### What this does constrain for our four-stage collapse
+### What this does constrain for our four-stage collapse — WEAKENED 2026-08-22
 
-**Three of the six segments are inert on a held note; three are active late.**
-That bounds what the collapse discards without giving the order.
+It was recorded here as: *three of the six segments are inert on a held note;
+three are active late*, bounding what the collapse discards. **That claimed more
+than the evidence carries, and eosed withdrew it (their §41, `772a9a6`) after
+the CUTCAL failure showed why.**
+
+An "inert" segment during a held note is exactly what a **release stage** looks
+like — and also exactly what a segment **not in the signal path** looks like.
+The knock-out experiment cannot separate those two. What was actually observed
+is narrower:
+
+> `SEG0`, `SEG4` and `SEG5` produced no audible effect over 6 s; `SEG1`, `SEG2`
+> and `SEG3` each dipped the corner ~400 Hz at ~5.6 s. **Reasons not
+> established.**
+
+So it bounds nothing about our four-stage collapse yet. The perturbation gate
+eosed already runs for the *cord* (depth 0 vs 100 moved the centroid 127 Hz
+before any contour was believed) does not run **per segment**; adding that is
+now a precondition for the ordering experiment rather than a refinement.
+
+This correction came out of §CUTCALDEAD, from the other machine and a different
+failure — which is the argument for writing these up even when they look like
+one project's private mistake.
 
 ### Key tracking: a real gap, but it explains neither open finding
 
