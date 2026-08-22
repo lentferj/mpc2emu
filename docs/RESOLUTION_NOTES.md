@@ -14459,6 +14459,29 @@ Filter open, no envelope, full key range, 4 s looped, deterministic seeds so a
 later run is comparable. Nothing imposed that the measuring session would have
 to undo over SysEx.
 
+### The E4XT companion, and the caveat that shaped it
+
+`tests/re_banks/gen_e4xt_noise_bank.py` builds the same source for the E4XT.
+eosed's caveat drove the design: **the E4XT resamples at any key but the root**,
+which transposes the noise, tilts its spectrum and moves its band limit — so a
+source verified flat *as a file* is not necessarily flat at the output.
+
+Rather than measure around that, the preset carries **one zone per measurement
+note**, each with `root_key` equal to the single key it covers (57, 69, 79).
+Playback ratio is exactly 1.0 at every one, so nothing is resampled at any note
+in the set and the file-side verification stays valid at the output. Adding a
+note to the campaign means adding a zone, not reasoning about transposition.
+
+12 s, looped, constant level at −6 dBFS (headroom for resonance — a source at
+full scale clips the moment anything peaks, and a clipped measurement looks like
+a flat one), filter open, no filter envelope, amp envelope instant-on and
+holding. Two independent draws, as on the AKAI side.
+
+`tests/re_banks/verify_noise_source.py` is the check itself, factored out so it
+can be run **on a capture rather than only on a file** — which is the point
+eosed made and the one that matters. File side: 7.7% and 7.8% at a 5 ms window,
+the two draws agreeing, which is the control working.
+
 ### The general rule
 
 **Verify a measuring instrument against the property it exists to provide,
