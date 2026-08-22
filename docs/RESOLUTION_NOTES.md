@@ -157,6 +157,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§ENV2CONTOUR — the envelope works better than §ENV2RESULT said, and the metric was the problem (2026-08-22, CORRECTION)](#env2contour-the-envelope-works-better-than-env2result-said-and-the-metric-was-the-problem-2026-08-22-correction)
 - [§AKAISTEREO3 — stereo output confirmed on the S3000XL, first load (2026-08-22)](#akaistereo3-stereo-output-confirmed-on-the-s3000xl-first-load-2026-08-22)
 - [§ENV2FLOOR — the filter envelope cannot attack faster than 66 ms, and that is the missing "snap" (2026-08-22)](#env2floor-the-filter-envelope-cannot-attack-faster-than-66-ms-and-that-is-the-missing-snap-2026-08-22)
+- [§NOISESRC — a taper is a de-click on a one-shot and a tremolo on a loop (2026-08-17)](#noisesrc-a-taper-is-a-de-click-on-a-one-shot-and-a-tremolo-on-a-loop-2026-08-17)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -14404,3 +14405,62 @@ expressible — which is worth knowing and recording rather than chasing.
 
 This ranks above the depth constant. A depth error scales a contour; this
 inverts one.
+
+## §NOISESRC — building a measuring instrument, and rejecting two versions of it (2026-08-22)
+
+§ENV2FLOOR asked whether `ATTAK2` below 40 attacks faster. s3ked answered
+qualitatively — **it does, the field is live below 40, there is no 66 ms floor
+in the machine** — but could not give a time, and stopped rather than iterate.
+Their reason is the useful part:
+
+**The FILTERTOP Schroeder complex cannot support a time-resolved measurement.**
+Schroeder phase spreads each period's energy into a chirp — that is exactly what
+buys its 4.2 dB crest factor — so the short-time spectrum sweeps *within every
+period*. On a 5 ms window they measured the centroid swinging 300–5000 Hz at the
+source's own 25 Hz period, which is the source, not the filter. Widening the
+window to one full period suppresses it and destroys the resolution the question
+needs. The source is right for the steady-state corner (§146 depended on it) and
+wrong for a rise time. That is not a fault in it.
+
+A rise-time measurement needs a source whose **short-time** spectrum is constant.
+
+### Two rejected constructions, both measured rather than argued
+
+Pink was the obvious choice — equal energy per octave reads more stably on a log
+measure, and these are bass programs. It failed twice:
+
+    Voss-McCartney octave summing   centroid  403..5842 Hz   63.1% spread
+    1/sqrt(f) spectral shaping      centroid  197..4053 Hz   78.4% spread
+    white noise                     centroid 8764..12715 Hz    7.5% spread
+
+(5 ms window — the resolution the question needs.)
+
+The second construction is stationary **by construction** in the frequency
+domain and still failed, which is the tell that the generator was not the fault.
+**Pink concentrates its energy below what a 5 ms window can resolve**: too few
+cycles of the low end fit in the window, so the band carrying most of the energy
+lands differently every time. That is a property of pink noise against a short
+window, not of an implementation — and it is the same failure as the Schroeder
+complex, reached by a different route.
+
+Had the source been shipped unmeasured, it would have carried into the AKAI
+measurement exactly the defect that measurement was built to escape.
+
+### What was built
+
+`tests/re_banks/gen_akai_noise_disc.py` → volume `TC10 Noise`, PRGNUM 50/51,
+0.71 MB. Two **independent white draws** rather than white plus pink: a second
+source earns its place by catching detector error — if two draws of the same
+process disagree, the fault is the detector — and a second *white* draw does
+that without reintroducing what is being escaped.
+
+Filter open, no envelope, full key range, 4 s looped, deterministic seeds so a
+later run is comparable. Nothing imposed that the measuring session would have
+to undo over SysEx.
+
+### The general rule
+
+**Verify a measuring instrument against the property it exists to provide,
+before using it.** Three sources have now failed this project on stationarity —
+Schroeder, and pink twice — and each failure was cheap to detect and expensive
+to discover downstream. The check is one measurement of the source alone.
