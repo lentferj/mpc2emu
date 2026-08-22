@@ -13813,6 +13813,32 @@ K2000's audio is not reaching them. That is a cable, a jack, or the expander's
 input gain for those two channels — Jan's hands, and nothing further is
 readable from software.
 
+### RESOLVED (2026-08-22): an external FX unit in the path, powered off
+
+Jan found it. An outboard effects unit sits **in series in the K2000's physical
+audio path**, and it was switched off — so nothing left the K2000 for the
+expander to convert.
+
+Note where that sits relative to the sentence above: the localisation was right
+(no signal arriving at expander inputs 5/6), the enumerated causes were not.
+"Cable, jack, or input gain" was offered as if it were exhaustive, and the
+actual cause was a fourth thing none of us had modelled — an *active device* in
+series that a purely passive picture of the signal path has no slot for. The
+right habit is to ask what is **in** the path, not only what carries it.
+
+It also explains the one thing that was mildly odd about the `A(FX)` →
+`B(DRY)` test. A unit in series on the main output blocks everything leaving the
+instrument regardless of which internal bus the program selects — which is
+exactly why both routings measured identically at the noise floor. Neither
+hypothesis was faulty reasoning; the fault was one level further downstream than
+either could reach, and no amount of SysEx could have found it.
+
+**What the night's work was still worth**, since none of the leads was the
+cause: the port scan is now a cheap standing first move for this rig, the
+routing matrix is documented, and separating the K2000's TRANSMIT channel from
+RECV `BasicChannel` from the Multi-mode `CHANLS` slot is knowledge that will
+outlive this fault.
+
 ### Procedural note, recorded by k2kremote
 
 Never leave an edit session open across script boundaries. Their first OUTPUT
