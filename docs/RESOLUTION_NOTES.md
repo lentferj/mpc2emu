@@ -15284,7 +15284,78 @@ The control is exact at all three notes: programs 3 and 23 are byte-identical an
 their contours differ by **0.1 / 0.0 / 0.1 Hz**. So the rig is sound and the
 comparison is correctly paired.
 
-### Which leaves a disagreement, not a finding
+### RESOLVED — it was the noise floor, and s3ked found it (2026-08-22)
+
+They checked their own bounds rather than leave the disagreement standing. Late
+window was **1.0–3.0 s** with the note on 0.0–3.0 s, so it never reached the
+release — the window candidate is out. The band was **40 Hz – 16 kHz**, and that
+is the cause.
+
+Every 0.5 s block *inside* their own window gives the pair as **+3 Hz**; only the
+whole-window figure reverses:
+
+    block          p0 cent    p20 cent
+    1.0-1.5 s          578         575
+    1.5-2.0 s          577         574
+    2.0-2.5 s          577         575
+    2.5-3.0 s          578         575
+    WHOLE              627         846      diff -219
+
+Per-block energies are flat, so it is not time-weighting. **`p20` is 12 dB
+quieter**, so across 8–16 kHz it sits at the noise floor while `p0` still has
+signal — and the floor drags the quieter program's centroid up by 271 Hz against
+the louder one's 49. Narrowing the band removes it and takes the sign with it:
+
+    band              whole-window    0.5 s blocks
+    40 Hz - 16 kHz            -219              +3
+    40 Hz - 8 kHz             +143            +203
+    40 Hz - 4 kHz             +234            +252
+    40 Hz - 2 kHz             +238            +243
+
+So the contour figures stand, the reversal is withdrawn, and the note-69 and
+note-57 numbers from the same analysis (+97, +43) are contaminated in the same
+direction by the same mechanism.
+
+### The rule, which this project had and did not apply
+
+**A spectral statistic over a band holding nothing measures the noise — and how
+much noise it measures depends on the program's LEVEL. So it manufactures
+differences between programs that differ only in loudness.**
+
+Two instances the same day, from opposite sides:
+
+* **§ENV2RESULT (ours):** band-energy *ratios* between two near-empty bands, read
+  as a −35 dB filter deficit that was not there.
+* **§N79NOREVERSAL (theirs):** a *centroid* over a band that was empty for one
+  program and not the other, read as a sign reversal that was not there.
+
+s3ked's own note is the sharp one: §139 already gates every harmonic against an
+absolute floor, and §146 already excludes settings whose transfer function is too
+shallow to resolve. **The discipline existed and was applied to the filter work,
+then not to the statistic computed over it.**
+
+`tests/re_banks/compare_akai_ab.py` now band-limits to 8 kHz and zeroes bins more
+than 60 dB below the spectrum's own peak. **That is a guard rail, not a cure**,
+and the measured limits are worth stating rather than implying it is solved — a
+single 539 Hz component plus a flat floor:
+
+    floor/peak    raw centroid    gated
+        1e-9            539 Hz    539 Hz
+        1e-5            749 Hz    564 Hz
+        1e-4           2321 Hz    778 Hz
+        1e-3           7585 Hz   2013 Hz
+
+A floor 30 dB down still drags the gated centroid to 2 kHz, because it is far
+above a 60 dB gate. Tightening the gate to catch it would start discarding real
+signal.
+
+**What actually worked was not a better centroid but a different statistic**: the
+contour in short blocks. s3ked's own 0.5 s blocks gave +3 Hz where their
+whole-window figure gave −219, before any gating. **A centroid is inherently
+level-sensitive whenever the floor is a material fraction of the band; measuring
+in blocks and comparing shapes is not.**
+
+### Superseded: what this section originally said
 
 Two measurements of the same captures disagree in **sign**. One of them is
 wrong and this note does not establish which. The candidates:
