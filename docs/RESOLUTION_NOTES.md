@@ -168,6 +168,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§ATKCAL — closing the attack timing: put the sweep on the disc (2026-08-22)](#atkcal-closing-the-attack-timing-put-the-sweep-on-the-disc-2026-08-22)
 - [§ENVLEVELAGREE — two independent fits agree, and neither is §39's (2026-08-22)](#envlevelagree-two-independent-fits-agree-and-neither-is-39s-2026-08-22)
 - [§N79NOREVERSAL — the note-79 sign reversal does not reproduce (2026-08-22)](#n79noreversal-the-note-79-sign-reversal-does-not-reproduce-2026-08-22)
+- [§PRG8 — the one unexplained program was not anomalous either (2026-08-22, RESOLVED)](#prg8-the-one-unexplained-program-was-not-anomalous-either-2026-08-22-resolved)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -15376,3 +15377,73 @@ That is the day's fourth "discrepancy" to dissolve on re-measurement, after the
 2.58× (a mislabelled axis), the −20.6 dB HF deficit (a band holding nothing), and
 the P/K/S question (already answered). **The prior for "surprising difference"
 should be bookkeeping, not physics.**
+
+## §PRG8 — the one unexplained program was not anomalous either (2026-08-22, RESOLVED)
+
+PRG 8 (`bass F`, from source preset 2) was recorded as the single
+unexplained result of the whole campaign: **−20.8 dB HF against the E4XT, with
+cutoff, filter envelope, resampling and the sample audio all eliminated**, and
+consistent across three notes so not noise.
+
+**It is not anomalous. There was nothing to explain.**
+
+### By contour it is among the best matches in the set
+
+Same code path that reproduces §ENV2CONTOUR exactly, all ten programs of the old
+build against the E4XT:
+
+    prg   HF dB    contour r    RMS
+      3    +0.0        1.000    58 Hz     <- the "spectrally identical" one
+      7    -6.5        1.000     0 Hz
+      8   -20.8        0.930     0 Hz     <- the "unexplained" one
+      9    -8.2        1.000     2 Hz
+      0   -18.6        0.782    48 Hz
+
+**PRG 8's centroid contour is 0 Hz from the E4XT's** — as close as anything
+measured. A program 20 dB darker cannot have an identical spectral centroid.
+
+### And above 4 kHz, neither machine has signal
+
+The decisive test is s3ked's: measure the band against **the take's own noise
+floor** rather than against the other machine.
+
+    prg   AKAI note   floor   lift      E4XT note   floor   lift
+      3        61.4    33.2  +28.2           58.0    31.0  +27.0
+      8        40.3    33.1   +7.2           39.8    31.4   +8.4
+      0        37.6    33.1   +4.4           50.7    30.8  +19.9
+
+**For PRG 8 both machines sit 7–8 dB above their own floors** — 1.2 dB apart. The
+"−20.8 dB deficit" was computed between two measurements that barely have signal
+in them. Per-sample the AKAI actually holds *slightly more* energy above 4 kHz
+than the E4XT (40.3 against 39.8 dB).
+
+PRG 0 is the control that proves the method can see a real difference: +4.4
+against +19.9, a genuine 15 dB gap — and PRG 0 is one of the programs whose
+source carries a filter envelope we were not writing.
+
+### Two of my own bugs found on the way, both worth recording
+
+**A prefix collision.** `find(root, prg, note, 'akai_')` also matches
+`akai_tc3_p3_…`, so the **TC3 rainstick** captures were being averaged into the
+TC1 bass ones. Same class as the take-number collision fixed this morning, and it
+produced a table of plausible-looking nonsense (RMS errors of 4000–6500 Hz)
+before I noticed PRG 3 had stopped being the best match. Prefix `akai_p` fixes
+it.
+
+**An unequal-window comparison.** A bare `sum` over the spectrum compared a 6.2 s
+AKAI capture against a 6.5 s E4XT one; per-sample normalisation is the
+like-for-like figure and it reverses the sign of the difference.
+
+### The sixth dissolution, and the pattern is now the finding
+
+    the 2.58x E4XT discrepancy    a mislabelled axis
+    the -20.6 dB HF deficit       a band holding nothing
+    the note-79 sign reversal     a noise floor, level-dependent
+    the P/K/S pool question       already answered two weeks earlier
+    the filter-slope flag         three numberings, one filter
+    PRG 8's -20.8 dB              a band holding nothing, again
+
+**Six surprising differences investigated today; six were bookkeeping. None was
+a machine.** The prior is now strong enough to act on: when a measurement says
+two things differ in a way nothing in the model predicts, check the metric, the
+window, the axis and the record *before* forming a hypothesis about hardware.
