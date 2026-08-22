@@ -700,8 +700,10 @@ def main():
              'anti-phase, so averaging cancels signal (on the worst, the '
              'difference carried 1.9x the energy of the sum). Averaging suits a '
              'coherent narrow image; picking a side suits wide or fake '
-             '(detuned-duplicate) stereo. KRZ and EIII output is mono either '
-             "way — those formats' stereo encodings are documented but not "
+             '(detuned-duplicate) stereo. AKAI output writes a stereo source as '
+             'a hard-panned -L/-R sample pair in one keygroup, which spends two '
+             'of that keygroup\'s four velocity zones. EIII output is mono '
+             'either way — that format\'s stereo encoding is documented but not '
              'implemented yet. Reading a stereo E4B is always correct '
              'regardless of this flag.')
     ap.add_argument('--trim-start', nargs='?', const=72.0, type=float, default=None,

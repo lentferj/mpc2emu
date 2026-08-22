@@ -44,7 +44,7 @@ from models.common import (
     AKAI_ENV2_DEPTH_OFFSET, AKAI_ENV2_DEPTH_MAX,Bank, LoopType, SampleData, safe_filename,
                            E4B_CUTOFF_MIN_HZ, E4B_CUTOFF_MAX_HZ, hz_to_e4b_cutoff)
 from parsers.akai_s3000_parser import (
-    str_to_akai, AKAI_NAME_LEN, SAMPLE_HEADER_LEN, PROGRAM_COMMON_LEN,
+    str_to_akai, akai_to_str, AKAI_NAME_LEN, SAMPLE_HEADER_LEN, PROGRAM_COMMON_LEN,
     KEYGROUP_LEN, _ZONE_OFFSETS, _BLOCK_ID_PROGRAM, _BLOCK_ID_KEYGROUP,
     _BLOCK_ID_SAMPLE,
 )
@@ -878,18 +878,25 @@ def _akai_tune_units(cents: float) -> int:
 
 
 def build_sample(sd: SampleData, name: Optional[str] = None,
-                 root_override: Optional[int] = None) -> bytes:
+                 root_override: Optional[int] = None,
+                 channel: Optional[int] = None) -> bytes:
     """One SampleData -> a complete `.a3s` file.
 
-    Mono only: the format carries one channel per file and pairs them via
-    `address of stereo partner`, which is an internal pointer we cannot
-    meaningfully synthesise. A stereo sample is mixed down rather than
-    written as a broken pair -- see write_akai_bank.
+    **One file carries one channel.** The format has no stereo sample: real
+    library discs build a stereo voice from TWO samples named `<base>-L` and
+    `<base>-R`, referenced by two hard-panned zones of the same keygroup
+    (§AKAISTEREO2). The header's `0x88` "stereo partner" word is an internal
+    RAM pointer, not on-disk state, and stays `_NO_POINTER` either way.
+
+    `channel` selects which half of an interleaved source to write: 0 for the
+    left file, 1 for the right. Left at None a multi-channel source is mixed
+    down, which is what happens when stereo output is off.
     """
     h = bytearray(SAMPLE_HEADER_LEN)
     pcm = sd.data
     if getattr(sd, 'channels', 1) > 1:
-        pcm = _mixdown(pcm, sd.channels)
+        pcm = (_extract_channel(pcm, sd.channels, channel)
+               if channel is not None else _mixdown(pcm, sd.channels))
     if len(pcm) % 2:
         pcm = pcm[:-1]
     n_frames = len(pcm) // 2
@@ -1070,6 +1077,22 @@ def build_sample(sd: SampleData, name: Optional[str] = None,
     # uses and could be read as a valid pointer.
     struct.pack_into('<H', h, 0x88, _NO_POINTER)
     return bytes(h) + pcm
+
+
+def _extract_channel(pcm: bytes, channels: int, index: int) -> bytes:
+    """Interleaved -> one channel, verbatim.
+
+    Used for stereo output, where each half becomes its own AKAI sample file.
+    Unlike `_mixdown` this applies NO gain change: halving is what stops a
+    correlated pair clipping when summed, and there is no sum here. Scaling
+    the halves would quietly alter the level of every stereo conversion.
+    """
+    n = len(pcm) // (2 * channels)
+    out = bytearray(n * 2)
+    for i in range(n):
+        out[i * 2:i * 2 + 2] = pcm[(i * channels + index) * 2:
+                                   (i * channels + index) * 2 + 2]
+    return bytes(out)
 
 
 def _mixdown(pcm: bytes, channels: int) -> bytes:
@@ -1900,7 +1923,8 @@ def _root_offset_units(z, sample_roots: Optional[dict]) -> int:
 
 def build_program(preset, name: str, prog_num: int = 0,
                   sample_roots: Optional[dict] = None,
-                  midi_channel=None) -> bytes:
+                  midi_channel=None,
+                  stereo_right: Optional[dict] = None) -> bytes:
     """One Preset -> a complete `.a3p` file.
 
     `prog_num` is the MIDI program number written to PRGNUM; pass each
@@ -2098,9 +2122,49 @@ def build_program(preset, name: str, prog_num: int = 0,
                 _or_default(getattr(z, 'volume', None), 0.0) / 0.60576)),
                 -50, 20),
         ) for z in zs]
-        for _i in range(0, len(_zdicts), MAX_ZONES_PER_KEYGROUP):
-            chunk = _zdicts[_i:_i + MAX_ZONES_PER_KEYGROUP]
-            if _i:
+        # STEREO: one zone becomes two, hard-panned, in the SAME keygroup.
+        #
+        # Layout read off real library discs (§AKAISTEREO2): zone 1 the `-L`
+        # sample at pan -50, zone 2 the `-R` at +50, both over the full
+        # velocity range of the zone they replace.
+        #
+        # The source zone's own pan is DISCARDED for these, deliberately. A
+        # stereo sample's image lives in the difference between its channels;
+        # panning both halves to some inherited centre would collapse exactly
+        # the thing writing two files is for. A source pan on a stereo sample
+        # has no faithful rendering here, and hard-panned is the one the
+        # machine's own libraries use.
+        if stereo_right:
+            _exp = []
+            for _z in _zdicts:
+                _rn = stereo_right.get(_z['sample_name'])
+                if _rn:
+                    _l = dict(_z); _l['pan'] = -50
+                    _r = dict(_z); _r['pan'] = 50; _r['sample_name'] = _rn
+                    _exp.append((_l, _r))
+                else:
+                    _exp.append((_z,))
+            _zdicts = _exp
+        else:
+            _zdicts = [(_z,) for _z in _zdicts]
+
+        # PACK WITHOUT SPLITTING A PAIR.
+        #
+        # A stereo pair whose halves land in different keygroups is not a
+        # stereo voice -- it is two mono keygroups over the same range, which
+        # the machine will happily play and which no check downstream would
+        # question. Chunking by a flat count of ZONES splits a pair whenever an
+        # odd number of mono zones precedes it, so pack by group instead.
+        chunk, first = [], True
+        for _grp in _zdicts:
+            if len(chunk) + len(_grp) > MAX_ZONES_PER_KEYGROUP and chunk:
+                if not first:
+                    dropped += len(chunk)
+                keygroups.append((key, owner, chunk))
+                chunk, first = [], False
+            chunk.extend(_grp)
+        if chunk:
+            if not first:
                 dropped += len(chunk)      # counted as "carried into an extra
                                            # keygroup", reported as such below
             keygroups.append((key, owner, chunk))
@@ -2183,11 +2247,53 @@ def sample_identity(sd) -> bytes:
     return h.digest()
 
 
+def _check_stereo_halves(prog: bytes, fn: str, stereo_right: dict,
+                         quiet: bool = False) -> list:
+    """Verify every stereo left half written into a program has its right half.
+
+    §AKAISTEREO measured why this cannot be left to anything downstream: a
+    program referencing only the left half **loads cleanly, raises no error and
+    is not dangling** -- nothing it asked for is missing -- and simply plays
+    mono. Neither the machine, nor `collect()`, nor `silence_audit.py` has any
+    way to notice. The failure is a silent halving of the material, so stereo
+    support has to carry its own check or it has none at all.
+
+    Reads the bytes actually written rather than the intent that produced them,
+    so a fault in the zone expansion or the keygroup packing is caught too.
+    """
+    n_kg = prog[0x2a] if len(prog) > 0x2a else 0
+    seen = set()
+    for k in range(n_kg):
+        base = PROGRAM_COMMON_LEN + k * KEYGROUP_LEN
+        names = []
+        for zo in _ZONE_OFFSETS:
+            o = base + zo
+            if o + AKAI_NAME_LEN > len(prog):
+                continue
+            nm = akai_to_str(prog[o:o + AKAI_NAME_LEN]).strip()
+            if nm:
+                names.append(nm)
+        for nm in names:
+            r = stereo_right.get(nm)
+            # BOTH HALVES IN THE SAME KEYGROUP, not merely both present:
+            # halves split across keygroups are two mono voices, not a stereo
+            # one, and that is precisely what the pair-aware packing prevents.
+            if r and r not in names:
+                seen.add(nm)
+    if seen and not quiet:
+        print(f"    [WARN] {fn}: {len(seen)} stereo sample(s) referenced by "
+              f"their left half only — those keygroups will play MONO "
+              f"({', '.join(sorted(seen)[:3])}"
+              f"{', …' if len(seen) > 3 else ''})")
+    return sorted(seen)
+
+
 def build_akai_volume(bank: Bank, bank_name: Optional[str] = None,
                       quiet: bool = False,
                       taken: Optional[set] = None,
                       taken_prog: Optional[set] = None,
-                      type0: bool = False) -> list:
+                      type0: bool = False,
+                      stereo: bool = True) -> list:
     """Build a Bank's AKAI volume contents as ``[(filename, data), ...]``.
 
     One file per program and per sample, which is how the sampler's own
@@ -2335,8 +2441,73 @@ def build_akai_volume(bank: Bank, bank_name: Optional[str] = None,
             return _clamp(max(set(rs), key=rs.count), 24, 127)
         return _clamp(_or_default(getattr(sd, 'root_note', None), 60), 24, 127)
 
+    def uniq_stereo_base(stem: str, ident: bytes) -> str:
+        """A <=10-character base whose `-L` AND `-R` names are both free.
+
+        The two halves must stay a matched pair, so they cannot be uniquified
+        independently -- `uniq()` resolving a collision on the right half alone
+        would produce `FOO-L` beside `FOO1-R`, two names that no longer look
+        like a pair and, worse, a `-R` that some other sample may legitimately
+        claim later. So the BASE is what gets uniquified, against both suffixed
+        forms at once, and both are reserved together.
+
+        Reserved under distinct identities: the halves carry different audio,
+        so recording one identity for both would let the reuse path in
+        `uniq()` hand the same name to a genuinely different sample.
+        """
+        # rstrip AFTER truncating: a 10-character cut lands mid-word as often
+        # as not, and 'MLOGUE 01 -L' reads as a name with a stray space rather
+        # than as a pair suffix. Real discs carry none ('B29C0-0999-L').
+        base = (stem or 'SAMPLE').upper()[:AKAI_NAME_LEN - 2].rstrip()
+        if not bytes(str_to_akai(base)).strip(bytes([_AKAI_SPACE])):
+            base = 'SAMPLE'
+        cand, n = base, 1
+        while True:
+            kl = bytes(str_to_akai(cand + '-L'))
+            kr = bytes(str_to_akai(cand + '-R'))
+            hl = taken.get(kl, _UNSET) if hasattr(taken, 'get') else (
+                _UNSET if kl not in taken else None)
+            hr = taken.get(kr, _UNSET) if hasattr(taken, 'get') else (
+                _UNSET if kr not in taken else None)
+            if hl is _UNSET and hr is _UNSET:
+                break                                   # both halves free
+            if hl == ident + b'L' and hr == ident + b'R':
+                return cand                             # same pair, same audio
+            suf = str(n)
+            cand = base[:AKAI_NAME_LEN - 2 - len(suf)] + suf
+            n += 1
+        if hasattr(taken, 'setdefault'):
+            taken[bytes(str_to_akai(cand + '-L'))] = ident + b'L'
+            taken[bytes(str_to_akai(cand + '-R'))] = ident + b'R'
+        else:
+            taken.add(bytes(str_to_akai(cand + '-L')))
+            taken.add(bytes(str_to_akai(cand + '-R')))
+        return cand
+
+    #: source sample name -> (left AKAI name, right AKAI name), for the zone
+    #: expansion in build_program. Empty when stereo output is off.
+    stereo_pairs: dict = {}
+
     renamed: dict = {}
     for sd in bank.samples:
+        if stereo and getattr(sd, 'channels', 1) >= 2:
+            # TWO FILES, ONE PER CHANNEL -- the format has no stereo sample.
+            # Layout copied from real library discs: see §AKAISTEREO2.
+            b = uniq_stereo_base(sd.name, sample_identity(sd))
+            ln, rn = b + '-L', b + '-R'
+            stereo_pairs[sd.name] = (ln, rn)
+            root = _chosen_root(sd)
+            for half, chan in ((ln, 0), (rn, 1)):
+                files.append((f"{half.strip()}.S3",
+                              build_sample(sd, name=half, root_override=root,
+                                           channel=chan)))
+            if not quiet:
+                print(f"  Sample: {ln}.S3 + {rn}.S3 (stereo pair, "
+                      f"{sd.sample_rate}Hz, "
+                      f"{len(sd.data)//2//max(getattr(sd,'channels',1),1)} frames)")
+            if b != sd.name.upper()[:AKAI_NAME_LEN - 2]:
+                renamed[sd.name] = ln
+            continue
         nm = uniq(sd.name, content=sample_identity(sd))
         if nm != sd.name.upper()[:AKAI_NAME_LEN]:
             renamed[sd.name] = nm
@@ -2369,11 +2540,23 @@ def build_akai_volume(bank: Bank, bank_name: Optional[str] = None,
         print(f"    [INFO] {len(renamed)} sample name(s) shortened to the AKAI "
               f"12-character limit")
 
-    name_map = {sd.name: (renamed.get(sd.name) or sd.name.upper()[:AKAI_NAME_LEN])
+    name_map = {sd.name: (stereo_pairs[sd.name][0] if sd.name in stereo_pairs
+                          else (renamed.get(sd.name)
+                                or sd.name.upper()[:AKAI_NAME_LEN]))
                 for sd in bank.samples}
     #: AKAI name -> the root note actually written into that sample's header,
     #: so a zone can be pitch-corrected against it (see _root_offset_units).
     _roots = {name_map[sd.name]: _chosen_root(sd) for sd in bank.samples}
+    #: Both halves of a stereo pair carry the same root, and the zone tune
+    #: correction is looked up BY AKAI NAME -- so the right half needs its own
+    #: entry or every stereo zone's right channel loses the correction and the
+    #: two halves play at different pitches.
+    for _sd in bank.samples:
+        if _sd.name in stereo_pairs:
+            _roots[stereo_pairs[_sd.name][1]] = _chosen_root(_sd)
+    #: left AKAI name -> right AKAI name, which is what build_program needs:
+    #: by the time it sees a zone the source name has already been remapped.
+    _stereo_right = {l: r for (l, r) in stereo_pairs.values()}
     _chosen_root_by_name = {sd.name: _chosen_root(sd) for sd in bank.samples}
     # PRGNUM: HONOUR THE SOURCE'S OWN NUMBERS WHEN THEY ARE USABLE.
     #
@@ -2438,8 +2621,11 @@ def build_akai_volume(bank: Bank, bank_name: Optional[str] = None,
         _pnum = (getattr(preset, 'program_number', 0) or 0) if _usable else n_written
         if _pnum > 127 and not _over_127:
             _over_127 = True
-        files.append((fn, build_program(preset, pname, prog_num=_pnum,
-                                        sample_roots=_roots)))
+        _pdata = build_program(preset, pname, prog_num=_pnum,
+                               sample_roots=_roots,
+                               stereo_right=_stereo_right)
+        _check_stereo_halves(_pdata, fn, _stereo_right, quiet)
+        files.append((fn, _pdata))
         n_written += 1
         if not quiet:
             print(f"  Program: {fn} "

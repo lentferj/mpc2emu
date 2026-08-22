@@ -148,6 +148,10 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIFILTREAD — the reader reads the filter and drops it, and the law it would need may be stale](#akaifiltread-the-reader-reads-the-filter-and-drops-it-and-the-law-it-would-need-may-be-stale)
 - [§AKAIPOOLBASE — the silent first program, and a fix that was only ever described](#akaipoolbase-the-silent-first-program-and-a-fix-that-was-only-ever-described)
 - [§SILENCEGATE — silence does not clip](#silencegate-silence-does-not-clip)
+- [§CAPTUREPORTS — proving an instrument is silent, rather than assuming a port (2026-08-22, MEASURED)](#captureports-proving-an-instrument-is-silent-rather-than-assuming-a-port-2026-08-22-measured)
+- [§TC3STEREO — the AKAI half could never have answered the stereo question (2026-08-22, CORRECTION)](#tc3stereo-the-akai-half-could-never-have-answered-the-stereo-question-2026-08-22-correction)
+- [§K2KMONO — the "Mono" presets are anti-phase, and the pairs really do differ (2026-08-22, MEASURED)](#k2kmono-the-mono-presets-are-anti-phase-and-the-pairs-really-do-differ-2026-08-22-measured)
+- [§AKAISTEREO2 — the layout, read off real library discs (2026-08-22, READY TO IMPLEMENT)](#akaistereo2-the-layout-read-off-real-library-discs-2026-08-22-ready-to-implement)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
