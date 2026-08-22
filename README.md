@@ -1356,6 +1356,9 @@ twenty steps:
 | 0.50 | 797 cents | 75 cents | 10.6× too shallow |
 | 1.00 | 1593 cents | 1200 cents | 1.2× too shallow |
 
+(Depths are **± half-swings**, the convention both machines use; a
+peak-to-peak measurement reads double.)
+
 Four cents of vibrato is inaudible rather than subtle, so in practice **any
 KRZ program with vibrato had none**, unless the source asked for nearly full
 depth. Programs with no LFO→pitch routing are unaffected.

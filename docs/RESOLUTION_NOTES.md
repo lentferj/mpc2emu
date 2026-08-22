@@ -16095,6 +16095,44 @@ writer now tops out at byte 83. Not a defect — a source-format limit — but t
 number is worth having, and it is why `KRZ_LFO_PITCH_MAX_CENTS` is named
 separately from the full scale, exactly as `KRZ_DEPTH_MAX_CENTS` is.
 
-**Not hardware-confirmed end to end.** k2kremote is running an audio
-cross-check (peak-to-peak pitch deviation on a held note) the way the filter
-corner was checked against the panel.
+### Audio cross-check — and the factor of two that did not bite
+
+k2kremote measured pitch deviation on held notes at both ends:
+
+    byte 79   claimed 1200 ct   measured 2404.7 ct peak-to-peak   0.2% off 2x1200
+    byte 41   claimed   80 ct   measured  161.4 ct peak-to-peak   0.9% off 2x80
+                                half-swings 87.3 / 74.1 ct
+
+Note the **2x**: the K2000 panel's Depth is a ± HALF-SWING, not a full
+peak-to-peak figure. Two independent points establish that, at ends of the
+range 15x apart.
+
+**This is where a silent factor of two could have entered, and the check is
+one line:** `LFO_PITCH_FULL_CENTS` is specified as *"Full-scale ±cents"* and
+its measurement recorded as *"one-sided cents = 400/801/1190/1583"*. Both
+sides are half-swings, so the conventions match and no correction is needed.
+Had the E4XT figure been peak-to-peak, every converted vibrato would have come
+out at twice the depth asked for — and the table above would still have
+validated perfectly, because the error would have lived entirely in the join
+between two correct measurements. **Worth stating explicitly rather than
+noticing later:** confirming each side separately does not confirm the seam.
+
+The low end was the point of asking, and it is answered: byte 41 resolves
+cleanly and is an audible vibrato, which is what the fix now writes where the
+old code wrote byte 4.
+
+**Byte 4 is at the instrument's floor and is reported as such.** k2kremote
+measured 9.5 ct p-p but declined to stand behind it: at ~262 Hz their
+autocorrelation tracker's adjacent integer lags are ~9–10 ct apart, so a true
+4 ct swing is smaller than the method's own quantisation, and sub-lag
+interpolation made the figure *worse* (25.5 ct) rather than better. What
+survives is the comparison, not the number: byte 4's swing sits ~17x below
+byte 41's cleanly-resolved 161 ct, which corroborates "inaudible" without
+proving it. A firmer answer needs a lower-noise capture or an ear, not more of
+that analysis — and it is not worth chasing, since no conversion writes byte 4
+any more.
+
+**Status:** the byte↔cents law is now hardware-confirmed at two points, and
+the ± convention on both sides is verified. What remains unconfirmed is the
+whole chain — a converted bank's vibrato sounding like its source — which is
+§MATRIX.
