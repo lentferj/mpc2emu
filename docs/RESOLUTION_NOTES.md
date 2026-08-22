@@ -13915,3 +13915,50 @@ ratio per preset, not only spectrum, because the stereo/mono question is a
 between-channel one and a mono sum is exactly where it cancels. The script
 mono-summed in its first version — the same mistake as the capture set, made
 independently an hour after warning k2kremote against it.
+
+## §K2KMONO — the "Mono" presets are anti-phase, and the pairs really do differ (2026-08-22, MEASURED)
+
+**Answered.** k2kremote captured all nine TC3 source presets on the K2000 at
+note 69, three takes each, stereo and unsummed, every take device-confirmed for
+id and name and every one clearing the lift gate by 10 dB or more.
+
+**The pairs differ, and not in timbre.** Measuring L/R correlation per preset —
+the direct test, which does not require the two presets to differ in tone at all:
+
+    200 Med. RainStick 1   -0.006      205 MonoMed.RStick 1   -0.909
+    201 Med. RainStick 2   +0.068      206 MonoMed.RStick 2   -0.900
+    202 Med. RainStick 3   -0.258      207 MonoMed.RStick 3   -0.944
+    203 SmallRainStick 1   +0.003      208 MonoSmall RStick   -0.924
+    204 NorthernRainstik   -0.072
+
+Identical to three decimals across all three takes of every preset, so this is
+playback, not noise.
+
+**Every preset named `Mono…` plays L ≈ −R.** Their side-to-mid ratio is **+12.6
+to +15.2 dB** — the sum of the two channels is over 12 dB *below* their
+difference. The presets not so named are decorrelated (r ≈ 0, side/mid ≈ 0 dB),
+which is ordinary stereo content.
+
+So the naming is not a label, and it does not mean what it appears to mean: a
+`Mono` preset here is not one channel duplicated (which would read r = +1.000
+with side/mid at the floor) but a **polarity inversion between the channels**.
+Summed to mono it very nearly cancels.
+
+**Consequences for our conversion.**
+
+* The distinction is real, so representing 200 and 205 as the same mono AKAI
+  program does lose something the K2000 was doing. §AKAISTEREO's value is
+  measured now rather than assumed.
+* But the thing lost is a *phase* relationship, and `_mixdown()` sums the two
+  channels — which for an anti-phase pair is the one operation that destroys it
+  completely. Emitting an AKAI `-L`/`-R` pair would preserve it, mixdown never
+  can, and no cutoff or envelope work touches it.
+* Worth stating plainly: it is not obvious the K2000's behaviour here is
+  desirable. A preset that cancels on a mono system is a fragile thing to
+  reproduce faithfully. **This is Jan's call, not ours** — the measurement says
+  what the machine does, not what our converter should do about it.
+
+**Why the AKAI side could not have shown any of this** — see §TC3STEREO: our
+conversion writes four mono samples for these nine programs, and all 81 AKAI
+captures are single-channel. Both facts independently put this difference out of
+reach. It took the K2000's own captures, in stereo, to see it at all.
