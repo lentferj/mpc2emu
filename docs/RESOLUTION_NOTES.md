@@ -160,6 +160,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§NOISESRC — building a measuring instrument, and rejecting two versions of it (2026-08-22)](#noisesrc-building-a-measuring-instrument-and-rejecting-two-versions-of-it-2026-08-22)
 - [§FENVORDER — the E4XT filter envelope's traversal order is NOT established (2026-08-22, NEGATIVE)](#fenvorder-the-e4xt-filter-envelopes-traversal-order-is-not-established-2026-08-22-negative)
 - [§KRZCUTCAL — the K2000 cutoff mapping is out by up to 1.8 octaves (2026-08-22)](#krzcutcal-the-k2000-cutoff-mapping-is-out-by-up-to-18-octaves-2026-08-22)
+- [§CUTCALDEAD — a calibration disc whose parameter was not wired (2026-08-22)](#cutcaldead-a-calibration-disc-whose-parameter-was-not-wired-2026-08-22)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -14648,3 +14649,54 @@ are all neutral, so the only thing differing across the set is the cutoff.
 Measure the corner on each and the position→Hz curve that falls out **is** the
 calibration — after which `_cutoff_byte` can be routed through Hz against
 measured endpoints rather than assumed ones.
+
+## §CUTCALDEAD — a calibration disc whose parameter was not wired (2026-08-22)
+
+**The first CUTCAL_01 measured nothing, and the fault was mine.** All eleven
+programs came out on algorithm 1 with the chain `PITCH  NONE  AMP` — **no filter
+stage in the signal path at all** — so the cutoff byte was written into programs
+that had nothing to apply it to.
+
+`krz_writer._patch_layer` gates the entire filter block on
+
+    if getattr(voice, 'filter_type', 0):
+
+and `VoiceLayer` defaults `filter_type` to **0**. The generator set
+`filter_cutoff` on every preset and never set `filter_type`, so the writer
+correctly declined to patch a filter that the voice did not claim to have.
+
+### How it was caught, and how close it came to entering the record
+
+k2kremote captured all 33 takes cleanly — every guard passed — and found the
+eleven presets **identical to 3–4 significant figures on both RMS and centroid**.
+Rather than report that as a filter response, they went to the panel and read the
+algorithm off the machine on four programs spanning the sweep.
+
+That is the only reason this did not enter the calibration as *"the filter does
+nothing across its whole range"*, which is a plausible-looking result that would
+have sent someone hunting a K2000 DSP fault. **A uniform result across a
+parameter sweep is the signature of a parameter that is not wired**, not of a
+parameter that does nothing — and the two are indistinguishable from the capture
+alone.
+
+### The lesson, which is not the one I thought I had learned
+
+Considerable care went into verifying the *source* for this disc — three
+constructions measured, two rejected (§NOISESRC). **None of it verified that the
+parameter under test was live.** A verified instrument pointed at an inert
+parameter measures exactly as cleanly as one pointed at a working one.
+
+So the generator now reads its own output back and **refuses to ship**:
+
+    REFUSING TO SHIP: no filter in [...] -- the cutoff byte would be written
+    into a program with no filter stage in its chain
+    REFUSING TO SHIP: cutoff does not vary across the sweep
+
+The second check would have caught it independently: on the dead bank the eleven
+cutoffs read back as a single collapsed value, because with no filter block there
+was nothing to store them in.
+
+`filter_type = 3` (Low4 → the K2000's 4-pole lowpass, algorithm 1, filter byte
+50) is what the rebuilt bank carries — the same filter the E4XT presets this
+campaign compares against actually use. Read back: filter live on all eleven,
+eleven distinct cutoffs.
