@@ -14193,3 +14193,59 @@ envelope, and track the corner. The E4B side needs the same treatment before the
 two can be mapped onto each other rather than assumed equal.
 
 Until then the depth conversion is a guess that happens to point the right way.
+
+### s3ked identified the field, and it is NOT the one our law covers
+
+They searched every single-byte keygroup field for the values we wrote and found
+exactly one match: **`MODVFILT3`, offset 153** — *"amount of control of filter
+frequency by assignable source 3"*. The full set of fields that differ between
+the two builds:
+
+    ATTAK2      off  20   new [40, 40, 40]   old [ 0,  0,  0]
+    DECAY2      off  21   new [73, 71, 71]   old [50, 50, 50]
+    SUSTN2      off  22   new [25, 15, 18]   old [99, 99, 99]
+    RELSE2      off  23   new [69, 74, 72]   old [45, 45, 45]
+    MODVFILT3   off 153   new [43, 41, 27]   old [ 0,  0,  0]
+
+**The law we already have (§116) is for `MODVFILT1` — source 1, not source 3**,
+and whether the matrix sources scale alike is on this project's own untested
+list. So it must be measured for source 3 specifically rather than inherited.
+
+### The shift is a PRODUCT, which our conversion does not account for
+
+§116's law is
+
+    octaves = 0.002075 * SUSTN2 * MODVFILT1
+
+— the envelope's **sustain LEVEL multiplies the depth**. At what we wrote
+(SUSTN2 25, depth 43) that is ≈ **2.2 octaves** at the sustain level, provisional
+until source 3 is measured.
+
+This matters beyond the constant. `akai_filter_env_bytes()` sets `SUSTN2` from
+the source envelope's sustain and `depth` from the source amount, treating them
+as independent — but on the AKAI they multiply, so a source with a low filter-
+envelope sustain gets its sweep divided as well as lowered. Our three programs
+sit at SUSTN2 25/15/18; at 15 that is nearly a sevenfold reduction against full.
+**Whether the E4B behaves the same way decides whether our conversion is
+structurally right with a wrong constant, or structurally wrong.** That question
+has gone to eosed.
+
+### Open: the difference reverses at note 79
+
+s3ked captured notes 57 and 79 as well, which turned out not to be
+confirmatory. Late-window centroid, new minus old (Hz):
+
+    pair          n69          n57          n79
+     0 vs 20   +97 (±2)    +128 (±1)   -218 (±1)
+     1 vs 21   +43 (±1)     +72 (±1)   -156 (±0)
+     2 vs 22  +100 (±1)     +23 (±1)   +252 (±1)
+     3 vs 23    -0 (±0)      -0 (±1)     -0 (±1)   <- control
+
+**The sign flips at note 79 on programs 0 and 1** — the new build is brighter at
+57 and 69 and darker at 79, against a per-program spread of 0–2 Hz, with the
+control flat at −0 across all three notes. So it is not the rig, and it is not
+what "we added a filter envelope" predicts on its own. Candidates: key-follow
+(`K_FREQ`) interacting with a corner that now moves, or the envelope pushing the
+corner past the sample's own bandwidth at the higher pitch. Unchased.
+
+Recorded because measuring one note would have missed it entirely.
