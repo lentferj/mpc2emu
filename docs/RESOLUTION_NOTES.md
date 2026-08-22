@@ -178,6 +178,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§KRZENVDEPTH2 — the byte↔cents mapping arrived, and the ceiling was never the full scale (2026-08-22)](#krzenvdepth2-the-bytecents-mapping-arrived-and-the-ceiling-was-never-the-full-scale-2026-08-22)
 - [§FENVFULLSCALE — two values for one quantity, 41% apart (2026-08-22)](#fenvfullscale-two-values-for-one-quantity-41-apart-2026-08-22)
 - [§KRZLFOPITCH — the plausible full scale was the one we had already disproved (2026-08-22)](#krzlfopitch-the-plausible-full-scale-was-the-one-we-had-already-disproved-2026-08-22)
+- [§MATRIXRESULT — the conversion matrix ran, and all three findings were the instrument (2026-08-23)](#matrixresult-the-conversion-matrix-ran-and-all-three-findings-were-the-instrument-2026-08-23)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -13532,10 +13533,10 @@ reasoning about its derivation.
 
 ## §AKAIPOOLBASE — the silent first program, and a fix that was only ever described
 
-**Jan, 2026-08-21, at the machine:** `TC1 E4B BASS`, PRGNUM 0, `bass A` —
+**Jan, 2026-08-21, at the machine:** `TC1 E4B BASS`, PRGNUM 0 —
 no sound. First program of the first volume he tried.
 
-`bass A.S3` is the **first sample in the volume and it is looped**, which
+That program's sample is the **first in the volume and it is looped**, which
 is precisely the condition §AKAILOOPCROSS established on hardware: a looped
 sample at the base of the sampler's object pool plays silent or degraded.
 
@@ -13589,7 +13590,7 @@ immediately.
 
 ### WITHDRAWN the same evening: the symptom was not there
 
-s3ked measured `bass A` on the machine and it is the **loudest** program in
+s3ked measured that same program on the machine and it is the **loudest** in
 the volume — **-15.8 dBFS**, centroid 152 Hz. It is not silent at note 69,
 velocity 100, and they flagged it against my brief rather than fitting the
 measurement to it.
@@ -15389,7 +15390,7 @@ should be bookkeeping, not physics.**
 
 ## §PRG8 — the one unexplained program was not anomalous either (2026-08-22, RESOLVED)
 
-PRG 8 (`bass F`, from source preset 2) was recorded as the single
+PRG 8 (from source preset 2) was recorded as the single
 unexplained result of the whole campaign: **−20.8 dB HF against the E4XT, with
 cutoff, filter envelope, resampling and the sample audio all eliminated**, and
 consistent across three notes so not noise.
@@ -16136,3 +16137,78 @@ any more.
 the ± convention on both sides is verified. What remains unconfirmed is the
 whole chain — a converted bank's vibrato sounding like its source — which is
 §MATRIX.
+
+
+## §MATRIXRESULT — the conversion matrix ran, and all three findings were the instrument (2026-08-23)
+
+Six of the eight routes measured on hardware overnight: 56 conversions, each
+source bank played on its own machine and its conversions on the others,
+everything through **one harness** — same JACK client, same note list, same
+analysis — so a cross-machine comparison would not inherit three measurement
+paths. Harness and 103 captures live in `~/temp/matrix/`, outside both repos.
+
+### The result, stated as a positive rather than as an absence
+
+    route                 tuning (conversion - source)
+    E4B   -> K2000                +0.1 ct
+    E4B   -> S3000XL              -0.3 ct
+    KRZ   -> E4XT                 +1.1 ct
+    KRZ   -> S3000XL              +1.4 ct
+    S1000 -> E4XT                 -0.6 ct
+    S3000 -> E4XT                 +0.8 ct
+
+**All six routes are tuning-accurate to within 1.4 cents.** The E4B source
+material is itself about **60 cents sharp**, and the AKAI writer reproduces
+that detuning to within **0.3 cents** — fidelity, not error. Across all 56
+conversions there were no silent patches, no octave errors and no dropped
+notes.
+
+Recorded in those words deliberately: "no defects found" reads a month later
+as "we did not look hard", and this was a measurement, not a shrug.
+
+### Three defects were raised and all three were withdrawn
+
+**1. The analysis window was offset, by a different amount per machine.**
+Note onsets were reconstructed from timing constants, and the reconstruction
+omitted `record_program`'s 0.45 s program-change settle plus the K2000's extra
+0.15 s bank-select wait. Every window was 0.45 s early, and the K2000's 0.60 s
+— **a different offset per machine, in a comparison whose entire subject is
+cross-machine agreement**. Confirmed against the audio: notes begin at 1.29 s
+on the E4XT and S3000XL, 1.45 s on the K2000, exactly as the corrected
+arithmetic predicts.
+
+Correcting it collapsed an apparent "+9.5 cents sharp on the KRZ row" to
+**+0.1**. The mechanism is worth keeping: those conversions now carry 100 cents
+of vibrato because of §KRZLFOPITCH, shipped the same evening, so sampling
+0.15 s later than the source read a different **LFO phase**. A fix made hours
+earlier is what rendered the measurement bug legible as a tuning defect.
+
+**2. Attack as 10→90% of smoothed peak measures transients, not attack.**
+One onset frame grazing the peak makes a slow organ swell read as instant. A
+transient-robust redefinition flipped the row median from **−0.77 to +3.27
+octaves**. Two defensible definitions, opposite signs: the scalar does not
+describe this material and neither number means anything.
+
+**3. Spectral centroid is dominated by the noise floor.** It read −0.98
+octaves where 85% rolloff read **0.00** on the same captures, because centroid
+follows high-frequency tails and therefore each machine's floor.
+
+### The gap underneath all three had no name
+
+**Nothing measured how much a metric moves when nothing changes.** There was no
+repeatability baseline, so there was no threshold below which an offset is not
+a finding. Capture the same program twice per machine and compute the spread
+before comparing anything; all three of the above would have been caught before
+they were written down.
+
+That is the same failure s3ked hit with an absolute pre-roll threshold and the
+one this project has now met from several directions: **a property of the
+instrument entering the measurement as if it were a property of the thing
+measured.**
+
+### Before this harness is trusted again
+
+Onsets detected from the recorded audio rather than reconstructed; an
+envelope-shape comparison instead of an attack scalar; rolloff instead of
+centroid; and the repeatability pass. All four can be validated against the
+103 captures already on disk before any new material is recorded.
