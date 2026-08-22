@@ -171,6 +171,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§PRG8 — the one unexplained program was not anomalous either (2026-08-22, RESOLVED)](#prg8-the-one-unexplained-program-was-not-anomalous-either-2026-08-22-resolved)
 - [§ATKCAL2 — the on-disc sweep failed its own gate, and the design was mine (2026-08-22)](#atkcal2-the-on-disc-sweep-failed-its-own-gate-and-the-design-was-mine-2026-08-22)
 - [§ATKMEAS — the filter-envelope attack, measured at last (2026-08-22)](#atkmeas-the-filter-envelope-attack-measured-at-last-2026-08-22)
+- [§ENV2DEPTH — the E4B side is a product too, so the fix is a constant (2026-08-22)](#env2depth-the-e4b-side-is-a-product-too-so-the-fix-is-a-constant-2026-08-22)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -15601,3 +15602,65 @@ being out by 4.3× does not stand.
 
 **No code change yet.** Recorded as a measurement, with the shipped law flagged
 rather than replaced.
+
+## §ENV2DEPTH — the E4B side is a product too, so the fix is a constant (2026-08-22)
+
+eosed measured the missing half (their §46): **how many octaves a
+`FEnv+ → FilFreq` cord actually moves the E4XT's corner.**
+
+    octaves ~= 5e-4 * level% * amount        (both 0..100)
+
+    level  25    0.01488 oct per amount unit   R2 0.9940
+    level  50    0.02445                       R2 0.9900
+    level 100    0.04335                       R2 0.9922  (amounts <= 60)
+
+**It is a product, which is the structural answer we needed.** Our conversion
+writes `SUSTN2` and `depth` from independent source fields, and that is only
+correct if both machines multiply level by depth. Both do.
+
+Their trap check first, as asked: amount 0 against 100 moved the corner **6.68
+octaves**, so the envelope had distance and the depth was genuinely under test.
+And a free internal control fell out — the amount-0 corner was 222.7 / 234.4 /
+234.4 Hz across the three levels, independent of envelope level, which it must be
+if the cord is the only path from envelope to filter.
+
+### The sustain cancels, as predicted
+
+    source asks for :  5.00 * sustain * amount  octaves
+    we deliver      : 14.01 * sustain * amount  octaves
+    ratio           :  2.80x too much sweep
+
+    implied AKAI_ENV2_DEPTH_MAX = 17.8    (we ship 50)
+
+`sustain` drops out of both sides, so the mapping depends on `amount` alone and
+the fix is **one constant, not a redesign**. What our three affected programs
+actually deliver:
+
+    prg   sustain  amount    asked   delivered
+      0      0.25    0.87    1.09o       3.05o
+      1      0.15    0.81    0.61o       1.70o
+      2      0.18    0.54    0.49o       1.36o
+
+### Why the constant is NOT being changed tonight
+
+**eosed explicitly declined to hand `5e-4` over as a number to hard-code**, and
+the reason is in their data: `k / level` runs **5.95 → 4.89 → 4.34** across levels
+25 → 50 → 100. A **32% monotonic drift**, not scatter — the larger the total
+shift, the less than proportional it becomes. Above roughly three octaves the
+E4XT clamps rather than continuing.
+
+So the product holds to first order and **compresses at the top**, and a law
+fitted at small shifts and extrapolated to large ones overshoots. Our own three
+programs sit at 1.4–3.1 delivered octaves, i.e. right at the knee.
+
+**And the same question applies to the AKAI side.** s3ked's `0.00283 * SUSTN2 *
+depth` was checked for product form at **depth 10 with `SUSTN2` swept** — inside
+the linear region — and they separately recorded saturation above depth ~20 at
+base `FILFRQ` 40. So both laws are first-order, both compress, and correcting one
+constant against the other without knowing where each stops being linear could
+trade a 2.8× error at the top for a different one.
+
+**Recorded, computed, and left un-shipped pending that.** The current 50 has no
+measurement behind it at all, so 17.8 would be an improvement on the merits — but
+"replace a guess with a first-order figure whose author asked you not to
+hard-code it" is exactly the kind of half-step that today has punished.
