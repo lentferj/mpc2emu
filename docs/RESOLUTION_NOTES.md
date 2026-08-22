@@ -13934,6 +13934,28 @@ the direct test, which does not require the two presets to differ in tone at all
 Identical to three decimals across all three takes of every preset, so this is
 playback, not noise.
 
+**Extended to the full set: 81 captures, nine presets x three notes x three
+takes.** The split holds at every pitch and the two populations do not come
+close to touching:
+
+    preset               n57      n69      n79    side/mid   name
+    200               +0.032   -0.006   -0.023      +0.1 dB  Med. RainStick 1
+    201               +0.065   +0.068   +0.119      -0.6 dB  Med. RainStick 2
+    202               -0.230   -0.258   -0.265      +2.1 dB  Med. RainStick 3
+    203               +0.002   +0.003   -0.003      -0.0 dB  SmallRainStick 1
+    204               -0.089   -0.072   -0.092      +0.5 dB  NorthernRainstik
+    205               -0.940   -0.909   -0.893     +13.1 dB  MonoMed.RStick 1
+    206               -0.930   -0.900   -0.871     +12.6 dB  MonoMed.RStick 2
+    207               -0.955   -0.944   -0.928     +15.2 dB  MonoMed.RStick 3
+    208               -0.949   -0.924   -0.887     +13.9 dB  MonoSmall RStick
+
+    stereo-named (45 takes)   r from -0.265 to +0.119
+    Mono-named   (36 takes)   r from -0.955 to -0.871
+    separation +0.606, no overlap
+
+Across two octaves, so it is a fixed property of how those programs are built
+and not an artifact of one note or of the sample's content at one transposition.
+
 **Every preset named `Mono…` plays L ≈ −R.** Their side-to-mid ratio is **+12.6
 to +15.2 dB** — the sum of the two channels is over 12 dB *below* their
 difference. The presets not so named are decorrelated (r ≈ 0, side/mid ≈ 0 dB),
