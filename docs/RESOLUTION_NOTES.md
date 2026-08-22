@@ -157,7 +157,8 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§ENV2CONTOUR — the envelope works better than §ENV2RESULT said, and the metric was the problem (2026-08-22, CORRECTION)](#env2contour-the-envelope-works-better-than-env2result-said-and-the-metric-was-the-problem-2026-08-22-correction)
 - [§AKAISTEREO3 — stereo output confirmed on the S3000XL, first load (2026-08-22)](#akaistereo3-stereo-output-confirmed-on-the-s3000xl-first-load-2026-08-22)
 - [§ENV2FLOOR — the filter envelope cannot attack faster than 66 ms, and that is the missing "snap" (2026-08-22)](#env2floor-the-filter-envelope-cannot-attack-faster-than-66-ms-and-that-is-the-missing-snap-2026-08-22)
-- [§NOISESRC — a taper is a de-click on a one-shot and a tremolo on a loop (2026-08-17)](#noisesrc-a-taper-is-a-de-click-on-a-one-shot-and-a-tremolo-on-a-loop-2026-08-17)
+- [§NOISESRC — building a measuring instrument, and rejecting two versions of it (2026-08-22)](#noisesrc-building-a-measuring-instrument-and-rejecting-two-versions-of-it-2026-08-22)
+- [§FENVORDER — the E4XT filter envelope's traversal order is NOT established (2026-08-22, NEGATIVE)](#fenvorder-the-e4xt-filter-envelopes-traversal-order-is-not-established-2026-08-22-negative)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -14464,3 +14465,88 @@ to undo over SysEx.
 before using it.** Three sources have now failed this project on stationarity —
 Schroeder, and pink twice — and each failure was cheap to detect and expensive
 to discover downstream. The check is one measurement of the source alone.
+
+## §FENVORDER — the E4XT filter envelope's traversal order is NOT established (2026-08-22, NEGATIVE)
+
+eosed spent Jan's authorised write budget on this and came back with a negative
+result and a retraction. Recorded because the retraction is the valuable half.
+
+### What is solid (read-only, unaffected by any of the below)
+
+Preset 3, voice 0 — six (rate, level) pairs with their parameter ids:
+
+    id 93/94    SEG0   "Atk1"    rate   0    level  +78
+    id 95/96    SEG1   "Dcy1"    rate   0    level +100
+    id 97/98    SEG2   "Rls1"    rate   0    level  +99
+    id 99/100   SEG3   "Atk2"    rate  73    level  +18    <- our "sustain"
+    id 101/102  SEG4   "Dcy2"    rate  37    level    0
+    id 103/104  SEG5   "Rls2"    rate   0    level    0
+
+Also: cord 5 `FEnv+` = +54, cord 6 `Key~` = +6, base cutoff `FMORPH` = 173, and
+the filter is a **4-pole lowpass** (runtime 1), not the `3` our model carries.
+**Our "filter env sustain" is the Atk2 target level, id 100 — not id 102.**
+
+### The retraction
+
+eosed first reported the numbered order as coherent, on the strength of an
+ascending staircase that walked 238 → 474 Hz. **Running the levels reversed as a
+control produced the same first 1.4 s to within a few Hz:**
+
+    t        ascending   descending
+    0.6       238.3 Hz     236.1 Hz
+    1.0       287.2 Hz     286.8 Hz
+    1.4       366.1 Hz     362.3 Hz
+
+Reversing the levels must invert the prediction; it changed nothing. **The rise
+was the sample's own onset — common-mode, not the envelope.** Without the
+reversed control it would have been reported as evidence.
+
+### The knock-out experiment, and why it does not order the stages
+
+Hold all six at level 100, drop exactly one to 0, watch when the corner dips:
+
+    SEG0    -3.4 Hz  at 0.7 s     no effect
+    SEG1  -402.3 Hz  at 5.6 s
+    SEG2  -398.0 Hz  at 5.6 s
+    SEG3  -402.5 Hz  at 5.7 s
+    SEG4    -4.2 Hz  at 0.7 s     no effect
+    SEG5    -3.0 Hz  at 0.6 s     no effect
+
+**Only SEG1/2/3 do anything on a held note, and all three act at the same time**,
+not marching through it. A sequential traversal should separate them. Three
+candidate explanations (stages completing instantly when the target equals the
+current level; wrong label mapping; something else) and no way to choose.
+
+### What actually blocks it
+
+**The filter envelope's rate → time has never been calibrated.** §37 did the AMP
+envelope; nothing is established to carry over. Every rate was set to 64 without
+knowing whether that is 0.2 s or 2 s, so a dip at 5.6 s cannot be mapped to a
+stage index. Calibrate one segment's rate → time first, and the ordering
+experiment becomes readable.
+
+### What this does constrain for our four-stage collapse
+
+**Three of the six segments are inert on a held note; three are active late.**
+That bounds what the collapse discards without giving the order.
+
+### Key tracking: a real gap, but it explains neither open finding
+
+eosed flagged cord 6 `Key~` = +6 and asked whether our dropping key tracking
+could explain program 2. Our AKAI writer does not write `K_FREQ` at all — a
+known, deliberate gap. But it explains neither symptom:
+
+* **The note-79 sign reversal** (§ENV2RESULT) is *new versus old on the AKAI*.
+  Both builds have identical, unwritten key tracking, so whatever its value it
+  is common-mode and cannot produce a difference between them.
+* **Program 2's contour decorrelation** is measured at a *single* note. Key
+  tracking at one pitch is a constant offset, and a constant offset shifts a
+  contour rather than decorrelating it.
+
+The magnitude argues the same way independently: +6/127 ≈ 5% tracking across
+57→79 (1.83 octaves) is ≈ 0.09 octaves of cutoff shift, far too small for a
+218 Hz centroid reversal.
+
+So `K_FREQ` stays worth implementing on its own merits, and is not the
+explanation for either symptom. §ENV2FLOOR remains the better candidate for
+program 2.
