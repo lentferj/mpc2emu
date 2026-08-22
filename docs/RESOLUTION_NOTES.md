@@ -154,6 +154,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAISTEREO2 — the layout, read off real library discs (2026-08-22, READY TO IMPLEMENT)](#akaistereo2-the-layout-read-off-real-library-discs-2026-08-22-ready-to-implement)
 - [§ABDISC — the A/B disc: new code beside the build that was actually heard (2026-08-22)](#abdisc-the-ab-disc-new-code-beside-the-build-that-was-actually-heard-2026-08-22)
 - [§ENV2RESULT — the filter envelope works, and is not enough (2026-08-22, MEASURED)](#env2result-the-filter-envelope-works-and-is-not-enough-2026-08-22-measured)
+- [§ENV2CONTOUR — the envelope works better than §ENV2RESULT said, and the metric was the problem (2026-08-22, CORRECTION)](#env2contour-the-envelope-works-better-than-env2result-said-and-the-metric-was-the-problem-2026-08-22-correction)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -14249,3 +14250,54 @@ what "we added a filter envelope" predicts on its own. Candidates: key-follow
 corner past the sample's own bandwidth at the higher pitch. Unchased.
 
 Recorded because measuring one note would have missed it entirely.
+
+## §ENV2CONTOUR — the envelope works better than §ENV2RESULT said, and the metric was the problem (2026-08-22, CORRECTION)
+
+**§ENV2RESULT reported that the wired filter envelope "closes only 4–8 dB of an
+~90 dB gap". That framing is wrong, and the fault is the metric, not the fix.**
+
+Band-energy ratios were taken on **normalised** spectra. On a bass program whose
+fundamental is 110 Hz, the 1–4 kHz band holds almost nothing, so a tiny absolute
+difference between two near-empty bands reads as tens of dB. "−35 dB at 1–4 kHz"
+compares almost-nothing against almost-nothing and says very little about what
+anyone hears.
+
+**The filter's own behaviour is a contour in time, so measure that.** Spectral
+centroid in 100 ms steps across the first second, median of three takes, against
+the E4XT playing the same source preset:
+
+    prg   old RMS err   new RMS err   improved   shape r old   shape r new
+      0          48 Hz         16 Hz     +31 Hz         0.783         0.969
+      1         129 Hz         53 Hz     +76 Hz         0.845         0.960
+      2          31 Hz         28 Hz      +3 Hz        -0.110        -0.195
+      3          58 Hz         58 Hz      -0 Hz         1.000         1.000  <- control
+
+The control is exact — byte-identical programs give an identical contour,
+r = 1.000 — so the rig is sound and the numbers mean what they say.
+
+**Programs 0 and 1 are substantially fixed.** Their sweep now tracks the E4XT's
+at r ≈ 0.96–0.97 where it was 0.78–0.85, and the contour error fell by 65% and
+59%. Reading the raw tracks side by side, the new build follows the E4XT's rise
+to ~230 Hz around 300–500 ms and its fall afterwards; the old build peaks lower
+and collapses early.
+
+    AKAI new p0   111 111 127 216 222 216 145 139 129 116
+    E4XT  src0    116 120 165 244 230 226 154 137 131 114
+    AKAI old p20  110 110 112 157 210 132 111 112 111 110
+
+**Program 2 is not fixed and is a different problem.** Its contour does not
+correlate with the E4XT's in either build (r −0.11 / −0.20), so whatever it is
+doing is not a depth error — a wrong depth would scale a contour, not decorrelate
+it. Program 1 also keeps a consistent ~60 Hz offset: the right shape, sitting
+low, which *is* the shape of a depth error.
+
+### Consequence for the depth question
+
+§ENV2RESULT sent both peers after a depth constant on the strength of a ~90 dB
+gap that was largely an artefact. The depth work is still worth having — the
+residual offset on program 1 is exactly what a depth error looks like — but it
+is a refinement, not the missing piece, and the priority was overstated.
+
+**Use the centroid contour for filter work, not band dB and not a single HF
+figure.** Three metrics have now each pointed somewhere different on the same
+captures, and only the contour tracks the thing the filter actually does.
