@@ -161,6 +161,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§FENVORDER — the E4XT filter envelope's traversal order is NOT established (2026-08-22, NEGATIVE)](#fenvorder-the-e4xt-filter-envelopes-traversal-order-is-not-established-2026-08-22-negative)
 - [§KRZCUTCAL — the K2000 cutoff mapping is out by up to 1.8 octaves (2026-08-22)](#krzcutcal-the-k2000-cutoff-mapping-is-out-by-up-to-18-octaves-2026-08-22)
 - [§CUTCALDEAD — a calibration disc whose parameter was not wired (2026-08-22)](#cutcaldead-a-calibration-disc-whose-parameter-was-not-wired-2026-08-22)
+- [§BUILDAROUND — three test-material failures, one cause (2026-08-22)](#buildaround-three-test-material-failures-one-cause-2026-08-22)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -14740,3 +14741,54 @@ above was entirely in the generator, not the writer.
 50) is what the rebuilt bank carries — the same filter the E4XT presets this
 campaign compares against actually use. Read back: filter live on all eleven,
 eleven distinct cutoffs.
+
+## §BUILDAROUND — three test-material failures, one cause (2026-08-22)
+
+Jan asked why testing had failed twice on building presets and images, that being
+core functionality. It is the right question and the answer is not "bad luck":
+**none of the three failures was in the conversion pipeline, and all three came
+from building test material AROUND it instead of through it.**
+
+    TC8 rebuild      called build_akai_volume() directly
+                     -> skipped convert.py's sample-rate snapping, so a 23939 Hz
+                        sample stayed unsnapped where the disc under test had it
+                        resampled to 44100. The A/B would have compared two
+                        different sounds and called it a filter difference.
+
+    CUTCAL_01        built a Bank by hand and left filter_type at its default
+                     -> 0 means OFF in the XPM enumeration, so krz_writer
+                        correctly wrote no filter block. Eleven programs on
+                        `PITCH NONE AMP`. Cost a full capture session.
+
+    E4XT_NOISE.iso   built a plain ISO 9660 image with an external tool
+                     -> the E4XT reads the EMU3 filesystem, not ISO 9660. The
+                        disc is unreadable to the sampler.
+
+**The pipeline was right every time.** Verified for the third case rather than
+assumed: `convert.py --format e4b --iso` produces an image beginning `45 4d 55
+33` — `EMU3` — with no ISO 9660 PVD, which is exactly what the machine wants.
+The hand-built one has the PVD and no EMU3 magic.
+
+### Why it keeps happening
+
+Test material feels like a special case — it needs odd parameter values, sweeps,
+deliberately degenerate presets — so the instinct is to construct it directly
+and skip the converter. But **the converter is where the accumulated knowledge
+lives**: the rate table the sampler can actually play, the filesystem the
+machine actually reads, the conventions the model's fields actually follow.
+Building around it discards all of that at exactly the moment correctness
+matters most, because the artefact is about to be used as ground truth.
+
+Each failure was also **silent in the same way**: a file that builds cleanly,
+loads cleanly, and measures cleanly — while measuring nothing.
+
+### The rule
+
+**Build hardware test material through `convert.py`, not around it.** Where a
+generator must construct a `Bank` by hand, it must then read its own output back
+and assert that the parameter under test is live — which is now enforced in
+`gen_krz_cutoffcal.py` and is why the rebuilt disc could be trusted.
+
+Corollary, from §CUTCALDEAD: verifying the *source* harder does not help. Three
+noise constructions were measured and two rejected for that disc, and none of it
+could detect that the filter was not in the chain.
