@@ -1340,6 +1340,57 @@ already did to files you *have*.
 **Newest first** — if you last read this section on a given date, everything
 above that date's entry is new to you.
 
+### If you built KRZ banks with filter envelopes before 2026-08-22, rebuild them — quiet sweeps were missing entirely
+
+The K2000's envelope→filter depth field is a plain 0–127 index whose *displayed*
+cents value is **nonlinear**: compressed near zero, exactly 100 cents per step
+through the middle, coarser again in the last three steps. mpc2emu scaled the
+requested depth straight onto the index, which treated the largest value the
+field can hold as "full envelope amount".
+
+The obvious symptom — depth 1.0 sweeping 9 octaves where 5.14 was asked for —
+is the **least** damaging one. Because the curve is compressed near zero, the
+mapping crossed over, and the error is far worse at the quiet end:
+
+| depth asked | should sweep | actually wrote | |
+|---|---|---|---|
+| 0.05 | 308 cents | 12 cents | **26× too little** |
+| 0.10 | 617 cents | 27 cents | 23× too little |
+| 0.25 | 1542 cents | 450 cents | 3.4× too little |
+| 0.50 | 3084 cents | 3600 cents | 1.2× too much |
+| 1.00 | 6168 cents | 10800 cents | 1.75× too much |
+
+So a **subtle** filter envelope — by far the common case in real programs —
+came out essentially flat, while only the most extreme sweeps came out too
+wide. Programs with no filter envelope at all are unaffected.
+
+mpc2emu's own reader had the same error mirrored, so a KRZ re-read in mpc2emu
+reports the depth the program *asked* for and looks correct. The only way to
+hear it is on the K2000 itself: a patch whose filter should open gently over
+the note plays with a static corner instead.
+
+### If you built KRZ banks before 2026-08-22, the filter corner sat in the wrong place — rebuild them
+
+The K2000 cutoff byte is signed semitones (`Hz = 440 × 2^((b−9)/12)`) spanning
+16 Hz–25 kHz, while mpc2emu's internal cutoff position spans 57 Hz–20 kHz. Both
+scales are logarithmic, so the shape was right, but the writer stretched one
+range linearly onto the other rather than converting through Hz — which
+misplaces every value in between, worst exactly where filtered material lives:
+
+| position | wanted | written | |
+|---|---|---|---|
+| 0.0 | 57 Hz | 16 Hz | −1.80 octaves |
+| 0.3 | 331 Hz | 147 Hz | −1.17 octaves |
+| 0.5 | 1068 Hz | 659 Hz | −0.70 octaves |
+| 0.8 | 6194 Hz | 5920 Hz | −0.07 octaves |
+
+Everything came out **too dark**, and the darker the intended sound the further
+off it was. Now routed through Hz and confirmed against the K2000R's own filter
+page: mean 0.08% off across eleven programs.
+
+Affects every KRZ with a filter — which, unlike the envelope defect above, is
+most of them.
+
 ### If you converted **from** an E4B before 2026-08-09, the sustain came out far too loud — reconvert
 
 The E4XT's amp-envelope sustain byte is dB-law, measured on hardware in July.
