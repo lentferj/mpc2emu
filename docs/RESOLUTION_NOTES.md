@@ -14696,6 +14696,26 @@ The second check would have caught it independently: on the dead bank the eleven
 cutoffs read back as a single collapsed value, because with no filter block there
 was nothing to store them in.
 
+### And it resolves the filter-type question eosed raised
+
+eosed read `E4_VOICE_FTYPE` off the E4XT for all ten presets and got **runtime 1
+= "4 Pole Low-pass"** (on-disk byte 0x00), against our model's `3`, and flagged
+that as a possible slope error our writer would carry latently. **It is not an
+error — the three numberings simply differ, and ours is right:**
+
+    E4B on-disk byte   0x00
+    E4XT runtime index 1        "4 Pole Low-pass"
+    our model          3        Low 4 -> 4-pole lowpass
+
+`parsers/e4b_parser._E4B_TO_XPM_FILTER_TYPE[0x00] = 3`, and 3 in the XPM
+enumeration is Low 4, the 4-pole lowpass. So our parse and eosed's device
+reading name the same filter by different conventions. Nothing to fix, and the
+latent slope error they flagged does not exist.
+
+Worth recording because **`filter_type = 0` in the same enumeration means
+"Off"** — which is why `_patch_layer`'s gate is correct behaviour and the fault
+above was entirely in the generator, not the writer.
+
 `filter_type = 3` (Low4 → the K2000's 4-pole lowpass, algorithm 1, filter byte
 50) is what the rebuilt bank carries — the same filter the E4XT presets this
 campaign compares against actually use. Read back: filter live on all eleven,
