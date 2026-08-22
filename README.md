@@ -1340,6 +1340,33 @@ already did to files you *have*.
 **Newest first** — if you last read this section on a given date, everything
 above that date's entry is new to you.
 
+### If you built KRZ banks with vibrato before 2026-08-22, rebuild them — the vibrato was ~20× too shallow
+
+mpc2emu scaled the requested LFO→pitch depth straight onto the K2000's depth
+byte, which put full vibrato at byte 79 — exactly 1200 cents, a clean one
+octave. That looks like the right answer and is not: a full E-MU LFO→pitch cord
+is **1593 cents (±16 semitones)**, measured on the E4XT.
+
+The endpoint being nearly right is what made this hard to notice. The error is
+below it, because the K2000's depth curve tracks cents **1:1** for its first
+twenty steps:
+
+| depth asked | should be | actually wrote | |
+|---|---|---|---|
+| 0.05 | 80 cents | 4 cents | **20× too shallow** |
+| 0.10 | 159 cents | 8 cents | 20× too shallow |
+| 0.25 | 398 cents | 20 cents | 20× too shallow |
+| 0.50 | 797 cents | 75 cents | 10.6× too shallow |
+| 1.00 | 1593 cents | 1200 cents | 1.2× too shallow |
+
+Four cents of vibrato is inaudible rather than subtle, so in practice **any
+KRZ program with vibrato had none**, unless the source asked for nearly full
+depth. Programs with no LFO→pitch routing are unaffected.
+
+As with the filter-envelope defect below, mpc2emu's own reader carried the same
+error mirrored, so re-reading the bank here reports the depth the source asked
+for and looks correct.
+
 ### If you built KRZ banks with filter envelopes before 2026-08-22, rebuild them — quiet sweeps were missing entirely
 
 The K2000's envelope→filter depth field is a plain 0–127 index whose *displayed*

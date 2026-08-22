@@ -939,6 +939,45 @@ def krz_cents_to_depth_byte(cents: float) -> int:
                key=lambda b: abs(KRZ_DEPTH_CENTS[b] - cents))
 
 
+#: K2000 LFO1->Pitch depth byte -> cents. Measured the same way as
+#: KRZ_DEPTH_CENTS: k2kremote walked every consecutive byte on program 250,
+#: single-clicking one step at a time, ceiling confirmed by four identical
+#: readings at byte 123 with further clicks doing nothing (2026-08-22).
+#:
+#: A DIFFERENT CURVE from the filter depth's, despite serving the same role.
+#: This one tracks cents 1:1 up to byte 20, then steps 2/5/10/20/50/100 ct
+#: before opening out at the top. Assuming one K2000 depth field's law carries
+#: over to another would have been wrong.
+KRZ_LFO_PITCH_CENTS = (
+    list(range(0, 21))                                            # 0..20, 1:1
+    + [22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48]    # 21..34, +2
+    + [50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100]               # 35..45, +5
+    + [110, 120, 130, 140, 150, 160, 170, 180, 190, 200]          # 46..55, +10
+    + [220, 240, 260, 280, 300, 320, 340, 360, 380, 400]          # 56..65, +20
+    + [450, 500, 550, 600, 650, 700, 750, 800, 850, 900, 950]     # 66..76, +50
+    + [1000, 1100]                                                # 77..78
+    + [(b - 67) * 100 for b in range(79, 118)]                    # 79..117, +100
+    + [5300, 5500, 6000, 6500, 6700, 7200]                        # 118..123
+)
+
+#: The K2000's own vibrato ceiling, 7200 ct = 6 octaves (byte 123). Far beyond
+#: anything an EOS cord amount can ask for -- LFO_PITCH_FULL_CENTS is 1593 --
+#: so this is headroom we can read but never write. Named for the same reason
+#: as KRZ_DEPTH_MAX_CENTS: so it cannot be mistaken for a full scale.
+KRZ_LFO_PITCH_MAX_CENTS = 7200.0
+
+
+def krz_lfo_pitch_byte_to_cents(b: int) -> float:
+    """K2000 CAL[22] LFO1->Pitch depth byte -> cents."""
+    return float(KRZ_LFO_PITCH_CENTS[max(0, min(b, 123))])
+
+
+def krz_cents_to_lfo_pitch_byte(cents: float) -> int:
+    """Cents -> the K2000 LFO1->Pitch byte that lands nearest."""
+    return min(range(len(KRZ_LFO_PITCH_CENTS)),
+               key=lambda b: abs(KRZ_LFO_PITCH_CENTS[b] - abs(cents)))
+
+
 # K2000 envelope-time display grid (seconds per editor step); env time byte =
 # steps(seconds) + 3. Shared with krz_writer._ENV_TIME_GRID.
 KRZ_ENV_TIME_GRID = [(0, 2, 0.02), (2, 5, 0.04), (5, 10, 0.10),

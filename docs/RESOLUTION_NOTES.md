@@ -177,6 +177,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§KRZENVDEPTH — the K2000 filter-envelope depth, measured but not yet usable (2026-08-22)](#krzenvdepth-the-k2000-filter-envelope-depth-measured-but-not-yet-usable-2026-08-22)
 - [§KRZENVDEPTH2 — the byte↔cents mapping arrived, and the ceiling was never the full scale (2026-08-22)](#krzenvdepth2-the-bytecents-mapping-arrived-and-the-ceiling-was-never-the-full-scale-2026-08-22)
 - [§FENVFULLSCALE — two values for one quantity, 41% apart (2026-08-22)](#fenvfullscale-two-values-for-one-quantity-41-apart-2026-08-22)
+- [§KRZLFOPITCH — the plausible full scale was the one we had already disproved (2026-08-22)](#krzlfopitch-the-plausible-full-scale-was-the-one-we-had-already-disproved-2026-08-22)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -16026,3 +16027,74 @@ paths?
 Deliberately **not** changed here: it would move sfz/sf2 input depths by 41% on
 the strength of a question nobody has answered yet, and it is a separate claim
 from the one k2kremote delivered.
+
+
+## §KRZLFOPITCH — the plausible full scale was the one we had already disproved (2026-08-22)
+
+k2kremote walked CAL[22] the same way they walked the filter depth — every
+consecutive byte, single-clicked, read back — and confirmed the ceiling with
+four identical readings at byte 123 (7200 ct) with further clicks doing
+nothing. All 124 points are now in `KRZ_LFO_PITCH_CENTS`.
+
+    byte 0..20     cents = byte           exactly 1:1
+    byte 21..34    +2 per step            22,24,26 ... 48
+    byte 35..45    +5                     50,55,60 ... 100
+    byte 46..55    +10                    110,120 ... 200
+    byte 56..65    +20                    220,240 ... 400
+    byte 66..76    +50                    450,500 ... 950
+    byte 77..78    1000, 1100
+    byte 79..117   cents = (byte - 67) * 100
+    byte 118..123  5300, 5500, 6000, 6500, 6700, 7200   (ceiling = 6 octaves)
+
+### Why this one was harder to catch than the filter depth
+
+`round(amount * 79)` puts full vibrato at byte 79 = **1200 cents = a clean
+1.000 octave**. As k2kremote put it, that "doesn't scream wrong on its face"
+the way the filter's 9 octaves did. A reviewer checking only the endpoint would
+have found a round, sensible number and moved on.
+
+It is wrong, and **we had already disproved it once**: `LFO_PITCH_FULL_CENTS`
+is 1593 cents (±16 semitones), measured on the E4XT 2026-06-12 across four
+depths, linear through the origin, σ=8 — and its own comment in
+`models/common.py` says in as many words *"NOT the ±1 octave previously
+assumed"*. The KRZ writer was carrying the assumption that constant exists to
+replace. **The plausible number was the disproved one**, and the disproof was
+sitting in the same file.
+
+### The damage, again below full scale
+
+    amount   wanted     old byte -> wrote     new byte -> writes
+      0.05     80 ct       4 ->    4 ct        41 ->   80 ct    20x too little
+      0.10    159 ct       8 ->    8 ct        51 ->  160 ct    20x too little
+      0.25    398 ct      20 ->   20 ct        65 ->  400 ct    20x too little
+      0.50    797 ct      40 ->   75 ct        73 ->  800 ct    10.6x too little
+      1.00   1593 ct      79 -> 1200 ct        83 -> 1600 ct    1.2x too little
+
+No crossover this time — the error is one-sided, always too shallow — but the
+low end is ~20× off because this curve tracks cents **1:1** up to byte 20. Four
+cents of vibrato is inaudible, not subtle. Every KRZ we wrote had effectively
+no vibrato unless the source asked for nearly all of it.
+
+The reader carried the mirror image (`seg[22] / 79.0`), so KRZ→KRZ round-tripped
+cleanly and nothing noticed — the same trap as §KRZENVDEPTH2.
+
+### The finding worth keeping: the two curves are not the same curve
+
+Two depth fields, same machine, same role — and different laws. Filter depth is
+**compressed** near zero (byte 10 = 20 ct); LFO pitch is **1:1** there (byte 10
+= 10 ct). Had we assumed the second table from the first, we would have written
+vibrato twice as deep as asked at the bottom of the range and called it
+measured. `test_the_two_depth_curves_are_not_the_same_curve` exists to hold
+that: it is cheap to state and expensive to rediscover.
+
+### Headroom we can read but never write
+
+Byte 123 = 7200 ct = 6 octaves, against `LFO_PITCH_FULL_CENTS` = 1593. So the
+K2000 can do 4.5× more vibrato than an EOS cord amount can ask for, and our
+writer now tops out at byte 83. Not a defect — a source-format limit — but the
+number is worth having, and it is why `KRZ_LFO_PITCH_MAX_CENTS` is named
+separately from the full scale, exactly as `KRZ_DEPTH_MAX_CENTS` is.
+
+**Not hardware-confirmed end to end.** k2kremote is running an audio
+cross-check (peak-to-peak pitch deviation on a held note) the way the filter
+corner was checked against the panel.

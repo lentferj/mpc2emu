@@ -88,7 +88,8 @@ from typing import List, Tuple
 from models.common import (Bank, Preset, SampleData, VoiceLayer, LoopType,
                           KRZ_ENV_TIME_GRID, KRZ_RELEASE_FACTOR,
                           E4B_CUTOFF_MIN_HZ, E4B_CUTOFF_MAX_HZ,
-                          krz_cents_to_depth_byte, KRZ_FENV_FULL_CENTS
+                          krz_cents_to_depth_byte, KRZ_FENV_FULL_CENTS,
+                          krz_cents_to_lfo_pitch_byte, LFO_PITCH_FULL_CENTS
 )
 from processors.loop_renderer import bake_alternating_loop
 # The K2000 and the E4B both store stereo PCM planar (whole left channel, then
@@ -875,6 +876,31 @@ def _reson_byte(reson01: float) -> int:
     return max(0, min(48, round(reson01 * 48)))             # dB*2, max 24 dB
 
 
+def _lfo_pitch_depth_byte(amount: float) -> int:
+    """LFO1->Pitch cord amount 0..1 -> K2000 CAL[22] depth byte.
+
+    **This used to be `round(amount * 79)`.** Unlike the filter-envelope depth
+    (`_filter_env_depth_byte`), the full-scale end of that mapping looked
+    entirely reasonable: byte 79 is 1200 cents, a clean 1.000 octave, exactly
+    what "full vibrato" ought to be. It is not what full vibrato is here --
+    `LFO_PITCH_FULL_CENTS` was measured on the E4XT at 1593 cents, +-16
+    semitones, and its own comment already records that "+-1 octave" was a
+    wrong assumption once before. The plausible number was the disproved one.
+
+    The real damage was below full scale. The K2000's curve tracks cents 1:1
+    up to byte 20 and only then opens out, so scaling the amount onto the byte
+    put small vibratos ~20x too shallow -- amount 0.05 wrote 4 cents where 80
+    were wanted, which is inaudible rather than subtle. Every KRZ we wrote had
+    effectively no vibrato unless the source asked for nearly all of it.
+
+    Note the curve differs from the filter depth's despite the identical role,
+    so neither table can be assumed from the other.
+    """
+    return krz_cents_to_lfo_pitch_byte(
+        max(0.0, min(1.0, amount)) * LFO_PITCH_FULL_CENTS)
+
+
+
 def _filter_env_depth_byte(amount: float) -> int:
     """FilterEnv->cutoff cord amount 0..1 -> K2000 ENV2->FilFreq depth byte.
 
@@ -1131,7 +1157,7 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False):
         lfo[4] = _LFO_SHAPE.get(voice.lfo1_shape.lower(), 0)  # fallback: Sine
     if getattr(voice, 'lfo1_to_pitch', 0.0) > 0.0:
         cal[21] = _K2_CS_LFO1                                # source = LFO1
-        cal[22] = max(0, min(123, round(voice.lfo1_to_pitch * 79)))  # depth (approx; TODO)
+        cal[22] = _lfo_pitch_depth_byte(voice.lfo1_to_pitch)  # depth (measured)
 
     return segs
 

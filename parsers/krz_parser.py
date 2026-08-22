@@ -57,7 +57,8 @@ from models.common import (Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            KRZ_RELEASE_FACTOR, hz_to_e4b_cutoff,
                            key_track_to_filter_amount,
                            krz_depth_byte_to_cents, KRZ_DEPTH_MAX_CENTS,
-                           KRZ_FENV_FULL_CENTS)
+                           KRZ_FENV_FULL_CENTS, LFO_PITCH_FULL_CENTS,
+                           krz_lfo_pitch_byte_to_cents)
 
 
 # ---------------------------------------------------------------------------
@@ -689,7 +690,14 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
             cur.transpose = t - 256 if t >= 128 else t
             cur.keymap_id = (seg[11] << 8) | seg[12]   # CAL[11:13] only, see TODO.md
             if seg[21] == _K2_CS_LFO1:
-                cur.lfo1_to_pitch = max(0.0, min(1.0, seg[22] / 79.0))
+                # VIA CENTS, not via the byte. `seg[22] / 79.0` treated the
+                # byte the writer happened to stop at as full depth; the field
+                # is an index into a nonlinear cents curve that reaches
+                # 7200 ct (6 octaves) at byte 123, and 79 is merely where
+                # 1200 ct lands. Normalising on LFO_PITCH_FULL_CENTS (1593,
+                # E4XT-measured) makes this the inverse of what we write.
+                cur.lfo1_to_pitch = min(1.0, krz_lfo_pitch_byte_to_cents(
+                    seg[22]) / LFO_PITCH_FULL_CENTS)
         elif tag == ENC_AMPMODE_TAG:
             if seg[1] != 1:   # 1 = Natural (hardware ignores ENV) -> leave default
                 pass          # actual ENV bytes read from ENV_AMP_TAG below
