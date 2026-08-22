@@ -15547,16 +15547,44 @@ indistinguishable from each other here. The honest form: *the clamp costs about
 40 ms of attack range, and how that range is distributed below byte 40 is not
 resolved by this measurement.*
 
-### 2. Our law's slope is wrong, and it over-predicts badly at the top
+### 2. WITHDRAWN — the slope disagreement was an artefact of my own fit
 
-    measured   t = 0.00250 * exp(0.06723 * byte)    doubling every 10.3 bytes
-    shipped    t = 0.001363 * exp(0.09703 * byte)   doubling every  7.1 bytes
+**What this section first said:** that the measured slope was 10.3 bytes per
+doubling against the shipped 7.1, and that at byte 72 we over-predict 1.47 s
+against a measured 0.34 s, 4.3× out — "large enough to act on".
 
-At byte 72 we predict 1.47 s where the machine takes **0.34 s — 4.3× out**. The
-direction matters: we *invert* the law to choose a byte, so over-predicting the
-time means picking too low a byte, and **long filter attacks come out far shorter
-than the source asked for.** At the short end the error is small (byte 40, 66 ms
-predicted against 40 ms measured).
+**Jan asked what to do about it, and checking before acting dissolved it.**
+
+**a) The slope figure was contaminated by unresolved points.** Re-run at 5 ms hop
+(4× the resolution) and fit only the well-resolved bytes 40–64:
+
+    20 ms run, 8 points incl. unresolved low bytes    17.7 bytes / doubling
+     5 ms run, 4 well-resolved points                  8.3 bytes / doubling
+    shipped                                            7.1 bytes / doubling
+
+The two runs disagree with *each other* far more than the better one disagrees
+with the shipped law. **Including points where the differences sit at the
+resolution limit flattens the fit**, and that is where 10.3 and 17.7 came from.
+On the resolved points the slope agrees with the shipped law to **17%**.
+
+**b) Byte 72 is anomalous and was in the fit.** Its rise is 22.6 dB against ~33
+on every other program, and its t90 comes out *shorter* than byte 64's, breaking
+monotonicity. s3ked flagged its shape as untrustworthy before handing over and
+they were right; it should have been excluded from the start.
+
+**c) The prefactor difference is my observable, not the machine.** What remains is
+a roughly constant 3.7–5× ratio, which is a prefactor difference — and
+§ENVRATESLOPE established that prefactor differences come from traverse distance
+while slope does not. The shipped law is *"times for a FULL 0..99 traverse"*. My
+observable is **HF energy reaching 90% of its own rise**, and HF saturates as the
+corner climbs, so it reaches 90% well before the envelope reaches level 99.
+**I measured a partial traverse of the same curve and compared it to a full one.**
+
+### Conclusion: no code change, and the shipped law is not shown to be wrong
+
+The measurement stands as evidence that **the field is live below byte 40** — that
+part is direct and does not depend on any fit. Everything I said about the law
+being out by 4.3× does not stand.
 
 ### What this measurement does not establish
 
