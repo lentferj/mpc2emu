@@ -172,6 +172,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§ATKCAL2 — the on-disc sweep failed its own gate, and the design was mine (2026-08-22)](#atkcal2-the-on-disc-sweep-failed-its-own-gate-and-the-design-was-mine-2026-08-22)
 - [§ATKMEAS — the filter-envelope attack, measured at last (2026-08-22)](#atkmeas-the-filter-envelope-attack-measured-at-last-2026-08-22)
 - [§ENV2DEPTH — the E4B side is a product too, so the fix is a constant (2026-08-22)](#env2depth-the-e4b-side-is-a-product-too-so-the-fix-is-a-constant-2026-08-22)
+- [§ENV2DEPTH2 — the compression was three points, and the fix is shipped (2026-08-22)](#env2depth2-the-compression-was-three-points-and-the-fix-is-shipped-2026-08-22)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -15699,3 +15700,67 @@ Our three programs sit at levels **15–25%**, the top of eosed's `k`:
 "say which level range you fitted at". And our programs run down to level 15,
 **below eosed's lowest measured level of 25** — so the value that suits our
 material is currently an extrapolation.
+
+## §ENV2DEPTH2 — the compression was three points, and the fix is shipped (2026-08-22)
+
+Jan asked whether the E4XT could be **clipping**, which would have made eosed's
+level-dependent `k` an artefact of overload rather than a machine property. The
+shape fitted: more level, more compression, monotonically.
+
+**It is not clipping, and eosed checked before running anything else:**
+
+    wide-open reference (the denominator for every corner)
+                      peak -12.75 dBFS,  zero samples at full scale
+    loudest capture   L100/A100  -12.57 dBFS,  zero at full scale
+    crest factor      3.9 - 4.5 across every level, no downward trend
+
+A level-dependent overload shows as falling crest at the loud end. It does not.
+
+**But the compression was not real either.** Jan also asked for more points than
+three, and at **12 levels / 132 captures** the drift disappears:
+
+    k/level x 1e4, levels 8 -> 100:
+      6.03  5.71  6.12  5.68  5.37  5.01  4.69  4.81  5.29  6.19  6.22  5.89
+
+Not monotonic — it dips near level 58 and rises at both ends. **Log-log fit
+`k ~ level^0.974`, against 1.000 for a pure product.** The original three levels
+(25, 50, 100) had landed on a descending stretch of scatter.
+
+**So the E4XT is a pure product after all**, and the levels our material uses
+(15/18/25) sit inside measured data — eosed's 8, 16 and 25 give 6.03 / 5.71 /
+6.12, flat within scatter. The 21.2-versus-17.9 dilemma dissolves; neither branch
+was reading a real level-dependence.
+
+### The fix, shipped
+
+    E4XT   octaves = 5.14e-4 * level% * amount%     (shifts <= 3 oct, n=106)
+    AKAI   octaves = 0.002837 * SUSTN2 * depth      (products 250..1980)
+
+Equating for a source at sustain S and amount A, **S and A both cancel**:
+
+    AKAI_ENV2_DEPTH_MAX = 5.14e-4 * 1e4 / (0.002837 * 99) = 18.30
+
+`models/common.py` now *derives* it from the two constants rather than storing a
+number, so a re-measurement of either law flows through and cannot drift from the
+arithmetic that justifies it. Two regression tests, both confirmed to fail with
+the old 50 restored.
+
+    prg   asked    before    after
+      0   1.12o     3.09o    1.12o
+      1   0.62o     1.69o    0.63o
+      2   0.50o     1.36o    0.51o
+
+**Not hardware-confirmed end to end.** Both laws are measured; the arithmetic
+joining them has not been checked by converting a bank and listening to it.
+
+### The lesson is not one better instruments reach
+
+Eight times today something looked like physics and was the apparatus. **This one
+looked like physics and was three points.** The captures were clean, the corners
+were real, the fit was good, and every check this project added today — verify
+the artefact as written, assert the parameter is live, gate on staleness, flip
+the input, check the axis — would have passed it.
+
+What caught it was **asking for more samples where a claim rested on very few**.
+That is neither a better instrument nor a better control, and it is the one move
+none of today's other lessons contains.

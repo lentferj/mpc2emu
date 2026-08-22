@@ -504,7 +504,35 @@ AKAI_ENV2_RELEASE = (0.001344, 0.09692, 40, 80)     # s, r2 0.99998
 #: envelope with no depth here modulates nothing -- which is why the reader
 #: must treat depth 0 as "no filter envelope" rather than as a full-depth one.
 AKAI_ENV2_DEPTH_OFFSET = 153
-AKAI_ENV2_DEPTH_MAX = 50
+#: FILTER-ENVELOPE DEPTH: DERIVED FROM TWO HARDWARE LAWS, NOT CHOSEN.
+#:
+#: This was 50 -- a guess with no measurement behind it, which delivered 2.8x
+#: the sweep the source asked for. Both halves were measured on 2026-08-22 and
+#: both machines turn out to multiply envelope LEVEL by depth, so the sustain
+#: cancels out of the mapping and one constant suffices:
+#:
+#:   E4XT   octaves = 5.14e-4 * level% * amount%     eosed §46
+#:          12 levels, 132 captures, shifts <= 3 oct (n=106), median residual
+#:          7.4%; log-log fit k ~ level^0.974 against 1.000 for a pure product.
+#:          An earlier reading of this as level-DEPENDENT (k falling 37% across
+#:          three levels) was withdrawn -- three points had landed on a
+#:          descending stretch of scatter. Asking for more levels is what caught
+#:          it; no instrument check would have, because the captures were clean
+#:          and the fit was good.
+#:   AKAI   octaves = 0.002837 * SUSTN2 * depth      s3ked §148
+#:          7 points spanning products 250..1980, i.e. 0.72 to 5.80 octaves,
+#:          sd 5.2% with no trend against product.
+#:
+#: Equating them for a source at sustain S and amount A:
+#:     5.14e-4 * 100S * 100A  ==  0.002837 * 99S * (A * DEPTH_MAX)
+#: S and A both cancel, leaving DEPTH_MAX = 5.14e-4 * 1e4 / (0.002837 * 99).
+#:
+#: NOT hardware-confirmed END TO END: the two laws are measured, the arithmetic
+#: joining them is not yet checked by converting a bank and listening to it.
+AKAI_ENV2_OCT_PER_UNIT = 0.002837   #: octaves per (SUSTN2 x depth), s3ked §148
+E4B_FENV_OCT_PER_UNIT  = 5.14e-4    #: octaves per (level% x amount%), eosed §46
+AKAI_ENV2_DEPTH_MAX = (E4B_FENV_OCT_PER_UNIT * 100.0 * 100.0
+                       / (AKAI_ENV2_OCT_PER_UNIT * 99.0))     #: ~18.3
 
 
 def akai_env2_stage_seconds(byte: int, distance: float, law) -> float:
