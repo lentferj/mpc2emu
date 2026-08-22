@@ -169,6 +169,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§ENVLEVELAGREE — two independent fits agree, and neither is §39's (2026-08-22)](#envlevelagree-two-independent-fits-agree-and-neither-is-39s-2026-08-22)
 - [§N79NOREVERSAL — the note-79 sign reversal does not reproduce (2026-08-22)](#n79noreversal-the-note-79-sign-reversal-does-not-reproduce-2026-08-22)
 - [§PRG8 — the one unexplained program was not anomalous either (2026-08-22, RESOLVED)](#prg8-the-one-unexplained-program-was-not-anomalous-either-2026-08-22-resolved)
+- [§ATKCAL2 — the on-disc sweep failed its own gate, and the design was mine (2026-08-22)](#atkcal2-the-on-disc-sweep-failed-its-own-gate-and-the-design-was-mine-2026-08-22)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -15447,3 +15448,68 @@ like-for-like figure and it reverses the sign of the difference.
 a machine.** The prior is now strong enough to act on: when a measurement says
 two things differ in a way nothing in the model predicts, check the metric, the
 window, the axis and the record *before* forming a hypothesis about hardware.
+
+## §ATKCAL2 — the on-disc sweep failed its own gate, and the design was mine (2026-08-22)
+
+§ATKCAL argued that putting the `ATTAK2` sweep on a disc would sidestep the live
+configuration that had failed nine times. s3ked cleared memory, loaded
+`TC11 ATKCAL` and verified it off the machine; the rig was free and I ran it.
+
+**It failed the gate I had set myself.** Programs 60 (`ATTAK2` 0) and 69
+(`ATTAK2` 72) are indistinguishable:
+
+    PC 60  lift 67.6 dB   HF start 119.4   peak 120.6   rise +1.2 dB
+    PC 69  lift 67.5 dB   HF start 119.4   peak 120.6   rise +1.2 dB
+
+Both sound loudly — 67 dB over their own pre-roll — so nothing is silent or
+out of range. **There is simply no filter movement, at either extreme.**
+
+I stopped rather than capturing the other eight, which is what the gate was for.
+
+### The source assignment is right, so that is not it
+
+    common[0x56] MODSFILT3 = 10 (env2)   on TC11 AND on TC1 program 0
+
+identical to the program that demonstrably *does* sweep (§ENV2CONTOUR). So the
+modulation source is assigned and the depth is written; the envelope is routed.
+
+### The design flaw is mine, and it is instructive
+
+The band analysis shows TC11 **bright and constant** — the filter is wide open
+for the whole note. Comparing the two envelopes:
+
+    TC11  ATTAK2 0-72   DECAY2 0    SUSTN2 99   depth 20
+    TC1   ATTAK2 40     DECAY2 73   SUSTN2 25   depth 43   <- this one sweeps
+
+I chose `SUSTN2 99` with `DECAY2 0` deliberately, to "attack to full and hold so
+no decay leg falls inside the measurement window". **That removed the observable.**
+By s3ked's law the steady-state shift is `0.00283 × SUSTN2 × depth`, so at
+`SUSTN2 99` the filter's resting position is already 5.6 octaves up — wide open —
+and the only movement left is the attack itself. TC1 sweeps because it *falls*
+from peak to a sustain of 25, and that fall is what §ENV2CONTOUR measured.
+
+### What this does and does not establish
+
+**It does not establish that `ATTAK2` is inert.** The attack at byte 0 completes
+far faster than a 20 ms analysis window, so PC 60 being flat is expected. PC 69
+being equally flat is the surprising half — our own law puts byte 72 at ~1.5 s,
+which a 600 ms window should show as a ramp.
+
+**So the honest statement is: on this configuration the filter shows no movement
+at either extreme, and I cannot separate "`ATTAK2` does nothing here" from "my
+design removed the thing that would have shown it".** That is a worse position
+than §ATKCAL claimed and it is the fault of the disc, not the machine.
+
+### What a third attempt would need
+
+Give the envelope somewhere to travel *at the sustain*, so the contour has shape
+rather than a single edge: `SUSTN2` low (TC1's 25 is a demonstrated working
+value), `DECAY2` fast, and `ATTAK2` swept. The attack then shows as *when* the
+peak arrives before the fall, which is a feature a contour can locate — rather
+than as a single rising edge against an already-open filter.
+
+**And the general lesson, which is the fourth version of it today:** the
+measurement design has to be checked against what the *instrument under test*
+actually does with the settings, not only against what the settings mean. I
+verified the source, the sample, the parameter's presence and its variation
+across the sweep — and still built a bank whose steady state hid the effect.
