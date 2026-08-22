@@ -14782,12 +14782,45 @@ matters most, because the artefact is about to be used as ground truth.
 Each failure was also **silent in the same way**: a file that builds cleanly,
 loads cleanly, and measures cleanly — while measuring nothing.
 
-### The rule
+### The rule, and a qualification eosed added
 
-**Build hardware test material through `convert.py`, not around it.** Where a
-generator must construct a `Bank` by hand, it must then read its own output back
-and assert that the parameter under test is live — which is now enforced in
-`gen_krz_cutoffcal.py` and is why the rebuilt disc could be trusted.
+**Build hardware test material through the project's own writers, not around
+them.** Where a generator must construct a `Bank` by hand, it must then read its
+own output back and assert that the parameter under test is live — which is now
+enforced in `gen_krz_cutoffcal.py` and is why the rebuilt disc could be trusted.
+
+**But "through `convert.py`" is too strong, and eosed found the case that breaks
+it.** `convert.py --iso` re-encodes the bank: parse → model → write, so the E4B
+inside the image is *not* the file that went in. For an artefact whose design was
+verified against a specific file — as their root-matched zone layout was — that
+puts a writer between the verification and the disc.
+
+`writers/iso_builder.build_iso` embeds the original bytes untouched, and for that
+case it is the right tool. Compared against `convert.py`'s image on the same
+bank: identical size, **eleven differing bytes**, all in the volume/bank name
+fields, in blocks 11 and 136. No layout divergence and no `brem` difference — so
+the container is the same either way and the choice is purely about whether the
+payload is re-encoded.
+
+So the rule is really about **which layer you verified**:
+
+> Verify the artefact **as written**, not the input you fed in. If the payload is
+> re-encoded on the way to the disc, the verification has to happen after the
+> re-encode; if it must not be re-encoded, use the writer that embeds it
+> verbatim.
+
+### The fourth instance, and the sharpest statement of the class
+
+eosed's own account of their ISO, which is the best one-line form of all four:
+
+> I verified the bank survived my ISO round trip byte-for-byte, inside a
+> container the sampler cannot read. **A clean measurement of the wrong layer.**
+
+That is what unites all four: TC8 measured audio that was really a resampling
+difference, CUTCAL measured a filter that was not in the chain, the ISO verified
+a payload inside an unreadable container, and our own §ENV2RESULT measured band
+ratios in a band that held nothing. Each was rigorous about something adjacent to
+the question.
 
 Corollary, from §CUTCALDEAD: verifying the *source* harder does not help. Three
 noise constructions were measured and two rejected for that disc, and none of it
