@@ -86,7 +86,8 @@ import struct
 from typing import List, Tuple
 
 from models.common import (Bank, Preset, SampleData, VoiceLayer, LoopType,
-                          KRZ_ENV_TIME_GRID, KRZ_RELEASE_FACTOR
+                          KRZ_ENV_TIME_GRID, KRZ_RELEASE_FACTOR,
+                          E4B_CUTOFF_MIN_HZ, E4B_CUTOFF_MAX_HZ
 )
 from processors.loop_renderer import bake_alternating_loop
 # The K2000 and the E4B both store stereo PCM planar (whole left channel, then
@@ -826,9 +827,47 @@ def _fill_env(b: bytearray, env) -> None:
     # byte 14 (loop/flag) left as the template set it
 
 
+#: The K2000 cutoff byte is signed semitones on the standard pitch scale,
+#: Hz = 440 * 2**((b - 9) / 12) -- so byte 9 is A4. `krz_cutoff_byte_to_hz` in
+#: models.common is that law, and the KRZ READER already decodes through it.
+_KRZ_CUT_BYTE_MIN, _KRZ_CUT_BYTE_MAX = -48, 79
+
+
 def _cutoff_byte(cutoff01: float) -> int:
-    # filter_cutoff 0..1 -> K2000 semitone byte -48 (16 Hz) .. +79 (25088 Hz)
-    return max(-48, min(79, round(-48 + cutoff01 * 127))) & 0xFF
+    """filter_cutoff 0..1 -> K2000 signed-semitone byte, VIA HZ.
+
+    **This used to stretch the position linearly across the byte range**
+    (`-48 + cutoff01 * 127`) and it put the filter in the wrong place on every
+    KRZ we wrote. Both scales are logarithmic in frequency, so the shape was
+    right, but the endpoints are not the same: the model's position spans
+    57 Hz-20 kHz (8.45 octaves) and the byte range spans 16 Hz-25088 Hz
+    (10.61 octaves). Stretching one onto the other misplaces every interior
+    value -- measured against what the model asked for:
+
+        position 0.0   57 Hz wanted,    16 Hz written   -1.80 octaves
+        position 0.3  331 Hz wanted,   147 Hz written   -1.17 octaves
+        position 0.5 1068 Hz wanted,   659 Hz written   -0.70 octaves
+        position 0.8 6194 Hz wanted,  5920 Hz written   -0.07 octaves
+
+    worst exactly where filtered material lives. For scale, the AKAI writer's
+    equivalent mapping was checked against hardware on 2026-08-22 and came back
+    within 0.05 octaves.
+
+    Going through Hz makes this the exact inverse of `krz_cutoff_byte_to_hz`,
+    which the reader already uses -- `docs/KRZ_FORMAT.md` recorded the two
+    curves disagreeing and named this fix as "a follow-up (not yet done)".
+
+    **What is fixed and what is not.** The position->Hz half is definitional and
+    is now right. The Hz->byte half rests on the documented semitone law, which
+    is NOT yet hardware-confirmed: CUTCAL (§KRZCUTCAL) measures it. If that
+    measurement disagrees, the correction belongs in `krz_cutoff_byte_to_hz`,
+    where reader and writer will both pick it up, rather than here.
+    """
+    hz = E4B_CUTOFF_MIN_HZ * (E4B_CUTOFF_MAX_HZ / E4B_CUTOFF_MIN_HZ) ** max(
+        0.0, min(1.0, cutoff01))
+    semitones = 9.0 + 12.0 * math.log2(hz / 440.0)
+    return max(_KRZ_CUT_BYTE_MIN,
+               min(_KRZ_CUT_BYTE_MAX, round(semitones))) & 0xFF
 
 
 def _reson_byte(reson01: float) -> int:
