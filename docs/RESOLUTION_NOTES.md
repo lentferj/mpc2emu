@@ -15664,3 +15664,38 @@ trade a 2.8× error at the top for a different one.
 measurement behind it at all, so 17.8 would be an improvement on the merits — but
 "replace a guess with a first-order figure whose author asked you not to
 hard-code it" is exactly the kind of half-step that today has punished.
+
+### CORRECTION — the AKAI is a pure product; the E4XT is not (2026-08-22)
+
+s3ked answered the compression question from saved data. **Their law is flat
+across an eight-fold product range**, not just the linear part:
+
+    SUSTN2 x depth   250 .. 1980      i.e. 0.72 to 5.80 octaves
+    k                mean 0.002837, sd 5.2%, no trend with product
+                     (largest value at the TOP of the range)
+
+So the AKAI side does **not** compress where our material sits, and their limit
+above depth ~20 is *their instrument running out of band*, not the machine bending
+— a distinction §146 cost them a day to learn, and one worth keeping separate
+from eosed's knee.
+
+**But that makes the asymmetry the important finding, and it corrects what this
+section said above.** eosed's `k` falls **5.95 → 4.89 → 4.34** with *level*, 37%
+across levels 25–100. That is not a pure product: `octaves = k(level) · level ·
+amount`. **So the sustain does NOT cancel exactly**, and a single constant is
+correct only for one level range.
+
+Our three programs sit at levels **15–25%**, the top of eosed's `k`:
+
+    prg  level%  amount%   asked   delivered   ratio
+      0      25       87   1.29o       3.05o   2.36x
+      1      15       81   0.72o       1.71o   2.36x
+      2      18       54   0.58o       1.36o   2.36x
+
+    -> AKAI_ENV2_DEPTH_MAX = 21.2  using k at our material's level
+    -> AKAI_ENV2_DEPTH_MAX = 17.9  using eosed's overall fitted 5e-4
+
+**The choice of which `k` moves the answer by 19%**, which is the whole content of
+"say which level range you fitted at". And our programs run down to level 15,
+**below eosed's lowest measured level of 25** — so the value that suits our
+material is currently an extrapolation.
