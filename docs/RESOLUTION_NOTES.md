@@ -181,6 +181,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§MATRIXRESULT — the conversion matrix ran, and all three findings were the instrument (2026-08-23)](#matrixresult-the-conversion-matrix-ran-and-all-three-findings-were-the-instrument-2026-08-23)
 - [§AKAIOBJCAPS — the AKAI service manual specifies 255 samples / 254 programs, and the splitter allows 509 of each (2026-08-23)](#akaiobjcaps-the-akai-service-manual-specifies-255-samples-254-programs-and-the-splitter-allows-509-of-each-2026-08-23)
 - [§IB304FDOC — what the service manual says about the second filter board (2026-08-23)](#ib304fdoc-what-the-service-manual-says-about-the-second-filter-board-2026-08-23)
+- [§AKAITUNEREAD — the AKAI reader still divides zone tune by 16; the writer was fixed on 2026-08-11 and the reader was not (2026-08-23)](#akaituneread-the-akai-reader-still-divides-zone-tune-by-16-the-writer-was-fixed-on-2026-08-11-and-the-reader-was-not-2026-08-23)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -16467,3 +16468,106 @@ does not re-raise it as a contradiction.
 mains EMI filter** — fuses, line-filter coils, 275 VAC X-capacitors. It has
 nothing to do with audio. It is the first hit for `filter` in all three lists,
 and the audio filter LSI is in the *main* board section.
+
+## §AKAITUNEREAD — the AKAI reader still divides zone tune by 16; the writer was fixed on 2026-08-11 and the reader was not (2026-08-23)
+
+Found from the audio, during the listening audit, which is what the audit was
+for. The matrix flagged one octave disagreement in 56 conversions; it survived
+an independent spectral check; tracing it to the file settled it in four steps
+and it is not a one-patch problem.
+
+### What was measured
+
+The capture: an AKAI electric-piano program sounds a full octave above the
+written note on all four probe notes, with **no energy at the written
+fundamental** and a clean harmonic series an octave up. Its E4B conversion sits
+at the written pitch and carries two partial series about 98 cents apart where
+the source has one.
+
+The file says why. That program is a two-layer octave stack — three zones at
+unison, three at `VTUNO = 3072`. AKAI keygroup and zone tune are **1/256
+semitone**, so 3072 is exactly +12 semitones.
+
+Tracing 3072 through our own code, on the real files:
+
+    AKAI zone VTUNO                 3072   = +1200 cents
+    model after parse_akai_image    fine_tune = 192, coarse_tune = 0
+    E4B we wrote                    fine_tune =  98, coarse_tune = 0
+
+An octave arrives as a semitone. Not a detune — a different chord.
+
+### The defect, and it is two defects on one line
+
+`parsers/akai_s3000_parser.py:626`
+
+    fine_tune=(kg['tune'] + z['tune']) // 16,
+
+1. **Wrong factor.** Cents are `units * 100 / 256`, i.e. `/ 2.56`. Dividing by
+   16 yields **0.16x the true value** — every AKAI-sourced detune is written at
+   16% of what the source asked for.
+2. **No coarse/fine split.** `ZoneMapping.fine_tune` is documented "Cents,
+   -100..+100" and `coarse_tune` holds semitones. The reader never populates
+   `coarse_tune`, so anything at or beyond a semitone cannot be represented and
+   saturates downstream regardless of the factor.
+
+### The part that makes this worth reading twice
+
+**The writer already knows.** `writers/akai_s3000_writer._akai_tune_units`
+opens with:
+
+    The factor is 2.56, NOT 256 and NOT 16. Both of those were in this file
+    until 2026-08-11: the sample path multiplied by 256 (treating cents as
+    semitones, 100x out) and the zone path by 16 (6.25x out).
+
+The write half was corrected twelve days ago and the read half was not. So the
+two are **not inverses**, and the one test shape that would have caught it —
+an AKAI -> AKAI round trip — does not exist. Every other AKAI test compares us
+against ourselves on the write side only.
+
+That is the §KRZENVDEPTH2 lesson with the sign flipped. There, reader and
+writer shared an error and were exact inverses, so 433 tests saw nothing:
+self-consistency is not correctness. Here they *disagree* and still nothing saw
+it, because no test puts them back to back. Both failures are invisible to a
+suite that never closes the loop.
+
+The same comment also names the precedent: VinSamLib's 16x tuning error came
+from labelling keygroup tune as 1/16 semitone "by inheriting a neighbour's
+unit". The wrong unit was documented, in this repository, as someone else's
+mistake, on the line that fixes the writer — while the reader went on making it.
+
+### How much material this reaches
+
+Every AKAI zone with a tune value, scanned with our own reader across the
+local ISO library:
+
+    programs scanned          22343
+      with any zone tuning     9423   42.2%
+    zones scanned            258992
+      with nonzero tuning     85528   33.0%
+      at or beyond 1 semitone 29514   11.4% of all zones
+      exactly 12 semitones    14124
+
+**14124 zones are exact octave layers** — the largest non-zero bucket by a
+factor of four, because octave stacking is a standard AKAI patch idiom. Every
+one of them currently converts to about one semitone. The remaining 56014
+sub-semitone zones convert at 16% of their intended detune, which is inaudible
+per zone and is why this survived: the common case degrades quietly and only
+the octave layers change the music.
+
+### The fix, not applied yet and deliberately
+
+    cents = round((kg['tune'] + z['tune']) * 100 / 256)
+    coarse, fine = divmod(cents + 6000, 100)      # or the model's own splitter
+    coarse_tune = coarse - 60
+    fine_tune = fine
+
+**Not applied during the listening audit.** Jan is working through material
+built with the current reader; changing it mid-session would invalidate what he
+is comparing and cost the session. It is also not a blind edit — it moves the
+pitch of 42% of AKAI-sourced programs, so it wants a regression test that fails
+with `// 16` restored, and the E4B/KRZ writers should be checked for their own
+clamps once values beyond +/-100 cents actually reach them.
+
+Worth doing at the same time: an **AKAI -> AKAI round-trip test**. It is the
+shape of test that would have caught this on the day the writer was fixed, and
+it costs nothing to keep.
