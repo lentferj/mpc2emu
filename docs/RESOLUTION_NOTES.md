@@ -16875,20 +16875,21 @@ conclusion from sound reasoning — reinforcement genuinely cannot suppress 3f b
 70 dB, and 3f genuinely is 70 dB down in that file, and the layer is
 nonetheless audible in the room.
 
-The control makes it worse rather than better. `split patch 6` is SPACE's unison
-layer alone, on the same samples, captured in the same pass:
+The control makes it worse rather than better. Another program in the same
+volume is the octave-stack's unison layer alone, on the same samples, captured
+in the same pass:
 
-    split patch 6    note 36   f0  -6.6 dB   2f 0.0   3f  -8.1
-    split patch 2    note 36   f0 -65.4 dB   2f 0.0   3f -69.8
+    unison-only program   note 36   f0  -6.6 dB   2f 0.0   3f  -8.1
+    the octave stack      note 36   f0 -65.4 dB   2f 0.0   3f -69.8
 
 Same rig, same session, same samples, and a 59 dB difference in the
 fundamental. So it is not a high-pass in the chain, not the sample, and not the
-analysis window — all three would have hit `split patch 6` too.
+analysis window — all three would have hit the unison-only program too.
 
 Checked and excluded: individual-output routing (all six programs carry the
 same `p[0x16] = 0x08`), and keygroup byte 0x2a, which turned out to be an index
-rather than a routing field (`split patch 3` runs 0..6 across its seven
-keygroups).
+rather than a routing field (a seven-keygroup program in the same volume runs
+0..6 across its keygroups).
 
 **This is now a harness defect, not a converter one, and it is downgraded
 accordingly.** Nothing about the conversion findings rests on it. What it does
@@ -16995,11 +16996,11 @@ decayed to ~0 and only the octave layer is still sounding. The measurement was
 correct and the inference from it was wrong — "absent from this window" was read
 as "absent".
 
-The `split patch 6` control that seemed to rule this out does not, on a closer look
+The unison-only control that seemed to rule this out does not, on a closer look
 at what was being compared. Those figures are ratios **within each file**, not
-absolute levels. `split patch 6` has no sustaining second layer, so its decayed
+absolute levels. The unison-only program has no sustaining second layer, so its decayed
 unison is still the loudest thing in its own window and its f0/2f ratio is
-normal. In `split patch 2` the sustaining octave layer dominates the same window and
+normal. In the octave stack the sustaining octave layer dominates the same window and
 pushes the ratio 59 dB the other way. Both readings are right; only the
 comparison between them was invalid.
 
