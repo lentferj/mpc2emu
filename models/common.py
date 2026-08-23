@@ -764,6 +764,37 @@ def env_span_seconds_to_rate(span_db: float, seconds: float) -> int:
     return max(0, min(127, round(b)))
 
 
+def env_rate_to_span_seconds(span_db: float, rate_byte: int) -> float:
+    """Seconds a rate byte takes to travel `span_db`. Inverse of
+    `env_span_seconds_to_rate`.
+
+    **The reader had no such inverse until 2026-08-24** (§E4BENVSPAN). The
+    writer has been span-aware since the calibration that produced
+    `env_span_seconds_to_rate`, and its docstring above says exactly why: a
+    time alone is only correct at the span the calibration happened to use.
+    The parser meanwhile decoded every stage with `env_rate_to_seconds`, which
+    is that time-alone law — so writer and parser were not inverses, and a
+    round trip through our own code turned 5.50 s and 3.86 s per voice into
+    3.8518 s on every voice.
+
+    The error has the same shape and size as the one the writer was fixed for:
+    1.5x at sustain byte 80 and 15x at byte 122, worst exactly where real
+    presets live. It reached every E4B-sourced conversion, not one path.
+
+    A rate byte of 0 is the deliberate "instant" encoding rather than a point
+    on the curve, and stays 0 seconds.
+    """
+    if rate_byte <= 0 or span_db <= 0.0:
+        return 0.0
+    return span_db / env_rate_byte_to_db_per_s(rate_byte)
+
+
+#: Peak-to-silence distance: the level law's own value at byte 0, so both
+#: sides use one notion of "silence" rather than two. Same definition the
+#: writer uses for the release complement.
+ENV_FULL_SPAN_DB = env_level_byte_to_db(0)
+
+
 def env_seconds_to_rate(seconds: float) -> int:
     """Envelope time (seconds) → EOS rate byte (0 = instant, higher = slower)."""
     if seconds <= 0.0:

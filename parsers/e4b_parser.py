@@ -40,6 +40,8 @@ from models.common import (Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            env_sustain_from_byte,
                            LoopType, Envelope, lfo_rate_byte_to_hz,
                            env_rate_to_seconds, env_byte_to_level,
+                           env_rate_to_span_seconds, env_level_byte_to_db,
+                           ENV_FULL_SPAN_DB,
                            cord_byte_to_amount,
                            e4xt_cutoff_byte_to_position, e4xt_byte_to_volume_db,
                            e4xt_byte_to_pan)
@@ -561,9 +563,25 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     def _stage2_seconds(rate_byte: int) -> float:
         return 0.0 if rate_byte == 0 else _fenv_rate_inv(rate_byte)
 
+    # SPAN. Decay and release are RATES, so the seconds a byte represents
+    # depend on how far the stage travels -- and the distance is set by the
+    # sustain LEVEL, which is why it has to be decoded first. The writer has
+    # been span-aware since `env_span_seconds_to_rate` was calibrated; this
+    # decoded every stage with the time-alone law until 2026-08-24, so the two
+    # were not inverses (§E4BENVSPAN). The error is 1.5x at sustain byte 80 and
+    # 15x at byte 122 -- worst exactly where real presets live -- and it
+    # reached every E4B-sourced conversion.
+    #
+    # ATTACK IS DELIBERATELY NOT SPAN-SCALED: it climbs the full range by
+    # definition, and the writer encodes it with the same time-alone law, so
+    # the two already agree there.
+    _decay_span = env_level_byte_to_db(pzt[7])
+    _rel_span   = max(0.0, ENV_FULL_SPAN_DB - _decay_span)
     env_attack  = _fenv_rate_inv(pzt[0]) + _stage2_seconds(pzt[2])
-    env_decay   = _fenv_rate_inv(pzt[4]) + _stage2_seconds(pzt[6])
-    env_release = _fenv_rate_inv(pzt[8]) + _stage2_seconds(pzt[10])
+    env_decay   = (env_rate_to_span_seconds(_decay_span, pzt[4])
+                   + _stage2_seconds(pzt[6]))
+    env_release = (env_rate_to_span_seconds(_rel_span, pzt[8])
+                   + _stage2_seconds(pzt[10]))
     # The amp-envelope sustain byte is dB-law on hardware (§E4BLEVEL), and
     # e4b_writer pre-compensates for that with env_sustain_to_byte. Reading it
     # back through the LINEAR level inverse was not an inverse: a bank written
@@ -585,9 +603,13 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
         # Read the env SHAPE even when amount==0 (§O: e4b_writer always writes the
         # filter-env shape), so the source curve survives an E4B→E4B repack.
         # Same 2-stage-pair combination as the amp envelope above.
+        _fdecay_span = env_level_byte_to_db(fenv_raw[7])
+        _frel_span   = max(0.0, ENV_FULL_SPAN_DB - _fdecay_span)
         filter_env_attack  = _fenv_rate_inv(fenv_raw[0]) + _stage2_seconds(fenv_raw[2])
-        filter_env_decay   = _fenv_rate_inv(fenv_raw[4]) + _stage2_seconds(fenv_raw[6])
-        filter_env_release = _fenv_rate_inv(fenv_raw[8]) + _stage2_seconds(fenv_raw[10])
+        filter_env_decay   = (env_rate_to_span_seconds(_fdecay_span, fenv_raw[4])
+                              + _stage2_seconds(fenv_raw[6]))
+        filter_env_release = (env_rate_to_span_seconds(_frel_span, fenv_raw[8])
+                              + _stage2_seconds(fenv_raw[10]))
         # Decay2 level byte = sustain (levels are full-scale).
         filter_env_sustain = max(0.0, min(1.0, _fenv_level_inv(fenv_raw[7])))
 
