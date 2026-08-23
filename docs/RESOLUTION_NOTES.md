@@ -16592,6 +16592,20 @@ hardware, which is this project's standard for "tested". It also retires the
 strongest form of §AKAICAPTUREGAP's first candidate: the live machine behaves
 as the capture did, so we were not analysing the wrong bytes.
 
+### Confirmed from both panels, and Jan named the fix
+
+On the AKAI: **every second keygroup displays `sem.cnt +12`** — the machine's
+own reading of the 3072, in semitones, exactly as the arithmetic says.
+
+On the E4XT: every second voice displays `ftune +63`.
+
+Jan's conclusion from those two screens was "you probably need to use ctune on
+EMU, not ftune", and that is right. It is the half of this defect that is not
+about the scale factor at all: **+12 semitones cannot be expressed in a
+fine-tune field**, whatever factor feeds it, because that field stops one cent
+short of a semitone. The reader has to split into `coarse_tune` and
+`fine_tune`, and today it never touches `coarse_tune`.
+
 ### The last link, read off the E4XT panel by Jan
 
 He looked at the converted voices on the machine: **every second voice shows
@@ -16779,10 +16793,34 @@ alone bury it by 60-70 dB. The six zones are six separate keygroups with
 overlapping key ranges rather than velocity zones within one keygroup, so
 normal AKAI behaviour is for all of them to sound together.
 
-Something is preventing the unison layer from sounding on this machine, and
-neither the header fields nor the level fields explain it. Next step is a
-listening question rather than a measurement: **does the source sound like one
-pitch or like two an octave apart?** One pitch means the unison layer is truly
-absent and there is a second defect or a machine behaviour to find. Two means
-the analysis window is dominated by the octave partials and the 65 dB figure is
-about the measurement, not the sound.
+**ANSWERED, and the answer is that the CAPTURE is wrong, not the machine.**
+Jan played it: *"you can clearly hear two different sounds one octave apart."*
+Both layers sound. The machine is doing what the file says.
+
+So the 57-72 dB figures are a property of the recording, not of the sound, and
+the odd/even argument that refuted s3ked's explanation (a) reached a false
+conclusion from sound reasoning — reinforcement genuinely cannot suppress 3f by
+70 dB, and 3f genuinely is 70 dB down in that file, and the layer is
+nonetheless audible in the room.
+
+The control makes it worse rather than better. `split patch 6` is SPACE's unison
+layer alone, on the same samples, captured in the same pass:
+
+    split patch 6    note 36   f0  -6.6 dB   2f 0.0   3f  -8.1
+    split patch 2    note 36   f0 -65.4 dB   2f 0.0   3f -69.8
+
+Same rig, same session, same samples, and a 59 dB difference in the
+fundamental. So it is not a high-pass in the chain, not the sample, and not the
+analysis window — all three would have hit `split patch 6` too.
+
+Checked and excluded: individual-output routing (all six programs carry the
+same `p[0x16] = 0x08`), and keygroup byte 0x2a, which turned out to be an index
+rather than a routing field (`split patch 3` runs 0..6 across its seven
+keygroups).
+
+**This is now a harness defect, not a converter one, and it is downgraded
+accordingly.** Nothing about the conversion findings rests on it. What it does
+mean is that these captures cannot be trusted for level or spectrum on a
+multi-layer program until it is understood — which is the fifth measurement
+fault this bench has produced in two days, and the second where a clean
+measurement supported a false conclusion.
