@@ -637,6 +637,71 @@ def akai_env_bytes(env) -> tuple:
     return a, d, sus, r
 
 
+def akai_env_from_bytes(atk: int, dec: int, sus: int, rel: int):
+    """(ATTAK1, DECAY1, SUSTN1, RELSE1) -> Envelope. Inverse of `akai_env_bytes`.
+
+    **The reader had no inverse at all until 2026-08-23** — it never assigned
+    `amp_env`, so every AKAI-sourced voice carried the model default and the
+    two distinct envelopes of a layered program came out identical. eosed read
+    all six voices of one off the E4XT and found them byte-identical where the
+    source says they must differ (§AKAIAMPENV).
+
+    It lives here rather than in the parser so the law has ONE home: three of
+    tonight's seven defects were a writer law that had been measured and wired
+    while the corresponding read path was left as it was, and a second copy of
+    the arithmetic is how that happens. The parser imports it inside the
+    function, because this module imports the parser at module scope and the
+    other direction would be circular.
+
+    Sustain is recovered first, for the same reason `akai_env_bytes` computes
+    it first: decay and release are RATES, so the seconds they represent
+    depend on the distance travelled, and sustain sets that distance.
+    """
+    from models.common import Envelope
+    sus_frac = _akai_sustain_fraction(sus)
+    return Envelope(
+        attack=_ak_attack_seconds(atk),
+        decay=_ak_rate_seconds(dec, _AK_SUSTAIN_DB_PER_UNIT * (99 - sus),
+                               _AK_DECAY1_RATE),
+        sustain=sus_frac,
+        release=_ak_rate_seconds(rel, _AK_SUSTAIN_DB_PER_UNIT * sus,
+                                 _AK_RELSE1_RATE))
+
+
+def _ak_attack_seconds(byte: int) -> float:
+    """ATTAK1 -> seconds. Exact inverse of `akai_attack_byte`'s law."""
+    a, b, lo, hi = _AK_ATTAK1_TIME
+    return a * math.exp(b * max(lo, min(hi, byte)))
+
+
+def _ak_rate_seconds(byte: int, span_db: float, law) -> float:
+    """A rate byte and the distance it must cover -> seconds.
+
+    `rate = a * exp(b * value)` and `time = span / rate`, which is the same
+    relation `_rate_law_value` inverts in the other direction.
+    """
+    a, b, lo, hi = law
+    rate = a * math.exp(b * max(lo, min(hi, byte)))
+    return max(0.0, span_db) / rate if rate > 0 else 0.0
+
+
+def _akai_sustain_fraction(byte: int) -> float:
+    """SUSTN1 -> linear amplitude fraction. Inverse of `akai_sustain_byte`.
+
+    Bisected rather than solved: `akai_sustain_byte` rounds, so several
+    fractions map to one byte and the honest inverse is the midpoint of the
+    band that produced it.
+    """
+    lo, hi = 0.0, 1.0
+    for _ in range(40):
+        mid = (lo + hi) / 2.0
+        if akai_sustain_byte(mid) < byte:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2.0
+
+
 def akai_attack_byte(seconds: float) -> int:
     """Amplitude attack time in seconds -> ATTAK1.
 

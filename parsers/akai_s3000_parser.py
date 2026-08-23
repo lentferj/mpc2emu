@@ -603,6 +603,17 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
         # conversion we ever made had a filter twice as steep as its source.
         voice.filter_type = 2          # XPM "Low 2": 2-pole, 12 dB/oct
         voice.filter_cutoff = _cutoff_of(kg['filter_freq'], prog['is_s3000'])
+        # AMPLITUDE ENVELOPE. Never assigned until 2026-08-23, so every
+        # AKAI-sourced voice carried VoiceLayer's default and the two distinct
+        # envelopes of a layered program came out identical -- eosed read all
+        # six voices of one off the E4XT and found them byte-identical where
+        # the source says they must differ (§AKAIAMPENV). The inverse lives
+        # beside the forward law in the writer so there is one home for it;
+        # the import is function-local because that module imports this one.
+        from writers.akai_s3000_writer import akai_env_from_bytes
+        voice.amp_env = akai_env_from_bytes(
+            kg['amp_attack'], kg['amp_decay'], kg['amp_sustain'],
+            kg['amp_release'])
         _fe, _amt = _filter_env_of(kg.get('env2'), kg.get('env2_depth', 0))
         if _fe is not None:
             voice.filter_env = _fe
