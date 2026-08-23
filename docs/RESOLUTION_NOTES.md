@@ -16921,11 +16921,55 @@ Inverting our own calibrated writer laws, what those bytes actually mean:
       unison   attack 0.0003 s   sustain ~0     -- an instant percussive click
       octave   attack 0.0154 s   release 1.15 s -- the sustaining body
 
-### Why it explains all three symptoms, including the octave
+### CORRECTED: the attack is not the fault. Jan was right and I was wrong.
 
-**"Metallic klick missing" and "too much attack"** are direct: the unison
-layer's attack should be **0.3 ms** and we give it **31 ms**, a hundredfold.
-That transient IS the metallic click.
+I first wrote that the unison layer's 0.3 ms attack became 31 ms. Jan pushed
+back — "the on-LCD numbers don't really support that, all pretty short" — and
+he was correct.
+
+`env_seconds_to_rate` clamps every attack at or below 31 ms to **rate 0**, and
+rate 0 is instant. So our E4B asks for an instant attack, which is what the
+source wants. The 31 ms figure was **my own parser's readback**, not the file:
+`env_rate_to_seconds(0)` returns 0.0310 s because the fit is evaluated at rate
+0, one step below the range it was measured over (the calibration starts at
+rate 8), and the constant's own comment says **"rate 0 = instant"** while the
+formula it sits above returns 31 ms. I read a tool's output as a fact about the
+file. Sixth instrument error on this bench in two days, and the first that was
+my own tool misreporting my own data.
+
+eosed confirmed it from the device: attack rate byte **0** on all six voices.
+
+### What the fault actually is: the envelope never decays
+
+eosed read all six voices over SysEx. The amplitude envelope is **byte-identical
+across all six** — the source says voices 0 and 1 must differ and they do not
+differ from each other or from anybody. And the shape is the point:
+
+    VENV  SEG0 0/100   SEG1 0/100   SEG2 87/96   SEG3 0/96   SEG4 38/0
+
+Amplitude sustain reads **96%** on the machine. The one slow stage, SEG2 at rate
+byte 87, travels from level 100 to level 96 — **four percentage points** — so
+the longest stage in the envelope is also inaudible. The voice jumps to full,
+sits at 96% until note-off, and releases.
+
+That is an organ envelope. The AKAI unison layer is the opposite: sustain byte
+**6 of 99**, a percussive decay to nothing. **That** is the missing metallic
+click — not a softened attack but a click that never stops, and it is also why
+the perceived pitch drops an octave, because a layer that should be a transient
+instead sustains and carries the note.
+
+(The 96% against the 0.821 our file carries is not a third discrepancy: the
+amp-envelope level byte is dB-compensated per §E4BLEVEL, ~1 dB per point below
+100%, so an amplitude fraction of 0.82 is about -1.7 dB and lands near 96% on
+the display. Reader and machine agree.)
+
+### Narrower than "envelopes are dropped": ENV1 only
+
+eosed's read settles the scope, and it matches the source line exactly. The
+FILTER envelope **does** carry through — FENV sustain reads 15 on the unison
+voices and 40 on the octave voices, from the source's own ENV2. It is
+specifically **ENV1 -> amplitude** that is lost, because
+`build_preset_from_program` assigns `filter_env` and never `amp_env`.
 
 **"Still one octave low overall" is the interesting one, and it is not a pitch
 error at all.** The source's unison layer decays to nothing (sustain byte 6 of
