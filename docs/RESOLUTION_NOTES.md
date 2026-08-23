@@ -185,6 +185,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIZONELOUD — the AKAI reader drops per-zone loudness, and writes +1 dB where it means unity (2026-08-23)](#akaizoneloud-the-akai-reader-drops-per-zone-loudness-and-writes-1-db-where-it-means-unity-2026-08-23)
 - [§AKAICAPTUREGAP — the capture that started it does not match the file, and that is unresolved (2026-08-23)](#akaicapturegap-the-capture-that-started-it-does-not-match-the-file-and-that-is-unresolved-2026-08-23)
 - [§AKAIAMPENV — the AKAI reader drops the amplitude envelope too, and that explains everything left over (2026-08-23)](#akaiampenv-the-akai-reader-drops-the-amplitude-envelope-too-and-that-explains-everything-left-over-2026-08-23)
+- [§AKAIENV2FLOOR — a zero attack converts to 66 ms, and that is where the click went (2026-08-23)](#akaienv2floor-a-zero-attack-converts-to-66-ms-and-that-is-where-the-click-went-2026-08-23)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -17057,3 +17058,85 @@ depend on the sustain distance, so they invert against the same
 
 Not applied mid-audit, same as the other two. All three want one commit, one
 regression test each, and the round-trip test.
+
+## §AKAIENV2FLOOR — a zero attack converts to 66 ms, and that is where the click went (2026-08-23)
+
+The fifth defect of the evening and the one that mattered most audibly. Found by
+disagreeing with a peer's prediction and being right for a checkable reason.
+
+### What was wrong
+
+The AKAI keygroups carry `ENV2 attack byte 0` — instant. Our own law returns
+
+    akai_env2_stage_seconds(0, 99, AKAI_ENV2_ATTACK)  ->  0.0661 s
+
+so the E4B is written with a filter envelope that takes **66 ms** to open, from
+a base corner of 65 Hz. A metallic click on an electric piano is over in ten to
+twenty milliseconds. Our filter spent that entire window closed and opened
+afterwards, removing exactly the transient and nothing else.
+
+### Measured on hardware
+
+eosed set `FENV Atk1 rate 13 -> 0` as a single variable, with a 30-parameter
+per-voice diff confirming nothing else moved. First 10 ms after onset, after
+minus before, by band:
+
+    note   200-400  400-800   800-1k    1k-3k    3k-6k   6k-12k
+      50      +3.0    +12.5    +14.1    +25.1    +35.5    +29.7
+      65     +11.3     +3.0     +8.5     +3.7    +16.8    +24.5
+      76      -3.5    +23.0    +22.7    +19.7    +21.4    +47.5
+
+Up to **+51 dB** at 6-12 kHz over the first 20 ms. The effect grows with
+frequency, which is what a filter opening looks like and is not what any level
+change looks like.
+
+### Why two earlier tests came back null, and why that was not a dead end
+
+Filter type (4-pole -> 2-pole) and filter-envelope decay (halved) both measured
+~1 dB. eosed localised the corner at 1.5-2.7 kHz and concluded the filter was
+passing everything, which was correct for the window measured and correct as an
+explanation of those two nulls: **after** the corner is up, slope and closing
+speed genuinely do not matter for this material.
+
+The inference that failed was "the corner starts high". It does not — it takes
+66 ms to get there. The measurement had used a 0-150 ms onset band, which
+straddles a 66 ms ramp and buries a 15 ms event under an order of magnitude of
+everything else. The window, not the number.
+
+eosed then re-ran at 10/20/50 ms with the onset **found in the audio** rather
+than reconstructed from the note-on, explicitly because a few milliseconds of
+scheduling jitter would put a 10 ms window off the event — the same trap that
+produced the withdrawn findings on 2026-08-22.
+
+### One bug with three faces
+
+This is the third law in this codebase found tonight returning a floor of tens
+of milliseconds where the source asks for zero:
+
+  * `env_rate_to_seconds(0)` = 31 ms, against the constant's own comment saying
+    "rate 0 = instant" (a parser reporting artefact; the writer clamps correctly)
+  * `akai_env2_stage_seconds(0, ...)` = 66 ms, which reaches the file and the
+    hardware — this one
+  * and the same shape is the leading suspect for the ~1.9x on VENV times and
+    the ~1.9x on VENV times, which is worst at the fast end
+
+**WITHDRAWN from that list the same evening: the "~2.1x on cutoff".** eosed had
+quoted the E4XT panel's printed Hz as if it were the corner. Measured against a
+noise source, byte 4 on the 2-pole is **129 Hz** where our chain asked for 138 —
+**7% end to end**, through the AKAI law, the Hz-to-position map, the writer's
+byte and the machine. No factor-of-two anywhere. What is wrong is the PANEL: it
+prints 57, 59, 61, 63, 65 Hz at the dark end, **linear at 2 Hz per byte**, while
+the real corner is exponential throughout. Anyone calibrating that machine from
+panel readings inherits the error; we did not, which is why the law survived.
+The one-bug-across-three-laws idea keeps only two legs, and should.
+
+Fitted laws evaluated at or below the bottom of their calibrated range. Worth
+one audit of every such law rather than five separate fixes.
+
+### A sixth thing, logged not chased
+
+FENV `Dcy1` reads rate 83 on all six voices where our law says unison 89 and
+octave 83 — a per-keygroup difference that did not survive conversion, the same
+shape as the amplitude envelope. eosed narrowed it usefully: FENV **levels** do
+differ per layer (15 vs 40) while FENV **rates** do not. Whatever writes ENV2 is
+carrying the depth and dropping the times.
