@@ -190,6 +190,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIENV2DEPTH — we sweep the filter clean out of the audio band (2026-08-23)](#akaienv2depth-we-sweep-the-filter-clean-out-of-the-audio-band-2026-08-23)
 - [§AKAIFIXPLAN — the plan to actually fix it (2026-08-23)](#akaifixplan-the-plan-to-actually-fix-it-2026-08-23)
 - [§AKAIMUTEGRP — the click is a mute group, and E4B cannot express it (2026-08-23)](#akaimutegrp-the-click-is-a-mute-group-and-e4b-cannot-express-it-2026-08-23)
+- [§E4BENVSPAN — the E4B writer encodes envelope rates with the span and the parser decodes without it (2026-08-23)](#e4benvspan-the-e4b-writer-encodes-envelope-rates-with-the-span-and-the-parser-decodes-without-it-2026-08-23)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -17617,3 +17618,68 @@ either they assert byte-identity EXCEPT for fields where hardware contradicts
 akaiutil — with each exception named and evidenced — or they stop claiming
 byte-identity and claim something weaker and true. Silently re-hashing them
 would throw away the only signal that currently notices we diverged.
+
+## §E4BENVSPAN — the E4B writer encodes envelope rates with the span and the parser decodes without it (2026-08-23)
+
+Found while chasing what I had filed as A7, "the filter-envelope decay is
+collapsed across voices". **A7 was my mis-derivation and is withdrawn.** What
+was underneath it is real and larger.
+
+### A7 withdrawn first
+
+I claimed our law wanted FENV decay rate 89 on the unison keygroups and 83 on
+the octave ones, and that reading 83 on all six was a collapse. I got 89 by
+calling `env_seconds_to_rate(5.50)` — the wrong encoder. The writer uses
+`_env_span_rate(span, seconds)`, because an EOS envelope value is a RATE and
+the time a stage takes depends on how far it travels.
+
+Both keygroups carry AKAI `DECAY2 = 90`. Both machines express decay as a rate
+scaled by distance. So the same source byte with different sustain levels
+gives different TIMES and the same RATE BYTE, and eosed reading 83 on all six
+was correct. No collapse, no defect. The reader is fine: the model carries
+5.50 s and 3.86 s per keygroup, as it should.
+
+### What is actually wrong
+
+    writers/e4b_writer.py:959   pzt[18] = _env_span_rate(_fdecay_span, decay)
+    parsers/e4b_parser.py:206   _fenv_rate_inv = env_rate_to_seconds
+    parsers/e4b_parser.py:589   filter_env_decay = _fenv_rate_inv(fenv_raw[4]) ...
+
+**The writer is span-aware and the parser is span-blind.** They are not
+inverses. Demonstrated by a round trip through our own code: a model carrying
+5.50 s and 3.86 s per voice is written, read back, and returns **3.8518 s on
+every voice** — the distinction is not lost in the file, it is lost in the
+READER, which decodes one byte to one time regardless of how far that stage
+travels.
+
+Every other value survived the same round trip: coarse tune +12, amp-envelope
+sustain 0.000 on the cut layers and 0.030 on the survivors, filter-envelope
+sustain and release per voice. It is specifically the envelope RATES.
+
+### Why this is the same defect as the rest of tonight
+
+Eight for eight now: a law that exists and is applied on one side of the
+codebase and not the other. Tune, loudness, amplitude envelope, filter type,
+resonance and the ENV2 floor were all the AKAI reader missing what the AKAI
+writer had. This one is the E4B reader missing what the E4B writer has, so it
+reaches **every E4B-sourced conversion**, not only the AKAI path.
+
+### It may also be eosed's ~1.9x
+
+eosed measured our envelope times against theirs and found three independent
+stages disagreeing by about 1.9x, and neither of us could place it. A
+span-blind decode returns the FULL-traverse time for a stage that travels only
+part of the way, so a systematic factor between two readings of the same byte
+is exactly the shape this produces. **Not asserted** — the direction of their
+discrepancy needs checking against this before anyone claims it — but it is
+the first mechanism proposed that would produce a constant ratio across
+unrelated stages, and it should be tested before the dedicated session.
+
+### Not fixed tonight
+
+The fix is to give the parser the same span treatment the writer has, which
+means the sustain byte has to be decoded before the rates that depend on it.
+That is a small change in a file every E4B conversion goes through, at 23:20,
+after seven other fixes. It wants its own session, a round-trip test asserting
+writer and parser are inverses across a spread of sustains, and a check of what
+it does to the E4B-sourced rows of the conversion matrix.
