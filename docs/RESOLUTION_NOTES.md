@@ -17508,7 +17508,23 @@ next touched.
 **Our two zones per keygroup are byte-identical** — same sample, tune, velocity
 span and loudness — and the KRZ source's two voices differ in nothing at voice
 or zone level as our reader presents them. Either that preset really is a plain
-doubling, or `parsers/krz_parser.py` collapses per-voice differences, which
-would be the "read by nobody" failure on a second input format and would mean
-every layered K2000 source lost the difference between its layers. **Open, and
-larger than KGMUTE if it is real.**
+doubling, or `parsers/krz_parser.py` collapses per-voice differences.
+
+**CLOSED THE SAME NIGHT, NO DEFECT.** s3ked's point was that the discriminator
+needs a source whose two voices are KNOWN to differ; the cheaper version is a
+corpus, and it needs no hardware. Across **602 local KRZ files, 10545 presets**:
+
+    presets with 2+ voices        2739
+      voices 0 and 1 DIFFER       1632
+      voices 0 and 1 IDENTICAL    1107
+
+The reader reads per-voice differences perfectly well — the commonest fields
+that differ are `filter_cutoff` (865), `lfo1_rate` (756), `filter_env` (585),
+`amp_env` (555) and `filter_resonance` (342). So identical voices are a real
+authoring idiom, present in 40% of multi-voice presets, and that particular
+preset genuinely is a plain doubling. Our conversion of it is correct.
+
+Worth keeping for the method: a suspected reader collapse is answerable from a
+corpus in ninety seconds, and a hardware A/B was never needed. "Does this code
+path ever produce a difference?" is a cheaper question than "is this specific
+value right", and it rules out a whole class of defect at once.
