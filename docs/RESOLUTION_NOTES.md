@@ -180,6 +180,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§KRZLFOPITCH — the plausible full scale was the one we had already disproved (2026-08-22)](#krzlfopitch-the-plausible-full-scale-was-the-one-we-had-already-disproved-2026-08-22)
 - [§MATRIXRESULT — the conversion matrix ran, and all three findings were the instrument (2026-08-23)](#matrixresult-the-conversion-matrix-ran-and-all-three-findings-were-the-instrument-2026-08-23)
 - [§AKAIOBJCAPS — the AKAI service manual specifies 255 samples / 254 programs, and the splitter allows 509 of each (2026-08-23)](#akaiobjcaps-the-akai-service-manual-specifies-255-samples-254-programs-and-the-splitter-allows-509-of-each-2026-08-23)
+- [§IB304FDOC — what the service manual says about the second filter board (2026-08-23)](#ib304fdoc-what-the-service-manual-says-about-the-second-filter-board-2026-08-23)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -16369,3 +16370,100 @@ filter is the figure `_cutoff_of` already cites from s3ked §139, which measured
 `.P1` passes FILFRQ through unchanged, and identity is not equivalence — now
 has AKAI's own spec sheet on both sides of it. Still needs an S1000; still the
 same open question, just better sourced.
+
+## §IB304FDOC — what the service manual says about the second filter board (2026-08-23)
+
+Asked directly, so answered directly: **the manual documents the IB-304F in one
+line and nowhere else.** It appears twice, both times in the same
+optional-accessories list:
+
+    IB-304F (2nd LSI filter board)
+
+No parts list, no schematic, no adjustment procedure, no test-mode entry. That
+is a deliberate-looking omission rather than an oversight, because the manual's
+own title covers the **EB16** and the **IB-208P** and both of those get full
+parts sections (7.2.12, 7.2.13) and schematic pages. Two of the three option
+boards are documented; this one is named.
+
+Everything below is inference from the parts lists, and is flagged as such.
+
+### The second LSI is identifiable, by absence
+
+Tracing every filter/DSP part across the three models' parts lists:
+
+| part | S2000 | S3000XL | S3200XL |
+|---|---|---|---|
+| `L7A1045 L6028 DSP-A` (digital signal processor) | IC20 main | IC20 main | IC42 main |
+| `L7A0986 L6029 DFL` (digital filter) | — | — | **IC40 main** |
+| `L7A1414 L6038 DFX` (digital filter) | EB16 only | — | Effect PCB |
+
+The DFL appears **only** in the S3200XL list, and the S3200XL is the model
+whose second filter is standard. Its optional-accessories list is also the
+only one of the three that does **not** offer the IB-304F — it lists FMX008
+and nothing else.
+
+So: the IB-304F's "2nd LSI" is almost certainly `L7A0986 L6029 DFL`, and the
+board is the S3200XL's IC40 on a daughtercard. The manual never says this. It
+is three facts pointing one way, not a statement.
+
+### How it attaches, which the manual does document
+
+The DSP-A pinout (PDF page 45; §11.2 in Jan's conversion) carries a block of
+pins that exist for nothing else:
+
+    108,109  U0IN, U1IN    I   Serial data in, 2nd LSI
+    115,116  U0OUT, U1OUT  O   Serial data out, 2nd LSI
+    117      USYNC         O   Sync out, 2nd LSI
+    118      RSTON         O   System reset out, 2nd LSI
+    119      T0B1          O   System clock out, 2nd LSI
+
+The second LSI is a **serial-attached slave** — two channels each way, clocked,
+synced and reset by the DSP-A. Every S3000XL and S2000 main board carries those
+pins whether or not anything is on them, which is the hardware reason the board
+can be a retrofit at all.
+
+### What it does NOT do: change the filter slope
+
+Both spec tables give the same filter, fitted board or not:
+
+    Digital dynamic low-pass filter (-12 dB/octave with resonance)
+
+The S3200XL's row is identical to the S3000XL's. So the second LSI supplies a
+**second filter**, not a steeper one — consistent with the seven board-gated
+fields being `FLT2GAIN` / `FLT2MODE` / `FLT2Q` / `FIL2FR` and neighbours, and
+with 24 dB/oct being something you build by putting two of them in series
+rather than something the option is.
+
+### The one row that bears on ENV3
+
+The spec tables differ in exactly one other place:
+
+    S2000 / S3000XL   Envelope generators   2 (1 multi-stage)
+    S3200XL           Envelope generators   3 (2 multi-stage)
+
+Read carelessly this looks like the service manual siding against the finding
+in `akai_s3000_writer.py` that **envelope 3 is not board-gated** — measured by
+s3ked (§50, §86) working through modulation-matrix source 14 on an S3000XL
+established to have no expansion boards at all.
+
+It does not, and the reason is already in that comment: *panel access needs the
+board; the generator is in firmware.* A spec table counts what the machine is
+sold as having, and the S3200XL is the model that exposes three. What this adds
+is a **mechanism** for the panel's behaviour, which is better than the note's
+current "the manual is simply wrong about that": the panel exposes ENV3 where
+the second LSI is present because on an S3200XL it always is. Both AKAI
+documents are then self-consistent and still describe the panel, while the
+measurement describes the wire.
+
+**Nothing here reopens the finding.** A measurement on a board-less machine
+beats two spec tables about what is *reachable from the front panel*, and that
+is the same distinction that took three corrections to establish. Recorded so
+the next reader who greps this manual for `envelope` and finds `3` against `2`
+does not re-raise it as a contradiction.
+
+### Trap for anyone searching the parts list
+
+**"FILTER P.C. BOARD" in every parts list (7.2.6, 7.3.6, 7.4.10) is the AC
+mains EMI filter** — fuses, line-filter coils, 275 VAC X-capacitors. It has
+nothing to do with audio. It is the first hit for `filter` in all three lists,
+and the audio filter LSI is in the *main* board section.

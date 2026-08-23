@@ -1273,6 +1273,19 @@ def _mixdown(pcm: bytes, channels: int) -> bytes:
 #:      capability, not a claim that the fields are dead.
 #:   5. This writer populates none of them. If that changes, (4) is the reason
 #:      for care and (2) is the reason not to suppress them outright.
+#:   6. The SERVICE manual (2026-08-23, §IB304FDOC) documents the board in one
+#:      line -- an optional-accessories entry, no parts list and no schematic,
+#:      while the EB16 and IB-208P get both. It does corroborate (2) from the
+#:      silicon: `L7A0986 L6029 DFL` appears only in the S3200XL parts list,
+#:      the S3200XL is the model whose second filter is standard and the only
+#:      one not offered the IB-304F, and both spec tables give the SAME
+#:      -12 dB/oct filter -- so the option is a second filter, not a steeper
+#:      one. It also supplies a mechanism for the panel behaviour in (3),
+#:      better than this comment's "the manual is simply wrong": the spec
+#:      tables say 2 envelope generators for an S3000XL and 3 for an S3200XL,
+#:      which is what the PANEL exposes, and ENV3 measured working over SysEx
+#:      on a board-less machine is what the WIRE does. Both documents are then
+#:      self-consistent and the finding stands unchanged.
 #:
 #: ── how this was arrived at ──────────────────────────────────────────────
 #:
