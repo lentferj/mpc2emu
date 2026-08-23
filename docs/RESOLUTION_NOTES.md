@@ -184,6 +184,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAITUNEREAD — the AKAI reader still divides zone tune by 16; the writer was fixed on 2026-08-11 and the reader was not (2026-08-23)](#akaituneread-the-akai-reader-still-divides-zone-tune-by-16-the-writer-was-fixed-on-2026-08-11-and-the-reader-was-not-2026-08-23)
 - [§AKAIZONELOUD — the AKAI reader drops per-zone loudness, and writes +1 dB where it means unity (2026-08-23)](#akaizoneloud-the-akai-reader-drops-per-zone-loudness-and-writes-1-db-where-it-means-unity-2026-08-23)
 - [§AKAICAPTUREGAP — the capture that started it does not match the file, and that is unresolved (2026-08-23)](#akaicapturegap-the-capture-that-started-it-does-not-match-the-file-and-that-is-unresolved-2026-08-23)
+- [§AKAIAMPENV — the AKAI reader drops the amplitude envelope too, and that explains everything left over (2026-08-23)](#akaiampenv-the-akai-reader-drops-the-amplitude-envelope-too-and-that-explains-everything-left-over-2026-08-23)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -16889,3 +16890,91 @@ mean is that these captures cannot be trusted for level or spectrum on a
 multi-layer program until it is understood — which is the fifth measurement
 fault this bench has produced in two days, and the second where a clean
 measurement supported a false conclusion.
+
+## §AKAIAMPENV — the AKAI reader drops the amplitude envelope too, and that explains everything left over (2026-08-23)
+
+Third defect on the same function, found by Jan's ears after the first two were
+fixed live. He reported the corrected preset as "a lot better, but a lot of the
+metallic klick sound is missing", "sounds like an envelope with too much attack"
+and "still one octave low overall". All three are this.
+
+### The defect
+
+`parsers/akai_s3000_parser.build_preset_from_program` sets `filter_cutoff` and
+`filter_env` on each `VoiceLayer` and **never assigns `amp_env` at all**. The
+keygroup's `amp_attack`, `amp_decay`, `amp_sustain` and `amp_release` are parsed
+into the dict (line 506) and never read again, so every AKAI-sourced voice keeps
+`VoiceLayer()`'s default envelope.
+
+Visible immediately in the output: the source's six keygroups carry **two
+distinct envelopes**, and our E4B gives all six voices the same one.
+
+    AKAI source        atk  dec  sus  rel
+      unison kg 0/2/4    5   85    6   45
+      octave kg 1/3/5   40   85   50   75
+
+    E4B we wrote (all six voices identical)
+      attack 0.0310 s   decay 4.8595 s   sustain 0.821   release 0.2820 s
+
+Inverting our own calibrated writer laws, what those bytes actually mean:
+
+      unison   attack 0.0003 s   sustain ~0     -- an instant percussive click
+      octave   attack 0.0154 s   release 1.15 s -- the sustaining body
+
+### Why it explains all three symptoms, including the octave
+
+**"Metallic klick missing" and "too much attack"** are direct: the unison
+layer's attack should be **0.3 ms** and we give it **31 ms**, a hundredfold.
+That transient IS the metallic click.
+
+**"Still one octave low overall" is the interesting one, and it is not a pitch
+error at all.** The source's unison layer decays to nothing (sustain byte 6 of
+99) while the octave layer sustains. So on the AKAI the note's *body* is the
+octave layer and the unison layer is only its attack transient — the ear takes
+its pitch from what sustains. We give both layers a sustain of 0.821, so on the
+E4XT the unison layer sustains too, and after the level fix it is also the
+louder of the two. The perceived pitch therefore sits an octave below the
+AKAI's while every stored pitch value is correct.
+
+### This resolves §AKAICAPTUREGAP
+
+That section recorded an unexplained 57-72 dB absence of the fundamental in the
+source capture, against a file that said both layers sound. The mechanism is
+here: the analysis window sits **mid-note**, by which time the unison layer has
+decayed to ~0 and only the octave layer is still sounding. The measurement was
+correct and the inference from it was wrong — "absent from this window" was read
+as "absent".
+
+The `split patch 6` control that seemed to rule this out does not, on a closer look
+at what was being compared. Those figures are ratios **within each file**, not
+absolute levels. `split patch 6` has no sustaining second layer, so its decayed
+unison is still the loudest thing in its own window and its f0/2f ratio is
+normal. In `split patch 2` the sustaining octave layer dominates the same window and
+pushes the ratio 59 dB the other way. Both readings are right; only the
+comparison between them was invalid.
+
+### Three defects, one function, one pattern
+
+| field | writer fixed | reader |
+|---|---|---|
+| zone tune | 2026-08-11 | `// 16`, no coarse split (§AKAITUNEREAD) |
+| zone loudness | 2026-08-17 | `volume=1.0`, source ignored (§AKAIZONELOUD) |
+| amp envelope | 2026-08-11 | never assigned at all |
+
+Every one is a field whose **writer** was calibrated and wired while the reader
+was left as it was. The rule §AKAIZONELOUD proposed after two instances now has
+three: **correcting a writer's law includes the reader for that field.** An
+AKAI -> AKAI round-trip test would have caught all three, and is now asked for
+by three findings rather than one.
+
+### Fix
+
+Build an `Envelope` from the keygroup bytes by inverting `akai_env_bytes`, and
+assign it to `voice.amp_env`. The inverse of the attack law is closed-form
+(`t = a * exp(b * ATTAK1)`); decay and release are rate laws whose seconds
+depend on the sustain distance, so they invert against the same
+`_AK_SUSTAIN_DB_PER_UNIT` span the writer uses. Sustain inverts through
+`akai_sustain_byte`.
+
+Not applied mid-audit, same as the other two. All three want one commit, one
+regression test each, and the round-trip test.
