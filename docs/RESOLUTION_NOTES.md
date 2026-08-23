@@ -16592,6 +16592,27 @@ hardware, which is this project's standard for "tested". It also retires the
 strongest form of §AKAICAPTUREGAP's first candidate: the live machine behaves
 as the capture did, so we were not analysing the wrong bytes.
 
+### The last link, read off the E4XT panel by Jan
+
+He looked at the converted voices on the machine: **every second voice shows
+`ftune +63`.** That closes the chain end to end, and it says the value
+SATURATED rather than merely arriving small:
+
+    AKAI VTUNO                              3072   = +12 semitones
+    reader, `// 16`                          192   ("cents")
+    e4b_writer:752, cents -> 1/64 semitone   123   = round(192 * 64/100)
+    same line, clamped to max(-64, min(63))   63   <- the field ceiling
+    E4XT panel                              +63
+    our own e4b_parser reads it back          98   cents = 63 * 100/64
+
+So the octave does not arrive as a proportional fraction of itself. It arrives
+as **the largest detune the E4B fine-tune field can express**, which is one
+cent short of a semitone. Any AKAI zone tune above about 6.25 semitones lands
+on exactly the same +63 after the `// 16`, so a +12 layer and a +7 layer would
+convert identically. That is worth knowing for the fix: it is not enough to
+correct the factor, because 1200 cents still cannot fit in a +/-100 cent field.
+`coarse_tune` has to be populated too, which the reader never does.
+
 ### What the bug SOUNDS like, which is not what I first said
 
 s3ked's correction, and it matters for anyone listening for it: this does not
