@@ -43,7 +43,7 @@ from models.common import (
     AKAI_ENV2_ATTACK, AKAI_ENV2_DECAY, AKAI_ENV2_RELEASE,
     AKAI_ENV2_DEPTH_OFFSET, AKAI_ENV2_DEPTH_MAX, akai_env2_stage_seconds,
     AKAI_VLOUD_DB_PER_UNIT, AKAI_TUNE_UNITS_PER_SEMITONE,
-    akai_filq_to_01,
+    akai_filq_to_01, AKAI_MUTE_CUT_SECONDS,
     Envelope)
 
 #: Keygroup byte offsets that had no name here until 2026-08-23.
@@ -595,6 +595,7 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
                     program_number=0)
     missing: set = set()
 
+    _kg_of_voice = []
     for kg in prog['keygroups']:
         voice = VoiceLayer()
         # The AKAI filter is 12 dB/octave -- the service manual's own
@@ -685,7 +686,97 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
             ))
         if voice.zones:
             preset.voices.append(voice)
+            _kg_of_voice.append(kg)
+    if preset.voices:
+        _apply_mute_groups(preset.voices, _kg_of_voice, prog['name'],
+                           quiet=quiet)
     return preset if preset.voices else None
+
+
+def _kg_vel_span(kg):
+    """A keygroup's velocity span: the union of its zones'."""
+    zs = [z for z in kg['zones'] if z]
+    return (min(z['lo_vel'] for z in zs), max(z['hi_vel'] for z in zs))
+
+
+def _apply_mute_groups(voices, kgs, prog_name, quiet=False):
+    """Re-model the AKAI keygroup mute group, which E4B cannot express.
+
+    **What the field does** (§AKAIMUTEGRP). `KGMUTE` is keygroup offset 160,
+    255 is off, and 0 is a real group -- so a zero-filled keygroup header
+    inherits an ACTIVE mute group for free. Two keygroups in one group that
+    are triggered together cut each other: measured at 19.1 dB on an S3000XL.
+
+    **Why it has to be re-modelled rather than converted.** eosed checked the
+    E4XT: `E4_VOICE_ASSIGN_GROUP` exists and our own format doc calls it the
+    choke group, but its semantics are note ALLOCATION. Two voices in one Mono
+    group under a single note change the mix by 0.13 dB, while the same group
+    across two overlapping notes suppresses the first entirely. The authority
+    is across notes, not between sibling layers under one note. There is no
+    other candidate field.
+
+    **The re-model, and why it is exact rather than approximate.** When two
+    keygroups overlap in key AND velocity, one note-on triggers both, so the
+    cut happens after a fixed allocator latency and depends on nothing the
+    player does. That is an envelope: instant attack, a short decay to zero,
+    no sustain, no release. The TIMING is identical rather than approximated,
+    because both layers start together. Only the shape of the ending differs
+    -- a true cut is a discontinuity and this is a fast fade -- and that costs
+    a click's worth of high frequency.
+
+    **Where it cannot be re-modelled**, and is warned about instead: the
+    classic cross-note use, a closed hi-hat keygroup cutting an open one on a
+    DIFFERENT key. There the cut time depends on when the second note arrives,
+    and no envelope can express it. The two cases are distinguishable in the
+    file, which is the whole reason this can be a three-way decision rather
+    than a blanket warning.
+
+    **Sized before it was written.** Across 9442 S3000 programs on library
+    discs, 5964 have two or more keygroups and 311 -- 3.3% of all, 5.2% of
+    multi -- have a mute group that would actually bite. 255 is 86% of all
+    keygroups, so a warning conditioned on "not 255" would fire on 14% of
+    everything and be ignored inside a week.
+    """
+    groups = {}
+    for i, kg in enumerate(kgs):
+        g = kg.get('mute_group', 255)
+        if g != 255:
+            groups.setdefault(g, []).append(i)
+
+    cut, cross = [], []
+    for g, members in groups.items():
+        if len(members) < 2:
+            continue
+        for a_i in range(len(members)):
+            for b_i in range(a_i + 1, len(members)):
+                a, b = members[a_i], members[b_i]
+                ka, kb = kgs[a], kgs[b]
+                if not (ka['lo_key'] <= kb['hi_key']
+                        and kb['lo_key'] <= ka['hi_key']):
+                    cross.append((g, a, b))
+                    continue
+                va, vb = _kg_vel_span(ka), _kg_vel_span(kb)
+                if not (va[0] <= vb[1] and vb[0] <= va[1]):
+                    continue
+                # The later keygroup wins: s3ked's 10 ms trace shows the mix
+                # tracking the lower-numbered layer for one window and the
+                # higher-numbered one thereafter.
+                cut.append(min(a, b))
+
+    for i in sorted(set(cut)):
+        voices[i].amp_env = Envelope(attack=0.0,
+                                     decay=AKAI_MUTE_CUT_SECONDS,
+                                     sustain=0.0, release=0.0)
+    if not quiet:
+        if cut:
+            print(f"    [note] {prog_name!r}: {len(set(cut))} layer(s) are cut "
+                  f"by a keygroup mute group; re-modelled as a "
+                  f"{AKAI_MUTE_CUT_SECONDS * 1000:.0f} ms decay")
+        for g, a, b in cross:
+            print(f"    [WARN] {prog_name!r}: keygroups {a} and {b} share mute "
+                  f"group {g} but do not overlap in key range -- that is a "
+                  f"cross-note choke and no target format here can express it")
+    return sorted(set(cut))
 
 
 #: Extensions that name a program file.

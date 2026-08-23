@@ -549,6 +549,20 @@ AKAI_VLOUD_DB_PER_UNIT = 0.60576
 AKAI_TUNE_UNITS_PER_SEMITONE = 256
 
 
+#: How long a keygroup sounds before its mute-group partner cuts it.
+#:
+#: MEASURED by s3ked 2026-08-23 at 10 ms resolution on an S3000XL: the losing
+#: layer is present for exactly one window and gone by the next. Both
+#: keygroups are triggered by the SAME note-on, so the delay is the voice
+#: allocator's own latency and does not depend on anything the player does --
+#: which is what makes it emulable by an envelope at all.
+#:
+#: ONE MEASUREMENT, ONE NOTE, ONE PROGRAM. Whether it varies with polyphony,
+#: note or velocity is untested, and 10 ms is the resolution of the trace
+#: rather than a fitted value. Good enough to reproduce the audible effect,
+#: not good enough to quote as a machine constant.
+AKAI_MUTE_CUT_SECONDS = 0.010
+
 #: FILQ (keygroup 149) -> resonance. s3ked §52, 2026-08-12, r2 0.999975,
 #: replacing their own earlier linear 0.5764 dB/step reading:
 #:
