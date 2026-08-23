@@ -679,9 +679,29 @@ def _ak_rate_seconds(byte: int, span_db: float, law) -> float:
 
     `rate = a * exp(b * value)` and `time = span / rate`, which is the same
     relation `_rate_law_value` inverts in the other direction.
+
+    **EXTRAPOLATES OUTSIDE THE FIT RATHER THAN CLAMPING, and the corpus is why
+    (§LAWRANGE, 2026-08-24).** Both laws here are fitted over a narrow window —
+    DECAY1 over 45..85, RELSE1 over 55..70 — and real material sits outside it
+    most of the time. Across 168765 keygroups on the library discs:
+
+        DECAY1   49.8% outside the fit   (25.9% below, 23.9% above)
+        RELSE1   79.8% outside the fit   (71.0% below,  8.7% above)
+
+    RELSE1's single commonest value is 45, below the fitted floor, on 39% of
+    all keygroups by itself. Clamping turns every one of those into the same
+    number: it produces a PLATEAU, so a program with a longer release converts
+    to the same release as a shorter one, and ordering — which is the thing a
+    converter must not lose — is destroyed for four fifths of the corpus.
+
+    Extrapolation is not free and this is not a claim that the fit holds out
+    there. It is monotonic, which a clamp is not, and monotonic-and-approximate
+    beats a plateau when half the data is outside the window. The honest fix is
+    a wider calibration; until then this is the lesser error and it is recorded
+    as such rather than presented as measured.
     """
-    a, b, lo, hi = law
-    rate = a * math.exp(b * max(lo, min(hi, byte)))
+    a, b, _lo, _hi = law
+    rate = a * math.exp(b * max(0, byte))
     return max(0.0, span_db) / rate if rate > 0 else 0.0
 
 
@@ -2171,7 +2191,17 @@ def build_program(preset, name: str, prog_num: int = 0,
             # A sample shared by zones with different roots therefore gets a
             # different tune per zone, which is correct and is why this cannot
             # be fixed by rewriting the sample header instead.
-            tune=_akai_tune_units(_or_default(getattr(z, 'fine_tune', None), 0))
+            # COARSE + FINE, since 2026-08-24. This read `fine_tune` alone,
+            # so a zone tuned a whole semitone or more lost everything above
+            # the cents -- an octave layer wrote as 0. Found by the AKAI ->
+            # AKAI round-trip test the day it was written, which is the
+            # mirror of the reader defect fixed the night before
+            # (§AKAITUNEREAD): the reader put an octave entirely into
+            # fine_tune, and the writer read only fine_tune. Neither side
+            # could see it alone.
+            tune=_akai_tune_units(
+                     _or_default(getattr(z, 'coarse_tune', None), 0) * 100.0
+                     + _or_default(getattr(z, 'fine_tune', None), 0))
                  + _root_offset_units(z, sample_roots),
             # `ZoneMapping.pan` is -1.0..+1.0 centred on 0.0; the AKAI field
             # is -50..+50 centred on 0. This used to subtract 0.5 first, on

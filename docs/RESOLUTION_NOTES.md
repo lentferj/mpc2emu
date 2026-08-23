@@ -192,6 +192,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIMUTEGRP — the click is a mute group, and E4B cannot express it (2026-08-23)](#akaimutegrp-the-click-is-a-mute-group-and-e4b-cannot-express-it-2026-08-23)
 - [§E4BENVSPAN — the E4B writer encodes envelope rates with the span and the parser decodes without it (2026-08-23)](#e4benvspan-the-e4b-writer-encodes-envelope-rates-with-the-span-and-the-parser-decodes-without-it-2026-08-23)
 - [§AKAIFIXPLAN2 — what is left, and what each item is blocked on (2026-08-23)](#akaifixplan2-what-is-left-and-what-each-item-is-blocked-on-2026-08-23)
+- [§LAWRANGE — the audit: what every fitted law does outside its calibrated range (2026-08-24)](#lawrange-the-audit-what-every-fitted-law-does-outside-its-calibrated-range-2026-08-24)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -17878,3 +17879,66 @@ scrub rule's purpose is served by everything downstream of it being clean.
 The two commits from 2026-08-23 that carried preset names WERE rewritten, and
 the tracked docs are clean: a check across every reachable commit and every
 tracked file finds nothing but this one.
+
+## §LAWRANGE — the audit: what every fitted law does outside its calibrated range (2026-08-24)
+
+Item 5 of §AKAIFIXPLAN2. Three instances turned up in one evening, which made it
+a class rather than three coincidences, so this is the enumeration.
+
+### The audit
+
+Every time-valued law, probed at byte 0, at `lo-1` and at `lo`:
+
+    law                     fit        byte 0        at lo      behaviour
+    AKAI_ENV2_ATTACK      40..85     0.000000     0.066081     extrapolates (fixed 2026-08-23)
+    AKAI_ENV2_DECAY       40..80     0.000000     0.126392     extrapolates (fixed 2026-08-23)
+    AKAI_ENV2_RELEASE     40..80     0.000000     0.064874     extrapolates (fixed 2026-08-23)
+    _AK_ATTAK1_TIME        0..99     0.000201     0.000201     fit covers the field
+    _AK_DECAY1_RATE       45..85     0.172973     0.172973     CLAMPED
+    _AK_RELSE1_RATE       55..70     0.465969     0.465969     CLAMPED
+    env_rate_to_seconds    8..64     0.031000          —      floor, against its
+                                                              own comment saying
+                                                              "rate 0 = instant"
+
+### The corpus is what decided the fix
+
+A clamp is defensible when almost nothing falls outside the window. Across
+**168765 keygroups** on the library discs:
+
+    DECAY1   49.8% outside the fit   (25.9% below, 23.9% above)
+    RELSE1   79.8% outside the fit   (71.0% below,  8.7% above)
+    ATTAK1    0.0% outside
+
+**RELSE1's single commonest value is 45 — below the fitted floor — on 39% of
+all keygroups by itself.** Clamping maps every value below 55 to the same
+number, so it produces a PLATEAU: a program with a longer release converts to
+the same release as a shorter one. Ordering is the one thing a converter must
+not lose, and a clamp destroys it for four fifths of the corpus.
+
+So `_ak_rate_seconds` now extrapolates. That is not a claim the fit holds out
+there — it is monotonic where a clamp is not, and monotonic-and-approximate
+beats a plateau when half the data is outside the window. The honest fix is a
+wider calibration, and this is recorded as the lesser error rather than as
+measured.
+
+ATTAK1 needed nothing: its fit spans the whole field and 0.0% of the corpus is
+outside it. Worth stating, because "we checked and it was fine" is a result.
+
+### The rule that comes out of it
+
+**A clamp at the BOTTOM of a time law is almost always wrong**, because
+"instant" is a real value a source can ask for and a clamp turns it into tens
+of milliseconds. That is precisely what removed the transient in
+§AKAIENV2FLOOR and cost an evening.
+
+**And a fit's range is a claim about the CALIBRATION, not about the field.**
+Before clamping to it, ask what fraction of real data falls outside — the
+answer here was half and four fifths, which no one had looked at.
+
+### Still open, and out of scope for tonight
+
+`e4xt_volume_byte` extrapolates below its measured floor (documented) and is
+`round(db)` — no law at all — for positive dB. eosed has a parked job to sweep
+it, weighted to the positive side. `env_rate_to_seconds(0)` returning 31 ms
+remains, but the E4B parser no longer reaches it for the span-scaled stages
+(§E4BENVSPAN); attack and stage 2 still do.
