@@ -179,6 +179,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§FENVFULLSCALE — two values for one quantity, 41% apart (2026-08-22)](#fenvfullscale-two-values-for-one-quantity-41-apart-2026-08-22)
 - [§KRZLFOPITCH — the plausible full scale was the one we had already disproved (2026-08-22)](#krzlfopitch-the-plausible-full-scale-was-the-one-we-had-already-disproved-2026-08-22)
 - [§MATRIXRESULT — the conversion matrix ran, and all three findings were the instrument (2026-08-23)](#matrixresult-the-conversion-matrix-ran-and-all-three-findings-were-the-instrument-2026-08-23)
+- [§AKAIOBJCAPS — the AKAI service manual specifies 255 samples / 254 programs, and the splitter allows 509 of each (2026-08-23)](#akaiobjcaps-the-akai-service-manual-specifies-255-samples-254-programs-and-the-splitter-allows-509-of-each-2026-08-23)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -16212,3 +16213,103 @@ Onsets detected from the recorded audio rather than reconstructed; an
 envelope-shape comparison instead of an attack scalar; rolloff instead of
 centroid; and the repeatability pass. All four can be validated against the
 103 captures already on disk before any new material is recorded.
+
+## §AKAIOBJCAPS — the AKAI service manual specifies 255 samples / 254 programs, and the splitter allows 509 of each (2026-08-23)
+
+Jan pointed at the Bibliothek: `~/Seafile/Bibliothek/Handbücher/
+Audio-Daws_and_Plugins/Synthesizer/akai_s2000_s3000xl_s3200xl_eb16_ib-208p_
+service_manual.pdf`, 80 pages, an ABBYY OCR of the AKAI service manual for the
+S2000, S3000XL and S3200XL. **The Markdown conversion he expected alongside it
+does not exist anywhere on this machine** — there are zero `.md` files under
+`~/Seafile` — so it was generated to
+`~/temp/akai_s3000xl_docs/service_manual/` (`mkmd.py` + the `.md`).
+
+It is a *hardware repair* manual: safety, disassembly, output-level trimming,
+memory test modes, parts lists, IC pinouts, schematics. **No disk format, no
+SysEx, no parameter scaling, no filter coefficients** — nothing that touches
+the converter, with one exception.
+
+### The exception
+
+The specification pages (PDF pages 3 and 4) give, for **both** the S2000 /
+S3000XL and the S3200XL:
+
+    Maximum sample number ...... 255
+    Maximum program number ..... 254
+
+`writers/bank_splitter.py:160` allows, per volume:
+
+    'akai': (509, 509, 510)      # max samples, max presets, combined
+
+509 is derived from the volume directory — 510 entries shared between samples
+and programs, minus one for the other kind. It is a **media** limit and it was
+never claimed to be anything else. The manual's pair is a different budget:
+what the machine can hold *resident*, the same class of limit as the 1006-object
+pool at `_AKAI_OBJECT_POOL`, which the directory cap also does not model.
+
+So a volume of 300 samples and 2 programs passes every check we have and, if
+the manual is right, loads 255 of those samples. That is the pool failure mode
+exactly — **a partial load, not a refusal** (measured 2026-08-16, see the
+`_AKAI_OBJECT_POOL` comment) — which is the quiet kind.
+
+### Corroboration, and what it is worth
+
+Independently in the S3000XL owner's manual: the Japanese specification table
+(`~/Dokumente/SYNTHS/Akai S3000XL/Docs/S3000XL_OM_djvu.txt:25946`) carries the
+same 255 / 254 in the same row positions. Two AKAI documents, not one.
+
+Authored data, scanned with our own `akai_image_parser` over every AKAI ISO on
+this disk:
+
+    volumes scanned       : 4253
+    max samples / volume  : 191   (Sonic Reality World Traveler, H/INDI PERC)
+    max programs / volume : 128
+    volumes > 255 samples : 0
+    volumes > 254 programs: 0
+
+**This is consistent with the manual and it does not confirm it.** Nothing in
+the corpus comes within 60 samples of 255, so the corpus cannot distinguish
+255 from 509 — it would look identical under either. Recording it as
+corroboration and no more, because the mistake in the other direction is one
+this project has already made: §AGREEMENT on the K2000's 229/191, where
+a corpus maximum was read as a format limit and measurement later gave 600+.
+
+Note also that 255 + 254 = 509, exactly the directory cap minus one. That may
+be the same budget written two ways, or coincidence. It is not evidence either
+way and should not be argued from.
+
+### Why this is not being fixed now
+
+Tightening a cap is not free. If the real resident limit is higher than 255,
+lowering ours splits banks that would have loaded whole, and the user gets more
+volumes to juggle for no reason. The failure we would be preventing is quiet;
+the failure we would be introducing is merely annoying — but it is certain,
+where the other is documented and unverified.
+
+### How to settle it (needs the S3000XL)
+
+One volume answers it, and it does not need a card crossing beyond the next
+scheduled one:
+
+1. Build a volume with **260 short samples and 1 program** (a few frames each —
+   the point is the count, not the RAM). `convert.py --format akai` with
+   `--akai-max-objects` left at default will emit it as one volume today.
+2. Load it. Read `free P/K/S` on the LOAD page before and after.
+3. Look at the sample list. **If it stops at 255, the manual is right** and the
+   splitter needs a fourth cap. If all 260 are selectable, the spec figure is a
+   documentation-era number and our 509 stands.
+4. Repeat with **260 programs and 1 sample** for the 254.
+
+Do both, because the two numbers differ by one and that asymmetry (255 vs 254)
+is itself unexplained — it smells like one reserved index on the program side,
+which would be a fact worth having.
+
+### If it is confirmed
+
+`writers/bank_splitter.py:160` becomes `('akai': (255, 254, 510))` — the
+combined 510 stays, since the directory limit is real and independent. The
+existing splitter machinery needs no other change: it already treats the tuple
+as (samples, presets, combined). Add the measurement to the
+`_AKAI_OBJECT_POOL` comment block, which is where the reader already goes for
+"what does the machine hold", and a regression test that a 300-sample bank
+splits into two volumes.
