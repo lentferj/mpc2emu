@@ -17866,9 +17866,15 @@ coincidences:
   * cord amount 100 vs 32 broadband, to confirm whether closing the filter is
     what costs the octave layer its level
 
-### 8. One history item
+### 8. One history item — DECIDED, LEAVE IT
 
-`56981fe` (2026-07-27, 342 commits back) names a vendor in its message. It
-wants the same scrub as tonight's two, but rewriting 342 commits is a separate,
-deliberate operation and belongs with the history rewrite that already has to
-happen before this branch is pushed.
+`56981fe` (2026-07-27, 342 commits back) names a vendor in its message.
+
+**Jan's call, 2026-08-24: leave it as it is.** Recorded here so it is not
+re-raised as an oversight by the next reader — including by me. Rewriting 342
+commits to change one word in a July message is not worth the churn, and the
+scrub rule's purpose is served by everything downstream of it being clean.
+
+The two commits from 2026-08-23 that carried preset names WERE rewritten, and
+the tracked docs are clean: a check across every reachable commit and every
+tracked file finds nothing but this one.
