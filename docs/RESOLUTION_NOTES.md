@@ -188,6 +188,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIENV2FLOOR — a zero attack converts to 66 ms, and that is where the click went (2026-08-23)](#akaienv2floor-a-zero-attack-converts-to-66-ms-and-that-is-where-the-click-went-2026-08-23)
 - [§E4XTQCAL — the E4XT resonance parameter, measured, and it tops out below what AKAI sources ask for (2026-08-23)](#e4xtqcal-the-e4xt-resonance-parameter-measured-and-it-tops-out-below-what-akai-sources-ask-for-2026-08-23)
 - [§AKAIENV2DEPTH — we sweep the filter clean out of the audio band (2026-08-23)](#akaienv2depth-we-sweep-the-filter-clean-out-of-the-audio-band-2026-08-23)
+- [§AKAIFIXPLAN — the plan to actually fix it (2026-08-23)](#akaifixplan-the-plan-to-actually-fix-it-2026-08-23)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -17286,3 +17287,137 @@ verification rather than a third success.
 
 **The unison layers still sweep past 19 kHz** and are the next place to look if
 the click is better but not right.
+
+## §AKAIFIXPLAN — the plan to actually fix it (2026-08-23)
+
+Five hours of diagnosis produced seven defects and no plan. This is the plan.
+
+### The thing that makes this hard, stated once
+
+**The defects are not independent, and that is why fixing them one at a time
+produced five nulls tonight.** Every filter-side fix was inaudible because
+`AKAI_ENV2_DEPTH_MAX` sweeps the corner past 19 kHz, out of the audio band. A
+lowpass with nothing above its corner does nothing, so:
+
+  * filter type 4-pole vs 2-pole measured ~1 dB
+  * halving the filter-envelope decay measured ~1 dB
+  * a second summing cord measured +0.0 dB, twice
+  * resonance was inaudible at any Q
+
+The dependency graph is the spine of the plan:
+
+    depth law  ──> corner lands in the audio band
+                      ├──> filter TYPE becomes audible
+                      ├──> RESONANCE becomes audible
+                      └──> filter-envelope TIMES become audible
+
+    tune, loudness, amp envelope ──> independent, audible immediately
+
+So there are two workstreams, and only one of them is blocked on measurement.
+
+### Workstream A — ship now, no new measurement needed
+
+All in `parsers/akai_s3000_parser.build_preset_from_program` unless noted.
+Every law these need already exists and is hardware-measured.
+
+  **A1. Zone tune** (§AKAITUNEREAD). `// 16` -> `* 100 / 256`, and split the
+  result into `coarse_tune` (semitones) and `fine_tune` (cents). +12 semitones
+  cannot go in a fine-tune field whatever factor feeds it.
+
+  **A2. Zone loudness** (§AKAIZONELOUD). `volume=1.0` -> the source's VLOUD1
+  through s3ked's measured `0.60576` dB/unit, defaulting to `0.0` not `1.0` —
+  the field is dB and unity is zero.
+
+  **A3. Amplitude envelope** (§AKAIAMPENV). Assign `voice.amp_env`, built by
+  inverting `akai_env_bytes`. Today it is never assigned at all.
+
+  **A4. Filter type.** Set `filter_type = 2` (Low 2, 2-pole, 12 dB/oct). Today
+  it is left at 0, which the E4B writer maps to `0x00` — the **4-pole**. The
+  AKAI is 12 dB/oct per the service manual and s3ked §139.
+
+  **A5. Resonance** (§E4XTQCAL). Read FILQ, convert through s3ked's §52 law to
+  a Q, and convert that Q to an E4XT byte through eosed's curve measured
+  tonight. **Clamp at byte 112**, not 127 — 112..127 are the same filter and a
+  writer clamping to 127 silently writes 112. Above FILQ ~13 the E4XT cannot
+  express the source's Q; say so in the conversion log rather than losing it
+  quietly.
+
+  **A6. The ENV2 attack floor** (§AKAIENV2FLOOR). `akai_env2_stage_seconds`
+  returns 66 ms for byte 0 where byte 0 means instant. Special-case zero. Then
+  audit **every** fitted law in this codebase for the same fault — a fit
+  evaluated at or below the bottom of its calibrated range. `env_rate_to_seconds(0)`
+  = 31 ms against its own comment saying "rate 0 = instant" is a second
+  instance, and the ~1.9x on VENV times is a third suspect.
+
+  **A7. The filter-envelope decay collapse.** Our file carries an identical
+  FENV decay on all six voices where the law says 5.50 s / 3.86 s, and eosed
+  read the same single value off the device. FENV *levels* differ per keygroup
+  and FENV *rates* do not. Trace whether the reader or the writer collapses it.
+
+### Workstream B — blocked on two calibrations, and it is the keystone
+
+**B1. Measure the E4XT FilterEnv->FilFreq depth law.** This is the root cause
+of the corner leaving the band, and it is an E4XT-side defect rather than an
+AKAI one. Tonight's three points from a ~120 Hz base:
+
+    amount  37  ->  +2.38 octaves
+    amount  74  ->  +4.21 octaves
+    amount 100  ->  >7.38 octaves   (saturated, lower bound only)
+
+0.0643 oct/unit at 37 and 0.0569 at 74 — **superlinear at the top**, so the
+relation is not the linear `5.14e-4 * level% * amount` we ship. Needs the noise
+preset, several base cutoffs, and enough points below saturation to see the
+shape. Same rig and method as tonight's cutoff and Q runs.
+
+**B2. Measure what an AKAI ENV2 depth is worth in octaves.** We have
+`AKAI_ENV2_DEPTH_MAX = 18.30`, composed from two constants measured on two
+different machines and never checked end to end. Tonight it over-delivered by
+2.5x to 6.7x. Sweep DEPTH on the S3000XL against a fixed FILFRQ and measure the
+corner shift directly.
+
+**B3. Then reformulate the conversion.** Do NOT convert "AKAI depth -> octaves
+-> E4XT amount" through two laws that compose. Convert **corner positions**:
+
+    target_hz = akai_base_hz * 2 ** akai_depth_octaves
+    amount    = e4xt_cord_amount(base_hz, target_hz)
+
+`e4xt_cord_amount(base_hz, target_hz)` is exactly the function eosed computed by
+hand per voice tonight, and getting 32 / 15 / 39 for three voices carrying the
+same source depth is the evidence that it cannot be a single constant. That
+function belongs in the code.
+
+### Workstream C — make the next round cheap
+
+**C1. An AKAI -> AKAI round-trip test.** Three of tonight's seven defects would
+have been caught by it on the day the corresponding writer was fixed. Every
+existing AKAI test compares us against ourselves on the write side only.
+
+**C2. A saturation invariant.** After conversion, assert that the filter corner
+at the envelope's peak is **inside the audio band**. Tonight's five nulls all
+had one cause — a control already at its limit reports nothing — and this is
+the machine-checkable form of that lesson.
+
+**C3. Regression tests per defect**, each confirmed to fail when its own fix is
+reverted. Not one test for the batch.
+
+### Ordering, and why
+
+Workstream A is independent of B and ships first: tune, loudness and the
+amplitude envelope are audible on their own and account for three of the four
+symptoms Jan reported by ear. A4, A5 and A7 are correct but will remain
+INAUDIBLE until B lands — ship them anyway, because they are right, and because
+shipping them after B would make B look like it did their work.
+
+B is the keystone and it is two measurement sessions, not a code change. Until
+B1 exists, any depth number we write is a guess dressed as arithmetic.
+
+C runs alongside; C2 in particular would have saved most of tonight.
+
+### What this does NOT fix, and should be stated in the conversion log
+
+  * **Q above FILQ ~13.** The E4XT clamps at Q 7.8; the source asks 20.1. Two
+    keygroups asking for different Q land on the same byte and the distinction
+    disappears.
+  * **The AKAI's transient shape.** Its 150 ms transient is a deep trough at
+    4-6 kHz with a sharp spike at 8-10 kHz. Ours rolls off gently with no
+    spike. Some of that is the Q ceiling; whether all of it is, is open.
