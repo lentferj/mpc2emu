@@ -186,6 +186,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAICAPTUREGAP — the capture that started it does not match the file, and that is unresolved (2026-08-23)](#akaicapturegap-the-capture-that-started-it-does-not-match-the-file-and-that-is-unresolved-2026-08-23)
 - [§AKAIAMPENV — the AKAI reader drops the amplitude envelope too, and that explains everything left over (2026-08-23)](#akaiampenv-the-akai-reader-drops-the-amplitude-envelope-too-and-that-explains-everything-left-over-2026-08-23)
 - [§AKAIENV2FLOOR — a zero attack converts to 66 ms, and that is where the click went (2026-08-23)](#akaienv2floor-a-zero-attack-converts-to-66-ms-and-that-is-where-the-click-went-2026-08-23)
+- [§E4XTQCAL — the E4XT resonance parameter, measured, and it tops out below what AKAI sources ask for (2026-08-23)](#e4xtqcal-the-e4xt-resonance-parameter-measured-and-it-tops-out-below-what-akai-sources-ask-for-2026-08-23)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -17140,3 +17141,74 @@ octave 83 — a per-keygroup difference that did not survive conversion, the sam
 shape as the amplitude envelope. eosed narrowed it usefully: FENV **levels** do
 differ per layer (15 vs 40) while FENV **rates** do not. Whatever writes ENV2 is
 carrying the depth and dropping the times.
+
+## §E4XTQCAL — the E4XT resonance parameter, measured, and it tops out below what AKAI sources ask for (2026-08-23)
+
+Measured by eosed against a noise preset at Jan's suggestion, after his question
+"should we calibrate Q for the 4-pole too?". The answer to that question turned
+out to be the cheapest part.
+
+### The parameter is id 84 and nothing named it
+
+`eos/params.py` calls id 84 `E4_VOICE_FKEY_XFORM`, "meaning varies by filter
+type". Ids 85-92 were probed and none moves the panel's Q field. **Id 84 does,
+and the panel prints it 1:1** across the whole range. On the lowpass types id 84
+is resonance, 0..127. (Our `vpar[61]` is a FILE offset, a different numbering —
+not the same thing.)
+
+### One calibration covers every lowpass type
+
+Nine 4-pole points against the 2-pole sweep:
+
+    byte    2-pole    4-pole    ratio
+      64     +9.15    +18.32     2.00
+      96    +14.39    +28.74     2.00
+     108    +15.54    +31.08     2.00
+     112    +17.84    +35.50     1.99
+     127    +17.84    +35.52     1.99
+
+**The 4-pole peak in dB is exactly twice the 2-pole peak at the same byte**,
+which is what cascading two identical sections does. So one measured curve,
+multiplied by poles/2. No per-type matrix, and not the 10-20% both of us
+guessed from the cutoff result — exactly 2.00.
+
+### It clamps at byte 112
+
+Bytes 112 to 127 are the same filter, 17.8 dB flat within noise, while the panel
+goes on printing whatever was set. **Fifteen dead steps at the top, and a writer
+that clamps to 127 is silently writing 112.**
+
+No self-oscillation anywhere, checked rather than assumed: pre-roll sat at -85
+to -86 dBFS at every point on both types, including a +35 dB peak. A ringing
+filter puts energy in the capture before the note is sent.
+
+Over the usable range, `peak_dB = 0.15283 * byte - 0.762` (bytes 0-108,
+residual RMS 0.41 dB) — but it is flatter below byte 24 and steeper at the top,
+so use the point list rather than the line for better than half a dB.
+
+### The consequence for AKAI conversion, which is a range problem not a scale one
+
+Converting through the 2-pole relation `|H|peak/|H|0 = Q/sqrt(1 - 1/(4Q^2))`:
+
+    byte  46 -> Q 1.88        byte  96 -> Q 5.22
+    byte  64 -> Q 2.82        byte 108 -> Q 5.96
+    byte  80 -> Q 3.89        byte 112 -> Q 7.78   <- ceiling
+
+**The E4XT 2-pole tops out at Q ~7.8.** The octave-stack program's keygroups ask
+for Q 9.2 and Q 20.1 (FILQ 14 and 15 through s3ked's §52 law). Both land on byte
+112 and **the source's distinction between them disappears**.
+
+So any converter mapping AKAI FILQ onto this machine flattens everything above
+FILQ ~13 into one value. That is worth saying explicitly in the eventual fix
+rather than discovering it as a quiet loss: it is the same class as the filter
+envelope's cord clamping at 5.14 octaves against a source asking 7.02.
+
+### One more §47 instance, self-reported
+
+eosed's first A/B captured six files of silence: the panel was still parked in
+PC 34's filter editor from the calibration, program change is ignored there, so
+every note went to the noise preset and landed outside its zones. The parameter
+writes were fine — they address the edit context, not the sounding preset — but
+the audio was of the wrong preset. Their own §47 trap, in their own run, two
+hours after writing it up. `lift_db` caught it; a peak or clip guard would not
+have.
