@@ -17482,6 +17482,51 @@ parameter set for group/mute/solo/cut/choke/exclusive finds nothing else.
 ceiling we can approach — it is a different voice architecture. The conversion
 log should say so.
 
+### Closed properly after Jan pushed back with a forum post
+
+He found advice saying "there are TWO settings you want to play with: Solo Mode
+and Assign Group", asked whether we were barking up the wrong tree, and told me
+to check the manual. Both were the right challenge: eosed had tested Assign
+Group with a control and Solo Mode only in passing, with none.
+
+**The manual, EOS 4.0 p338/p340, describes both mechanisms purely in terms of
+NOTES.** Assign Group is output-CHANNEL allocation — "Voices will rotate within
+their assigned bin of channels… Mono A-I: Nine monophonic channels" — and its
+own worked example is the cross-note hi-hat. Solo mode "provides the playing
+action of a monophonic instrument… preventing more than one NOTE from sounding
+at once". The manual also describes two voices on one key as simply "layered",
+with no choke anywhere. The 4.6 and 4.7 addenda add no such feature. EOS
+"Group" 1-32 turns out to be an EDITING selector — "all voices with that group
+number will be selected" — which is the id 227 eosed had already dismissed.
+
+**And the combination is measured, each half with its own positive control:**
+
+    single note 52, voices 0 and 1, median against the untouched baseline
+      Multiple Trigger, assign as found     +0.50 dB
+      Multiple Trigger + Mono A on both     +0.57 dB
+      Synth (last)     + Mono A on both     +0.54 dB
+
+    controls, noise preset, two overlapping notes 600 ms apart
+      Solo Off          rise +3.07 dB    (two sources summing)
+      Multiple Trigger  rise -0.52 dB    STEALS
+      Synth (last)      rise +0.09 dB    STEALS
+
+The ~+0.5 dB is common to cases sharing no setting, so it is capture-to-capture
+variation. Both solo modes work exactly as documented — they stop a second NOTE
+— and neither has any opinion about two voices allocated by one note-on. Nor
+does Mono A, alone or on top of them.
+
+**The forum advice is not wrong; it is about the other case.** Solo Mode plus
+Assign Group is exactly right for a hi-hat, which is two different KEYS. One
+note-on starting two voices creates no contention at either level, so neither
+fires — which is why the advice reads as though it should apply.
+
+So the conclusion now rests on three legs rather than one: assign group
+measured with a control, both solo modes measured with controls alone and
+combined, and the manual describing both purely in terms of notes. eosed's own
+caveat is worth keeping: that is two fields tested and two manual sections
+read, which is not the same as having exhausted the format.
+
 ### What this retires
 
 Every filter parameter tried tonight measured correct and sounded insufficient
