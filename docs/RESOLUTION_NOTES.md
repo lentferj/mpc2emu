@@ -16556,6 +16556,50 @@ sub-semitone zones convert at 16% of their intended detune, which is inaudible
 per zone and is why this survived: the common case degrades quietly and only
 the octave layers change the music.
 
+### THE FIX VALIDATED ON HARDWARE BEFORE ANY CODE CHANGED (2026-08-23)
+
+Jan's call: compute the correct values and set them live over SysEx rather than
+rebuild. eosed set six voices on the converted preset, RAM only, and read every
+one back off the device rather than reporting what it sent.
+
+    voice  layer   before                    after
+      0    unison  ctune  +0 ftune  +0 vol +1   ctune  +0 ftune +0 vol   0
+      1    octave  ctune  +0 ftune +63 vol +1   ctune +12 ftune +0 vol -16
+      2    unison  ctune  +0 ftune  +0 vol +1   ctune  +0 ftune +0 vol   0
+      3    octave  ctune  +0 ftune +63 vol +1   ctune +12 ftune +0 vol  -6
+      4    unison  ctune  +0 ftune  +0 vol +1   ctune  +0 ftune +0 vol   0
+      5    octave  ctune  +0 ftune +63 vol +1   ctune +12 ftune +0 vol -16
+
+**The before-state matched the diagnosis exactly**, which is independent
+confirmation that the fault is where the source line says it is.
+
+**The tune fix is measured, not assumed.** At note 65 the beat partner sat at
+369.7 Hz, **+98.4 cents** — 63/64 of a semitone, the field ceiling, arriving
+exactly as predicted. After the edit that partial fell from -11.3 dB under the
+fundamental to **-47.3 dB**: a 37 dB collapse. The beat source is gone.
+
+**The volume numbers are panel bytes and the distinction mattered.** The
+source's -20/-8/-20 units are -12.12/-4.85/-12.12 dB, but the E4XT volume byte
+is not linear in dB, so the panel values are **-16 and -6**. Setting the naive
+-12 and -5 would have delivered -9.17 and -3.83 — about 3 dB hot, and
+inconclusive in the direction that reads as success.
+
+Isolated-layer measurement, by muting one voice at a time to -96: the octave
+layer sits **-5.84 dB** under the unison at note 65 against the law's predicted
+-4.60, the ~1.2 dB remainder being the two samples' own level difference rather
+than a panel-value error. eosed explicitly declined to read that ratio from the
+mixed capture, because at note 65 the octave layer lands on 698.5 Hz, which is
+also the unison layer's second harmonic — a bin dominated by the wrong voice
+would have given a confounded number that reads as success.
+
+**Correction to §34 that came out of it:** that section concluded a layered
+voice "cannot be muted from here to isolate another one". That was inferred
+from a PRESET-volume write, which never reaches the audio. **VOICE volume does**
+— the mutes above are the proof — so remote layer soloing works. Also, the
+Voices page updates its LCD live from editor-protocol writes, contrary to the
+spec's claim that the panel does not reflect a remote edit until the preset is
+touched.
+
 ### The fix, not applied yet and deliberately
 
     cents = round((kg['tune'] + z['tune']) * 100 / 256)
