@@ -16691,11 +16691,17 @@ missing test §AKAITUNEREAD asks for and is now asked for by two findings.
 
 ### Consequence for the octave-stack program
 
-The source attenuates its octave layer by 20 dB, 8 dB, 20 dB across the three
-key ranges. We convert all three at the same level as the unison layer. So the
-converted patch has an octave layer roughly **20 dB louder relative to the
-fundamental than the original**, in addition to that layer being detuned by
-three quarters of a semitone instead of transposed by twelve.
+The source attenuates its octave layer by VLOUD1 **-20, -8, -20 units** across
+the three key ranges. **CORRECTION, and it is embarrassing in a finding about
+units:** an earlier version of this section quoted those figures as decibels.
+They are not. At the measured 0.60576 dB per unit they are **-12.1 dB, -4.8 dB
+and -12.1 dB**. The defect is unchanged and the proposed fix was already right;
+only my description of the magnitude was wrong.
+
+We convert all three at the same level as the unison layer, so the converted
+patch carries its octave layer about **12 dB hotter relative to the
+fundamental** than the original, on top of that layer being detuned by three
+quarters of a semitone instead of transposed by twelve.
 
 ### Heard on the bench, 2026-08-23, and it is a SEPARATE symptom from the tune bug
 
@@ -16703,8 +16709,8 @@ Jan compared source and conversion by ear and reported the difference as being
 "in tuning ... and in high frequencies". The tuning half is §AKAITUNEREAD. The
 brightness half is most likely **this** defect, and the mechanism is direct: an
 octave-up layer is inherently the bright half of the patch, the original holds
-it 20 dB down, and we render it at unity. Restoring a layer's intended
-attenuation is not a subtle balance change when the amount is 20 dB.
+it 12 dB down, and we render it at unity. Twelve decibels on the bright half of
+a two-layer patch is not a subtle balance change.
 
 That the two bugs produce two distinguishable symptoms is worth noting on its
 own. It is also worth noting what did NOT find this: the matrix's brightness
@@ -16713,6 +16719,21 @@ rather than its sound (§MATRIXRESULT), so the only instrument that has reported
 this is a person listening. Not proof of the mechanism — the filter path is a
 second candidate and has not been excluded — but the level fault is proven from
 the file and predicts the symptom, which the filter path does not yet.
+
+### HARDWARE-CONFIRMED FROM BOTH PANELS, 2026-08-23
+
+Jan read the level fields off the two machines without being told what to
+expect, and both halves of this defect are visible on screen:
+
+  * **AKAI:** the +12 keygroups show `loud` settings that are **not 00** —
+    the source's per-zone attenuation, present and non-zero.
+  * **E4XT:** every per-voice volume reads **`+1`**.
+
+That `+1` is the literal `volume=1.0` constant, displayed. It is the unit error
+made visible: the field is decibels with unity at 0, so the reader's "1.0"
+reaches the machine as **+1 dB on every voice** — and identically on every
+voice, which is the dropped-offset half of the same line. One screen shows both
+faults at once.
 
 ### Fix
 
