@@ -535,10 +535,46 @@ AKAI_ENV2_DEPTH_MAX = (E4B_FENV_OCT_PER_UNIT * 100.0 * 100.0
                        / (AKAI_ENV2_OCT_PER_UNIT * 99.0))     #: ~18.3
 
 
+#: VLOUD1 (per-zone level offset) -> dB. s3ked 2026-08-17: the full law is
+#: `dB = 0.60576 * VLOUD1 - 20.1778`, r2 0.999896 over -50..+20; the intercept
+#: is the absolute output level at VLOUD 0, so an OFFSET uses the slope alone.
+#: Named here rather than left inline in the writer because the reader needs
+#: the same number to invert it (CR-13).
+AKAI_VLOUD_DB_PER_UNIT = 0.60576
+
+#: AKAI KGTUNO/VTUNO are 1/256 semitone, so cents are `units * 100 / 256`.
+#: Named because it has been got wrong twice: the writer multiplied by 256 and
+#: by 16 before 2026-08-11, and the reader still divided by 16 until
+#: 2026-08-23 (§AKAITUNEREAD).
+AKAI_TUNE_UNITS_PER_SEMITONE = 256
+
+
 def akai_env2_stage_seconds(byte: int, distance: float, law) -> float:
-    """A stage byte -> the seconds it takes to cover `distance` of 99."""
+    """A stage byte -> the seconds it takes to cover `distance` of 99.
+
+    **Byte 0 is INSTANT, and used not to be.** The fitted range starts at 40,
+    and this clamped anything below it up to 40 -- so every byte from 0 to 40
+    returned the same 66 ms, and a source asking for an instant filter attack
+    got a 66 ms fade. On a percussive program that removes the entire
+    transient, which is exactly what it did: see §AKAIENV2FLOOR, where it cost
+    an evening of chasing the missing attack through filter parameters.
+
+    Below the fitted range the law is now EXTRAPOLATED rather than clamped.
+    That is not free -- extrapolation below a measured range is a fault this
+    project has been bitten by repeatedly -- but the clamp is demonstrably
+    wrong here and the extrapolation is at least monotonic and lands at 1.4 ms
+    for byte 1, which is the right order of magnitude for "fast". Byte 0 is
+    special-cased to exactly zero because "instant" is a semantic value the
+    source states, not a point on a curve.
+
+    The top is still clamped at the fitted maximum: extrapolating upward would
+    invent slow stages nobody has measured.
+    """
     a, b, lo, hi = law
-    full = a * math.exp(b * max(lo, min(hi, byte)))
+    byte = max(0, min(hi, byte))
+    if byte == 0:
+        return 0.0
+    full = a * math.exp(b * byte)
     return full * (max(0.0, distance) / 99.0)
 
 

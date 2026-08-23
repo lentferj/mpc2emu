@@ -42,7 +42,14 @@ from models.common import (
     akai_filfrq_to_hz, hz_to_e4b_cutoff, AKAI_FILTER_LAW, AKAI_FILTER_OPEN,
     AKAI_ENV2_ATTACK, AKAI_ENV2_DECAY, AKAI_ENV2_RELEASE,
     AKAI_ENV2_DEPTH_OFFSET, AKAI_ENV2_DEPTH_MAX, akai_env2_stage_seconds,
+    AKAI_VLOUD_DB_PER_UNIT, AKAI_TUNE_UNITS_PER_SEMITONE,
     Envelope)
+
+#: Keygroup byte offsets that had no name here until 2026-08-23.
+AKAI_FILQ_OFFSET = 149        #: resonance, 0..15 (s3ked §52)
+AKAI_KGMUTE_OFFSET = 160      #: keygroup mute group; **255 is off, 0 is a
+                              #: real group** (§AKAIMUTEGRP)
+AKAI_KGMUTE_OFF = 255
 
 # ── AKAI character encoding ────────────────────────────────────────────────
 # Not ASCII: names are a 41-symbol alphabet packed one byte per character.
@@ -508,6 +515,14 @@ def parse_program_bytes(data: bytes, fallback_name: str = '',
             env2=(kg[0x14], kg[0x15], kg[0x16], kg[0x17]),
             env2_depth=(_s8(kg[AKAI_ENV2_DEPTH_OFFSET])
                         if len(kg) > AKAI_ENV2_DEPTH_OFFSET else 0),
+            filter_q=(kg[AKAI_FILQ_OFFSET]
+                      if len(kg) > AKAI_FILQ_OFFSET else 0),
+            # 255 is off. An S1000 keygroup is 150 bytes and has no offset
+            # 160 at all, so a short block reports OFF rather than group 0 --
+            # reporting 0 would invent an active mute group for every S1000
+            # program on earth.
+            mute_group=(kg[AKAI_KGMUTE_OFFSET]
+                        if len(kg) > AKAI_KGMUTE_OFFSET else AKAI_KGMUTE_OFF),
             zones=zones,
         ))
 
@@ -581,6 +596,12 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
 
     for kg in prog['keygroups']:
         voice = VoiceLayer()
+        # The AKAI filter is 12 dB/octave -- the service manual's own
+        # specification and s3ked's §139 measurement. Left unset until
+        # 2026-08-23, and the model default of 0 is "Off", which the E4B
+        # writer maps to vpar[58]=0x00 -- the FOUR-pole. Every AKAI-sourced
+        # conversion we ever made had a filter twice as steep as its source.
+        voice.filter_type = 2          # XPM "Low 2": 2-pole, 12 dB/oct
         voice.filter_cutoff = _cutoff_of(kg['filter_freq'], prog['is_s3000'])
         _fe, _amt = _filter_env_of(kg.get('env2'), kg.get('env2_depth', 0))
         if _fe is not None:
@@ -618,13 +639,27 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
             sd = cache[src]
             if sd is None:
                 continue
+            _cents = int(round((kg['tune'] + z['tune']) * 100.0
+                               / AKAI_TUNE_UNITS_PER_SEMITONE))
+            # Truncate toward zero so `fine` keeps the sign of the whole
+            # value: -1250 cents is -12 semitones and -50 cents, not -13 and
+            # +50.
+            _coarse = int(_cents / 100.0)
+            _fine = _cents - _coarse * 100
             voice.zones.append(ZoneMapping(
                 sample_name=sd.name,
                 lo_key=kg['lo_key'], hi_key=kg['hi_key'],
                 lo_vel=z['lo_vel'], hi_vel=z['hi_vel'],
                 root_key=sd.root_note,
-                fine_tune=(kg['tune'] + z['tune']) // 16,
-                volume=1.0,
+                # AKAI tune is 1/256 semitone. This divided by 16 until
+                # 2026-08-23 -- 16% of the true value -- AND put the whole
+                # result in fine_tune, which is a +/-100 cent field, so an
+                # octave layer saturated at +98 cents (§AKAITUNEREAD).
+                coarse_tune=_coarse, fine_tune=_fine,
+                # VLOUD1 through the measured slope. Was a hardcoded 1.0,
+                # which dropped the source's level offset AND meant +1 dB
+                # rather than unity, since the field is dB (§AKAIZONELOUD).
+                volume=z.get('loudness', 0) * AKAI_VLOUD_DB_PER_UNIT,
                 # AKAI pan is -50..+50 with 0 centred; `ZoneMapping.pan` is
                 # -1.0..+1.0 with 0.0 centred. Both ends are hard, so the
                 # scale is /50. Measured over 54 654 zones on the disc corpus:
