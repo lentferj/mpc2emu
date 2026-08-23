@@ -17011,6 +17011,41 @@ three: **correcting a writer's law includes the reader for that field.** An
 AKAI -> AKAI round-trip test would have caught all three, and is now asked for
 by three findings rather than one.
 
+### Set live and confirmed, 2026-08-23 — and one measurement correctly refused
+
+eosed set the recalculated VENV on all six voices (unison `98/42`, octave
+`87/68`, releases `0/0` and `62/0`) with FENV, ctune, ftune and volume verified
+unchanged per voice. The flat-topped box is gone and the note decays instead of
+holding at 96% until release.
+
+**The test was also meant to discriminate the ~1.9x disagreement between our two
+envelope-time laws, and eosed refused to let it.** They measured the decay
+directly rather than asking whether it "sounds twice as long", found it a clean
+straight line in dB (residual under 1 dB over a 36 dB fall, so level really is
+linear in dB), and then found the slope depends on which key is played:
+
+    note 50 (voices 0/1)  -5.47 dB/s   settles 8.30 s
+    note 65 (voices 2/3)  -5.80 dB/s   settles 6.15 s
+    note 76 (voices 4/5)  -7.16 dB/s   settles 5.10 s
+
+All three unison voices carry the same rate byte 98, and a rate law cannot give
+three answers for one byte. At least three things are in that number and none
+can be separated tonight: **the samples decay by themselves** (this is an
+electric piano, so what was measured is the envelope multiplied by the source's
+own decay), **possible key-scaling of envelope rates on the E4XT** — untested,
+and something the converter would need to know — and the octave voice still
+contributing at 12 dB down.
+
+So the tidy conclusion "§43 wins over 9.30 s" was available and was correctly
+withdrawn. §43 earned its clean law by measuring a noise source with no decay of
+its own on a purpose-built disc; there is no shortcut to that through a sampled
+piano. The dedicated session stands.
+
+**A useful thing falls out of it anyway:** because the old envelope was a flat
+box, every earlier capture of this preset was showing the *sample's* natural
+decay and nothing else. That is why the broken conversion still sounded like an
+electric piano.
+
 ### Fix
 
 Build an `Envelope` from the keygroup bytes by inverting `akai_env_bytes`, and
