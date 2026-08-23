@@ -182,6 +182,8 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIOBJCAPS — the AKAI service manual specifies 255 samples / 254 programs, and the splitter allows 509 of each (2026-08-23)](#akaiobjcaps-the-akai-service-manual-specifies-255-samples-254-programs-and-the-splitter-allows-509-of-each-2026-08-23)
 - [§IB304FDOC — what the service manual says about the second filter board (2026-08-23)](#ib304fdoc-what-the-service-manual-says-about-the-second-filter-board-2026-08-23)
 - [§AKAITUNEREAD — the AKAI reader still divides zone tune by 16; the writer was fixed on 2026-08-11 and the reader was not (2026-08-23)](#akaituneread-the-akai-reader-still-divides-zone-tune-by-16-the-writer-was-fixed-on-2026-08-11-and-the-reader-was-not-2026-08-23)
+- [§AKAIZONELOUD — the AKAI reader drops per-zone loudness, and writes +1 dB where it means unity (2026-08-23)](#akaizoneloud-the-akai-reader-drops-per-zone-loudness-and-writes-1-db-where-it-means-unity-2026-08-23)
+- [§AKAICAPTUREGAP — the capture that started it does not match the file, and that is unresolved (2026-08-23)](#akaicapturegap-the-capture-that-started-it-does-not-match-the-file-and-that-is-unresolved-2026-08-23)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -16478,13 +16480,13 @@ and it is not a one-patch problem.
 
 ### What was measured
 
-The capture: an AKAI electric-piano program sounds a full octave above the
-written note on all four probe notes, with **no energy at the written
-fundamental** and a clean harmonic series an octave up. Its E4B conversion sits
-at the written pitch and carries two partial series about 98 cents apart where
-the source has one.
+**The proof is the file and the source line. The capture was only the way in,
+and it is decoupled here on s3ked's advice, which was right** — the reader bug
+stands on its own and attaching it to a capture the file does not predict gives
+a reviewer a loose thread to pull. What the capture did was point at a program
+worth reading. See §AKAICAPTUREGAP for the part of it that is still unexplained.
 
-The file says why. That program is a two-layer octave stack — three zones at
+That program is a two-layer octave stack — three zones at
 unison, three at `VTUNO = 3072`. AKAI keygroup and zone tune are **1/256
 semitone**, so 3072 is exactly +12 semitones.
 
@@ -16571,3 +16573,139 @@ clamps once values beyond +/-100 cents actually reach them.
 Worth doing at the same time: an **AKAI -> AKAI round-trip test**. It is the
 shape of test that would have caught this on the day the writer was fixed, and
 it costs nothing to keep.
+
+### What the bug SOUNDS like, which is not what I first said
+
+s3ked's correction, and it matters for anyone listening for it: this does not
+drop the octave. It scales it to 16%, so the converted layer lands about
+**three quarters of a semitone** above an untuned layer at the same level.
+That is not a missing octave — it is a sour beating unison. Listening for an
+absent octave will miss it; listening for a detuned double cannot.
+
+
+## §AKAIZONELOUD — the AKAI reader drops per-zone loudness, and writes +1 dB where it means unity (2026-08-23)
+
+Predicted by s3ked while reviewing §AKAITUNEREAD — "if your reader drops zone
+loudness offsets the way it mis-scales zone tune" — and confirmed the same
+minute. It is a second defect on the same function, with the same history.
+
+`parsers/akai_s3000_parser.py`, in the `ZoneMapping(...)` construction:
+
+    volume=1.0,
+
+Two faults again:
+
+1. **The source value is discarded.** `parse_program_bytes` reads VLOUD1 into
+   the zone dict — the octave-stack program carries `loudness = -20, -8, -20`
+   on its three octave layers — and `build_preset_from_program` never looks at
+   it. Every AKAI-sourced zone leaves the reader at the same level.
+2. **The constant is in the wrong unit.** `ZoneMapping.volume` is documented
+   `# dB, -96..+12`, where unity is **0.0**. `1.0` is therefore **+1 dB**, not
+   "full scale" — a small spurious lift on every zone we read from an AKAI
+   source, on top of the dropped offset.
+
+### The same twelve-day gap, in the same direction
+
+`writers/akai_s3000_writer.py` already carries the correct law, added
+2026-08-17, and its comment says exactly what happened on the write side:
+
+    VLOUD1, the per-zone level offset. Dropped entirely until 2026-08-17 --
+    the encoder was in place and nothing ever set 'loudness', so 14.8% of
+    corpus zones lost their level offset in silence.
+
+    MEASURED (s3ked, 2026-08-17): dB = 0.60576 * VLOUD1 - 20.1778,
+    r2 0.999896 over -50..+20
+
+So the write half was measured, fitted and wired; the read half still hands it
+a constant. **14.8% of corpus zones** carry a level offset, per that same
+measurement.
+
+### This is now a pattern, not two coincidences
+
+Two fields, same function, same shape:
+
+| field | writer fixed | reader still wrong |
+|---|---|---|
+| zone tune (VTUNO/KGTUNO) | 2026-08-11, factor 2.56 | `// 16`, and no coarse split |
+| zone loudness (VLOUD1) | 2026-08-17, 0.60576 dB/unit | `volume=1.0`, source ignored |
+
+Both times the work went into making us **write** AKAI correctly and the
+corresponding **read** path was left as it was. That is worth stating as a
+rule rather than fixing twice quietly: **when a writer's unit or law is
+corrected, the reader for the same field is part of the change.** Neither of
+these would have survived an AKAI -> AKAI round-trip test, which is the same
+missing test §AKAITUNEREAD asks for and is now asked for by two findings.
+
+### Consequence for the octave-stack program
+
+The source attenuates its octave layer by 20 dB, 8 dB, 20 dB across the three
+key ranges. We convert all three at the same level as the unison layer. So the
+converted patch has an octave layer roughly **20 dB louder relative to the
+fundamental than the original**, in addition to that layer being detuned by
+three quarters of a semitone instead of transposed by twelve.
+
+### Fix
+
+Route the dict's `loudness` through the writer's measured law, inverted, and
+default to `0.0` rather than `1.0`:
+
+    volume=z.get('loudness', 0) * 0.60576,
+
+Same caveats as §AKAITUNEREAD: not applied mid-audit, wants a regression test
+that fails when reverted, and the level change reaches every AKAI-sourced
+conversion.
+
+
+## §AKAICAPTUREGAP — the capture that started it does not match the file, and that is unresolved (2026-08-23)
+
+Kept separate from §AKAITUNEREAD deliberately, because the reader bug is proven
+without it and this is not proven at all.
+
+**What the file says the program should do.** Six zones, three key ranges by
+two layers. Both layers LOVEL 0 / HIVEL 127, so no velocity switch. CP 0
+everywhere, so no constant-pitch zone. SPITCH 48 / 60 / 72 matching the key
+ranges exactly, no root-note error. SSRATE 44100 uniform across all sixteen
+samples, STUNO 0 throughout. Both layers' samples present, neither dangling.
+s3ked decoded all of that through their own parameter table, independently of
+our parser, and the two agree. **The unison layer should sound, at the written
+pitch, at full level, on every note and every velocity.**
+
+**What the capture shows.** Measuring the fundamental and its first three
+harmonics directly in the source capture, relative to the strongest of them:
+
+    note 36   f0 -65.4 dB    2f  0.0    3f -69.8    4f  -4.6
+    note 43   f0 -57.2 dB    2f  0.0    3f -70.5    4f  -6.8
+    note 48   f0 -70.6 dB    2f  0.0    3f -77.3    4f  -7.3
+    note 55   f0 -72.4 dB    2f  0.0    3f -81.3    4f  -8.6
+
+Against the same measurement on the E4B conversion:
+
+    note 36   f0  -5.8 dB    2f  0.0    3f  -8.3    4f -18.6
+    note 43   f0  -0.6 dB    2f  0.0    3f  -7.6    4f -16.9
+
+**s3ked's explanation (a) does not survive this, and it was the right thing to
+propose.** They suggested the octave layer reinforces every even harmonic, so a
+weak-fundamental electric piano would look like a clean series on 2f while f is
+present and sounding. But that mechanism cannot suppress the **odd** harmonics,
+and 3f is 70 to 81 dB down alongside a 2f and 4f that are strong. A spectrum
+with even harmonics only is a spectrum whose true fundamental is 2f. The
+conversion, by contrast, has 3f within 8 dB — both layers audible, exactly as
+the file predicts for the original.
+
+So the source capture really does contain only the octave layer, at 60-70 dB of
+separation. That is not a weak fundamental; it is an absent one.
+
+**What is NOT established:** why. Three live candidates, none favoured:
+
+  1. **The card's MX3 is not this file.** Everything above was read from
+     `MXS3.hda` and `HD-MATRIX-AKAI.hda`, staging images. s3ked flagged that
+     the second is pre-rename and identified the volumes **by content**, not by
+     name — solid inference, not a byte copy of what the sampler loaded. A
+     fresh card image settles it and nobody has touched the card.
+  2. **Something silenced the unison layer at play time** — polyphony, voice
+     stealing, or a keygroup interaction the header does not show.
+  3. **The capture is mislabelled** and this is a different program.
+
+Ruling out (1) is cheap and comes first; it needs a card read, not a listen.
+Until then this is an open thread with a measurement attached, and it must not
+be cited as evidence for anything else.
