@@ -187,6 +187,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIAMPENV — the AKAI reader drops the amplitude envelope too, and that explains everything left over (2026-08-23)](#akaiampenv-the-akai-reader-drops-the-amplitude-envelope-too-and-that-explains-everything-left-over-2026-08-23)
 - [§AKAIENV2FLOOR — a zero attack converts to 66 ms, and that is where the click went (2026-08-23)](#akaienv2floor-a-zero-attack-converts-to-66-ms-and-that-is-where-the-click-went-2026-08-23)
 - [§E4XTQCAL — the E4XT resonance parameter, measured, and it tops out below what AKAI sources ask for (2026-08-23)](#e4xtqcal-the-e4xt-resonance-parameter-measured-and-it-tops-out-below-what-akai-sources-ask-for-2026-08-23)
+- [§AKAIENV2DEPTH — we sweep the filter clean out of the audio band (2026-08-23)](#akaienv2depth-we-sweep-the-filter-clean-out-of-the-audio-band-2026-08-23)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -17212,3 +17213,76 @@ writes were fine — they address the edit context, not the sounding preset — 
 the audio was of the wrong preset. Their own §47 trap, in their own run, two
 hours after writing it up. `lift_db` caught it; a peak or clip guard would not
 have.
+
+## §AKAIENV2DEPTH — we sweep the filter clean out of the audio band (2026-08-23)
+
+Found by measuring the two machines against each other instead of arguing from
+laws, after four filter tests in a row returned clean nulls.
+
+### The cross-machine measurement
+
+Transient (first 150 ms), band-summed, each normalised to its own 500-1000 Hz:
+
+    band          AKAI     E4XT
+    4-6 kHz       +3.0     -5.4
+    6-8 kHz      +10.8     -7.7      <- 18.5 dB apart
+    8-10 kHz      +7.4    -17.1      <- 24.5 dB apart
+    10-12 kHz    -10.6    -24.4
+    14-16 kHz    -27.2    -37.4
+
+The AKAI carries a **resonant peak at 6-10 kHz** — a peak, not a shelf, with the
+bands either side 10-20 dB below it. That is the metallic click. Our conversion
+has nothing there, and both machines roll off alike above 12 kHz, so it is not
+an output-bandwidth difference.
+
+### The cause, and why every earlier test was a null
+
+`AKAI_ENV2_DEPTH_MAX = 18.30` makes the source's ENV2 depth 25 worth **7.02
+octaves**. eosed measured one cord at +100 from a ~120 Hz base putting the corner
+**past 19 kHz**. So our resonant peak sits outside the audio band, where no value
+of Q is audible.
+
+That retires both of the "machine limits" we had been treating as the remaining
+gap — the Q ceiling at 7.8 and the cord clamp at 5.14 octaves — as explanations
+for this symptom. Neither matters while the corner is inaudible. It also explains
+the four nulls: **the filter was never in circuit.** Filter type, filter decay,
+a second cord on voice 3, a second cord on the unison layers — every one of them
+measured a control that was already saturated.
+
+### What the machine actually wants
+
+eosed aimed at the corner rather than at one amount, measuring each octave voice
+isolated and sweeping until the peak landed in band:
+
+    voice 1  Fc 135  ->  amount 32  ->  peak  6218 Hz  (+7.8 dB)
+    voice 3  Fc 179  ->  amount 15  ->  peak  7394 Hz  (+10.8 dB)
+    voice 5  Fc 119  ->  amount 39  ->  (verification failed, see below)
+
+Against the +100 we write today. That is 2.5x to 6.7x too much.
+
+**The spread is the finding, not the average.** The same octave shift from three
+different base cutoffs needs three different amounts, so whatever replaces 18.30
+has to interact with the base cutoff and cannot be a single constant. Do not fit
+one number to these three points — the depth law itself is unmeasured and this
+is three points and a symptom, not a calibration.
+
+### Result
+
+Mixed A/B, first 40 ms after onset, after minus before:
+
+    note      1-2k    2-4k    4-6k    6-8k   8-10k  10-12k
+      50      -0.0    -0.0    +0.0    +0.1    +5.0    -7.6
+      65      -0.0    +0.1    +0.0    +8.3    -0.0    -5.3
+      76      +0.0    +0.4    +3.8    -0.1    -0.1    -3.0
+
+A peak in 4-10 kHz and everything above 10 kHz down — the AKAI's shape. The
+unison voices were untouched and the 1-4 kHz bands are flat, so this is the
+octave layers and nothing else.
+
+Voice 5's isolated verification returned 308 Hz, which is the detector failing
+rather than a result; the mixed evidence puts its peak in 4-6 kHz rather than
+the 7.5 kHz aimed at, so it is probably 3-4 units short. Reported as a failed
+verification rather than a third success.
+
+**The unison layers still sweep past 19 kHz** and are the next place to look if
+the click is better but not right.
