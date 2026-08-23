@@ -16574,6 +16574,24 @@ Worth doing at the same time: an **AKAI -> AKAI round-trip test**. It is the
 shape of test that would have caught this on the day the writer was fixed, and
 it costs nothing to keep.
 
+### HARDWARE-CONFIRMED BY EAR, 2026-08-23
+
+Jan played the AKAI original against its E4B conversion on the bench, one
+program change apart, and reported both predicted symptoms without being told
+what to listen for:
+
+  * **"EMU is significantly lower"** — the source sounds an octave above the
+    conversion, which is what the capture measured.
+  * **"sounds very detuned in itself"** — the conversion beats against itself.
+    That is the 16% scaling heard directly: 3072 units should be +1200 cents
+    and reaches the E4B as +98, so the two layers sit about a semitone apart
+    instead of an octave.
+
+So the defect is no longer only proven from the file — it is audible on
+hardware, which is this project's standard for "tested". It also retires the
+strongest form of §AKAICAPTUREGAP's first candidate: the live machine behaves
+as the capture did, so we were not analysing the wrong bytes.
+
 ### What the bug SOUNDS like, which is not what I first said
 
 s3ked's correction, and it matters for anyone listening for it: this does not
@@ -16644,6 +16662,23 @@ converted patch has an octave layer roughly **20 dB louder relative to the
 fundamental than the original**, in addition to that layer being detuned by
 three quarters of a semitone instead of transposed by twelve.
 
+### Heard on the bench, 2026-08-23, and it is a SEPARATE symptom from the tune bug
+
+Jan compared source and conversion by ear and reported the difference as being
+"in tuning ... and in high frequencies". The tuning half is §AKAITUNEREAD. The
+brightness half is most likely **this** defect, and the mechanism is direct: an
+octave-up layer is inherently the bright half of the patch, the original holds
+it 20 dB down, and we render it at unity. Restoring a layer's intended
+attenuation is not a subtle balance change when the amount is 20 dB.
+
+That the two bugs produce two distinguishable symptoms is worth noting on its
+own. It is also worth noting what did NOT find this: the matrix's brightness
+metric was withdrawn on 2026-08-22 for following each machine's noise floor
+rather than its sound (§MATRIXRESULT), so the only instrument that has reported
+this is a person listening. Not proof of the mechanism — the filter path is a
+second candidate and has not been excluded — but the level fault is proven from
+the file and predicts the symptom, which the filter path does not yet.
+
 ### Fix
 
 Route the dict's `loudness` through the writer's measured law, inverted, and
@@ -16709,3 +16744,24 @@ separation. That is not a weak fundamental; it is an absent one.
 Ruling out (1) is cheap and comes first; it needs a card read, not a listen.
 Until then this is an open thread with a measurement attached, and it must not
 be cited as evidence for anything else.
+
+**UPDATE, same evening: candidate (1) is largely retired and the paradox is
+sharper.** Jan played the volume live and heard the source an octave above its
+conversion — the same relationship the capture shows. So the card and the
+staging image agree on the audible outcome and we were not reading the wrong
+bytes.
+
+That makes the arithmetic harder to explain, not easier. The octave layer is
+the one the file **attenuates by 20 dB** (`VLOUD1 -20`), and the unison layer
+sits at 0. A layer 20 dB down should not dominate a layer at full level, let
+alone bury it by 60-70 dB. The six zones are six separate keygroups with
+overlapping key ranges rather than velocity zones within one keygroup, so
+normal AKAI behaviour is for all of them to sound together.
+
+Something is preventing the unison layer from sounding on this machine, and
+neither the header fields nor the level fields explain it. Next step is a
+listening question rather than a measurement: **does the source sound like one
+pitch or like two an octave apart?** One pitch means the unison layer is truly
+absent and there is a second defect or a machine behaviour to find. Two means
+the analysis window is dominated by the octave partials and the 65 dB figure is
+about the measurement, not the sound.
