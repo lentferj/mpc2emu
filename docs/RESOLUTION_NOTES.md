@@ -16313,3 +16313,59 @@ as (samples, presets, combined). Add the measurement to the
 `_AKAI_OBJECT_POOL` comment block, which is where the reader already goes for
 "what does the machine hold", and a regression test that a 300-sample bank
 splits into two volumes.
+
+### Addendum, same day: the S1000 manual, and the evidence that discriminates
+
+Both Markdown conversions landed in the Bibliothek at 11:51 and 11:52 (the
+upload had failed the first time, which is why the first pass found none).
+**Jan's conversions are the ones to cite** — structured tables, a parts index
+and an IC reference, against the raw page dump generated here before they
+arrived. His S3000 file carries the 255 / 254 pair verbatim, so the finding
+above is quotable from it directly:
+
+    Maximum sample number | 255 | 255
+    Maximum program number | 254 | 254
+
+The S1000 service manual states its own, and they are **different numbers**:
+
+    Max. No. of samples ....... 200
+    Max. No. of programs ...... 100
+    Filter .................... Digital moving low pass filter (-18dB/oct)
+
+That the figures move per model is the first thing that separates them from a
+marketing round number. The second is in the corpus. Re-running the scan split
+by generation — `.S1`/`.P1` files against `.S3`/`.P3`:
+
+    S1000: 2803 volumes   max samples 120   max programs  43
+    S3000: 1433 volumes   max samples 191   max programs 128
+
+**128 > 100.** No S1000 volume passes the S1000's stated program cap; S3000
+volumes do, and only S3000 volumes do. The two populations separate at the
+boundary the two manuals state, which is exactly the discrimination the flat
+"nothing exceeds either cap" scan could not provide. This is still not proof
+of 255 — nothing comes near it — but it is evidence that a cap printed in
+these spec tables is the kind of number that binds, rather than the kind the
+229/191 case turned out to be.
+
+### Why the S1000 never showed us this and the S3000 does
+
+The volume directory holds **126 entries on an S1000** and 510 on an S3000
+(`akai_image_parser._VOLDIR_LAYOUT`). So on an S1000 the media limit is
+*tighter* than the resident one — 126 entries cannot hold 200 samples, and the
+200 is unreachable within a single volume. On an S3000 the ordering reverses:
+510 entries against a 255-sample ceiling, so the resident cap binds first and
+is the one nothing in our code models. The cap became reachable when the
+directory grew, which is why it has never bitten.
+
+None of this changes the S1000 side of our code, because **we do not write
+S1000 volumes** — `.S1`/`.P1` appear in `ext_to_ftype` for reading and for
+appending onto mixed media, and every volume we author is `.S3`/`.P3`. The
+S1000 numbers are recorded here as evidence about the S3000 pair, not as a
+limit of ours.
+
+One item the S1000 manual corroborates rather than opens: its **-18 dB/oct**
+filter is the figure `_cutoff_of` already cites from s3ked §139, which measured
+12 dB/oct on the S3000XL. The docstring's caution — an S3000XL importing a
+`.P1` passes FILFRQ through unchanged, and identity is not equivalence — now
+has AKAI's own spec sheet on both sides of it. Still needs an S1000; still the
+same open question, just better sourced.
