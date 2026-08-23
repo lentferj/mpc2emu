@@ -191,6 +191,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIFIXPLAN — the plan to actually fix it (2026-08-23)](#akaifixplan-the-plan-to-actually-fix-it-2026-08-23)
 - [§AKAIMUTEGRP — the click is a mute group, and E4B cannot express it (2026-08-23)](#akaimutegrp-the-click-is-a-mute-group-and-e4b-cannot-express-it-2026-08-23)
 - [§E4BENVSPAN — the E4B writer encodes envelope rates with the span and the parser decodes without it (2026-08-23)](#e4benvspan-the-e4b-writer-encodes-envelope-rates-with-the-span-and-the-parser-decodes-without-it-2026-08-23)
+- [§AKAIFIXPLAN2 — what is left, and what each item is blocked on (2026-08-23)](#akaifixplan2-what-is-left-and-what-each-item-is-blocked-on-2026-08-23)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -17729,3 +17730,145 @@ That is a small change in a file every E4B conversion goes through, at 23:20,
 after seven other fixes. It wants its own session, a round-trip test asserting
 writer and parser are inverses across a spread of sustains, and a check of what
 it does to the E4B-sourced rows of the conversion matrix.
+
+## §AKAIFIXPLAN2 — what is left, and what each item is blocked on (2026-08-23)
+
+The seven reader items in §AKAIFIXPLAN are done, tested and committed. This is
+everything that was found and deliberately NOT applied, with what each one
+needs. Ordered by what unblocks what, not by size.
+
+### 1. The E4B reader ignores the envelope span (§E4BENVSPAN) — BIGGEST REACH
+
+`writers/e4b_writer.py` encodes envelope rates with `_env_span_rate(span,
+seconds)`; `parsers/e4b_parser.py` decodes with `env_rate_to_seconds(byte)`,
+which has no span. **They are not inverses**, and a round trip through our own
+code proves it: 5.50 s and 3.86 s per voice come back as 3.8518 s on every
+voice.
+
+This reaches **every E4B-sourced conversion**, not one path. It is the largest
+of the remaining items by blast radius and the cheapest to verify.
+
+    fix        give the parser the same span treatment — decode the sustain
+               byte first, then the rates that depend on it
+    test       a round trip asserting writer and parser are inverses across a
+               spread of sustains, which is the test that would have caught it
+    check      re-run the E4B-sourced rows of the conversion matrix; envelope
+               times will move, and the matrix says by how much
+    watch for  this may also be eosed's unexplained ~1.9x between our envelope
+               times and theirs. A span-blind decode returns the FULL-traverse
+               time for a partial stage, which is the only mechanism anyone has
+               proposed that would give a constant ratio across unrelated
+               stages. Check the DIRECTION of their discrepancy against it
+               before claiming it.
+
+### 2. KGMUTE is never written — blocked on a golden-hash decision, not on doubt
+
+One line: `k[160] = 255` in `_keygroup`. It breaks three byte-for-byte-against-
+akaiutil tests, which means **akaiutil writes 0 there too**.
+
+§AGREEMENT already says what that pairing rules out — our arithmetic, and
+nothing about whether either implementation is right — and against it stands a
+hardware measurement of 19.1 dB plus 86% of factory keygroups carrying 255. The
+measurement wins on the merits. What is needed is a decision about the golden
+tests, not more evidence:
+
+  * either they assert byte-identity EXCEPT for named, evidenced fields where
+    hardware contradicts akaiutil,
+  * or they stop claiming byte-identity and claim something weaker and true.
+
+**Do not silently re-hash them.** That throws away the only signal that
+currently notices we diverged from the reference implementation.
+
+Latent meanwhile: our converter emits layers as velocity zones inside one
+keygroup, never as overlapping keygroups, so nothing shipped can have been bitten.
+
+### 3. The E4B resonance writer is an uncalibrated guess — data now exists
+
+`e4b_writer.py:864` is `vpar[61] = round(voice.filter_resonance * 127)`. That
+is the same shape as the K2000 filter-envelope depth fixed on 2026-08-22, which
+was 23x out at low amounts and 1.75x too much at full because the field's
+response is not linear.
+
+The reader half shipped tonight; this is the other half. eosed measured the
+real curve on 2026-08-23 (§E4XTQCAL): peak height in dB per byte, **clamping at
+byte 112** with fifteen dead steps above it, and exactly twice the dB on the
+4-pole so one curve covers both types. Raw points are in
+`~/temp/e4xt_ref/qcal/`.
+
+    fix        map the model's 0..1 through the measured curve, clamp at 112
+    say so     the E4XT tops out at Q ~7.8 and AKAI FILQ above ~13 asks for
+               more, so two keygroups asking for different Q land on the same
+               byte. State it in the conversion log rather than losing it
+    test       assert 127 is never written, and that the curve is used rather
+               than a multiplication
+
+### 4. The FilterEnv depth conversion composes two laws and should not
+
+`AKAI_ENV2_DEPTH_MAX = 18.30` is derived by equating two constants measured on
+two different machines, and it over-delivers by 2.5x to 6.7x — enough to sweep
+the corner past 19 kHz, out of the audio band, which is why four filter tests in
+a row measured ~1 dB (§AKAIENV2DEPTH).
+
+**Do not fit a new constant to tonight's three points.** The three octave voices
+wanted amounts 32, 15 and 39 for the same source depth, because their base
+cutoffs differ — the relation interacts with the base and cannot be one number.
+
+    needs      B1: measure the E4XT FilterEnv->FilFreq depth law properly. It is
+               superlinear (0.0643 oct/unit at amount 37, 0.0569 at 74), so the
+               linear `5.14e-4 * level% * amount` we ship is the wrong shape.
+               Noise preset, several base cutoffs, enough points below
+               saturation to see the curve
+    needs      B2: measure what an AKAI ENV2 depth is worth in octaves, by
+               sweeping DEPTH against a fixed FILFRQ on the S3000XL
+    then       reformulate as CORNER POSITIONS rather than composed depths:
+                   target_hz = akai_base_hz * 2 ** akai_depth_octaves
+                   amount    = e4xt_cord_amount(base_hz, target_hz)
+               That function is what eosed computed by hand per voice, and it
+               belongs in the code
+    free       cords SUM linearly — two at +37 measure identical to one at +74 —
+               so depth beyond one cord is reachable by allocating a second.
+               A general capability for any over-range modulation we clamp
+
+### 5. Audit every fitted law for evaluation outside its calibrated range
+
+Three instances in one evening, and they are a class rather than three
+coincidences:
+
+  * `akai_env2_stage_seconds` clamped UP to the fit's bottom (byte 40), so
+    bytes 0..40 all returned 66 ms — fixed tonight
+  * `env_rate_to_seconds(0)` returns 31 ms against its own comment saying
+    "rate 0 = instant" — a parser reporting artefact, not in the file
+  * `akai_env_from_bytes` round-trips inexactly at the edges because
+    `_AK_RELSE1_RATE` is fitted 55..70 and real programs use 45 and 75
+
+    do         enumerate every law tuple carrying a `(lo, hi)` and check what
+               happens outside it — clamp, extrapolate, or neither
+    rule       a clamp at the BOTTOM of a time law is almost always wrong,
+               because "instant" is a real value a source can ask for
+    also       `e4xt_volume_byte` extrapolates below its measured floor and is
+               `round(db)` — no law at all — for positive dB
+
+### 6. Two tests that would have caught most of this
+
+  * **AKAI -> AKAI round trip.** Three of the seven fixed tonight would have
+    been caught the day the matching writer was fixed. Every existing AKAI test
+    compares us against ourselves on the write side only.
+  * **A saturation invariant.** After conversion, assert the filter corner at
+    the envelope's peak is inside the audio band. Five nulls tonight had one
+    cause — a control already at its limit reports nothing — and this is the
+    machine-checkable form of it.
+
+### 7. Parked hardware jobs, both cheap
+
+  * verify the E4XT voice-volume law: sweep one voice, measure delivered level
+    against panel value, weighted to -16..-6 and to the POSITIVE side where our
+    code has no law at all
+  * cord amount 100 vs 32 broadband, to confirm whether closing the filter is
+    what costs the octave layer its level
+
+### 8. One history item
+
+`56981fe` (2026-07-27, 342 commits back) names a vendor in its message. It
+wants the same scrub as tonight's two, but rewriting 342 commits is a separate,
+deliberate operation and belongs with the history rewrite that already has to
+happen before this branch is pushed.
