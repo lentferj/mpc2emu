@@ -193,6 +193,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§E4BENVSPAN — the E4B writer encodes envelope rates with the span and the parser decodes without it (2026-08-23)](#e4benvspan-the-e4b-writer-encodes-envelope-rates-with-the-span-and-the-parser-decodes-without-it-2026-08-23)
 - [§AKAIFIXPLAN2 — what is left, and what each item is blocked on (2026-08-23)](#akaifixplan2-what-is-left-and-what-each-item-is-blocked-on-2026-08-23)
 - [§LAWRANGE — the audit: what every fitted law does outside its calibrated range (2026-08-24)](#lawrange-the-audit-what-every-fitted-law-does-outside-its-calibrated-range-2026-08-24)
+- [§NAMEBITFLIP — a one-bit name corruption in sampler RAM, and why it matters to us (2026-08-24)](#namebitflip-a-one-bit-name-corruption-in-sampler-ram-and-why-it-matters-to-us-2026-08-24)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -17964,3 +17965,43 @@ answer here was half and four fifths, which no one had looked at.
 it, weighted to the positive side. `env_rate_to_seconds(0)` returning 31 ms
 remains, but the E4B parser no longer reaches it for the span-scaled stages
 (§E4BENVSPAN); attack and stage 2 still do.
+
+## §NAMEBITFLIP — a one-bit name corruption in sampler RAM, and why it matters to us (2026-08-24)
+
+Not our defect and not diagnosed. Recorded because of the SHAPE of the symptom
+it would produce in our converter.
+
+s3ked, tidying up after the depth calibration, read a sample name out of the
+S3000XL's RAM as `NOHSE WHT A` where the disk holds `NOISE WHT A`:
+
+    machine  name bytes [24, 25, 18, 29, 15, ...]
+    disk     name bytes [24, 25, 19, 29, 15, ...]
+                                ^^   19 = I, 18 = H
+                                     0b10011 against 0b10010 — ONE BIT
+
+Not a decoder fault: the partner sample from the same volume and the same load
+carries 19 in that position and reads correctly, and both projects' decoders map
+18 and 19 identically. Not one garbled reply either — two different operations,
+the name list and a header byte read at the name offset, agreed on the wrong
+value. **And it does not reproduce**: two reloads, both samples, byte 2 = 19.
+
+Candidates recorded as candidates rather than diagnosed: a RAM bit error; a
+stray write landing in a neighbouring header, since headers share one
+1022-entry pool and the sweep was writing hard to a different item in the same
+memory; or something rare in the load path.
+
+### Why it is filed here
+
+**Our converter resolves samples to zones by NAME** — `build_preset_from_program`
+calls `sample_bytes(z['sample_name'])` and warns "sample not found" when it
+misses.
+
+A single flipped bit in a name corrupts no audio, fails no checksum, and changes
+no byte anyone would diff. It just stops a name matching. The visible symptom is
+a healthy program reporting a dangling zone and playing silence, for a reason
+that is not true.
+
+That is a false finding shaped exactly like a real one, and this project has
+spent two days learning to distrust those. **If a dangling zone ever makes no
+sense, re-read the name and compare it against the DISK rather than against
+memory before believing it.**
