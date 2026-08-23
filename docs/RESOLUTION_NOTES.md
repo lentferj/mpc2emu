@@ -17590,3 +17590,30 @@ So the design is three-way rather than binary:
   * same group, overlapping key+velocity  -> EMULATE with a fast decay envelope
   * same group, disjoint key ranges       -> WARN, not expressible
   * 255, or a group with one member       -> nothing to do
+
+### The KGMUTE writer fix is READY AND NOT APPLIED, and the reason is a golden hash
+
+Writing `k[160] = 255` in `writers/akai_s3000_writer._keygroup` is a one-line
+change, it is correct, and it **breaks three byte-for-byte tests** —
+`test_hd_image_matches_akaiutil_byte_for_byte` and its floppy and CD siblings.
+
+Those tests passing today means **akaiutil writes 0 there too.** That is worth
+sitting with rather than dismissing: a widely used independent implementation
+makes the same choice. But §AGREEMENT already covers exactly this pairing —
+"our writer byte-identical to akaiutil" rules out OUR ARITHMETIC and rules out
+nothing about whether either implementation is right. And on the other side
+there is a hardware measurement: 0 is an active group and costs 19.1 dB on two
+overlapping keygroups, while 255 is off and is what 86% of factory keygroups
+carry.
+
+So the measurement wins on the merits. What stopped the change tonight is
+process, not doubt: **updating a golden reference is not a thing to do
+unsupervised at midnight on a defect with no current victim.** Our converter
+emits layers as velocity zones inside one keygroup, never as overlapping
+keygroups, so nothing we have shipped can have been bitten.
+
+When it is applied, the golden tests need a decision rather than a re-hash:
+either they assert byte-identity EXCEPT for fields where hardware contradicts
+akaiutil — with each exception named and evidenced — or they stop claiming
+byte-identity and claim something weaker and true. Silently re-hashing them
+would throw away the only signal that currently notices we diverged.

@@ -549,6 +549,52 @@ AKAI_VLOUD_DB_PER_UNIT = 0.60576
 AKAI_TUNE_UNITS_PER_SEMITONE = 256
 
 
+#: FILQ (keygroup 149) -> resonance. s3ked §52, 2026-08-12, r2 0.999975,
+#: replacing their own earlier linear 0.5764 dB/step reading:
+#:
+#:     damping z = 0.46864 - 0.029587 * FILQ
+#:     dB        = -20 log10(1 - FILQ / 15.84)
+#:     Q         = 1.067 / (1 - FILQ / 15.84)      1.07 at 0, ~20 at 15
+#:
+#: Damping reaches zero at 15.84, just past the top of the field, so the
+#: machine stops short of self-oscillation and one number generates all
+#: sixteen steps. The linear reading had the SHAPE backwards -- the last three
+#: steps are worth more than the first ten together, which is why a
+#: normalisation that assumes linearity gets the loud end badly wrong.
+AKAI_FILQ_DAMPING_ZERO = 15.84
+AKAI_FILQ_MAX = 15
+
+
+def akai_filq_to_db(byte: int) -> float:
+    """FILQ -> the resonant peak's height in dB above the passband."""
+    z = 1.0 - max(0, min(AKAI_FILQ_MAX, byte)) / AKAI_FILQ_DAMPING_ZERO
+    return -20.0 * math.log10(z) if z > 0 else 60.0
+
+
+def akai_filq_to_01(byte: int) -> float:
+    """FILQ -> the model's 0..1 resonance, as a fraction of the AKAI's own range.
+
+    **Read by nobody and written by nobody until 2026-08-23** — every
+    AKAI-sourced conversion we ever made had a filter with no resonance at all,
+    while real programs use it heavily: one factory electric piano carries
+    FILQ 7 on its unison layers and 13, 14 and 15 on its octave layers, which
+    is Q 1.9 against Q 6 to 20 (§E4XTQCAL).
+
+    Normalised in **dB of peak height**, not in field units, because the field
+    is not linear in anything audible: FILQ 7 of 15 is 5.1 dB of a 25.5 dB
+    range, i.e. a fifth, not a half.
+
+    **This is the reader's half only.** What the destination machine does with
+    a 0..1 resonance is its own problem, and the E4B writer's `round(res*127)`
+    is an uncalibrated linear guess — the same shape as the K2000 depth bug
+    fixed on 2026-08-22. eosed measured the E4XT's real curve on 2026-08-23
+    (peak height per byte, clamping at byte 112 = 17.84 dB, and exactly twice
+    that on the 4-pole), so it is now fixable; it is not fixed here.
+    """
+    full = akai_filq_to_db(AKAI_FILQ_MAX)
+    return max(0.0, min(1.0, akai_filq_to_db(byte) / full))
+
+
 def akai_env2_stage_seconds(byte: int, distance: float, law) -> float:
     """A stage byte -> the seconds it takes to cover `distance` of 99.
 
