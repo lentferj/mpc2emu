@@ -529,7 +529,62 @@ AKAI_ENV2_DEPTH_OFFSET = 153
 #:
 #: NOT hardware-confirmed END TO END: the two laws are measured, the arithmetic
 #: joining them is not yet checked by converting a bank and listening to it.
-AKAI_ENV2_OCT_PER_UNIT = 0.002837   #: octaves per (SUSTN2 x depth), s3ked §148
+#: Octaves per (SUSTN2 x depth), REMEASURED by s3ked on white noise
+#: 2026-08-24, superseding §148's 0.002837. Their section number is not cited
+#: here because it was still being written when this landed; the run is dated
+#: and the numbers below are the whole of it.
+#:
+#:     octaves = 0.002612 * SUSTN2 * depth      sd 0.000017, spread 0.7%
+#:
+#: Ten points that are neither bin-limited nor at the ceiling, across TWO
+#: sustain settings and depth 5..50. No compression and no knee — depth is
+#: linear across its whole range. The cross-check is the part to trust: SUSTN2
+#: 99 / depth 15 has product 1485 and measured 3.862 octaves, where the SUSTN2
+#: 25 fit predicts 3.874 — 0.3% apart from opposite ends of the range.
+#:
+#: **§148's 0.00283 was 8% higher and the gap is not just its ceiling-bound
+#: point.** Its own mean excluding that point is 0.002822. s3ked's candidates:
+#: §148 used a harmonic Schroeder complex and read the resonance PEAK, and
+#: §145 showed the peak/corner ratio drifts with frequency; its base was 134 Hz,
+#: below the tracker's stated 500 Hz floor for harmonic sources. White noise has
+#: no comb, so that floor does not apply to the new run. Unsettled; the new one
+#: is preferred only because it is internally consistent across two sustains.
+AKAI_ENV2_OCT_PER_UNIT = 0.002612
+
+#: **THE AKAI FILTER CORNER STOPS AT 7.86 kHz, whatever the depth asks for.**
+#: s3ked, 2026-08-24: eight points across two base cutoffs, 1.6% spread —
+#:
+#:     from base  325 Hz: depth 25 -> 7787, 30 -> 7912, 40 -> 7862, 50 -> 7887
+#:     from base 1325 Hz: depth 10 -> 7850, 20 -> 7850, 30 -> 7837
+#:
+#: The law predicts 28 kHz at depth 25 and 2.5 MHz at depth 50. The machine
+#: sits at 7.86 kHz and stops. Controls rule out the material (44.1 kHz source
+#: with content to 22 kHz) and the analysis window (ran to 20 kHz).
+#:
+#: **This is why there is no single AKAI_ENV2_DEPTH_MAX.** The ceiling is
+#: absolute in Hz, so the largest shift available is `log2(7858 / base_Hz)` and
+#: depends entirely on where the base sits: 5.87 octaves from FILFRQ 40, 4.27
+#: from 55, 1.08 from 85. A converter mapping source depth onto a fixed octave
+#: span cannot be right at more than one base.
+#:
+#: So CLAMP THE TARGET CORNER, never the depth.
+AKAI_ENV2_CEILING_HZ = 7858.0
+
+
+def akai_env2_target_hz(base_hz: float, sustn2: int, depth: int) -> float:
+    """Where an AKAI ENV2 actually takes the corner, ceiling included."""
+    if base_hz <= 0 or depth <= 0 or sustn2 <= 0:
+        return max(0.0, base_hz)
+    octaves = AKAI_ENV2_OCT_PER_UNIT * sustn2 * depth
+    return min(base_hz * 2.0 ** octaves, AKAI_ENV2_CEILING_HZ)
+
+
+def akai_env2_max_octaves(base_hz: float) -> float:
+    """The largest shift reachable from this base — NOT a constant."""
+    if base_hz <= 0:
+        return 0.0
+    return max(0.0, math.log2(AKAI_ENV2_CEILING_HZ / base_hz))
+
 E4B_FENV_OCT_PER_UNIT  = 5.14e-4    #: octaves per (level% x amount%), eosed §46
 AKAI_ENV2_DEPTH_MAX = (E4B_FENV_OCT_PER_UNIT * 100.0 * 100.0
                        / (AKAI_ENV2_OCT_PER_UNIT * 99.0))     #: ~18.3
@@ -607,6 +662,70 @@ def akai_filq_to_01(byte: int) -> float:
     """
     full = akai_filq_to_db(AKAI_FILQ_MAX)
     return max(0.0, min(1.0, akai_filq_to_db(byte) / full))
+
+
+#: The E4XT FilterEnv -> FilterFreq cord, measured properly at last.
+#:
+#: **THE CORD ADDS CUTOFF BYTES, NOT OCTAVES.** eosed, 2026-08-24, 57 points
+#: over five base cutoffs (§AKAIENV2DEPTH, their §56):
+#:
+#:     delta_byte = E4XT_FENV_BYTE_PER_UNIT * level_percent * amount
+#:
+#: 2.506 byte per amount-unit at level 100, residual RMS 2.1 bytes over 41
+#: unsaturated points; an independent refit here through their own byte<->Hz
+#: calibration gives 2.480, agreeing to 1.0%.
+#:
+#: **It does NOT depend on the base cutoff.** Five bases agree to ~2.5% in
+#: BYTES. In OCTAVES the same data looks strongly base-dependent — 0.0917
+#: oct/unit from byte 0 against 0.0542 from byte 100 — and that is entirely an
+#: artefact of the byte->Hz curve not being a pure exponential. It is also why
+#: three octave voices of one program needed amounts 32, 15 and 39 for the same
+#: source depth: three different bases, all landing within 2 bytes of each
+#: other.
+#:
+#: **What this retires.** `E4B_FENV_OCT_PER_UNIT` (5.14e-4) is the same product
+#: form in the wrong unit, and the "one cord is worth 5.14 octaves, the source
+#: wants 7.02, so we clamp" story was never real — the old law simply
+#: under-predicted what amount 100 does. One cord at full depth is worth 250.6
+#: bytes of a 0..255 range, i.e. the entire cutoff range from any base.
+#:
+#: **Saturation is the CUTOFF BYTE hitting its ceiling, not a cord limit.**
+#: Every saturated point predicts `base + 2.506*amount >= 250.3` and every
+#: unsaturated one `<= 238.1` — clean separation, no overlap.
+E4XT_FENV_BYTE_PER_UNIT = 2.506
+E4XT_FENV_SATURATION_BYTE = 250.0   #: above this the cutoff byte is at its end
+
+
+def e4xt_cord_amount(base_byte: float, target_byte: float,
+                     level_percent: float = 100.0) -> int:
+    """Cord amount that moves the corner from `base_byte` to `target_byte`.
+
+    This is the function the conversion should use instead of composing two
+    depth laws measured on two different machines. Converting CORNER POSITIONS
+    rather than depths is what removes the base-dependence, because the cord's
+    effect is linear in the byte and not in the frequency.
+
+    Clamped to 0..100: the cord field's own range. A target the cord cannot
+    reach from this base is reported by `e4xt_cord_saturates`, not silently
+    approximated here.
+    """
+    if level_percent <= 0.0:
+        return 0
+    per_unit = E4XT_FENV_BYTE_PER_UNIT * (level_percent / 100.0)
+    return max(0, min(100, round((target_byte - base_byte) / per_unit)))
+
+
+def e4xt_cord_saturates(base_byte: float, amount: float,
+                        level_percent: float = 100.0) -> bool:
+    """Would this cord push the cutoff byte off the end of its range?
+
+    Measured boundary rather than an assumed one: every saturated point in
+    eosed's sweep predicts at or above 250.3 and every unsaturated one at or
+    below 238.1.
+    """
+    reached = base_byte + (E4XT_FENV_BYTE_PER_UNIT
+                           * (level_percent / 100.0) * amount)
+    return reached >= E4XT_FENV_SATURATION_BYTE
 
 
 def akai_env2_stage_seconds(byte: int, distance: float, law) -> float:
