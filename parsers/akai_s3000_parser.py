@@ -631,6 +631,27 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
                     if src not in missing:
                         if not quiet:
                             print(f"    [WARN] sample not found: {src!r}")
+                            # THE HINT IS HERE BECAUSE THE WARNING CANNOT
+                            # DISTINGUISH THE TWO CAUSES (§NAMEBITFLIP).
+                            # A zone names its sample, so a name that is wrong
+                            # in the SOURCE and a name that was corrupted in
+                            # the copy we read produce byte-identical
+                            # symptoms: no bad audio, no failed checksum,
+                            # nothing to diff -- just a name that stops
+                            # matching. s3ked saw a real one-bit flip in
+                            # sampler RAM on 2026-08-24, H for I, that did not
+                            # reproduce.
+                            #
+                            # Comparing against the medium is the only way to
+                            # tell, and nobody takes that step unless they
+                            # already suspect it. So the suspicion is printed
+                            # once per program rather than left in a document.
+                            if not missing:
+                                print("           (if this program looks "
+                                      "otherwise healthy, compare the name "
+                                      "against the source medium -- a "
+                                      "single-bit corruption reads exactly "
+                                      "like a missing sample)")
                         missing.add(src)
                     # `quiet` exists so a 180-volume disc does not print a
                     # warning per program; it must not mean the loss goes
