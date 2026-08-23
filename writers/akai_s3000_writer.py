@@ -44,6 +44,7 @@ from models.common import (
     AKAI_ENV2_DEPTH_OFFSET, AKAI_ENV2_DEPTH_MAX,Bank, LoopType, SampleData, safe_filename,
                            E4B_CUTOFF_MIN_HZ, E4B_CUTOFF_MAX_HZ, hz_to_e4b_cutoff)
 from parsers.akai_s3000_parser import (
+    AKAI_KGMUTE_OFFSET, AKAI_KGMUTE_OFF,
     str_to_akai, akai_to_str, AKAI_NAME_LEN, SAMPLE_HEADER_LEN, PROGRAM_COMMON_LEN,
     KEYGROUP_LEN, _ZONE_OFFSETS, _BLOCK_ID_PROGRAM, _BLOCK_ID_KEYGROUP,
     _BLOCK_ID_SAMPLE,
@@ -394,6 +395,11 @@ _AK_ATTAK1_TIME = (0.000201173, 0.10844, 0, 99)   # seconds,  s3ked §141
 #: Cost here: 36 sustain fractions in 1000 shift by one byte, max delta 1, and
 #: the release span moves with it (release starts at the sustain level).
 _AK_SUSTAIN_DB_PER_UNIT = 0.60676
+
+#: What we write at keygroup 160. 255 is OFF; akaiutil writes 0.
+#: Module-level so `tests/test_akai_image.no_hw_defaults` can pin it
+#: back to akaiutil's value, like every other deliberate divergence.
+_KGMUTE_DEFAULT = AKAI_KGMUTE_OFF
 
 #: LFORAT is LINEAR, not exponential: Hz = 0.11867 * LFORAT - 0.04, r2 0.9995.
 #: Measured twice by independent routes -- once through loudness modulation,
@@ -1721,6 +1727,28 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
     k[0x03] = lo_b
     k[0x04] = hi_b
     _put_s16(k, 0x05, 0)                # tune offset
+    # KGMUTE, keygroup 160: the mute group, where **255 is OFF and 0 is a real
+    # group**. Never written until 2026-08-24, so every keygroup we authored
+    # inherited the buffer's zero fill and landed in group 0 -- and two
+    # keygroups sharing a group that overlap in key and velocity cut each
+    # other. Measured by s3ked on an S3000XL: 19.1 dB (§AKAIMUTEGRP). 86% of
+    # factory keygroups across 9442 programs carry 255, so OFF is the normal
+    # authored value and the zeros look like S1000 zero-fill inherited by the
+    # 192-byte layout.
+    #
+    # LATENT for our own output: this writer puts source layers into velocity
+    # zones INSIDE one keygroup rather than into overlapping keygroups, and a
+    # mute group only acts BETWEEN keygroups. 22 authored programs across two
+    # source formats have zero overlaps. Fixed anyway, because "no current
+    # victim" is not "correct" and the next feature that emits overlapping
+    # keygroups would be bitten silently.
+    #
+    # It is one of the deliberate divergences from akaiutil, which leaves this
+    # at zero as this writer used to -- suppressed in `no_hw_defaults` for the
+    # same reason as the modulation-matrix defaults and the filter/envelope
+    # laws: the golden hashes exist to pin the MEDIA layout against an
+    # independent implementation, not to freeze hardware-measured content.
+    k[AKAI_KGMUTE_OFFSET] = _KGMUTE_DEFAULT
     # Filter frequency, fully open. CONFIRMED ON HARDWARE 2026-08-11 by the
     # s3ked project: keygroup offset 7 IS the basic filter frequency, and 99
     # is genuinely wide open.

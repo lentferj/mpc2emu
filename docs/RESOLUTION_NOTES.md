@@ -17762,7 +17762,29 @@ of the remaining items by blast radius and the cheapest to verify.
                stages. Check the DIRECTION of their discrepancy against it
                before claiming it.
 
-### 2. KGMUTE is never written — blocked on a golden-hash decision, not on doubt
+### 2. KGMUTE — DONE 2026-08-24, and there was no decision to make
+
+**Resolved by reading the golden test instead of reasoning about it.** The
+mechanism already existed and is documented in that file's own docstring: the
+`no_hw_defaults` fixture pins hardware-measured values back to akaiutil's, so
+the hashes keep meaning *"an independent implementation produces this MEDIA
+layout"* — partition, volume directory, block allocation, sample data — rather
+than freezing our program content.
+
+There is precedent for exactly this, three times over: the 22-byte
+modulation-matrix default (2026-08-10), `akai_filter_byte`, `akai_env_bytes`,
+and the active-loop count (2026-08-18). Every one is a hardware-measured value
+akaiutil does not have, suppressed in that fixture.
+
+KGMUTE is the same class, so it went in the same place. `_KGMUTE_DEFAULT` is
+module-level precisely so the fixture can pin it, like the others. The golden
+hashes are untouched and still mean what they meant.
+
+I had filed this as needing a decision from Jan about whether those tests
+should assert byte-identity "except for named fields". They already do, and
+have since August. **The answer was in the test's docstring the whole time.**
+
+### 2b. What the original framing got right, kept for the record
 
 One line: `k[160] = 255` in `_keygroup`. It breaks three byte-for-byte-against-
 akaiutil tests, which means **akaiutil writes 0 there too**.
