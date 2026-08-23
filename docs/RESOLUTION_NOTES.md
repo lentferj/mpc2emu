@@ -189,6 +189,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§E4XTQCAL — the E4XT resonance parameter, measured, and it tops out below what AKAI sources ask for (2026-08-23)](#e4xtqcal-the-e4xt-resonance-parameter-measured-and-it-tops-out-below-what-akai-sources-ask-for-2026-08-23)
 - [§AKAIENV2DEPTH — we sweep the filter clean out of the audio band (2026-08-23)](#akaienv2depth-we-sweep-the-filter-clean-out-of-the-audio-band-2026-08-23)
 - [§AKAIFIXPLAN — the plan to actually fix it (2026-08-23)](#akaifixplan-the-plan-to-actually-fix-it-2026-08-23)
+- [§AKAIMUTEGRP — the click is a mute group, and E4B cannot express it (2026-08-23)](#akaimutegrp-the-click-is-a-mute-group-and-e4b-cannot-express-it-2026-08-23)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -17421,3 +17422,93 @@ C runs alongside; C2 in particular would have saved most of tonight.
   * **The AKAI's transient shape.** Its 150 ms transient is a deep trough at
     4-6 kHz with a sharp spike at 8-10 kHz. Ours rolls off gently with no
     spike. Some of that is the Q ceiling; whether all of it is, is open.
+
+## §AKAIMUTEGRP — the click is a mute group, and E4B cannot express it (2026-08-23)
+
+The answer to five hours of chasing a filter. It was never a filter.
+
+### What the click is
+
+The AKAI program's two layers both sit in **keygroup mute group 0** — `KGMUTE`,
+keygroup offset 160, where **255 means off** — and both span the same keys. One
+note triggers both keygroups and the second **cuts** the first. At 10 ms
+resolution:
+
+    t=1.01   the mix tracks the UNISON layer
+    t=1.02   the mix switches to the OCTAVE layer
+    t=1.03+  the mix tracks the octave within 0.5 dB for three seconds
+
+s3ked proved it on the S3000XL: KGMUTE 0 gives -30.6 dBFS, KGMUTE 255 gives
+-11.5 dBFS. **+19.1 dB, both layers sounding.** Restored afterwards.
+
+So the "metallic click" is a **10 ms burst of the unison layer, hard-cut**.
+
+### It is the factory program's behaviour, not ours
+
+Offset 160 reads 0 on the original CD-ROM as well, byte-identical to our copy,
+on all six programs of that volume. Our extraction is faithful.
+
+Probable cause, offered as a guess: these are S1000-era programs. The S1000
+keygroup is 150 bytes and offset 160 does not exist in it, so converting up to
+the S3000's 192-byte layout leaves zero fill in a field where 0 is an ACTIVE
+group. If that is right, every S1000-derived program on those discs has it.
+
+### E4B cannot reproduce it, and this is measured
+
+eosed checked the format rather than inferring. The field exists —
+`E4_VOICE_ASSIGN_GROUP`, SysEx id 66, range 0-23, already mapped to vpar[27] in
+our own `docs/E4B_FORMAT.md` line 226 and called the choke group there, with
+0-14 Poly variants and 15-23 Mono A..I. **But its semantics are note
+allocation, not a sibling choke:**
+
+  * Two voices in the same Mono group, under ONE note: **+0.13 dB** median
+    change, no step anywhere in the 10 ms envelope. Both layers keep sounding.
+  * **The control that makes that mean something** — the same group, two
+    overlapping notes 600 ms apart on a noise preset:
+
+        Poly All   note1 alone -46.2   both held -43.2   rise +2.99 dB
+        Mono A     note1 alone -45.7   both held -46.4   rise -0.68 dB
+
+    +3 dB is two incoherent sources summing. Mono A gives no rise: the second
+    note steals the first. The group has full authority — **across notes.**
+
+`E4_VOICE_SOLO` (id 65) was also checked and moved the single-note mix by
++0.23 dB; no positive control was run on it, so it is recorded as consistent
+with its documented meaning rather than firmly established. A grep of the whole
+parameter set for group/mute/solo/cut/choke/exclusive finds nothing else.
+
+**So this sound is not expressible in E4B.** It is not a depth, a rate or a
+ceiling we can approach — it is a different voice architecture. The conversion
+log should say so.
+
+### What this retires
+
+Every filter parameter tried tonight measured correct and sounded insufficient
+because we were modelling the wrong mechanism. No further filter work will
+change it. In particular:
+
+  * **The Q-ceiling explanation is withdrawn.** It rested on comparing the
+    AKAI's isolated octave layer against our full mix — and that file contained
+    one layer *because of this mute group*. eosed's ceiling measurement itself
+    stands (17.84 dB at byte 112, flat to 127, both filter types); only my use
+    of it was wrong.
+  * The remaining "too much 2-6 kHz, too little 8-12 kHz" comparison was the
+    same bad pairing and is withdrawn with it.
+
+### Two defects this did surface, both real
+
+**KGMUTE is never written** (`writers/akai_s3000_writer.py`, offset 160 left at
+the buffer's zero fill). Zero is an active group, 255 is off. **Latent, with no
+current victim:** our converter maps source layers onto velocity zones INSIDE
+one keygroup rather than onto overlapping keygroups, and mute groups act only
+between keygroups. Zone counts confirm the mapping is faithful — the KRZ source's
+6 and 8 zone presets come out as 6 and 8. One byte to fix when the writer is
+next touched.
+
+**Our two zones per keygroup are byte-identical** — same sample, tune, velocity
+span and loudness — and the KRZ source's two voices differ in nothing at voice
+or zone level as our reader presents them. Either that preset really is a plain
+doubling, or `parsers/krz_parser.py` collapses per-voice differences, which
+would be the "read by nobody" failure on a second input format and would mean
+every layered K2000 source lost the difference between its layers. **Open, and
+larger than KGMUTE if it is real.**
