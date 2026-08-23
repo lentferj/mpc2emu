@@ -17528,3 +17528,65 @@ Worth keeping for the method: a suspected reader collapse is answerable from a
 corpus in ninety seconds, and a hardware A/B was never needed. "Does this code
 path ever produce a difference?" is a cheaper question than "is this specific
 value right", and it rules out a whole class of defect at once.
+
+### The warning, sized before designing it
+
+Jan asked whether we should warn when a source carries this. Measured across
+**9442 S3000 programs** on the local library discs before answering:
+
+    programs with 2+ keygroups                    5964
+    where a mute group would actually BITE         311   3.3% of all
+                                                         5.2% of multi
+
+    KGMUTE across all keygroups:  255 (off) 44634
+                                    0        7185
+                                   58, 1-4, 31, ...  a few dozen real groups
+
+**Yes, warn.** 3.3% is the right rate for a warning to mean something — rare
+enough not to become noise, common enough that 311 programs on these discs
+alone are affected. And 255 being 86% of all keygroups confirms that "off" is
+the normal authored value, which makes the 14% of zeros look even more like the
+S1000 zero-fill inheritance.
+
+The condition to test is not "KGMUTE is not 255" — that would fire on 14% of
+everything and be ignored. It is **two keygroups sharing a non-255 group AND
+overlapping in key and velocity**, which is when the cut is actually reachable.
+
+### RE-MODELLING IT: the common case is emulable, and cheaply
+
+Jan's better question. E4B has no choke, but it does not need one for this case.
+
+**What the mute group does here is deterministic.** Both keygroups are triggered
+by the SAME note-on, so the second cuts the first after a fixed voice-start
+latency — s3ked measured about 10 ms. Nothing about it depends on what the
+player does next.
+
+**So the emulation is an envelope.** Give the layer that gets cut an amplitude
+envelope of instant attack, ~10 ms decay, zero sustain, zero release. It sounds
+for 10 ms and stops, which is what the cut produces, and because both layers
+start together the TIMING IS IDENTICAL rather than approximate.
+
+The only audible difference is the shape of the ending: a true cut is a
+discontinuity, an envelope is a fast fade. Make the decay as fast as the E4B
+envelope allows and the difference is a click's worth of high frequency — and
+worth noting that a real cut's discontinuity is itself part of what makes this
+program sound percussive.
+
+**Which layer gets the envelope:** the one that loses. s3ked's 10 ms trace shows
+the lower-numbered keygroup sounding first and the higher one taking over, so
+within a mute group all but the last keygroup are cut. Worth one confirmation
+on a three-layer program before relying on it.
+
+**Where this does NOT work, and the warning must still fire:** the classic
+cross-note use — a closed hi-hat keygroup cutting an open hi-hat keygroup on a
+DIFFERENT key. There the cut time depends on when the second note arrives, which
+is performance-dependent, and no envelope can express it. That case is
+distinguishable in the file: same mute group, key ranges that do NOT overlap.
+The 311 counted above are the overlapping kind, so the emulable case is the one
+we measured; the cross-note case wants its own count.
+
+So the design is three-way rather than binary:
+
+  * same group, overlapping key+velocity  -> EMULATE with a fast decay envelope
+  * same group, disjoint key ranges       -> WARN, not expressible
+  * 255, or a group with one member       -> nothing to do
