@@ -831,10 +831,6 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
                 # model throughout and is consumed by the E4B writer, so those
                 # conversions have been losing key tracking as well.
                 #
-                # 100 cents per key is one octave of cutoff per octave of key,
-                # so the conversion goes through the existing
-                # `key_track_to_filter_amount` helper rather than inventing a
-                # scale: byte * 2 / 100 is the oct/oct ratio it expects.
                 _kt = seg[3] - 256 if seg[3] >= 128 else seg[3]
                 if _kt:
                     # 100 cents per key is one octave of cutoff per octave of

@@ -19355,6 +19355,35 @@ wrong quantity: no amount of listening distinguishes our sample from an
 identically-named one, and the voice-to-sample map — which settles it in one
 read — is not a thing anybody listens to.
 
+### An anchor must be an identifier, not prose
+
+s3ked's, 2026-08-24, and it generalises the docstring rule above rather than
+repeating it.
+
+A scripted edit to their parameter table was anchored on the note text
+`range as written: "0 to 12 semitones"`. **Two unrelated parameters carry that
+string byte for byte** -- the filter key-follow they had measured, and a
+pitch-bend depth. The replacement took the first, so for several hours a
+pitch-bend field was documented as a hardware-measured filter parameter and the
+measured field carried no note at all. **Nothing looked wrong. Every test
+passed. No test asserts that a note describes its own field, and it is not
+obvious how one would cheaply.**
+
+The two coincidences are both ordinary: two fields sharing a documented range,
+and a house style that renders every range identically. **The more consistently
+a table documents its units, the more of its rows look alike to a search.**
+
+**Audited our own edits against this the same evening**, since this project's
+docs and tables are the same shape and every edit tonight was a scripted
+string replacement. One instance found: the KRZ key-track read carried the OLD
+comment ("the conversion goes through `key_track_to_filter_amount`") six lines
+above the NEW one, because the code beneath it was replaced and the comment
+above it was not. Benign -- it described a conversion that had just been
+removed -- and it is exactly how a comment starts lying.
+
+**The rule: anchor on a name and an offset, never on prose.** And when a
+scripted edit replaces code, check what is directly above it.
+
 ### A docstring that specifies behaviour is a test that has not been written
 
 s3ked's line, and the sharpest summary of the week from either project. **Three
