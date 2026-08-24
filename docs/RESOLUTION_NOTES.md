@@ -19519,7 +19519,19 @@ checks**, which is exactly how the AKAI's filter key-follow byte went unread.
 
 **Corpora:** ~26 000 AKAI keygroups on library discs; **131 third-party E4B
 banks from five commercial libraries** (28 242 zones); **201 third-party K2000
-soundsets** (7 197 zones).
+soundsets** (7 197 zones); **679 EIII banks** pulled out of eight EMU3 volumes
+(20 315 zones).
+
+**The EIII corpus did not exist until 2026-08-24 and had to be dug out of two
+layers.** The banks live inside EMU3 filesystem images, and several of those
+images were still inside `.7z` and `.rar` archives — so no third-party EIII
+content had ever been round-tripped. Extracted with
+`emu3_os_file_audit.Emu3Image`: file type 129 is a standard file, 128 is the
+machine's own OS code and is skipped. The source ISOs are deleted after
+extraction; the banks are a fifth of their size and the disk is at 98%.
+
+**EIII is the cleanest path we have** — 41 fields preserved exactly, one at
+14.6%.
 
 **THE E4B HARNESS RAN ON THE WRONG CORPUS AT FIRST**, and the mistake is worth
 keeping. Its glob included our own output directory, and since the list is
@@ -19541,7 +19553,25 @@ own output is a mirror; agreement with it is not evidence.
 one had a symptom anybody had reported. Two of them — the rate-zero floor and
 the resonance poles argument — were already written down as known and left.
 
-### Two false results, both from the harness itself
+### Four false results, all from the harness itself
+
+**Every one had the same shape: an identifier that is not an identity, or an
+instrument reporting where it could not see.** They are listed because the
+harness's own error rate is part of what it is worth.
+
+**Keying on the PRESET NAME.** The EIII writer rewrites a suffix in preset
+names -- `kyb` and `K01` both come back as `L01` -- so every zone in a renamed
+preset looked like a zone that had vanished: **12 848 phantom mismatches over
+296 banks, against ZERO actual zone loss** when checked directly. Keyed on the
+preset's index instead, the same run compares **20 315 zones** rather than
+6 154: the false mismatches had been hiding two thirds of the corpus.
+
+**Swallowing an exception in the extractor.** `Emu3Image.extents` returns a
+`(ranges, size)` tuple and the first version unpacked it as a list, inside a
+bare `except: continue`. It reported "0 non-OS files" on volumes holding 98 --
+and 0 looks like a clean answer rather than a broken one, which is the same
+failure as the harness that compared nothing.
+
 
 **The AKAI harness reported "pan sign flips on 18.9% of zones".** It keyed
 records on (key range, velocity, sample) and built a dict — but a hard-panned
