@@ -201,6 +201,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§E4XTQSHIFT — cutoff and resonance are not independent, and the cutoff table is 0.4 octaves dark (2026-08-24)](#e4xtqshift-cutoff-and-resonance-are-not-independent-and-the-cutoff-table-is-04-octaves-dark-2026-08-24)
 - [§FIRSTSTEP — four laws in one day that are wrong at their bottom rung (2026-08-24)](#firststep-four-laws-in-one-day-that-are-wrong-at-their-bottom-rung-2026-08-24)
 - [§E4BLOOPREL — every looped sample we have ever written had no release at all (2026-08-24)](#e4blooprel-every-looped-sample-we-have-ever-written-had-no-release-at-all-2026-08-24)
+- [§E4BNAMEDEDUP — the E4XT rebinds a merged bank's zones to already-resident samples of the same name (2026-08-24)](#e4bnamededup-the-e4xt-rebinds-a-merged-banks-zones-to-already-resident-samples-of-the-same-name-2026-08-24)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -18618,3 +18619,87 @@ Entering Sample Edit pops a warning dialog naming a DIFFERENT sample than the
 one selected — S011 while S021 was current, both times. Dismissed with OK and
 apparently informational, but a dialog reporting on a sample you are not editing
 is worth knowing about before someone acts on it.
+
+## §E4BNAMEDEDUP — the E4XT rebinds a merged bank's zones to already-resident samples of the same name (2026-08-24)
+
+**Measured, and it invalidated a listening verdict before anyone acted on it.**
+
+Jan A/B'd a converted bank against a hand-built reference and reported the low
+octaves near perfect and the release too short higher up. **Five of the six
+voices he was judging were not playing our samples at all.**
+
+### The measurement
+
+The converted bank was merged onto a machine already holding the reference bank,
+whose samples carry the same names. Voice -> sample id on the converted preset:
+
+    stale (merged over the reference):  v0 24  v1 54  v2 25  v3 22  v4 26  v5 23
+    clean (loaded alone, empty RAM):    v0  4  v1  1  v2  5  v3  2  v4  6  v5  3
+
+**Five voices bound at exactly +20 — the reference bank's own copies — and one,
+index 0, got the freshly loaded sample.** The clean load is six distinct
+consecutive ids in the bank's own range, so the bank itself is correct and the
+rebinding happens at merge time.
+
+**The merge added exactly ONE sample.** S054 was the last id in RAM afterwards,
+not S054..S069. Fifteen of sixteen were never loaded.
+
+### What the two banks actually differ by
+
+This is what makes the behaviour hard to fault and hard to defend against.
+Comparing the reference bank against the converted one, sample by sample:
+
+    name             ref size   new size    ref opt   new opt
+    KK DXE_C2          105060     105060     0x0031    0x0039
+    ...all sixteen: identical names, identical sizes, identical PCM
+
+**They differ in exactly one bit** — bit 3 of the options word, the
+loop-in-release flag (§E4BLOOPREL), which is the only thing that changed those
+headers. So a matcher keying on name, or on name and size, matches all sixteen;
+a matcher keying on content matches none.
+
+Which makes **index 0 being the exception stranger, not less strange.** No
+content or size discriminator can single it out. It is the first entry in the
+file, and a first-entry special case in the merge is as plausible as anything
+about its contents. **Recorded unexplained.**
+
+### One candidate ruled out cheaply
+
+Sample RAM before the merge: 128 MB total, 7 MB used, **5%**. The merge did not
+run out of room and fall back to rebinding — it had 121 MB free and rebound
+anyway.
+
+### Why this was invisible
+
+**Nothing in a parameter read-back or a file dump shows it.** The preset's
+parameters are correct, the bank on disc is correct, and every check we had
+passes. The only visible symptom is the sound, and the sound was wrong in a way
+that looked exactly like a converter defect — a release that worked in one key
+range and not the others.
+
+That is the same invisibility as §E4BLOOPREL, found the same day. **Two defects
+whose shared property is that no check we had could see them.**
+
+### Consequences
+
+**For the converter:** sample names must not be able to collide with a bank the
+user may already have loaded. A revised bank merged over an older one will
+otherwise silently bind to the old samples every time — and "merge a revised
+bank over the one you are comparing it against" is exactly what anyone auditing
+a conversion does.
+
+**For any A/B on this machine:** while two banks share sample names, having both
+resident may be structurally impossible. Loading the reference first binds the
+conversion to it; loading the conversion first binds the reference to the
+conversion. eosed's route out is to capture one side to AUDIO before erasing —
+a recording cannot be rebound.
+
+### A near miss worth keeping
+
+Before the cause was found, the keygroups that released had ~12 ms of sample
+data past their loop end and the ones that did not had ~2 ms. A clean split, and
+both of us took it seriously. It cannot be the mechanism: 12 ms of data cannot
+produce an 850 ms fall that stretches past 1.5 s when the envelope is slowed —
+three orders of magnitude. It was a correlation with WHICH COPY a voice was
+bound to. **A correlation that clean and that wrong is worth more in the notes
+than the finding it imitated.**
