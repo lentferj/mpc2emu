@@ -206,6 +206,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§E4BRATEANCHOR — our EOS rate law is 18-25% fast, and four fresh points say which anchor is right (2026-08-24)](#e4brateanchor-our-eos-rate-law-is-18-25-fast-and-four-fresh-points-say-which-anchor-is-right-2026-08-24)
 - [§INERTCHANGE — four defects in one night, all of them changes that looked applied (2026-08-24)](#inertchange-four-defects-in-one-night-all-of-them-changes-that-looked-applied-2026-08-24)
 - [§E4BFENVUNIT — the filter envelope is right by cancellation, not by construction (2026-08-24)](#e4bfenvunit-the-filter-envelope-is-right-by-cancellation-not-by-construction-2026-08-24)
+- [§CORPUSRT — round-tripping the corpus, and the eight defects it found in two hours (2026-08-24)](#corpusrt-round-tripping-the-corpus-and-the-eight-defects-it-found-in-two-hours-2026-08-24)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -19490,3 +19491,71 @@ while the E4XT's are rates. Unlike the amplitude release, matching seconds
 across that pair may be correct — the distance is already carried by
 `akai_env2_stage_seconds`. It needs the same treatment §AKAIRELSPAN got: check
 what each machine was actually metered for before deciding what to preserve.
+
+
+## §CORPUSRT — round-tripping the corpus, and the eight defects it found in two hours (2026-08-24)
+
+**`tests/` is gitignored, so the harnesses are not in the repository.** Their
+design is here for the same reason the noise bank's is: the last thing that
+existed only as a file was lost, and six sections depended on it.
+
+### What they are
+
+Three scripts — `roundtrip_corpus.py` (AKAI), `roundtrip_e4b_corpus.py`,
+`roundtrip_krz_corpus.py` — sharing `roundtrip_lib.py`. Each parses real
+material, writes it back out, parses it again, and compares **one record per
+sounding zone**, field by field, over the whole corpus.
+
+**Why per zone rather than per structure:** a keygroup or layer COUNT may
+legitimately change — keygroups identical but for key coverage merge on the way
+in and split on the way out. Flattening to what the machine renders makes the
+comparison survive a deliberate restructuring, which is the only kind worth
+having.
+
+**Why the field lists are not lists:** they come from the objects' own
+`vars()`. A field the model or parser gains is compared from that moment,
+without anyone remembering to add it. **A field nobody lists is a field nobody
+checks**, which is exactly how the AKAI's filter key-follow byte went unread.
+
+**Corpora:** ~26 000 AKAI keygroups on library discs; 461 E4B banks (mostly our
+own output, so it shows reader/writer AGREEMENT and not correctness against a
+real E4XT); **201 genuinely third-party K2000 soundsets**, which is the only
+one of the three that tests more than self-consistency.
+
+### What it found, in two hours
+
+        AKAI  filter_q            44.8% -> 0.1%   resonance never written back
+        E4B   filter_resonance    60.5% -> 31.6%  poles cancelled itself out
+        E4B   filter_env attack   77.4% -> ~0%    rate 0 read as 31 ms
+        E4B   lfo1_to_pitch        8.8% -> 0%     triangle phase never undone
+        KRZ   filter_keytrack     19.2% -> 0%     read since August, never written
+
+**Every one is a pair of laws that were never each other's inverse**, and not
+one had a symptom anybody had reported. Two of them — the rate-zero floor and
+the resonance poles argument — were already written down as known and left.
+
+### Two false results, both from the harness itself
+
+**The AKAI harness reported "pan sign flips on 18.9% of zones".** It keyed
+records on (key range, velocity, sample) and built a dict — but a hard-panned
+stereo pair puts the SAME sample at the SAME range twice, differing only in
+pan. The dict kept one, and the survivor's +25 was compared against the other's
+-25. **Pan round-trips perfectly**, verified directly. Records are grouped now,
+never mapped.
+
+**And its first version compared nothing at all.** It passed a dict where a
+callable was wanted, every program raised, and it printed a clean sweep. **A
+harness that compares nothing looks exactly like a harness that passes**, so
+the number of records compared now prints above the results and a run of zero
+says so in words.
+
+### Expected losses, so they are not read as defects
+
+- **KRZ `velocity_to_filter` (53.9%) and part of `filter_cutoff` (66.9%)** —
+  the writer deliberately folds the velocity term into the cutoff rather than
+  writing a VelTrk sweep, documented at the point it happens.
+- **KRZ ROM samples** — real soundsets reference built-in waveforms whose PCM
+  is not in the file; those zones drop on both passes.
+- **KRZ layer fitting** — the harness passes `faithful_layers=True` so it
+  measures the conversion rather than the approximation the writer already
+  announces.

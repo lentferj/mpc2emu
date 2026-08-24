@@ -85,7 +85,8 @@ import math
 import struct
 from typing import List, Tuple
 
-from models.common import (Bank, Preset, SampleData, VoiceLayer, LoopType,
+from models.common import (
+    KEY_FILTER_OCT_PER_OCT,Bank, Preset, SampleData, VoiceLayer, LoopType,
                           KRZ_ENV_TIME_GRID, KRZ_RELEASE_FACTOR,
                           E4B_CUTOFF_MIN_HZ, E4B_CUTOFF_MAX_HZ,
                           krz_cents_to_depth_byte, KRZ_FENV_FULL_CENTS,
@@ -1271,6 +1272,31 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False):
         eff_cutoff = min(1.0, getattr(voice, 'filter_cutoff', 1.0)
                               + max(0.0, getattr(voice, 'velocity_to_filter', 0.0)))
         hob_f1[1] = _cutoff_byte(eff_cutoff)
+        # KEY TRACKING, seg[3]: a straight signed byte, 2 cents per key per
+        # unit. The READER has read this since 2026-08-17 -- its comment there
+        # notes the field is set on 15.9% of real filter slots and that E4B
+        # conversions had been losing it -- and the writer never wrote it, so
+        # anything converted INTO a K2000 lost it instead.
+        #
+        # Measured over 91 real third-party soundsets 2026-08-24: keytrack was
+        # zeroed on **19.2% of round-tripped zones**, always to nothing.
+        #
+        # Same helper as the reader, in the same direction: the model's amount
+        # is a fraction of the E4XT cord's own 0.713 oct/oct, so recover the
+        # ratio first and then convert at 100 cents per octave, two cents per
+        # unit. (That the model measures this in another machine's cord units
+        # at all is filed as its own defect -- it costs a byte of precision
+        # here and more elsewhere.)
+        _kt_oct = (getattr(voice, 'filter_keytrack', 0.0) or 0.0) \
+            * KEY_FILTER_OCT_PER_OCT
+        # SIGNED. The first version clamped to 0..255 before masking, which
+        # threw away every NEGATIVE keytrack -- and the reader sign-extends
+        # this byte, so negatives are legal and real material uses them. The
+        # corpus barely moved (19.2% to 16.6%) until this was corrected, which
+        # is the tell: a fix that only half works is measuring something it
+        # only half understands.
+        hob_f1[3] = max(-128, min(127,
+                                  int(round(_kt_oct * 100.0 / 2.0)))) & 0xFF
         if has_res:                                          # 1-pole has fixed -3 dB res
             hob_f2[1] = _reson_byte(getattr(voice, 'filter_resonance', 0.0))
         elif ftype_byte == _K2_FILTER_2P_BP:                 # bandpass F2 = width
