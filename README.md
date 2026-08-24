@@ -354,6 +354,24 @@ Output:
                       minus headroom for setups and effects) → ~117 presets per
                       bank.  Raise it if the target machine has a PRAM
                       expansion: --pram 760 is a common one and allows ~810.
+  --krz-faithful      KRZ: keep every layer even when that exceeds the K2000's
+                      3-layer limit for a *regular* program.  A program with
+                      more than three SPLIT layers is a **drum program** and
+                      sounds only on a drum channel — a converted electric
+                      piano was silent on a K2000R for exactly this reason,
+                      with every internal check reading clean and the program
+                      name shown in parentheses as the only tell.
+                      Without this flag the writer fuses the most similar
+                      DISJOINT layers and averages their filter settings
+                      (key-span weighted) until three remain, and says loudly
+                      what it gave up — once where it happens and again at the
+                      end of the run, since the per-preset line scrolls away in
+                      a large bank.  Overlapping layers are never fused: two
+                      layers that sound together on a key would become one
+                      voice, which deletes a layer rather than approximating
+                      it.  Use this when you want the source's structure
+                      preserved exactly and are willing to play the result on a
+                      drum channel.
   --akai-type0        AKAI: also write the four auxiliary files an S3000XL's own
                       type-0 SAVE produces — effects file, multi, drum-input
                       page and take list.  Without it a volume built from

@@ -540,6 +540,16 @@ def main():
         metavar='DIR', help='Output directory (default: current directory)')
     ap.add_argument('--overwrite', action='store_true',
         help='Overwrite existing output files without prompting')
+    ap.add_argument('--krz-faithful', action='store_true',
+        help='KRZ: keep every layer even when that exceeds the K2000\'s '
+             '3-layer limit for a REGULAR program. A program with more than '
+             'three split layers is a DRUM PROGRAM and sounds only on a drum '
+             'channel -- a converted electric piano was silent on a K2000R for '
+             'exactly this reason. Without this flag the writer fuses the most '
+             'similar DISJOINT layers and averages their filter settings until '
+             'three remain, and says loudly that it did. Overlapping layers '
+             'are never fused, since that would delete a voice rather than '
+             'approximate one.')
     ap.add_argument('--akai-type0', action='store_true',
         help='AKAI: also write the four auxiliary files a type-0 SAVE produces '
              '(effects, multi, drum inputs, take list), using the contents the '
@@ -1353,7 +1363,8 @@ def main():
             elif args.format == 'eiii':
                 write_eiii(bank, out_path, variant=args.eiii_variant)
             else:
-                write_krz(bank, out_path)
+                write_krz(bank, out_path,
+                          faithful_layers=args.krz_faithful)
             out_paths.append(out_path)
         except Exception as e:
             print(f"  [ERROR] {bank.name}{ext}: {e}")

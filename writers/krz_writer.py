@@ -608,6 +608,111 @@ def _write_keymap_object(f, name: str, voice: VoiceLayer, obj_id: int,
 # Program object  (KProgram segments)
 # ---------------------------------------------------------------------------
 
+def _voice_span(v):
+    """(lowest key, highest key) this voice sounds over."""
+    zs = [z for z in getattr(v, 'zones', []) or []]
+    return (min(z.lo_key for z in zs), max(z.hi_key for z in zs)) if zs else (0, -1)
+
+
+def _spans_disjoint(a, b):
+    la, ha = _voice_span(a)
+    lb, hb = _voice_span(b)
+    return ha < lb or hb < la
+
+
+_VOICE_FIT_FIELDS = ('filter_cutoff', 'filter_resonance', 'filter_env_amount')
+
+
+def _voice_distance(a, b):
+    """How unlike two voices are, for choosing which pair to fuse.
+
+    Only the CONTINUOUS voice-level fields count. Anything categorical -- the
+    filter type, the envelopes, the LFO routing -- cannot be averaged, so a
+    pair differing in one of those is refused outright rather than given a
+    large distance: an averaged envelope is not a compromise between two
+    envelopes, it is a third envelope neither layer asked for.
+    """
+    for name in ('filter_type',):
+        if getattr(a, name, None) != getattr(b, name, None):
+            return None
+    for env in ('amp_env', 'filter_env'):
+        ea, eb = getattr(a, env, None), getattr(b, env, None)
+        if repr(ea) != repr(eb):
+            return None
+    if (getattr(a, 'lfo1_rate', None) != getattr(b, 'lfo1_rate', None)
+            or getattr(a, 'lfo1_to_pitch', None) != getattr(b, 'lfo1_to_pitch', None)):
+        return None
+    d = 0.0
+    for name in _VOICE_FIT_FIELDS:
+        d += abs((getattr(a, name, 0.0) or 0.0) - (getattr(b, name, 0.0) or 0.0))
+    return d
+
+
+def _fuse_voices(a, b):
+    """Fold b into a: zones concatenated, continuous fields key-span weighted.
+
+    Weighted by how many keys each voice covers, so the setting that governs
+    most of the keyboard dominates the compromise rather than both counting
+    equally regardless of how much they are heard.
+    """
+    la, ha = _voice_span(a)
+    lb, hb = _voice_span(b)
+    wa, wb = max(1, ha - la + 1), max(1, hb - lb + 1)
+    for name in _VOICE_FIT_FIELDS:
+        va = getattr(a, name, 0.0) or 0.0
+        vb = getattr(b, name, 0.0) or 0.0
+        setattr(a, name, (va * wa + vb * wb) / (wa + wb))
+    a.zones = list(a.zones) + list(b.zones)
+    return a
+
+
+def _fit_layers(voices, limit=3):
+    """Fuse the most similar DISJOINT voices until `limit` layers remain.
+
+    **Why this is the default and faithful is the option (Jan, 2026-08-24).**
+    A K2000 program with more than three split layers is a drum program and
+    sounds only on a drum channel -- so a faithful four-layer electric piano
+    is SILENT on a normal channel, which is not a subtler rendering of the
+    preset, it is no rendering at all. A slightly averaged filter is a
+    compromise a listener can hear and judge; silence is not.
+
+    ONLY DISJOINT VOICES FUSE. Two layers that overlap on a key sound
+    together, and folding them into one would delete a voice rather than
+    approximate it -- the difference between losing detail and losing a
+    layer. Voices that overlap therefore survive, and if too many of them do,
+    the program stays a drum program and says so.
+
+    Returns (voices, notes) where notes describes what was given up, so the
+    caller can print it rather than leave the user to notice.
+    """
+    voices = list(voices)
+    notes = []
+    while len(voices) > limit:
+        best = None
+        for i in range(len(voices)):
+            for j in range(i + 1, len(voices)):
+                if not _spans_disjoint(voices[i], voices[j]):
+                    continue
+                d = _voice_distance(voices[i], voices[j])
+                if d is None:
+                    continue
+                if best is None or d < best[0]:
+                    best = (d, i, j)
+        if best is None:
+            break                      # nothing left that may legally fuse
+        d, i, j = best
+        before = tuple(round(getattr(voices[i], n, 0.0) or 0.0, 4)
+                       for n in _VOICE_FIT_FIELDS)
+        other = tuple(round(getattr(voices[j], n, 0.0) or 0.0, 4)
+                      for n in _VOICE_FIT_FIELDS)
+        _fuse_voices(voices[i], voices[j])
+        after = tuple(round(getattr(voices[i], n, 0.0) or 0.0, 4)
+                      for n in _VOICE_FIT_FIELDS)
+        notes.append((before, other, after, d))
+        voices.pop(j)
+    return voices, notes
+
+
 def _make_pgm_segment(num_layers: int) -> bytes:
     # PGMSEGTAG: mode=2 (K2000), numLayers, bendRange=0x37, portamento=64
     data = bytearray(15)
@@ -1356,9 +1461,17 @@ def _voices_stacked(voices) -> bool:
 # Main writer
 # ---------------------------------------------------------------------------
 
-def write_krz(bank: Bank, output_path: str) -> None:
-    """Serialize a Bank to a Kurzweil .KRZ file."""
+def write_krz(bank: Bank, output_path: str,
+              faithful_layers: bool = False) -> None:
+    """Serialize a Bank to a Kurzweil .KRZ file.
+
+    `faithful_layers` keeps every layer even when that makes the program a
+    K2000 DRUM PROGRAM, which sounds only on a drum channel. The default fits
+    to three layers instead, because a program that does not sound on the
+    channel it is played on is not a subtler rendering of the preset.
+    """
     lost_zones: list = []
+    fitted: list = []
     print(f"Writing KRZ: {output_path}")
     print(f"  {len(bank.presets)} preset(s), {len(bank.samples)} sample(s)")
 
@@ -1532,10 +1645,48 @@ def write_krz(bank: Bank, output_path: str) -> None:
             print(f"  [layers] '{preset.name}': {len(voices)} stacked layers → "
                   f"3 spread across the stack (regular program, any channel).")
             voices = _spread_pick(voices, 3)
+        elif len(voices) > 3 and not faithful_layers:
+            # DEFAULT: fit to three so the program plays on ANY channel.
+            #
+            # Faithful used to be the only behaviour and it produced silence:
+            # a four-layer electric piano is a drum program, and Jan's K2000R
+            # refused it on channel 9 with every internal check reading clean
+            # (2026-08-24). An averaged filter is a compromise a listener can
+            # hear and argue with; a program that does not sound is not a
+            # subtler rendering of the preset.
+            _was = len(voices)
+            voices, _notes = _fit_layers(voices, 3)
+            if len(voices) <= 3:
+                # LOUD ON PURPOSE (Jan, 2026-08-24). This is the one place the
+                # converter knowingly changes what the source says, and the
+                # thing it changes -- a filter setting -- is exactly the kind
+                # that gets blamed on something else months later.
+                print(f"  [!!] '{preset.name}': APPROXIMATED to fit the K2000's "
+                      f"3-layer limit")
+                print(f"       {_was} layers → {len(voices)}: "
+                      f"{_was - len(voices)} disjoint layer(s) FUSED, and their "
+                      f"filter settings AVERAGED (key-span weighted).")
+                for _b, _o, _a, _d in _notes:
+                    print(f"       cutoff {_b[0]:.4f} + {_o[0]:.4f} → {_a[0]:.4f}"
+                          f"   resonance {_b[1]:.4f} + {_o[1]:.4f} → {_a[1]:.4f}"
+                          f"   filter-env {_b[2]:.4f} + {_o[2]:.4f} → {_a[2]:.4f}")
+                print(f"       The source authored these separately. "
+                      f"Use --krz-faithful to keep all {_was} layers instead "
+                      f"-- that makes it a DRUM PROGRAM, playable only on a "
+                      f"drum channel.")
+                fitted.append((preset.name, _was, len(voices), _notes))
+            else:
+                n = min(len(voices), _MAX_KRZ_LAYERS)
+                print(f"  [layers] '{preset.name}': {n} split layers → DRUM "
+                      f"PROGRAM (play on a drum channel). Could not fit to 3: "
+                      f"the remaining layers OVERLAP on the keyboard, so "
+                      f"fusing them would delete a voice rather than "
+                      f"approximate one.")
+                voices = voices[:_MAX_KRZ_LAYERS]
         elif len(voices) > 3:
             n = min(len(voices), _MAX_KRZ_LAYERS)
             print(f"  [layers] '{preset.name}': {n} split layers → DRUM PROGRAM "
-                  f"(play on a drum channel)."
+                  f"(play on a drum channel; --krz-faithful was given)."
                   + ("" if len(voices) <= _MAX_KRZ_LAYERS
                      else f"  (clamped from {len(voices)} to the K2000 max {_MAX_KRZ_LAYERS})"))
             voices = voices[:_MAX_KRZ_LAYERS]
@@ -1646,6 +1797,21 @@ def write_krz(bank: Bank, output_path: str) -> None:
 
         total = f.tell()
         print(f"  Written: {output_path} ({total/1024/1024:.2f} MB)")
+        # REPEATED AT THE END, deliberately. The per-preset warning above scrolls
+        # past behind one line per sample; a bank of forty presets buries it
+        # completely. The one thing the converter knowingly approximates should
+        # still be on screen when the run finishes.
+        if fitted:
+            print()
+            print(f"  [!!] {len(fitted)} preset(s) had LAYERS FUSED AND FILTER "
+                  f"SETTINGS AVERAGED to fit the K2000's 3-layer limit:")
+            for _nm, _was, _now, _notes in fitted:
+                print(f"       '{_nm}': {_was} → {_now} layers, "
+                      f"{len(_notes)} fusion(s)")
+            print(f"       This is an APPROXIMATION of what the source "
+                  f"authored, not a translation of it.")
+            print(f"       --krz-faithful keeps every layer; those presets then "
+                  f"become DRUM PROGRAMS and sound only on a drum channel.")
     if lost_zones:
         print(f"  [WARN] {len(lost_zones)} zone(s) could not be placed and were "
               f"dropped:")
