@@ -987,7 +987,35 @@ def akai_env2_stage_seconds(byte: int, distance: float, law) -> float:
 #: these as the base for a saturated FILFRQ keeps that convertible instead of
 #: silently dropping it.
 AKAI_FILTER_OPEN_HZ = 8481.0     #: FILFRQ 95, the top of the measured table
-AKAI_FILTER_FLOOR_HZ = 100.0     #: below the lowest measured corner
+#: THE FILTER DOES NOT FLOOR. This is a modelling limit, not a machine one, and
+#: the old comment ("below the lowest measured corner") invited the opposite
+#: reading -- it looked like a property of the S3000XL and is not.
+#:
+#: MEASURED 2026-08-24 (s3ked), steady noise, FILQ 0, no modulation, each
+#: setting differenced against wide open, absolute attenuation at 80 Hz:
+#:
+#:     FILFRQ    0     5    10    15    20    25    30    35    40
+#:     dB @80 -41.2 -35.5 -30.5 -24.2 -17.7 -11.3  -5.4  -0.8  +1.0
+#:
+#: **Monotonic across 41 dB with no plateau anywhere**, and the exponential --
+#: fitted 44..92 and never measured below it by anyone -- predicts a 12 dB/oct
+#: rolloff to within ~2 dB all the way to FILFRQ 0. At 0 the corner is 6.5 Hz
+#: and the filter attenuates 41 dB at 80 Hz: a real, usable, very dark setting.
+#:
+#: **AND 100.0 IS ALMOST CERTAINLY AN ARTEFACT OF THE MEASUREMENT THAT WAS NOT
+#: TAKEN.** s3ked's first pass normalised each curve to its own 60-120 Hz level
+#: before finding the -3 dB point, and got 111.3 Hz identically for FILFRQ 0,
+#: 5, 10, 20 and 30 -- a clean flat-below-and-rising-above curve saying "the
+#: filter floors at 111 Hz". Once the corner drops below the normalisation
+#: band the 0 dB reference sits ON THE SLOPE, so the whole curve slides with it
+#: and every setting reads the same -3 dB point. **A passband reference is only
+#: a passband reference while the corner is above it.** 111 is close enough to
+#: this constant's 100 that they are likely the same mistake.
+#:
+#: Kept only as the downward-sweep bound in `_env2_amount`, where SOMETHING has
+#: to stop an unbounded octave count. Named for that and nothing else.
+AKAI_ENV2_SWEEP_FLOOR_HZ = 100.0   #: modelling bound on a downward env2 sweep
+AKAI_FILTER_FLOOR_HZ = AKAI_ENV2_SWEEP_FLOOR_HZ   #: deprecated alias
 
 
 def akai_filfrq_to_hz(byte: int):
@@ -1023,7 +1051,17 @@ def akai_filfrq_to_hz(byte: int):
         y1 = AKAI_FILTER_MEASURED[pts[0]]
         f = (byte - top) / (pts[0] - top)
         return math.exp(math.log(y0) + f * (math.log(y1) - math.log(y0)))
-    return a * math.exp(b * max(lo, byte))
+    # NO CLAMP AT THE FIT'S FLOOR. This read `max(lo, byte)` with lo = 40, so
+    # every FILFRQ from 0 to 40 returned the same 137.9 Hz -- **29.4% of real
+    # keygroups on the library discs, all given one cutoff.** Measured 2026-08-24
+    # (see AKAI_ENV2_SWEEP_FLOOR_HZ above): the corner keeps descending to
+    # FILFRQ 0 with no plateau, and this law predicts it to within ~2 dB the
+    # whole way despite being fitted at 44..92.
+    #
+    # Fifth instance of one class in a week -- a bound taken from where somebody
+    # stopped fitting, applied as though it were a property of the machine. This
+    # one had the largest span of the five.
+    return a * math.exp(b * max(0, byte))
 
 
 def hz_to_e4b_cutoff(hz: float) -> float:
