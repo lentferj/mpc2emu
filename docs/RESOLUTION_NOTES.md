@@ -18949,6 +18949,57 @@ against it: both would be contaminated and their agreement would prove nothing.
 That is a correction to this session's proposed control, and it reorders the
 work: **settle FX first, then sweep.**
 
+### What the FILE says, which settles more of it than the bench did
+
+Read out of `MXS3FIX_01.E4B` directly, no hardware. Doing this first would have
+saved most of the theorising above, and that is the lesson worth keeping: **the
+captures were being interpreted for hours before anyone opened the bank they
+came from.**
+
+**All three sustaining voices carry BYTE-IDENTICAL envelopes** — sustain 86,
+Dcy1 99, Rls1 69, against the click layer's 0 / 3 / 0. Identical, not similar.
+**So no difference between the low, mid and high keygroups can be the
+envelope.** Whatever varies is the sample or the transposition, and a whole
+family of explanations dies at once.
+
+**The decay should still be running at note-off, and the captures say it is
+not.** Dcy1 99 is 6.1 dB/s over a 31.4 dB span = 5.16 s; the note is held 3.0 s,
+so roughly 18 dB of decay is due by note-off (about 15 by the corrected law).
+Measured across the 0.4 s before note-off: -39.5, -39.1, -39.6 — **0.1 dB of
+movement where 2.4 dB is due.** A contradiction between a byte we wrote and the
+machine, independent of every hypothesis on the table, and the rebuilt noise
+bank tests it with no confound because its attack and decay are both zero.
+**Chase this before the knee: it is a contradiction, not a mystery.**
+
+**The 0.070 s periodicity is not the LFO.** LFO1 is 3.78 Hz — 0.264 s, triangle,
+no delay. The obvious second candidate after the loop, excluded from the file.
+
+**The loops are not one period.** `KK DXE` and `KK DXE1` loop 7.6 ms, `KK DXE2`
+loops 15.3 ms, so any prediction made from a single assumed base period will
+miss — which is what happened.
+
+### The low keygroup is the least stationary subject, not the most
+
+v1 is rooted at 48 and spans 24-59, so **n26 plays at 0.28x**. Its loop starts
+1.17 s into the sample, which at that ratio is **4.16 s** — and the note ends at
+3.0 s. **The voice is still playing pre-loop sample data when the release
+begins**, and only enters the loop 0.66 s into the fall. n40 (0.63x) reaches its
+loop at 1.86 s and n52 at 0.93 s, so n26 alone is affected.
+
+It had been read as the clean straight line the anomalous keygroup should be
+compared against. It is the one capture of the nine whose release is the product
+of our envelope and the sample's own decaying tail — **and it looked straight
+anyway**, which is the part to remember. Straightness is not evidence of a
+stationary subject.
+
+It is also the note Jan reports as wrong, and across the nine captures the same
+material is played over a **14x range of playback rate** (0.28x at n26 to 4.00x
+at n96). That is the variable the table is really sorted by.
+
+The rebuilt noise bank removes all of this by construction: root-matched at
+every measurement note, ratio exactly 1.0, loop stationary from the first
+sample.
+
 Separating them needs the **envelope written out per point at 10 ms
 resolution**, not just a fitted number, which is how the sweep is staged: fit
 window, knee detection and the law itself can then be reworked offline. A bench
