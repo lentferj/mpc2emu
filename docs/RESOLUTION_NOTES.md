@@ -198,6 +198,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIFILT2 — the IB-304F option, and what to do about filter order in both directions (2026-08-24)](#akaifilt2-the-ib-304f-option-and-what-to-do-about-filter-order-in-both-directions-2026-08-24)
 - [§LFODEPTHRANGE — the LFO→pitch law validated 16× below its calibration, and a withdrawn 19% (2026-08-24)](#lfodepthrange-the-lfopitch-law-validated-16-below-its-calibration-and-a-withdrawn-19-2026-08-24)
 - [§AKAILPTCH — the LFO is gated per keygroup, and the depth law has an unrecorded dependency (2026-08-24)](#akailptch-the-lfo-is-gated-per-keygroup-and-the-depth-law-has-an-unrecorded-dependency-2026-08-24)
+- [§E4XTQSHIFT — cutoff and resonance are not independent, and the cutoff table is 0.4 octaves dark (2026-08-24)](#e4xtqshift-cutoff-and-resonance-are-not-independent-and-the-cutoff-table-is-04-octaves-dark-2026-08-24)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -18325,3 +18326,104 @@ A gated keygroup is correct. **A non-gated one carries a depth we should treat
 as unknown rather than trusted**, and the constant says so. That is a smaller
 error than before — three of six voices in this program are now silent that were
 wrong — and it is honest about the rest.
+
+## §E4XTQSHIFT — cutoff and resonance are not independent, and the cutoff table is 0.4 octaves dark (2026-08-24)
+
+Two findings out of an A/B that was never going to be valid, both measured by
+eosed, both bigger than the test they came from.
+
+### 1. `_E4XT_CUTOFF_TABLE` is wrong from byte 64 upward
+
+Twelve bytes measured directly at Q 0, cord zeroed, each capture divided by a
+wide-open reference:
+
+    byte    measured    our table    error
+       4       128.8        138.0    +0.10 oct   <- agrees
+      64       397.4        301.3    -0.40
+      80       515.4        396.4    -0.38
+     100       687.9        519.7    -0.40
+     119       918.3        672.7    -0.45
+     135      1092.0        836.1    -0.39
+     160      1589.6       1102.5    -0.53
+     179      2002.7       1209.9    -0.73
+     195      2523.3       1616.7    -0.64
+
+**Only byte 4 agrees**, which is exactly why the end-to-end check on 2026-08-23
+passed at 7% and said nothing about the rest — it was done at byte 4. Every E4B
+we write has its filter roughly a third of an octave too dark, worse at the top.
+
+eosed's §52 reproduces the measurement to better than 0.3% at every byte where
+it had a point, so this is not two extrapolations of equal standing.
+
+**Not fixed here.** The table is consumed by formats with no hardware
+calibration behind them, and its own comment warns that correcting it would move
+those silently. A 0.4-octave change to every conversion needs its own session.
+
+### 2. Resonance MOVES the corner, by up to an octave
+
+The finding that killed the A/B. Fix the cutoff byte, sweep Q, watch the -3 dB
+crossing — as a multiple of the same byte at Q 0:
+
+    byte     Q41    Q64   Q102   Q112
+     119    1.37   1.50   1.63   1.68
+     135    1.59   1.78   1.94   2.00
+     179    1.94   2.24   2.59   2.75
+
+At byte 135 the corner goes 1092 Hz to 2184 Hz — **a full octave from the Q knob
+alone**. Both the peak and the crossing move, so it is a real shift in the
+response rather than an artefact of which feature is measured.
+
+**In octaves the shift is close to SEPARABLE**, `shift ≈ f(Q) * g(byte)`:
+normalising each Q column by its byte-119 row gives 1.00/1.47/2.11 at Q 41 and
+1.00/1.34/1.95 at Q 112 — the same shape to about 8%. So a product of two
+one-dimensional curves would capture most of it, which is far cheaper than a
+2-D grid. Three bytes and four Q values is not enough to fit anything; recorded
+because knowing the shape is simple should inform how much bench time this
+deserves.
+
+**Consequence for items 3 and 4 of §AKAIFIXPLAN2**, which are wired: they set
+resonance and cutoff independently, and on this machine they are not. Any
+conversion that targets a corner and then applies a resonance misses by up to an
+octave, and misses more the brighter the voice.
+
+### Q-shift was the WHOLE of the discrepancy
+
+Re-aimed by measurement at each voice's real Q:
+
+    v1   target 5161 Hz   measured 4974 Hz   0.964
+    v3   target 7414 Hz   measured 7453 Hz   1.005
+    v5   target 4153 Hz   measured 4183 Hz   1.007
+
+**No residual.** So a Q-aware correction is the only thing standing between the
+law and the machine, and nothing else is hiding underneath it. That is worth as
+much as the finding itself — it bounds the remaining work.
+
+Three sets of amounts now exist for the same three voices, and only one was
+measured under the conditions the preset runs at:
+
+    law, Q-0 bases          34 / 21 / 37
+    by ear at Q 0           32 / 15 / 39
+    measured at real Q      25 / 14 / 29
+
+### A target below the resonant floor, which is a POLICY question
+
+The unison voices cannot reach their target at all:
+
+    cord amount     0      2      4      6      8     11     14
+    measured peak  523    523    523    739    739    879    987 Hz
+
+**Target is 207 Hz. At cord amount ZERO the peak already sits at 523 Hz** — Q 41
+on a byte-4 cutoff lifts it there with no envelope applied. Reducing the cord
+cannot help; the floor is the resonance.
+
+eosed aimed the SWEEP SIZE instead, which is still reproducible: the source asks
+138 -> 207 Hz (0.59 oct), the machine gives 523 -> 739 Hz (0.50 oct) at amount 8,
+and 0.59 oct needs amount 7. So the layer sweeps by nearly the right amount, an
+octave and a bit higher than the source does it.
+
+**This is a constraint on the conversion, not a tuning problem.** Any AKAI
+keygroup whose FILQ maps to a Q that lifts the corner above its FILFRQ target is
+unreachable, and the brighter the Q the worse it gets. The writer will have to
+choose: match the sweep, clamp to the floor, or reduce Q and lose the resonance.
+A policy decision, not an arithmetic one, and it wants Jan's ear on which loss
+is least bad.
