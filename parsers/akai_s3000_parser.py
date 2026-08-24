@@ -738,8 +738,12 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
         # checked it is the same place. A pivot mismatch tilts the tracking
         # about the wrong centre -- audible as "the filter is wrong at one end
         # of the keyboard" while the ratio itself is right.
-        voice.filter_keytrack = key_track_to_filter_amount(
-            kg.get('filter_keyfollow', 0) / 12.0)
+        # K_FREQ/12 IS the ratio: octaves of cutoff per octave of key. The
+        # model carries that directly since 2026-08-24; it used to be converted
+        # to an EOS cord fraction here and saturated at 0.713 oct/oct, which
+        # threw away every value past K_FREQ 9 -- and real material reaches -30
+        # and +40.
+        voice.filter_keytrack = kg.get('filter_keyfollow', 0) / 12.0
         # AMPLITUDE ENVELOPE. Never assigned until 2026-08-23, so every
         # AKAI-sourced voice carried VoiceLayer's default and the two distinct
         # envelopes of a layered program came out identical -- eosed read all

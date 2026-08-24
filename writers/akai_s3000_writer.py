@@ -2058,15 +2058,28 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
         # the source had -- and the reader did not read it either, which is
         # why nothing ever disagreed.
         #
-        # Clamped to the MEASURED range -5..+22 rather than to a full signed
-        # byte. s3ked has been to those two ends on the machine and no further,
-        # and that unit has been crashed twice by out-of-range writes; a range
-        # nobody has visited is not a range to declare. The documented 0..12 is
-        # too NARROW -- a display range transcribed as a value range -- and 18
-        # and 22 both act, linearly, with no knee.
+        # Clamped to -30..+40, the range that has been VISITED on the machine,
+        # and no further.
+        #
+        # This was -5..+22 for one evening and the corpus said that was far too
+        # narrow: `filter_keyfollow` changed on **32.6% of round-tripped zones**
+        # across the sound libraries, one program carrying -18 and being
+        # flattened to -5. On a one-octave span that is the difference between
+        # the filter dropping 1.5 octaves across the keyboard and dropping 0.4.
+        #
+        # THE DOCUMENTS DISAGREE AND BOTH ARE TOO NARROW. The S2800/S3000/S3200
+        # sheet says "0 to 12 semitones" -- no sign at all. The S1000 sheet says
+        # "+/-24 semitones/octave", which gives sign, unit and bound and is the
+        # second independent source for the unit. **Measured, it is linear from
+        # -30 to +40 with no knee at 24 or anywhere else**, every point within
+        # 96-103% of K_FREQ/12, and every value reading back exactly as written.
+        # So +/-24 is a display range too, and NO DOCUMENT STATES THIS FIELD'S
+        # REAL LIMIT. s3ked did not find a wall and did not claim one.
+        #
+        # A predicted knee at 24 was written down before that run and refuted --
+        # the second prediction refuted on this one field.
         _kf = getattr(voice, 'filter_keytrack', 0.0) or 0.0
-        k[0x08] = _clamp(int(round(
-            _kf * KEY_FILTER_OCT_PER_OCT * 12.0)), -5, 22) & 0xFF
+        k[0x08] = _clamp(int(round(_kf * 12.0)), -30, 40) & 0xFF
         if _vf_lost > 50:
             _velfilt_clipped.append((index + 1, _vf_lost))
     # VELOCITY -> FILTER FREQUENCY, KEYGROUP BYTE 151. Written since 2026-08-16;

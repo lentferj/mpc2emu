@@ -1287,8 +1287,7 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False):
         # unit. (That the model measures this in another machine's cord units
         # at all is filed as its own defect -- it costs a byte of precision
         # here and more elsewhere.)
-        _kt_oct = (getattr(voice, 'filter_keytrack', 0.0) or 0.0) \
-            * KEY_FILTER_OCT_PER_OCT
+        _kt_oct = getattr(voice, 'filter_keytrack', 0.0) or 0.0
         # SIGNED. The first version clamped to 0..255 before masking, which
         # threw away every NEGATIVE keytrack -- and the reader sign-extends
         # this byte, so negatives are legal and real material uses them. The

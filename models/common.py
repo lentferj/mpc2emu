@@ -184,6 +184,11 @@ def velocity_filter_depth_to_amount(cents: float) -> float:
 KEY_FILTER_OCT_PER_OCT = 0.713
 
 
+def filter_amount_to_key_track(amount: float) -> float:
+    """EOS cord amount -> octaves of cutoff per octave of key. The inverse."""
+    return amount * KEY_FILTER_OCT_PER_OCT
+
+
 def key_track_to_filter_amount(oct_per_oct: float) -> float:
     """Map a desired Key→Filter tracking ratio (octaves of cutoff per octave of
     key) to an EOS cord amount (-1..+1)."""
@@ -1863,7 +1868,20 @@ class VoiceLayer:
     # Tuning
     non_transpose: bool = False  # vpar[38]=1 in E4B: pitch does not follow key
     # Filter modulation (EOS mod cords into Filter-Freq; -1.0..+1.0 = ±100%)
-    filter_keytrack: float = 0.0     # Key → Filter-Freq  (cord 06)
+    #: Key -> Filter tracking, in OCTAVES OF CUTOFF PER OCTAVE OF KEY.
+    #:
+    #: **This was an EOS CORD AMOUNT until 2026-08-24** -- a fraction of one
+    #: machine's cord, whose full scale is 0.713 oct/oct. So any source asking
+    #: for more than that saturated at -1..+1 and the value was gone. The AKAI
+    #: uses 1:1 tracking on 27% of its keygroups and goes past 2.5 oct/oct in
+    #: real material; measured over the sound libraries, key-follow was lost on
+    #: **32.6% of round-tripped zones**, and widening the AKAI's own clamp only
+    #: moved it to 31.3% because the loss was happening HERE, not there.
+    #:
+    #: Same defect as the release span and the same fix: carry the physical
+    #: quantity, convert at the point of use. `key_track_to_filter_amount`
+    #: turns it into an EOS cord amount where one is wanted.
+    filter_keytrack: float = 0.0     # oct of cutoff per oct of key
     # VELOCITY -> FILTER IS A RANGE, NOT A DEPTH.
     #
     # `velocity_to_filter` is the depth reached at FULL velocity. The floor the

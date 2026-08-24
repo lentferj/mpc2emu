@@ -183,8 +183,12 @@ def _sfz_voice_params(merged: dict) -> dict:
             pass
     if 'fil_keytrack' in merged:
         try:
-            params['filter_keytrack'] = key_track_to_filter_amount(
-                float(merged['fil_keytrack']) / 100.0)
+            # SFZ states cents of cutoff per key, so /100 is already octaves
+            # per octave -- which IS the model's unit since 2026-08-24. It used
+            # to be converted to an EOS cord fraction here and saturated at
+            # 0.713 oct/oct; an sfz asking for full 1:1 tracking lost a third
+            # of it.
+            params['filter_keytrack'] = float(merged['fil_keytrack']) / 100.0
         except ValueError:
             pass
     if 'fil_veltrack' in merged:

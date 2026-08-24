@@ -837,8 +837,11 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
                 # scale: byte * 2 / 100 is the oct/oct ratio it expects.
                 _kt = seg[3] - 256 if seg[3] >= 128 else seg[3]
                 if _kt:
-                    cur.filter_keytrack = key_track_to_filter_amount(
-                        _kt * 2.0 / 100.0)
+                    # 100 cents per key is one octave of cutoff per octave of
+                    # key, so this IS the model's unit since 2026-08-24 -- no
+                    # conversion, and no saturation against another machine's
+                    # cord range on the way in.
+                    cur.filter_keytrack = _kt * 2.0 / 100.0
 
                 # seg[4] IS VelTrk: A DIRECT VELOCITY->CUTOFF AMOUNT.
                 #

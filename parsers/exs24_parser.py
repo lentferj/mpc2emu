@@ -110,6 +110,7 @@ from pathlib import Path
 from typing import Optional, Dict, List, Tuple
 
 from models.common import (
+    filter_amount_to_key_track,
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType,
     hz_to_e4b_cutoff, E4B_CUTOFF_MAX_HZ, walk_files_deterministic
 )
@@ -226,7 +227,12 @@ def _apply_exs_filter(voice: VoiceLayer, params: dict) -> None:
     # and CWM never applies it); assume 0-1000 like cutoff. No EXS velocity→filter.
     kt = params.get(_EXS_FILTER_KEYTRACK, 0)
     if kt:
-        voice.filter_keytrack = max(-1.0, min(1.0, kt / 1000.0))
+        # kt/1000 was read as an EOS cord fraction; the model now carries
+        # oct/oct, so convert rather than silently rescaling this source.
+        # The scaling was already flagged unverified above -- this change
+        # preserves what it rendered, it does not claim to fix it.
+        voice.filter_keytrack = filter_amount_to_key_track(
+            max(-1.0, min(1.0, kt / 1000.0)))
     atk = params.get(_EXS_ENV2_ATTACK, 0)
     dec = params.get(_EXS_ENV2_DECAY, 0)
     rel = params.get(_EXS_ENV2_RELEASE, 0)

@@ -43,6 +43,7 @@ from models.common import (Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            env_rate_to_span_seconds, env_level_byte_to_db,
                            env_rate_byte_to_db_per_s,
                            e4xt_byte_to_resonance,
+                           filter_amount_to_key_track,
                            ENV_FULL_SPAN_DB,
                            cord_byte_to_amount,
                            e4xt_cutoff_byte_to_position, e4xt_byte_to_volume_db,
@@ -458,7 +459,10 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     mod_region = data[VOICE_MOD_OFF:VOICE_MOD_OFF + 80] if len(data) >= VOICE_MOD_OFF + 27 else b''
     _cord = lambda off: (cord_byte_to_amount(mod_region[off]) if mod_region else 0.0)
     cord_amt = mod_region[_MOD_FENV_TO_CUTOFF_AMT] if mod_region else 0
-    filter_keytrack    = _cord(_MOD_KEY_TO_CUTOFF_AMT)
+    # The cord amount is this MACHINE's fraction; the model carries the
+    # physical ratio (§CORPUSRT).
+    filter_keytrack    = filter_amount_to_key_track(
+        _cord(_MOD_KEY_TO_CUTOFF_AMT))
     velocity_to_filter = _cord(_MOD_VEL_TO_CUTOFF_AMT)
     # LFO→dest cords + mod-wheel→LFO-depth gate reconstruction (inverse of
     # e4b_writer: each LFO cord depth D is split into static D*(1-Kw) + a

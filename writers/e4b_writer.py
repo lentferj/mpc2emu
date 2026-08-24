@@ -109,6 +109,7 @@ import copy
 import struct
 from typing import List
 from models.common import (
+    key_track_to_filter_amount,
     e4xt_cutoff_byte_to_position,Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            LoopType, lfo_rate_hz_to_byte,
                            env_seconds_to_rate, env_rate_to_seconds,
@@ -1145,7 +1146,7 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
     has_extra = any(abs(a) > 0.01 for _, _, a in _extra_cords)
     needs_mod = (voice.non_transpose
                  or abs(voice.filter_env_amount) > 0.01
-                 or abs(voice.filter_keytrack) > 0.01
+                 or _q(key_track_to_filter_amount(voice.filter_keytrack)) not in (0, 256)
                  or abs(voice.velocity_to_filter) > 0.01
                  or _q(voice.lfo1_to_pitch) not in (0, 256)
                  or has_extra)
@@ -1176,8 +1177,14 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
                           _lfo1_pitch * Kw)
         if abs(voice.filter_env_amount) > 0.01:
             mod[_MOD_FENV_TO_CUTOFF_AMT] = _q(voice.filter_env_amount)
-        if abs(voice.filter_keytrack) > 0.01:
-            mod[_MOD_KEY_TO_CUTOFF_AMT] = _q(voice.filter_keytrack)
+        # The model carries oct/oct; the cord carries a fraction of this
+        # machine's 0.713 oct/oct full scale. Converted here rather than
+        # stored converted, so a source asking for more than the E4XT can do
+        # saturates at the WRITER (which is the hardware's honest answer) and
+        # not in the model (which would lose it for every other format too).
+        _ktb = _q(key_track_to_filter_amount(voice.filter_keytrack))
+        if _ktb not in (0, 256):
+            mod[_MOD_KEY_TO_CUTOFF_AMT] = _ktb
         if abs(voice.velocity_to_filter) > 0.01:
             # Source = Vel+ (ADD, anchored at base for vel 0); the DIRECTION is the
             # sign of the (signed) amount: +amount → harder opens the filter above

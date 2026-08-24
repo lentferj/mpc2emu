@@ -500,9 +500,9 @@ def _write_zone(data: bytearray, offset: int, zone: ZoneMapping, voice: VoiceLay
         data[offset + ZONE_VCF_Q] = resonance | (Q_REALTIME_ENABLE if bank_format.is_esi else 0)
         data[offset + ZONE_VCF_TYPE_LFO_SHAPE] = 0
         # Key-tracking and velocity-to-cutoff are left neutral: mpc2emu's
-        # filter_keytrack/velocity_to_filter are EOS mod-cord amounts
-        # calibrated against E4XT hardware (models.common
-        # key_track_to_filter_amount / velocity_filter_depth_to_amount) —
+        # velocity_to_filter is an EOS mod-cord amount calibrated against
+        # E4XT hardware (models.common velocity_filter_depth_to_amount);
+        # filter_keytrack is octaves per octave since 2026-08-24 —
         # that calibration does not apply to EIII's differently-scaled,
         # differently-shaped DSP, and no EIII hardware calibration exists
         # yet (see docs/EIII_FORMAT.md). Writing a made-up conversion would
