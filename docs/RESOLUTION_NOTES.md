@@ -18872,6 +18872,35 @@ hardcoded, on the actual samples — and it agrees with §63 to about a byte
 rather than contradicting it. The prefactor `1382` is where the anchor error
 lives and it should not be the thing inverted.
 
+### Seven points now, and three routes agree on the byte
+
+Measurements in hand 2026-08-24, all on the E4XT, two keygroups or three notes
+each:
+
+        byte    measured           ours        §63          7-point fit
+         69     27.36 / 27.97      +18/+21%    +0/+2%       -3/-5%
+         80     13.44 / 14.24      +25/+32%    +6/+12%      +3/+9%
+         99     5.34 / 5.36 / 5.39 +13/+14%    -4/-5%       -1/-2%
+
+Refitting our own parameterisation to all seven gives **halving 12.86 bytes,
+22.64 dB/s at byte 72** (against our 12.3 and 27.9). Inverting each law for the
+AKAI's 15.224 dB/s:
+
+        ours        82.75
+        §63         79.79
+        7-point     79.36
+        eosed's direct two-point solve   78.1 / 78.9
+
+**Three independent routes land on 79; ours is the outlier by three and a half
+bytes.** That is the number to write when this is wired.
+
+**One residual worth carrying into the sweep: byte 80 is over-predicted by every
+law, including the one fitted to it** (+3 to +32%), and its two measurements are
+also the most scattered pair (6% apart, against 2% at byte 69 and 0.9% at 99).
+Either the curve is not a pure exponential there or that measurement has a
+problem. The sweep should resolve which, and the residuals-by-thirds output
+exists for exactly this.
+
 ### The sweep that should happen before this is trusted
 
 eosed has offered bytes **60 through 100 in steps** on the clean bank's own
@@ -18962,14 +18991,40 @@ Dcy1 99, Rls1 69, against the click layer's 0 / 3 / 0. Identical, not similar.
 envelope.** Whatever varies is the sample or the transposition, and a whole
 family of explanations dies at once.
 
-**The decay should still be running at note-off, and the captures say it is
-not.** Dcy1 99 is 6.1 dB/s over a 31.4 dB span = 5.16 s; the note is held 3.0 s,
-so roughly 18 dB of decay is due by note-off (about 15 by the corrected law).
-Measured across the 0.4 s before note-off: -39.5, -39.1, -39.6 — **0.1 dB of
-movement where 2.4 dB is due.** A contradiction between a byte we wrote and the
-machine, independent of every hypothesis on the table, and the rebuilt noise
-bank tests it with no confound because its attack and decay are both zero.
-**Chase this before the knee: it is a contradiction, not a mystery.**
+**~~The decay should still be running at note-off, and the captures say it is
+not.~~ WITHDRAWN, same day, and it was the stale anchor a fourth time.** The
+claim was that Dcy1 99 owes ~18 dB of fall across a 3.0 s hold and the captures
+show 0.1 dB — a contradiction between a byte we wrote and the machine. It was a
+contradiction between the machine and **our own prediction**, which is a
+different thing and is the thing already known to be wrong.
+
+Measured properly on the mid keygroup, where the sample's own contour does not
+dominate — three notes, **0.9% spread**, the cleanest decay anywhere in the nine:
+
+        v3_n62  5.39 dB/s     v3_n66  5.36     v3_n70  5.34
+        §63 at byte 99   5.14      measured 4% high
+        ours at byte 99  6.09      measured 12-14% LOW
+
+**A fourth independent confirmation of §E4BRATEANCHOR, on a different envelope
+segment.** Which also says the decay and release stages share one rate scale —
+and §63 had already argued the same for the filter and amplitude envelopes at
+12.2 against 12.3 bytes per halving. **Three envelope contexts, one scale.**
+
+**And byte 99 is TWELVE BYTES outside §63's fitted [60, 87] window, predicted to
+4%.** The sweep exists to reach the slow end; the slow end has now been shown
+reachable by extrapolation. That does not retire the sweep — one point is not a
+range, and it rides on a decay rather than a release — but the specific worry
+about byte 100 falling apart is much smaller than it was.
+
+**What survives of the item:** on musical material the held level is not the
+envelope. Total decay travelled, from *identical* envelope bytes throughout:
+
+        v5_n76 14.7 dB   v1_n52 24.6   v3_n70 34.2
+        v5_n84 17.1      v1_n40 27.2   v3_n66 35.8
+        v1_n26 28.2      v5_n96 32.1   v3_n62 39.9
+
+**14.7 to 39.9 dB from the same bytes.** The sample's contour dominates
+everywhere except the mid keygroup, which is why that one reads clean.
 
 **The 0.070 s periodicity is not the LFO.** LFO1 is 3.78 Hz — 0.264 s, triangle,
 no delay. The obvious second candidate after the loop, excluded from the file.
@@ -18977,6 +19032,25 @@ no delay. The obvious second candidate after the loop, excluded from the file.
 **The loops are not one period.** `KK DXE` and `KK DXE1` loop 7.6 ms, `KK DXE2`
 loops 15.3 ms, so any prediction made from a single assumed base period will
 miss — which is what happened.
+
+**And it WAS the loop after all — the null was underpowered, not negative.** The
+autocorrelation that reported no pitch-tracking periodicity ran on **5 ms
+envelope windows**, against loops of 3-13 ms at the notes played. It could not
+have resolved the thing it was looking for. Redone at 0.5 ms:
+
+        v1_n26  loop 27.08 ms   best lag 13.50 ms   rho 0.96   ratio 0.50
+        v1_n40  loop 12.06 ms   best lag  6.00 ms   rho 0.98   ratio 0.50
+        v1_n52  loop  6.03 ms   best lag  3.00 ms   rho 0.99   ratio 0.50
+
+Exactly half the loop period at all three notes across 26 semitones. The loop
+shows through at its second harmonic and tracks pitch precisely.
+
+**Keep the shape of that mistake, not just its answer: a null result from an
+analysis that could not have seen the effect is not evidence of absence, and it
+reads exactly like evidence of absence.** The resolution of the method has to be
+checked against the size of the thing being looked for, before the null is
+reported. This one was caught only because the file supplied the true loop
+lengths — nothing in the analysis itself would have raised a hand.
 
 ### The low keygroup is the least stationary subject, not the most
 
