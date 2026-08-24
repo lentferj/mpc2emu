@@ -897,13 +897,41 @@ def _env2_stage_byte(seconds: float, distance: float, law) -> int:
     travels less takes proportionally less: scale the wanted time UP by
     99/distance before inverting, and the byte that results is the one whose
     full traverse would take that long.
+
+    **BOTTOM EXTRAPOLATES, TOP STILL CLAMPS, and the asymmetry is deliberate
+    both ways** (2026-08-24, the same audit that caught `_rate_law_value`).
+
+    This used to clamp BOTH ends to the fitted 40..80/85 while its own inverse
+    `akai_env2_stage_seconds` already extrapolated downward -- so the two sides
+    of one law disagreed about a quarter of the corpus. A source asking for a
+    filter stage faster than byte 40 got byte 40, i.e. ~60 ms, however fast it
+    asked; and the corpus puts **~25% of real ATTAK2 values in bytes 21..39**,
+    all of which were landing on one number. A plateau is worse than an
+    extrapolation because it is not merely inaccurate: it makes two different
+    source programs identical, and ordering is the one thing a converter must
+    not lose.
+
+    A ZERO REQUEST STILL RETURNS 0, not an extrapolated small byte. "Instant"
+    is a value the source states rather than a point on the curve, and the read
+    side special-cases it the same way. Measured on an S3000XL: byte 0 is
+    instant to within the rig's 10 ms floor, against the law's own prediction
+    of 1.4 ms -- so this is a known endpoint, not a guess. s3ked's `endpoints`
+    idea generalised: where a value outside the fit has an independently known
+    meaning, use the fact rather than extrapolating or refusing.
+
+    The TOP stays clamped at the fitted maximum, matching the read side.
+    Extrapolating upward invents slow stages nobody has measured, and unlike
+    the bottom there is no endpoint fact to anchor it. **Recorded as a known
+    plateau rather than a fixed one:** the corpus puts 10.5% of DECAY2 and 4.6%
+    of RELSE2 above the fit, so ordering IS being lost there and the honest fix
+    is a wider calibration.
     """
     a, b, lo, hi = law
     if seconds <= 0 or distance <= 0:
-        return lo
+        return 0
     full = seconds * (99.0 / distance)
     v = math.log(max(full, 1e-9) / a) / b
-    return int(round(max(lo, min(hi, v))))
+    return int(round(max(0.0, min(float(hi), v))))
 
 
 def akai_filter_env_bytes(env, amount: float, filfrq: int = 99):
