@@ -47,6 +47,7 @@ from models.common import (
     akai_lfo_rate_hz, akai_lfo_depth_to_pitch, akai_lfo_delay_seconds,
     akai_env2_target_hz, E4B_CUTOFF_MAX_HZ, E4XT_FENV_BYTE_PER_UNIT,
     AKAI_ENV2_OCT_PER_UNIT, AKAI_FILTER_OPEN_HZ, AKAI_FILTER_FLOOR_HZ,
+    key_track_to_filter_amount,
     Envelope)
 import math
 
@@ -573,6 +574,25 @@ def parse_program_bytes(data: bytes, fallback_name: str = '',
             lo_key=kg[0x03], hi_key=kg[0x04],
             tune=_s16(kg, 0x05),
             filter_freq=kg[0x07],
+            # K_FREQ, "key follow of filter frequency", SIGNED semitones.
+            # Never read until 2026-08-24 -- found by diffing raw keygroup
+            # blocks when Jan challenged a claim about three keygroups' filter
+            # settings, and confirmed on an S3000XL the same evening.
+            #
+            #   octaves of cutoff per octave of key = K_FREQ / 12
+            #   pivot: note 64 (the machine's convention, shared with V_LOUD
+            #   and V_ATT1 -- NOT middle C and NOT the sample root)
+            #
+            # SIGNED, and our documentation said 0..12 unsigned. That was a
+            # DISPLAY range transcribed as a value range, the same error this
+            # project already found on KGTUNO. Measured: raw 251 gives -0.435
+            # oct/oct against -5/12 = -0.417 predicted, so the corner moves
+            # DOWN as the note goes up and negative tracking is real content.
+            #
+            # It also does not clamp at 12: 18 and 22 give 1.491 and 1.845
+            # against 1.500 and 1.833 predicted, straight through with no knee
+            # (0.08444 per unit against 1/12 = 0.08333, 1.3%).
+            filter_keyfollow=_s8(kg[0x08]),
             amp_attack=kg[0x0c], amp_decay=kg[0x0d],
             amp_sustain=kg[0x0e], amp_release=kg[0x0f],
             env2=(kg[0x14], kg[0x15], kg[0x16], kg[0x17]),
@@ -703,6 +723,23 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
                 prog['lfo_depth'], kg['lfo_to_pitch'])
             voice.lfo1_delay = akai_lfo_delay_seconds(prog.get('lfo_delay', 0))
         voice.filter_cutoff = _cutoff_of(kg['filter_freq'], prog['is_s3000'])
+        # KEY FOLLOW OF FILTER FREQUENCY -- carried since 2026-08-24, dropped
+        # silently before that on every AKAI-sourced conversion in every
+        # format. See `filter_keyfollow` in parse_program_bytes for the law and
+        # how the field was found.
+        #
+        # Converted through the SHARED helper rather than by dividing here: the
+        # E4B cord's own full-scale lives in `KEY_FILTER_OCT_PER_OCT`, and a
+        # second copy of that ratio is the exact shape of defect that accounted
+        # for most of this week's work.
+        #
+        # ONE THING IS ASSUMED AND SHOULD BE MEASURED: the AKAI pivots this at
+        # NOTE 64. The E4XT's Key source pivots somewhere too and nobody has
+        # checked it is the same place. A pivot mismatch tilts the tracking
+        # about the wrong centre -- audible as "the filter is wrong at one end
+        # of the keyboard" while the ratio itself is right.
+        voice.filter_keytrack = key_track_to_filter_amount(
+            kg.get('filter_keyfollow', 0) / 12.0)
         # AMPLITUDE ENVELOPE. Never assigned until 2026-08-23, so every
         # AKAI-sourced voice carried VoiceLayer's default and the two distinct
         # envelopes of a layered program came out identical -- eosed read all

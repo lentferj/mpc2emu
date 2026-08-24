@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Optional
 
 from models.common import (
+    KEY_FILTER_OCT_PER_OCT,
     AKAI_FILTER_LAW, AKAI_FILTER_OPEN, akai_filfrq_to_hz,
     AKAI_ENV2_ATTACK, AKAI_ENV2_DECAY, AKAI_ENV2_RELEASE,
     AKAI_ENV2_DEPTH_OFFSET, AKAI_ENV2_DEPTH_MAX,Bank, LoopType, SampleData, safe_filename,
@@ -1961,6 +1962,21 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
         _vmin = getattr(voice, 'velocity_to_filter_min', 0.0) or 0.0
         _vmax = getattr(voice, 'velocity_to_filter', 0.0) or 0.0
         k[0x07], _vf_byte, _vf_lost = akai_velocity_filter(_cut, _vmin, _vmax)
+        # K_FREQ (0x08): key follow of filter frequency, SIGNED semitones,
+        # oct/oct = K_FREQ / 12, pivot note 64. Never written before
+        # 2026-08-24, so an AKAI -> AKAI round trip silently zeroed whatever
+        # the source had -- and the reader did not read it either, which is
+        # why nothing ever disagreed.
+        #
+        # Clamped to the MEASURED range -5..+22 rather than to a full signed
+        # byte. s3ked has been to those two ends on the machine and no further,
+        # and that unit has been crashed twice by out-of-range writes; a range
+        # nobody has visited is not a range to declare. The documented 0..12 is
+        # too NARROW -- a display range transcribed as a value range -- and 18
+        # and 22 both act, linearly, with no knee.
+        _kf = getattr(voice, 'filter_keytrack', 0.0) or 0.0
+        k[0x08] = _clamp(int(round(
+            _kf * KEY_FILTER_OCT_PER_OCT * 12.0)), -5, 22) & 0xFF
         if _vf_lost > 50:
             _velfilt_clipped.append((index + 1, _vf_lost))
     # VELOCITY -> FILTER FREQUENCY, KEYGROUP BYTE 151. Written since 2026-08-16;
