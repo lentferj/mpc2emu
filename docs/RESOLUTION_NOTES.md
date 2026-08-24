@@ -19608,6 +19608,35 @@ own output is a mirror; agreement with it is not evidence.
 one had a symptom anybody had reported. Two of them — the rate-zero floor and
 the resonance poles argument — were already written down as known and left.
 
+### A sixth: a metric that confounds the two causes it was built to separate
+
+**Time-to-floor cannot tell a rate from a duration.** Measured on the K2000
+2026-08-24, one release setting, three sustain levels:
+
+        sustain 100%   0.545 s to floor
+        sustain  50%   0.385 s
+        sustain  15%   0.200 s
+
+A **rate** predicts 0.545 / 0.490 / 0.395 (distances of 60, 54 and 43.5 dB
+above a -60 dB floor). A **duration** predicts roughly constant. The measured
+values fall 2.7x across the range and match neither -- the shape is close to
+`time ∝ level^0.5`, which nobody had proposed.
+
+**The metric is the problem, not the machine.** A release starting at 15% is
+already two thirds of the way to the floor before it moves, so it arrives
+sooner *whether it is a rate or a duration*. The measurement conflates where
+the fall starts with how fast it falls.
+
+**What separates them is the SLOPE, measured well above the floor** — constant
+across sustain levels means a rate, changing means a duration. That is what
+settled the AKAI's filter release the same evening: distance x2.02 gave time
+x1.93 with the rate flat to a few percent, where two arrival times would have
+been consistent with several wrong laws.
+
+Note the shape of the near-miss: choosing a completion instant over a t-10 dB
+crossing was CORRECT, and solved a different problem. **A guard against one
+known trap is not a guard against the family.**
+
 ### The family these all belong to
 
 **An instrument producing a plausible number in a régime where it cannot
