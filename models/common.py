@@ -863,6 +863,27 @@ def akai_filq_to_db(byte: int) -> float:
     return -20.0 * math.log10(z) if z > 0 else 60.0
 
 
+def akai_01_to_filq(amount: float) -> int:
+    """The model's 0..1 resonance -> FILQ. Inverse of `akai_filq_to_01`.
+
+    **The reader's half was wired 2026-08-23 and the writer's was not**, so
+    every conversion INTO an AKAI dropped resonance entirely -- measured across
+    the library discs on 2026-08-24: **FILQ changed on 44.8% of round-tripped
+    zones**, almost always to 0. Real programs use it heavily, so this was not
+    a corner case; it was most of them.
+
+    Inverts through dB, matching the forward direction, because the field is
+    linear in nothing audible: FILQ 7 of 15 is a fifth of the range, not a
+    half. Clamped to the field, and to `AKAI_FILQ_MAX` rather than to
+    `AKAI_FILQ_DAMPING_ZERO` -- damping reaches zero at 15.84, past the top of
+    the field, which is why the machine stops just short of self-oscillation.
+    """
+    db = max(0.0, min(1.0, amount)) * RESONANCE_FULL_DB
+    z = 10.0 ** (-db / 20.0)
+    return int(round(max(0, min(AKAI_FILQ_MAX,
+                                AKAI_FILQ_DAMPING_ZERO * (1.0 - z)))))
+
+
 def akai_filq_to_01(byte: int) -> float:
     """FILQ -> the model's 0..1 resonance, as a fraction of the AKAI's own range.
 

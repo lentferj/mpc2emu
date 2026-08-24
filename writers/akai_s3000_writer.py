@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Optional
 
 from models.common import (
+    akai_01_to_filq,
     KEY_FILTER_OCT_PER_OCT,
     AKAI_FILTER_LAW, AKAI_FILTER_OPEN, akai_filfrq_to_hz,
     AKAI_ENV2_ATTACK, AKAI_ENV2_DECAY, AKAI_ENV2_RELEASE,
@@ -419,6 +420,10 @@ _AK_SUSTAIN_DB_PER_UNIT = 0.60676
 #: What we write at keygroup 160. 255 is OFF; akaiutil writes 0.
 #: Module-level so `tests/test_akai_image.no_hw_defaults` can pin it
 #: back to akaiutil's value, like every other deliberate divergence.
+#: FILQ, resonance. Same offset the reader uses; named here rather than
+#: imported because the constant lives in the parser module and importing
+#: it the other way would be circular.
+_AKAI_FILQ_OFFSET = 149
 _KGMUTE_DEFAULT = AKAI_KGMUTE_OFF
 
 #: LFORAT is LINEAR, not exponential: Hz = 0.11867 * LFORAT - 0.04, r2 0.9995.
@@ -1968,11 +1973,19 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
     #     wrong offset writes somewhere real and reads back clean. That trap
     #     survives the good news and is the durable lesson here.
     #
-    # FILQ (keygroup 149) is NOT required for the filter to act; it rested at
-    # 0 throughout, and we still write nothing to it.
+    # FILQ (keygroup 149): RESONANCE, written since 2026-08-24.
     #
-    # A law now exists if resonance is ever carried across (s3ked §52,
-    # 2026-08-12), replacing their own earlier linear 0.5764 dB/step:
+    # This comment used to end "and we still write nothing to it", with the law
+    # recorded just below against the day resonance was ever carried across.
+    # The reader's half went in on 2026-08-23 and the writer's did not, so
+    # every conversion INTO an AKAI dropped resonance -- measured on the
+    # library discs the next day, **FILQ changed on 44.8% of round-tripped
+    # zones**, almost always to zero. Not a corner case: most of them.
+    k[_AKAI_FILQ_OFFSET] = akai_01_to_filq(
+        getattr(voice, 'filter_resonance', 0.0) or 0.0)
+
+    # The law it inverts (s3ked §52, 2026-08-12), replacing their own earlier
+    # linear 0.5764 dB/step:
     #
     #     damping z = 0.46864 - 0.029587 * FILQ      r2 0.999975
     #     dB        = -20 log10(1 - FILQ / 15.84)
