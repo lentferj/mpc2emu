@@ -1130,6 +1130,24 @@ _MPC_LFO_RATE_B = 9.195
 # the response is linear through the origin, one-sided cents = 400/801/1190/1583
 # at 25/50/75/100 %, giving a full-scale of 1593 c (σ=8) — i.e. ±16 semitones,
 # NOT the ±1 octave previously assumed.  See RESOLUTION_NOTES §19.
+#
+# **VALIDATED DOWN TO 1.57 % ON 2026-08-24 and left unchanged** (§LFODEPTHRANGE).
+# The 25 % floor of that calibration mattered, because real vibratos live far
+# below it: this program's is 4.72 %, a fifth of the way under the fitted
+# window, and §LAWRANGE had just found two other laws wrong in exactly that
+# region. eosed swept 1.57–25.2 % on both a triangle and a square LFO. The
+# response is linear all the way down and the two waveforms agree to 1 %, so
+# neither curvature nor waveform-dependence exists. An independent refit of
+# their raw data gives a mean ratio of 1.005 against this constant across eight
+# triangle points — scatter, not bias.
+#
+# The one real caveat is the INTERCEPT. The original fit is
+# `cents = 15.752*pct + 9.00`, and 9 cents at zero amount cannot be physical —
+# zero cord must give zero pitch. It is invisible above ~3 % and is the whole
+# disagreement below it: at 1.57 % it predicts 33.8 c where 30.1 was measured,
+# an 11 % overshoot. Forcing the new data through the origin gives 16.82*pct
+# (full scale 1682), but with ~10 % point-to-point scatter that is not
+# demonstrably better than what is here, so nothing is changed on it.
 LFO_PITCH_FULL_CENTS = 1593.0
 # Full-scale dB swing for an LFO→volume cord at amount=100% (±1.0). UNCONFIRMED
 # on hardware (no MOD_DEPTH_CAL-style measurement exists for this cord, unlike

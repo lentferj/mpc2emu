@@ -196,6 +196,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§NAMEBITFLIP — a one-bit name corruption in sampler RAM, and why it matters to us (2026-08-24)](#namebitflip-a-one-bit-name-corruption-in-sampler-ram-and-why-it-matters-to-us-2026-08-24)
 - [§AKAILFO — the reader never read the LFO, so every conversion lost its vibrato (2026-08-24)](#akailfo-the-reader-never-read-the-lfo-so-every-conversion-lost-its-vibrato-2026-08-24)
 - [§AKAIFILT2 — the IB-304F option, and what to do about filter order in both directions (2026-08-24)](#akaifilt2-the-ib-304f-option-and-what-to-do-about-filter-order-in-both-directions-2026-08-24)
+- [§LFODEPTHRANGE — the LFO→pitch law validated 16× below its calibration, and a withdrawn 19% (2026-08-24)](#lfodepthrange-the-lfopitch-law-validated-16-below-its-calibration-and-a-withdrawn-19-2026-08-24)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -18172,3 +18173,77 @@ loss and the user can act on it — by fitting the board.
 A 2-pole source on a machine WITH the board is the easy case: leave the second
 filter out of circuit. Worth stating so nobody "uses the hardware because it is
 there".
+
+## §LFODEPTHRANGE — the LFO→pitch law validated 16× below its calibration, and a withdrawn 19% (2026-08-24)
+
+An audit that came back clean, which is a result and is recorded as one.
+
+### Why it was suspected
+
+Setting this program's vibrato on the E4XT, eosed measured ~185 cents pk-pk
+where our chain asked for 155.8 — 19% high. `LFO_PITCH_FULL_CENTS = 1593` comes
+from MOD_DEPTH_CAL (2026-06-12) measured at cord amounts **25/50/75/100 %**, and
+**our operating point here is 4.72 %** — a fifth of the way below the bottom of
+that window.
+
+That is §LAWRANGE exactly, on a law I had not thought to audit the day after
+auditing the others. Two candidates: no measurement below 25 %, and MOD_DEPTH_CAL
+used a SQUARE LFO where this is a TRIANGLE.
+
+### Both candidates are dead
+
+eosed swept 1.57–25.2 % on both waveforms.
+
+**Waveform: no difference.** Peak excursion derived from the modulation
+fundamental with each shape's own Fourier factor (4/π square, 8/π² triangle):
+
+    amount   pct    triangle   square   ratio
+      -2    1.57      30.1      30.4    0.993
+      -4    3.15      53.2      53.2    1.000
+      -6    4.72      87.5      88.0    0.995
+      -8    6.30     110.5     111.0    0.996
+     -12    9.45     168.0     164.4    1.022
+
+**Two waveforms whose harmonic content differs completely agreeing to 1% on the
+derived peak is also the best validation the estimator could have** — that is
+eosed's point and it is the strongest thing in the run.
+
+**Curvature: none.** An independent refit here of their raw `fund_cents`, with
+the Fourier factors applied, gives a mean ratio of **1.005** against our law
+across eight triangle points, spread 0.891–1.086. Scatter, not bias.
+
+**So the extrapolation from 25–100 % down to 4.7 % was justified.** That was not
+knowable before someone measured it, and now it is.
+
+### The withdrawn 19%, and why it is the more instructive half
+
+eosed withdrew their own headline. It came from a 2nd/98th-percentile range of
+the instantaneous frequency, which picks up the tracker's overshoot at the
+triangle's turns and the sample's own wobble adding at the extremes. Their words:
+
+> I reported the percentile figure as the headline because it "assumes nothing
+> about shape". It assumes something worse: that the tracker's excursions are
+> the signal's.
+
+That is the same class as the four findings withdrawn on 2026-08-22 and the
+noise-floor "burst" withdrawn this morning: an instrument's behaviour read as a
+property of the thing measured.
+
+### What DOES survive: the intercept
+
+`cents = 15.752*pct + 9.00`. Nine cents at zero amount cannot be physical — zero
+cord must give zero pitch. Invisible above ~3 %, and it is the entire
+disagreement below: at 1.57 % it predicts 33.8 c against 30.1 measured, an 11 %
+overshoot.
+
+Forcing the new data through the origin gives `16.822*pct`, full scale 1682. Not
+adopted: with ~10 % point-to-point scatter it is not demonstrably better than
+what is there, and swapping a measured constant for a differently-fitted one on
+that evidence is how a law drifts. Recorded on the constant instead.
+
+### Data limits, as reported
+
+The square becomes untrackable above amount −12 — at −32 it reads 7.92 Hz,
+double the real rate, because the pitch steps carry the partial out of the ±70 Hz
+analysis band. Those points are flagged in the JSON and excluded here; including
+them would have produced a spurious waveform difference of about 18%.
