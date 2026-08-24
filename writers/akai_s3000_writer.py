@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Optional
 
 from models.common import (
+    AKAI_LFO_DEPTH_CAL_LPTCH,
     akai_01_to_filq,
     KEY_FILTER_OCT_PER_OCT,
     AKAI_FILTER_LAW, AKAI_FILTER_OPEN, akai_filfrq_to_hz,
@@ -424,6 +425,8 @@ _AK_SUSTAIN_DB_PER_UNIT = 0.60676
 #: imported because the constant lives in the parser module and importing
 #: it the other way would be circular.
 _AKAI_FILQ_OFFSET = 149
+#: L_PTCH, the LFO->pitch gate. Same offset the reader uses.
+_AKAI_LPTCH_OFFSET = 150
 _KGMUTE_DEFAULT = AKAI_KGMUTE_OFF
 
 #: LFORAT is LINEAR, not exponential: Hz = 0.11867 * LFORAT - 0.04, r2 0.9995.
@@ -1981,6 +1984,30 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
     # every conversion INTO an AKAI dropped resonance -- measured on the
     # library discs the next day, **FILQ changed on 44.8% of round-tripped
     # zones**, almost always to zero. Not a corner case: most of them.
+    # L_PTCH (keygroup 150): THE LFO -> PITCH GATE, written since 2026-08-24.
+    #
+    # The reader has used this since the 23rd -- as a GATE, because 0 means no
+    # vibrato and nobody has shown that the value composes multiplicatively
+    # with LFODEP. The writer wrote nothing, so it stayed 0, so **every
+    # keygroup we have ever written into an AKAI had its LFO->pitch routing
+    # switched off.** Measured over the sound libraries: `lfo_to_pitch`
+    # changed on **100% of round-tripped zones**, every one to zero.
+    #
+    # A source's vibrato was being carried faithfully all the way to the last
+    # byte and then not routed. Same shape as FILQ, found the same day, by the
+    # same harness.
+    #
+    # WHAT VALUE. The model does not carry L_PTCH -- the reader takes it as a
+    # gate and discards the number -- so there is nothing to restore. Written
+    # at `AKAI_LFO_DEPTH_CAL_LPTCH`, the routing the depth law was itself
+    # measured at, which is the only choice that makes the depth we write mean
+    # what the law says it means. A round trip therefore restores the VIBRATO
+    # and not the original number, and the harness will keep reporting that
+    # difference. That is honest: carrying the value needs the composition
+    # measured first, and it is filed rather than guessed.
+    _vib = abs(getattr(voice, 'lfo1_to_pitch', 0.0) or 0.0)
+    k[_AKAI_LPTCH_OFFSET] = (AKAI_LFO_DEPTH_CAL_LPTCH if _vib > 0.0 else 0) & 0xFF
+
     k[_AKAI_FILQ_OFFSET] = akai_01_to_filq(
         getattr(voice, 'filter_resonance', 0.0) or 0.0)
 
