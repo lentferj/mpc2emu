@@ -1306,9 +1306,25 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False):
             hob_f2[1] = max(0, min(48, round(_K2_PARAMID_GAIN_MIN_DB
                                              + _K2_PARAMID_GAIN_SPAN_DB * res)))
         # --- filter envelope (ENV2) + routing to filter freq ---
+        #
+        # THE SHAPE IS WRITTEN WHETHER OR NOT THE DEPTH IS, matching what the
+        # E4B writer has done since 2026-06-13 and for the same reason: the
+        # depth is a separate routing, so an envelope at zero depth is inert
+        # rather than absent, and writing the source curve preserves it for the
+        # machine's own display and for anyone who turns the depth up later.
+        #
+        # These two writers disagreed until 2026-08-24 and the KRZ one was the
+        # loser: measured over 91 third-party soundsets, the filter envelope
+        # changed on **55.8% of round-tripped zones**, and every example
+        # inspected had `filter_env_amount == 0` with a real shape behind it --
+        # attacks of 4.76 s and 8.0 s discarded because the routing that would
+        # have swept them was switched off.
+        #
+        # The ROUTING still depends on the depth. Writing ENV2 as the source at
+        # zero depth would be inventing a modulation the file does not ask for.
         amt = getattr(voice, 'filter_env_amount', 0.0)
+        _fill_env(seg(0x22), voice.filter_env)
         if amt > 0.0:
-            _fill_env(seg(0x22), voice.filter_env)
             hob_f1[5] = _K2_CS_ENV2                          # source = ENV2
             hob_f1[6] = _filter_env_depth_byte(amt)         # depth (measured; see above)
 

@@ -19559,3 +19559,23 @@ says so in words.
 - **KRZ layer fitting** — the harness passes `faithful_layers=True` so it
   measures the conversion rather than the approximation the writer already
   announces.
+- **KRZ `amp_env` (50.1%) is QUANTISATION, checked rather than assumed.** Every
+  difference inspected is `attack 0.0010 -> 0.0000` (below the format's time
+  resolution) or `release 0.5000 -> 0.4947` (about 1%). A large percentage with
+  a tiny magnitude is the signature of an encoding floor, and the only way to
+  tell it from a defect is to look at the values rather than the count. The
+  same caution applies to `filter_cutoff`'s 66.9% on the E4B side.
+
+### The one number that is worth a percentage
+
+`filter_env` went 55.8% -> 30.5% when the KRZ writer stopped gating the
+envelope SHAPE on the envelope DEPTH. The E4B writer has written the shape
+unconditionally since 2026-06-13, with its reasoning at the point it happens:
+the depth is a separate routing, so an envelope at zero depth is inert rather
+than absent, and the source curve is worth preserving for the machine's display
+and for anyone who turns the depth up later.
+
+**Our two writers disagreed for two months and the corpus is what noticed.**
+Every example inspected had `filter_env_amount == 0` with a real shape behind
+it — attacks of 4.76 s and 8.0 s discarded because the routing that would have
+swept them was switched off. What remains at 30.5% is the encoding floor above.
