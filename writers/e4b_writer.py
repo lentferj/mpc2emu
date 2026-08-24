@@ -1075,7 +1075,7 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
                  or abs(voice.filter_env_amount) > 0.01
                  or abs(voice.filter_keytrack) > 0.01
                  or abs(voice.velocity_to_filter) > 0.01
-                 or abs(voice.lfo1_to_pitch) > 0.01
+                 or _q(voice.lfo1_to_pitch) not in (0, 256)
                  or has_extra)
     if needs_mod:
         mod = bytearray(_MOD_TMPL)
@@ -1084,7 +1084,17 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
         Kw = max(0.0, min(1.0, voice.wheel_to_lfo))
         gate = Kw > 0.01
         _static = (lambda d: d * (1.0 - Kw)) if gate else (lambda d: d)
-        if abs(voice.lfo1_to_pitch) > 0.01:
+        # THRESHOLD IS THE ENCODED BYTE, NOT AN ARBITRARY FRACTION.
+        # This was `> 0.01`, which was harmless while the AKAI vibrato depth
+        # was 6x too large and became a silent dropout the moment that was
+        # fixed: the measured depth for a real program is 0.00799, just under
+        # the old line, so the cord was never written and the vibrato vanished
+        # again after having just been repaired (§AKAILPTCH).
+        #
+        # The only threshold that means anything is whether the value survives
+        # quantisation — if it encodes to a non-zero byte it is audible and
+        # belongs in the file.
+        if _q(voice.lfo1_to_pitch) not in (0, 256):
             _lfo1_pitch = voice.lfo1_to_pitch * _lfo1_sign   # triangle phase fix
             mod[_MOD_LFO_TO_PITCH_AMT] = _q(_static(_lfo1_pitch))
             if gate:
