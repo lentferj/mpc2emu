@@ -19729,6 +19729,31 @@ Note the shape of the near-miss: choosing a completion instant over a t-10 dB
 crossing was CORRECT, and solved a different problem. **A guard against one
 known trap is not a guard against the family.**
 
+### A disagreement about a number is not a disagreement about the thing
+
+Both cross-project "disagreements" of 2026-08-25 dissolved into **scale
+mismatches**, and neither was an error:
+
+- **Cutoff.** We reported position 0.1446; the machine reported byte 0. Not a
+  conflict — our position is a measured mapping through the E4XT's real cutoff
+  curve, not `byte/255`. Four bytes checked, four exact matches: 0 -> 0.1446,
+  18 -> 0.1727, 173 -> 0.5155, 255 -> 1.0000. The panel independently prints
+  **20000 Hz at byte 255**, the nominal top, exactly where our scale puts 1.0.
+- **Filter type.** We reported 3; the machine reported 1. Our value is the XPM
+  canonical enum, the machine's is its own parameter id. The panel settles it:
+  **`4 Pole Low-pass`** — the same filter under two numbering schemes, and no
+  6 dB/octave error anywhere.
+
+**Neither would have been found if either side had reconciled before
+reporting.** Both were sent raw, as disagreements, and both turned out to be
+the reporter's own scale.
+
+**The rule: state both scales before calling it a disagreement.** And the
+corollary, from the filter case — the answer was already in the other project's
+own notes, recorded two days earlier, and went unconsulted. **Check your own
+record before reporting a mismatch**, but report it either way rather than
+resolving it silently.
+
 ### The family these all belong to
 
 **An instrument producing a plausible number in a régime where it cannot
