@@ -200,6 +200,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAILPTCH — the LFO is gated per keygroup, and the depth law has an unrecorded dependency (2026-08-24)](#akailptch-the-lfo-is-gated-per-keygroup-and-the-depth-law-has-an-unrecorded-dependency-2026-08-24)
 - [§E4XTQSHIFT — cutoff and resonance are not independent, and the cutoff table is 0.4 octaves dark (2026-08-24)](#e4xtqshift-cutoff-and-resonance-are-not-independent-and-the-cutoff-table-is-04-octaves-dark-2026-08-24)
 - [§FIRSTSTEP — four laws in one day that are wrong at their bottom rung (2026-08-24)](#firststep-four-laws-in-one-day-that-are-wrong-at-their-bottom-rung-2026-08-24)
+- [§E4BLOOPREL — every looped sample we have ever written had no release at all (2026-08-24)](#e4blooprel-every-looped-sample-we-have-ever-written-had-no-release-at-all-2026-08-24)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -18479,3 +18480,103 @@ either a wrong one or none.
 **Not compensated in code.** A correction factor on one byte of one cord, fitted
 to a single measured point, would be exactly the kind of thing this week has
 spent its time removing.
+
+## §E4BLOOPREL — every looped sample we have ever written had no release at all (2026-08-24)
+
+Jan, after everything else on the octave-stack program was measured and set:
+*"the sound is there — as good as it gets. One thing still, the release is quite
+a bit longer on the Akai than on the EMU."*
+
+It took four wrong answers to get to the right one, and the right one is the
+largest single defect found this week.
+
+### The mechanism, confirmed audibly
+
+E4XT Sample Edit -> Tools1 -> LpType, read off the machine's own screen on a
+sample our converter wrote:
+
+    Loop type        : on
+    Loop in release  : off
+
+**With loop-in-release off, the voice LEAVES THE LOOP at note-off**, plays out
+whatever sample data lies past the loop end — typically a few tens of
+milliseconds — and stops. These programs loop in a short window near the END of
+the data (52483 frames with the loop at 51646..51982), so after a second of
+holding there is nothing left. Hence a note that stopped 20 ms after note-off
+whatever the release rate said.
+
+**So every looped sample this writer has ever produced has no release. Not too
+fast — absent.** It has never been noticed because you have to listen for a
+release on a looped sample to see it, and nobody had.
+
+eosed toggled the flag on one sample, A/B/A:
+
+    off   -54 dB -> floor within 0.2 s of note-off      instant
+    on    -54 -57 -63 -71 -77 -83 over 2.5 s            14.09 dB/s
+    off   instant again
+
+### It confirmed the rate work at the same time
+
+The four flag-on captures give **14.09 dB/s**, residual 0.5-0.7 dB over ~160
+points each — a straight line. Against **15.1 dB/s** predicted by §63 for that
+rate byte and **15.2 dB/s** measured by s3ked on the AKAI for the source's own
+RELSE1 75. **7% apart**, against the 1.85x gap Jan was hearing.
+
+So the flag, the E4XT rate law, and the AKAI-to-E4XT rate matching are all
+confirmed in one measurement. That is a better outcome than confirming any of
+them alone.
+
+### What is NOT established: that bit 3 is where it lives
+
+The fix sets bit 3 (0x08) of the sample header's options word, and that rests on
+correlation rather than proof.
+
+Across 125 E4B files the options word takes **five** values, not the two this
+writer emits:
+
+    0x0031   1219 samples    looped          <- what we wrote
+    0x0020    240            unlooped        <- what we wrote
+    0x0039     38            bit 3 set
+    0x0079      6            bit 3 + stereo
+    0x0078      1
+
+The difference is bit 3 alone. **Every file carrying it is dated 2002-09-21** —
+E-MU-era — and the other 121, spanning 2002 to 2026 and including everything
+this toolchain has made, never set it.
+
+**One co-varying detail was checked and does not confound it.** eosed flagged
+that every bit-3 sample has 6 frames past the loop end where every 0x0031 sample
+has 0, and could not separate the two from file evidence. Surveying 382 local
+banks independently: frames-past-loop-end takes **807 distinct values**, with
+6210 samples at 1 frame and **815 at 6** — against 45 carrying bit 3. The two
+are not locked together.
+
+**The confirmation this still wants is a converted bank that sustains through
+its release on the hardware.** One write and one listen once the writer ships.
+
+### Four wrong answers on the way, all withdrawn by their authors
+
+Worth recording because the withdrawals are what made the right answer
+reachable:
+
+  1. **My span hypothesis.** `ENV_FULL_SPAN_DB = 97.82` against a calibration
+     comment saying "~55 dB" looked like a 1.78x error making every release 3x
+     too fast. eosed measured: the E4XT rate is a SPEED not a time, the span is
+     ~90 dB, and 97.82 was roughly right. Refuted.
+  2. **eosed's cord-7 ghost.** A note persisting 7.84 s against 1.92 s
+     depending on one cord — withdrawn after printing the envelope instead of
+     trusting a "sound persists" metric that was tracking noise wandering above
+     a floor. Four later captures alternating that cord are indistinguishable.
+  3. **eosed's noise-preset contrast.** Offered as a working example of the flag
+     being ON; the sample is **12 seconds long** and the hold was 1.5 s, so the
+     playhead never approached the end and no flag was needed. Withdrawn.
+  4. **The one-shot suspicion.** The samples are looped in the source and the
+     loop survived into our E4B — checked in the file, and eosed's own 4.5 s
+     hold on a 1.19 s sample had already proved the loop works.
+
+### Panel note, for whoever goes there next
+
+Entering Sample Edit pops a warning dialog naming a DIFFERENT sample than the
+one selected — S011 while S021 was current, both times. Dismissed with OK and
+apparently informational, but a dialog reporting on a sample you are not editing
+is worth knowing about before someone acts on it.

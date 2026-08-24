@@ -475,7 +475,43 @@ def _build_sample_header(sample: SampleData, sample_idx: int) -> bytes:
         # even to explain its removal, is still a reference a reader will try
         # to follow.)
         lel = (sample.loop_end - 1) * 2 + STRUCT_SZ
-        options = 0x0031   # MONO_L | bit4 | LOOP (forward; ping-pong maps here)
+        # LOOP IN RELEASE, bit 3 (0x08), added 2026-08-24.
+        #
+        # **The mechanism is confirmed audibly; this bit's identity is not.**
+        # Set "Loop in release" on the panel and a looped sample's release
+        # appears and runs at the calibrated rate; leave it off and the voice
+        # LEAVES THE LOOP at note-off, plays out whatever data lies past the
+        # loop end -- typically a few tens of milliseconds -- and stops. So
+        # every looped sample this writer has ever produced had NO RELEASE AT
+        # ALL. Not too fast: absent. Nobody noticed because you have to listen
+        # for a release on a looped sample to see it (§E4BLOOPREL).
+        #
+        # Measured by eosed with the flag toggled on one sample, A/B/A:
+        #     off  -54 dB -> floor within 0.2 s of note-off
+        #     on   -54 -57 -63 -71 -77 -83 over 2.5 s, 14.09 dB/s
+        #     off  instant again
+        # 14.09 dB/s against 15.1 predicted for this rate byte and 15.2 measured
+        # on the AKAI for the source's own RELSE1 -- so the flag, the rate law
+        # and the AKAI-to-E4XT rate matching are confirmed together, to 7%.
+        #
+        # **WHY BIT 3 AND NOT ANOTHER: correlation, not proof.** Across 125 E4B
+        # files the options word takes five values, not the two this writer
+        # emits -- 0x0031 (1219), 0x0020 (240), 0x0039 (38), 0x0079 (6),
+        # 0x0078 (1). The difference is bit 3 alone, and every file carrying it
+        # is dated 2002-09-21, i.e. E-MU-era. The other 121 files, spanning
+        # 2002 to 2026 and including everything this toolchain has made, never
+        # set it.
+        #
+        # One co-varying detail was checked and does NOT confound it: bit-3
+        # samples all have 6 frames past the loop end, but so do 815 samples
+        # across 382 local banks against 45 carrying bit 3, and that field
+        # takes 807 distinct values. The two are not locked together.
+        #
+        # The confirmation this still wants is a converted bank that sustains
+        # through its release on the hardware. Until then the bit is the
+        # leading candidate for WHERE the flag lives, and the flag itself is
+        # not in doubt.
+        options = 0x0039   # MONO_L | bit4 | LOOP | LOOP-IN-RELEASE
     else:
         lsl = STRUCT_SZ
         lel = end_l
