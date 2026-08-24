@@ -620,7 +620,18 @@ def _spans_disjoint(a, b):
     return ha < lb or hb < la
 
 
-_VOICE_FIT_FIELDS = ('filter_cutoff', 'filter_resonance', 'filter_env_amount')
+#: CONTINUOUS voice-level quantities: averaged when two layers fuse.
+#:
+#: The first version listed only the three filter fields, so a layer's velocity
+#: tracking and key-follow were silently dropped while the banner announced
+#: that "filter settings" had been averaged. The rule is now explicit --
+#: anything physically interpolable is averaged and named; anything categorical
+#: refuses the fusion outright (see `_voice_distance`). A field that is neither
+#: listed here nor checked there would be dropped in silence, which is what
+#: happened.
+_VOICE_FIT_FIELDS = ('filter_cutoff', 'filter_resonance', 'filter_env_amount',
+                     'filter_keytrack', 'velocity_to_filter',
+                     'velocity_to_filter_min', 'lfo1_to_volume')
 
 
 def _voice_distance(a, b):
@@ -642,6 +653,18 @@ def _voice_distance(a, b):
     if (getattr(a, 'lfo1_rate', None) != getattr(b, 'lfo1_rate', None)
             or getattr(a, 'lfo1_to_pitch', None) != getattr(b, 'lfo1_to_pitch', None)):
         return None
+    # ANYTHING NOT AVERAGED MUST MATCH, or fusing silently drops the loser's
+    # value. `_patch_layer` also consumes `velocity_to_filter` and
+    # `lfo1_shape`, and the first version of this compared neither -- so a
+    # 4-layer split whose top layer tracked velocity into the filter lost that
+    # entirely, while the deliberately loud banner said only that "filter
+    # settings" were averaged. Refusing is right rather than averaging them
+    # too: a velocity-tracking depth is not obviously interpolable, and a
+    # program that stays a drum program is a visible failure where a silently
+    # dropped modulation is not.
+    for name in ('lfo1_shape', 'lfo1_delay'):
+        if getattr(a, name, None) != getattr(b, name, None):
+            return None
     d = 0.0
     for name in _VOICE_FIT_FIELDS:
         d += abs((getattr(a, name, 0.0) or 0.0) - (getattr(b, name, 0.0) or 0.0))
@@ -685,7 +708,16 @@ def _fit_layers(voices, limit=3):
     Returns (voices, notes) where notes describes what was given up, so the
     caller can print it rather than leave the user to notice.
     """
-    voices = list(voices)
+    # COPY BEFORE MUTATING. `_fuse_voices` writes averaged fields onto the
+    # surviving voice, and `_split_voice_by_velocity` hands back the ORIGINAL
+    # object for a single-band voice -- so fusing in place edited the caller's
+    # Bank. A converter run that writes KRZ and then another format would have
+    # written the second one from averaged values it never asked for. Caught by
+    # review; no test covers writing one Bank to two formats.
+    import copy as _copy
+    voices = [_copy.copy(v) for v in voices]
+    for v in voices:
+        v.zones = list(getattr(v, 'zones', []) or [])
     notes = []
     while len(voices) > limit:
         best = None
@@ -1667,9 +1699,14 @@ def write_krz(bank: Bank, output_path: str,
                       f"{_was - len(voices)} disjoint layer(s) FUSED, and their "
                       f"filter settings AVERAGED (key-span weighted).")
                 for _b, _o, _a, _d in _notes:
-                    print(f"       cutoff {_b[0]:.4f} + {_o[0]:.4f} → {_a[0]:.4f}"
-                          f"   resonance {_b[1]:.4f} + {_o[1]:.4f} → {_a[1]:.4f}"
-                          f"   filter-env {_b[2]:.4f} + {_o[2]:.4f} → {_a[2]:.4f}")
+                    # Every averaged field, named. The banner used to say
+                    # "filter settings" while quietly averaging (or dropping)
+                    # more than that.
+                    for _i, _fname in enumerate(_VOICE_FIT_FIELDS):
+                        if _b[_i] == _o[_i]:
+                            continue        # unchanged: not worth a line
+                        print(f"       {_fname:22s} {_b[_i]:+.4f} + "
+                              f"{_o[_i]:+.4f} → {_a[_i]:+.4f}")
                 print(f"       The source authored these separately. "
                       f"Use --krz-faithful to keep all {_was} layers instead "
                       f"-- that makes it a DRUM PROGRAM, playable only on a "

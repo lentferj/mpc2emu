@@ -549,13 +549,48 @@ def _filfrq_positions():
     while a docstring claimed they were inverses by construction. A search
     cannot drift.
     """
-    # Domain starts at the FITTED FLOOR, not 0. Below it the reader clamps,
-    # so every setting from 0 to the floor reads as the same position -- and a
-    # search over all of them would return 0 for any dark source, which is a
-    # legal byte and a silent lie. The floor is the darkest thing we can
-    # honestly write.
+    # DOMAIN IS THE WHOLE FIELD, 0..open.
+    #
+    # It used to start at the FITTED FLOOR (40), justified by "below it the
+    # reader clamps, so every setting from 0 to the floor reads as the same
+    # position". **That clamp was removed from `akai_filfrq_to_hz` on
+    # 2026-08-24** after the corner was measured all the way down -- monotonic
+    # across 41 dB, no plateau -- and this justification became false the same
+    # hour. The read side was fixed and the write side was left, which is the
+    # one-sided repair this project keeps making: FILFRQ 10 (15.7 Hz) and 20
+    # (32.4 Hz) both wrote back as 40 (138 Hz), brightening a dark keygroup by
+    # up to four octaves on an AKAI -> AKAI round trip.
+    #
+    # Caught by review rather than by a test, because nothing round-trips a
+    # cutoff below the old floor.
+    #
+    # BUT THE FLOOR IS NOT ZERO EITHER, AND THE FIRST ATTEMPT AT THIS WAS
+    # WORSE THAN WHAT IT REPLACED. Opening the domain to 0 made FILFRQ 14, 16
+    # and 20 all write back as **0** -- 7.6 Hz where the source said 32 --
+    # because the model's `filter_cutoff` is an E4B POSITION and that scale
+    # bottoms out at `E4B_CUTOFF_MIN_HZ` (57 Hz). Every AKAI corner below 57 Hz
+    # arrives here as position 0, so the search saw them as identical and
+    # returned the darkest byte in the domain. One plateau traded for another,
+    # at the wrong end.
+    #
+    # So the domain starts at the darkest byte the MODEL can actually
+    # distinguish: position 0 means "at or below 57 Hz", and the honest
+    # representative of that is the byte nearest 57 Hz, not the byte nearest
+    # zero. Derived from the E4B scale's own limit rather than from a fit
+    # range -- a real boundary, not an artifact of where someone stopped
+    # measuring.
+    #
+    # The information is already gone by the time it reaches this function.
+    # The upstream fix is for `filter_cutoff` to carry Hz rather than one
+    # machine's position, which is the same defect as the release span and the
+    # key-follow units. Recorded in TODO.md; not a change to make inside a
+    # search function.
+    _floor = 0
+    while (akai_filfrq_to_hz(_floor) or 0.0) < E4B_CUTOFF_MIN_HZ \
+            and _floor < AKAI_FILTER_OPEN:
+        _floor += 1
     out = {}
-    for v in range(AKAI_FILTER_LAW[2], AKAI_FILTER_OPEN + 1):
+    for v in range(_floor, AKAI_FILTER_OPEN + 1):
         hz = akai_filfrq_to_hz(v)
         out[v] = 1.0 if hz is None else hz_to_e4b_cutoff(hz)
     return out

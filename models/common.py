@@ -1748,7 +1748,13 @@ class Envelope:
     #: cutoff LEVEL rather than at silence -- a defined endpoint on both sides,
     #: so the span arithmetic is correct there and this would be a wrong fix
     #: to a problem it does not have.
-    release_rate_db_per_s: float | None = None
+    #: `Optional[float]`, NOT `float | None`. PEP 604 in a class body is
+    #: evaluated at import time, so on the Python 3.8/3.9 the README still
+    #: promises, `float | None` raises TypeError and the whole converter fails
+    #: to start. Every other optional field in this file uses Optional[...] and
+    #: this one did not -- caught by review, not by any test, because the
+    #: interpreter here is 3.11.
+    release_rate_db_per_s: Optional[float] = None
 
 
 def _amp_env() -> Envelope:    # amplitude-envelope default
