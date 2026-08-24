@@ -195,6 +195,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§LAWRANGE — the audit: what every fitted law does outside its calibrated range (2026-08-24)](#lawrange-the-audit-what-every-fitted-law-does-outside-its-calibrated-range-2026-08-24)
 - [§NAMEBITFLIP — a one-bit name corruption in sampler RAM, and why it matters to us (2026-08-24)](#namebitflip-a-one-bit-name-corruption-in-sampler-ram-and-why-it-matters-to-us-2026-08-24)
 - [§AKAILFO — the reader never read the LFO, so every conversion lost its vibrato (2026-08-24)](#akailfo-the-reader-never-read-the-lfo-so-every-conversion-lost-its-vibrato-2026-08-24)
+- [§AKAIFILT2 — the IB-304F option, and what to do about filter order in both directions (2026-08-24)](#akaifilt2-the-ib-304f-option-and-what-to-do-about-filter-order-in-both-directions-2026-08-24)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -18057,3 +18058,117 @@ Those laws are for the program-level fields with LFO1 driving pitch. A keygroup
 `MODVPITCH` or program `MODSPITCH` route would scale on top of them, and the
 numbers above are the unmodified case. Program offset 87 and keygroup 154 want
 reading before 155.9 cents is trusted for an arbitrary source.
+
+## §AKAIFILT2 — the IB-304F option, and what to do about filter order in both directions (2026-08-24)
+
+Design, not implementation. Jan asked for an option for the second filter board
+and an approach for modelling what it adds — and, separately, what to do when a
+4-pole source meets a machine without it. The second question is live TODAY and
+does not need the board.
+
+### First, a present-tense gap that neither question depends on
+
+**`writers/akai_s3000_writer.py` never looks at `filter_type` at all.** A 2-pole
+source and a 4-pole source produce byte-identical AKAI output. So the "what do
+we do without the board" question is not hypothetical — we currently do nothing,
+silently, and have always done nothing.
+
+That is the same shape as the reader defects fixed this week, in the other
+direction, and it is worth fixing before the board arrives rather than after.
+
+### What the board actually adds — a SECOND filter, not a steeper one
+
+From the service manual (§IB304FDOC): both the S3000XL and the S3200XL spec
+tables give **the same** filter, `-12 dB/octave with resonance`. The S3200XL has
+the second LSI (`L7A0986 L6029 DFL`) as standard and is the only model whose
+optional-accessory list does not offer the IB-304F.
+
+So the option is a second 12 dB/oct section, and the seven board-gated fields
+are `FLT2GAIN`, `FLT2MODE`, `FLT2Q`, `FIL2FR` and neighbours. **`FLT2MODE` is
+the interesting one** — a *mode* field implies the second filter is not simply
+another lowpass, and nothing we have says what its values are.
+
+### Can two 2-pole sections make a 4-pole? Yes for the SLOPE. Not automatically for the SHAPE.
+
+This is the part worth getting right, because the obvious implementation is
+wrong in a way that sounds subtly dull rather than obviously broken.
+
+Cascading two identical 2-pole sections at the same corner gives 24 dB/octave —
+but each section is already 3 dB down at the corner, so the pair is **6 dB down
+at the corner**. That is a 4th-order **Linkwitz-Riley**, not a Butterworth, and
+its passband droops into the corner.
+
+A true 4th-order Butterworth is two 2-pole sections at the SAME corner with
+**different Q**:
+
+    stage 1   Q = 0.5412
+    stage 2   Q = 1.3065
+
+So if `FLT2Q` is independently settable — and it is a separate field, so it
+probably is — then the board makes a **proper** 4-pole reachable, and the
+implementation is "set both corners equal and the two Qs to the Butterworth
+pair", NOT "duplicate the first filter".
+
+Duplicating would be the natural thing to write and would be quietly wrong.
+
+### What has to be measured before any of that is written
+
+None of it is knowable without the board, which Jan ordered 2026-08-17:
+
+  1. **Is FILTER2 in SERIES with FILTER1?** Everything above assumes it is.
+     Parallel or per-zone routing would change the whole approach.
+  2. **What are `FLT2MODE`'s values?** If it offers highpass or bandpass, the
+     board is worth more than a slope upgrade and the mapping should use it.
+  3. **Does `FLT2Q` follow the same law as `FILQ`** (s3ked's §52,
+     `Q = 1.067 / (1 - FILQ/15.84)`)? The Butterworth pair needs Q 0.5412,
+     which is BELOW `FILQ 0`'s Q of 1.067 — so a Butterworth 4-pole may not be
+     reachable at all, and that would be a real finding rather than a detail.
+  4. **Does `FIL2FR` use the same FILFRQ->Hz law?**
+
+Item 3 is the one that could invalidate the whole approach, so measure it first.
+
+### The option
+
+    --akai-filter-board        default OFF
+
+Default off because that is the common case, because s3ked's S3000XL has never
+had one, and because of the safety point below. When off, **we must never
+populate FILTER2 / TONE / ENV3** — s3ked crashed an S3000XL twice in one session
+while that area was exercised, and fences those fifteen fields behind an
+explicit declaration. Ours should mirror theirs.
+
+Note the asymmetry that makes the flag necessary at all: nothing on the wire
+distinguishes a fitted machine from an unfitted one. `LSI2_ON` is settable over
+SysEx and means nothing without the hardware, so it cannot be used to detect the
+board. The user has to tell us.
+
+### Without the board: a 4-pole source on a 2-pole machine
+
+Two defensible answers, and they preserve different things.
+
+**(a) Keep the corner, accept 12 dB/oct less rolloff. RECOMMENDED.**
+
+**(b) Lower the corner so the slopes match at a chosen frequency.** They can only
+match at one, and the arithmetic is clean: a 4-pole at `Fc` and a 2-pole at
+`Fc'` attenuate equally at `f` when `Fc' = Fc**2 / f`. Matching one octave above
+the corner means **halving** it.
+
+**Why (a).** Last night established that the resonant PEAK is what carries the
+"metallic" character of these programs — it is a peak, not a shelf, with the
+bands either side 10-20 dB below it (§AKAIENV2DEPTH). The peak sits AT the
+corner. Option (b) moves the corner and therefore moves the peak, trading a
+slope error for a pitch-of-the-resonance error, and the second is far more
+audible on any resonant source.
+
+(b) is the better answer for a NON-resonant 4-pole source, where there is no
+peak to misplace. If that turns out to be common enough to matter, it is a
+second flag and not a default.
+
+Either way the conversion log should say the order was reduced. It is a real
+loss and the user can act on it — by fitting the board.
+
+### And the same question in the other direction
+
+A 2-pole source on a machine WITH the board is the easy case: leave the second
+filter out of circuit. Worth stating so nobody "uses the hardware because it is
+there".
