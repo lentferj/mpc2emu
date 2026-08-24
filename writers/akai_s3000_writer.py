@@ -763,15 +763,38 @@ def _akai_sustain_fraction(byte: int) -> float:
     Bisected rather than solved: `akai_sustain_byte` rounds, so several
     fractions map to one byte and the honest inverse is the midpoint of the
     band that produced it.
+
+    **IT USED TO RETURN THE BAND'S LOWER EDGE, NOT ITS MIDPOINT**, which is
+    what the docstring already said it should do -- one bisection for the first
+    fraction reaching `byte`, and that value handed straight back. Sitting on a
+    boundary, it re-rounded DOWN: SUSTN1 6 came back as 5, 10 as 9, 75 as 74,
+    99 as 98. Off by one at 5 of 8 probed values, and silent, because a sustain
+    one byte low is 0.6 dB and nothing downstream compares it.
+
+    Found by an AKAI -> AKAI round trip on 2026-08-24 while fixing the keygroup
+    merge -- the same test that has now caught three defects on this path
+    (§AKAITUNEREAD's octave, the writer's fine-tune-only read, and this).
+    **Converting to a format and back is the cheapest test we have for a pair
+    of laws that were written apart.**
+
+    Now bisects BOTH edges and returns the midpoint, so the value is as far
+    from either boundary as it can be and the round trip is exact for every
+    byte 0..99.
     """
-    lo, hi = 0.0, 1.0
-    for _ in range(40):
-        mid = (lo + hi) / 2.0
-        if akai_sustain_byte(mid) < byte:
-            lo = mid
-        else:
-            hi = mid
-    return (lo + hi) / 2.0
+    def _first_reaching(target):
+        if target > 99:
+            return 1.0
+        lo, hi = 0.0, 1.0
+        for _ in range(60):
+            mid = (lo + hi) / 2.0
+            if akai_sustain_byte(mid) < target:
+                lo = mid
+            else:
+                hi = mid
+        return (lo + hi) / 2.0
+    if byte <= 0:
+        return 0.0
+    return (_first_reaching(byte) + _first_reaching(byte + 1)) / 2.0
 
 
 def akai_attack_byte(seconds: float) -> int:
@@ -2107,15 +2130,21 @@ def keygroup_count(preset) -> int:
     count that disagreed with what is actually written would be worse than no
     count at all.
 
-    The rule must stay identical to build_program's: one keygroup per distinct
-    (lo_key, hi_key) across every voice, clamped to MAX_KEYGROUPS, since zones
-    past that are dropped on write and never become resident objects.
+    It no longer RESTATES build_program's rule -- it calls it. The docstring
+    used to say "the rule must stay identical to build_program's", which is the
+    sort of instruction that holds until the day it does not; the rule changed
+    on 2026-08-24 and a restated copy would have gone stale that day.
+
+    One keygroup per distinct (key range, keygroup-settings fingerprint),
+    clamped to MAX_KEYGROUPS, since keygroups past that are dropped on write
+    and never become resident objects.
+
+    **This count can now exceed the old one for the same preset**, because
+    layers with different envelopes stop sharing a keygroup. That is the point
+    of the change and the budget has to see it: a program that used to cost
+    three objects and lose half its envelopes costs six and keeps them.
     """
-    ranges = {(z.lo_key, z.hi_key)
-              for voice in getattr(preset, 'voices', []) or []
-              for z in getattr(voice, 'zones', []) or []
-              if (getattr(z, 'sample_name', '') or '').strip()}
-    return min(len(ranges), MAX_KEYGROUPS)
+    return min(len(_group_zones_into_keygroups(preset)), MAX_KEYGROUPS)
 
 
 def _root_offset_units(z, sample_roots: Optional[dict]) -> int:
@@ -2136,6 +2165,78 @@ def _root_offset_units(z, sample_roots: Optional[dict]) -> int:
     return int(round((sr - zr))) * _AKAI_TUNE_UNITS_PER_SEMITONE
 
 
+def _voice_kg_signature(lo_key: int, hi_key: int, voice) -> bytes:
+    """Byte-exact fingerprint of the keygroup this voice alone would produce.
+
+    **Built by CALLING `_keygroup`, not by listing the fields it reads.** A
+    hand-maintained list of "the settings that live at keygroup level" is a
+    second copy of the rule, and every defect found on 2026-08-24 was a second
+    copy that drifted from the first. Render an empty keygroup for each
+    candidate voice and compare the bytes: if two voices would produce
+    identical keygroup settings, they can share one; if a single byte differs,
+    they cannot. The question is answered by the same code that answers it for
+    real.
+
+    Zones are excluded deliberately -- an empty zone list writes the same
+    unused-slot pattern for every voice, so what remains is exactly the
+    per-keygroup state. `index` is fixed at 0 so the RAM address, which is
+    positional, does not enter the comparison.
+    """
+    return bytes(_keygroup(lo_key, hi_key, [], index=0, voice=voice,
+                           dead_key_ranges=[]))
+
+
+def _group_zones_into_keygroups(preset):
+    """[( (lo,hi), voice, [zones...] )] -- the ONE grouping rule.
+
+    Shared by `build_program` and `keygroup_count` so the object budget and the
+    file can never disagree; `keygroup_count`'s docstring has warned about that
+    since it was written.
+
+    **A KEYGROUP HOLDS ONE AMPLITUDE ENVELOPE, ONE FILTER AND ONE FILTER
+    ENVELOPE.** This used to group on key range alone and take the settings
+    from whichever voice owned the lowest-velocity zone, which silently
+    discarded every other voice's envelope over that range. Measured on an
+    AKAI -> AKAI round trip 2026-08-24: a source with **six** keygroups in
+    three pairs -- a percussive layer at SUSTN1 6 / RELSE1 45 and a sustaining
+    layer at SUSTN1 50 / RELSE1 75 -- came back as **three**, all carrying the
+    percussive envelope. The sustaining half of the program lost its sustain
+    and its release outright.
+
+    **The source used six keygroups precisely because two layers needing
+    different envelopes cannot share one.** Merging them threw away the reason
+    the structure existed, and nothing in the file said so: the zones were all
+    present, the key ranges were right, and only the sound was wrong.
+
+    So the grouping key is (key range, keygroup-settings fingerprint). Layers
+    that genuinely agree still merge into velocity zones of one keygroup --
+    that is the format's own idiom and costs an object where splitting does
+    not. Layers that differ get their own keygroup, which is what the source
+    did.
+
+    Overlapping keygroups LAYER on this machine (hardware-measured, see
+    `build_program`), so a split pair still sounds together.
+    """
+    by_key: dict = {}
+    order = []
+    for voice in getattr(preset, 'voices', []) or []:
+        for z in getattr(voice, 'zones', []) or []:
+            # A ZONE WITH NO SAMPLE IS NOT A KEYGROUP -- see build_program.
+            if not (getattr(z, 'sample_name', '') or '').strip():
+                continue
+            rng = (z.lo_key, z.hi_key)
+            key = (rng, _voice_kg_signature(rng[0], rng[1], voice))
+            if key not in by_key:
+                by_key[key] = []
+                order.append(key)
+            by_key[key].append((z, voice))
+    out = []
+    for key in order:
+        pairs = sorted(by_key[key], key=lambda zv: zv[0].lo_vel)
+        out.append((key[0], pairs[0][1], [z for z, _ in pairs]))
+    return out
+
+
 def build_program(preset, name: str, prog_num: int = 0,
                   sample_roots: Optional[dict] = None,
                   midi_channel=None,
@@ -2154,43 +2255,22 @@ def build_program(preset, name: str, prog_num: int = 0,
     key span and holds up to four VELOCITY zones within it, which is the
     inverse of how the common model nests them.
     """
-    by_range: dict = {}
-    order = []
-    # Keep the owning VOICE beside each zone. An AKAI keygroup is keyed on a
-    # KEY RANGE, while our model nests zones under voices (layers), so one
-    # keygroup can collect zones from several voices and there is no single
-    # owner. The filter and envelope have to come from somewhere, so the rule
-    # is: the voice owning the LOWEST-VELOCITY zone in the keygroup. Stated
-    # here rather than left implicit, because it is a real lossiness -- a
-    # keygroup built from two voices with different envelopes keeps one of
-    # them.
-    for voice in preset.voices:
-        for z in voice.zones:
-            # A ZONE WITH NO SAMPLE IS NOT A KEYGROUP.
-            #
-            # Real source material carries them: the E4B preset behind Jan's
-            # 'P006' has a final zone with keys 0-0, root 0 and an EMPTY sample
-            # name. We wrote it out as a sixth keygroup with no zones, template
-            # filter and envelope, sitting on key 24 -- and since overlapping
-            # keygroups LAYER (measured), it is an extra empty voice on every
-            # note in its span rather than something inert.
-            #
-            # Dropped here rather than later so the keygroup count, the object
-            # budget and the file all agree: keygroup_count() applies the same
-            # rule, and a keygroup nothing can sound is not worth an object
-            # against a 1006 ceiling either.
-            if not (getattr(z, 'sample_name', '') or '').strip():
-                continue
-            key = (z.lo_key, z.hi_key)
-            if key not in by_range:
-                by_range[key] = []
-                order.append(key)
-            by_range[key].append((z, voice))
+    # GROUPING LIVES IN ONE PLACE (`_group_zones_into_keygroups`) so the object
+    # budget and the file cannot disagree.
+    #
+    # It used to be inline here and keyed on the KEY RANGE alone, taking the
+    # filter and envelope from whichever voice owned the lowest-velocity zone
+    # -- "a real lossiness", as the comment then said, "a keygroup built from
+    # two voices with different envelopes keeps one of them". It was worse than
+    # lossy: a layered program came back with every layer wearing the first
+    # one's envelope. Voices whose keygroup settings differ now get their own
+    # keygroup, which is what the source material does.
+    _groups = _group_zones_into_keygroups(preset)
 
     keygroups = []
     dropped = 0
-    for key in order:
-        # ONE KEYGROUP PER KEY SPAN, AND OVERLAPPING SPANS LAYER.
+    for key, owner, zs in _groups:
+        # OVERLAPPING SPANS LAYER.
         #
         # Any layered multisample produces keygroups whose key ranges overlap.
         # This construction assumes both answer a note in the overlap -- and
@@ -2220,9 +2300,6 @@ def build_program(preset, name: str, prog_num: int = 0,
         # NOT established: what happens when overlapping voices exceed
         # polyphony. That is a resource limit, not a routing rule, so this is
         # not a promise about voice count.
-        pairs = sorted(by_range[key], key=lambda zv: zv[0].lo_vel)
-        zs = [z for z, _ in pairs]
-        owner = pairs[0][1] if pairs else None
         # MORE THAN FOUR VELOCITY LAYERS: SPLIT ACROSS KEYGROUPS, DO NOT DROP.
         #
         # A keygroup has four zone slots, so six layers cannot live in one.
