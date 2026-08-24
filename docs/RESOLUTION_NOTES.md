@@ -19553,6 +19553,36 @@ own output is a mirror; agreement with it is not evidence.
 one had a symptom anybody had reported. Two of them — the rate-zero floor and
 the resonance poles argument — were already written down as known and left.
 
+### The family these all belong to
+
+**An instrument producing a plausible number in a régime where it cannot
+distinguish two causes.** Five instances in one week, and every one produced a
+clean-looking result:
+
+- a **fit window standing in the noise floor** — the floor flattens the bottom
+  of a log-domain fall, so the fitted slope tilts and the slowest byte takes
+  the most damage
+- an **analysis window too coarse for the period** being looked for — a 5 ms
+  window against a 3 ms loop returns a confident null
+- a **passband reference below the corner** — once the corner drops under the
+  normalisation band the 0 dB reference sits on the slope, and every setting
+  reads the same -3 dB point, which looks exactly like a filter that floors
+- a **key that is not an identity** — a hard-panned stereo pair, or a preset
+  name a writer may legitimately rewrite
+- and **clipping mistaken for saturation** (Jan, 2026-08-24): a wide-open
+  filter passing a broadband source is the loudest thing a voice produces, so
+  an output stage saturating makes the top four cutoff bytes look identical —
+  which is precisely what the table under test predicts.
+
+**The control is the same every time: change something the real effect does not
+depend on and see whether the answer moves.** For clipping that is the source
+level — if the saturation point moves with it, it is the output stage; if it
+stays, it is the filter. For the noise floor it is the fit window's lower edge.
+For the null it is the window length.
+
+Four of the five were caught after producing a result. The clipping one was
+caught before, by somebody asking what else could produce that shape.
+
 ### Four false results, all from the harness itself
 
 **Every one had the same shape: an identifier that is not an identity, or an
