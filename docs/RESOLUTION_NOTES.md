@@ -19354,6 +19354,28 @@ wrong quantity: no amount of listening distinguishes our sample from an
 identically-named one, and the voice-to-sample map — which settles it in one
 read — is not a thing anybody listens to.
 
+### A docstring that specifies behaviour is a test that has not been written
+
+s3ked's line, and the sharpest summary of the week from either project. **Three
+times the correct statement was already written down and the code did something
+else:**
+
+- `_akai_tune_units`' own comment said *"the factor is 2.56, NOT 16"* while the
+  reader divided by 16.
+- §67's closing sentence — *"every stage of both envelopes is a rate"* — was
+  true, measured for one stage, and doing load-bearing work for another that
+  had never been tested.
+- `_akai_sustain_fraction`'s docstring said it returns *"the midpoint of the
+  band"*; it returned the band's lower edge, and re-rounding pushed five of
+  eight probed values down a byte.
+
+A fourth, found the same evening: `_ak_rate_seconds` carries a long note
+explaining why it must extrapolate rather than clamp, and **its own inverse
+thirty lines away was still clamping** — mapping half the corpus onto two
+numbers, and turning a 10 ms mute cut into 210 ms.
+
+None of these needed new knowledge. Each needed the docstring to be executable.
+
 ### The rule that generalises
 
 **A label is the least trustworthy thing in a file, because it is the one part
