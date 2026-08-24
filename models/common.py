@@ -758,11 +758,42 @@ def e4xt_byte_to_resonance(byte: int, poles: int = 2) -> float:
     return max(0.0, min(1.0, db * scale / RESONANCE_FULL_DB))
 
 
-#: `L_PTCH` at which s3ked's 19.4932 cents/unit was measured. **UNKNOWN.**
-#: Their sweep never set the field, so it sat at whatever the calibration
-#: program carried and nothing records it. We know only that it was NOT 0,
-#: because L_PTCH 0 gates the vibrato off entirely.
-AKAI_LFO_DEPTH_CAL_LPTCH = None
+#: The AKAI vibrato depth, MEASURED AS A PRODUCT of both fields (s3ked,
+#: 2026-08-24, by sideband analysis after the pitch tracker could not do it):
+#:
+#:     rms_cents = 0.13127 * LFODEP * L_PTCH        k sd 0.0055, spread 4.2%
+#:
+#: **The control is not the spread.** The same product reached from different
+#: settings is what tests the product FORM: 30x10 against 6x50, both product
+#: 300, agree to 8.6%, while same-setting repeatability is 0.5%. So this is "a
+#: product to within about 9%", not "a product" — s3ked's phrasing and the
+#: right one. Better than 9% needs a wider product range than the estimator's
+#: window allows.
+#:
+#: **RMS is the primary form because the estimator is waveform-independent** —
+#: a second moment about the carrier equals the mean square deviation for FM by
+#: any periodic shape. Only converting to peak-to-peak needs a waveform.
+AKAI_LFO_RMS_CENTS_PER_PRODUCT = 0.13127
+
+#: `L_PTCH` at which §35's `19.4932 cents pp per LFODEP unit` was measured.
+#: **IDENTIFIED 2026-08-24, having been unrecorded.** Converting the RMS law
+#: back needs the LFO shape, and §35 recorded neither the routing nor the wave:
+#:
+#:     if sine     19.4932 / 2.828 = 6.892 rms/unit -> L_PTCH 52.5
+#:     if triangle 19.4932 / 3.464 = 5.627 rms/unit -> L_PTCH 42.9
+#:
+#: The field's maximum is 50. So §35 was calibrated at or near MAXIMUM routing:
+#: 52.5 is 5% over the top and inside the k spread, consistent with exactly 50.
+#: The sine reading is therefore the likely one, and scaling §35 by L_PTCH/50 is
+#: approximately right — which was the obvious guess, refused on 2026-08-24 for
+#: want of evidence, and is now measured rather than plausible.
+AKAI_LFO_DEPTH_CAL_LPTCH = 50
+
+
+def akai_lfo_rms_cents(lfodep: int, l_ptch: int) -> float:
+    """AKAI vibrato depth in RMS cents. Both fields, measured as a product."""
+    return (AKAI_LFO_RMS_CENTS_PER_PRODUCT
+            * max(0, min(99, lfodep)) * abs(max(-50, min(50, l_ptch))))
 
 
 def akai_lfo_depth_to_pitch(byte: int, l_ptch: int = None) -> float:
@@ -793,10 +824,15 @@ def akai_lfo_depth_to_pitch(byte: int, l_ptch: int = None) -> float:
     constant to one listener's word for a symptom, which is the shape of most
     of the false findings this week.
     """
-    if l_ptch is not None and l_ptch == 0:
+    if l_ptch is None:
+        l_ptch = AKAI_LFO_DEPTH_CAL_LPTCH      # the calibration's own routing
+    if l_ptch == 0:
         return 0.0
-    cents_pp = AKAI_LFO_DEPTH_CENTS_PP_PER_UNIT * max(0, min(99, byte))
-    return max(0.0, min(1.0, (cents_pp / 2.0) / LFO_PITCH_FULL_CENTS))
+    # Through the MEASURED product, not through §35 scaled by a guess. RMS is
+    # the form that was measured; the triangle factor takes it to one-sided
+    # peak, which is what `lfo1_to_pitch` means.
+    one_sided = akai_lfo_rms_cents(byte, l_ptch) * math.sqrt(3.0)
+    return max(0.0, min(1.0, one_sided / LFO_PITCH_FULL_CENTS))
 
 
 def akai_lfo_delay_seconds(byte: int) -> float:
