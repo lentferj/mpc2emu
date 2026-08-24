@@ -19062,7 +19062,64 @@ in **three different ways at three notes**:
 **n76 and n84 are opposite shapes**, so no single mechanism covers both, and
 whatever explains one has to leave the other alone.
 
-**Hypothesis (eosed): an FX tail** sitting ~33 dB below the direct sound —
+**CLOSED 2026-08-24: it was the FILTER, and it is not the machine.**
+
+Top keygroup, musical material, rate byte 69, by semitones above root:
+
+        +0 30.02   +4 28.62   +8 18.34   +12 36.07   +16 50.51
+        +20 43.37  +24 39.62  +28 36.75  +32 36.80   +36 no fall
+
+Non-monotonic, 18 to 50, with **low residuals at several points** — each a
+straight fall at a wildly different slope. Zeroing the filter cord:
+
+        semis    cord 31 (as found)    cord 0
+         +4         27.74               28.18
+         +8         19.05               28.22
+        +12         39.46               28.13
+
+**A 19-to-49 scatter collapses to 28.1 ± 0.05.** The cutoff is fixed while
+transposition slides the sample's spectrum across it, so the closing filter's
+share of the fall depends on pitch — and non-monotonically, because it depends
+on where that sample's energy happens to sit relative to a fixed corner.
+Nothing to do with the envelope, nothing to do with key scaling, **nothing a
+rate byte can fix.**
+
+The noise bank agrees: within ±11 semitones of a root, musical material reads
+28 exactly like noise (low +0/+7/+11 → 28.44/28.75/27.46, mid → 28.46/28.21/27.86).
+
+**So the calibration bank was necessary — for a reason neither of us
+commissioned it for.** Not the loop-in-release flag. **A preset with any filter
+modulation at all cannot measure an amplitude envelope**, and the original noise
+preset's zeroed cord turns out to be the load-bearing detail in its design.
+
+### The caveat that outlives the fix
+
+**Calibrating the amplitude rate is necessary and NOT sufficient for matching
+what someone hears.** A listener hears amplitude and filter together, and on a
+bright transposed sample the filter's contribution can exceed the amplitude
+envelope's — a factor of 1.8 at +16 above.
+
+Consequence, and it is the one to state before the next listening test: **if the
+two machines' filter envelopes do not already agree, the amplitude fix will be
+partly masked, and the residual will look like an amplitude error and will not
+be one.** That is the same trap as §E4BNAMEDEDUP in a different costume — a
+symptom that points confidently at the wrong subsystem.
+
+**And the skeleton on both subjects, which is the permanent result:**
+
+        byte    noise     musical    law
+         60     46.48     46.72     46.59
+         72     23.70     23.84     23.65
+         88      9.67      8.97      9.58
+        100      4.84      4.51      4.86
+
+**They agree to 1% at the fast bytes and diverge 6-7% at the slow ones**, with
+the musical residual thirds turning curved exactly where they diverge. The
+filter release runs at its own fixed rate, so on a slow amplitude fall it
+finishes early and stops contributing partway down. **Measure envelope rates on
+a filter-inert subject or not at all.**
+
+**Superseded hypothesis (eosed): an FX tail** sitting ~33 dB below the direct sound —
 buried under the -85 floor for the quiet keygroups, visible for the loud top
 one. It explains n76's stall well.
 
