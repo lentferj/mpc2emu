@@ -49,6 +49,13 @@ from models.common import (
 
 #: Keygroup byte offsets that had no name here until 2026-08-23.
 AKAI_FILQ_OFFSET = 149        #: resonance, 0..15 (s3ked §52)
+#: `L_PTCH`, "Amount of control of pitch by LFO1", -50..+50. The per-keygroup
+#: GATE on the program's LFO1: measured 2026-08-24, LFODEP 99 with L_PTCH 0
+#: produces no vibrato at all. So a program-level LFO depth means nothing
+#: without this, and the same program can have vibrato on some keygroups and
+#: none on others -- which is what Jan heard before anyone read the field.
+AKAI_LPTCH_OFFSET = 150
+AKAI_LPTCH_MAX = 50
 AKAI_KGMUTE_OFFSET = 160      #: keygroup mute group; **255 is off, 0 is a
                               #: real group** (§AKAIMUTEGRP)
 AKAI_KGMUTE_OFF = 255
@@ -519,6 +526,8 @@ def parse_program_bytes(data: bytes, fallback_name: str = '',
                         if len(kg) > AKAI_ENV2_DEPTH_OFFSET else 0),
             filter_q=(kg[AKAI_FILQ_OFFSET]
                       if len(kg) > AKAI_FILQ_OFFSET else 0),
+            lfo_to_pitch=(_s8(kg[AKAI_LPTCH_OFFSET])
+                          if len(kg) > AKAI_LPTCH_OFFSET else 0),
             # 255 is off. An S1000 keygroup is 150 bytes and has no offset
             # 160 at all, so a short block reports OFF rather than group 0 --
             # reporting 0 would invent an active mute group for every S1000
@@ -614,9 +623,30 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
         # VIBRATO. Dropped entirely until 2026-08-24: the reader never touched
         # the LFO, so every AKAI-sourced conversion lost it. Per-program on
         # this machine, so every voice gets the same.
-        if prog.get('lfo_depth'):
+        # VIBRATO, GATED PER KEYGROUP. The LFO is per PROGRAM but its route to
+        # pitch is per KEYGROUP -- `L_PTCH`, offset 150. MEASURED 2026-08-24:
+        # LFODEP 99 with L_PTCH 0 produces no vibrato at all, against a
+        # detector floor established in the same run. So both must be
+        # non-zero, and one program can have vibrato on some keygroups and
+        # none on others.
+        #
+        # Jan heard exactly that before anyone read the field -- "on the AKAI
+        # the LFO only affects the non-metallic sounding KG, on the EMU it
+        # sounds like it is affecting all voices" -- while we were applying the
+        # program depth to every voice.
+        #
+        # **THE DEPTH IS SCALED BY L_PTCH AND THE LAW IS NOT KNOWN.**
+        # `akai_lfo_depth_to_pitch` rests on s3ked's 19.4932 cents/unit, and
+        # their sweep never set L_PTCH -- it sat at whatever the calibration
+        # program carried, unrecorded. Since L_PTCH 0 gates the vibrato off
+        # entirely, that program cannot have had 0, so 19.4932 is the law at
+        # some unknown non-zero routing rather than a full-scale reference.
+        # A linear ratio is the obvious guess and is NOT applied: nobody has
+        # shown the two compose multiplicatively (§AKAILPTCH).
+        if prog.get('lfo_depth') and kg.get('lfo_to_pitch'):
             voice.lfo1_rate = akai_lfo_rate_hz(prog.get('lfo_rate', 0))
-            voice.lfo1_to_pitch = akai_lfo_depth_to_pitch(prog['lfo_depth'])
+            voice.lfo1_to_pitch = akai_lfo_depth_to_pitch(
+                prog['lfo_depth'], kg['lfo_to_pitch'])
             voice.lfo1_delay = akai_lfo_delay_seconds(prog.get('lfo_delay', 0))
         voice.filter_cutoff = _cutoff_of(kg['filter_freq'], prog['is_s3000'])
         # AMPLITUDE ENVELOPE. Never assigned until 2026-08-23, so every

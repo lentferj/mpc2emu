@@ -197,6 +197,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAILFO — the reader never read the LFO, so every conversion lost its vibrato (2026-08-24)](#akailfo-the-reader-never-read-the-lfo-so-every-conversion-lost-its-vibrato-2026-08-24)
 - [§AKAIFILT2 — the IB-304F option, and what to do about filter order in both directions (2026-08-24)](#akaifilt2-the-ib-304f-option-and-what-to-do-about-filter-order-in-both-directions-2026-08-24)
 - [§LFODEPTHRANGE — the LFO→pitch law validated 16× below its calibration, and a withdrawn 19% (2026-08-24)](#lfodepthrange-the-lfopitch-law-validated-16-below-its-calibration-and-a-withdrawn-19-2026-08-24)
+- [§AKAILPTCH — the LFO is gated per keygroup, and the depth law has an unrecorded dependency (2026-08-24)](#akailptch-the-lfo-is-gated-per-keygroup-and-the-depth-law-has-an-unrecorded-dependency-2026-08-24)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -18247,3 +18248,80 @@ The square becomes untrackable above amount −12 — at −32 it reads 7.92 Hz,
 double the real rate, because the pitch steps carry the partial out of the ±70 Hz
 analysis band. Those points are flagged in the JSON and excluded here; including
 them would have produced a spurious waveform difference of about 18%.
+
+## §AKAILPTCH — the LFO is gated per keygroup, and the depth law has an unrecorded dependency (2026-08-24)
+
+**Jan found this by ear before anyone read the field**, and the second half is a
+problem with a calibration we had been treating as settled.
+
+His report, after hearing the vibrato we had just wired in: *"that is far too
+extreme — also, I think on the AKAI the LFO only affects the non-metallic
+sounding KG, on the EMU it sounds like it is affecting all voices."*
+
+### The gate, which is proven
+
+Keygroup offset 150, **`L_PTCH`**, range -50..+50, "Amount of control of pitch
+by LFO1". In the program he was listening to:
+
+    keygroup   0    1    2    3    4    5
+    L_PTCH     0    7    0    7    0    7
+               ^unison   ^octave
+
+Zero on the three unison keygroups — the percussive "metallic" layers — and 7 on
+the three sustaining ones. **The AKAI LFO is per PROGRAM but its route to pitch
+is per KEYGROUP**, and we were applying the program depth to every voice.
+
+s3ked measured it 2x2 against a detector floor established in the same run:
+
+    LFODEP   L_PTCH    cents pp     verdict
+         0        0        74.1     floor
+        99        0        62.5     AT THE FLOOR — no vibrato
+         0       50        76.5     AT THE FLOOR — no vibrato
+        99       50    364..509     strong vibrato
+
+**Both fields must be non-zero.** A maximal LFO depth with the gate shut
+produces nothing. That is a large qualitative difference against a measured
+floor, so it stands even though the absolute numbers in the same run do not.
+
+Wired: `L_PTCH == 0` now means no vibrato on that keygroup.
+
+### The part that is NOT proven, and the temptation to resist
+
+`L_PTCH` is 7 of a possible 50 here. **7/50 would take a vibrato Jan calls "far
+too extreme" down to about ±11 cents, which would match "a little vibrato"
+exactly.** It is not applied, for two reasons.
+
+**First, nobody has shown the two compose multiplicatively.** s3ked's pitch
+tracker could not resolve it: sweeping L_PTCH 0..50 gave 649, 577, 558, 547,
+543, 524, 570, 305, 516 cents — non-monotonic and saturated, with the tracked f0
+collapsing from 221 Hz to 150.5 Hz and sticking. Sweeping LFODEP at fixed
+L_PTCH did the same, 576 cents at LFODEP 10 against 514 at LFODEP 99. **A
+control that reads the same at 10 as at 99 is not measuring the field**, and
+§35 had warned about exactly these octave errors.
+
+**Second, and worse: there is nothing to scale FROM.** The `LFODEP cents =
+19.4932 * x` law was measured by a sweep that **never set `L_PTCH`** — it
+appears nowhere in the probe or the scales module, and neither §35 nor §44
+records its value, so it sat at whatever the calibration program happened to
+carry. Since L_PTCH 0 gates the vibrato off entirely, that program cannot have
+had 0. **So 19.4932 is the law at some unknown non-zero routing, not an
+L_PTCH-independent full scale.**
+
+Applying 7/50 because it sounds right would be fitting a constant to one
+listener's word for a symptom — the shape of most of this week's false findings.
+
+### What would settle it
+
+Not a better pitch tracker. **Sideband analysis**: vibrato at a known rate puts
+sidebands around each harmonic spaced at the LFO rate, and the
+sideband-to-carrier ratio gives the modulation index through the Bessel ratio,
+with deviation = index x rate. No f0 estimate anywhere, so octave errors cannot
+reach it. s3ked's proposal, and they want to validate it against LFODEP's own
+known-linear axis before trusting it on L_PTCH — which is right.
+
+### Consequence for now
+
+A gated keygroup is correct. **A non-gated one carries a depth we should treat
+as unknown rather than trusted**, and the constant says so. That is a smaller
+error than before — three of six voices in this program are now silent that were
+wrong — and it is honest about the rest.

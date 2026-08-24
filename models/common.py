@@ -651,15 +651,43 @@ def akai_lfo_rate_hz(byte: int) -> float:
                + AKAI_LFO_RATE_HZ_OFFSET)
 
 
-def akai_lfo_depth_to_pitch(byte: int) -> float:
-    """LFODEP -> our one-sided `lfo1_to_pitch` depth, 0..1.
+#: `L_PTCH` at which s3ked's 19.4932 cents/unit was measured. **UNKNOWN.**
+#: Their sweep never set the field, so it sat at whatever the calibration
+#: program carried and nothing records it. We know only that it was NOT 0,
+#: because L_PTCH 0 gates the vibrato off entirely.
+AKAI_LFO_DEPTH_CAL_LPTCH = None
+
+
+def akai_lfo_depth_to_pitch(byte: int, l_ptch: int = None) -> float:
+    """LFODEP (+ the keygroup's `L_PTCH` gate) -> one-sided `lfo1_to_pitch`.
 
     The field is PEAK-TO-PEAK cents and our model field is one-sided against
     `LFO_PITCH_FULL_CENTS`, so this halves as well as scaling. Getting that
-    wrong would double every vibrato, and it is the same class of seam as the
-    K2000 LFO depth where the half-swing convention had to be checked on both
-    sides before the factor of two could be ruled out.
+    wrong would double every vibrato — the same seam as the K2000 LFO depth,
+    where the half-swing convention had to be checked on both sides before a
+    factor of two could be ruled out.
+
+    **`l_ptch` GATES, and does not yet SCALE.** MEASURED 2026-08-24 against a
+    floor established in the same run: LFODEP 99 with L_PTCH 0 produces no
+    vibrato, L_PTCH 50 with LFODEP 0 produces none either, and both non-zero
+    produces a strong one. So 0 means silence here and that is applied.
+
+    What is NOT applied is a proportional scaling, and the temptation is
+    considerable — this program carries L_PTCH 7 of a possible 50, and 7/50
+    would take a vibrato Jan calls "far too extreme" down to a plausible ±11
+    cents. It is not applied because **nobody has shown the two compose
+    multiplicatively**, and because 19.4932 was itself measured at an
+    unrecorded non-zero L_PTCH, so there is no reference point to scale
+    *from*. s3ked's pitch tracker could not resolve the composition — octave
+    errors dominate at exactly the swings involved — and the honest instrument
+    for it is sideband analysis, which does not exist yet (§AKAILPTCH).
+
+    Applying 7/50 on the strength of it looking right would be fitting a
+    constant to one listener's word for a symptom, which is the shape of most
+    of the false findings this week.
     """
+    if l_ptch is not None and l_ptch == 0:
+        return 0.0
     cents_pp = AKAI_LFO_DEPTH_CENTS_PP_PER_UNIT * max(0, min(99, byte))
     return max(0.0, min(1.0, (cents_pp / 2.0) / LFO_PITCH_FULL_CENTS))
 
