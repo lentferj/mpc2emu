@@ -18985,6 +18985,30 @@ Capped at ±24 rather than the full keyboard: beyond that the transposition
 aliases grossly, and while aliasing does not change an amplitude envelope there
 is no reason to have to defend that when the effect lives at +24.
 
+**The bank's presets start at PC10, and that is not cosmetic.** It is designed
+to be MERGED onto a machine already holding the conversion under test, so both
+subjects stay resident and no reload sits between two measurements — and the
+conversion lives at P000. A bank starting at 0 collides on the first slot.
+
+That matters more than a numbering clash normally would because **the whole run
+is keyed on PC14 against PC15, and those two differ only in root key.** Getting
+the pair the wrong way round proves the exact opposite of what it appears to,
+and nothing in the audio would reveal the swap. Starting at 10 leaves room for
+a nine-preset bank underneath and costs nothing.
+
+**Read the numbers back off the machine anyway.** A merge is the E4XT's
+decision, not ours, and §E4BNAMEDEDUP is the same lesson one level down: what
+the file said and what the machine did came apart silently, and it cost a
+listening verdict.
+
+**Note that `tests/` is gitignored deliberately, so the generator itself is not
+in the repository.** Its design rationale is duplicated into this section for
+that reason. If the bank has to be rebuilt from scratch, everything needed is
+here: two independent white draws, looped end to end, one zone per measurement
+note at matching root, two sustain levels 23 dB apart, filter open with no
+envelope or LFO, release placed on the current operating byte and asserted
+after writing, loop-in-release verified at the byte, presets based at 10.
+
 ### The sweep that should happen before this is trusted
 
 eosed has offered bytes **60 through 100 in steps** on the clean bank's own
