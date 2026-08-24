@@ -204,6 +204,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§E4BNAMEDEDUP — the E4XT rebinds a merged bank's zones to already-resident samples of the same name (2026-08-24)](#e4bnamededup-the-e4xt-rebinds-a-merged-banks-zones-to-already-resident-samples-of-the-same-name-2026-08-24)
 - [§AKAIRELSPAN — the release is the one stage whose endpoint neither machine defines, and we matched seconds across it (2026-08-24)](#akairelspan-the-release-is-the-one-stage-whose-endpoint-neither-machine-defines-and-we-matched-seconds-across-it-2026-08-24)
 - [§E4BRATEANCHOR — our EOS rate law is 18-25% fast, and four fresh points say which anchor is right (2026-08-24)](#e4brateanchor-our-eos-rate-law-is-18-25-fast-and-four-fresh-points-say-which-anchor-is-right-2026-08-24)
+- [§INERTCHANGE — four defects in one night, all of them changes that looked applied (2026-08-24)](#inertchange-four-defects-in-one-night-all-of-them-changes-that-looked-applied-2026-08-24)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -19187,3 +19188,63 @@ resolution**, not just a fitted number, which is how the sweep is staged: fit
 window, knee detection and the law itself can then be reworked offline. A bench
 run that has to be repeated because the analysis was baked into it spends
 somebody else's hardware time.
+
+
+## §INERTCHANGE — four defects in one night, all of them changes that looked applied (2026-08-24)
+
+Not a bug report. A shape, recorded because four separate faults found in one
+evening turned out to be the same one, and because none of them was detectable
+without going to the machine and measuring.
+
+**The four:**
+
+1. **Loop-in-release** (§E4BLOOPREL) — the bit was set in the file. The machine
+   did not honour it, so no looped sample we had ever written had a release.
+2. **Sample binding** (§E4BNAMEDEDUP) — the bank on disc was correct. On merge
+   the machine bound five of six voices to a different bank's samples. It cost
+   a listening verdict before anyone acted on it.
+3. **The rate anchor** (§E4BRATEANCHOR) — wrong by 13-19% for months, sitting
+   behind a 5% residual that the constant's own comment recorded as
+   *"unexplained and not worth chasing"*.
+4. **Preset placement** — `program_number` set, generator printed the numbers
+   asked for, and the preset bodies carry the enumerate ordinal instead. The
+   change was inert exactly where it mattered.
+
+**What they share is not a subsystem. It is that everything upstream reported
+success.** The file was right. The parameters read back right. The tests passed
+— all 499 of them, at every stage, on every one of these. A test written in the
+same style as our existing ones could not have caught a single one, because
+each fault lives in the gap between what we wrote and what the machine did with
+it, and our tests only ever compare us to ourselves.
+
+### The rule that generalises
+
+**A label is the least trustworthy thing in a file, because it is the one part
+nothing verifies.** That was said about preset names and it reaches further:
+
+- a preset **number** is a label — defect 4 is exactly that
+- a bank's stated preset **count** is a label
+- a **name** is a label, and §E4BNAMEDEDUP is what happens when the machine
+  uses one as an identity
+
+**Anything the machine does not have to act on can drift without anything
+upstream noticing.** So identify things by a field the machine demonstrably
+acts on — a root key it transposes by, a byte it slews at — and treat every
+label as a hint to be confirmed.
+
+### And the corollary for the bench
+
+Three analysis errors the same night (§E4BRATEANCHOR's withdrawn 78-79, the
+withdrawn loop null, the withdrawn decay "contradiction") share a *different*
+single shape: **a method whose limits were never checked against the size of the
+thing being measured.** A 5 ms window against a 3 ms loop. A fit window standing
+in the noise floor. A constant under active suspicion used as the fixed point of
+a comparison.
+
+All three produced results that looked *fine* — a clean null, a plausible bias,
+a confident prediction. **None of them looked like an error from the inside.**
+Two of the three were caught only because someone asked for something specific:
+residuals by thirds rather than an R2, and the true loop lengths out of the
+file. **A summary would have given nothing to ask about**, which is the
+practical argument for reporting raw shapes between sessions rather than
+conclusions.
