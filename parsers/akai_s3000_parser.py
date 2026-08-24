@@ -805,9 +805,72 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
             preset.voices.append(voice)
             _kg_of_voice.append(kg)
     if preset.voices:
+        # AFTER the mute-group re-model, deliberately: that rewrites the losing
+        # layer's envelope, so two keygroups identical in the source can end up
+        # different here, and two that differed can end up the same. Merging
+        # first would group on settings that are about to change.
         _apply_mute_groups(preset.voices, _kg_of_voice, prog['name'],
                            quiet=quiet)
+        _before = len(preset.voices)
+        preset.voices = _merge_identical_voices(preset.voices)
+        if len(preset.voices) != _before and not quiet:
+            print(f"    [layers] '{prog['name']}': {_before} keygroup(s) -> "
+                  f"{len(preset.voices)} voice(s) (identical settings merged "
+                  f"into multisampled layers)")
     return preset if preset.voices else None
+
+
+def _merge_identical_voices(voices):
+    """Voices that differ ONLY in which keys they cover become one voice.
+
+    An AKAI keygroup owns a KEY RANGE and carries its own filter and envelopes.
+    Our model's voice owns a SIGNAL PATH and carries zones that may span the
+    keyboard. One keygroup per voice is therefore the wrong shape whenever
+    several keygroups were authored as one multisampled layer -- which is the
+    normal way to build an instrument, one sample per octave under a single
+    envelope.
+
+    It matters most on the K2000, whose keymap IS the multisample container:
+    **measured over 201 real third-party soundsets, 20.7% of 1584 keymaps hold
+    more than one sample, up to 64 in one.** Emitting one keymap and one layer
+    per keygroup produced six layers for a three-octave electric piano, and a
+    K2000 program with more than three SPLIT layers is a drum program that
+    sounds only on a drum channel -- so the converted preset was silent on a
+    normal channel, correctly, with nothing wrong anywhere in the file. Jan
+    diagnosed the shape of it from the format's logic before any of the
+    measurements existed.
+
+    **LOSSLESS BY CONSTRUCTION.** Voices merge only when every voice-level
+    field is identical -- filter type, cutoff, resonance, both envelopes, the
+    envelope depth, the LFO and its routing. Everything that then differs
+    between them lives on the ZONE (sample, key range, velocity, tune, volume,
+    pan) and is carried unchanged. If two keygroups differ in so much as a
+    cutoff byte they stay apart, which is why a preset whose octaves carry
+    their own filter settings does not collapse to one layer and should not.
+
+    The signature is built by iterating the model's own voice fields rather
+    than by listing them here, so a field added later cannot be silently
+    ignored by this function -- the failure mode that produced most of this
+    week's defects.
+    """
+    if len(voices) < 2:
+        return voices
+    ignore = {'zones'}
+    order, groups = [], {}
+    for v in voices:
+        sig = []
+        for name in sorted(vars(v)):
+            if name in ignore or name.startswith('_'):
+                continue
+            val = getattr(v, name)
+            sig.append((name, repr(val)))
+        key = tuple(sig)
+        if key not in groups:
+            groups[key] = v
+            order.append(key)
+        elif groups[key] is not v:
+            groups[key].zones.extend(v.zones)
+    return [groups[k] for k in order]
 
 
 def _kg_vel_span(kg):
