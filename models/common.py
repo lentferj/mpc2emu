@@ -729,9 +729,21 @@ def e4xt_resonance_byte(amount: float, poles: int = 2) -> int:
     Clamped at `E4XT_Q_MAX_BYTE`, not 127. Writing 127 is not an error the
     machine reports; it is fifteen steps of nothing.
     """
+    # `poles` USED TO CANCEL ITSELF OUT. This scaled the target AND the table
+    # by the same factor, so `(0.5, 2)` and `(0.5, 4)` returned the same byte
+    # -- while `e4xt_byte_to_resonance` applied the scale ONE-SIDED and was
+    # therefore not the inverse. An E4B repacked twice climbed: byte 40 ->
+    # 0.38 -> 67 -> 0.998 -> 112, pinned at the maximum. Measured over the
+    # corpus 2026-08-24: resonance changed on **60.5% of round-tripped zones**,
+    # always upward.
+    #
+    # The inverse was the correct half. The machine at `poles` delivers
+    # `table_db(b) * scale`, so to deliver `amount * RESONANCE_FULL_DB` the
+    # table must be asked for `amount * RESONANCE_FULL_DB / scale` -- divided,
+    # against the UNSCALED table.
     scale = max(1, poles) / 2.0
-    target = max(0.0, min(1.0, amount)) * RESONANCE_FULL_DB * scale
-    tbl = [(b, db * scale) for b, db in _E4XT_Q_TABLE]
+    target = max(0.0, min(1.0, amount)) * RESONANCE_FULL_DB / scale
+    tbl = list(_E4XT_Q_TABLE)
     if target <= tbl[0][1]:
         return tbl[0][0]
     for (b0, d0), (b1, d1) in zip(tbl, tbl[1:]):
