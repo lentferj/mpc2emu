@@ -1034,9 +1034,44 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
     sus = 100.0 * max(0.0, min(1.0, voice.filter_env_sustain))
     pzt[14] = _fenv_rate(voice.filter_env_attack);  pzt[15] = _fenv_level(100.0)
     pzt[16] = 0;                                     pzt[17] = _fenv_level(100.0)
-    # Filter envelope: same span treatment as the amp envelope above. Its level
-    # byte comes from _fenv_level rather than _fenv_sustain, but the span is
-    # still the dB distance that byte represents.
+    # ── THE FILTER ENVELOPE'S SPAN IS IN THE WRONG UNIT, AND IT CANCELS ────
+    #
+    # This block used to claim "the span is still the dB distance that byte
+    # represents". That was an assumption stated as a fact, and it is wrong
+    # (§E4BFENVUNIT, 2026-08-24). Read what actually happens below:
+    #
+    #   _fsus_byte   comes from _fenv_level -- a SIGNED -100..+100 percent
+    #                encoding, x127/100
+    #   _fdecay_span feeds that byte to env_level_byte_to_db, which is the
+    #                AMPLITUDE SUSTAIN-BYTE law (dB below peak = 97.82 -
+    #                0.7718 x byte). Different encoding, different quantity.
+    #   _frel_span   subtracts it from the AMPLITUDE full span, in dB
+    #   _env_span_rate applies the AMPLITUDE rate law to the result
+    #
+    # ...for an envelope the E4XT runs on a CUTOFF BYTE scale: §56 measured the
+    # envelope-to-cutoff depth as linear in cutoff bytes, not in octaves and
+    # not in dB.
+    #
+    # IT IS LEFT ALONE ON PURPOSE. Swept over 30 combinations of filter sustain
+    # (10-100%) and release (0.1-8 s), what this emits lands within 2-3 bytes of
+    # the machine's own measured filter law -- worst case 1.19x in time. The
+    # unit error and a 0.52x difference in the rate prefactor very nearly
+    # cancel, and the offset is NEAR-CONSTANT, which is the tell: shape right,
+    # anchor off.
+    #
+    # Correcting it needs a reference we do not have. The filter law (§43) was
+    # measured on a transition UPWARD to target 100; nobody has measured the
+    # release segment. Correcting a 1.19x error against an assumed reference is
+    # how a 1.19x error becomes a 1.4x one.
+    #
+    # AND NOTE THE THREE LAWS IN SIX LINES: the ATTACK below goes through
+    # _fenv_rate (env_seconds_to_rate, the time-alone law) while the decay and
+    # release go through _env_span_rate (the span law). One envelope, two
+    # conventions, plus the unit mismatch above. Nothing in the output is
+    # visibly wrong today -- which is exactly how the amplitude rate anchor
+    # stayed 13-19% wrong for months behind a residual small enough to write
+    # off. If you are here to change this function, change all three together
+    # and measure first.
     _fsus_byte = _fenv_level(sus)
     _fdecay_span = _env_level_db(_fsus_byte)
     pzt[18] = _env_span_rate(_fdecay_span, voice.filter_env_decay)
