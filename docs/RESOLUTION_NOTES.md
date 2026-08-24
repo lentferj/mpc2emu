@@ -18711,9 +18711,54 @@ than the finding it imitated.**
 
 ## §AKAIRELSPAN — the release is the one stage whose endpoint neither machine defines, and we matched seconds across it (2026-08-24)
 
-**Status:** measured on both sides, fix designed, NOT wired.
+**Status:** **FIXED AND HARDWARE-CONFIRMED, 2026-08-24 19:01.**
 **Found by:** Jan by ear ("the release is a bit too short on the EMU"), held
 through §E4BNAMEDEDUP, then confirmed by eosed on the clean load.
+
+### Confirmed on the machine, on a converted bank
+
+The recalibrated conversion loaded and measured. Identification first, read off
+the machine rather than assumed: **Rls1 = 80 on all three sustaining voices**,
+no mixture, where they read 69 this afternoon.
+
+        keygroup  note  semis    dB/s   resid    vs source 15.224
+        low        40     -8    15.30   0.44        +0.5%
+        mid        66     +6    14.59   0.20        -4.2%
+        top        76     +4    10.12   2.57        (see below)
+
+**0.5% and 4.2% against the source machine, where it was 87% before.** Same
+notes on the old bank read 27.17 and 28.21, so the new bank is **1.78x and
+1.93x slower** — the correction is the size the arithmetic predicted.
+
+And it reached the audio. Time from note-off to within 6 dB of the floor,
+whole preset, same rig and gain as the pre-erase reference captures:
+
+        note   reference   old conv   NEW      new/old
+          26    0.05 s      0.84 s    1.37 s   1.63x
+          40    0.03 s      0.88 s    1.31 s   1.49x
+          52    0.02 s      0.90 s    1.56 s   1.73x
+          64    0.03 s      1.14 s    1.84 s   1.61x
+          72    0.19 s      1.30 s    2.64 s   2.03x
+          84    0.20 s      1.17 s    1.36 s   1.16x
+
+### The two numbers that are NOT rates, and both were predicted before the run
+
+**Top keygroup, residual 2.57** against 0.20-0.44 elsewhere. That is
+§E4BFENVUNIT's caveat behaving exactly as written: the filter release runs at
+its own fixed rate, so on a *slower* amplitude fall it finishes early and bends
+the curve. Same signature as the 6-7% slow-byte divergence in the both-subjects
+skeleton. **A prediction that a number would not be the envelope's, confirmed,
+is a result and not a miss.**
+
+**Note 84 at 1.16x** against 1.49-2.03x everywhere else. Note 84 is +12 from
+the top keygroup's root — outside the ±11 window where the envelope dominates.
+Everything inside that window moved by 1.5-2.0x; the one note outside it barely
+moved. **The exception falls exactly where the caveat said it would**, which is
+better evidence for the caveat than for a defect.
+
+The 4.2% on the mid keygroup is the only thing left, and it is smaller than the
+filter's contribution at those pitches. Not worth chasing until someone measures
+the filter release direction (§E4BFENVUNIT).
 
 Jan reported this twice and it survived the collision that invalidated
 everything else he heard that session. It is real, it is the last surviving
