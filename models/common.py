@@ -1224,6 +1224,33 @@ def env_rate_byte_to_db_per_s(rate_byte: int) -> float:
         -(b - ENV_RATE_BYTE_REF) / ENV_RATE_HALVING_BYTES)
 
 
+#: THE K2000's DISPLAYED RELEASE TIME IS THE TIME TO CROSS A FIXED SPAN.
+#:
+#: MEASURED 2026-08-25 (k2kremote), on a subject built for it: program 199's
+#: edit buffer, algorithm 1 (PITCH->NONE->AMP, no filter stage at all), ROM
+#: sawtooth, no cords, FX confirmed dry, AMPENV switched out of Natural mode --
+#: which it ships in, and which would have made the whole run measure the
+#: sample's own envelope instead.
+#:
+#:     displayed 3.00 s   ->  -33.02 dB/s   span 99.06 dB   r2 0.9996
+#:     displayed 1.00 s   ->  -99.68 dB/s   span 99.68 dB   r2 0.9974
+#:
+#: **Two settings, one subject, spans agreeing to 0.62%.** The machine is a
+#: RATE machine (slope invariant across sustain levels, measured separately),
+#: and the display states the seconds to traverse ~99.4 dB.
+#:
+#: THE FAST SETTING HAD TO BE FITTED OVER ITS TOP THIRD. Across the whole
+#: window it reads -89.4 dB/s, because the fall bends and a straight line
+#: across a bend is a chord. The top 12 dB gives -99.68 with r2 0.9974. The
+#: full-window number is an average and is not the rate.
+#:
+#: This supersedes `KRZ_RELEASE_FACTOR` for any source that carries a rate:
+#: that factor was derived from the machine's DISPLAYED release against
+#: another machine's, which is two conversions of an unmeasured span rather
+#: than one measurement of a real one.
+KRZ_RELEASE_SPAN_DB = 99.37
+
+
 def env_db_per_s_to_rate_byte(db_per_s: float) -> int:
     """A slew rate in dB/s -> the EOS rate byte that produces it.
 

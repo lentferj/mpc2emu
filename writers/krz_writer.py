@@ -86,6 +86,7 @@ import struct
 from typing import List, Tuple
 
 from models.common import (
+    KRZ_RELEASE_SPAN_DB,
     KEY_FILTER_OCT_PER_OCT,Bank, Preset, SampleData, VoiceLayer, LoopType,
                           KRZ_ENV_TIME_GRID, KRZ_RELEASE_FACTOR,
                           E4B_CUTOFF_MIN_HZ, E4B_CUTOFF_MAX_HZ,
@@ -953,7 +954,28 @@ def _fill_env(b: bytearray, env) -> None:
     # Approximate with a long first leg down to a knee, then a short tail to
     # silence.  Knee + split validated by ear on the K2000R (AlphaPad #200, Jan
     # 2026-06-24: Rel1 2.16 s → 33 %, Rel2 0.5 s → 0 %; total ≈ the release time).
-    rel = env.release * _KRZ_RELEASE_FACTOR          # KRZ-only time correction
+    # PREFER A CARRIED RATE (§CORPUSRT / KRZ_RELEASE_SPAN_DB, 2026-08-25).
+    #
+    # The K2000 is a RATE machine -- its slope is invariant across sustain
+    # levels -- and its displayed release time is the seconds to cross a FIXED
+    # span of ~99.4 dB, measured at two settings on a purpose-built subject and
+    # agreeing to 0.62%. So a source that knows its own release RATE can be
+    # converted exactly: seconds = span / rate.
+    #
+    # `_KRZ_RELEASE_FACTOR` stays for sources that only state a duration. It
+    # was derived by comparing this machine's DISPLAYED release against
+    # another's, which is two conversions of an unmeasured span rather than one
+    # measurement of a real one -- fine as a fallback, wrong to prefer.
+    #
+    # THIS IS AN AUDIBLE CHANGE. An AKAI source at 15.22 dB/s went to 3.76 s
+    # and now goes to 6.53 s. That is the same defect the E4B path carried
+    # until 2026-08-24, one format over: matching SECONDS across two machines
+    # that disagree about where silence is.
+    _rrate = getattr(env, 'release_rate_db_per_s', None)
+    if _rrate:
+        rel = KRZ_RELEASE_SPAN_DB / _rrate
+    else:
+        rel = env.release * _KRZ_RELEASE_FACTOR      # KRZ-only time correction
     pairs = [(env.attack, 100),                      # Att1 — ramp to full
              (0.0, 100),                             # Att2
              (0.0, 100),                             # Att3
