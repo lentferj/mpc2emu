@@ -19662,6 +19662,39 @@ wrong. **All of it was a straight line chasing a 2 Hz wobble.**
 cleanly under other conditions, suspect the subject, not the model.** And the
 test is cheap — residuals against time, FFT or just count sign changes.
 
+### COUNT THE CYCLES. An FFT peak at one cycle is not a period.
+
+**The acceptance criterion above was wrong as first written, and it produced a
+false positive within hours.** A clean single-oscillator subject — built for
+this, no filter stage, no cords, envelope mode verified — returned a peak at
+2.22 Hz with peak-to-mean 19.65 and `+ − +` residual thirds: every marker the
+confirmed beating had.
+
+**Cycles inside the fit window settle it:**
+
+        confirmed beating   1.020 s window   1.96 / 2.94 / 3.92 Hz  =  2, 3, 4 cycles
+        false positive      0.450 s window          2.22 Hz         =  1.00 cycle
+
+**One cycle is the lowest bin an FFT can resolve.** Every residual curve, bow
+or trend lands there by construction. `+ − +` thirds are one arch, not a
+repeating wave. **A component you cannot fit two cycles of is not a
+component.**
+
+**The criterion needs a floor of at least two cycles — better three — inside
+the window before a peak counts.** Peak-to-mean measures shape: it says nothing
+about magnitude, and nothing about periodicity either.
+
+**What the false positive actually was: CURVATURE**, which needs a narrower
+window rather than a different subject — a different response entirely from
+contamination.
+
+**And one detail withdrawn on the same reasoning.** The confirmed beating's
+1.96 / 2.94 / 3.92 was read here as "1 : 1.5 : 2, several detuned oscillators".
+Those are **adjacent bins 2, 3 and 4**, which is equally what one component
+with spectral leakage looks like. The beating conclusion stands on magnitude
+(22x peak-to-mean, 11 dB of residual) and on the E4XT's independent case with
+its LFO-frequency control. **The "several oscillators" reading was over-read.**
+
 **Two consequences beyond the measurement.** It is a second independent
 argument for a stationary calibration subject: **noise has no beat frequency**,
 detuned musical material always does. And it was a candidate for the E4XT's
