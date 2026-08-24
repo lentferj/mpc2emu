@@ -19499,6 +19499,32 @@ what each machine was actually metered for before deciding what to preserve.
 design is here for the same reason the noise bank's is: the last thing that
 existed only as a file was lost, and six sections depended on it.
 
+### The backup images are a local index of what is ON the machines
+
+Jan's, 2026-08-24, and it changes how a bench session gets planned: instead of
+asking a session what is resident, read the machine's own disk here and pick.
+
+- **E4XT** — `SYNTHS/E4XT/Backups/HD0.img`, 19 GB, **already uncompressed and
+  plain FAT32**. `7z l` lists it; `7z x` extracts individual banks. 25 banks,
+  335 MB of content, all on the machine's own SCSI disk (which survives a RAM
+  erase). Parsing them locally gives exact parameter bytes for any voice
+  *before* anyone loads anything.
+- **K2000R** — `SYNTHS/K2000R/Backups/*.img.lzo`, ~1 GB each, four dates.
+  Decompresses with `lzop -d` to ~2 GB. The volume is **FAT16 with a `KMSI`
+  OEM id and a BPB declaring ZERO heads and sectors**, which is why both `7z`
+  and `mtools` refuse it — mtools says "the devil is in the details: zero
+  number of heads or sectors". **Parse the BPB by hand and it reads fine**:
+  bytes-per-sector at 11, sectors-per-cluster at 13, reserved at 14, FAT count
+  at 16, root entries at 17, FAT size at 22; root directory at
+  `(reserved + nfats * fatsz) * bps`, data area right after it.
+
+  25 root entries, almost all category directories -- `-PADS`, `-ORGANS`,
+  `-EPIANOS`, `-SYNTHS`, `-BAESSE` and so on -- plus `MASTER01.KRZ` and
+  `NULL.KRZ`.
+
+**Delete the decompressed K2000 image when done.** It is 2 GB and this disk sits
+at 98%.
+
 ### What they are
 
 Three scripts — `roundtrip_corpus.py` (AKAI), `roundtrip_e4b_corpus.py`,
