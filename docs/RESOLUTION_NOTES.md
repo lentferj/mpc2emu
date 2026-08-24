@@ -19355,6 +19355,32 @@ wrong quantity: no amount of listening distinguishes our sample from an
 identically-named one, and the voice-to-sample map — which settles it in one
 read — is not a thing anybody listens to.
 
+### A guard anchored to a value has the lifetime of that value
+
+Same evening, one level down from the anchor rule below, and from the bench
+rather than the code.
+
+A script driving the K2000's editor gained a sanity check after an earlier run
+mis-navigated and corrupted a program. The check compared the field it had
+landed on against **67** — the value that field happened to hold at the time it
+was written. On the next run it fired on a field that was correctly navigated
+and correctly valued, because 67 was no longer the number.
+
+**Fixed by checking the TYPE instead**: does the value carry a literal `s`
+suffix, i.e. am I on a seconds field at all. That is the invariant. A guard
+anchored to a value stops guarding the moment the value legitimately changes;
+a guard anchored to a type does not.
+
+### And the asymmetry that makes guards worth having anyway
+
+**The guard fired WRONGLY and the run still went well.** Clean abort, no hang,
+no corruption, five minutes lost. The run before it had no guard: a nine-minute
+hang and a program driven into a corrupt state that had to be restored field by
+field.
+
+**A false positive from a guard costs a re-run. A false negative costs the data
+and the subject.** Worth erring toward guards that occasionally cry wolf.
+
 ### An anchor must be an identifier, not prose
 
 s3ked's, 2026-08-24, and it generalises the docstring rule above rather than
