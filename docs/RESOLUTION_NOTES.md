@@ -18819,14 +18819,67 @@ converter uses this law in both directions**, so a round trip through our own
 code hides it perfectly. Our 499 tests cannot see it and no amount of adding
 tests in the same style would.
 
-### Before changing it
+### The replacement law's provenance, since it is about to become a constant
 
-The replacement touches every E4B envelope we emit in every format pair, so
-§63's **fit range** goes in with its coefficients, per §LAWRANGE. Specifically:
-whether the fit covers bytes 78-83, which is the region this converter would
-now be emitting. eosed flagged that their own two-point slope (0.061-0.065 per
-byte) disagrees with §63's 0.0565 and said to prefer §63 — so the range
-question is live and is asked, not assumed.
+Asked for and supplied (eosed, 2026-08-24), because §LAWRANGE exists.
+
+**Subject:** a single-voice white-noise preset, played at its root key so
+nothing is resampled — flat, non-decaying, looped, 2-pole lowpass at Q 0,
+filter cord zeroed, no LFO, envelope arranged to jump straight to sustain and
+hold, so the release is the only thing moving.
+
+**Points: three rate bytes x two sustain levels.**
+
+        sustain    byte 60    byte 69    byte 87
+          70        47.6       27.8       10.4    dB/s
+         100        45.5       28.6        9.9
+
+**Window 60 to 87, so the 78-83 we would now emit INTERPOLATES.** Record it
+that way — but record equally that the exponent rests on **three distinct
+bytes**, which is thin for a law.
+
+**What actually carries the slope is not the point count.** §43 measured the
+*filter* envelope's rate at 12.2 bytes per halving — different envelope,
+different subject, different run — against §63's 12.27. **Two envelopes, one
+rate scale.** That is the load-bearing evidence, and it is the reason to adopt
+the slope while treating the prefactor with suspicion.
+
+The two sustain levels put roughly 50 dB and 73 dB of travel above the rig's
+floor and returned the same dB/s, which is what established it as a speed at
+all. Span-independent across at least a 50-73 dB fall.
+
+### Take the byte from measurement, not from inverting the law
+
+The two sets of numbers were produced by **different estimators**, and this is
+where the 5-10% lives. §63's dB/s is a two-point crossing measure — 10 dB over
+the interval between the -10 and -20 dB crossings — while the four fresh points
+are least-squares fits over a fixed window. The crossing measure is the more
+fragile: sensitive to the exact crossing samples and to any curvature near the
+top of the fall.
+
+And §63 is **not neutral in the region we would emit**:
+
+        byte 69    §63 28.04    measured 27.36 / 27.97     -2.4% / -0.2%
+        byte 80    §63 15.02    measured 13.44 / 14.24    -10.5% / -5.2%
+
+Within 1% at 69 and 5-10% fast at 80 — because 69 was far better constrained in
+the original fit than 80 was. So inverting §63's prefactor for 15.224 dB/s
+gives 79.7 while the machine says 78.1/78.9.
+
+**Adopt §63's slope; take the byte from direct measurement.** The two-point
+solve is thin as a law and is direct measurement in exactly the region being
+hardcoded, on the actual samples — and it agrees with §63 to about a byte
+rather than contradicting it. The prefactor `1382` is where the anchor error
+lives and it should not be the thing inverted.
+
+### The sweep that should happen before this is trusted
+
+eosed has offered bytes **60 through 100 in steps** on the clean bank's own
+samples, OLS-fitted with residuals printed — roughly an hour of bench time. It
+would either tighten 78-79 to a decimal or show where the exponential stops
+holding. **Do that before the constant is treated as settled**, on the general
+principle that a law replacing a law deserves at least the range of the one it
+replaces. Not while Jan is at the machine.
 
 Also open and left open: eosed's **top keygroup fits no straight line at either
 rate** — residuals 2.16 and 2.35 against 0.22-1.26 elsewhere, a visible knee,
