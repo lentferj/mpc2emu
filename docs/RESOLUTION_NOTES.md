@@ -19217,6 +19217,19 @@ same style as our existing ones could not have caught a single one, because
 each fault lives in the gap between what we wrote and what the machine did with
 it, and our tests only ever compare us to ourselves.
 
+**"Go to the hardware" is necessary and not sufficient, and defect 2 is the
+proof (eosed).** That one WAS taken to the machine — Jan sat in front of the
+E4XT and listened. He still could not see it, because what reached his ears was
+another bank's audio wearing the right envelopes, and **nothing about that
+sounds like a binding problem.** It sounds like a converter that got the release
+wrong, which is precisely what he reported and precisely what we chased.
+
+So the rule is not "measure on hardware". It is **measure a quantity the defect
+can actually move.** His ears were a perfectly good instrument pointed at the
+wrong quantity: no amount of listening distinguishes our sample from an
+identically-named one, and the voice-to-sample map — which settles it in one
+read — is not a thing anybody listens to.
+
 ### The rule that generalises
 
 **A label is the least trustworthy thing in a file, because it is the one part
@@ -19248,3 +19261,17 @@ residuals by thirds rather than an R2, and the true loop lengths out of the
 file. **A summary would have given nothing to ask about**, which is the
 practical argument for reporting raw shapes between sessions rather than
 conclusions.
+
+**The one rule that would have caught all three before they were sent
+(eosed):** a result that looks fine from the inside is no evidence the method
+could have seen the alternative. **Ask what the measurement would have shown if
+the opposite were true, and check the instrument can show it** — before
+reporting either an effect or its absence.
+
+Applied to the three: a 5 ms window asked "what would a 3 ms period look like
+here?" answers *nothing*, so the null was uninformative before it was wrong. A
+fit reaching into the noise floor asked "what would a straight line look like
+down there?" answers *bent*, so the bias was an artefact before it was
+measured. And a prediction from a constant under active suspicion asked "what
+would agreement look like?" answers *nothing I could distinguish from my own
+error*.
