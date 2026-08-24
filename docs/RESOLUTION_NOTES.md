@@ -19634,6 +19634,41 @@ own output is a mirror; agreement with it is not evidence.
 one had a symptom anybody had reported. Two of them — the rate-zero floor and
 the resonance poles argument — were already written down as known and left.
 
+### A seventh, and the one that ate an evening: THE SUBJECT BEATS
+
+**Confirmed on the K2000, 2026-08-24.** A slow release fitted at r² 0.93 and
+0.85 where the same rig and subject gave 0.999 at a faster setting. Every model
+proposed fitted *worse*: linear-in-dB, linear-in-amplitude, a restricted common
+window. FFT of the fit residuals, 204 uniformly sampled points:
+
+        2.94 Hz   magnitude 151.9    peak-to-mean over bins 1-5: 22.4x
+        1.96 Hz             128.8    residual range -8.2 .. +3.1 dB, std 2.47
+        3.92 Hz             114.6
+
+**1.96 / 2.94 / 3.92 is 1x, 1.5x, 2x** — several detuned oscillators, each pair
+beating at its own difference frequency. The program's name says *stack*.
+
+**Why it only appears at slow settings:** a fast release crosses the fit window
+before a beat cycle completes and looks like a clean line; a slow one rides
+several. So the SAME subject produces a textbook fit and an unusable one
+depending only on how fast the thing being measured moves.
+
+**What it cost:** a monotone-thirds pattern read as curvature, a 36% window
+disagreement read as level-dependence, an amplitude-linear hypothesis, and a
+claim of mine that "an envelope generator cannot do that" which was simply
+wrong. **All of it was a straight line chasing a 2 Hz wobble.**
+
+**The general rule: when every model fits badly and the same subject fits
+cleanly under other conditions, suspect the subject, not the model.** And the
+test is cheap — residuals against time, FFT or just count sign changes.
+
+**Two consequences beyond the measurement.** It is a second independent
+argument for a stationary calibration subject: **noise has no beat frequency**,
+detuned musical material always does. And it is a candidate for the E4XT's
+unexplained keygroup — residuals 2.16/2.35 against 0.22-1.26, a visible knee
+surviving every other correction, on a DX electric piano with detuned layers.
+Same test, same captures, no bench time.
+
 ### A sixth: a metric that confounds the two causes it was built to separate
 
 **Time-to-floor cannot tell a rate from a duration.** Measured on the K2000
