@@ -19517,10 +19517,17 @@ having.
 without anyone remembering to add it. **A field nobody lists is a field nobody
 checks**, which is exactly how the AKAI's filter key-follow byte went unread.
 
-**Corpora:** ~26 000 AKAI keygroups on library discs; 461 E4B banks (mostly our
-own output, so it shows reader/writer AGREEMENT and not correctness against a
-real E4XT); **201 genuinely third-party K2000 soundsets**, which is the only
-one of the three that tests more than self-consistency.
+**Corpora:** ~26 000 AKAI keygroups on library discs; **131 third-party E4B
+banks from five commercial libraries** (28 242 zones); **201 third-party K2000
+soundsets** (7 197 zones).
+
+**THE E4B HARNESS RAN ON THE WRONG CORPUS AT FIRST**, and the mistake is worth
+keeping. Its glob included our own output directory, and since the list is
+sorted and truncated it ran almost entirely on banks we had written -- which
+can only show that our reader and writer agree with each other. It reported 886
+zones and a fairly clean sweep. Pointed at the third-party banks it reported
+**28 242 zones and two fields wrong on 95% and 99% of them.** A corpus of your
+own output is a mirror; agreement with it is not evidence.
 
 ### What it found, in two hours
 
@@ -19559,6 +19566,14 @@ says so in words.
 - **KRZ layer fitting** — the harness passes `faithful_layers=True` so it
   measures the conversion rather than the approximation the writer already
   announces.
+- **E4B `filter_env` (99.5%) is mostly a DEFAULTING artifact.** The parser
+  returns `Envelope()`'s own defaults when the primary zone table carries the
+  template's filter-envelope section, so `decay` reads 0.3 where the file says
+  nothing; writing that and reading it back gives 0.0, since a decay to a
+  sustain of 1.0 has no distance to travel. Cosmetic -- both are inert -- but
+  it swamps the percentage, and the real content underneath is 2% release
+  quantisation. **Reporting a model default as if it were file content is
+  worth fixing on its own terms**, and is not the same defect as losing data.
 - **KRZ `amp_env` (50.1%) is QUANTISATION, checked rather than assumed.** Every
   difference inspected is `attack 0.0010 -> 0.0000` (below the format's time
   resolution) or `release 0.5000 -> 0.4947` (about 1%). A large percentage with

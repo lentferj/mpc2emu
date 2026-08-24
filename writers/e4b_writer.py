@@ -108,7 +108,8 @@ import math
 import copy
 import struct
 from typing import List
-from models.common import (Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
+from models.common import (
+    e4xt_cutoff_byte_to_position,Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            LoopType, lfo_rate_hz_to_byte,
                            env_seconds_to_rate, env_rate_to_seconds,
                            env_level_to_byte, env_sustain_to_byte, cord_amount_to_byte,
@@ -901,6 +902,24 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
     _nominal_hz = E4B_CUTOFF_MIN_HZ * (E4B_CUTOFF_MAX_HZ / E4B_CUTOFF_MIN_HZ) ** max(
         0.0, min(1.0, voice.filter_cutoff))
     vpar[60] = min(255, round(e4xt_cutoff_position(_nominal_hz) * 255))
+    # SATURATION: A FULLY OPEN FILTER MUST STAY FULLY OPEN.
+    #
+    # The reader's measured table saturates -- bytes 252..255 all read back as
+    # position 1.0 -- while this Hz path returns 251 for that position, so a
+    # wide-open filter came back four bytes down. Measured over 131 real
+    # third-party banks 2026-08-24: `filter_cutoff` changed on **95.5% of
+    # round-tripped zones**, which is simply how common a wide-open filter is.
+    #
+    # It settles rather than ramps (255 -> 251 -> 251, a fixed point), so the
+    # harm is one step at the very top of the range and not a drift. Fixed
+    # anyway, because "the two ends of one law disagree" is the shape that has
+    # produced most of this week's defects, and because a source that says
+    # WIDE OPEN should not be written as slightly closed.
+    #
+    # Only the saturated end is touched. The Hz path below saturation is the
+    # hardware-calibrated one (§E4BFILTCAL) and is left exactly as it was.
+    if e4xt_cutoff_byte_to_position(255) <= max(0.0, min(1.0, voice.filter_cutoff)):
+        vpar[60] = 255
     # RESONANCE through the MEASURED curve, since 2026-08-24 (§E4XTQCAL).
     # This was `round(resonance * 127)` -- an uncalibrated linear guess on a
     # field whose response is not linear in anything audible, exactly the shape
