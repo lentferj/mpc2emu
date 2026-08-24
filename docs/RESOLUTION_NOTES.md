@@ -199,6 +199,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§LFODEPTHRANGE — the LFO→pitch law validated 16× below its calibration, and a withdrawn 19% (2026-08-24)](#lfodepthrange-the-lfopitch-law-validated-16-below-its-calibration-and-a-withdrawn-19-2026-08-24)
 - [§AKAILPTCH — the LFO is gated per keygroup, and the depth law has an unrecorded dependency (2026-08-24)](#akailptch-the-lfo-is-gated-per-keygroup-and-the-depth-law-has-an-unrecorded-dependency-2026-08-24)
 - [§E4XTQSHIFT — cutoff and resonance are not independent, and the cutoff table is 0.4 octaves dark (2026-08-24)](#e4xtqshift-cutoff-and-resonance-are-not-independent-and-the-cutoff-table-is-04-octaves-dark-2026-08-24)
+- [§FIRSTSTEP — four laws in one day that are wrong at their bottom rung (2026-08-24)](#firststep-four-laws-in-one-day-that-are-wrong-at-their-bottom-rung-2026-08-24)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -18427,3 +18428,54 @@ unreachable, and the brighter the Q the worse it gets. The writer will have to
 choose: match the sweep, clamp to the floor, or reduce Q and lose the resonance.
 A policy decision, not an arithmetic one, and it wants Jan's ear on which loss
 is least bad.
+
+## §FIRSTSTEP — four laws in one day that are wrong at their bottom rung (2026-08-24)
+
+Not one finding but a pattern, and it is worth naming because it has now cost
+four separate investigations in a single day.
+
+**Every one of these is a field that is well-behaved across its working range
+and is not well-behaved at its very first step:**
+
+  1. **Envelope decay rate** (§AKAIMUTEGRP / E4B). Rates 0 and 1 are SILENT —
+     the envelope closes before any audio leaves the voice — rate 2 is a 0.0 ms
+     blip 15 dB down, and rate 3 is the first usable rung at 13.4 ms. A 10 ms
+     cut clamped to 0 produced an inaudible layer rather than a brief one, which
+     was worse than the defect it was modelling.
+  2. **ENV2 stage times** (§AKAIENV2FLOOR). The fit starts at byte 40 and the
+     helper clamped UP to it, so bytes 0..40 all returned 66 ms. A source asking
+     for an instant filter attack got a 66 ms fade, which removed the entire
+     transient and cost an evening.
+  3. **`LFO_PITCH_FULL_CENTS`** (§LFODEPTHRANGE). `cents = 15.752*pct + 9.00`,
+     and 9 cents at zero amount cannot be physical. Invisible above ~3% and the
+     entire disagreement below it.
+  4. **Cord amount** (this section). Amount 1 delivers 3.12 cents RMS where a
+     linear unit is 7.6 — about **40%**. Linear from amount 2 upward; the step
+     from 1 to 2 is five times where it should be two.
+
+### The rule
+
+**A law fitted over a field's middle should not be trusted at its first step.**
+Every one of the four was found by someone measuring the bottom of a range that
+had only ever been calibrated in its middle, and on this machine the first step
+has been wrong every single time anyone looked.
+
+That is a strong enough record to invert the default: **assume the first step is
+anomalous until measured**, rather than assuming a fit extends to it.
+
+### Consequence for the vibrato, which is where it surfaced
+
+The measured depth for the octave-stack program is 7.35 cents RMS. It is not
+reachable:
+
+    amount -1 -> 3.12 cents   undershoot 2.4x
+    amount -2 -> 15.96 cents  overshoot 2.2x
+
+There is no byte between them. One cord's amount field does not resolve that
+depth at this LFO rate and routing. Left at -1, because the complaint was "far
+too extreme" and undershooting is the safer error — a gentle vibrato rather than
+either a wrong one or none.
+
+**Not compensated in code.** A correction factor on one byte of one cord, fitted
+to a single measured point, would be exactly the kind of thing this week has
+spent its time removing.

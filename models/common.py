@@ -1274,6 +1274,32 @@ def env_sustain_from_byte(byte: int) -> float:
 
 # ── Signed mod-cord amount codec (±1.0 <-> signed byte stored unsigned) ─────
 # CR-13/CR-18: was inlined ~5× across the E4B writer/parser.
+#: **CORD AMOUNT 1 DELIVERS ABOUT 40% OF A LINEAR UNIT** — measured on the
+#: E4XT 2026-08-24, LFO->Pitch, rate pinned:
+#:
+#:     amount   rms cents (floor removed)   per unit   vs linear
+#:         -1                 3.12            3.12       0.40
+#:         -2                15.96            7.98       1.02
+#:         -3                22.25            7.42       0.95
+#:         -4                28.41            7.10       0.91
+#:         -6                46.89            7.81       1.00
+#:
+#: Linear at ~7.6 cents per unit from amount 2 upward; the FIRST step is not.
+#: The jump from 1 to 2 is five times where it should be two.
+#:
+#: **FOURTH INSTANCE OF ONE SHAPE IN A DAY.** The envelope decay (rates 0 and 1
+#: both silent, 3 the first usable rung), the cutoff table's low bytes, the
+#: LFO-depth law's unphysical +9 cent intercept, and this. **A law fitted over a
+#: field's middle should not be trusted at its first step**, and on this machine
+#: the first step has been wrong every time anyone has looked.
+#:
+#: Consequence: any conversion computing an amount of 1 delivers 40% of what it
+#: intended, and there is no byte between 1 and 2 to correct it with. Not
+#: compensated here — a fudge factor on one byte would be a fit to a single
+#: point on one cord — but recorded so it is not rediscovered.
+CORD_AMOUNT_FIRST_STEP_FRACTION = 0.40
+
+
 def cord_amount_to_byte(amount: float) -> int:
     """Mod-cord amount −1.0..+1.0 → signed byte stored unsigned (±127)."""
     return round(max(-1.0, min(1.0, amount)) * 127) & 0xFF
