@@ -19664,10 +19664,41 @@ test is cheap — residuals against time, FFT or just count sign changes.
 
 **Two consequences beyond the measurement.** It is a second independent
 argument for a stationary calibration subject: **noise has no beat frequency**,
-detuned musical material always does. And it is a candidate for the E4XT's
-unexplained keygroup — residuals 2.16/2.35 against 0.22-1.26, a visible knee
-surviving every other correction, on a DX electric piano with detuned layers.
-Same test, same captures, no bench time.
+detuned musical material always does. And it was a candidate for the E4XT's
+unexplained keygroup — which it then closed.
+
+### It closed the E4XT knee too, and the CONTROL is what made it a result
+
+Run on all nine clean-load captures (eosed, 2026-08-25, 0.5-20 Hz, cubic
+detrend, Hann):
+
+        capture        peak/mean   top three (Hz / magnitude)
+        v1_n26            3.6x     19.32/34.5  13.53/16.5   6.76/15.0
+        v3_n66            5.1x      4.83/10.7   3.86/ 7.4   5.80/ 4.1
+        v5_n84            5.6x      1.93/43.8   2.90/34.7   0.97/27.5   <--
+        v5_n96            2.1x      3.86/ 6.4   2.90/ 6.4  13.53/ 4.6
+
+**`v5_n84`, the capture with the knee, is the only one whose release is
+dominated by a low series, at four times anything else in the table**, and
+0.97 / 1.93 / 2.90 is **1 : 2 : 3**. The K2000's was 1 : 1.5 : 2. Different
+program, different machine, same shape.
+
+**The control is the stronger half.** Every clean keygroup carries **3.86 Hz**
+against a file whose LFO1 is **3.78 Hz** — so the estimator is finding real
+modulation at a frequency predictable from the file *before* anyone measured
+it. That rules out "beating everywhere with one louder" **and validates the
+instrument in the same table**. The noise bank, same analysis: peak-to-mean
+2.1-2.5x and magnitudes 7-11, against 4.9-12.2x and up to 127 on musical
+material.
+
+**Three separate things had been blamed for the top keygroup and none was the
+envelope**: key scaling (excluded), the filter (§E4BFENVUNIT), and now the
+source beating against itself inside the fits.
+
+**Held open deliberately:** the both-subjects skeleton divergence at slow bytes
+(6-7%) is NOT thereby explained. It grows toward the slow bytes, which fits a
+filter release finishing early; beating has no reason to worsen with the rate
+byte. **A new answer is not a spare answer for the next open question.**
 
 ### A sixth: a metric that confounds the two causes it was built to separate
 
