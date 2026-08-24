@@ -205,6 +205,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIRELSPAN — the release is the one stage whose endpoint neither machine defines, and we matched seconds across it (2026-08-24)](#akairelspan-the-release-is-the-one-stage-whose-endpoint-neither-machine-defines-and-we-matched-seconds-across-it-2026-08-24)
 - [§E4BRATEANCHOR — our EOS rate law is 18-25% fast, and four fresh points say which anchor is right (2026-08-24)](#e4brateanchor-our-eos-rate-law-is-18-25-fast-and-four-fresh-points-say-which-anchor-is-right-2026-08-24)
 - [§INERTCHANGE — four defects in one night, all of them changes that looked applied (2026-08-24)](#inertchange-four-defects-in-one-night-all-of-them-changes-that-looked-applied-2026-08-24)
+- [§E4BFENVUNIT — the filter envelope is right by cancellation, not by construction (2026-08-24)](#e4bfenvunit-the-filter-envelope-is-right-by-cancellation-not-by-construction-2026-08-24)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -19332,3 +19333,72 @@ down there?" answers *bent*, so the bias was an artefact before it was
 measured. And a prediction from a constant under active suspicion asked "what
 would agreement look like?" answers *nothing I could distinguish from my own
 error*.
+
+
+## §E4BFENVUNIT — the filter envelope is right by cancellation, not by construction (2026-08-24)
+
+Scoped from the notes after §E4BRATEANCHOR landed, because a filter release
+that is miscalibrated the same way would partly mask the amplitude fix and the
+residual would read as an amplitude error.
+
+**Answer: it is not masking it. Our filter release is within 2-3 bytes of the
+machine's own measured filter law, uniformly.** Swept over filter sustains of
+10-100% and releases of 0.1-8 s, 30 combinations, ours minus the measured law:
+
+        -3 -2 -2 -2 -2 | -3 -2 -2 -2 -2 | -2 -2 -2 -2 -2
+        -2 -2 -2 -2 -1 | -2 -2 -2 -2 -1 | -2 -2 -2 -2 -1
+
+Worst case 3 bytes, **1.19x in time**. Against the amplitude release's 1.8x,
+that is not the thing to chase, and Jan's listening test on the recalibrated
+release is meaningful as it stands.
+
+### But the way it is right is worth writing down
+
+**Three separate unit errors that happen to cancel.** What the writer does for
+the filter envelope's release:
+
+        _fsus_byte   = env_level_to_byte(sus)        signed -100..+100, x127/100
+        _fdecay_span = env_level_byte_to_db(byte)    the AMPLITUDE sustain-byte law
+        _frel_span   = 97.82 - that                  the AMPLITUDE full span, in dB
+        Rls1         = env_span_seconds_to_rate(...) the AMPLITUDE rate law
+
+So a filter level byte from one encoding is fed to a law that maps an
+*amplitude sustain byte* to dB below peak, and the result is called a span in
+dB — for an envelope the machine runs on a **cutoff byte** scale (§56: the
+envelope-to-cutoff depth is linear in cutoff BYTES, not octaves). The comment in
+the code says "the span is still the dB distance that byte represents", which
+was an assumption and is the wrong unit.
+
+Then the rate constant: §43 records that our `ENV_RATE_A` runs **0.52x** the
+measured filter law across the whole range (0.51 / 0.53 / 0.56 at bytes 24 / 56
+/ 88) because ours was fitted on Decay-1, travelling peak-to-sustain rather than
+a full traversal. **Near-constant ratio with the slope untouched is a distance
+difference, not a conflict.**
+
+A wrong span and a half-size prefactor, and the product lands within two bytes
+of the measured law. **The near-constant -2 means the shape is right and only
+the anchor is off**, so a fix is one constant rather than a rewrite.
+
+**A third inconsistency, inside one envelope:** the filter ATTACK uses
+`env_seconds_to_rate` — the time-alone law — while its decay and release use the
+span law. Three different laws in six lines.
+
+### Why it is NOT being changed tonight
+
+**The reference is not solid enough.** §43 measured a transition *to target
+100* — the excursion upward. **Whether the release segment obeys the same law
+was never separately measured**, and eosed flagged this rather than letting it
+be generalised silently. Correcting a 15% error against an assumed reference is
+how a 15% error becomes a 40% one.
+
+The bench item, if it turns out to matter: measure the filter envelope's
+*release* the way §43 measured its rise. The calibration bank is deliberately
+filter-inert, so it needs a preset with a filter cord added — either a new one
+from here or one set up in RAM.
+
+**And the AKAI side is a separate question that has not been asked yet.** The
+AKAI's env2 stages are fitted as **times** (`a * exp(b * byte)` in seconds)
+while the E4XT's are rates. Unlike the amplitude release, matching seconds
+across that pair may be correct — the distance is already carried by
+`akai_env2_stage_seconds`. It needs the same treatment §AKAIRELSPAN got: check
+what each machine was actually metered for before deciding what to preserve.
