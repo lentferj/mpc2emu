@@ -883,6 +883,32 @@ def env_span_seconds_to_rate(span_db: float, seconds: float) -> int:
     return max(0, min(127, round(b)))
 
 
+#: The fastest envelope decay the E4XT actually SOUNDS at.
+#:
+#: MEASURED by eosed 2026-08-24, isolated voice, decay level 0, rate swept:
+#:
+#:     rate 0    SILENT           peak -73.7 dBFS   (noise floor -84.2)
+#:     rate 1    SILENT           peak -74.2
+#:     rate 2    burst  0.0 ms    peak -65.1
+#:     rate 3    burst 13.4 ms    peak -50.8
+#:     rate 5    burst 16.6 ms    peak -41.9
+#:     rate 8    burst 17.0 ms    peak -37.0
+#:
+#: **Rate 0 is not a very short decay. It is the envelope reaching zero before
+#: any audio leaves the voice.** Note the peak climbs with the rate as well as
+#: the duration — a slower decay lets more of the attack transient out before
+#: the envelope closes — so rate 0 loses the burst's amplitude, not just its
+#: length.
+#:
+#: That matters because a source can legitimately ask for a decay faster than
+#: this machine can render. Clamping to the fastest available rate is right in
+#: principle and wrong here, because the fastest available rate is silence:
+#: the AKAI mute-group re-model asks for a 10 ms cut and, clamped to 0,
+#: rendered the layer INAUDIBLE rather than brief (§AKAIMUTEGRP). The nearest
+#: expressible burst is a better approximation to 10 ms than nothing is.
+E4B_MIN_AUDIBLE_DECAY_RATE = 3
+
+
 def env_rate_to_span_seconds(span_db: float, rate_byte: int) -> float:
     """Seconds a rate byte takes to travel `span_db`. Inverse of
     `env_span_seconds_to_rate`.

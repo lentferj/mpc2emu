@@ -115,6 +115,7 @@ from models.common import (Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            e4xt_cutoff_position, e4xt_volume_byte, e4xt_pan_byte,
                            E4B_CUTOFF_MIN_HZ, E4B_CUTOFF_MAX_HZ,
                            env_level_byte_to_db,
+                           E4B_MIN_AUDIBLE_DECAY_RATE,
                            env_span_seconds_to_rate)
 from processors.loop_renderer import bake_alternating_loop
 from writers.atomic import atomic_write
@@ -931,7 +932,19 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
     decay_span = _env_level_db(sus)
     pzt[0] = min(127, _fenv_rate(voice.env_attack)); pzt[1] = _fenv_level(100.0)  # Atk1 → full
     pzt[2] = 0;                                      pzt[3] = _fenv_level(100.0)  # Atk2 hold full
-    pzt[4] = _env_span_rate(decay_span, voice.env_decay);        pzt[5] = sus     # Dcy1 → sustain
+    # A DECAY TO SILENCE MUST NOT ENCODE TO A RATE THAT IS SILENT.
+    # `_env_span_rate` clamps a too-fast request to 0, and rate 0 with a zero
+    # sustain closes the envelope before any audio leaves the voice -- measured
+    # by eosed, not inferred. So a source asking for a 10 ms cut got an
+    # inaudible layer instead of a brief one. Floor it at the fastest rate that
+    # actually sounds; the nearest expressible burst approximates the request
+    # far better than nothing does. Only when a decay was ASKED FOR and it
+    # falls to silence: rate 0 into a non-zero sustain is a legitimate instant
+    # jump and is left alone.
+    _dcy = _env_span_rate(decay_span, voice.env_decay)
+    if _dcy < E4B_MIN_AUDIBLE_DECAY_RATE and voice.env_decay > 0.0 and sus == 0:
+        _dcy = E4B_MIN_AUDIBLE_DECAY_RATE
+    pzt[4] = _dcy;                                   pzt[5] = sus                 # Dcy1 → sustain
     pzt[6] = 0;                                      pzt[7] = sus                 # Dcy2 hold sustain
     # RELEASE: sustain -> silence, i.e. the COMPLEMENT of the decay span.
     # INFERRED, not measured. What eosed measured is that release rate is
