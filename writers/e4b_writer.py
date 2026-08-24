@@ -117,7 +117,8 @@ from models.common import (Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            env_level_byte_to_db,
                            E4B_MIN_AUDIBLE_DECAY_RATE,
                            e4xt_resonance_byte,
-                           env_span_seconds_to_rate)
+                           env_span_seconds_to_rate,
+                           env_db_per_s_to_rate_byte)
 from processors.loop_renderer import bake_alternating_loop
 from writers.atomic import atomic_write
 
@@ -631,6 +632,7 @@ _fenv_seconds = env_rate_to_seconds
 _fenv_sustain = env_sustain_to_byte
 _env_level_db = env_level_byte_to_db      #: level byte -> dB below peak
 _env_span_rate = env_span_seconds_to_rate #: (span_dB, seconds) -> rate byte
+_env_db_per_s_to_rate = env_db_per_s_to_rate_byte  #: dB/s -> rate byte
 
 #: Peak-to-silence distance, used only for the RELEASE complement. Taken as the
 #: level law's own value at byte 0, so the two stages are internally consistent
@@ -1005,8 +1007,24 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
     # rather than a trend. That constrains the independence; the span
     # arithmetic `full - decay` is the part still unmeasured, and it is one
     # cheap bank to settle (fixed sustain, sweep the release byte, read t-40dB).
+    #
+    # AND A CARRIED RATE WINS OVER BOTH (§AKAIRELSPAN, 2026-08-24). The span
+    # arithmetic below is only as good as `_ENV_FULL_SPAN_DB`, which is this
+    # machine's level law evaluated at byte 0 -- not a floor anyone metered.
+    # The AKAI's equivalent is 60.07 dB, equally unmeasured, and matching
+    # SECONDS across the two made every AKAI-sourced release 1.6-4x too fast
+    # while leaving the decay right to 1-7%. The decay stops at the sustain
+    # level, which both machines agree on; the release stops at "silence",
+    # which neither of them defines.
+    #
+    # So when the reader knew its own rate law it hands us the rate, and the
+    # rate goes straight to a byte. Sources that genuinely specify a duration
+    # (MPC, XPM) carry `None` and take the span path exactly as before.
     rel_span = max(0.0, _ENV_FULL_SPAN_DB - decay_span)
-    pzt[8] = _env_span_rate(rel_span, voice.env_release);        pzt[9] = _fenv_level(0.0)
+    _rel_rate = getattr(voice.amp_env, 'release_rate_db_per_s', None)
+    pzt[8] = (_env_db_per_s_to_rate(_rel_rate) if _rel_rate
+              else _env_span_rate(rel_span, voice.env_release))
+    pzt[9] = _fenv_level(0.0)
     pzt[10] = 0;                                     pzt[11] = _fenv_level(0.0)   # Rls2 stay 0
     # Filter-envelope SHAPE — always written (§O, 2026-06-13).  Its depth/sign is
     # the Cord 05 (FilterEnv→FilterFreq) amount in the mod table (set below only

@@ -41,6 +41,7 @@ from models.common import (Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            LoopType, Envelope, lfo_rate_byte_to_hz,
                            env_rate_to_seconds, env_byte_to_level,
                            env_rate_to_span_seconds, env_level_byte_to_db,
+                           env_rate_byte_to_db_per_s,
                            e4xt_byte_to_resonance,
                            ENV_FULL_SPAN_DB,
                            cord_byte_to_amount,
@@ -690,7 +691,19 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
         zones              = zones,
         non_transpose      = non_transpose,
         chorus_amount      = chorus_amount,
-        amp_env            = Envelope(env_attack, env_decay, env_sustain, env_release),
+        amp_env            = Envelope(env_attack, env_decay, env_sustain, env_release,
+                                      # The rate the byte actually produces,
+                                      # carried alongside the seconds so an
+                                      # E4B -> AKAI conversion moves the
+                                      # quantity both machines measure rather
+                                      # than the one neither defines
+                                      # (§AKAIRELSPAN). Rate 0 is the
+                                      # deliberate "instant" encoding and not
+                                      # a point on the curve, so it carries
+                                      # nothing and the seconds stand.
+                                      release_rate_db_per_s=(
+                                          env_rate_byte_to_db_per_s(pzt[8])
+                                          if pzt[8] > 0 else None)),
         filter_env         = Envelope(filter_env_attack, filter_env_decay,
                                       filter_env_sustain, filter_env_release),
         filter_type        = filter_type,

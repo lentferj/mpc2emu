@@ -651,9 +651,22 @@ def akai_env_bytes(env) -> tuple:
                         span_decay_db, _AK_DECAY1_RATE, default=50)
 
     # Release travels from the sustain level down to the floor.
-    span_rel_db = _AK_SUSTAIN_DB_PER_UNIT * sus
-    r = _rate_law_value(getattr(env, 'release', 0.5) or 0.5,
-                        span_rel_db, _AK_RELSE1_RATE, default=45)
+    #
+    # PREFER A CARRIED RATE over the seconds when the source supplied one
+    # (§AKAIRELSPAN). A release ends at "silence" and the two machines disagree
+    # about where that is by 60.07 dB against 97.82 -- two numbers neither of
+    # them was ever metered for. When the reader knew its own rate law, that
+    # rate is the quantity both machines actually measure and it goes across
+    # untouched; the seconds are the derived figure and only stand in when
+    # there is nothing better.
+    _rate = getattr(env, 'release_rate_db_per_s', None)
+    if _rate:
+        _a, _b, _lo, _hi = _AK_RELSE1_RATE
+        r = int(round(max(0, min(127, math.log(_rate / _a) / _b))))
+    else:
+        span_rel_db = _AK_SUSTAIN_DB_PER_UNIT * sus
+        r = _rate_law_value(getattr(env, 'release', 0.5) or 0.5,
+                            span_rel_db, _AK_RELSE1_RATE, default=45)
 
     # Attack rises from silence to the peak, so unlike decay and release its
     # span is fixed and it needs no sustain-dependent distance.
@@ -684,13 +697,27 @@ def akai_env_from_bytes(atk: int, dec: int, sus: int, rel: int):
     """
     from models.common import Envelope
     sus_frac = _akai_sustain_fraction(sus)
+    _a, _b, _lo, _hi = _AK_RELSE1_RATE
     return Envelope(
         attack=_ak_attack_seconds(atk),
         decay=_ak_rate_seconds(dec, _AK_SUSTAIN_DB_PER_UNIT * (99 - sus),
                                _AK_DECAY1_RATE),
         sustain=sus_frac,
         release=_ak_rate_seconds(rel, _AK_SUSTAIN_DB_PER_UNIT * sus,
-                                 _AK_RELSE1_RATE))
+                                 _AK_RELSE1_RATE),
+        # THE RATE ITSELF, alongside the seconds (§AKAIRELSPAN).
+        #
+        # `release` above is the same number it always was and every existing
+        # consumer keeps working. This is the quantity that actually survives
+        # the trip to another rate machine: the seconds are computed over a
+        # 60.07 dB scale here and read back over a 97.82 dB one by the E4B
+        # writer, and since both figures are parameter-scale artifacts rather
+        # than measured floors, matching seconds across them made every
+        # AKAI-sourced release 1.6-4x too fast.
+        #
+        # The DECAY deliberately gets no such field: it ends at the sustain
+        # level, which both machines agree on, so its seconds are sound.
+        release_rate_db_per_s=_a * math.exp(_b * max(0, rel)))
 
 
 def _ak_attack_seconds(byte: int) -> float:

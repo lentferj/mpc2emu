@@ -1067,10 +1067,53 @@ ENV_RATE_K = 0.0581
 # ADDS to the plateau, shrinking the apparent span). Above it the plateau
 # saturates against the peak it is divided by.
 #
-# RATE LAW, from ENVSPAN and confirmed on SUSLEVEL's decay times at 26.5 dB/s
-# against 27.9 (5%, unexplained and not worth chasing):
+# RATE LAW -- REPLACED 2026-08-24 after a swept calibration (§E4BRATEANCHOR).
 #
-#     dB per second = 27.9 x 2 ** (-(byte - 72) / 12.3)
+# WAS:  dB/s = 27.9 x 2 ** (-(byte - 72) / 12.3),  from ENVSPAN, "confirmed on
+#       SUSLEVEL's decay times at 26.5 dB/s against 27.9 (5%, unexplained and
+#       not worth chasing)".
+#
+# It was worth chasing. That law is 13-19% FAST across every byte anyone has
+# since measured, and the 5% residual its own comment dismissed was the visible
+# corner of it. It stayed invisible for months because EVERY path through this
+# converter uses the law in BOTH directions, so a round trip through our own
+# code cancels it exactly -- our tests could not see it and no test written in
+# the same style ever would.
+#
+# NOW, measured on a stationary looped white-noise subject, one voice, filter
+# open, no filter envelope, no LFO, envelope jumping straight to sustain and
+# holding so the release is the only thing moving (eosed, 2026-08-24):
+#
+#     byte    measured   this law   ratio
+#      60      46.48      46.59     1.00
+#      72      23.70      23.65     1.00
+#      88       9.67       9.58     1.01
+#     100       4.84       4.86     1.00
+#
+# Residuals 0.41-0.43, thirds within +/-0.12, spans of 56 dB. **Byte 100 is
+# twelve bytes outside the window the law was originally fitted over and still
+# lands at 1.00x**, so 60..100 is now a MEASURED range rather than an
+# extrapolation -- which is what §LAWRANGE asks for and what the old constants
+# never had.
+#
+# A seven-point refit of our own was rejected in favour of these constants: two
+# of its points came from fits whose lower edge stood in the noise floor, which
+# levers a log-domain slope downward, and it predicts 23.88 at byte 72 against
+# a measured 23.70 where this law gives 23.65. **A law measured across a range
+# beats a fit pulled by two bad points**, even when the fit is ours.
+#
+# THE PREMISE, measured the same session and worth stating because everything
+# downstream is quoted in dB/s: the byte is a SPEED and not a duration. Two
+# sustain levels 17 dB apart, same rate byte, on two independent noise draws:
+# 27.96 / 28.31 / 27.97 / 28.33 dB/s -- same to 1.3%.
+#
+# AND THE RATE DOES NOT SCALE WITH KEY OR WITH DISTANCE FROM ROOT. Six captures
+# of ONE sample at root distances -24 to +24, achieved by moving the root rather
+# than the note: 27.95 to 28.03, spread 0.3%. So an apparent rate that varies
+# across a keyboard is the SAMPLE's own contour showing through a fit that
+# assumes the envelope is the only thing moving -- not the machine.
+#
+#     dB per second = 1382 x exp(-0.0565 x byte)
 #
 #: NAMED FOR THE BYTE, not just 'level'. `ENV_LEVEL_DB_INTERCEPT` already
 #: exists below for the sustain-PERCENT law and silently shadowed these when
@@ -1078,9 +1121,17 @@ ENV_RATE_K = 0.0581
 #: name 80 lines later, and every reading came out 0 dB. Python said nothing.
 ENV_LEVELBYTE_DB_INTERCEPT = 97.82   #: dB below peak at level byte 0
 ENV_LEVELBYTE_DB_PER_BYTE  = 0.7718  #: dB recovered per level byte
-ENV_RATE_DB_PER_S_REF  = 27.9     #: dB/s at ENV_RATE_BYTE_REF
+#: The swept law's own two constants. Everything below is DERIVED from these
+#: rather than transcribed alongside them: the previous set was three numbers
+#: kept consistent by hand, and a hand-maintained anchor is exactly what went
+#: stale. Change these two and the rest follows.
+ENV_RATE_SWEEP_A = 1382.0    #: dB/s at byte 0 (extrapolated; fitted 60..100)
+ENV_RATE_SWEEP_K = 0.0565    #: per byte, natural log
+
 ENV_RATE_BYTE_REF      = 72
-ENV_RATE_HALVING_BYTES = 12.3     #: +12.3 on the byte halves the rate
+ENV_RATE_HALVING_BYTES = math.log(2.0) / ENV_RATE_SWEEP_K   #: 12.268
+ENV_RATE_DB_PER_S_REF  = ENV_RATE_SWEEP_A * math.exp(       #: 23.648
+    -ENV_RATE_SWEEP_K * ENV_RATE_BYTE_REF)
 
 
 def env_level_byte_to_db(level_byte: int) -> float:
@@ -1095,6 +1146,32 @@ def env_rate_byte_to_db_per_s(rate_byte: int) -> float:
     b = max(0, min(127, int(rate_byte)))
     return ENV_RATE_DB_PER_S_REF * 2.0 ** (
         -(b - ENV_RATE_BYTE_REF) / ENV_RATE_HALVING_BYTES)
+
+
+def env_db_per_s_to_rate_byte(db_per_s: float) -> int:
+    """A slew rate in dB/s -> the EOS rate byte that produces it.
+
+    The exact inverse of `env_rate_byte_to_db_per_s`, and the ONLY correct way
+    to move a release between two rate machines (§AKAIRELSPAN).
+
+    **Seconds are the wrong interchange currency for a release.** A decay stops
+    at the sustain level, which both an AKAI and an E4XT agree on and either
+    can be metered for, so converting a decay through seconds is sound. A
+    release stops at *silence* -- and the AKAI's notion of that is 60.07 dB
+    below peak (its sustain byte scale x 99) while the E4XT's is 97.82 (its
+    level law at byte 0). **Neither number was ever measured.** Both are
+    parameter-scale artifacts, and matching seconds across them made every
+    AKAI-sourced release 1.6-4x too fast depending on the sustain.
+
+    The rate laws on both sides ARE hardware. So carry the rate: it is the
+    quantity that is measured on both machines rather than the one that is
+    invented on both.
+    """
+    if db_per_s <= 0.0:
+        return 0
+    b = ENV_RATE_BYTE_REF - ENV_RATE_HALVING_BYTES * math.log2(
+        db_per_s / ENV_RATE_DB_PER_S_REF)
+    return max(0, min(127, round(b)))
 
 
 def env_span_seconds_to_rate(span_db: float, seconds: float) -> int:
@@ -1616,6 +1693,24 @@ class Envelope:
     decay:   float = 0.3
     sustain: float = 0.8
     release: float = 0.5
+
+    #: The release's slew rate in dB/s, when the SOURCE machine measured one.
+    #:
+    #: `None` means "seconds are all I have" -- an MPC or an XPM really does
+    #: specify a duration, and nothing about those paths changes.
+    #:
+    #: Set by readers whose machine is a RATE machine, consumed by writers
+    #: whose machine is one. It exists because `release` alone cannot survive
+    #: the trip (§AKAIRELSPAN): a release ends at "silence", the two samplers
+    #: disagree about where that is by 60.07 dB against 97.82, and NEITHER
+    #: number was ever measured. Carrying the rate carries the quantity both
+    #: machines were metered for instead of the one both of them invented.
+    #:
+    #: Deliberately NOT applied to the filter envelope, whose release ends at a
+    #: cutoff LEVEL rather than at silence -- a defined endpoint on both sides,
+    #: so the span arithmetic is correct there and this would be a wrong fix
+    #: to a problem it does not have.
+    release_rate_db_per_s: float | None = None
 
 
 def _amp_env() -> Envelope:    # amplitude-envelope default
