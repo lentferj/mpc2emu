@@ -194,6 +194,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIFIXPLAN2 — what is left, and what each item is blocked on (2026-08-23)](#akaifixplan2-what-is-left-and-what-each-item-is-blocked-on-2026-08-23)
 - [§LAWRANGE — the audit: what every fitted law does outside its calibrated range (2026-08-24)](#lawrange-the-audit-what-every-fitted-law-does-outside-its-calibrated-range-2026-08-24)
 - [§NAMEBITFLIP — a one-bit name corruption in sampler RAM, and why it matters to us (2026-08-24)](#namebitflip-a-one-bit-name-corruption-in-sampler-ram-and-why-it-matters-to-us-2026-08-24)
+- [§AKAILFO — the reader never read the LFO, so every conversion lost its vibrato (2026-08-24)](#akailfo-the-reader-never-read-the-lfo-so-every-conversion-lost-its-vibrato-2026-08-24)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -18005,3 +18006,54 @@ That is a false finding shaped exactly like a real one, and this project has
 spent two days learning to distrust those. **If a dangling zone ever makes no
 sense, re-read the name and compare it against the DISK rather than against
 memory before believing it.**
+
+## §AKAILFO — the reader never read the LFO, so every conversion lost its vibrato (2026-08-24)
+
+Jan, after the attack was settled: *"the AKAI has a lot longer release, and a
+little vibrato during the sustain and release."* The second half is this, and it
+is the ninth instance of the week's pattern.
+
+**A grep for `lfo` in `parsers/akai_s3000_parser.py` returned nothing.** The
+program header carries three fields and the reader read none of them, so every
+AKAI-sourced conversion we have ever made came out with no vibrato at all.
+
+    program 0x21  LFORAT   32
+    program 0x22  LFODEP    8
+    program 0x23  LFODEL   20     (s3ked's name; calling it LFODLY greps wrong)
+
+### All three laws already existed
+
+`s3k/scales.py` has carried them since 2026-08-12, and — unusually — each is
+fitted across the **whole 0..99 field** rather than a window:
+
+    LFORAT  Hz     0.11867 * x - 0.04              r2 0.9995
+    LFODEP  cents  19.4932 * x   PEAK-TO-PEAK      r2 0.99949
+    LFODEL  s      0.06905 * x / (103.41 - x)      r2 0.999555
+
+So this needed no bench time at all. I asked for three measurements and two of
+them were already done; asking first would have saved the request.
+
+### What this program actually asks for
+
+    LFORAT 32  ->  3.757 Hz
+    LFODEP  8  ->  155.9 cents peak-to-peak, i.e. +/-78 cents
+    LFODEL 20  ->  16.6 ms
+
+**Two of those contradict what the symptom suggested.** ±78 cents is not "a
+little" vibrato — it is over three quarters of a semitone. And 16.6 ms is
+effectively no delay, so the vibrato runs from note-on rather than arriving
+later. s3ked's reading, which I take: if it seems to start during the sustain,
+that is the attack masking it rather than a delay.
+
+LFODEP being PEAK-TO-PEAK matters. Our `lfo1_to_pitch` is a ONE-SIDED depth
+against `LFO_PITCH_FULL_CENTS`, so the conversion halves as well as scaling.
+Getting that wrong would double every vibrato — the same seam as the K2000 LFO
+depth, where the half-swing convention had to be checked on both sides before a
+factor of two could be ruled out.
+
+### Still unchecked, and flagged by s3ked rather than by me
+
+Those laws are for the program-level fields with LFO1 driving pitch. A keygroup
+`MODVPITCH` or program `MODSPITCH` route would scale on top of them, and the
+numbers above are the unmodified case. Program offset 87 and keygroup 154 want
+reading before 155.9 cents is trusted for an arbitrary source.

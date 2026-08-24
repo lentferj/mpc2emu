@@ -214,7 +214,26 @@ _AK_FILTER_SUPERSEDED = (6.4597, 0.07100, 44, 92)    # Hz -- see AKAI_FILTER_LAW
 #
 #   rate = a * exp(b * value),  time = span / rate
 _AK_DECAY1_RATE = (23525.6, -0.09776, 45, 85)   # dB/s,            r2 0.99998
-_AK_RELSE1_RATE = (22055.3, -0.09683, 55, 70)   # dB/s,            r2 0.99956
+# RELSE1 REFITTED 2026-08-24 (s3ked), 11 points, log-space r2 0.99996. The
+# constants barely move -- the VALUE of the run is the RANGE: **validated
+# 45..99 where it was 55..70**, so the 8.7% of corpus keygroups above the old
+# window are now measured rather than extrapolated, and this program's own
+# RELSE1 75 with them.
+#
+# It also REFUTED a hypothesis of ours, which is the more useful half. We
+# expected the curve to flatten above the fit, making the true release several
+# seconds and explaining a difference Jan heard. It does not flatten: worst
+# error 4.1% at RELSE1 99, twenty-nine units above the old top, and at 75 the
+# measured release is 2.62 s against 2.59 s extrapolated. Whatever he is
+# hearing, it is not the fit range (§LAWRANGE).
+#
+# BELOW 45 IS STILL UNVALIDATED and s3ked marked it rather than filling it: at
+# RELSE1 35 and below their fit collapses to r2 0.51-0.73 AND stops depending
+# on the setting -- 194, 192, 209, 155, 256, 305 dB/s for bytes 0..25.
+# Non-monotonic and roughly constant is the signature of measuring the rig's
+# own tail rather than the envelope, because the release is over in a
+# millisecond or two.
+_AK_RELSE1_RATE = (23042.3, -0.09754, 45, 99)   # dB/s,  log-space r2 0.99996
 
 #: ATTAK1 -> seconds: `t = a * exp(b * ATTAK1)`, a RISE TIME and not a rate.
 #: HW-MEASURED by s3ked (§141, 2026-08-20), time from note-on to 90% of the

@@ -618,6 +618,58 @@ AKAI_TUNE_UNITS_PER_SEMITONE = 256
 #: not good enough to quote as a machine constant.
 AKAI_MUTE_CUT_SECONDS = 0.010
 
+#: The AKAI LFO1, all three fields, fitted across the WHOLE 0..99 field rather
+#: than a window. s3ked's `s3k/scales.py`, 2026-08-12:
+#:
+#:     LFORAT  Hz     0.11867 * x - 0.04              r2 0.9995
+#:     LFODEP  cents  19.4932 * x   (PEAK-TO-PEAK)    r2 0.99949
+#:     LFODEL  s      0.06905 * x / (103.41 - x)      r2 0.999555
+#:
+#: **The reader read none of them until 2026-08-24** — a grep for "lfo" in this
+#: parser returned nothing — so every AKAI-sourced conversion lost its vibrato
+#: entirely. Ninth instance of the pattern that ran through this week: a writer
+#: law measured and wired while the read path was never done. Jan heard it as
+#: "a little vibrato during the sustain and release" that our conversion did
+#: not have.
+#:
+#: LFODEP is peak-to-peak, so full scale is 1930 cents pp = +/-9.6 semitones —
+#: a much wider range than the panel suggests. Our `lfo1_to_pitch` is a
+#: one-sided depth against `LFO_PITCH_FULL_CENTS`, so the conversion halves it.
+#:
+#: NOTE THE FIELD NAME: s3ked calls the delay `LFODEL`, at program offset 35.
+#: Calling it LFODLY sends a grep to the wrong place in their tree.
+AKAI_LFO_RATE_HZ_PER_UNIT = 0.11867
+AKAI_LFO_RATE_HZ_OFFSET = -0.04
+AKAI_LFO_DEPTH_CENTS_PP_PER_UNIT = 19.4932
+AKAI_LFO_DELAY_NUM = 0.06905
+AKAI_LFO_DELAY_POLE = 103.41
+
+
+def akai_lfo_rate_hz(byte: int) -> float:
+    """LFORAT -> Hz."""
+    return max(0.0, AKAI_LFO_RATE_HZ_PER_UNIT * max(0, min(99, byte))
+               + AKAI_LFO_RATE_HZ_OFFSET)
+
+
+def akai_lfo_depth_to_pitch(byte: int) -> float:
+    """LFODEP -> our one-sided `lfo1_to_pitch` depth, 0..1.
+
+    The field is PEAK-TO-PEAK cents and our model field is one-sided against
+    `LFO_PITCH_FULL_CENTS`, so this halves as well as scaling. Getting that
+    wrong would double every vibrato, and it is the same class of seam as the
+    K2000 LFO depth where the half-swing convention had to be checked on both
+    sides before the factor of two could be ruled out.
+    """
+    cents_pp = AKAI_LFO_DEPTH_CENTS_PP_PER_UNIT * max(0, min(99, byte))
+    return max(0.0, min(1.0, (cents_pp / 2.0) / LFO_PITCH_FULL_CENTS))
+
+
+def akai_lfo_delay_seconds(byte: int) -> float:
+    """LFODEL -> seconds. A pole, not a line: it runs away near byte 99."""
+    b = max(0, min(99, byte))
+    return AKAI_LFO_DELAY_NUM * b / max(1e-6, AKAI_LFO_DELAY_POLE - b)
+
+
 #: FILQ (keygroup 149) -> resonance. s3ked §52, 2026-08-12, r2 0.999975,
 #: replacing their own earlier linear 0.5764 dB/step reading:
 #:

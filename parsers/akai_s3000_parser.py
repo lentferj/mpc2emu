@@ -44,6 +44,7 @@ from models.common import (
     AKAI_ENV2_DEPTH_OFFSET, AKAI_ENV2_DEPTH_MAX, akai_env2_stage_seconds,
     AKAI_VLOUD_DB_PER_UNIT, AKAI_TUNE_UNITS_PER_SEMITONE,
     akai_filq_to_01, AKAI_MUTE_CUT_SECONDS,
+    akai_lfo_rate_hz, akai_lfo_depth_to_pitch, akai_lfo_delay_seconds,
     Envelope)
 
 #: Keygroup byte offsets that had no name here until 2026-08-23.
@@ -537,6 +538,9 @@ def parse_program_bytes(data: bytes, fallback_name: str = '',
         loudness=data[0x19],
         pan=_s8(data[0x18]),
         tune=_s16(data, 0x41),
+        # LFO1, read by nobody until 2026-08-24 (§AKAILFO). The AKAI LFO is
+        # per PROGRAM, not per keygroup, so it lands on every voice.
+        lfo_rate=data[0x21], lfo_depth=data[0x22], lfo_delay=data[0x23],
         keygroups=keygroups,
     )
 
@@ -607,6 +611,13 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
         # RESONANCE. FILQ was read by nobody and written by nobody, so every
         # AKAI-sourced filter came out flat. Real programs lean on it hard.
         voice.filter_resonance = akai_filq_to_01(kg.get('filter_q', 0))
+        # VIBRATO. Dropped entirely until 2026-08-24: the reader never touched
+        # the LFO, so every AKAI-sourced conversion lost it. Per-program on
+        # this machine, so every voice gets the same.
+        if prog.get('lfo_depth'):
+            voice.lfo1_rate = akai_lfo_rate_hz(prog.get('lfo_rate', 0))
+            voice.lfo1_to_pitch = akai_lfo_depth_to_pitch(prog['lfo_depth'])
+            voice.lfo1_delay = akai_lfo_delay_seconds(prog.get('lfo_delay', 0))
         voice.filter_cutoff = _cutoff_of(kg['filter_freq'], prog['is_s3000'])
         # AMPLITUDE ENVELOPE. Never assigned until 2026-08-23, so every
         # AKAI-sourced voice carried VoiceLayer's default and the two distinct
