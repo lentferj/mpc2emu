@@ -690,9 +690,19 @@ def akai_env_bytes(env) -> tuple:
     sus = akai_sustain_byte(getattr(env, 'sustain', 0.8))
 
     # Decay travels from peak DOWN to the sustain level.
-    span_decay_db = _AK_SUSTAIN_DB_PER_UNIT * (99 - sus)
-    d = _rate_law_value(getattr(env, 'decay', 0.3) or 0.3,
-                        span_decay_db, _AK_DECAY1_RATE, default=50)
+    # PREFER A CARRIED RATE, for the same reason the release does and one more:
+    # at full sustain the decay span is ZERO, so `_rate_law_value` divides
+    # nothing by the time and falls through to its default. That default fired
+    # on essentially every zone of the sound libraries, quietly replacing the
+    # source's own decay byte with 50.
+    _drate = getattr(env, 'decay_rate_db_per_s', None)
+    if _drate:
+        _a, _b, _lo, _hi = _AK_DECAY1_RATE
+        d = int(round(max(0, min(99, math.log(_drate / _a) / _b))))
+    else:
+        span_decay_db = _AK_SUSTAIN_DB_PER_UNIT * (99 - sus)
+        d = _rate_law_value(getattr(env, 'decay', 0.3) or 0.3,
+                            span_decay_db, _AK_DECAY1_RATE, default=50)
 
     # Release travels from the sustain level down to the floor.
     #
@@ -749,6 +759,11 @@ def akai_env_from_bytes(atk: int, dec: int, sus: int, rel: int):
         sustain=sus_frac,
         release=_ak_rate_seconds(rel, _AK_SUSTAIN_DB_PER_UNIT * sus,
                                  _AK_RELSE1_RATE),
+        # The DECAY's rate too, for a narrower reason: at SUSTN1 99 the decay
+        # has nowhere to travel, so its seconds are 0 and the byte is
+        # unrecoverable from them. See `Envelope.decay_rate_db_per_s`.
+        decay_rate_db_per_s=_AK_DECAY1_RATE[0] * math.exp(
+            _AK_DECAY1_RATE[1] * max(0, dec)),
         # THE RATE ITSELF, alongside the seconds (§AKAIRELSPAN).
         #
         # `release` above is the same number it always was and every existing

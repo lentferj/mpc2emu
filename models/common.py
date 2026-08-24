@@ -1807,6 +1807,24 @@ class Envelope:
     #: interpreter here is 3.11.
     release_rate_db_per_s: Optional[float] = None
 
+    #: The DECAY's slew rate in dB/s, when the source machine measured one.
+    #:
+    #: Added for a narrower reason than the release's: a decay to FULL SUSTAIN
+    #: has nowhere to travel, so its seconds are 0 whatever the rate byte says,
+    #: and the byte cannot be recovered from them. Measured across the AKAI
+    #: sound libraries 2026-08-24, `amp_decay` changed on ~100% of
+    #: round-tripped zones -- every one a full-sustain keygroup falling through
+    #: to the writer's default. Every other sustain level round-tripped
+    #: exactly.
+    #:
+    #: Inaudible while the sustain stays full, and wrong the moment anyone
+    #: edits the sustain on the machine.
+    #:
+    #: **The E4B path deliberately ignores this.** Its decay runs peak ->
+    #: sustain, both ends defined, so the seconds are sound there and a rate
+    #: would be a second way of saying the same thing (§AKAIRELSPAN).
+    decay_rate_db_per_s: Optional[float] = None
+
 
 def _amp_env() -> Envelope:    # amplitude-envelope default
     return Envelope(0.001, 0.3, 0.8, 0.5)
