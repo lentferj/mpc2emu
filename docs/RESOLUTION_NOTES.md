@@ -18866,40 +18866,73 @@ Within 1% at 69 and 5-10% fast at 80 — because 69 was far better constrained i
 the original fit than 80 was. So inverting §63's prefactor for 15.224 dB/s
 gives 79.7 while the machine says 78.1/78.9.
 
-**Adopt §63's slope; take the byte from direct measurement.** The two-point
-solve is thin as a law and is direct measurement in exactly the region being
-hardcoded, on the actual samples — and it agrees with §63 to about a byte
-rather than contradicting it. The prefactor `1382` is where the anchor error
-lives and it should not be the thing inverted.
+~~**Adopt §63's slope; take the byte from direct measurement.**~~ **WITHDRAWN
+the same evening — see "Seven points, and the byte is 80" below.** The apparent
+5-10% bias at byte 80 was a fit window extending into the noise floor, not the
+law. Corrected, §63 is accurate to 1-3% at both bytes and inverting it was
+right all along. The recommendation is now the opposite of this paragraph: take
+the byte from the law, and prefer a refit over either the law verbatim or a
+two-point solve.
 
-### Seven points now, and three routes agree on the byte
+### Seven points, and the byte is 80
 
-Measurements in hand 2026-08-24, all on the E4XT, two keygroups or three notes
-each:
+**The first version of this table was wrong and the way it was wrong is the
+most useful thing in this section.** It read byte 80 at 13.44 / 14.24 and
+concluded that the replacement law ran 5-10% fast there, that the byte should
+therefore be taken from direct measurement rather than by inverting the law,
+and that 78-79 was the answer. All three of those are withdrawn.
 
-        byte    measured           ours        §63          7-point fit
-         69     27.36 / 27.97      +18/+21%    +0/+2%       -3/-5%
-         80     13.44 / 14.24      +25/+32%    +6/+12%      +3/+9%
-         99     5.34 / 5.36 / 5.39 +13/+14%    -4/-5%       -1/-2%
+**The cause was the fit window's lower edge, not the machine.** Those fits ran
+down to floor+6 dB. The noise floor flattens the bottom of a log-domain fall:
+points near it sit above the true line and lever the fitted slope down. Byte 80
+is the slowest release measured and therefore spends the longest near the floor,
+so it took the most damage — which is exactly why **the most scattered pair was
+also the slowest one**, the thing this section had flagged as structural.
 
-Refitting our own parameterisation to all seven gives **halving 12.86 bytes,
-22.64 dB/s at byte 72** (against our 12.3 and 27.9). Inverting each law for the
-AKAI's 15.224 dB/s:
+Re-fitting the same captures from floor+15 instead:
+
+        capture    floor+6            floor+15
+        v1_r69     27.14  +.2 -.2 +.1    28.35   +.0 -.0 +.0
+        v1_r80     14.58  +.2 -.3 +.1    15.52   +.0 -.1 +.1
+        v3_r69     27.48  +.1 -.1 +.0    28.24   +.0 -.0 -.0
+        v3_r80     14.10  +.2 -.4 +.2    14.99   +.1 -.1 +.0
+
+The same `+ - +` curvature in all four at floor+6, gone at floor+15. That
+signature **is** floor contamination, and it was visible in the residuals the
+whole time — which is the argument for printing residuals by thirds rather than
+an R2, since an R2 would have looked fine.
+
+**Corrected, with our parameterisation refitted to all seven points:**
+
+        byte    measured             ours       §63        7-pt refit
+         69     28.35 / 28.24        +16.5/+17.0%   -1.2/-0.8%   -0.5/-0.2%
+         80     15.52 / 14.99        +14.5/+18.6%   -3.0/+0.4%   -1.2/+2.3%
+         99     5.34 / 5.36 / 5.39   +13.0/+14.1%   -3.7/-4.6%   +0.3/-0.6%
+
+        refit:  halving 12.519 bytes, 23.882 dB/s at byte 72
+        §63:    halving 12.268,       23.648
+        ours:   halving 12.300,       27.900
+
+**The refit holds all seven points within 2.3%** across bytes 69-99. §63 is
+within 4.6% and slightly low throughout. Ours is 13-19% fast **uniformly**,
+which is the signature of a pure anchor error — our slope was right all along.
+
+Inverting each for the AKAI's 15.224 dB/s:
 
         ours        82.75
         §63         79.79
-        7-point     79.36
-        eosed's direct two-point solve   78.1 / 78.9
+        7-pt refit  80.13
+        direct solve from the corrected pairs   80.04
 
-**Three independent routes land on 79; ours is the outlier by three and a half
-bytes.** That is the number to write when this is wired.
+**Three routes land on 80.** Write 80, and prefer the refit's constants over
+§63's: same slope to 2%, better anchor, fitted to every point we have.
 
-**One residual worth carrying into the sweep: byte 80 is over-predicted by every
-law, including the one fitted to it** (+3 to +32%), and its two measurements are
-also the most scattered pair (6% apart, against 2% at byte 69 and 0.9% at 99).
-Either the curve is not a pure exponential there or that measurement has a
-problem. The sweep should resolve which, and the residuals-by-thirds output
-exists for exactly this.
+### What still survives, and it is the anomaly not the residual
+
+The high keygroup's curvature is **not** floor contamination. At floor+15 n84
+still gives thirds of **-0.80 / +1.79 / -0.96** with residual 1.78, against
+±0.1 everywhere else. Real curvature, three shapes, still unexplained, still
+needs the bench.
 
 ### The sweep that should happen before this is trusted
 
