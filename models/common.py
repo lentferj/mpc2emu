@@ -1297,7 +1297,30 @@ def env_sustain_from_byte(byte: int) -> float:
 #: intended, and there is no byte between 1 and 2 to correct it with. Not
 #: compensated here — a fudge factor on one byte would be a fit to a single
 #: point on one cord — but recorded so it is not rediscovered.
+#: **AND THE FIRST STEP IS ASYMMETRIC IN SIGN.** The 0.40 above was measured on
+#: the NEGATIVE side only. Sweeping the same slot on the same voices, one sign
+#: at a time (eosed, 2026-08-24):
+#:
+#:     amount  +1   8.48 rms cents      amount  +2   20.84
+#:     amount  -1   3.78                amount  -2   16.17
+#:     amount  +1   8.48  (repeat, reproducible)
+#:
+#: **+1 delivers 2.24x what -1 does**, converging to 1.29x at |2| and closing
+#: as the magnitude grows. So "amount 1 gives 40% of a linear unit" is true
+#: going down and roughly true going up — a positive 1 is close to linear.
+#:
+#: Consequence for the writer's deliberate triangle-phase negation: at these
+#: depths **the negation costs more than half the modulation**. If the phase
+#: inversion is worth having, the magnitude must be re-derived on the negative
+#: side rather than carried across — and at |1| no negative value reaches a
+#: target of 7.35 rms, since -1 gives 3.78 and -2 gives 16.17.
+#:
+#: Cause not established. Two's-complement rounding in the encoding is the
+#: obvious guess and is NOT supported by this codec: `cord_amount_to_byte` is
+#: symmetric about zero here, +0.00787 -> +1 and -0.00787 -> -1. So the
+#: asymmetry is in the machine rather than in our arithmetic.
 CORD_AMOUNT_FIRST_STEP_FRACTION = 0.40
+CORD_AMOUNT_POS_OVER_NEG_AT_ONE = 2.24
 
 
 def cord_amount_to_byte(amount: float) -> int:

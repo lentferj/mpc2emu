@@ -18481,6 +18481,44 @@ either a wrong one or none.
 to a single measured point, would be exactly the kind of thing this week has
 spent its time removing.
 
+### AND THE FIRST STEP IS ASYMMETRIC IN SIGN — measured the next day
+
+The 40% above was measured on the NEGATIVE side only, and that turned out to
+matter. Sweeping the same slot on the same voices, one sign at a time:
+
+    amount  +1   8.48 rms cents      amount  +2   20.84
+    amount  -1   3.78                amount  -2   16.17
+    amount  +1   8.48  (repeat, reproducible)
+
+**+1 delivers 2.24x what -1 does**, converging to 1.29x at |2|. So the "40% of a
+linear unit" claim holds going down and roughly does not going up.
+
+**It reverses the conclusion, in the writer's favour.** §FIRSTSTEP said the
+target of 7.35 rms cents was unreachable — between -1 undershooting 2.4x and -2
+overshooting 2.2x. On the positive side `+1` delivers **8.48**, i.e. **+15%**.
+So the converter's own value is very nearly right, and closer to the source than
+the hand-set -1 that had been on the reference preset all afternoon. **The first
+thing all day where the code beat the hand-built preset.**
+
+**Consequence for the deliberate triangle-phase negation.** The E4B writer
+negates a triangle LFO's cord because the E4XT's key-synced triangle rises first
+where the source's falls first. At these depths that negation **costs more than
+half the modulation**. If the phase inversion is worth keeping, the magnitude has
+to be re-derived on the negative side rather than carried across — and at |1|
+there is no negative value that reaches the target at all.
+
+**Cause not established, and one obvious guess is excluded.** Two's-complement
+rounding in the encoding would explain it, but `cord_amount_to_byte` is
+symmetric about zero at these values: +0.00787 -> +1 and -0.00787 -> -1. The
+asymmetry is in the machine, not in our arithmetic.
+
+### One more instance of the rule, from the same measurement
+
+**Measuring one side of a signed field is measuring half of it.** §FIRSTSTEP's
+own number was correct and its conclusion was wrong, because the sweep only went
+one way. That belongs beside "a law fitted over a field's middle should not be
+trusted at its first step" — the same failure, one axis over.
+
 ## §E4BLOOPREL — every looped sample we have ever written had no release at all (2026-08-24)
 
 Jan, after everything else on the octave-stack program was measured and set:
