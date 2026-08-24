@@ -18931,8 +18931,59 @@ Inverting each for the AKAI's 15.224 dB/s:
 
 The high keygroup's curvature is **not** floor contamination. At floor+15 n84
 still gives thirds of **-0.80 / +1.79 / -0.96** with residual 1.78, against
-±0.1 everywhere else. Real curvature, three shapes, still unexplained, still
-needs the bench.
+±0.1 everywhere else. Real curvature, three shapes, still unexplained.
+
+**Pre-loop sample data does not explain it either, and that was this session's
+hypothesis.** `KK DXE2` loops at 31795 of ~45000 samples, i.e. **0.721 s in at
+root**. At +12 the loop is entered at 0.36 s and at +24 at 0.18 s, against a
+note-off at 3.0 s. Every note in that keygroup is deep in the loop long before
+release. The n84 plateau would need a loop starting 6.9 s into a 1.02 s sample.
+**It explains the low keygroup at n26 and it cannot reach the top keygroup at
+all** — an explanation that works on one end of the keyboard and is arithmetically
+impossible at the other.
+
+### The axis is root distance, and §65 sampled the wrong range
+
+Release rate at floor+15, rate byte 69, arranged by distance above each
+keygroup's **own root** rather than by keygroup:
+
+        low   -22  26.98    -8  27.17    +4  28.20
+        mid    +2  28.41    +6  28.23   +10  28.00
+        high   +4  29.13   +12  36.07   +24  39.62
+
+**Everything within a few semitones of a root sits at 28. The top keygroup
+climbs to 39.6 by +24** — about +1.55%/semitone against §65's +0.23%. And
+§65's three notes were -22, -8, +4: **it never tested far above a root.** Key
+scaling was ruled out over the range that was sampled, and that range was the
+wrong one. Not reopened as a conclusion; no longer excluded.
+
+### The discriminator, and the third hypothesis the bench version cannot see
+
+Two hypotheses fit that table equally: *the top keygroup behaves differently*,
+or *rate depends on distance above root and only the top keygroup gets far above
+one*. Each keygroup's range and its root move together, so almost every design
+confounds them. Two notes separate them — the low keygroup at its **top** note
+(+11) and the top keygroup at its **bottom** note (+0).
+
+**But each keygroup also has its own SAMPLE**, so "the keygroup" and "the
+sample" still move together, and the bench discriminator cannot tell those two
+apart either.
+
+`gen_e4xt_noise_bank.py` breaks it at zero bench cost, as two extra presets:
+
+        XP R72   keys 72..96, root 72     note 96 is +24, note 72 is  +0
+        XP R96   keys 72..96, root 96     note 96 is  +0, note 72 is -24
+
+**One sample, one envelope, one voice; only the root moves.** A note played in
+both presets is literally the same audio at a different distance from its root.
+If the rate follows the distance it is the machine; if it follows the note it is
+not. And noise is stationary under transposition once looped, so the sample
+contour that dominates every musical capture — 14.7 to 39.9 dB of travel from
+identical bytes — contributes nothing.
+
+Capped at ±24 rather than the full keyboard: beyond that the transposition
+aliases grossly, and while aliasing does not change an amplitude envelope there
+is no reason to have to defend that when the effect lives at +24.
 
 ### The sweep that should happen before this is trusted
 
