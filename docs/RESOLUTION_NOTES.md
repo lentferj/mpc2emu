@@ -18881,6 +18881,26 @@ holding. **Do that before the constant is treated as settled**, on the general
 principle that a law replacing a law deserves at least the range of the one it
 replaces. Not while Jan is at the machine.
 
-Also open and left open: eosed's **top keygroup fits no straight line at either
+### The knee, and the three things it could be
+
+Open and left open: eosed's **top keygroup fits no straight line at either
 rate** — residuals 2.16 and 2.35 against 0.22-1.26 elsewhere, a visible knee,
-consistent across rates, and not the key scaling that §65 ruled out. Unexplained.
+consistent across rates, and not the key scaling that §65 ruled out.
+
+The sweep is the cheap chance to name it, because the three candidates make
+different predictions and one run separates all three:
+
+- **knee moves with the rate byte** -> it is in the envelope generator
+- **knee sits at a fixed level** -> it is a floor, ours or the rig's
+- **knee sits at a fixed time after note-off** -> it is neither, it is **the
+  sample** running out of data
+
+The third is eosed's and it is the one that would have been missed by asking
+only "envelope or level". Worth stating before the data arrives, so the answer
+is read off rather than argued into place.
+
+Separating them needs the **envelope written out per point at 10 ms
+resolution**, not just a fitted number, which is how the sweep is staged: fit
+window, knee detection and the law itself can then be reworked offline. A bench
+run that has to be repeated because the analysis was baked into it spends
+somebody else's hardware time.
