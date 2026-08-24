@@ -202,6 +202,8 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§FIRSTSTEP — four laws in one day that are wrong at their bottom rung (2026-08-24)](#firststep-four-laws-in-one-day-that-are-wrong-at-their-bottom-rung-2026-08-24)
 - [§E4BLOOPREL — every looped sample we have ever written had no release at all (2026-08-24)](#e4blooprel-every-looped-sample-we-have-ever-written-had-no-release-at-all-2026-08-24)
 - [§E4BNAMEDEDUP — the E4XT rebinds a merged bank's zones to already-resident samples of the same name (2026-08-24)](#e4bnamededup-the-e4xt-rebinds-a-merged-banks-zones-to-already-resident-samples-of-the-same-name-2026-08-24)
+- [§AKAIRELSPAN — the release is the one stage whose endpoint neither machine defines, and we matched seconds across it (2026-08-24)](#akairelspan-the-release-is-the-one-stage-whose-endpoint-neither-machine-defines-and-we-matched-seconds-across-it-2026-08-24)
+- [§E4BRATEANCHOR — our EOS rate law is 18-25% fast, and four fresh points say which anchor is right (2026-08-24)](#e4brateanchor-our-eos-rate-law-is-18-25-fast-and-four-fresh-points-say-which-anchor-is-right-2026-08-24)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -18703,3 +18705,129 @@ produce an 850 ms fall that stretches past 1.5 s when the envelope is slowed —
 three orders of magnitude. It was a correlation with WHICH COPY a voice was
 bound to. **A correlation that clean and that wrong is worth more in the notes
 than the finding it imitated.**
+
+
+## §AKAIRELSPAN — the release is the one stage whose endpoint neither machine defines, and we matched seconds across it (2026-08-24)
+
+**Status:** measured on both sides, fix designed, NOT wired.
+**Found by:** Jan by ear ("the release is a bit too short on the EMU"), held
+through §E4BNAMEDEDUP, then confirmed by eosed on the clean load.
+
+Jan reported this twice and it survived the collision that invalidated
+everything else he heard that session. It is real, it is the last surviving
+half of his verdict, and it is arithmetic rather than taste.
+
+### The measurement
+
+s3ked has the source at **15.224 dB/s**. Our own AKAI law agrees to within a
+percent — RELSE1 75 gives `23042.3 * exp(-0.09754 * 75)` = **15.33 dB/s**, so
+the read side is sound. eosed then measured what the E4XT actually does with
+what we wrote: **27.19 to 28.64 dB/s** across seven of nine keygroups. About
+**1.8x too fast**, which is exactly the direction of "too short".
+
+### Why it is the release and not the decay
+
+Both stages go through the same span-aware machinery, so the obvious guess is
+that both are wrong. They are not, and the asymmetry is the diagnosis. Span
+that each side believes it is travelling, at the same sustain setting:
+
+        SUSTN1   decay span (ak / e4)      release span (ak / e4)
+          20      47.93 / 48.42   1.01      12.14 / 49.40   4.07
+          40      35.80 / 36.85   1.03      24.27 / 60.97   2.51
+          60      23.66 / 25.27   1.07      36.41 / 72.55   1.99
+          75      14.56 / 16.78   1.15      45.51 / 81.04   1.78
+          90       5.46 /  7.52   1.38      54.61 / 90.30   1.65
+
+**The decay agrees to within 1-7% over most of the range; the release is out by
+1.6x to 4x.** The decay runs peak to sustain, and the two machines' sustain-level
+laws genuinely agree about where the sustain sits. The release runs sustain to
+*silence* — and 60.07 dB (AKAI: 0.60676 x 99) against 97.82 dB (E-MU: the level
+law evaluated at byte 0) is a disagreement about **a number neither of us ever
+measured**. Both are parameter-scale artifacts. Neither is a floor anyone put a
+meter on.
+
+That is why Jan heard a wrong release and a right decay, and it is the reason
+to trust this diagnosis over the several that did not survive that session.
+
+### The fix, and why it is not "pick a span"
+
+Seconds are the wrong interchange currency for this one stage. The rate laws
+are hardware on both sides; the spans are fabricated on both sides. So carry
+the **rate**.
+
+Concretely: `Envelope` gains an optional `release_rate_db_per_s`, defaulting to
+`None`. A reader that knows its machine's rate law sets it; a writer that knows
+its own consumes it directly and skips the span arithmetic entirely; everything
+else is untouched because `None` means "seconds are all I have". Additive,
+exact for rate-machine to rate-machine, and it leaves the MPC path — where the
+source really does specify a duration — alone.
+
+**What must NOT be done here is to unify the two span constants.** Making the
+AKAI reader use 97.82, or the E4B writer use 60.07, would make the round trip
+self-consistent while leaving both sides asserting a floor neither measured.
+The numbers would agree and still be invented.
+
+### The consequence for the decay, which is smaller but not nothing
+
+The decay ratio is not flat — it reaches **1.38x at SUSTN1 90 and 1.83x at 95**,
+because the two sustain-level laws diverge as they approach the peak. Both
+spans are small there, so the absolute error in seconds is small, and it is
+recorded rather than fixed. It is a separate item from this one and should not
+be folded into the same change.
+
+### Do not fix this without §E4BRATEANCHOR
+
+The two errors are in **opposite directions** and partly cancel: the span error
+makes the release too fast, the stale rate anchor makes it too slow. Wiring the
+span fix alone would move the result by less than the arithmetic predicts and
+leave roughly 18% behind, which would look like the fix half-failing.
+
+
+## §E4BRATEANCHOR — our EOS rate law is 18-25% fast, and four fresh points say which anchor is right (2026-08-24)
+
+**Status:** measured against hardware by eosed, NOT wired. Provenance of the
+replacement law requested from eosed before the constant is changed.
+
+Found while checking §AKAIRELSPAN's arithmetic, which is the only reason it was
+found at all — nothing in our own test suite could see it.
+
+We carry:
+
+        dB/s = 27.9 * 2 ** (-(byte - 72) / 12.3)
+
+eosed measured four points on the clean load, two keygroups at each of two rate
+bytes, against our law and against their own §63 (`1382 * exp(-0.0565 * rate)`):
+
+        byte 69    measured 27.36 / 27.97      ours 33.04      §63 28.04
+        byte 80    measured 13.44 / 14.24      ours 17.78      §63 15.02
+
+**Ours is 18-25% fast on all four points. §63 lands within 1-8%.**
+
+The slopes agree — `ln 2 / 0.0565` = 12.27 against our 12.3 — so this is purely
+the **anchor**, worth about three bytes. Inverting each law for the AKAI's
+measured 15.224 dB/s: §63 says byte **79.7**, eosed's direct two-point solve
+says **78.1 / 78.9**, ours says **82.8**. Two independent routes land within a
+byte of each other and ours is the outlier.
+
+### The smell was already in the file and was written off
+
+The constant's own comment says: *"confirmed on SUSLEVEL's decay times at 26.5
+dB/s against 27.9 (5%, unexplained and not worth chasing)"*. It was worth
+chasing. A 5% residual that will not explain itself is the visible corner of
+something, and the reason it stayed invisible is that **every path through the
+converter uses this law in both directions**, so a round trip through our own
+code hides it perfectly. Our 499 tests cannot see it and no amount of adding
+tests in the same style would.
+
+### Before changing it
+
+The replacement touches every E4B envelope we emit in every format pair, so
+§63's **fit range** goes in with its coefficients, per §LAWRANGE. Specifically:
+whether the fit covers bytes 78-83, which is the region this converter would
+now be emitting. eosed flagged that their own two-point slope (0.061-0.065 per
+byte) disagrees with §63's 0.0565 and said to prefer §63 — so the range
+question is live and is asked, not assumed.
+
+Also open and left open: eosed's **top keygroup fits no straight line at either
+rate** — residuals 2.16 and 2.35 against 0.22-1.26 elsewhere, a visible knee,
+consistent across rates, and not the key scaling that §65 ruled out. Unexplained.
