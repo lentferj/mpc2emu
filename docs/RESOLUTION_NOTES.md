@@ -18899,6 +18899,56 @@ The third is eosed's and it is the one that would have been missed by asking
 only "envelope or level". Worth stating before the data arrives, so the answer
 is read off rather than argued into place.
 
+**RETIRED SAME DAY, and correctly (eosed).** The third cannot apply to this
+bank: a looped sample with loop-in-release set is **stationary during the
+release by construction** — the same loop repeats, so the only thing changing
+is the envelope. §64 already showed a 1.19 s sample still sounding at 4.5 s. At
+the slowest sweep byte the nine-second fall will loop, not exhaust. Recorded as
+retired rather than deleted, because it was the reason the noise bank was
+rebuilt and it will be the first thing someone re-proposes.
+
+Note what retiring it does NOT do: it retires the hypothesis for **looped**
+subjects only, which is every subject either of us intends to measure on. It
+says nothing about a converted preset in the field.
+
+### There is not one knee — there are three shapes, and they disagree
+
+Nine clean-load captures at rate 69 (eosed, dBFS every 0.15 s from note-off).
+Low and mid keygroups are straight at every note. The top keygroup is irregular
+in **three different ways at three notes**:
+
+        n76   starts ~40 dB/s and FLATTENS to ~13, stalling at -74
+        n84   nearly FLAT for 0.45 s, then ACCELERATES to ~45, reaching -84
+        n96   straight at ~38 all the way to the floor
+
+**n76 and n84 are opposite shapes**, so no single mechanism covers both, and
+whatever explains one has to leave the other alone.
+
+**Hypothesis (eosed): an FX tail** sitting ~33 dB below the direct sound —
+buried under the -85 floor for the quiet keygroups, visible for the loud top
+one. It explains n76's stall well.
+
+**Counter-observation (this session), and it may settle it without bench time:
+n76 and n84 are the same voice.** Same FX send, same routing, same note-off
+level (-40 dBFS both). A reverb tail 33 dB below direct appears in both or
+neither. One stalls at -74 and the other falls clean to -84. Unless the two
+notes were held for different durations — which changes the energy fed to a
+tail and is checkable in the captures already taken — **the FX hypothesis is
+already in trouble from data in hand.**
+
+**And n84's shape points somewhere cheaper: flat-then-accelerate is what a
+LATE note-off looks like.** A capture whose note-off timestamp is 0.45 s early
+would show exactly that plateau. That is a rig question, not a machine
+question, and the saved 10 ms envelopes answer it without touching hardware.
+
+**Why this matters more than the subject question.** An FX tail — if it is one
+— contaminates the slow end of a rate law on **any** subject, white noise
+included, and the original law was measured through whatever FX state that
+preset carried. So "measure both subjects and compare" does **not** protect
+against it: both would be contaminated and their agreement would prove nothing.
+That is a correction to this session's proposed control, and it reorders the
+work: **settle FX first, then sweep.**
+
 Separating them needs the **envelope written out per point at 10 ms
 resolution**, not just a fitted number, which is how the sweep is staged: fit
 window, knee detection and the law itself can then be reworked offline. A bench
