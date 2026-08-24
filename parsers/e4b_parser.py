@@ -515,7 +515,27 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
         if _ratios and (max(_ratios) - min(_ratios) <= 0.05):
             wheel_to_lfo = max(0.0, min(1.0, sum(_ratios) / len(_ratios)))
             _use_full = True
-    _depth = (lambda a: _routes[a][0]) if _use_full else (lambda a: _routes[a][1])
+    # TRIANGLE PHASE, UNDONE. The writer negates every triangle LFO's cord
+    # amounts -- the E4XT's key-synced triangle rises first while the MPC's
+    # falls, hardware-RE'd 2026-06-14 -- and this parser never undid it, so the
+    # pair were not inverses. Measured over the E4B corpus 2026-08-24:
+    # `lfo1_to_pitch` came back NEGATED on 8.8% of round-tripped zones, which
+    # is every voice whose LFO is a triangle (the default shape).
+    #
+    # Applying it here is right for third-party banks too, not only our own
+    # output: the correction translates between the two machines' starting
+    # directions, so reading an E4XT cord into the model needs it in the same
+    # way writing one out does.
+    # Read from the PZT here rather than using `lfo1_shape`, which is not
+    # assigned until further down -- ordering, not preference.
+    _sign1 = -1.0 if _LFO_SHAPE_NAME.get(pzt[43], 'triangle') == 'triangle' else 1.0
+    _sign2 = -1.0 if _LFO_SHAPE_NAME.get(pzt[51], 'triangle') == 'triangle' else 1.0
+    _signs = {'lfo1_to_pitch': _sign1, 'lfo1_to_filter': _sign1,
+              'lfo1_to_filter_q': _sign1, 'lfo2_to_pitch': _sign2,
+              'lfo2_to_filter': _sign2, 'lfo2_to_filter_q': _sign2}
+    _raw_depth = ((lambda a: _routes[a][0]) if _use_full
+                  else (lambda a: _routes[a][1]))
+    _depth = lambda a: _raw_depth(a) * _signs.get(a, 1.0)     # noqa: E731
     lfo1_to_pitch    = _depth('lfo1_to_pitch')
     lfo1_to_filter   = _depth('lfo1_to_filter')
     lfo1_to_filter_q = _depth('lfo1_to_filter_q')

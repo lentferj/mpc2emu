@@ -1330,8 +1330,26 @@ def env_seconds_to_rate(seconds: float) -> int:
 
 
 def env_rate_to_seconds(rate: int) -> float:
-    """EOS rate byte → envelope time in seconds (inverse of env_seconds_to_rate)."""
-    return ENV_RATE_A * math.exp(ENV_RATE_K * max(0, min(127, rate)))
+    """EOS rate byte → envelope time in seconds (inverse of env_seconds_to_rate).
+
+    **RATE 0 IS INSTANT AND USED TO READ AS 31 ms.** `env_seconds_to_rate(0)`
+    returns 0, so the pair were not inverses at the one value a source is most
+    likely to state: an attack of exactly zero came back as `ENV_RATE_A`
+    itself. Measured over the E4B corpus 2026-08-24, the filter envelope
+    changed on **77.4% of round-tripped zones**, and the commonest single
+    difference was `attack 0.0 -> 0.031`.
+
+    It was known and unfixed: §LAWRANGE's own table lists this function at
+    "0.031000, floor, against its own comment saying rate 0 = instant". The
+    comment was right and the code did something else -- the fourth time this
+    week (see §INERTCHANGE).
+
+    Zero is a semantic value the source states, not a point on the curve, which
+    is the same reason `akai_env2_stage_seconds` special-cases it.
+    """
+    if rate <= 0:
+        return 0.0
+    return ENV_RATE_A * math.exp(ENV_RATE_K * min(127, rate))
 
 
 def env_level_to_byte(pct: float) -> int:
