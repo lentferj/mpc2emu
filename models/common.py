@@ -254,6 +254,12 @@ def e4xt_cutoff_position(hz: float) -> float:
     return max(0.0, min(1.0, _interp(max(hz, 1e-6), pts, logy=False)))
 
 
+def e4b_cutoff_position_to_hz(pos: float) -> float:
+    """The shared 0..1 cutoff position -> Hz. Inverse of `hz_to_e4b_cutoff`."""
+    p = max(0.0, min(1.0, pos))
+    return E4B_CUTOFF_MIN_HZ * (E4B_CUTOFF_MAX_HZ / E4B_CUTOFF_MIN_HZ) ** p
+
+
 def e4xt_cutoff_byte_to_position(byte: int) -> float:
     """Inverse: a vpar[60] byte -> the SHARED 0-1 position it represents.
     Parser and writer must stay exact inverses -- when they were not, the
@@ -576,7 +582,11 @@ def akai_env2_target_hz(base_hz: float, sustn2: int, depth: int) -> float:
     if base_hz <= 0 or depth <= 0 or sustn2 <= 0:
         return max(0.0, base_hz)
     octaves = AKAI_ENV2_OCT_PER_UNIT * sustn2 * depth
-    return min(base_hz * 2.0 ** octaves, AKAI_ENV2_CEILING_HZ)
+    # The ceiling is a MAXIMUM, so it can never pull the corner BELOW its own
+    # base -- a base already above 7.86 kHz (a saturated FILFRQ treated as the
+    # machine's open corner) would otherwise produce a negative shift from a
+    # positive depth, which reads as a downward sweep that was never asked for.
+    return max(base_hz, min(base_hz * 2.0 ** octaves, AKAI_ENV2_CEILING_HZ))
 
 
 def akai_env2_max_octaves(base_hz: float) -> float:
@@ -649,6 +659,103 @@ def akai_lfo_rate_hz(byte: int) -> float:
     """LFORAT -> Hz."""
     return max(0.0, AKAI_LFO_RATE_HZ_PER_UNIT * max(0, min(99, byte))
                + AKAI_LFO_RATE_HZ_OFFSET)
+
+
+#: The E4XT resonance parameter, MEASURED by eosed 2026-08-24 (§E4XTQCAL):
+#: byte -> resonant peak height in dB above the passband, 2-pole, corner parked
+#: where the peak resolves. **The 4-pole is exactly twice these dB at the same
+#: byte** — 2.00 at every point, which is what cascading two identical sections
+#: does — so one table covers the whole lowpass family via `poles / 2`.
+#:
+#: Replaces `round(resonance * 127)`, which was an uncalibrated linear guess of
+#: exactly the shape as the K2000 filter-envelope depth fixed on 2026-08-22:
+#: that one was 23x too little at low amounts and 1.75x too much at full,
+#: because the field's response is not linear in anything audible.
+_E4XT_Q_TABLE = [
+    (0, 0.11), (8, 0.64), (16, 1.39), (24, 2.60), (32, 3.76), (40, 4.85),
+    (48, 6.13), (56, 7.59), (64, 9.15), (72, 10.62), (80, 11.87), (88, 13.02),
+    (96, 14.39), (108, 15.54), (112, 17.84),
+]
+
+#: **Bytes 112..127 are the same filter.** 17.8 dB flat within noise while the
+#: panel goes on printing whatever was set — fifteen dead steps, so a writer
+#: clamping to 127 silently writes 112. No self-oscillation anywhere: pre-roll
+#: sat at -85 to -86 dBFS at every point on both filter types, checked rather
+#: than assumed, since a ringing filter puts energy in the capture BEFORE the
+#: note is sent.
+E4XT_Q_MAX_BYTE = 112
+E4XT_Q_MAX_DB = 17.84
+
+
+#: What `VoiceLayer.filter_resonance == 1.0` MEANS, in dB of resonant peak
+#: above the passband.
+#:
+#: The field had no absolute meaning at all until 2026-08-24 — every parser
+#: normalised by its own machine's range, so a "0.5" from one format and a
+#: "0.5" from another were different sounds, and no conversion could preserve
+#: what a listener actually hears. Peak height in dB is the right currency for
+#: the same reason it was for the AKAI/E4XT Q comparison: for a filter of a
+#: given order it determines the response shape, and it is directly measurable
+#: on both machines without composing anything.
+#:
+#: Set to the AKAI's own maximum (FILQ 15 = 25.51 dB), the widest measured
+#: range we have, so that the format with the most resonance available defines
+#: full scale and nothing has to exceed 1.0.
+#:
+#: **CONSEQUENCE, STATED RATHER THAN HIDDEN: the E4XT tops out at 17.84 dB.**
+#: An AKAI source above about FILQ 13 asks for more than the E4XT can produce
+#: and clamps, so two keygroups asking for different resonances can arrive
+#: identical. That is a real limit of the target and belongs in the conversion
+#: log, not in a rounding.
+#:
+#: **NOT YET APPLIED TO EVERY PARSER.** `e4b_parser` and this writer are a
+#: matched pair through the measured table; `krz_parser` and others still
+#: normalise by their own ranges and are therefore on a different scale. That
+#: is a real inconsistency and it is recorded rather than fixed blind — fixing
+#: it means knowing each machine's peak-height range, which only the AKAI and
+#: the E4XT currently have measured.
+RESONANCE_FULL_DB = 25.51
+
+
+def e4xt_resonance_byte(amount: float, poles: int = 2) -> int:
+    """Model resonance 0..1 -> the E4XT byte that delivers the same PEAK dB.
+
+    Matches the resonant peak height rather than the fraction-of-range, because
+    dB is what is audible and a fraction is meaningless across machines with
+    different ranges. Interpolated linearly in dB between measured points — the
+    curve is smooth and the points dense enough that a fit would add nothing
+    but a place to be wrong.
+
+    Clamped at `E4XT_Q_MAX_BYTE`, not 127. Writing 127 is not an error the
+    machine reports; it is fifteen steps of nothing.
+    """
+    scale = max(1, poles) / 2.0
+    target = max(0.0, min(1.0, amount)) * RESONANCE_FULL_DB * scale
+    tbl = [(b, db * scale) for b, db in _E4XT_Q_TABLE]
+    if target <= tbl[0][1]:
+        return tbl[0][0]
+    for (b0, d0), (b1, d1) in zip(tbl, tbl[1:]):
+        if target <= d1:
+            f = (target - d0) / (d1 - d0) if d1 > d0 else 0.0
+            return int(round(b0 + f * (b1 - b0)))
+    return E4XT_Q_MAX_BYTE
+
+
+def e4xt_byte_to_resonance(byte: int, poles: int = 2) -> float:
+    """Inverse of `e4xt_resonance_byte`, so reader and writer stay inverses."""
+    b = max(0, min(E4XT_Q_MAX_BYTE, int(byte)))
+    scale = max(1, poles) / 2.0
+    tbl = _E4XT_Q_TABLE
+    if b <= tbl[0][0]:
+        db = tbl[0][1]
+    else:
+        db = tbl[-1][1]
+        for (b0, d0), (b1, d1) in zip(tbl, tbl[1:]):
+            if b <= b1:
+                f = (b - b0) / (b1 - b0) if b1 > b0 else 0.0
+                db = d0 + f * (d1 - d0)
+                break
+    return max(0.0, min(1.0, db * scale / RESONANCE_FULL_DB))
 
 
 #: `L_PTCH` at which s3ked's 19.4932 cents/unit was measured. **UNKNOWN.**
@@ -835,6 +942,16 @@ def akai_env2_stage_seconds(byte: int, distance: float, law) -> float:
         return 0.0
     full = a * math.exp(b * byte)
     return full * (max(0.0, distance) / 99.0)
+
+
+#: The highest corner the AKAI filter actually distinguishes, and the lowest.
+#: `akai_filfrq_to_hz` returns None at or above `AKAI_FILTER_SATURATED` because
+#: the machine does not tell those settings apart — but "wide open" still has a
+#: frequency, and a NEGATIVE ENV2 depth sweeps downward from it audibly. Using
+#: these as the base for a saturated FILFRQ keeps that convertible instead of
+#: silently dropping it.
+AKAI_FILTER_OPEN_HZ = 8481.0     #: FILFRQ 95, the top of the measured table
+AKAI_FILTER_FLOOR_HZ = 100.0     #: below the lowest measured corner
 
 
 def akai_filfrq_to_hz(byte: int):

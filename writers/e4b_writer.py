@@ -116,6 +116,7 @@ from models.common import (Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            E4B_CUTOFF_MIN_HZ, E4B_CUTOFF_MAX_HZ,
                            env_level_byte_to_db,
                            E4B_MIN_AUDIBLE_DECAY_RATE,
+                           e4xt_resonance_byte,
                            env_span_seconds_to_rate)
 from processors.loop_renderer import bake_alternating_loop
 from writers.atomic import atomic_write
@@ -862,7 +863,22 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
     _nominal_hz = E4B_CUTOFF_MIN_HZ * (E4B_CUTOFF_MAX_HZ / E4B_CUTOFF_MIN_HZ) ** max(
         0.0, min(1.0, voice.filter_cutoff))
     vpar[60] = min(255, round(e4xt_cutoff_position(_nominal_hz) * 255))
-    vpar[61] = min(127, round(voice.filter_resonance * 127))
+    # RESONANCE through the MEASURED curve, since 2026-08-24 (§E4XTQCAL).
+    # This was `round(resonance * 127)` -- an uncalibrated linear guess on a
+    # field whose response is not linear in anything audible, exactly the shape
+    # of the K2000 filter-envelope depth fixed on 2026-08-22 (23x too little at
+    # low amounts, 1.75x too much at full).
+    #
+    # Two things the measurement changed. The byte now targets a PEAK HEIGHT IN
+    # dB rather than a fraction of the field, because dB is what is audible and
+    # a fraction is meaningless across machines with different ranges. And it
+    # clamps at 112, not 127: bytes 112..127 are the same filter, 17.8 dB flat
+    # within noise, while the panel goes on printing whatever was set.
+    #
+    # 4-pole is exactly twice the dB at the same byte, measured at every point,
+    # so `poles` covers the whole lowpass family from one table.
+    _poles = 4 if voice.filter_type in (3, 4, 5) else 2
+    vpar[61] = e4xt_resonance_byte(voice.filter_resonance, _poles)
     # Band-stop (15-18) AND band-boost (19-22) both map to Swept EQ 1-oct
     # (vpar[58]=0x20), where vpar[61] is GAIN, not Q — they are the SAME parametric
     # band filter, differing only in gain SIGN: band-stop cuts, band-boost boosts.

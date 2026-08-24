@@ -833,7 +833,7 @@ def _env2_stage_byte(seconds: float, distance: float, law) -> int:
     return int(round(max(lo, min(hi, v))))
 
 
-def akai_filter_env_bytes(env, amount: float):
+def akai_filter_env_bytes(env, amount: float, filfrq: int = 99):
     """Filter envelope -> (ATTAK2, DECAY2, SUSTN2, RELSE2, depth byte).
 
     Distances mirror `akai_env_bytes`: attack climbs the full range, decay
@@ -841,6 +841,21 @@ def akai_filter_env_bytes(env, amount: float):
     zero. Returns the depth separately because an envelope with no routing is
     inaudible, which is indistinguishable from the fixed defaults this
     replaced.
+
+    **THE DEPTH CONVERTS A CORNER POSITION, and needs `filfrq` to do it**
+    (§AKAIENV2DEPTH, 2026-08-24). It used to be `amount * AKAI_ENV2_DEPTH_MAX`,
+    a constant derived by equating two laws measured on two different machines.
+    Both halves are now measured directly, and the composition goes through the
+    only thing both machines agree on -- where the corner ends up:
+
+        amount     -> the E4XT corner byte the cord would reach
+                   -> that corner in Hz
+        base_hz    -> the AKAI's own resting corner for this FILFRQ
+        depth      -> the ENV2 depth that lands on the same Hz
+
+    `filfrq` defaults to 99 (wide open) so existing callers keep working, and
+    a wide-open base returns depth 0 -- correctly, since there is nowhere for
+    the corner to sweep from there.
     """
     sus = int(round(max(0.0, min(1.0, getattr(env, 'sustain', 0.5))) * 99))
     a = _env2_stage_byte(getattr(env, 'attack', 0.0) or 0.0, 99, _AK_ATTAK2_FULL)
@@ -848,8 +863,33 @@ def akai_filter_env_bytes(env, amount: float):
                          max(1, 99 - sus), _AK_DECAY2_FULL)
     r = _env2_stage_byte(getattr(env, 'release', 0.0) or 0.0,
                          max(1, sus), _AK_RELSE2_FULL)
-    depth = int(round(max(-1.0, min(1.0, amount)) * _AK_ENV2_DEPTH_MAX))
-    return a, d, sus, r, depth
+    return a, d, sus, r, _akai_env2_depth(amount, sus, filfrq)
+
+
+def _akai_env2_depth(amount: float, sustn2: int, filfrq: int) -> int:
+    """Model filter-env amount -> AKAI ENV2 depth. Inverse of the reader's
+    `_env2_amount`, and it must stay one: the two were briefly not inverses on
+    2026-08-24 and the round-trip test caught it inside a minute, which is the
+    entire argument for having that test."""
+    from models.common import (akai_filfrq_to_hz, hz_to_e4b_cutoff,
+                               E4XT_FENV_BYTE_PER_UNIT, AKAI_ENV2_OCT_PER_UNIT,
+                               AKAI_ENV2_CEILING_HZ, e4b_cutoff_position_to_hz)
+    amt = max(-1.0, min(1.0, amount))
+    if not amt or sustn2 <= 0:
+        return 0
+    base_hz = akai_filfrq_to_hz(filfrq)
+    if base_hz is None:
+        # Saturated FILFRQ. Same rule as the reader: use the highest corner the
+        # machine distinguishes, so a downward sweep stays convertible.
+        from models.common import AKAI_FILTER_OPEN_HZ
+        base_hz = AKAI_FILTER_OPEN_HZ
+    base_byte = round(hz_to_e4b_cutoff(base_hz) * 255)
+    tgt_byte = base_byte + E4XT_FENV_BYTE_PER_UNIT * abs(amt) * 100.0
+    tgt_hz = min(e4b_cutoff_position_to_hz(min(1.0, tgt_byte / 255.0)),
+                 AKAI_ENV2_CEILING_HZ)
+    octaves = math.log2(max(tgt_hz, 1e-6) / base_hz)
+    depth = octaves / (AKAI_ENV2_OCT_PER_UNIT * sustn2)
+    return int(round(math.copysign(min(abs(depth), 50.0), amt)))
 
 
 def akai_sustain_byte(fraction: float) -> int:
@@ -1915,7 +1955,10 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
     _fe = getattr(voice, 'filter_env', None) if voice is not None else None
     _famt = (getattr(voice, 'filter_env_amount', 0.0) or 0.0) if voice else 0.0
     if _fe is not None and abs(_famt) > 0.001:
-        _a2, _d2, _s2, _r2, _dep = akai_filter_env_bytes(_fe, _famt)
+        # k[0x07] is this keygroup's FILFRQ, set above. The depth is a
+        # corner conversion now, so it needs the base it sweeps FROM.
+        _a2, _d2, _s2, _r2, _dep = akai_filter_env_bytes(_fe, _famt,
+                                                         k[0x07])
         k[0x14], k[0x15], k[0x16], k[0x17] = _a2, _d2, _s2, _r2
         k[_AK_ENV2_DEPTH_OFF] = _dep & 0xFF
     else:

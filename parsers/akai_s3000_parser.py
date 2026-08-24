@@ -45,7 +45,10 @@ from models.common import (
     AKAI_VLOUD_DB_PER_UNIT, AKAI_TUNE_UNITS_PER_SEMITONE,
     akai_filq_to_01, AKAI_MUTE_CUT_SECONDS,
     akai_lfo_rate_hz, akai_lfo_depth_to_pitch, akai_lfo_delay_seconds,
+    akai_env2_target_hz, E4B_CUTOFF_MAX_HZ, E4XT_FENV_BYTE_PER_UNIT,
+    AKAI_ENV2_OCT_PER_UNIT, AKAI_FILTER_OPEN_HZ, AKAI_FILTER_FLOOR_HZ,
     Envelope)
+import math
 
 #: Keygroup byte offsets that had no name here until 2026-08-23.
 AKAI_FILQ_OFFSET = 149        #: resonance, 0..15 (s3ked §52)
@@ -250,7 +253,7 @@ def _playback_rate(data: bytes, s3000: bool) -> int:
 # ── sample ─────────────────────────────────────────────────────────────────
 
 
-def _filter_env_of(env2, depth):
+def _filter_env_of(env2, depth, filfrq=99, s3000=True):
     """Keygroup envelope-2 bytes -> (Envelope, amount), or (None, 0).
 
     **Depth 0 means NO filter envelope**, not a full-depth one. §144 measured
@@ -273,7 +276,58 @@ def _filter_env_of(env2, depth):
         decay=akai_env2_stage_seconds(d, max(1, 99 - sus), AKAI_ENV2_DECAY),
         sustain=sustain,
         release=akai_env2_stage_seconds(r, max(1, sus), AKAI_ENV2_RELEASE)),
-        max(-1.0, min(1.0, depth / float(AKAI_ENV2_DEPTH_MAX))))
+        _env2_amount(depth, sus, filfrq, s3000))
+
+
+def _env2_amount(depth, sustn2, filfrq, s3000):
+    """AKAI ENV2 depth -> the model's 0..1 filter-envelope amount.
+
+    **CONVERTS A CORNER POSITION, NOT A DEPTH** (§AKAIENV2DEPTH). The old form
+    was `depth / AKAI_ENV2_DEPTH_MAX`, where that constant was derived by
+    EQUATING two laws measured on two different machines and never checked end
+    to end. It over-delivered by 2.5x to 6.7x -- enough to sweep the corner
+    past 19 kHz, out of the audio band -- which is why four filter tests in a
+    row measured about 1 dB with nothing left to open.
+
+    Both halves are now measured on the machines that produce them, so the
+    conversion goes through the one thing both machines agree on: WHERE THE
+    CORNER ENDS UP.
+
+        base_hz    the keygroup's own resting corner
+        target_hz  where the AKAI's envelope actually takes it, ceiling included
+        amount     the fraction of a full sweep from base to target
+
+    **The AKAI's ceiling is absolute in Hz (7.86 kHz), so the reachable octave
+    span depends entirely on the base** -- 5.87 octaves from FILFRQ 40, 1.08
+    from 85. That is why no single `DEPTH_MAX` could ever have been right, and
+    why the target corner is clamped rather than the depth.
+    """
+    if not depth:
+        return 0.0
+    base_hz = akai_filfrq_to_hz(filfrq)
+    if base_hz is None:
+        # Saturated FILFRQ: the machine does not distinguish these from wide
+        # open. Use the highest corner it DOES distinguish as the base rather
+        # than returning zero -- a NEGATIVE depth sweeps downward from here and
+        # is very audible, and returning zero would silently drop it.
+        base_hz = AKAI_FILTER_OPEN_HZ
+    if depth < 0:
+        # Downward sweep. The 7.86 kHz ceiling is an upper bound and does not
+        # apply; the floor is the machine's own lowest corner.
+        octaves = -min(AKAI_ENV2_OCT_PER_UNIT * sustn2 * abs(depth),
+                       math.log2(max(base_hz, 1.0) / AKAI_FILTER_FLOOR_HZ))
+    else:
+        target_hz = akai_env2_target_hz(base_hz, sustn2, depth)
+        octaves = math.log2(max(target_hz, 1e-6) / base_hz)
+    # The model's amount is a fraction of ONE E4XT cord's full sweep. Measured
+    # in cutoff BYTES rather than octaves, because that is the unit the cord is
+    # linear in -- the same octave shift from three different bases needs three
+    # different amounts, which is what caught us out by ear.
+    tgt_hz = min(max(base_hz * 2.0 ** octaves, 1.0), E4B_CUTOFF_MAX_HZ)
+    base_byte = round(hz_to_e4b_cutoff(base_hz) * 255)
+    tgt_byte = round(hz_to_e4b_cutoff(tgt_hz) * 255)
+    amt = abs(tgt_byte - base_byte) / (E4XT_FENV_BYTE_PER_UNIT * 100.0)
+    return max(-1.0, min(1.0, math.copysign(amt, octaves)))
 
 
 def _cutoff_of(filfrq: int, s3000: bool) -> float:
@@ -660,7 +714,8 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
         voice.amp_env = akai_env_from_bytes(
             kg['amp_attack'], kg['amp_decay'], kg['amp_sustain'],
             kg['amp_release'])
-        _fe, _amt = _filter_env_of(kg.get('env2'), kg.get('env2_depth', 0))
+        _fe, _amt = _filter_env_of(kg.get('env2'), kg.get('env2_depth', 0),
+                                   kg.get('filter_freq', 99), prog['is_s3000'])
         if _fe is not None:
             voice.filter_env = _fe
             voice.filter_env_amount = _amt

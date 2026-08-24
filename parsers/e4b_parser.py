@@ -41,6 +41,7 @@ from models.common import (Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            LoopType, Envelope, lfo_rate_byte_to_hz,
                            env_rate_to_seconds, env_byte_to_level,
                            env_rate_to_span_seconds, env_level_byte_to_db,
+                           e4xt_byte_to_resonance,
                            ENV_FULL_SPAN_DB,
                            cord_byte_to_amount,
                            e4xt_cutoff_byte_to_position, e4xt_byte_to_volume_db,
@@ -406,7 +407,11 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     # nominal position here -- otherwise parser and writer stop being inverses
     # and an E4B->E4B conversion applies the correction twice. See §E4BFILTCAL.
     filter_cutoff    = e4xt_cutoff_byte_to_position(vpar[60])
-    filter_resonance = vpar[61] / 127.0
+    # Inverse of the writer's measured curve (§E4XTQCAL). Was `vpar[61]/127`,
+    # which was not an inverse of anything -- reader and writer have to move
+    # together or an E4B->E4B repack shifts the resonance every pass.
+    filter_resonance = e4xt_byte_to_resonance(
+        vpar[61], 4 if filter_byte in (0x00, 0x02) else 2)
     if filter_byte in (0x20, 0x21, 0x22):
         # Swept EQ 1-oct = parametric band gain; vpar[61] is GAIN, not Q
         # (gain_dB=(byte-64)*0.375).  Recover band-BOOST (BB) vs band-STOP (BS)
