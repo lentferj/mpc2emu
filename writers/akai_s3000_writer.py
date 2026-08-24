@@ -824,6 +824,29 @@ def _rate_law_value(seconds: float, span: float, law, default: int) -> int:
     Returns `default` when the span is zero -- a stage with nowhere to travel
     has no meaningful rate, and dividing by it would produce a confident
     number from nothing.
+
+    **EXTRAPOLATES OUTSIDE THE FIT RATHER THAN CLAMPING, and it did not until
+    2026-08-24.** `_ak_rate_seconds` -- this function's own inverse, thirty
+    lines up -- has extrapolated since §LAWRANGE, with a long note saying
+    exactly why: clamping turns every value outside the window into the same
+    number, so it produces a PLATEAU, and ordering is the one thing a converter
+    must not lose. **The read path was fixed and the write path was left
+    clamping**, which is the same one-sided repair that accounted for most of
+    this week's defects.
+
+    The corpus says it matters here in both directions: 25.9% of DECAY1 values
+    sit below the fitted 45 and 23.9% above 85, so half of all real keygroups
+    were being mapped onto one of two numbers.
+
+    It also had a concrete victim. The mute-group re-model asks for a ~10 ms
+    cut on the layer that loses; clamped at DECAY1 45 that became **210 ms, 21x
+    too long**, and the field the model actually depends on was the one nobody
+    printed. s3ked caught the class of it from the other side.
+
+    Clamped only to the FIELD's legal range 0..99, which is a hardware limit
+    rather than a fitting artifact. Extrapolation is not free and this is not a
+    claim the fit holds out there -- it is monotonic, which a clamp is not, and
+    monotonic-and-approximate beats a plateau.
     """
     a, b, lo, hi = law
     if span <= 0 or seconds <= 0:
@@ -832,7 +855,7 @@ def _rate_law_value(seconds: float, span: float, law, default: int) -> int:
     if rate <= 0:
         return default
     v = math.log(rate / a) / b
-    return int(round(max(lo, min(hi, v))))
+    return int(round(max(0.0, min(99.0, v))))
 
 
 #: ENVELOPE 2, the FILTER envelope. Times for a FULL 0..99 traverse, from
