@@ -18760,6 +18760,27 @@ The 4.2% on the mid keygroup is the only thing left, and it is smaller than the
 filter's contribution at those pitches. Not worth chasing until someone measures
 the filter release direction (§E4BFENVUNIT).
 
+### The reference preset is not ground truth for a release
+
+Kept because it is the trap this entire day started inside, and it survives the
+collision that made it visible.
+
+Look at the reference column: **0.02 to 0.20 s**, against the faithful
+conversion's **1.3 to 2.6 s**. Two orders of magnitude, and **both are correct
+for what they are.** The reference is a hand-built library preset; its samples
+carry loop-in-release clear; it was never trying to imitate the source machine.
+
+So it cannot be ground truth for a release, and **using it as one would condemn
+a correct conversion.** That is close to what happened: five of six voices Jan
+judged were bound to that preset's samples (§E4BNAMEDEDUP), and the verdict he
+formed — "the release is too short on the EMU" — was accurate about the audio
+reaching him and wrong about what produced it.
+
+**A reference is ground truth only for the quantities it was built to
+reproduce.** Ours was built for a byte-identical A/B of *samples* across two
+machines. Nothing about it makes it authoritative on an envelope, and nothing
+in its file says so.
+
 Jan reported this twice and it survived the collision that invalidated
 everything else he heard that session. It is real, it is the last surviving
 half of his verdict, and it is arithmetic rather than taste.
