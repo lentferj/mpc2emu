@@ -19781,6 +19781,16 @@ mismatches**, and neither was an error:
 reporting.** Both were sent raw, as disagreements, and both turned out to be
 the reporter's own scale.
 
+**A third variant, 2026-08-25: a recorded number without its BASE.** A note
+reading *"returned 58"* was read back as decimal and predicted 3000 cents; the
+value was hex, `0x58` = 88, decoding to 6000. The tool was right, the device was
+right, and the prediction was wrong because the record did not say what base it
+was in.
+
+**All three are one thing: a record that does not say enough about itself.**
+Prose that does not identify its field, a number that does not state its scale,
+a number that does not state its base. **Write the units in.**
+
 **The rule: state both scales before calling it a disagreement.** And the
 corollary, from the filter case — the answer was already in the other project's
 own notes, recorded two days earlier, and went unconsulted. **Check your own
