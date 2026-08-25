@@ -958,6 +958,67 @@ def _kg_vel_span(kg):
     return (min(z['lo_vel'] for z in zs), max(z['hi_vel'] for z in zs))
 
 
+def _merge_windows(wins):
+    """Overlapping key windows -> the smallest set of disjoint ones."""
+    if not wins:
+        return []
+    out = []
+    for lo, hi in sorted(wins):
+        if out and lo <= out[-1][1] + 1:
+            out[-1] = (out[-1][0], max(out[-1][1], hi))
+        else:
+            out.append((lo, hi))
+    return out
+
+
+def _split_voice_on_windows(voice, wins, cut_env):
+    """One voice -> the pieces inside `wins` (cut) and the pieces outside.
+
+    A mute group bites only on the keys two keygroups SHARE, so a voice whose
+    partner overlaps part of its range has to become two voices: the shared
+    keys with the cut envelope, the rest with its own. Zones that straddle a
+    boundary are split; a zone entirely outside every window is untouched.
+
+    Returns voices in key order, and never returns an empty one.
+    """
+    import copy as _copy
+
+    def clip(zones, lo, hi):
+        out = []
+        for z in zones:
+            a, b = max(z.lo_key, lo), min(z.hi_key, hi)
+            if a > b:
+                continue
+            nz = _copy.copy(z)
+            nz.lo_key, nz.hi_key = a, b
+            out.append(nz)
+        return out
+
+    lo0 = min(z.lo_key for z in voice.zones)
+    hi0 = max(z.hi_key for z in voice.zones)
+    pieces = []
+    cursor = lo0
+    for wlo, whi in wins:
+        if cursor < wlo:
+            pieces.append((cursor, wlo - 1, False))
+        pieces.append((max(wlo, lo0), min(whi, hi0), True))
+        cursor = min(whi, hi0) + 1
+    if cursor <= hi0:
+        pieces.append((cursor, hi0, False))
+
+    out = []
+    for a, b, is_cut in pieces:
+        zs = clip(voice.zones, a, b)
+        if not zs:
+            continue
+        nv = _copy.copy(voice)
+        nv.zones = zs
+        if is_cut:
+            nv.amp_env = cut_env
+        out.append(nv)
+    return out or [voice]
+
+
 def _apply_mute_groups(voices, kgs, prog_name, quiet=False):
     """Re-model the AKAI keygroup mute group, which E4B cannot express.
 
@@ -1002,7 +1063,7 @@ def _apply_mute_groups(voices, kgs, prog_name, quiet=False):
         if g != 255:
             groups.setdefault(g, []).append(i)
 
-    cut, cross = [], []
+    cut, cross, cut_windows = [], [], {}
     for g, members in groups.items():
         if len(members) < 2:
             continue
@@ -1020,17 +1081,50 @@ def _apply_mute_groups(voices, kgs, prog_name, quiet=False):
                 # The later keygroup wins: s3ked's 10 ms trace shows the mix
                 # tracking the lower-numbered layer for one window and the
                 # higher-numbered one thereafter.
-                cut.append(min(a, b))
+                loser = min(a, b)
+                cut.append(loser)
+                # ...and it is only cut where the two actually overlap.
+                cut_windows.setdefault(loser, []).append(
+                    (max(ka['lo_key'], kb['lo_key']),
+                     min(ka['hi_key'], kb['hi_key'])))
 
-    for i in sorted(set(cut)):
-        voices[i].amp_env = Envelope(attack=0.0,
-                                     decay=AKAI_MUTE_CUT_SECONDS,
-                                     sustain=0.0, release=0.0)
+    # THE CUT APPLIES ONLY WHERE BOTH PARTNERS SOUND -- fixed 2026-08-25
+    # (§AKAIMUTESCOPE). This replaced the losing voice's envelope across its
+    # WHOLE key range, when a mute group can only bite on the keys the two
+    # keygroups share. Measured on the bench: four of the six programs on one
+    # volume converted to a click followed by silence, because the voices
+    # covering the middle of the keyboard were cut by partners that overlap
+    # them only at one end. split patch 4 at note 48 --
+    #
+    #     v1 keys 39-52  cut     v2 keys 45-76  cut     nothing else plays there
+    #
+    # -- and the AKAI sustains that note for seconds. The rule was right and
+    # its scope was not.
+    cut_env = Envelope(attack=0.0, decay=AKAI_MUTE_CUT_SECONDS,
+                       sustain=0.0, release=0.0)
+    out, n_whole, n_split = [], 0, 0
+    for i, v in enumerate(voices):
+        wins = _merge_windows(cut_windows.get(i, []))
+        if not wins:
+            out.append(v)
+            continue
+        lo = min(z.lo_key for z in v.zones)
+        hi = max(z.hi_key for z in v.zones)
+        if wins[0][0] <= lo and wins[-1][1] >= hi and len(wins) == 1:
+            v.amp_env = cut_env
+            out.append(v)
+            n_whole += 1
+        else:
+            out.extend(_split_voice_on_windows(v, wins, cut_env))
+            n_split += 1
+    voices[:] = out
     if not quiet:
-        if cut:
-            print(f"    [note] {prog_name!r}: {len(set(cut))} layer(s) are cut "
-                  f"by a keygroup mute group; re-modelled as a "
-                  f"{AKAI_MUTE_CUT_SECONDS * 1000:.0f} ms decay")
+        if n_whole or n_split:
+            print(f"    [note] {prog_name!r}: {n_whole + n_split} layer(s) are "
+                  f"cut by a keygroup mute group; re-modelled as a "
+                  f"{AKAI_MUTE_CUT_SECONDS * 1000:.0f} ms decay"
+                  + (f" ({n_split} only over the keys the partner shares)"
+                     if n_split else ""))
         for g, a, b in cross:
             print(f"    [WARN] {prog_name!r}: keygroups {a} and {b} share mute "
                   f"group {g} but do not overlap in key range -- that is a "

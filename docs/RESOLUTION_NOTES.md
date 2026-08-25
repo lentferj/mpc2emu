@@ -212,6 +212,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§SSCENTSDEPTHS — the filter depths carry cents, and that dissolves FENVFULLSCALE rather than deciding it (2026-08-25)](#sscentsdepths-the-filter-depths-carry-cents-and-that-dissolves-fenvfullscale-rather-than-deciding-it-2026-08-25)
 - [§AKAIENV2PEAK — the filter envelope was read at its sustain and written as its peak, and that is where the click went (2026-08-25)](#akaienv2peak-the-filter-envelope-was-read-at-its-sustain-and-written-as-its-peak-and-that-is-where-the-click-went-2026-08-25)
 - [§AKAIKEYFOLLOWHW — key tracking fails its first hardware test, and the test only happened because the parameter was missing (2026-08-25)](#akaikeyfollowhw-key-tracking-fails-its-first-hardware-test-and-the-test-only-happened-because-the-parameter-was-missing-2026-08-25)
+- [§AKAIMUTESCOPE — the mute cut was applied to a whole voice when it can only bite on shared keys (2026-08-25)](#akaimutescope-the-mute-cut-was-applied-to-a-whole-voice-when-it-can-only-bite-on-shared-keys-2026-08-25)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -20413,3 +20414,71 @@ And an absent parameter is invisible to every check the receiving side can
 make: eosed verified structure, sample bindings, byte-for-byte transport and
 program-change reachability, and **all four are about whether the body arrived
 intact.** None of them can see a field that was never in it.
+
+## §AKAIMUTESCOPE — the mute cut was applied to a whole voice when it can only bite on shared keys (2026-08-25)
+
+Four of the six programs on one AKAI volume converted to **a click followed by
+silence**. Measured on the bench, note 48, RMS in successive windows:
+
+    take                 0-50ms   50-200   200-500   0.5-1s    1-2s
+    AKAI split patch 4       -25.9    -24.0     -25.0    -24.0   -27.0
+    E4XT conversion       -45.3    -85.4     -86.0    -86.1   -86.2
+
+-85 dB is the noise floor. The source sustains for seconds; the conversion
+stops.
+
+### The cause
+
+`_apply_mute_groups` replaced the losing voice's amp envelope across its
+**whole key range**. A mute group can only bite on the keys the two keygroups
+SHARE — elsewhere the partner is not sounding and nothing chokes.
+
+split patch 4's converted voices, before:
+
+    keys  24- 38   decay 9.123 s
+    keys  39- 52   decay 0.084 s   <- cut
+    keys  45- 76   decay 0.084 s   <- cut
+    keys  72-127   decay 9.123 s
+
+Note 48 is covered by the two cut voices and nothing else, so the note dies.
+But the 45-76 voice's choke partner is the 72-127 one, which overlaps it only
+above key 72 — at note 48 that partner is silent and the cut should not apply.
+
+### The fix
+
+Record the INTERSECTION of each choking pair, not just the loser's index, and
+split the loser at those boundaries: the shared keys get the cut envelope, the
+rest keeps its own. Zones straddling a boundary are split with it.
+
+    keys  24- 38   decay 7.701 s
+    keys  39- 44   decay 7.701 s
+    keys  45- 52   decay 0.084 s   <- cut, and only here
+    keys  45-127   decay 7.701 s   (C3+C4, merged after the split)
+    keys  72- 76   decay 0.084 s   <- cut, and only here
+
+**Checked across all six programs: every note from 24 to 127 now has at least
+one sustaining voice.** Before the fix, four of six had dead regions.
+
+### What this says about the earlier argument
+
+s3ked proposed exactly this — *"you are applying the choke to every zone in an
+all-0 program; it should apply only where two keygroups actually overlap"* — and
+**I checked the code, found the overlap test, and told them they were wrong.**
+The overlap test is there and it is correct: it decides WHETHER to cut. What it
+does not do is decide WHERE. Being able to point at the line that implements a
+check is not the same as checking that the check does what its name says, and
+"I looked and it is handled" is the most confident form of not looking.
+
+Three of my four hypotheses tonight were wrong and the one that was right came
+from the peer I contradicted.
+
+### Why no harness caught it
+
+The round-trip corpus reads AKAI and writes AKAI. A voice cut across its whole
+range writes back as a keygroup with a short envelope — self-consistent, and
+the mismatch it does produce was already being dismissed as the deliberate
+re-model (§155). Only playing the conversion next to its source finds a note
+that stops when it should ring, and only doing that for SEVERAL PROGRAMS finds
+it at all: the one program under study all evening, split patch 2, is the one whose
+keygroups overlap completely, where whole-voice and shared-key cutting are the
+same thing. **The bug was invisible on the patch we were staring at.**
