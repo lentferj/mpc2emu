@@ -19381,6 +19381,42 @@ field.
 **A false positive from a guard costs a re-run. A false negative costs the data
 and the subject.** Worth erring toward guards that occasionally cry wolf.
 
+### The index of open work is the thing that goes stale
+
+s3ked, 2026-08-25, and it cost them two bench sweeps over ground already
+covered.
+
+A measurement sat recorded in their constants module since 2026-08-17 — the
+positive half of a field swept to the top of its range, no saturation anywhere.
+**Their notes' status line for that item still read "open, one measurement
+away."** They read the status, believed it, and measured it twice more.
+
+**Nothing was wrong anywhere. The fact was right in the file that holds facts;
+the file that decides what to do next was stale.** And the consequence reached
+us: two confident messages carrying a bound that was too narrow, and a clamp
+here set to +40 when the field had been shown good to 99.
+
+**The hazard applies directly to this project**, whose `TODO.md` and whose
+constants can disagree about whether something is settled — and `TODO.md` is
+exactly the file consulted to decide what to work on. **A stale "open" costs
+repeated work; a stale "fixed" costs a defect nobody looks for.**
+
+### A test that checks a MESSAGE rather than an EFFECT
+
+Same review. An editor's `_nudge` carried an escape hatch: a value already
+outside its range could be stepped back *towards* it, so it would not be
+trapped. The step then went through an encoder that refuses anything outside
+the range, so stepping down from 60 produced 59 and was refused exactly as 60
+had been. **The hatch existed for two months and never once fired.**
+
+**The test asserted only that the refusal WORDING was absent** — and on the
+error path it is. It never asserted the value moved. **A test that checks a
+message rather than an effect passes on the failure it was written to
+prevent.**
+
+Audited ours the same day: no test here asserts the absence of a message in
+place of an effect. Worth re-checking whenever one is added.
+
 ### An anchor must be an identifier, not prose
 
 s3ked's, 2026-08-24, and it generalises the docstring rule above rather than

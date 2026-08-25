@@ -2058,8 +2058,17 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
         # the source had -- and the reader did not read it either, which is
         # why nothing ever disagreed.
         #
-        # Clamped to -30..+40, the range that has been VISITED on the machine,
-        # and no further.
+        # Clamped to -30..99: the whole positive half of the field plus the
+        # negative range that has been visited.
+        #
+        # This was -5..+22, then -30..+40, and both were too narrow for the same
+        # reason in two different ways. The first was a fit range mistaken for a
+        # field range. The second was "declare only what has been visited" --
+        # correct in principle, and wrong here because **the positive side had
+        # already been swept to 99 a week earlier and the record of it was not
+        # consulted**: the corner rises linearly to K_FREQ 99 at 0.508-0.602
+        # FILFRQ units per step against 0.511 predicted, with no saturation
+        # anywhere in range.
         #
         # This was -5..+22 for one evening and the corpus said that was far too
         # narrow: `filter_keyfollow` changed on **32.6% of round-tripped zones**
@@ -2079,7 +2088,7 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
         # A predicted knee at 24 was written down before that run and refuted --
         # the second prediction refuted on this one field.
         _kf = getattr(voice, 'filter_keytrack', 0.0) or 0.0
-        k[0x08] = _clamp(int(round(_kf * 12.0)), -30, 40) & 0xFF
+        k[0x08] = _clamp(int(round(_kf * 12.0)), -30, 99) & 0xFF
         if _vf_lost > 50:
             _velfilt_clipped.append((index + 1, _vf_lost))
     # VELOCITY -> FILTER FREQUENCY, KEYGROUP BYTE 151. Written since 2026-08-16;
