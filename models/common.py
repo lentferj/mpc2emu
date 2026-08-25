@@ -684,10 +684,38 @@ AKAI_TUNE_UNITS_PER_SEMITONE = 256
 #: which is what makes it emulable by an envelope at all.
 #:
 #: ONE MEASUREMENT, ONE NOTE, ONE PROGRAM. Whether it varies with polyphony,
-#: note or velocity is untested, and 10 ms is the resolution of the trace
-#: rather than a fitted value. Good enough to reproduce the audible effect,
-#: not good enough to quote as a machine constant.
-AKAI_MUTE_CUT_SECONDS = 0.010
+#: note or velocity is untested.
+#:
+#: **RE-MEASURED 2026-08-25 (s3ked, §155 amendment) AND IT IS NOT A GATE.**
+#: The 10 ms above was the TRACE WINDOW, not the cut: a 10 ms grid can only
+#: say the layer was present in one window and gone by the next, which bounds
+#: the cut at <=10 ms and measures nothing. At 2 ms windows on a 0.5 ms hop,
+#: the cut layer against its own uncut self:
+#:
+#:     t+ms      0     1     2     3     4     5     6     8    10    12
+#:     dB      0.0  +0.7  +0.1  +1.0  -0.1  -1.6  -4.0 -13.1 -13.7 -20.7
+#:
+#: **Full level for the first 4-5 ms, then a ramp to -20 dB by 12 ms.** Below
+#: about -20 dB the technique is floor-limited (the partner has to stay
+#: audible enough to choke), so the tail beyond that is not quoted.
+#:
+#: **WHAT THIS CONSTANT CAN AND CANNOT DO.** `Envelope` is four parameters and
+#: cannot express "hold, then fall": with attack 0 and sustain 0 the level
+#: falls from t=0 at a constant rate, so the 5 ms at unity is unrepresentable.
+#: The value below reproduces the measured RAMP -- 97 dB of span at the rate
+#: that reaches -20 dB at 12 ms -- and accepts the hold as a known residual of
+#: about 3.6 dB over the first 30 ms.
+#:
+#: The old 0.010 reached -20 dB at 2.1 ms and lost **11.2 dB** of energy over
+#: that window against the measured cut. That is most of an attack transient,
+#: and it is what Jan heard as "the click is pretty much gone" on a converted
+#: electric piano whose loud layer is the choked one (the choke costs 13.7 dB
+#: of early level, so the layer being cut carries most of the attack).
+#:
+#: The residual is a MODEL limit, not a calibration gap: see TODO "the mute
+#: cut needs a hold stage". Do not fit this constant to close it -- matching
+#: the energy instead would need 80 ms and would put the ramp 4.5 ms late.
+AKAI_MUTE_CUT_SECONDS = 0.058
 
 #: The AKAI LFO1, all three fields, fitted across the WHOLE 0..99 field rather
 #: than a window. s3ked's `s3k/scales.py`, 2026-08-12:
