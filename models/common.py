@@ -602,7 +602,11 @@ def akai_env2_max_octaves(base_hz: float) -> float:
 
 E4B_FENV_OCT_PER_UNIT  = 5.14e-4    #: octaves per (level% x amount%), eosed §46
 AKAI_ENV2_DEPTH_MAX = (E4B_FENV_OCT_PER_UNIT * 100.0 * 100.0
-                       / (AKAI_ENV2_OCT_PER_UNIT * 99.0))     #: ~18.3
+                       / (AKAI_ENV2_OCT_PER_UNIT * 99.0))     #: ~19.88
+#: The comment above said ~18.3 until 2026-08-25 and the docs quoted that
+#: figure in four places. It is DERIVED, so it moved when one of its inputs
+#: was recalibrated and nothing pointed at the stale copies. Caught by
+#: tests/test_docs_constants_agree.py on that test's first run.
 
 
 #: VLOUD1 (per-zone level offset) -> dB. s3ked 2026-08-17: the full law is

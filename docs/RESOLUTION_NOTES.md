@@ -2195,7 +2195,7 @@ LFO→Pitch and still a proportional guess for the others (`FILTER_ENV_FULL_CENT
   Key→Filter (±3.65 oct + 0.713 oct/oct ⇒ key source ±1 over ~128 keys, 2.08≈2.0).
   **Reconciliation:** destination `0x38` (Filter-Freq) has a single sensitivity
   shared by LFO→Filter, Key→Filter, Velocity→Filter AND FilterEnv→Filter, so
-  `FILTER_ENV_FULL_CENTS = 9600` is ~2.2× too high → reset to **≈4383** at apply
+  `FILTER_ENV_FULL_CENTS` was 9600 is ~2.2× too high → reset to **≈4383** at apply
   time (filter-env depth has likewise been under-delivered in conversions).
   Apply: add `lfo_filter_depth_to_amount(oct) = oct / 3.65` (clamped ±1).
 - **Key→Filter — first take exposed a transpose-rail; KeyTrk/VelTrk redesigned.**
@@ -17257,7 +17257,7 @@ an output-bandwidth difference.
 
 ### The cause, and why every earlier test was a null
 
-`AKAI_ENV2_DEPTH_MAX = 18.30` makes the source's ENV2 depth 25 worth **7.02
+`AKAI_ENV2_DEPTH_MAX = 19.88` makes the source's ENV2 depth 25 worth **7.02
 octaves**. eosed measured one cord at +100 from a ~120 Hz base putting the corner
 **past 19 kHz**. So our resonant peak sits outside the audio band, where no value
 of Q is audible.
@@ -17389,7 +17389,7 @@ preset, several base cutoffs, and enough points below saturation to see the
 shape. Same rig and method as tonight's cutoff and Q runs.
 
 **B2. Measure what an AKAI ENV2 depth is worth in octaves.** We have
-`AKAI_ENV2_DEPTH_MAX = 18.30`, composed from two constants measured on two
+`AKAI_ENV2_DEPTH_MAX = 19.88`, composed from two constants measured on two
 different machines and never checked end to end. Tonight it over-delivered by
 2.5x to 6.7x. Sweep DEPTH on the S3000XL against a fixed FILFRQ and measure the
 corner shift directly.
@@ -17841,7 +17841,7 @@ byte 112** with fifteen dead steps above it, and exactly twice the dB on the
 
 ### 4. The FilterEnv depth conversion composes two laws and should not
 
-`AKAI_ENV2_DEPTH_MAX = 18.30` is derived by equating two constants measured on
+`AKAI_ENV2_DEPTH_MAX = 19.88` is derived by equating two constants measured on
 two different machines, and it over-delivers by 2.5x to 6.7x — enough to sweep
 the corner past 19 kHz, out of the audio band, which is why four filter tests in
 a row measured ~1 dB (§AKAIENV2DEPTH).
