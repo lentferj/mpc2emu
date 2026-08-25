@@ -104,6 +104,7 @@ import xml.etree.ElementTree as ET
 from xml.dom import minidom
 
 from models.common import (
+    nominal_knob_to_hz,
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType, Envelope,
     safe_filename,
 )
@@ -342,7 +343,9 @@ def parse_talsmpl(talsmpl_path: str, wav_dir: Optional[str] = None) -> Bank:
             print(f"  [WARN] Embedded sample decode failed ({fn}): {exc}")
 
     # Global filter / ADSR (single set for the whole preset in TAL-Sampler)
-    filter_cutoff    = float(prog.get('filtercutoff',    '1.0'))
+    # UNMEASURED knob -- see nominal_knob_to_hz.
+    filter_cutoff    = nominal_knob_to_hz(
+        float(prog.get('filtercutoff', '1.0')))
     filter_resonance = float(prog.get('filterresonance', '0.0'))
     filter_type      = _tal_filtermode_to_xpm(float(prog.get('filtermode', '0.0')))
     adsr_attack  = _tal_adsr_to_secs(float(prog.get('adsrampattack',  '0.0')))

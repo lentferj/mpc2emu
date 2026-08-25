@@ -100,7 +100,8 @@ import struct
 from pathlib import Path
 from typing import Optional, List, Dict
 
-from models.common import Bank, Preset, VoiceLayer, ZoneMapping, SampleData
+from models.common import (Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
+                           nominal_knob_to_hz)
 from parsers.xpm_parser import load_wav, _safe_name
 
 
@@ -285,7 +286,12 @@ def _parse_mpc1000(p: Path, data: bytes,
             # Filter 1 (only when engaged and not fully open).
             if f1_type in _PGM_FILTER_XPM and f1_freq < 100:
                 voice.filter_type      = _PGM_FILTER_XPM[f1_type]
-                voice.filter_cutoff    = min(1.0, f1_freq / 99.0)
+                # An UNMEASURED knob. This stored the raw 0..1 into a field
+                # the pipeline then read as a position on the nominal
+                # 57 Hz..20 kHz scale -- the assumption was already being
+                # made, silently. Named now, so measuring this machine is a
+                # one-line change. NOT a calibration.
+                voice.filter_cutoff    = nominal_knob_to_hz(f1_freq / 99.0)
                 voice.filter_resonance = min(1.0, f1_res / 100.0)
             else:
                 voice.filter_type   = 0

@@ -796,7 +796,7 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
             elif b0 != _K2_FILTER_NONE:
                 cur.filter_type = _K2_FILTER_TO_XPM[b0]
                 hz = krz_cutoff_byte_to_hz(seg[1])
-                cur.filter_cutoff = hz_to_e4b_cutoff(hz)
+                cur.filter_cutoff = hz            # the model carries Hz (2026-08-25)
                 # BOTH SOURCE SLOTS, ONE SCALE.
                 #
                 # A K2000 DSP function has two modulation sources. Slot 1 is

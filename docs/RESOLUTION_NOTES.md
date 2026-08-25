@@ -207,6 +207,8 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§INERTCHANGE — four defects in one night, all of them changes that looked applied (2026-08-24)](#inertchange-four-defects-in-one-night-all-of-them-changes-that-looked-applied-2026-08-24)
 - [§E4BFENVUNIT — the filter envelope is right by cancellation, not by construction (2026-08-24)](#e4bfenvunit-the-filter-envelope-is-right-by-cancellation-not-by-construction-2026-08-24)
 - [§CORPUSRT — round-tripping the corpus, and the eight defects it found in two hours (2026-08-24)](#corpusrt-round-tripping-the-corpus-and-the-eight-defects-it-found-in-two-hours-2026-08-24)
+- [§CUTOFFHZ — `filter_cutoff` now carries hertz, and the corpus says how much that was costing (2026-08-25)](#cutoffhz-filter_cutoff-now-carries-hertz-and-the-corpus-says-how-much-that-was-costing-2026-08-25)
+- [§KRZVELFOLD — the KRZ writer destroys a K2000's own velocity cord, and it is what remains after §CUTOFFHZ (2026-08-25)](#krzvelfold-the-krz-writer-destroys-a-k2000s-own-velocity-cord-and-it-is-what-remains-after-cutoffhz-2026-08-25)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -19934,3 +19936,142 @@ and for anyone who turns the depth up later.
 Every example inspected had `filter_env_amount == 0` with a real shape behind
 it — attacks of 4.76 s and 8.0 s discarded because the routing that would have
 swept them was switched off. What remains at 30.5% is the encoding floor above.
+
+## §CUTOFFHZ — `filter_cutoff` now carries hertz, and the corpus says how much that was costing (2026-08-25)
+
+**The third and last of the family.** Three defects this week had the same
+shape: *a physical quantity stored in one machine's parameter scale*. The
+release span was fixed 2026-08-24 (§AKAIRELSPAN), `filter_keytrack` in EOS cord
+units on 2026-08-25, and this is the third. Each cost roughly a third of the
+corpus, and each was invisible to every test we had because both sides of every
+round trip agreed on the wrong unit.
+
+`VoiceLayer.filter_cutoff` was a **position on the E-MU's 57 Hz – 20 kHz
+exponential**. That scale is not a superset of the others:
+
+| machine | reaches down to | what the model could hold |
+|---|---|---|
+| E-MU E4XT | ~133 Hz (byte 0 → position 0.1446) | fits |
+| Kurzweil K2000 | 16 Hz (byte −48) | **clamped to 57 Hz** |
+| AKAI S3000XL | ~7 Hz (FILFRQ 0, measured by s3ked 2026-08-24) | **clamped to 57 Hz** |
+
+So the model's floor sat *above* two of the three machines' real range, and
+everything below it collapsed onto one value. On the AKAI that is **every
+FILFRQ below 28 — 29.4% of the corpus** — arriving back as 28. The full sweep
+of the sound libraries showed `filter_freq` changing on 0.6%–26.0% of zones per
+disc, examples `21 -> 28`, `22 -> 28`, `23 -> 28`, `24 -> 28`.
+
+### The fix
+
+Store the frequency; convert at the point of use. Same move `filter_keytrack`
+made the same morning, and bigger, because cutoff is set by every parser and
+consumed by every writer.
+
+- **Six parsers stopped converting Hz away.** `sf2`, `eiii`, `sfz`, `krz`,
+  `exs24`, `akai` all knew their source's cutoff in hertz and were calling
+  `hz_to_e4b_cutoff` to throw the precision at the E-MU scale. They now assign
+  the frequency.
+- **`e4b_parser` converts once, on the way in** — its byte is genuinely an
+  E-MU position, so it goes `byte -> position -> Hz` at the read and no
+  consumer converts back. Missing this one is what made the E4B corpus read
+  100% `filter_cutoff` mismatch on the first pass: the writer had moved to Hz
+  and the reader had not.
+- **Four normalised-knob sources became explicit.** `pgm`, `gig`, `talsmpl`
+  and the MPC 2.x `xpm` path have only a 0–1 knob and no measurement. They now
+  call `nominal_knob_to_hz`, which is the E-MU curve *named as an assumption*
+  rather than a silent pass-through into a field that meant something else.
+  See the re-scoped "Normalised-knob cutoff sources" row in `TODO.md`.
+- **The AKAI writer searches in log Hz.** `_filfrq_positions()` became
+  `_filfrq_hz_table()` and `_nearest_filfrq(hz)` compares log-frequency
+  distance. Searching in position space had a second effect: it compressed the
+  dark end so hard that neighbouring bytes were indistinguishable.
+- **The KRZ writer's velocity fold moved into octaves.** The velocity term is a
+  *fraction of the 0–1 scale*, so it could not simply be added to a frequency —
+  but that scale is logarithmic, so the fraction **is** a number of octaves:
+  `E4B_CUTOFF_RANGE_OCT` (8.455) of them. Multiplying it out lets the sum
+  happen in Hz. Identical arithmetic to the old fold inside the E-MU range, and
+  unlike the old one it does not clamp a dark source up to 57 Hz before adding.
+- **Saturation stopped colliding.** A saturated AKAI FILFRQ now returns
+  `E4B_CUTOFF_MAX_HZ` instead of FILFRQ 95's own corner, and `_nearest_filfrq`
+  uses `>` rather than `>=` at `AKAI_FILTER_OPEN_HZ`.
+
+### Measured, on the same sweep that found it
+
+| corpus | before | after |
+|---|---|---|
+| AKAI, 2292 programs / 10153 zones | `filter_freq` **16.1%** | **1.7%** |
+| E4B, 58 banks / 26644 zones | `filter_cutoff` **100%** | **0.1%** |
+| KRZ, 32 banks / 3186 zones | `filter_cutoff` **61.3%** | **49.3%** → see §KRZVELFOLD |
+
+507 tests pass. Seven test fixtures had to move from positions to hertz, and
+several of those had been **passing for the wrong reason**: with 0.0 and 0.5
+both clamping to the bottom of the scale, two cases that were meant to be
+distinct were the same test written twice.
+
+### What is left, and why it is not fixable here
+
+**The 94/95 collision.** The remaining 1.7% on the AKAI side is dominated by
+`95 -> 94`. FILFRQ 95 has no measurement of its own and inherits 94's corner, so
+the search cannot tell them apart. Irreducible until s3ked measures byte 95 —
+this is a measurement gap, not a conversion error, and fitting a curve through
+it would be inventing the data point.
+
+**The KRZ residual** is a different defect entirely; §KRZVELFOLD.
+
+## §KRZVELFOLD — the KRZ writer destroys a K2000's own velocity cord, and it is what remains after §CUTOFFHZ (2026-08-25)
+
+Moving cutoff to hertz took the KRZ corpus from 61.3% to 49.3%, not to ~2% like
+the other two. The residual is not the cutoff scale.
+
+`krz_writer._patch_layer` folds `max(0, velocity_to_filter)` into the static
+cutoff and writes no velocity cord at all. On the corpus:
+
+- `velocity_to_filter` changes on **46.7% of zones**, always to `0.0`;
+- neutralising the fold (experiment only, reverted) drops `filter_cutoff` from
+  **49.3% to 3.5%**.
+
+So the fold is the whole residual. The typical case is small and systematic:
+a source cord of `0.00555` becomes `0.00555 × 8.455 oct = 0.047 oct`, which
+rounds the semitone byte up by exactly one — `493.88 Hz -> 523.25 Hz`.
+
+**The fold is correct for the case it was written for.** The comment at the
+site records it, and it is hardware-checked: on an MPC source a high
+VelocityToFilter means the cutoff opens at playing velocity (Jan, on Bass-MS20:
+VelToFilter 127 → filter ~open), and rendering that as a K2000 VelTrk sweep
+starting from the K2000's 16 Hz floor would **mute softly-played notes the MPC
+keeps audible**. Baking it into a static cutoff is the right trade for a source
+that cannot be expressed any other way.
+
+It is wrong when the target can express what the source said. The K2000 can:
+`krz_parser.py:871` and `:907` already decode the cord on the way in. A
+K2000 program read and rewritten loses a parameter the format has a slot for.
+
+**Deliberately not fixed in the §CUTOFFHZ commit.** The two cases want opposite
+things and the writer cannot tell them apart from the model alone — the MPC
+path is the one that would regress, and it is the one confirmed on hardware.
+
+### What to do
+
+1. **Do not "fix" this by always writing the cord.** That is the muted-soft-notes
+   regression, on the only branch of this that has hardware behind it.
+2. The distinguishing information is whether the source's cutoff and velocity
+   depth are *independent controls* (K2000, E4B: write the cord) or *summed*
+   (MPC: fold). That is a property of the source format, not of the value, so
+   it belongs on the parser — a flag on `VoiceLayer` alongside the depth, set
+   by whichever parser produced it, defaulting to the fold so nothing changes
+   for sources that have not been looked at.
+3. Confirm on the device before changing anything: build one bank with both
+   renderings of the same source voice as two presets (§ the one-bank-many-
+   presets convention) and have k2kremote read each program's own filter page
+   back, as it did for §KRZCUTCAL.
+
+### The smaller sibling in the same sweep
+
+The 3.5% left after neutralising the fold is the model's **ceiling**: the
+K2000's cutoff byte reaches 25088 Hz and the model clamps to
+`E4B_CUTOFF_MAX_HZ = 20000.0`, so `25087.7 -> 19912.1` on a K2000→K2000 trip.
+Both are far above anything audible and no material is affected, but it is the
+same class of error as §CUTOFFHZ one octave up: a machine's real range trimmed
+to another machine's scale. Fixing it means the model's cutoff has no ceiling
+and each writer clamps to its own — cheap, but it touches every writer, so it
+waits for a reason better than tidiness.

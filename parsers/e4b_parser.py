@@ -46,7 +46,8 @@ from models.common import (Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            filter_amount_to_key_track,
                            ENV_FULL_SPAN_DB,
                            cord_byte_to_amount,
-                           e4xt_cutoff_byte_to_position, e4xt_byte_to_volume_db,
+                           e4xt_cutoff_byte_to_position,
+                           e4b_cutoff_position_to_hz, e4xt_byte_to_volume_db,
                            e4xt_byte_to_pan)
 
 
@@ -408,7 +409,12 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     # the measured E4XT cutoff law), so it must be inverted back to the shared
     # nominal position here -- otherwise parser and writer stop being inverses
     # and an E4B->E4B conversion applies the correction twice. See §E4BFILTCAL.
-    filter_cutoff    = e4xt_cutoff_byte_to_position(vpar[60])
+    # HERTZ since 2026-08-25. `e4xt_cutoff_byte_to_position` gives the SHARED
+    # 0..1 position the byte represents; the model now carries the frequency
+    # that position means, so this converts once here instead of every consumer
+    # converting back.
+    filter_cutoff    = e4b_cutoff_position_to_hz(
+        e4xt_cutoff_byte_to_position(vpar[60]))
     # Inverse of the writer's measured curve (§E4XTQCAL). Was `vpar[61]/127`,
     # which was not an inverse of anything -- reader and writer have to move
     # together or an E4B->E4B repack shifts the resonance every pass.

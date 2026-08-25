@@ -393,9 +393,26 @@ def _cutoff_of(filfrq: int, s3000: bool) -> float:
     interpolation with measurement and would move 44% of real voices.
     """
     hz = akai_filfrq_to_hz(filfrq)
-    if hz is None:                      # saturated: the machine does not
-        return 1.0                      # distinguish these from wide open
-    return hz_to_e4b_cutoff(hz)
+    if hz is None:
+        # Saturated: the machine does not distinguish these from wide open, so
+        # the honest model value is WIDE OPEN and not the highest measured
+        # corner.
+        #
+        # Returning `AKAI_FILTER_OPEN_HZ` here collided with FILFRQ 95, whose
+        # measured corner IS that frequency -- so 95 and 96..99 arrived as the
+        # same number and the writer had to pick one, sending 95 back as 99 on
+        # 2.1% of zones. They are different settings and the model can hold
+        # that.
+        #
+        # `_env2_amount` still uses the highest measured corner for its own
+        # saturated case, and that is a different decision on purpose: a sweep
+        # needs a real corner to start from, where a cutoff needs to say
+        # "open".
+        return E4B_CUTOFF_MAX_HZ
+    # THE MODEL CARRIES Hz SINCE 2026-08-25, and this is the call site the
+    # change was made for: converting to a position here put every corner
+    # below 57 Hz -- 29.4% of the corpus -- onto one byte on the way back.
+    return hz
 
 
 

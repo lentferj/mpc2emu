@@ -178,7 +178,8 @@ def _sfz_voice_params(merged: dict) -> dict:
         params['env_release'] = _f('ampeg_release', 0.5)
     if 'cutoff' in merged:
         try:
-            params['filter_cutoff'] = hz_to_e4b_cutoff(float(merged['cutoff']))
+            # sfz states the corner in Hz and the model now carries Hz.
+            params['filter_cutoff'] = float(merged['cutoff'])
         except ValueError:
             pass
     if 'fil_keytrack' in merged:

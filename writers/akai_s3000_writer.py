@@ -42,7 +42,7 @@ from models.common import (
     AKAI_LFO_DEPTH_CAL_LPTCH,
     akai_01_to_filq,
     KEY_FILTER_OCT_PER_OCT,
-    AKAI_FILTER_LAW, AKAI_FILTER_OPEN, akai_filfrq_to_hz,
+    AKAI_FILTER_LAW, AKAI_FILTER_OPEN, AKAI_FILTER_OPEN_HZ, akai_filfrq_to_hz,
     AKAI_ENV2_ATTACK, AKAI_ENV2_DECAY, AKAI_ENV2_RELEASE,
     AKAI_ENV2_DEPTH_OFFSET, AKAI_ENV2_DEPTH_MAX,Bank, LoopType, SampleData, safe_filename,
                            E4B_CUTOFF_MIN_HZ, E4B_CUTOFF_MAX_HZ, hz_to_e4b_cutoff)
@@ -547,94 +547,82 @@ def akai_velocity_filter(cutoff_pos: float, vel_min: float, vel_max: float):
     return f_byte, d_byte, lost_clamp + lost_range
 
 
-def _filfrq_positions():
-    """FILFRQ -> the model position it reads as, for every settable value.
+def _filfrq_hz_table():
+    """FILFRQ -> the corner in Hz it reads as, for every settable value.
 
     Built from `akai_filfrq_to_hz`, the SAME function the reader uses, so the
-    writer is the inverse of the reader by SEARCH rather than by a second
+    writer is the inverse of the reader BY SEARCH rather than by a second
     formula. That is the lesson of 2026-08-20: two hand-derived inverses of one
-    curve drifted apart and nine of ten FILFRQ values failed a round trip,
-    while a docstring claimed they were inverses by construction. A search
-    cannot drift.
+    curve drifted apart and nine of ten FILFRQ values failed a round trip while
+    a docstring claimed they were inverses by construction. A search cannot
+    drift.
+
+    **THE DOMAIN IS THE WHOLE FIELD, and getting here took three attempts.**
+
+    It began at the FITTED FLOOR (40), justified by "below it the reader
+    clamps". That clamp was removed on 2026-08-24 once the corner was measured
+    all the way down -- monotonic across 41 dB, no plateau -- and the read side
+    was fixed while this was left, so FILFRQ 10 and 20 both wrote back as 40:
+    a dark keygroup brightened by up to four octaves.
+
+    Opening it to 0 was WORSE. `filter_cutoff` was then an E-MU POSITION whose
+    scale bottoms at 57 Hz, so every AKAI corner below that arrived here
+    identical and the search returned the darkest byte in the domain -- one
+    plateau traded for another, at the wrong end. A floor at the darkest byte
+    the model could distinguish was the honest patch, and it still flattened
+    **29.4% of the corpus** onto FILFRQ 28.
+
+    **The model carries Hz since 2026-08-25, so the search runs in Hz and the
+    floor is gone.** Matching in LOG Hz, because a semitone is a ratio: 40 Hz
+    against 45 is the same musical error as 4000 against 4500, and matching
+    linearly would spend all its precision at the top.
     """
-    # DOMAIN IS THE WHOLE FIELD, 0..open.
-    #
-    # It used to start at the FITTED FLOOR (40), justified by "below it the
-    # reader clamps, so every setting from 0 to the floor reads as the same
-    # position". **That clamp was removed from `akai_filfrq_to_hz` on
-    # 2026-08-24** after the corner was measured all the way down -- monotonic
-    # across 41 dB, no plateau -- and this justification became false the same
-    # hour. The read side was fixed and the write side was left, which is the
-    # one-sided repair this project keeps making: FILFRQ 10 (15.7 Hz) and 20
-    # (32.4 Hz) both wrote back as 40 (138 Hz), brightening a dark keygroup by
-    # up to four octaves on an AKAI -> AKAI round trip.
-    #
-    # Caught by review rather than by a test, because nothing round-trips a
-    # cutoff below the old floor.
-    #
-    # BUT THE FLOOR IS NOT ZERO EITHER, AND THE FIRST ATTEMPT AT THIS WAS
-    # WORSE THAN WHAT IT REPLACED. Opening the domain to 0 made FILFRQ 14, 16
-    # and 20 all write back as **0** -- 7.6 Hz where the source said 32 --
-    # because the model's `filter_cutoff` is an E4B POSITION and that scale
-    # bottoms out at `E4B_CUTOFF_MIN_HZ` (57 Hz). Every AKAI corner below 57 Hz
-    # arrives here as position 0, so the search saw them as identical and
-    # returned the darkest byte in the domain. One plateau traded for another,
-    # at the wrong end.
-    #
-    # So the domain starts at the darkest byte the MODEL can actually
-    # distinguish: position 0 means "at or below 57 Hz", and the honest
-    # representative of that is the byte nearest 57 Hz, not the byte nearest
-    # zero. Derived from the E4B scale's own limit rather than from a fit
-    # range -- a real boundary, not an artifact of where someone stopped
-    # measuring.
-    #
-    # The information is already gone by the time it reaches this function.
-    # The upstream fix is for `filter_cutoff` to carry Hz rather than one
-    # machine's position, which is the same defect as the release span and the
-    # key-follow units. Recorded in TODO.md; not a change to make inside a
-    # search function.
-    _floor = 0
-    while (akai_filfrq_to_hz(_floor) or 0.0) < E4B_CUTOFF_MIN_HZ \
-            and _floor < AKAI_FILTER_OPEN:
-        _floor += 1
     out = {}
-    for v in range(_floor, AKAI_FILTER_OPEN + 1):
+    for v in range(0, AKAI_FILTER_OPEN + 1):
         hz = akai_filfrq_to_hz(v)
-        out[v] = 1.0 if hz is None else hz_to_e4b_cutoff(hz)
+        out[v] = None if hz is None else hz
     return out
 
 
-_FILFRQ_POS = None
+_FILFRQ_HZ = None
 
 
-def _nearest_filfrq(pos: float) -> int:
-    """Position -> the FILFRQ whose own position is closest.
+def _nearest_filfrq(hz: float) -> int:
+    """Cutoff in Hz -> the FILFRQ whose own corner is closest, in LOG Hz.
 
     Fully open is written as 99, the machine's own resting value, rather than
-    as the lowest saturated setting -- 96..99 are indistinguishable to the
-    machine (98 differs from 99 by 2.2 dB across the whole band), so any of
-    them is correct and 99 is the one a user's machine sits at.
+    the lowest saturated setting -- 96..99 are indistinguishable to the machine
+    (98 differs from 99 by 2.2 dB across the whole band), so any is correct and
+    99 is where a user's machine sits.
 
     Below that, **ties go to the LOWER setting**, which keeps a measured point
-    in preference to a clamp: FILFRQ 95 has no measurement and takes 94's
-    corner, so the two share a position, and 94 is the one that was actually
-    measured.
+    in preference to an unmeasured one: FILFRQ 95 has no measurement and takes
+    94's corner, so the two share a frequency and 94 is the one measured.
     """
-    global _FILFRQ_POS
-    if _FILFRQ_POS is None:
-        _FILFRQ_POS = _filfrq_positions()
-    if pos >= 1.0:
+    global _FILFRQ_HZ
+    if _FILFRQ_HZ is None:
+        _FILFRQ_HZ = _filfrq_hz_table()
+    # STRICTLY GREATER. `AKAI_FILTER_OPEN_HZ` IS FILFRQ 95's own measured
+    # corner, so `>=` swallowed 95 and returned 99 -- 2.1% of round-tripped
+    # zones, all at this one boundary. The reader now returns wide open (the
+    # scale's top) for the genuinely saturated 96..99, which is comfortably
+    # above this, so both cases still land where they should.
+    if hz > AKAI_FILTER_OPEN_HZ:
         return AKAI_FILTER_OPEN
+    target = math.log(max(1e-6, hz))
     best, best_d = 0, 9e9
-    for v in sorted(_FILFRQ_POS):
-        d = abs(_FILFRQ_POS[v] - pos)
+    for v in sorted(_FILFRQ_HZ):
+        f = _FILFRQ_HZ[v]
+        if f is None:               # saturated: indistinguishable from open
+            continue
+        d = abs(math.log(f) - target)
         if d < best_d - 1e-12:
             best, best_d = v, d
     return best
 
 
-def akai_filter_byte(cutoff_pos: float) -> int:
-    """0..1 shared cutoff position -> FILFRQ.
+def akai_filter_byte(cutoff_hz: float) -> int:
+    """Cutoff in Hz -> FILFRQ.
 
     `filter_cutoff` is this project's internal 0-1 position, defined by the
     documented 57 Hz..20 kHz law (see models.common). Convert it to the
@@ -663,8 +651,7 @@ def akai_filter_byte(cutoff_pos: float) -> int:
                        FILFRQ 0..43 is unmeasured and the E4B precedent says
                        an unsampled extrapolation can be wrong by 5x.
     """
-    pos = max(0.0, min(1.0, cutoff_pos))
-    return _nearest_filfrq(pos)
+    return _nearest_filfrq(max(0.0, cutoff_hz))
 
 
 def akai_lfo_rate_byte(hz: float) -> int:

@@ -267,7 +267,7 @@ def _parse_zone(data: bytes, offset: int, key_lo: int, key_hi: int,
     has_filter = not (cutoff_hz >= E4B_CUTOFF_MAX_HZ and resonance == 0 and env_amount == 0)
     extra.filter_type = 1 if has_filter else 0
     if has_filter:
-        extra.filter_cutoff = hz_to_e4b_cutoff(cutoff_hz)
+        extra.filter_cutoff = cutoff_hz   # the model carries Hz (2026-08-25)
         extra.filter_resonance = max(0.0, min(1.0, resonance / 127.0))
         extra.filter_env_amount = max(0.0, min(1.0, env_amount / 127.0))
         extra.filter_env = _parse_envelope(data, offset + ZONE_VCF_ENVELOPE)

@@ -37,6 +37,7 @@ import sys
 import struct
 
 from models.common import (
+    nominal_knob_to_hz,
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType, lfo_knob_to_hz,
     cap_voices_by_coverage, stereo_to_mono, hz_to_e4b_cutoff,
 )
@@ -1703,8 +1704,11 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
             # Hz-aware parser takes (§MPCCUTOFF).  The MPC 2.x path has no
             # measured curve yet, so it keeps its historical pass-through.
             _cut_raw = float(_get_text(instrument, 'Cutoff', '1.0'))
-            filt_cutoff = (hz_to_e4b_cutoff(_xpm3_cutoff_to_hz(_cut_raw))
-                           if is_mpc3 else _cut_raw)
+            # MPC 3's knob->Hz is MEASURED (§MPCCUTOFF); the 2.x path's is
+            # not, and goes through the nominal scale so the assumption is
+            # visible rather than implied by the field's old units.
+            filt_cutoff = (_xpm3_cutoff_to_hz(_cut_raw) if is_mpc3
+                           else nominal_knob_to_hz(_cut_raw))
             filt_res     = float(_get_text(instrument, 'Resonance',     '0.0'))
             filt_env_amt = float(_get_text(instrument, 'FilterEnvAmt',  '0.0'))
             filt_atk     = _env('FilterAttack')

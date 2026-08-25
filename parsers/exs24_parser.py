@@ -192,7 +192,7 @@ def _exs_cutoff_to_e4b(value: int) -> float:
     then place that frequency on the E4B's exponential cutoff scale (the shared
     `hz_to_e4b_cutoff`, CR-12).  (We previously used value/1000 directly as the
     exponential position, which made every EXS filter far too dark.)"""
-    return hz_to_e4b_cutoff((max(0, value) / 1000.0) * E4B_CUTOFF_MAX_HZ)
+    return (max(0, value) / 1000.0) * E4B_CUTOFF_MAX_HZ   #: Hz (2026-08-25)
 
 
 def _parse_exs_params_v11(data: bytes, content_off: int) -> dict:

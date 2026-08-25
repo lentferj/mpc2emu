@@ -900,8 +900,11 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
     # mean, then ask for the position the E4XT actually renders there -- the
     # real curve tops out near 4.1 kHz with a bypass endpoint, so a nominal
     # 0.7 (3.4 kHz) would otherwise sound at 1.2 kHz. See §E4BFILTCAL.
-    _nominal_hz = E4B_CUTOFF_MIN_HZ * (E4B_CUTOFF_MAX_HZ / E4B_CUTOFF_MIN_HZ) ** max(
-        0.0, min(1.0, voice.filter_cutoff))
+    # The model carries Hz since 2026-08-25, so there is nothing to
+    # reconstruct: this used to raise the nominal scale to a stored position,
+    # which is the step that lost every corner below 57 Hz.
+    _nominal_hz = max(E4B_CUTOFF_MIN_HZ,
+                      min(E4B_CUTOFF_MAX_HZ, voice.filter_cutoff))
     vpar[60] = min(255, round(e4xt_cutoff_position(_nominal_hz) * 255))
     # SATURATION: A FULLY OPEN FILTER MUST STAY FULLY OPEN.
     #
@@ -919,7 +922,7 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
     #
     # Only the saturated end is touched. The Hz path below saturation is the
     # hardware-calibrated one (§E4BFILTCAL) and is left exactly as it was.
-    if e4xt_cutoff_byte_to_position(255) <= max(0.0, min(1.0, voice.filter_cutoff)):
+    if voice.filter_cutoff >= E4B_CUTOFF_MAX_HZ:
         vpar[60] = 255
     # RESONANCE through the MEASURED curve, since 2026-08-24 (§E4XTQCAL).
     # This was `round(resonance * 127)` -- an uncalibrated linear guess on a

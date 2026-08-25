@@ -86,12 +86,12 @@ import struct
 from typing import List, Tuple
 
 from models.common import (
-    KRZ_RELEASE_SPAN_DB,
-    KEY_FILTER_OCT_PER_OCT,Bank, Preset, SampleData, VoiceLayer, LoopType,
-                          KRZ_ENV_TIME_GRID, KRZ_RELEASE_FACTOR,
-                          E4B_CUTOFF_MIN_HZ, E4B_CUTOFF_MAX_HZ,
-                          krz_cents_to_depth_byte, KRZ_FENV_FULL_CENTS,
-                          krz_cents_to_lfo_pitch_byte, LFO_PITCH_FULL_CENTS
+    Bank, Preset, SampleData, VoiceLayer, LoopType,
+    KRZ_ENV_TIME_GRID, KRZ_RELEASE_FACTOR, KRZ_RELEASE_SPAN_DB,
+    E4B_CUTOFF_MAX_HZ, E4B_CUTOFF_RANGE_OCT,
+    KEY_FILTER_OCT_PER_OCT,
+    krz_cents_to_depth_byte, KRZ_FENV_FULL_CENTS,
+    krz_cents_to_lfo_pitch_byte, LFO_PITCH_FULL_CENTS,
 )
 from processors.loop_renderer import bake_alternating_loop
 # The K2000 and the E4B both store stereo PCM planar (whole left channel, then
@@ -995,15 +995,15 @@ def _fill_env(b: bytearray, env) -> None:
 _KRZ_CUT_BYTE_MIN, _KRZ_CUT_BYTE_MAX = -48, 79
 
 
-def _cutoff_byte(cutoff01: float) -> int:
-    """filter_cutoff 0..1 -> K2000 signed-semitone byte, VIA HZ.
+def _cutoff_byte_hz(hz: float) -> int:
+    """filter_cutoff in HERTZ -> K2000 signed-semitone byte.
 
     **This used to stretch the position linearly across the byte range**
     (`-48 + cutoff01 * 127`) and it put the filter in the wrong place on every
     KRZ we wrote. Both scales are logarithmic in frequency, so the shape was
-    right, but the endpoints are not the same: the model's position spans
+    right, but the endpoints are not the same: the position it stretched spans
     57 Hz-20 kHz (8.45 octaves) and the byte range spans 16 Hz-25088 Hz
-    (10.61 octaves). Stretching one onto the other misplaces every interior
+    (10.61 octaves). Stretching one onto the other misplaced every interior
     value -- measured against what the model asked for:
 
         position 0.0   57 Hz wanted,    16 Hz written   -1.80 octaves
@@ -1019,15 +1019,17 @@ def _cutoff_byte(cutoff01: float) -> int:
     which the reader already uses -- `docs/KRZ_FORMAT.md` recorded the two
     curves disagreeing and named this fix as "a follow-up (not yet done)".
 
-    **What is fixed and what is not.** The position->Hz half is definitional and
-    is now right. The Hz->byte half rests on the documented semitone law, which
+    Since 2026-08-25 the model carries the frequency itself, so the position
+    half is gone: the argument IS the Hz.  That also removes the 57 Hz floor
+    this used to impose -- the K2000 tunes down to 16 Hz and a source darker
+    than the E4B scale reaches no longer gets clamped up on the way through.
+
+    **What is fixed and what is not.** The Hz->byte half rests on the documented semitone law, which
     is NOT yet hardware-confirmed: CUTCAL (§KRZCUTCAL) measures it. If that
     measurement disagrees, the correction belongs in `krz_cutoff_byte_to_hz`,
     where reader and writer will both pick it up, rather than here.
     """
-    hz = E4B_CUTOFF_MIN_HZ * (E4B_CUTOFF_MAX_HZ / E4B_CUTOFF_MIN_HZ) ** max(
-        0.0, min(1.0, cutoff01))
-    semitones = 9.0 + 12.0 * math.log2(hz / 440.0)
+    semitones = 9.0 + 12.0 * math.log2(max(1e-6, hz) / 440.0)
     return max(_KRZ_CUT_BYTE_MIN,
                min(_KRZ_CUT_BYTE_MAX, round(semitones))) & 0xFF
 
@@ -1291,9 +1293,19 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False):
         # sweep from the K2000's 16 Hz floor (which would mute softly-played notes
         # that the MPC keeps audible).  velocity_to_filter is -1..+1; only the
         # opening (positive) part raises the floor.
-        eff_cutoff = min(1.0, getattr(voice, 'filter_cutoff', 1.0)
-                              + max(0.0, getattr(voice, 'velocity_to_filter', 0.0)))
-        hob_f1[1] = _cutoff_byte(eff_cutoff)
+        # The velocity term is a FRACTION of the 0..1 cutoff scale, not a
+        # frequency, so it cannot simply be added to Hz -- but that scale is
+        # logarithmic, so the fraction IS a number of octaves:
+        # E4B_CUTOFF_RANGE_OCT of them.  Multiplying it out lets the sum happen
+        # in Hz, which is what the model now carries.  Identical arithmetic to
+        # the old position-space fold inside the E4B range, and unlike that one
+        # it does not clamp a source darker than 57 Hz up to the E4B floor
+        # before adding (61.3% of the KRZ corpus sits below it).
+        _hz = getattr(voice, 'filter_cutoff', E4B_CUTOFF_MAX_HZ)
+        _vel_oct = (max(0.0, getattr(voice, 'velocity_to_filter', 0.0))
+                    * E4B_CUTOFF_RANGE_OCT)
+        eff_hz = min(E4B_CUTOFF_MAX_HZ, _hz * (2.0 ** _vel_oct))
+        hob_f1[1] = _cutoff_byte_hz(eff_hz)
         # KEY TRACKING, seg[3]: a straight signed byte, 2 cents per key per
         # unit. The READER has read this since 2026-08-17 -- its comment there
         # notes the field is set on 15.9% of real filter slots and that E4B

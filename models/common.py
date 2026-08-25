@@ -200,6 +200,13 @@ def key_track_to_filter_amount(oct_per_oct: float) -> float:
 # (CR-12 — previously duplicated in exs24 and re-implemented wrong in sfz).
 E4B_CUTOFF_MIN_HZ = 57.0
 E4B_CUTOFF_MAX_HZ = 20000.0
+#: Octaves spanned by the shared 0..1 cutoff position -- 8.455.  Wherever a
+#: modulation depth is expressed as a FRACTION of that scale (the K2000
+#: writer's velocity->filter fold), this is what the fraction is a fraction
+#: OF, and multiplying by it converts the depth into octaves.  That lets the
+#: sum happen in Hz, which matters for a source darker than 57 Hz: folding
+#: via `hz_to_e4b_cutoff` would clamp it to the E4B floor first.
+E4B_CUTOFF_RANGE_OCT = math.log2(E4B_CUTOFF_MAX_HZ / E4B_CUTOFF_MIN_HZ)
 
 
 # ── E4XT-measured cutoff and volume laws (2026-07-31) ──────────────────────
@@ -1106,6 +1113,26 @@ def akai_filfrq_to_hz(byte: int):
     return a * math.exp(b * max(0, byte))
 
 
+def nominal_knob_to_hz(knob: float) -> float:
+    """A source's normalised 0..1 cutoff knob -> Hz on the NOMINAL scale.
+
+    **For sources whose filter range nobody has measured.** `pgm` (MPC1000),
+    the MPC 2.x XPM path, `talsmpl` and `gig` all carry a 0..1 knob with no
+    Hz law behind it; see TODO's "Normalised-knob cutoff sources", where the
+    MPC 3 half was closed by measuring the hardware and these were left.
+
+    **This changes no output.** Until 2026-08-25 those parsers stored the raw
+    knob into a field that the whole pipeline then read as a position on this
+    exact scale -- so the assumption was already being made, silently, by
+    everything downstream. Routing it through a named function makes it
+    greppable and makes the day somebody measures one of those machines a
+    one-line change instead of an archaeology exercise.
+
+    It is NOT a calibration and must not be cited as one.
+    """
+    return e4b_cutoff_position_to_hz(max(0.0, min(1.0, knob)))
+
+
 def hz_to_e4b_cutoff(hz: float) -> float:
     """Map a cutoff frequency in Hz to the E4B exponential cutoff position
     (0.0-1.0, where the writer does round(pos*255) → vpar[60])."""
@@ -1893,7 +1920,24 @@ class VoiceLayer:
                                 # identical numbering for both MPC 2.x XML and
                                 # MPC 3.x JSON, so the MPC 3 reader passes the
                                 # integer straight through.
-    filter_cutoff: float = 1.0  # 0.0-1.0 (1.0 = fully open / 20kHz)
+    #: Filter cutoff in **HERTZ**.
+    #:
+    #: **This was a 0..1 POSITION on the E-MU's 57 Hz..20 kHz scale until
+    #: 2026-08-25**, which made it one machine's parameter scale standing in
+    #: for a physical quantity -- the third instance of that fault in two days,
+    #: after the release span and the key-follow units, and it cost about the
+    #: same share of the corpus as each of those.
+    #:
+    #: **The floor was the damage.** The position scale bottoms out at 57 Hz,
+    #: so every AKAI corner below that collapsed onto one byte: FILFRQ under 28
+    #: is **29.4% of the library corpus**, and `filter_freq` changed on up to
+    #: **26% of zones on a single disc**, reading back as 28 whatever it was.
+    #:
+    #: Hz is what every machine's own law is measured in, so each writer now
+    #: converts at the point of use and each parser stores what it actually
+    #: knows. `hz_to_e4b_cutoff` remains for the E-MU byte, and
+    #: `nominal_knob_to_hz` exists for the sources that only have a knob.
+    filter_cutoff: float = E4B_CUTOFF_MAX_HZ   #: Hz (default = fully open)
     filter_resonance: float = 0.0  # 0.0-1.0
     filter_env_amount: float = 0.0  # 0.0-1.0 (envelope→cutoff depth, separate)
     # Tuning

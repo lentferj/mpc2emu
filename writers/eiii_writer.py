@@ -494,7 +494,7 @@ def _write_zone(data: bytearray, offset: int, zone: ZoneMapping, voice: VoiceLay
     # to select one from, so the type nibble is always left at 0 (= the
     # EIIIX/EIII low-pass, and ESI's own most-used type).
     if voice.filter_type:
-        hz = _e4b_cutoff_position_to_hz(voice.filter_cutoff)
+        hz = voice.filter_cutoff      # the model carries Hz (2026-08-25)
         data[offset + ZONE_VCF_CUTOFF] = _cutoff_value(hz)
         resonance = max(0, min(127, int(round(voice.filter_resonance * 127))))
         data[offset + ZONE_VCF_Q] = resonance | (Q_REALTIME_ENABLE if bank_format.is_esi else 0)

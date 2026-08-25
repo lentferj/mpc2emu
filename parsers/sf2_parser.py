@@ -487,7 +487,7 @@ def parse_sf2(sf2_path: str, max_presets: int = 64) -> Bank:
                     if fc_cents < _SF2_FC_OFF_CENTS:
                         hz = 8.176 * 2.0 ** (fc_cents / 1200.0)
                         voice.filter_type   = 1  # LP12: SF2 defines a fixed 2-pole (-12dB/oct) resonant lowpass
-                        voice.filter_cutoff = hz_to_e4b_cutoff(hz)
+                        voice.filter_cutoff = hz          # the model carries Hz (2026-08-25)
                         q_cb = ig_dict.get(9, {}).get('amt', 0) + _global(9)
                         # 0-960 centibels (0-96dB) is the full legal range of
                         # the generator per spec; normalized against that

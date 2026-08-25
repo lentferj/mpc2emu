@@ -61,6 +61,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from models.common import (
+    nominal_knob_to_hz,
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType
 )
 from parsers.xpm_parser import _safe_name, _stereo_to_mono
@@ -766,7 +767,9 @@ def parse_gig(gig_path: str, max_instruments: int = 32,
                 flt = env.get('filter')
                 if flt and voice.filter_env_amount == 0.0:
                     voice.filter_type        = flt['type']
-                    voice.filter_cutoff      = flt['cutoff']
+                    # UNMEASURED knob -- see nominal_knob_to_hz.
+                    voice.filter_cutoff      = nominal_knob_to_hz(
+                        flt['cutoff'])
                     voice.filter_resonance   = flt['resonance']
                     voice.filter_env_amount  = flt['env_amount']
                     voice.filter_env_attack  = flt['env_attack']
