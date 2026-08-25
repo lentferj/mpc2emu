@@ -1050,6 +1050,15 @@ def e4xt_cord_saturates(base_byte: float, amount: float,
 # Consistent with two correct measurements taken from two different bases and
 # reported as a property of the cord.  Neither is a constant of the machine.
 #
+# **CITE §56 FOR THE DEPTH LAW, NOT §46** (eosed, 2026-08-25).  §46 is the
+# earlier OCTAVE-based product law -- the one that produces the numbers above
+# -- and it is superseded by §56, the BYTE-based law measured on 57 points
+# over five base cutoffs.  The distinction is the whole point rather than a
+# footnote: an octave-based conversion needs a different amount from every
+# base and a byte-based one does not, so anyone building against §46 rebuilds
+# the defect this file just removed.  §46 is kept upstream for its method and
+# for the part of it that was withdrawn.
+#
 # So depths on this destination convert through the CORNER, never through a
 # cents-per-cord number: the model says how far the corner should move in
 # cents, and these turn that into the amount that moves it that far FROM THIS
