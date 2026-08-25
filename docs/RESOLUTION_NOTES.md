@@ -20047,9 +20047,13 @@ It is wrong when the target can express what the source said. The K2000 can:
 `krz_parser.py:871` and `:907` already decode the cord on the way in. A
 K2000 program read and rewritten loses a parameter the format has a slot for.
 
-**Deliberately not fixed in the §CUTOFFHZ commit.** The two cases want opposite
-things and the writer cannot tell them apart from the model alone — the MPC
-path is the one that would regress, and it is the one confirmed on hardware.
+**Deliberately not fixed in the CUTOFFHZ commit**, on the reasoning that the
+two cases want opposite things, that the writer cannot tell them apart from
+the model alone, and that the MPC path is the one with hardware behind it.
+That reasoning was wrong in its second and third clauses, and the section
+below says why -- it is kept here because the wrong version is the part worth
+reading: it was a confident argument from one file about what another file
+could not know, and the other file already said otherwise.
 
 ### FIXED, 2026-08-25 -- and my "what to do" above was wrong
 
