@@ -20051,31 +20051,59 @@ K2000 program read and rewritten loses a parameter the format has a slot for.
 things and the writer cannot tell them apart from the model alone — the MPC
 path is the one that would regress, and it is the one confirmed on hardware.
 
-### What to do
+### FIXED, 2026-08-25 -- and my "what to do" above was wrong
 
-1. **Do not "fix" this by always writing the cord.** That is the muted-soft-notes
-   regression, on the only branch of this that has hardware behind it.
-2. The distinguishing information is whether the source's cutoff and velocity
-   depth are *independent controls* (K2000, E4B: write the cord) or *summed*
-   (MPC: fold). That is a property of the source format, not of the value, so
-   it belongs on the parser — a flag on `VoiceLayer` alongside the depth, set
-   by whichever parser produced it, defaulting to the fold so nothing changes
-   for sources that have not been looked at.
-3. Confirm on the device before changing anything: build one bank with both
-   renderings of the same source voice as two presets (§ the one-bank-many-
-   presets convention) and have k2kremote read each program's own filter page
-   back, as it did for §KRZCUTCAL.
+I proposed a flag on `VoiceLayer` to tell "independent controls" sources
+(K2000, E4B) from "summed" ones (MPC), defaulting to the fold. **No flag was
+needed, because the two cases were never different.**
 
-### The smaller sibling in the same sweep
+The premise behind the fold was wrong about the DESTINATION, not the source.
+It avoided a VelTrk "sweep from the K2000's 16 Hz floor" -- but `hob_f1[4]` is
+**unipolar from the resting corner**, and `krz_parser` has recorded exactly
+that since 2026-08-17: *"It is UNIPOLAR from the cutoff, like MinDpt 0 /
+MaxDpt N, so it goes in as (0, VelTrk)."* Soft notes sit at the voice's own
+cutoff; hard notes at cutoff + depth. That IS the MPC semantics Jan checked on
+hardware. Writing the cord serves the source the fold was invented for and
+stops destroying a K2000's own.
 
-The 3.5% left after neutralising the fold is the model's **ceiling**: the
-K2000's cutoff byte reaches 25088 Hz and the model clamps to
-`E4B_CUTOFF_MAX_HZ = 20000.0`, so `25087.7 -> 19912.1` on a K2000→K2000 trip.
-Both are far above anything audible and no material is affected, but it is the
-same class of error as §CUTOFFHZ one octave up: a machine's real range trimmed
-to another machine's scale. Fixing it means the model's cutoff has no ceiling
-and each writer clamps to its own — cheap, but it touches every writer, so it
-waits for a reason better than tidiness.
+So the reader had the fact the writer needed, in a comment, for eight days.
+Same shape as SSCENTSDEPTHS, where `E4XT_FENV_BYTE_PER_UNIT`'s comment held
+the answer to a question filed two days earlier: **the expensive gap is not
+between us and the hardware, it is between two files in this repo.**
+
+What changed:
+
+- `hob_f1[4]` carries the depth through `krz_cents_to_depth_byte`, SIGNED --
+  the fold's `max(0, ...)` dropped every darkening routing, and the K2000 has
+  them (the reader observed -4600 ct).
+- The cutoff is the source's cutoff, untouched by the velocity depth.
+- A source with a nonzero velocity FLOOR still folds, anchored at the floor,
+  because VelTrk has no floor byte -- and it prints when it does. **0 of 1383
+  velocity routings in the 32-bank corpus take that branch.**
+- The model's 20 kHz ceiling is gone from this writer: the K2000's byte
+  reaches 25088 Hz, so `_cutoff_byte_hz` clamps to the K2000's own range.
+
+**Measured on the 3186-zone corpus:**
+
+| field | before | after |
+|---|---|---|
+| `velocity_to_filter_cents` | 46.7% | **0%** |
+| `filter_cutoff` | 49.3% | **0%** (was 61.3% before CUTOFFHZ) |
+
+Still worth confirming by ear on the device -- the arithmetic is right and the
+routing is the machine's own, but nothing here has been heard yet.
+
+### The smaller sibling in the same sweep -- also fixed
+
+The 3.5% left after neutralising the fold was the model's **ceiling**: the
+K2000's cutoff byte reaches 25088 Hz and this writer clamped to
+`E4B_CUTOFF_MAX_HZ = 20000.0`, so `25087.7 -> 19912.1` on a K2000-to-K2000
+trip. The same class of error as CUTOFFHZ one octave up -- a machine's real
+range trimmed to another machine's scale. The clamp is removed;
+`_cutoff_byte_hz` clamps to the K2000's own byte range, which is the only
+ceiling that belongs in a K2000 writer. Nothing audible was affected either
+way; it is the last 0% on that line.
+
 
 ## §SSCENTSDEPTHS — the filter depths carry cents, and that dissolves FENVFULLSCALE rather than deciding it (2026-08-25)
 

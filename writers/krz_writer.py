@@ -1290,24 +1290,49 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False):
         hob_f2[0] = f2_byte                                  # F2 block: RES(16)/NONE(61)
         seg(0x52)[0] = f3_byte                               # F3 block: SEP(18)/NONE(60)
         cal[_K2_CAL_ALGORITHM] = algo                        # algorithm number (1/5/16)
-        # Velocity->Filter: on the source (MPC) a high VelocityToFilter pushes the
-        # cutoff "up very far" at playing velocity (hardware-checked by Jan on
-        # Bass-MS20: VelToFilter 127 -> filter ~open; 0 -> static Cutoff engages,
-        # i.e. effective cutoff = Cutoff + VelToFilter).  We render a static K2000
-        # program, so fold the velocity term into the cutoff rather than a VelTrk
-        # sweep from the K2000's 16 Hz floor (which would mute softly-played notes
-        # that the MPC keeps audible).  velocity_to_filter_cents is -1..+1; only the
-        # opening (positive) part raises the floor.
-        # Both quantities are physical since 2026-08-25 -- the cutoff in Hz and
-        # the velocity depth in cents -- so the fold is one multiplication and
-        # needs no full-scale constant on either side. It went through the
-        # shared 0..1 position until this morning, which clamped a source
-        # darker than 57 Hz up to the E-MU floor before adding; 61.3% of the
-        # KRZ corpus sits below that floor.
+        # VELOCITY -> FILTER IS WRITTEN AS THE MACHINE'S OWN VelTrk, and used
+        # to be folded into the static cutoff instead (§KRZVELFOLD).
+        #
+        # The fold was chosen because a VelTrk "sweep from the K2000's 16 Hz
+        # floor" would mute softly-played notes that the MPC keeps audible.
+        # That premise was wrong about the destination: `hob_f1[4]` is
+        # UNIPOLAR FROM THE RESTING CORNER -- the parser records it as
+        # (0, VelTrk) -- so soft notes sit at the voice's own cutoff and hard
+        # notes at cutoff + depth. That is exactly the MPC semantics Jan
+        # checked on hardware (Bass-MS20: VelToFilter 127 -> filter ~open,
+        # 0 -> static Cutoff engages), so writing the cord serves the source
+        # the fold was designed for AND stops destroying a K2000's own.
+        #
+        # Cost of the fold, measured over the 32-bank corpus: the cord was
+        # lost on 46.7% of zones and its magnitude smeared into the cutoff,
+        # which was 49.3% of zones changing where 3.5% was the floor.
+        #
+        # SIGNED: a K2000 VelTrk goes negative (observed at -4600 ct), where
+        # velocity DARKENS. The fold could only ever open -- it took
+        # max(0, ...) -- so every darkening routing was silently dropped.
+        _vel_ct = getattr(voice, 'velocity_to_filter_cents', 0.0) or 0.0
+        _vel_min_ct = getattr(voice, 'velocity_to_filter_min_cents', 0.0) or 0.0
         _hz = getattr(voice, 'filter_cutoff', E4B_CUTOFF_MAX_HZ)
-        _vel_ct = max(0.0, getattr(voice, 'velocity_to_filter_cents', 0.0))
-        eff_hz = min(E4B_CUTOFF_MAX_HZ, _hz * (2.0 ** (_vel_ct / 1200.0)))
-        hob_f1[1] = _cutoff_byte_hz(eff_hz)
+        if _vel_ct and _vel_min_ct:
+            # A FLOORED sweep -- the source moves the corner even at velocity
+            # zero -- and VelTrk has no floor byte. Fall back to the fold,
+            # anchored at the floor so the resting corner is right, and say so.
+            # ZERO of 1383 velocity routings in the corpus take this branch;
+            # it exists so a source that does specify a floor is not silently
+            # flattened.
+            print(f"  [krz] velocity->filter floor {_vel_min_ct:.0f} ct folded "
+                  f"into the cutoff: VelTrk carries no floor byte")
+            _hz = _hz * (2.0 ** (_vel_min_ct / 1200.0))
+            _vel_ct -= _vel_min_ct
+        # NOT clamped to E4B_CUTOFF_MAX_HZ. The K2000's cutoff byte reaches
+        # 25088 Hz and the E-MU's scale stops at 20 kHz, so trimming here
+        # imposed one machine's ceiling on a K2000->K2000 trip: 3.5% of the
+        # corpus, `25087.7 -> 19912.1`. `_cutoff_byte_hz` clamps to this
+        # machine's own byte range, which is the only ceiling that belongs
+        # in a K2000 writer.
+        hob_f1[1] = _cutoff_byte_hz(_hz)
+        if _vel_ct:
+            hob_f1[4] = krz_cents_to_depth_byte(_vel_ct) & 0xFF
         # KEY TRACKING, seg[3]: a straight signed byte, 2 cents per key per
         # unit. The READER has read this since 2026-08-17 -- its comment there
         # notes the field is set on 15.9% of real filter slots and that E4B
