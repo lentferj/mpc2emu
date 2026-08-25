@@ -211,6 +211,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§KRZVELFOLD — the KRZ writer destroys a K2000's own velocity cord, and it is what remains after §CUTOFFHZ (2026-08-25)](#krzvelfold-the-krz-writer-destroys-a-k2000s-own-velocity-cord-and-it-is-what-remains-after-cutoffhz-2026-08-25)
 - [§SSCENTSDEPTHS — the filter depths carry cents, and that dissolves FENVFULLSCALE rather than deciding it (2026-08-25)](#sscentsdepths-the-filter-depths-carry-cents-and-that-dissolves-fenvfullscale-rather-than-deciding-it-2026-08-25)
 - [§AKAIENV2PEAK — the filter envelope was read at its sustain and written as its peak, and that is where the click went (2026-08-25)](#akaienv2peak-the-filter-envelope-was-read-at-its-sustain-and-written-as-its-peak-and-that-is-where-the-click-went-2026-08-25)
+- [§AKAIKEYFOLLOWHW — key tracking fails its first hardware test, and the test only happened because the parameter was missing (2026-08-25)](#akaikeyfollowhw-key-tracking-fails-its-first-hardware-test-and-the-test-only-happened-because-the-parameter-was-missing-2026-08-25)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -20335,3 +20336,80 @@ word "again" -- Jan had heard the same thing before the amp-envelope fix of
 2026-08-23 and recognised it coming back. The corpus is good at "does the
 value survive" and blind to "is the value right"; only the hardware and the
 ear answer the second question.
+
+## §AKAIKEYFOLLOWHW — key tracking fails its first hardware test, and the test only happened because the parameter was missing (2026-08-25)
+
+`filter_keytrack` landed 2026-08-24 (`9ff8a7d`, "carry the AKAI filter
+key-follow, a parameter we had never read"). It had never been heard.
+
+### How it came to be tested at all
+
+Every preset body sent to the E4XT tonight was an edited copy of a SysEx dump
+of `MXS3FIX`, a bank built on 2026-08-24 at 14:50 — before the converter wrote
+key tracking. The editing rule was "every field I do not name stays exactly as
+the machine had it", which is the right rule against fields you do not
+understand and the wrong one against fields that are STALE. Nothing in a body
+distinguishes the two.
+
+So the Key->FilterFreq cord sat at zero in P100, P101, P102-P105 and the first
+P106, and the conversion on the bench was quietly missing a parameter. Adding
+it back produced the controlled pair that tests it: **the same preset, sent
+twice, one cord different, nothing else on the bench changed.**
+
+### The measurement
+
+RMS against the AKAI source, same seven notes, same velocity, minutes apart:
+
+| note | source | no keytrack | with keytrack | err before | err after |
+|---|---|---|---|---|---|
+| 36 | −39.8 | −38.8 | −38.8 | +1.0 | +1.0 |
+| 48 | −38.1 | −37.2 | −37.2 | +0.8 | +0.8 |
+| 65 | −38.8 | −33.5 | −34.3 | +5.3 | +4.5 |
+| 80 | −41.9 | −34.5 | −29.4 | +7.4 | **+12.5** |
+| 96 | −39.1 | −30.4 | −47.4 | +8.7 | **−8.4** |
+
+Keyboard slope, note 96 minus note 36: **+7.7 dB -> −9.4 dB.** Third-octave
+distance at notes 80 and 96: **5.27 -> 12.87** and **4.54 -> 16.44 dB**.
+
+**Turning key tracking on makes this conversion much worse**, and the presets
+that were accidentally missing it measure better for it.
+
+### The clue is that it is NOT MONOTONIC
+
+Note 96 fell 17 dB and note 80 ROSE 5 dB, from the same cord on the same voice.
+A scale error, a sign error or a wrong pivot would all darken monotonically
+with rising key. This does not — so the corner is being dragged down THROUGH
+the resonant peak we write on these voices (Q 0.59-0.70), and the level at a
+given note depends on where the peak lands relative to that note's partials.
+
+That also means **the error cannot be fitted out with a single factor.** Any
+correction has to be checked against the resonance, which is the same coupling
+§E4XTQSHIFT recorded on the E4XT: cutoff and Q are not independent there.
+
+### The chain under test, and which link is unknown
+
+    AKAI K_FREQ -4  ->  K_FREQ / 12 = -0.333 oct/oct
+                    ->  / KEY_FILTER_OCT_PER_OCT (0.713)
+                    ->  E4XT cord -46%
+
+One of those three is wrong and the measurement cannot say which. The suspect
+is the first: s3ked measured the corner shift in **FILFRQ units per K_FREQ
+step**, not in octaves per octave of KEY, and `K_FREQ/12` is an interpretation
+of that rather than a reading of it. The E4XT's Key cord pivot is also
+unverified against the AKAI's note 64.
+
+**Do not ship key tracking on the AKAI path until this is settled.**
+
+### The method lesson, which is the durable part
+
+Preserving fields you have not named is faithful only to the build the source
+body came from. The check that distinguishes an unknown field from a stale one
+is comparing the finished body against the CONVERTER'S OUTPUT field by field —
+not against your own intent while editing, which is what "I re-derived the
+cutoffs and cords and they matched" actually did. That check now runs in
+`make_space_e.py`.
+
+And an absent parameter is invisible to every check the receiving side can
+make: eosed verified structure, sample bindings, byte-for-byte transport and
+program-change reachability, and **all four are about whether the body arrived
+intact.** None of them can see a field that was never in it.
