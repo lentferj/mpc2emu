@@ -156,26 +156,57 @@ class LoopType(IntEnum):
 # reach full amount at ±3.65 oct = ±4383 cents, so this ONE constant scales both
 # the filter-envelope depth AND the LFO→filter depth.  (Was 9600 = 8 oct, a guess
 # ~2.2× too high, which under-delivered every cents-based filter-mod depth.)
+#: NOMINAL, not a machine constant: 3.65 oct is what MOD_DEPTH_CAL measured
+#: from ONE base cutoff (~byte 193), and the same cord is worth 5.14 oct from
+#: byte 104 and 7.05 oct from byte 0. Kept as the input-path span for sources
+#: that only give a fraction, and for the LFO->Filter depths, which are still
+#: fractions. Not used for the filter envelope any more.
 FILTER_ENV_FULL_CENTS = 4383.0       # = 3.65 octaves * 1200
 
 
 def cents_to_filter_env_amount(cents: float) -> float:
     """Map a Filter-Freq mod depth in cents to an EOS cord amount (-1..+1).
-    Shared by the filter ENVELOPE and the LFO→Filter cords (same 0x38 dest)."""
+
+    **The LFO->Filter cords only, since 2026-08-25.** The filter ENVELOPE used
+    to share this and no longer does: `filter_env_cents` carries cents and each
+    writer converts from the voice's own corner (`e4xt_cents_to_cord_amount`),
+    because what a full cord is worth in octaves depends on the base and is not
+    a constant -- see the note above `E4XT_VEL_SOURCE_UNITS`. The LFO depths
+    are still fractions and still use this; they have the same latent fault.
+    """
     return max(-1.0, min(1.0, cents / FILTER_ENV_FULL_CENTS))
+
+
+def nominal_filter_env_cents(fraction: float) -> float:
+    """A source's 0..1 filter-envelope depth -> cents, on the nominal span.
+
+    For the sources that state a FRACTION and never a frequency (EXS24, EIII's
+    0..127 byte, the MPC knob). Named so the assumption is visible: it puts the
+    knob on `FILTER_ENV_FULL_CENTS`, which is one measurement from one base and
+    not a property of any machine. A source that states cents must not come
+    through here.
+    """
+    return max(-1.0, min(1.0, fraction)) * FILTER_ENV_FULL_CENTS
 
 
 # Velocity→Filter: the velocity source spans 0→~2.08 units over MIDI velocity
 # 0→127, so a 100% cord moves the cutoff ~7.6 octaves (= 9120 cents) across the
 # full velocity range (measured r=0.9999; consistent with Key 0.713 oct/oct ×
 # 10.6 oct keyboard).  Note: the writer routes this through the **Vel+** source.
+#: NOMINAL, same caveat as FILTER_ENV_FULL_CENTS -- it is that number times
+#: the Vel+ source's 2.08-unit span (`E4XT_VEL_SOURCE_UNITS`), so it inherits
+#: the base it was measured from.
 VEL_FILTER_FULL_CENTS = 9120.0       # = 7.6 octaves * 1200
 
 
-def velocity_filter_depth_to_amount(cents: float) -> float:
-    """Map a velocity→filter depth in cents (cutoff change at full velocity) to
-    an EOS cord amount (-1..+1)."""
-    return max(-1.0, min(1.0, cents / VEL_FILTER_FULL_CENTS))
+def nominal_velocity_filter_cents(fraction: float) -> float:
+    """A source's 0..1 velocity->filter depth -> cents, on the nominal span.
+
+    Companion to `nominal_filter_env_cents`, same caveat: the span is one
+    measurement from one base. Sources that state the depth in cents (SFZ,
+    SF2, GIG, KRZ) assign it directly and never call this.
+    """
+    return max(-1.0, min(1.0, fraction)) * VEL_FILTER_FULL_CENTS
 
 
 # Key→Filter: a 100% cord tracks the cutoff at 0.713 octave per octave of key
@@ -998,6 +1029,136 @@ def e4xt_cord_saturates(base_byte: float, amount: float,
     reached = base_byte + (E4XT_FENV_BYTE_PER_UNIT
                            * (level_percent / 100.0) * amount)
     return reached >= E4XT_FENV_SATURATION_BYTE
+
+
+# ── Filter-destination cord depths, in cents, via the corner (2026-08-25) ────
+#
+# WHAT A FULL CORD IS WORTH IN OCTAVES IS NOT A CONSTANT, and two entries in
+# this file spent three days disagreeing about its value (§FENVFULLSCALE:
+# `FILTER_ENV_FULL_CENTS` 3.65 oct on the input path against
+# `E4B_FENV_OCT_PER_UNIT` 5.14 oct on the output path, 41% apart, composing
+# rather than cancelling).  The answer is neither: the cord moves the cutoff
+# BYTE linearly (`E4XT_FENV_BYTE_PER_UNIT`, 2.506 bytes per unit of amount) and
+# the byte->Hz curve is not a pure exponential, so the same cord is worth a
+# different number of octaves from every base.  A full cord saturates the byte
+# from essentially any base, which makes "octaves per full cord" just
+# `log2(20 kHz / base)` -- and that reproduces both disputed figures:
+#
+#     3.65 oct  <->  base byte ~193  (1559 Hz)     MOD_DEPTH_CAL, 2026-06-12
+#     5.14 oct  <->  base byte ~104  ( 549 Hz)     eosed §46
+#
+# Consistent with two correct measurements taken from two different bases and
+# reported as a property of the cord.  Neither is a constant of the machine.
+#
+# So depths on this destination convert through the CORNER, never through a
+# cents-per-cord number: the model says how far the corner should move in
+# cents, and these turn that into the amount that moves it that far FROM THIS
+# VOICE'S OWN BASE.  Same reasoning as `e4xt_cord_amount`, whose docstring
+# already said so; these add the sign and the source span it did not carry.
+
+#: The Vel+ source spans 0 -> ~2.08 cord units over MIDI velocity 0..127
+#: (MOD_DEPTH_CAL, r=0.9999), so a velocity cord at a given amount moves the
+#: corner 2.08x as far at full velocity as a unit source would.  Was buried in
+#: a comment on `VEL_FILTER_FULL_CENTS`, which is the constant it invalidates.
+E4XT_VEL_SOURCE_UNITS = 2.08
+
+
+def e4xt_cutoff_byte_to_hz(byte: float) -> float:
+    """vpar[60] -> the corner the E4XT actually renders, in Hz.
+
+    The MEASURED table, not the nominal scale: unlike
+    `e4xt_cutoff_byte_to_position` this does not clamp into the shared
+    57 Hz-20 kHz window, because cord arithmetic has to work in the machine's
+    own range (byte 0 is ~133 Hz, above the shared floor).
+    """
+    return _interp(max(0.0, min(1.0, byte / 255.0)), _E4XT_CUTOFF_TABLE)
+
+
+def e4xt_cutoff_hz_to_byte(hz: float) -> float:
+    """Hz -> vpar[60], unrounded. EXACT inverse of `e4xt_cutoff_byte_to_hz`.
+
+    **By search, not by a second formula.** `e4xt_cutoff_position` looks like
+    the inverse and is not: it interpolates the same table LINEARLY IN
+    POSITION while `e4xt_cutoff_byte_to_hz` interpolates it LOG IN HZ, so
+    between knots the two curves diverge -- measured, up to **1.47 bytes** at
+    byte 64. That is the identical fault the AKAI writer hit on 2026-08-20
+    ("two hand-derived inverses of one curve drifted apart... a search cannot
+    drift"), and here it broke the cord round trip: a cord byte read as cents
+    and written back landed a byte away on 12% of values.
+
+    `e4xt_cutoff_position` is left alone -- it is the writer's hardware-
+    calibrated path for `vpar[60]` and moving it would move every E4B cutoff.
+    """
+    lo, hi = 0.0, 255.0
+    if hz <= e4xt_cutoff_byte_to_hz(lo):
+        return lo
+    if hz >= e4xt_cutoff_byte_to_hz(hi):
+        return hi
+    for _ in range(40):
+        mid = (lo + hi) / 2.0
+        if e4xt_cutoff_byte_to_hz(mid) < hz:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2.0
+
+
+def e4xt_cents_to_cord_amount(base_byte: float, cents: float,
+                              level_percent: float = 100.0,
+                              source_units: float = 1.0) -> float:
+    """Cents of corner movement -> signed cord amount (-100..+100).
+
+    `base_byte` is the voice's own cutoff byte: the same depth in cents needs a
+    different amount from a different base, which is the whole point.  Clamped
+    to the field's range; a request the cord cannot reach is reported by
+    `e4xt_cord_saturates`, not silently approximated.
+
+    **UNROUNDED on purpose.** The cord is stored on a 0..127 byte grid, not a
+    0..100 one, so rounding to an integer amount here and quantising again at
+    the byte put two grids in series -- measured on the 58-bank E4B corpus, an
+    integer return moved the depth on 3.9-4.1% of zones purely through that.
+    The caller quantises once.
+    """
+    if level_percent <= 0.0 or source_units <= 0.0 or not cents:
+        return 0.0
+    target_hz = e4xt_cutoff_byte_to_hz(base_byte) * (2.0 ** (cents / 1200.0))
+    delta = e4xt_cutoff_hz_to_byte(target_hz) - base_byte
+    per_unit = (E4XT_FENV_BYTE_PER_UNIT * (level_percent / 100.0)
+                * source_units)
+    return max(-100.0, min(100.0, delta / per_unit))
+
+
+def e4xt_cord_amount_to_cents(base_byte: float, amount: float,
+                              level_percent: float = 100.0,
+                              source_units: float = 1.0) -> float:
+    """Signed cord amount -> the cents of corner movement it produces.
+
+    Exact inverse of `e4xt_cents_to_cord_amount` up to the cord byte's own
+    quantisation.  The reader needs this so an E4B round trip does not have to
+    agree with any cents-per-cord constant -- only with itself.
+
+    **THE CORNER IS CLAMPED, so this reports what the machine RENDERS.**  A
+    full cord covers the entire cutoff byte range (`E4XT_FENV_BYTE_PER_UNIT`),
+    so from a mid cutoff more than half the cord's numeric range drives the
+    corner off one end -- and **36.5% of the nonzero filter depths in 60 real
+    banks do exactly that**.  Reporting what those cords ASK for instead of
+    what they reach gave readings up to 71 octaves, which is not a sound, and
+    every other machine would then be told to sweep 71 octaves rather than the
+    7.2 the E4XT actually manages.  The model describes the sound.
+
+    The cost is that a saturated cord does not always come back as the same
+    BYTE: several amounts reach the same corner and the writer picks the one
+    that just gets there.  `e4b_writer` keeps the full-amount case exact by
+    re-saturating (see `e4xt_cord_saturates` there); the intermediate ones are
+    audibly identical and numerically not.
+    """
+    if not amount:
+        return 0.0
+    reached = base_byte + (E4XT_FENV_BYTE_PER_UNIT * (level_percent / 100.0)
+                           * source_units * amount)
+    lo = e4xt_cutoff_byte_to_hz(base_byte)
+    hi = e4xt_cutoff_byte_to_hz(max(0.0, min(255.0, reached)))
+    return 1200.0 * math.log2(max(hi, 1e-6) / max(lo, 1e-6))
 
 
 def akai_env2_stage_seconds(byte: int, distance: float, law) -> float:
@@ -1939,7 +2100,11 @@ class VoiceLayer:
     #: `nominal_knob_to_hz` exists for the sources that only have a knob.
     filter_cutoff: float = E4B_CUTOFF_MAX_HZ   #: Hz (default = fully open)
     filter_resonance: float = 0.0  # 0.0-1.0
-    filter_env_amount: float = 0.0  # 0.0-1.0 (envelope→cutoff depth, separate)
+    #: Cents the FILTER ENVELOPE moves the corner at full envelope level.
+    #: Signed. Cents since 2026-08-25 (SS_CENTS_DEPTHS) -- see the note on
+    #: `e4xt_cents_to_cord_amount` for why no cents-per-cord constant is
+    #: right for the E4XT, and why this converts through the corner instead.
+    filter_env_cents: float = 0.0
     # Tuning
     non_transpose: bool = False  # vpar[38]=1 in E4B: pitch does not follow key
     # Filter modulation (EOS mod cords into Filter-Freq; -1.0..+1.0 = ±100%)
@@ -1959,11 +2124,11 @@ class VoiceLayer:
     filter_keytrack: float = 0.0     # oct of cutoff per oct of key
     # VELOCITY -> FILTER IS A RANGE, NOT A DEPTH.
     #
-    # `velocity_to_filter` is the depth reached at FULL velocity. The floor the
-    # modulation starts from is `velocity_to_filter_min`, and the two together
+    # `velocity_to_filter_cents` is the depth reached at FULL velocity. The floor the
+    # modulation starts from is `velocity_to_filter_min_cents`, and the two together
     # are what a source actually specifies:
     #
-    #   K2000 Src2:  (MinDpt, MaxDpt)      e.g. (0, +10800 ct) -> (0.0, +1.0)
+    #   K2000 Src2:  (MinDpt, MaxDpt)      e.g. (0, +10800 ct)
     #   K2000 Src1:  (0, Depth)            a single depth is the same shape
     #
     # CARRYING ONLY THE DEPTH LOSES THE POLARITY. `(0, +10800)` only ever OPENS
@@ -1973,11 +2138,16 @@ class VoiceLayer:
     # BELOW a floor the source never crosses -- which on a cymbal is silence,
     # found on hardware 2026-08-17 (see RESOLUTION_NOTES.md AKAIVELFILT).
     #
-    # Both are normalised on 10800 cents (+-9 octaves), the K2000's own range.
-    # Default (0.0, 0.0) is "no modulation" and is what every non-KRZ parser
-    # leaves them at, so nothing changes for those paths.
-    velocity_to_filter: float = 0.0      # depth at full velocity (cord 04)
-    velocity_to_filter_min: float = 0.0  # depth at zero velocity; 0 = unipolar
+    # UNITS: CENTS, since 2026-08-25 (SS_CENTS_DEPTHS). Both used to be
+    # fractions -- of 10800 cents on the way in from a K2000 and of
+    # VEL_FILTER_FULL_CENTS on the way in from an SFZ, which are two different
+    # definitions of 1.0 for one quantity. Cents is what every source states
+    # and what no machine has to agree about.
+    #: Cents the corner moves at FULL velocity. Signed: negative darkens.
+    velocity_to_filter_cents: float = 0.0
+    #: Cents the corner moves at ZERO velocity. 0 = unipolar sweep from the
+    #: voice's own cutoff, which is what a single-depth source means.
+    velocity_to_filter_min_cents: float = 0.0
     # LFO1 (EOS Primary Zone Table PZT[42:46]; hardware-RE'd 2026-06-10 from
     # B.011-LFO1 settings.E4B).  None on a field = leave the EOS hardware default
     # (rate 4.12 Hz, triangle, no delay/variation, key-sync) so voices from

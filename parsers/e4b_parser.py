@@ -36,7 +36,9 @@ import math
 import re
 import struct
 from pathlib import Path
-from models.common import (Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
+from models.common import (
+    e4xt_cord_amount_to_cents, E4XT_VEL_SOURCE_UNITS,
+    Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            env_sustain_from_byte,
                            LoopType, Envelope, lfo_rate_byte_to_hz,
                            env_rate_to_seconds, env_byte_to_level,
@@ -97,7 +99,7 @@ _LFO_DELAY_MAX_S = 20.0
 # LFO rate byte -> Hz lives in models.common (lfo_rate_byte_to_hz), shared.
 
 # Primary zone table filter-envelope section template (bytes 14-25 of _PRIMARY_ZONE_TMPL).
-# Default (filter_env_amount=0) — see writers/e4b_writer.py for full 64-byte template.
+# Default (filter_env_cents=0) — see writers/e4b_writer.py for full 64-byte template.
 _PZT_FENV_DEFAULT = bytes([
     0x00, 0x00,   # Attack1:  rate=0,  level=0
     0x00, 0x7F,   # Attack2:  rate=0,  level=+100
@@ -469,7 +471,12 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     # physical ratio (§CORPUSRT).
     filter_keytrack    = filter_amount_to_key_track(
         _cord(_MOD_KEY_TO_CUTOFF_AMT))
-    velocity_to_filter = _cord(_MOD_VEL_TO_CUTOFF_AMT)
+    # CENTS, from this voice's own corner -- the exact inverse of what
+    # e4b_writer wrote. vpar[60] is the base; see `e4xt_cents_to_cord_amount`
+    # for why no cents-per-cord constant is right on this machine.
+    velocity_to_filter_cents = e4xt_cord_amount_to_cents(
+        vpar[60], _cord(_MOD_VEL_TO_CUTOFF_AMT) * 100.0,
+        source_units=E4XT_VEL_SOURCE_UNITS)
     # LFO→dest cords + mod-wheel→LFO-depth gate reconstruction (inverse of
     # e4b_writer: each LFO cord depth D is split into static D*(1-Kw) + a
     # ModWheel→CordN-Amount cord of D*Kw).  Recover the full depth (static+gate)
@@ -626,8 +633,10 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     # over-reported sustain and every E4B->KRZ/EIII/TAL conversion carried it.
     env_sustain = max(0.0, min(1.0, env_sustain_from_byte(pzt[7])))
 
-    # Depth/sign from the cord amount (0 when the FilterEnv→Filter cord is 0).
-    filter_env_amount = cord_byte_to_amount(cord_amt)
+    # Depth/sign from the cord amount (0 when the FilterEnv→Filter cord is 0),
+    # turned into cents through this voice's own corner.
+    filter_env_cents = e4xt_cord_amount_to_cents(
+        vpar[60], cord_byte_to_amount(cord_amt) * 100.0)
     if fenv_raw == _PZT_FENV_DEFAULT:
         # EOS template-default env (third-party files / never-set) → dataclass
         # defaults so it round-trips cleanly.
@@ -739,9 +748,9 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
         filter_type        = filter_type,
         filter_cutoff      = filter_cutoff,
         filter_resonance   = filter_resonance,
-        filter_env_amount  = filter_env_amount,
+        filter_env_cents  = filter_env_cents,
         filter_keytrack    = filter_keytrack,
-        velocity_to_filter = velocity_to_filter,
+        velocity_to_filter_cents = velocity_to_filter_cents,
         lfo1_rate          = lfo1_rate,
         lfo1_shape         = lfo1_shape,
         lfo1_delay         = lfo1_delay,

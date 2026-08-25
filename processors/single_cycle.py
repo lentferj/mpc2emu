@@ -348,9 +348,9 @@ def _neutralize_voice(v, keep_flt: bool, keep_lfo: bool, keep_amp: bool) -> None
         v.filter_type = _FILTER_TYPE_4PLP
         v.filter_cutoff = 1.0
         v.filter_resonance = 0.0
-        v.filter_env_amount = 0.0
+        v.filter_env_cents = 0.0
         v.filter_keytrack = 0.0
-        v.velocity_to_filter = 0.0
+        v.velocity_to_filter_cents = 0.0
         v.filter_env = Envelope(0.0, 0.3, 1.0, 0.0)
     if not keep_amp:
         v.amp_env = Envelope(*_ORGAN_AMP_ENV)

@@ -61,6 +61,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from models.common import (
+    nominal_filter_env_cents, nominal_velocity_filter_cents,
     nominal_knob_to_hz,
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType
 )
@@ -765,18 +766,21 @@ def parse_gig(gig_path: str, max_instruments: int = 32,
                 # Filter envelope (EG2) + VCF: take from the first region that
                 # actually enables the filter (the first region is often VCF-off).
                 flt = env.get('filter')
-                if flt and voice.filter_env_amount == 0.0:
+                if flt and voice.filter_env_cents == 0.0:
                     voice.filter_type        = flt['type']
                     # UNMEASURED knob -- see nominal_knob_to_hz.
                     voice.filter_cutoff      = nominal_knob_to_hz(
                         flt['cutoff'])
                     voice.filter_resonance   = flt['resonance']
-                    voice.filter_env_amount  = flt['env_amount']
+                    # GIG gives FRACTIONS, not cents -- nominal span, named.
+                    voice.filter_env_cents  = nominal_filter_env_cents(
+                        flt['env_amount'])
                     voice.filter_env_attack  = flt['env_attack']
                     voice.filter_env_decay   = flt['env_decay']
                     voice.filter_env_sustain = flt['env_sustain']
                     voice.filter_env_release = flt['env_release']
-                    voice.velocity_to_filter = flt['vel_to_filter']
+                    voice.velocity_to_filter_cents = nominal_velocity_filter_cents(
+                        flt['vel_to_filter'])
                     voice.filter_keytrack    = flt['keytrack']
 
         if voice.zones:

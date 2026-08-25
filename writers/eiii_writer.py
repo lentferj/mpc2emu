@@ -58,7 +58,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from models.common import Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType, ensure_mono
+from models.common import Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType, ensure_mono, FILTER_ENV_FULL_CENTS
 from processors.loop_renderer import bake_alternating_loop
 from writers.atomic import atomic_write
 
@@ -500,8 +500,7 @@ def _write_zone(data: bytearray, offset: int, zone: ZoneMapping, voice: VoiceLay
         data[offset + ZONE_VCF_Q] = resonance | (Q_REALTIME_ENABLE if bank_format.is_esi else 0)
         data[offset + ZONE_VCF_TYPE_LFO_SHAPE] = 0
         # Key-tracking and velocity-to-cutoff are left neutral: mpc2emu's
-        # velocity_to_filter is an EOS mod-cord amount calibrated against
-        # E4XT hardware (models.common velocity_filter_depth_to_amount);
+        # velocity_to_filter_cents is a depth in cents since 2026-08-25 and
         # filter_keytrack is octaves per octave since 2026-08-24 —
         # that calibration does not apply to EIII's differently-scaled,
         # differently-shaped DSP, and no EIII hardware calibration exists
@@ -509,7 +508,11 @@ def _write_zone(data: bytearray, offset: int, zone: ZoneMapping, voice: VoiceLay
         # risk producing filters that audibly mistrack on real hardware.
         data[offset + ZONE_VCF_TRACKING] = _ZONE_TRACKING_NEUTRAL
 
-        env_amount = max(0, min(127, int(round(voice.filter_env_amount * 127))))
+        # The model states cents; EIII's byte is a 0..127 depth with no
+        # measurement behind it, so the nominal span is the inverse of what
+        # `eiii_parser` used on the way in. Named, not silent.
+        env_amount = max(0, min(127, int(round(
+            abs(voice.filter_env_cents) / FILTER_ENV_FULL_CENTS * 127))))
         data[offset + ZONE_VCF_ENVELOPE_AMOUNT] = env_amount
         if env_amount:
             _write_envelope(data, offset + ZONE_VCF_ENVELOPE, voice.filter_env)

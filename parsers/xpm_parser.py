@@ -37,6 +37,7 @@ import sys
 import struct
 
 from models.common import (
+    nominal_filter_env_cents, nominal_velocity_filter_cents,
     nominal_knob_to_hz,
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType, lfo_knob_to_hz,
     cap_voices_by_coverage, stereo_to_mono, hz_to_e4b_cutoff,
@@ -1752,10 +1753,13 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
                 env_attack=env_attack, env_decay=env_decay,
                 env_sustain=env_sustain, env_release=env_release,
                 filter_type=filt_type, filter_cutoff=filt_cutoff,
-                filter_resonance=filt_res, filter_env_amount=filt_env_amt,
+                filter_resonance=filt_res,
+                # MPC states 0..1 knobs for both depths, never cents.
+                filter_env_cents=nominal_filter_env_cents(filt_env_amt),
                 filter_env_attack=filt_atk, filter_env_decay=filt_dec,
                 filter_env_sustain=filt_sus, filter_env_release=filt_rel,
-                filter_keytrack=filt_keytrk, velocity_to_filter=filt_velamt,
+                filter_keytrack=filt_keytrk,
+                velocity_to_filter_cents=nominal_velocity_filter_cents(filt_velamt),
             )
             # MPC 3 second LFO (<LFO2>, emitted only by the JSON converter — an
             # MPC 2.x XML program never has one, so this is inert there).  Routed

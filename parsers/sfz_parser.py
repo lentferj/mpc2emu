@@ -50,7 +50,7 @@ from typing import Optional, Dict, Any
 from models.common import (
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType,
     cents_to_filter_env_amount, lfo_pitch_depth_to_amount, hz_to_e4b_cutoff,
-    lfo_volume_depth_to_amount, velocity_filter_depth_to_amount, key_track_to_filter_amount,
+    lfo_volume_depth_to_amount, key_track_to_filter_amount,
     cap_voices_by_coverage, walk_files_deterministic,
 )
 from parsers.xpm_parser import load_wav, _safe_name
@@ -194,13 +194,17 @@ def _sfz_voice_params(merged: dict) -> dict:
             pass
     if 'fil_veltrack' in merged:
         try:
-            params['velocity_to_filter'] = velocity_filter_depth_to_amount(
-                float(merged['fil_veltrack']))
+            # fil_veltrack is CENTS in SFZ (-9600..9600), and the model now
+            # carries cents too, so this is an assignment and not a
+            # calibration. It used to divide by VEL_FILTER_FULL_CENTS while
+            # the AKAI and KRZ writers multiplied by their own full scales --
+            # two different definitions of 1.0 for one quantity.
+            params['velocity_to_filter_cents'] = float(merged['fil_veltrack'])
         except ValueError:
             pass
     if 'fileg_depth' in merged:
         try:
-            params['filter_env_amount']  = cents_to_filter_env_amount(float(merged['fileg_depth']))
+            params['filter_env_cents']  = float(merged['fileg_depth'])  # SFZ states cents
             params['filter_env_attack']  = _f('fileg_attack', 0.0)
             params['filter_env_decay']   = _f('fileg_decay', 0.3)
             params['filter_env_sustain'] = _sfz_sustain_to_linear(merged.get('fileg_sustain', '100'))

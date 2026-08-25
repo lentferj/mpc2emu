@@ -209,6 +209,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§CORPUSRT — round-tripping the corpus, and the eight defects it found in two hours (2026-08-24)](#corpusrt-round-tripping-the-corpus-and-the-eight-defects-it-found-in-two-hours-2026-08-24)
 - [§CUTOFFHZ — `filter_cutoff` now carries hertz, and the corpus says how much that was costing (2026-08-25)](#cutoffhz-filter_cutoff-now-carries-hertz-and-the-corpus-says-how-much-that-was-costing-2026-08-25)
 - [§KRZVELFOLD — the KRZ writer destroys a K2000's own velocity cord, and it is what remains after §CUTOFFHZ (2026-08-25)](#krzvelfold-the-krz-writer-destroys-a-k2000s-own-velocity-cord-and-it-is-what-remains-after-cutoffhz-2026-08-25)
+- [§SSCENTSDEPTHS — the filter depths carry cents, and that dissolves FENVFULLSCALE rather than deciding it (2026-08-25)](#sscentsdepths-the-filter-depths-carry-cents-and-that-dissolves-fenvfullscale-rather-than-deciding-it-2026-08-25)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -20075,3 +20076,140 @@ same class of error as §CUTOFFHZ one octave up: a machine's real range trimmed
 to another machine's scale. Fixing it means the model's cutoff has no ceiling
 and each writer clamps to its own — cheap, but it touches every writer, so it
 waits for a reason better than tidiness.
+
+## §SSCENTSDEPTHS — the filter depths carry cents, and that dissolves FENVFULLSCALE rather than deciding it (2026-08-25)
+
+Jan asked which model fields are still "one machine's parameter scale" rather
+than a physical unit. The answer was: the signal path is physical (envelope
+times in seconds, LFO in Hz, volume in dB, cutoff in Hz since this morning,
+key-follow in oct/oct since yesterday) and **every modulation depth is a
+fraction of somebody's full scale**, each with a named constant in cents or dB
+sitting three lines away. Same shape as the three defects fixed this week.
+
+This moves the two where the span is measured on both sides:
+
+    filter_env_amount       -> filter_env_cents
+    velocity_to_filter      -> velocity_to_filter_cents
+    velocity_to_filter_min  -> velocity_to_filter_min_cents
+
+**Renamed, not silently redefined.** A field that changes units without
+changing name is exactly how this family of defects survives: every call site
+keeps compiling and quietly means something ~4000x different. The rename made
+the interpreter find all 24 files.
+
+### What it resolves
+
+**§FENVFULLSCALE, filed 2026-08-22, asked eosed the wrong question.** It laid
+out two constants for one quantity -- 4383 ct (3.65 oct) on the input path,
+6168 ct (5.14 oct) on the output path, composing rather than cancelling -- and
+asked *"does §46 supersede MOD_DEPTH_CAL, or do they measure different paths?"*
+
+Neither. **They measure the same path from different base cutoffs.** The cord
+moves the cutoff BYTE linearly (`E4XT_FENV_BYTE_PER_UNIT = 2.506`) and the
+byte->Hz curve is not a pure exponential, so a full cord saturates the byte
+from essentially any base and "octaves per full cord" is just
+`log2(20 kHz / base_hz)`:
+
+    base byte    0      64     104     128     193     200
+    octaves    7.05    6.05    5.19    4.72    3.68    3.50
+
+3.65 oct is a base near byte 193; 5.14 oct is a base near byte 104. Both
+measurements are correct. Only the name `FILTER_ENV_FULL_CENTS` was wrong.
+
+**The answer was already in the tree and nobody connected it.**
+`E4XT_FENV_BYTE_PER_UNIT`'s own comment -- written 2026-08-24, two days after
+§FENVFULLSCALE was filed -- says the octave figure "looks strongly
+base-dependent... and that is entirely an artefact of the byte->Hz curve not
+being a pure exponential". A named open question and its answer sat in the
+same file for a day. The lesson is not "read more carefully": it is that an
+open question filed as *which of these two numbers* cannot be closed by a
+measurement showing *neither*, because nobody re-reads a question they think
+they know the shape of.
+
+### How the depths convert now
+
+Nothing multiplies by a full scale. Each end uses its own measured law:
+
+| path | conversion |
+|---|---|
+| SFZ, SF2, GIG (cents in the file) | assigned; no constant |
+| E4XT read/write | `e4xt_cord_amount_to_cents` / `e4xt_cents_to_cord_amount`, **through this voice's own corner** |
+| K2000 read/write | `krz_depth_byte_to_cents`, the hardware-measured table, alone |
+| AKAI read/write | `_env2_amount` / `_akai_env2_depth`, this machine's own octave law |
+| EXS24, EIII, MPC, GIG fractions | `nominal_filter_env_cents` / `nominal_velocity_filter_cents` -- the assumption is named |
+
+`KRZ_FENV_FULL_CENTS` is gone from `krz_writer` entirely, and
+`E4XT_FENV_BYTE_PER_UNIT` and `hz_to_e4b_cutoff` are gone from the AKAI depth
+path: **an AKAI conversion no longer contains an E-MU number.**
+
+### Two defects found while doing it
+
+**1. `akai_velocity_filter` was broken by this morning's commit (`4733a90`).**
+That commit moved `filter_cutoff` to hertz and changed `akai_filter_byte` with
+it, but left this function raising the E-MU scale to the power of what is now
+a *frequency* -- so any voice carrying a velocity->filter sweep was written
+wide open. **The corpus sweep could not see it**: the AKAI reader never
+populates `velocity_to_filter_cents`, so an AKAI->AKAI trip takes the
+`not span_ct` early return and never reaches the line. Only KRZ->AKAI and
+SFZ->AKAI could hit it. *A round-trip corpus is blind to any field its own
+reader does not set* -- the general form, and worth remembering, because the
+corpus is now the main safety net for exactly this class of change.
+
+**2. `e4xt_cutoff_position` is not the inverse of `e4xt_cutoff_byte_to_hz`.**
+Up to **1.47 bytes apart at byte 64**: one interpolates the measured table
+linearly in POSITION, the other log in HZ, so between knots they are different
+curves. It cost 12% of cord values a byte on the round trip before it was
+found. `e4xt_cutoff_hz_to_byte` now inverts by bisection -- the same
+"a search cannot drift" rule the AKAI writer adopted on 2026-08-20 after two
+hand-derived inverses of one curve diverged. `e4xt_cutoff_position` is left
+alone: it is the writer's hardware-calibrated path for `vpar[60]`.
+
+### The reader reports what the machine RENDERS, and that was a real choice
+
+A full cord covers the entire cutoff byte range, so from a mid cutoff more than
+half the cord's numeric range drives the corner off one end -- and **36.5% of
+the nonzero filter depths in 60 real banks do**. Reading those as the depth
+they *ask for* gave values up to **71 octaves**, and every other machine would
+then be told to sweep 71 octaves rather than the 7.2 the E4XT manages. So the
+reader clamps at the corner and the model carries the rendered depth; the
+maximum over the same 60 banks is now 7.45 octaves.
+
+That costs byte-exactness on a saturated cord, because several amounts reach
+the same corner. `e4b_writer` re-saturates to the field end when the target is
+already there, which keeps the common full-amount case exact.
+
+Note this is the OPPOSITE choice from `filter_keytrack`, which carries the
+request and lets the writer saturate. The difference is that key-follow's
+excess is recoverable on another machine with more range, while a corner that
+has hit 20 kHz has nowhere further to go on any of them.
+
+### Measured
+
+| corpus | before | after |
+|---|---|---|
+| E4B, 26644 zones | `filter_env_cents` — (was a raw cord byte, exact) | **0.0%** |
+| E4B, 26644 zones | `velocity_to_filter_cents` — | **0.1%** |
+| AKAI, 10153 zones | both preserved exactly | unchanged |
+| KRZ, 3186 zones | `filter_env_cents` exact | unchanged |
+| EIII, 2796 zones | clean | unchanged |
+
+508 tests pass. Four test files moved to cents, and three of their assertions
+had been pinning one of the two disputed constants as the expected answer --
+`test_full_filter_env_amount_is_five_octaves_not_the_bytes_nine` asserted 5.14
+octaves by name, so it would have passed with `KRZ_FENV_FULL_CENTS` set to
+anything at all as long as the writer used the same value.
+
+### What is still a fraction of somebody's scale
+
+`filter_resonance` (RESONANCE_FULL_DB = 25.51), `lfo1/2_to_filter` and
+`_filter_q`, `lfo1/2_to_pitch` (LFO_PITCH_FULL_CENTS = 1593),
+`lfo1/2_to_volume` (LFO_VOLUME_FULL_DB = 24.0), and `chorus_amount`
+(documented as "E4B vpar[42]" -- literally one machine's parameter).
+`wheel_to_lfo` is a genuine ratio and is fine.
+
+**Resonance and the LFO->filter depths are blocked, not merely undone.**
+§E4XTQSHIFT measured that cutoff and resonance are not independent on the E4XT
+-- setting Q moves the corner by up to a full octave -- so giving resonance a
+dB unit implies a law we have 12 points of and know is wrong above byte 64.
+The LFO pitch and volume depths are the next cheap ones: both spans are
+measured, both are already in cents or dB.

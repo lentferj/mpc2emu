@@ -645,9 +645,9 @@ class _KrzLayer:
         self.filter_type = 0
         self.filter_cutoff = 1.0
         self.filter_resonance = 0.0
-        self.filter_env_amount = 0.0
-        self.velocity_to_filter = 0.0
-        self.velocity_to_filter_min = 0.0
+        self.filter_env_cents = 0.0
+        self.velocity_to_filter_cents = 0.0
+        self.velocity_to_filter_min_cents = 0.0
         self.filter_keytrack = 0.0
         # DECLARED HERE OR SILENTLY DISCARDED. This intermediate layer is not
         # the model voice: the fields below are copied across one by one when
@@ -866,10 +866,11 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
                 # it: a program may carry both, and they sum on the machine.
                 _vt = seg[4] - 256 if seg[4] >= 128 else seg[4]
                 if _vt:
-                    _vt_amt = max(-1.0, min(1.0,
-                                            _k2_depth_cents(_vt) / 10800.0))
-                    cur.velocity_to_filter = max(
-                        -1.0, min(1.0, cur.velocity_to_filter + _vt_amt))
+                    # CENTS since 2026-08-25 -- the machine states cents and
+                    # so does the model, so nothing is normalised here. This
+                    # used to divide by 10800 while the AKAI and KRZ writers
+                    # multiplied by their own full scales.
+                    cur.velocity_to_filter_cents += _k2_depth_cents(_vt)
 
                 # THE THIRD ELEMENT IS THE FLOOR, AND IT IS THE POINT.
                 # Slot 2 specifies a RANGE -- MinDpt at zero velocity, MaxDpt
@@ -885,27 +886,28 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
                         continue
                     _d = _depth - 256 if _depth >= 128 else _depth
                     _f = _floor - 256 if _floor >= 128 else _floor
-                    # TWO SCALES, AND THE DIFFERENCE IS THE POINT.
+                    # NO NORMALISATION ON THE TWO CENTS DESTINATIONS.
                     #
-                    # KRZ_DEPTH_MAX_CENTS is how far the FIELD reaches (9.000
-                    # octaves). The filter-envelope amount is an EOS cord
-                    # amount, and a full one is worth 5.14 octaves, so
-                    # normalising it on the field's ceiling understated every
-                    # converted sweep -- and, because the byte's display curve
-                    # is compressed near zero, understated SMALL amounts by
-                    # ~23x rather than uniformly by 1.75x. The other three
-                    # destinations keep the ceiling for now; each needs its own
+                    # This used to divide by KRZ_DEPTH_MAX_CENTS (how far the
+                    # FIELD reaches, 9 octaves) for velocity and by
+                    # KRZ_FENV_FULL_CENTS (what a full EOS cord is worth, 5.14
+                    # octaves) for the envelope -- two different definitions of
+                    # 1.0, neither of which the writers on the other side
+                    # agreed with. The model carries cents for both since
+                    # 2026-08-25, so the depth the machine states is the depth
+                    # that is stored. The LFO destinations below are still
+                    # amounts and still keep the ceiling; each needs its own
                     # measured full scale (TODO: KRZ depth normalisation).
                     _amt = max(-1.0, min(1.0,
                                          _k2_depth_cents(_d) / KRZ_DEPTH_MAX_CENTS))
-                    _amt_min = max(-1.0, min(1.0,
-                                             _k2_depth_cents(_f) / KRZ_DEPTH_MAX_CENTS))
                     if _src == _K2_CS_ENV2:
-                        cur.filter_env_amount = min(1.0, abs(
-                            _k2_depth_cents(_d) / KRZ_FENV_FULL_CENTS))
+                        # SIGN KEPT. The old line took abs() -- a K2000
+                        # envelope that sweeps the corner DOWN came back as one
+                        # that sweeps it up, which is a different patch.
+                        cur.filter_env_cents = _k2_depth_cents(_d)
                     elif _src == _K2_CS_ATTACK_VEL:
-                        cur.velocity_to_filter = _amt
-                        cur.velocity_to_filter_min = _amt_min
+                        cur.velocity_to_filter_cents = _k2_depth_cents(_d)
+                        cur.velocity_to_filter_min_cents = _k2_depth_cents(_f)
                     elif _src == _K2_CS_LFO1:
                         cur.lfo1_to_filter = _amt
                     elif _src == _K2_CS_LFO2:
@@ -1216,9 +1218,9 @@ def parse_krz(path: str) -> Bank:
                     filter_type=layer.filter_type,
                     filter_cutoff=layer.filter_cutoff,
                     filter_resonance=layer.filter_resonance,
-                    filter_env_amount=layer.filter_env_amount,
-                    velocity_to_filter=layer.velocity_to_filter,
-                    velocity_to_filter_min=layer.velocity_to_filter_min,
+                    filter_env_cents=layer.filter_env_cents,
+                    velocity_to_filter_cents=layer.velocity_to_filter_cents,
+                    velocity_to_filter_min_cents=layer.velocity_to_filter_min_cents,
                     filter_keytrack=layer.filter_keytrack,
                     lfo1_to_filter=layer.lfo1_to_filter,
                     lfo2_to_filter=layer.lfo2_to_filter,

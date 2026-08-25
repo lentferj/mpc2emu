@@ -62,7 +62,7 @@ import struct
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from models.common import Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType, Envelope, hz_to_e4b_cutoff, E4B_CUTOFF_MAX_HZ
+from models.common import Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType, Envelope, hz_to_e4b_cutoff, E4B_CUTOFF_MAX_HZ, nominal_filter_env_cents
 from writers.eiii_writer import (
     BankFormat, ALL_BANK_FORMATS,
     NAME_LENGTH, PRESET_SIZE, NOTE_ZONE_SIZE, ZONE_SIZE, SAMPLE_HEADER_SIZE,
@@ -205,7 +205,7 @@ def _parse_envelope(data: bytes, offset: int) -> Envelope:
 
 class _ZoneExtra:
     __slots__ = ('amp_env', 'filter_type', 'filter_cutoff', 'filter_resonance',
-                 'filter_env_amount', 'filter_env', 'non_transpose')
+                 'filter_env_cents', 'filter_env', 'non_transpose')
 
 
 def _parse_zone(data: bytes, offset: int, key_lo: int, key_hi: int,
@@ -269,12 +269,13 @@ def _parse_zone(data: bytes, offset: int, key_lo: int, key_hi: int,
     if has_filter:
         extra.filter_cutoff = cutoff_hz   # the model carries Hz (2026-08-25)
         extra.filter_resonance = max(0.0, min(1.0, resonance / 127.0))
-        extra.filter_env_amount = max(0.0, min(1.0, env_amount / 127.0))
+        # EIII states a 0..127 depth byte, not a frequency -> nominal span.
+        extra.filter_env_cents = nominal_filter_env_cents(env_amount / 127.0)
         extra.filter_env = _parse_envelope(data, offset + ZONE_VCF_ENVELOPE)
     else:
-        extra.filter_cutoff = 1.0
+        extra.filter_cutoff = E4B_CUTOFF_MAX_HZ
         extra.filter_resonance = 0.0
-        extra.filter_env_amount = 0.0
+        extra.filter_env_cents = 0.0
         extra.filter_env = Envelope(0.0, 0.3, 1.0, 0.0)
 
     if sample.loop_type != LoopType.NO_LOOP and (flags & ZONE_FLAG_DISABLE_LOOP):
@@ -698,7 +699,7 @@ def _parse_layers(data: bytes, preset_offset: int,
             filter_type=rep.filter_type,
             filter_cutoff=rep.filter_cutoff,
             filter_resonance=rep.filter_resonance,
-            filter_env_amount=rep.filter_env_amount,
+            filter_env_cents=rep.filter_env_cents,
             non_transpose=rep.non_transpose,
         )
         voices.append(voice)

@@ -110,6 +110,7 @@ from pathlib import Path
 from typing import Optional, Dict, List, Tuple
 
 from models.common import (
+    nominal_filter_env_cents,
     filter_amount_to_key_track,
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType,
     hz_to_e4b_cutoff, E4B_CUTOFF_MAX_HZ, walk_files_deterministic
@@ -237,9 +238,11 @@ def _apply_exs_filter(voice: VoiceLayer, params: dict) -> None:
     dec = params.get(_EXS_ENV2_DECAY, 0)
     rel = params.get(_EXS_ENV2_RELEASE, 0)
     if atk or dec or rel:        # ENV2 actually moves the cutoff
-        # EXS routes ENV2 to the cutoff; EOS has no separate env→cutoff depth, so
-        # a full positive sweep is used (approximation, see RESOLUTION_NOTES §17).
-        voice.filter_env_amount  = 1.0
+        # EXS routes ENV2 to the cutoff and states no depth, so a full positive
+        # sweep is used (approximation, see RESOLUTION_NOTES §17). The model
+        # carries CENTS since 2026-08-25, and "full" is a fraction, so it goes
+        # through the nominal span with the assumption named.
+        voice.filter_env_cents  = nominal_filter_env_cents(1.0)
         voice.filter_env_attack  = _exs_env_to_seconds(atk)
         voice.filter_env_decay   = _exs_env_to_seconds(dec)
         voice.filter_env_sustain = max(0.0, min(1.0, params.get(_EXS_ENV2_SUSTAIN, 127) / 127.0))

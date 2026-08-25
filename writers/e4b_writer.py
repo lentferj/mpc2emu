@@ -109,6 +109,7 @@ import copy
 import struct
 from typing import List
 from models.common import (
+    e4xt_cents_to_cord_amount, e4xt_cord_saturates, E4XT_VEL_SOURCE_UNITS,
     key_track_to_filter_amount,
     e4xt_cutoff_byte_to_position,Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            LoopType, lfo_rate_hz_to_byte,
@@ -675,7 +676,7 @@ _PRIMARY_ZONE_TMPL = bytes([
 #      from B.010-CordAmountTest.E4B (UI cord N = storage slot N; amount at byte
 #      index 2 of the cord), 2026-06-09.
 # The filter-envelope SHAPE is written full-scale in PZT; its DEPTH is this cord
-# amount = round(filter_env_amount × 127), signed.
+# amount = round(filter_env_cents × 127), signed.
 _MOD_TMPL = bytes([
     0x0C, 0x40, 0x1E, 0x00, 0x10, 0x30, 0x08, 0x00,
     0x60, 0x30, 0x00, 0x00, 0x11, 0xAA, 0x10, 0x00,
@@ -1051,7 +1052,7 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
     pzt[10] = 0;                                     pzt[11] = _fenv_level(0.0)   # Rls2 stay 0
     # Filter-envelope SHAPE — always written (§O, 2026-06-13).  Its depth/sign is
     # the Cord 05 (FilterEnv→FilterFreq) amount in the mod table (set below only
-    # when filter_env_amount>0), so at amount 0 the env is inert/inaudible — but
+    # when filter_env_cents>0), so at amount 0 the env is inert/inaudible — but
     # writing the source curve preserves it for the E4XT display and for later use
     # if the depth is turned up on the hardware.  Mirrors how the E4XT stores it.
     sus = 100.0 * max(0.0, min(1.0, voice.filter_env_sustain))
@@ -1147,10 +1148,32 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
         (0x68, 0x39, voice.lfo2_to_filter_q * _lfo2_sign),  # LFO2 → Filter-Q
     ]
     has_extra = any(abs(a) > 0.01 for _, _, a in _extra_cords)
+    # FILTER DEPTHS CONVERT THROUGH THE CORNER, FROM THIS VOICE'S OWN BASE.
+    #
+    # The model states them in cents (2026-08-25) and the cord moves the cutoff
+    # BYTE linearly, so what a given depth costs in cord amount depends on
+    # where this voice's cutoff already sits. There is no cents-per-cord
+    # constant that would be right -- §FENVFULLSCALE spent three days with two
+    # of them, 41% apart, and the answer was that the quantity is not constant.
+    # `vpar[60]` is set above and is exactly the base these need.
+    #
+    # SATURATION IS RE-SATURATED, not re-derived. When the requested corner is
+    # already at the end of the cutoff byte, MANY amounts reach it and the
+    # conversion above picks the smallest that does -- so a third-party bank's
+    # full-amount cord would be rewritten smaller on every round trip, sounding
+    # identical and reading differently. 36.5% of the nonzero filter depths in
+    # 60 real banks saturate, so this is the common case, not an edge one.
+    def _cord(cents, units=1.0):
+        amt = e4xt_cents_to_cord_amount(vpar[60], cents, source_units=units)
+        if amt and e4xt_cord_saturates(vpar[60], amt) and abs(amt) < 100.0:
+            return math.copysign(100.0, amt)
+        return amt
+    _fenv_amt = _cord(voice.filter_env_cents)
+    _vel_amt = _cord(voice.velocity_to_filter_cents, E4XT_VEL_SOURCE_UNITS)
     needs_mod = (voice.non_transpose
-                 or abs(voice.filter_env_amount) > 0.01
+                 or _q(_fenv_amt / 100.0) not in (0, 256)
                  or _q(key_track_to_filter_amount(voice.filter_keytrack)) not in (0, 256)
-                 or abs(voice.velocity_to_filter) > 0.01
+                 or _q(_vel_amt / 100.0) not in (0, 256)
                  or _q(voice.lfo1_to_pitch) not in (0, 256)
                  or has_extra)
     if needs_mod:
@@ -1178,8 +1201,8 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
                 _set_cord(mod, _MOD_WHEEL_GATE_SLOT, _SRC_MOD_WHEEL,
                           _CORD_AMT_DEST_BASE + _MOD_LFO_TO_PITCH_SLOT,
                           _lfo1_pitch * Kw)
-        if abs(voice.filter_env_amount) > 0.01:
-            mod[_MOD_FENV_TO_CUTOFF_AMT] = _q(voice.filter_env_amount)
+        if _q(_fenv_amt / 100.0) not in (0, 256):
+            mod[_MOD_FENV_TO_CUTOFF_AMT] = _q(_fenv_amt / 100.0)
         # The model carries oct/oct; the cord carries a fraction of this
         # machine's 0.713 oct/oct full scale. Converted here rather than
         # stored converted, so a source asking for more than the E4XT can do
@@ -1188,13 +1211,18 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
         _ktb = _q(key_track_to_filter_amount(voice.filter_keytrack))
         if _ktb not in (0, 256):
             mod[_MOD_KEY_TO_CUTOFF_AMT] = _ktb
-        if abs(voice.velocity_to_filter) > 0.01:
+        if _q(_vel_amt / 100.0) not in (0, 256):
             # Source = Vel+ (ADD, anchored at base for vel 0); the DIRECTION is the
             # sign of the (signed) amount: +amount → harder opens the filter above
             # base, −amount → harder closes it below base.  (The old default Vel<
             # subtracted, anchoring HARD notes at base — wrong for veltrack.)
+            #
+            # Vel+ spans 2.08 cord units over velocity 0..127, so the same
+            # cents need 2.08x LESS amount here than on a unit source -- that
+            # span is `E4XT_VEL_SOURCE_UNITS` and it is why the old
+            # VEL_FILTER_FULL_CENTS was FILTER_ENV_FULL_CENTS times 2.08.
             mod[_MOD_VEL_TO_CUTOFF_SRC] = _SRC_VEL_PLUS
-            mod[_MOD_VEL_TO_CUTOFF_AMT] = _q(voice.velocity_to_filter)
+            mod[_MOD_VEL_TO_CUTOFF_AMT] = _q(_vel_amt / 100.0)
         slot = _LFO_ROUTE_FIRST_FREE_SLOT
         for src, dst, amt in _extra_cords:
             if abs(amt) > 0.01 and slot < 20:

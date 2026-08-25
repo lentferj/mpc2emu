@@ -281,7 +281,7 @@ def _filter_env_of(env2, depth, filfrq=99, s3000=True):
 
 
 def _env2_amount(depth, sustn2, filfrq, s3000):
-    """AKAI ENV2 depth -> the model's 0..1 filter-envelope amount.
+    """AKAI ENV2 depth -> the model's filter-envelope depth in CENTS.
 
     **CONVERTS A CORNER POSITION, NOT A DEPTH** (§AKAIENV2DEPTH). The old form
     was `depth / AKAI_ENV2_DEPTH_MAX`, where that constant was derived by
@@ -304,7 +304,7 @@ def _env2_amount(depth, sustn2, filfrq, s3000):
     why the target corner is clamped rather than the depth.
     """
     if not depth:
-        return 0.0
+        return 0.0        # cents
     base_hz = akai_filfrq_to_hz(filfrq)
     if base_hz is None:
         # Saturated FILFRQ: the machine does not distinguish these from wide
@@ -320,15 +320,17 @@ def _env2_amount(depth, sustn2, filfrq, s3000):
     else:
         target_hz = akai_env2_target_hz(base_hz, sustn2, depth)
         octaves = math.log2(max(target_hz, 1e-6) / base_hz)
-    # The model's amount is a fraction of ONE E4XT cord's full sweep. Measured
-    # in cutoff BYTES rather than octaves, because that is the unit the cord is
-    # linear in -- the same octave shift from three different bases needs three
-    # different amounts, which is what caught us out by ear.
-    tgt_hz = min(max(base_hz * 2.0 ** octaves, 1.0), E4B_CUTOFF_MAX_HZ)
-    base_byte = round(hz_to_e4b_cutoff(base_hz) * 255)
-    tgt_byte = round(hz_to_e4b_cutoff(tgt_hz) * 255)
-    amt = abs(tgt_byte - base_byte) / (E4XT_FENV_BYTE_PER_UNIT * 100.0)
-    return max(-1.0, min(1.0, math.copysign(amt, octaves)))
+    # THE MODEL CARRIES CENTS SINCE 2026-08-25, so the octaves this function
+    # already computed ARE the answer -- one multiplication, and no E-MU
+    # number anywhere in an AKAI read.
+    #
+    # It used to convert those octaves into "a fraction of one E4XT cord's
+    # full sweep", measured in E4XT cutoff BYTES because that is the unit the
+    # cord is linear in. Correct arithmetic for a wrong destination: it made
+    # every AKAI filter-envelope depth depend on the E4XT's byte curve, and it
+    # is half of what §FENVFULLSCALE was about -- the reader normalised on one
+    # full scale and the KRZ and AKAI writers multiplied by another.
+    return octaves * 1200.0
 
 
 def _cutoff_of(filfrq: int, s3000: bool) -> float:
@@ -776,7 +778,7 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
                                    kg.get('filter_freq', 99), prog['is_s3000'])
         if _fe is not None:
             voice.filter_env = _fe
-            voice.filter_env_amount = _amt
+            voice.filter_env_cents = _amt
         for z in kg['zones']:
             src = z['sample_name']
             if src not in cache:

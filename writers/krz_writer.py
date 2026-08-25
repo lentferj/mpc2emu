@@ -88,9 +88,9 @@ from typing import List, Tuple
 from models.common import (
     Bank, Preset, SampleData, VoiceLayer, LoopType,
     KRZ_ENV_TIME_GRID, KRZ_RELEASE_FACTOR, KRZ_RELEASE_SPAN_DB,
-    E4B_CUTOFF_MAX_HZ, E4B_CUTOFF_RANGE_OCT,
+    E4B_CUTOFF_MAX_HZ,
     KEY_FILTER_OCT_PER_OCT,
-    krz_cents_to_depth_byte, KRZ_FENV_FULL_CENTS,
+    krz_cents_to_depth_byte,
     krz_cents_to_lfo_pitch_byte, LFO_PITCH_FULL_CENTS,
 )
 from processors.loop_renderer import bake_alternating_loop
@@ -631,9 +631,9 @@ def _spans_disjoint(a, b):
 #: refuses the fusion outright (see `_voice_distance`). A field that is neither
 #: listed here nor checked there would be dropped in silence, which is what
 #: happened.
-_VOICE_FIT_FIELDS = ('filter_cutoff', 'filter_resonance', 'filter_env_amount',
-                     'filter_keytrack', 'velocity_to_filter',
-                     'velocity_to_filter_min', 'lfo1_to_volume')
+_VOICE_FIT_FIELDS = ('filter_cutoff', 'filter_resonance', 'filter_env_cents',
+                     'filter_keytrack', 'velocity_to_filter_cents',
+                     'velocity_to_filter_min_cents', 'lfo1_to_volume')
 
 
 def _voice_distance(a, b):
@@ -656,7 +656,7 @@ def _voice_distance(a, b):
             or getattr(a, 'lfo1_to_pitch', None) != getattr(b, 'lfo1_to_pitch', None)):
         return None
     # ANYTHING NOT AVERAGED MUST MATCH, or fusing silently drops the loser's
-    # value. `_patch_layer` also consumes `velocity_to_filter` and
+    # value. `_patch_layer` also consumes `velocity_to_filter_cents` and
     # `lfo1_shape`, and the first version of this compared neither -- so a
     # 4-layer split whose top layer tracked velocity into the filter lost that
     # entirely, while the deliberately loud banner said only that "filter
@@ -1063,8 +1063,8 @@ def _lfo_pitch_depth_byte(amount: float) -> int:
 
 
 
-def _filter_env_depth_byte(amount: float) -> int:
-    """FilterEnv->cutoff cord amount 0..1 -> K2000 ENV2->FilFreq depth byte.
+def _filter_env_depth_byte(cents: float) -> int:
+    """FilterEnv->cutoff depth in CENTS -> K2000 ENV2->FilFreq depth byte.
 
     **This used to be `round(amount * 127)`**, which treated the byte's
     numerical maximum as "full envelope amount". It is not: byte 127 is
@@ -1078,13 +1078,18 @@ def _filter_env_depth_byte(amount: float) -> int:
     K2000 is far past its own usable range long before that, which is a second
     reason the old mapping could not have been what full amount meant.
 
-    Routed through cents via the shared codec, so this is the exact inverse of
-    what `krz_parser` reads. Only the byte->cents table is hardware-measured
-    (k2kremote, 2026-08-21); the 5.14 oct full scale is the E4XT's (eosed §46)
-    and is NOT yet confirmed end to end -- §MATRIX is what checks that.
+    **The full-scale constant is gone entirely as of 2026-08-25.** The model
+    carries the depth in cents, so this is now the hardware-measured
+    byte<->cents table (k2kremote, 2026-08-21) and nothing else -- the exact
+    inverse of what `krz_parser` reads, with no E4XT number in the middle.
+    That retires this writer's half of §FENVFULLSCALE: the 41% disagreement
+    between the input and output full scales cannot compose here any more,
+    because neither one is consulted.
+
+    Signed: the K2000 sweeps the corner down as readily as up, and the table's
+    codec mirrors on magnitude.
     """
-    return krz_cents_to_depth_byte(
-        max(0.0, min(1.0, amount)) * KRZ_FENV_FULL_CENTS)
+    return krz_cents_to_depth_byte(cents)
 
 
 # K2000 DSP filter-type bytes — HOB0(0x50)[0] — and the algorithm they live in.
@@ -1291,20 +1296,17 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False):
         # i.e. effective cutoff = Cutoff + VelToFilter).  We render a static K2000
         # program, so fold the velocity term into the cutoff rather than a VelTrk
         # sweep from the K2000's 16 Hz floor (which would mute softly-played notes
-        # that the MPC keeps audible).  velocity_to_filter is -1..+1; only the
+        # that the MPC keeps audible).  velocity_to_filter_cents is -1..+1; only the
         # opening (positive) part raises the floor.
-        # The velocity term is a FRACTION of the 0..1 cutoff scale, not a
-        # frequency, so it cannot simply be added to Hz -- but that scale is
-        # logarithmic, so the fraction IS a number of octaves:
-        # E4B_CUTOFF_RANGE_OCT of them.  Multiplying it out lets the sum happen
-        # in Hz, which is what the model now carries.  Identical arithmetic to
-        # the old position-space fold inside the E4B range, and unlike that one
-        # it does not clamp a source darker than 57 Hz up to the E4B floor
-        # before adding (61.3% of the KRZ corpus sits below it).
+        # Both quantities are physical since 2026-08-25 -- the cutoff in Hz and
+        # the velocity depth in cents -- so the fold is one multiplication and
+        # needs no full-scale constant on either side. It went through the
+        # shared 0..1 position until this morning, which clamped a source
+        # darker than 57 Hz up to the E-MU floor before adding; 61.3% of the
+        # KRZ corpus sits below that floor.
         _hz = getattr(voice, 'filter_cutoff', E4B_CUTOFF_MAX_HZ)
-        _vel_oct = (max(0.0, getattr(voice, 'velocity_to_filter', 0.0))
-                    * E4B_CUTOFF_RANGE_OCT)
-        eff_hz = min(E4B_CUTOFF_MAX_HZ, _hz * (2.0 ** _vel_oct))
+        _vel_ct = max(0.0, getattr(voice, 'velocity_to_filter_cents', 0.0))
+        eff_hz = min(E4B_CUTOFF_MAX_HZ, _hz * (2.0 ** (_vel_ct / 1200.0)))
         hob_f1[1] = _cutoff_byte_hz(eff_hz)
         # KEY TRACKING, seg[3]: a straight signed byte, 2 cents per key per
         # unit. The READER has read this since 2026-08-17 -- its comment there
@@ -1349,17 +1351,19 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False):
         # These two writers disagreed until 2026-08-24 and the KRZ one was the
         # loser: measured over 91 third-party soundsets, the filter envelope
         # changed on **55.8% of round-tripped zones**, and every example
-        # inspected had `filter_env_amount == 0` with a real shape behind it --
+        # inspected had `filter_env_cents == 0` with a real shape behind it --
         # attacks of 4.76 s and 8.0 s discarded because the routing that would
         # have swept them was switched off.
         #
         # The ROUTING still depends on the depth. Writing ENV2 as the source at
         # zero depth would be inventing a modulation the file does not ask for.
-        amt = getattr(voice, 'filter_env_amount', 0.0)
+        _fenv_ct = getattr(voice, 'filter_env_cents', 0.0)
         _fill_env(seg(0x22), voice.filter_env)
-        if amt > 0.0:
+        if _fenv_ct:
             hob_f1[5] = _K2_CS_ENV2                          # source = ENV2
-            hob_f1[6] = _filter_env_depth_byte(amt)         # depth (measured; see above)
+            # Signed since 2026-08-25: `if amt > 0.0` dropped every downward
+            # sweep the source asked for, and the K2000 has the sign.
+            hob_f1[6] = _filter_env_depth_byte(_fenv_ct) & 0xFF
 
     # --- LFO1 + vibrato (LFO1 -> Pitch) ---
     lfo = seg(0x14)

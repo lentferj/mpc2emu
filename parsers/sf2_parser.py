@@ -502,7 +502,9 @@ def parse_sf2(sf2_path: str, max_presets: int = 64) -> Bank:
                     # (cents = the envelope's filter depth/amount).
                     me_amt = ig_dict.get(11, {}).get('amt', 0)
                     if me_amt:
-                        voice.filter_env_amount  = cents_to_filter_env_amount(me_amt)
+                        # modEnvToFilterFc is already cents, and the model
+                        # carries cents since 2026-08-25 -- assign it.
+                        voice.filter_env_cents  = float(me_amt)
                         voice.filter_env_attack  = _tc(26, 0.0)
                         voice.filter_env_decay   = _tc(28, 0.3)
                         sus_pm = ig_dict.get(29, {}).get('amt', 0)  # 0.1% units

@@ -305,7 +305,7 @@ _AK_ATTAK1_TIME = (0.000201173, 0.10844, 0, 99)   # seconds,  s3ked §141
 #
 #       Stale reason 2, and this one is ours: "our model carries no
 #       filter-envelope amount -- there is no span to divide by". It does.
-#       `VoiceLayer.filter_env_amount` exists, EIGHT parsers populate it, and
+#       `VoiceLayer.filter_env_cents` exists, EIGHT parsers populate it, and
 #       it is non-zero on 20 of 39 voices in real E4B material.
 #
 #       So the honest current blocker is neither of those. It is that these
@@ -483,8 +483,21 @@ _AKAI_VELFILT_PIVOT = 64.56        # the velocity the field pivots about
 _AKAI_VELFILT_FILFRQ_PER_UNIT = 2.22
 
 
-def akai_velocity_filter(cutoff_pos: float, vel_min: float, vel_max: float):
-    """(cutoff_pos, MinDpt, MaxDpt normalised on 10800 ct) -> (FILFRQ, MODVFILT1, lost_ct).
+def akai_velocity_filter(cutoff_hz: float, vel_min_ct: float,
+                         vel_max_ct: float):
+    """(resting corner in Hz, MinDpt and MaxDpt in CENTS)
+       -> (FILFRQ, MODVFILT1, lost_ct).
+
+    **THIS FUNCTION WAS BROKEN FOR ONE COMMIT (4733a90 -> here, 2026-08-25.)**
+    That commit moved `filter_cutoff` to hertz and changed `akai_filter_byte`
+    with it, but left this function's body raising the E-MU scale to the power
+    of what is now a FREQUENCY -- so any voice that carried a velocity->filter
+    sweep was written wide open. It survived the corpus sweep because the AKAI
+    reader does not populate `velocity_to_filter_cents`, so an AKAI->AKAI trip
+    takes the `not span_ct` early return and never reaches the broken line;
+    only KRZ->AKAI and SFZ->AKAI could hit it. A round-trip corpus cannot see a
+    field its own reader never sets, which is the general form of the lesson.
+    
 
     THE SOURCE SPECIFIES A LINE, NOT A POINT. A K2000 velocity->filter routing
     runs from `vel_min` at velocity 0 to `vel_max` at velocity 127, and the
@@ -502,19 +515,19 @@ def akai_velocity_filter(cutoff_pos: float, vel_min: float, vel_max: float):
     Returns the two bytes plus how many cents of the requested span could not
     be represented, so the caller can say so rather than clip quietly.
     """
-    span_ct = (vel_max - vel_min) * 10800.0
+    # CENTS ON BOTH DEPTHS since 2026-08-25. They arrived normalised on the
+    # K2000's 10800-cent field before that, which meant an SFZ and a KRZ
+    # asking for the same sweep did not produce the same one.
+    span_ct = vel_max_ct - vel_min_ct
     if not span_ct:
-        return akai_filter_byte(cutoff_pos), 0, 0.0
+        return akai_filter_byte(cutoff_hz), 0, 0.0
 
     # Depth from the SLOPE: the source covers span_ct over 127 velocity units.
     depth = span_ct / (127.0 * _AKAI_VELFILT_CENTS)
 
     # FILFRQ from where the source sits AT THE PIVOT, not at velocity 0.
-    base_hz = E4B_CUTOFF_MIN_HZ * (E4B_CUTOFF_MAX_HZ / E4B_CUTOFF_MIN_HZ) ** \
-        max(0.0, min(1.0, cutoff_pos))
-    pivot_ct = vel_min * 10800.0 + span_ct * _AKAI_VELFILT_PIVOT / 127.0
-    pivot_hz = base_hz * 2.0 ** (pivot_ct / 1200.0)
-    f_byte = akai_filter_byte(hz_to_e4b_cutoff(pivot_hz))
+    pivot_ct = vel_min_ct + span_ct * _AKAI_VELFILT_PIVOT / 127.0
+    f_byte = akai_filter_byte(cutoff_hz * 2.0 ** (pivot_ct / 1200.0))
 
     d_byte = _clamp(int(round(depth)), -50, 50)
 
@@ -980,7 +993,7 @@ def _env2_stage_byte(seconds: float, distance: float, law) -> int:
     return int(round(max(0.0, min(float(hi), v))))
 
 
-def akai_filter_env_bytes(env, amount: float, filfrq: int = 99):
+def akai_filter_env_bytes(env, cents: float, filfrq: int = 99):
     """Filter envelope -> (ATTAK2, DECAY2, SUSTN2, RELSE2, depth byte).
 
     Distances mirror `akai_env_bytes`: attack climbs the full range, decay
@@ -992,13 +1005,12 @@ def akai_filter_env_bytes(env, amount: float, filfrq: int = 99):
     **THE DEPTH CONVERTS A CORNER POSITION, and needs `filfrq` to do it**
     (§AKAIENV2DEPTH, 2026-08-24). It used to be `amount * AKAI_ENV2_DEPTH_MAX`,
     a constant derived by equating two laws measured on two different machines.
-    Both halves are now measured directly, and the composition goes through the
-    only thing both machines agree on -- where the corner ends up:
+    Since 2026-08-25 the model states the depth in CENTS, so the composition is
+    just this machine's own measured law:
 
-        amount     -> the E4XT corner byte the cord would reach
-                   -> that corner in Hz
-        base_hz    -> the AKAI's own resting corner for this FILFRQ
-        depth      -> the ENV2 depth that lands on the same Hz
+        cents      -> where the corner ends up, from this FILFRQ
+        ceiling    -> clamped at AKAI_ENV2_CEILING_HZ (absolute in Hz)
+        depth      -> the ENV2 depth that lands there
 
     `filfrq` defaults to 99 (wide open) so existing callers keep working, and
     a wide-open base returns depth 0 -- correctly, since there is nowhere for
@@ -1010,19 +1022,29 @@ def akai_filter_env_bytes(env, amount: float, filfrq: int = 99):
                          max(1, 99 - sus), _AK_DECAY2_FULL)
     r = _env2_stage_byte(getattr(env, 'release', 0.0) or 0.0,
                          max(1, sus), _AK_RELSE2_FULL)
-    return a, d, sus, r, _akai_env2_depth(amount, sus, filfrq)
+    return a, d, sus, r, _akai_env2_depth(cents, sus, filfrq)
 
 
-def _akai_env2_depth(amount: float, sustn2: int, filfrq: int) -> int:
-    """Model filter-env amount -> AKAI ENV2 depth. Inverse of the reader's
+def _akai_env2_depth(cents: float, sustn2: int, filfrq: int) -> int:
+    """Filter-env depth in CENTS -> AKAI ENV2 depth. Inverse of the reader's
     `_env2_amount`, and it must stay one: the two were briefly not inverses on
     2026-08-24 and the round-trip test caught it inside a minute, which is the
-    entire argument for having that test."""
-    from models.common import (akai_filfrq_to_hz, hz_to_e4b_cutoff,
-                               E4XT_FENV_BYTE_PER_UNIT, AKAI_ENV2_OCT_PER_UNIT,
-                               AKAI_ENV2_CEILING_HZ, e4b_cutoff_position_to_hz)
-    amt = max(-1.0, min(1.0, amount))
-    if not amt or sustn2 <= 0:
+    entire argument for having that test.
+
+    **No E-MU constant is involved any more (2026-08-25).** This used to turn
+    the model's amount into an E4XT cord's byte movement, read that back as
+    Hz, and only then ask what the AKAI needed -- so an AKAI conversion
+    depended on the E4XT's byte curve for no reason. The model carries cents,
+    the AKAI's own law is measured, and the two meet directly. That is this
+    writer's half of §FENVFULLSCALE gone.
+
+    The AKAI's CEILING still binds and is still absolute in Hz, so it is
+    applied to the target corner rather than to the depth: the reachable span
+    is 5.87 octaves from FILFRQ 40 and 1.08 from 85.
+    """
+    from models.common import (akai_filfrq_to_hz, AKAI_ENV2_OCT_PER_UNIT,
+                               AKAI_ENV2_CEILING_HZ)
+    if not cents or sustn2 <= 0:
         return 0
     base_hz = akai_filfrq_to_hz(filfrq)
     if base_hz is None:
@@ -1030,13 +1052,13 @@ def _akai_env2_depth(amount: float, sustn2: int, filfrq: int) -> int:
         # machine distinguishes, so a downward sweep stays convertible.
         from models.common import AKAI_FILTER_OPEN_HZ
         base_hz = AKAI_FILTER_OPEN_HZ
-    base_byte = round(hz_to_e4b_cutoff(base_hz) * 255)
-    tgt_byte = base_byte + E4XT_FENV_BYTE_PER_UNIT * abs(amt) * 100.0
-    tgt_hz = min(e4b_cutoff_position_to_hz(min(1.0, tgt_byte / 255.0)),
-                 AKAI_ENV2_CEILING_HZ)
-    octaves = math.log2(max(tgt_hz, 1e-6) / base_hz)
+    if cents > 0:
+        tgt_hz = min(base_hz * 2.0 ** (cents / 1200.0), AKAI_ENV2_CEILING_HZ)
+        octaves = math.log2(max(tgt_hz, 1e-6) / base_hz)
+    else:
+        octaves = cents / 1200.0        # the ceiling is an upper bound only
     depth = octaves / (AKAI_ENV2_OCT_PER_UNIT * sustn2)
-    return int(round(math.copysign(min(abs(depth), 50.0), amt)))
+    return int(round(math.copysign(min(abs(depth), 50.0), cents)))
 
 
 def akai_sustain_byte(fraction: float) -> int:
@@ -2036,8 +2058,8 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
     if _cut is None:
         k[0x07] = 99                 # wide open (HW-confirmed) when unknown
     else:
-        _vmin = getattr(voice, 'velocity_to_filter_min', 0.0) or 0.0
-        _vmax = getattr(voice, 'velocity_to_filter', 0.0) or 0.0
+        _vmin = getattr(voice, 'velocity_to_filter_min_cents', 0.0) or 0.0
+        _vmax = getattr(voice, 'velocity_to_filter_cents', 0.0) or 0.0
         k[0x07], _vf_byte, _vf_lost = akai_velocity_filter(_cut, _vmin, _vmax)
         # K_FREQ (0x08): key follow of filter frequency, SIGNED semitones,
         # oct/oct = K_FREQ / 12, pivot note 64. Never written before
@@ -2169,7 +2191,7 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
     # inaudible, and writing one anyway would replace a fixed default with a
     # fixed default that merely looks converted.
     _fe = getattr(voice, 'filter_env', None) if voice is not None else None
-    _famt = (getattr(voice, 'filter_env_amount', 0.0) or 0.0) if voice else 0.0
+    _famt = (getattr(voice, 'filter_env_cents', 0.0) or 0.0) if voice else 0.0
     if _fe is not None and abs(_famt) > 0.001:
         # k[0x07] is this keygroup's FILFRQ, set above. The depth is a
         # corner conversion now, so it needs the base it sweeps FROM.
