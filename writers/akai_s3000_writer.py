@@ -1043,7 +1043,7 @@ def _akai_env2_depth(cents: float, sustn2: int, filfrq: int) -> int:
     is 5.87 octaves from FILFRQ 40 and 1.08 from 85.
     """
     from models.common import (akai_filfrq_to_hz, AKAI_ENV2_OCT_PER_UNIT,
-                               AKAI_ENV2_CEILING_HZ)
+                               AKAI_ENV2_CEILING_HZ, AKAI_ENV2_FULL_LEVEL)
     if not cents or sustn2 <= 0:
         return 0
     base_hz = akai_filfrq_to_hz(filfrq)
@@ -1057,7 +1057,14 @@ def _akai_env2_depth(cents: float, sustn2: int, filfrq: int) -> int:
         octaves = math.log2(max(tgt_hz, 1e-6) / base_hz)
     else:
         octaves = cents / 1200.0        # the ceiling is an upper bound only
-    depth = octaves / (AKAI_ENV2_OCT_PER_UNIT * sustn2)
+    # DIVIDE BY THE FULL LEVEL, NOT BY SUSTN2 -- the exact inverse of the
+    # reader's fix of 2026-08-25 (§AKAIENV2PEAK). `cents` is the depth at full
+    # envelope level; the SUSTN2 byte written alongside reproduces the settled
+    # corner, and dividing by it here as well would apply the sustain twice.
+    # That double application is what silenced the attack transient: on a
+    # percussive envelope (SUSTN2 15) it made the written sweep fifteen times
+    # too small, and reader and writer agreed with each other throughout.
+    depth = octaves / (AKAI_ENV2_OCT_PER_UNIT * AKAI_ENV2_FULL_LEVEL)
     return int(round(math.copysign(min(abs(depth), 50.0), cents)))
 
 

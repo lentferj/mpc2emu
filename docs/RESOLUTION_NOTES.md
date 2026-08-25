@@ -210,6 +210,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§CUTOFFHZ — `filter_cutoff` now carries hertz, and the corpus says how much that was costing (2026-08-25)](#cutoffhz-filter_cutoff-now-carries-hertz-and-the-corpus-says-how-much-that-was-costing-2026-08-25)
 - [§KRZVELFOLD — the KRZ writer destroys a K2000's own velocity cord, and it is what remains after §CUTOFFHZ (2026-08-25)](#krzvelfold-the-krz-writer-destroys-a-k2000s-own-velocity-cord-and-it-is-what-remains-after-cutoffhz-2026-08-25)
 - [§SSCENTSDEPTHS — the filter depths carry cents, and that dissolves FENVFULLSCALE rather than deciding it (2026-08-25)](#sscentsdepths-the-filter-depths-carry-cents-and-that-dissolves-fenvfullscale-rather-than-deciding-it-2026-08-25)
+- [§AKAIENV2PEAK — the filter envelope was read at its sustain and written as its peak, and that is where the click went (2026-08-25)](#akaienv2peak-the-filter-envelope-was-read-at-its-sustain-and-written-as-its-peak-and-that-is-where-the-click-went-2026-08-25)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -20245,3 +20246,92 @@ anything at all as long as the writer used the same value.
 dB unit implies a law we have 12 points of and know is wrong above byte 64.
 The LFO pitch and volume depths are the next cheap ones: both spans are
 measured, both are already in cents or dB.
+
+## §AKAIENV2PEAK — the filter envelope was read at its sustain and written as its peak, and that is where the click went (2026-08-25)
+
+**Found by ear, on hardware, after four days of measurement had walked past
+it.** Jan, listening to two builds of one AKAI electric piano on the E4XT:
+*"the click is pretty much gone again on both converted presets"*.
+
+### What the machine does, and what we wrote
+
+The source program's percussive keygroup:
+
+    FILFRQ 35      ENV2 = (attack 0, decay 90, sustain 15, release 50)
+    env2 depth 25  amp env = (5, 85, 6, 45)
+
+Through s3ked's own law, `octaves = 0.002612 x LEVEL x depth`:
+
+| | corner |
+|---|---|
+| AKAI at the attack peak, LEVEL 99 | 6.46 oct -> **7858 Hz** (its ceiling) |
+| AKAI at sustain, LEVEL 15 | 0.98 oct -> **189 Hz** |
+| what we wrote as the PEAK | **187.7 Hz** |
+
+**187.7 against 189.4.** We were writing the corner the envelope SETTLES at as
+the corner it STARTS at, and the instant sweep to 7.9 kHz -- which is the
+click -- was not converted at all.
+
+`_env2_amount` passed the keygroup's `SUSTN2` as the level and stored the
+result in `filter_env_cents`, whose definition is *"cents the filter envelope
+moves the corner at full envelope level"*. `_akai_env2_depth` divided by
+`SUSTN2` on the way back out. So the sustain was applied twice -- once in the
+depth and again by the envelope itself -- and on a percussive envelope
+(SUSTN2 15) that made the written sweep **fifteen times too small**.
+
+### Why nothing caught it
+
+**The round-trip corpus could not see it.** Reader and writer made the SAME
+substitution, so every AKAI->AKAI trip agreed with itself perfectly; the
+field's value was wrong and its round trip was exact. That is the third
+distinct blindness in this harness in one day, after "a field its own reader
+never sets" (§SSCENTSDEPTHS) and "two fields of one file that disagree".
+
+**And a unit test was asserting the bug.**
+`test_filter_envelope_is_written_and_routed` used `VoiceLayer`'s default
+cutoff -- wide open -- whose FILFRQ 99 sits ABOVE the AKAI's 7858 Hz ceiling,
+so no positive depth can brighten it and the honest answer is depth 0. It
+passed only because dividing by SUSTN2 inflated the depth enough to round
+non-zero. The test was pinning "we write a sweep the machine cannot perform".
+Fixture given a real cutoff; the wide-open case now has its own assertion.
+
+### The fix, and why it is self-checking
+
+Read and write the depth at `AKAI_ENV2_FULL_LEVEL` (99). The sustain is not
+lost -- the `Envelope` returned alongside carries `sustain = SUSTN2/99`, so a
+writer reproduces the settled corner as `sustain x full depth`. For this
+program that is `0.15 x 6.46 = 0.97` octaves against the machine's own 0.98,
+which is the check: two numbers derived by different routes that have to agree
+and do.
+
+After the fix the percussive layer reads **7625 ct = 6.35 octaves**, giving a
+peak corner of **7858 Hz** (machine: 7858) and a settled corner of **187 Hz**
+(machine: 189).
+
+### The measurement that confirms the symptom
+
+Attack transient, first 30 ms, 2-10 kHz, absolute dB:
+
+| note | source | 24 Aug build | 25 Aug build |
+|---|---|---|---|
+| 36 | 21.7 | 30.5 | 16.9 |
+| 48 | 24.6 | 32.8 | 14.6 |
+| 80 | 22.4 | 33.9 | 15.8 |
+| 96 | 27.6 | 29.4 | 17.6 |
+
+**Both builds wrong, in opposite directions.** The 24 August build was too
+BRIGHT because its sustaining voices carried inflated filter-envelope depths
+(5184 cents, saturating) that leaked brightness into the attack -- accidental
+compensation for a dead percussive layer. §SSCENTSDEPTHS made those depths
+correct, the compensation went with them, and the click got 10 dB worse. **A
+defect that had been masked by a second defect, and fixing the second one is
+what exposed it.**
+
+### What this says about the method
+
+Four days of corpus sweeps, 508 tests and three hardware sessions did not find
+this. One listening test did, in a sentence, and the sentence contained the
+word "again" -- Jan had heard the same thing before the amp-envelope fix of
+2026-08-23 and recognised it coming back. The corpus is good at "does the
+value survive" and blind to "is the value right"; only the hardware and the
+ear answer the second question.

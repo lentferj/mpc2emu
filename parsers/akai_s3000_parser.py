@@ -46,7 +46,7 @@ from models.common import (
     akai_filq_to_01, AKAI_MUTE_CUT_SECONDS,
     akai_lfo_rate_hz, akai_lfo_depth_to_pitch, akai_lfo_delay_seconds,
     akai_env2_target_hz, E4B_CUTOFF_MAX_HZ, E4XT_FENV_BYTE_PER_UNIT,
-    AKAI_ENV2_OCT_PER_UNIT, AKAI_FILTER_OPEN_HZ, AKAI_FILTER_FLOOR_HZ,
+    AKAI_ENV2_OCT_PER_UNIT, AKAI_ENV2_FULL_LEVEL, AKAI_FILTER_OPEN_HZ, AKAI_FILTER_FLOOR_HZ,
     key_track_to_filter_amount,
     Envelope)
 import math
@@ -283,6 +283,9 @@ def _filter_env_of(env2, depth, filfrq=99, s3000=True):
 def _env2_amount(depth, sustn2, filfrq, s3000):
     """AKAI ENV2 depth -> the model's filter-envelope depth in CENTS.
 
+    `sustn2` is no longer used for the LEVEL -- see below -- and is kept in the
+    signature because the caller has it and a future ceiling rule may need it.
+
     **CONVERTS A CORNER POSITION, NOT A DEPTH** (§AKAIENV2DEPTH). The old form
     was `depth / AKAI_ENV2_DEPTH_MAX`, where that constant was derived by
     EQUATING two laws measured on two different machines and never checked end
@@ -312,13 +315,29 @@ def _env2_amount(depth, sustn2, filfrq, s3000):
         # than returning zero -- a NEGATIVE depth sweeps downward from here and
         # is very audible, and returning zero would silently drop it.
         base_hz = AKAI_FILTER_OPEN_HZ
+    # AT FULL ENVELOPE LEVEL, NOT AT SUSTAIN -- fixed 2026-08-25 (§AKAIENV2PEAK).
+    #
+    # `filter_env_cents` is defined as the depth at FULL level, and this used
+    # to pass `sustn2` here, so it reported the corner the envelope SETTLES at
+    # and called it the peak. On the program that exposed it the AKAI sweeps to
+    # 7858 Hz instantly and decays to 189 Hz, and we were writing 189 Hz as the
+    # peak with no sweep at all -- which removes the attack transient entirely.
+    # Jan heard it as "the click is gone" on a converted electric piano; no
+    # corpus round trip could see it, because the reader and the writer made
+    # the same substitution and agreed with each other perfectly.
+    #
+    # The sustain is NOT lost by this and must not be applied twice: the
+    # Envelope returned alongside carries sustain = sustn2/99, so a writer
+    # reproduces the settled corner as sustain x full depth. For this program
+    # that is 0.15 x 6.46 = 0.97 octaves against the machine's own 0.98.
+    _lvl = AKAI_ENV2_FULL_LEVEL
     if depth < 0:
         # Downward sweep. The 7.86 kHz ceiling is an upper bound and does not
         # apply; the floor is the machine's own lowest corner.
-        octaves = -min(AKAI_ENV2_OCT_PER_UNIT * sustn2 * abs(depth),
+        octaves = -min(AKAI_ENV2_OCT_PER_UNIT * _lvl * abs(depth),
                        math.log2(max(base_hz, 1.0) / AKAI_FILTER_FLOOR_HZ))
     else:
-        target_hz = akai_env2_target_hz(base_hz, sustn2, depth)
+        target_hz = akai_env2_target_hz(base_hz, _lvl, depth)
         octaves = math.log2(max(target_hz, 1e-6) / base_hz)
     # THE MODEL CARRIES CENTS SINCE 2026-08-25, so the octaves this function
     # already computed ARE the answer -- one multiplication, and no E-MU

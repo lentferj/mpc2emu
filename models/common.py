@@ -620,8 +620,22 @@ AKAI_ENV2_OCT_PER_UNIT = 0.002612
 AKAI_ENV2_CEILING_HZ = 7858.0
 
 
+#: An AKAI envelope's full level. The ENV2 octave law is
+#: `octaves = AKAI_ENV2_OCT_PER_UNIT * LEVEL * depth`, and LEVEL is wherever
+#: the envelope currently is -- 99 at the attack peak, SUSTN2 while held.
+#: Confirmed by s3ked's own cross-check, which measured SUSTN2 99 / depth 15
+#: at 3.862 octaves against 3.874 predicted from a SUSTN2 25 fit.
+AKAI_ENV2_FULL_LEVEL = 99
+
+
 def akai_env2_target_hz(base_hz: float, sustn2: int, depth: int) -> float:
-    """Where an AKAI ENV2 actually takes the corner, ceiling included."""
+    """Where an AKAI ENV2 takes the corner AT LEVEL `sustn2`, ceiling included.
+
+    Pass `AKAI_ENV2_FULL_LEVEL` for the attack peak. Passing the envelope's own
+    sustain byte gives the corner it settles at, which is a different and much
+    lower number on a percussive envelope -- 189 Hz against 7858 Hz on the
+    program that exposed this (§AKAIENV2PEAK).
+    """
     if base_hz <= 0 or depth <= 0 or sustn2 <= 0:
         return max(0.0, base_hz)
     octaves = AKAI_ENV2_OCT_PER_UNIT * sustn2 * depth
