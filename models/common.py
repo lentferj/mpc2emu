@@ -226,6 +226,24 @@ def key_track_to_filter_amount(oct_per_oct: float) -> float:
     return max(-1.0, min(1.0, oct_per_oct / KEY_FILTER_OCT_PER_OCT))
 
 
+#: §AKAIKEYFOLLOWHW: `K_FREQ / 12` (the octaves-of-cutoff-per-octave-of-key a
+#: raw K_FREQ step is nominally worth) was never right on the NEGATIVE side --
+#: the only side ever shipped, and the one the first hardware test failed on.
+#: Measured 2026-08-27 on a clean, non-resonant, non-masked subject (Q forced
+#: to minimum, wide-open reference program to divide out): K_FREQ -4/-8/-12/-18
+#: gave -0.186/-0.385/-0.585/-0.977 oct/oct against -0.333/-0.667/-1.000/-1.500
+#: predicted -- a consistent ~0.59-0.65x undershoot across a 4.5x range of
+#: magnitudes (least-squares through the origin: 0.622). The POSITIVE side
+#: overshoots instead (~1.4-1.9x, non-constant, likely real nonlinearity or the
+#: AKAI's own non-log-linear FILFRQ curve) and is NOT corrected here -- there is
+#: not yet a clean single-factor law for it, and guessing one would repeat the
+#: exact mistake this section fixes. Same measurement also found the AKAI's own
+#: pivot clusters around note ~70, not the assumed 64 -- recorded in
+#: TODO.md/RESOLUTION_NOTES.md, not yet acted on (unclear where in the model a
+#: pivot-not-64 correction belongs without more thought).
+AKAI_KEYFOLLOW_NEG_SCALE = 0.622
+
+
 # E4B VCF cutoff byte (vpar[60]) is exponential: ~57 Hz at 0, 20 kHz at full.
 # Shared by every parser that maps a source cutoff frequency onto the E4B scale
 # (CR-12 — previously duplicated in exs24 and re-implemented wrong in sfz).

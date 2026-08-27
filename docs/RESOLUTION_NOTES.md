@@ -18661,7 +18661,7 @@ This is what makes the behaviour hard to fault and hard to defend against.
 Comparing the reference bank against the converted one, sample by sample:
 
     name             ref size   new size    ref opt   new opt
-    KK DXE_C2          105060     105060     0x0031    0x0039
+    (sample name)      105060     105060     0x0031    0x0039
     ...all sixteen: identical names, identical sizes, identical PCM
 
 **They differ in exactly one bit** — bit 3 of the options word, the
@@ -19009,7 +19009,7 @@ still gives thirds of **-0.80 / +1.79 / -0.96** with residual 1.78, against
 ±0.1 everywhere else. Real curvature, three shapes, still unexplained.
 
 **Pre-loop sample data does not explain it either, and that was this session's
-hypothesis.** `KK DXE2` loops at 31795 of ~45000 samples, i.e. **0.721 s in at
+hypothesis.** The top keygroup's own sample loops at 31795 of ~45000 samples, i.e. **0.721 s in at
 root**. At +12 the loop is entered at 0.36 s and at +24 at 0.18 s, against a
 note-off at 3.0 s. Every note in that keygroup is deep in the loop long before
 release. The n84 plateau would need a loop starting 6.9 s into a 1.02 s sample.
@@ -19269,7 +19269,7 @@ everywhere except the mid keygroup, which is why that one reads clean.
 **The 0.070 s periodicity is not the LFO.** LFO1 is 3.78 Hz — 0.264 s, triangle,
 no delay. The obvious second candidate after the loop, excluded from the file.
 
-**The loops are not one period.** `KK DXE` and `KK DXE1` loop 7.6 ms, `KK DXE2`
+**The loops are not one period.** The low and mid samples loop 7.6 ms, the high sample
 loops 15.3 ms, so any prediction made from a single assumed base period will
 miss — which is what happened.
 
@@ -20421,7 +20421,7 @@ Four of the six programs on one AKAI volume converted to **a click followed by
 silence**. Measured on the bench, note 48, RMS in successive windows:
 
     take                 0-50ms   50-200   200-500   0.5-1s    1-2s
-    AKAI split patch 4       -25.9    -24.0     -25.0    -24.0   -27.0
+    AKAI (test program)   -25.9    -24.0     -25.0    -24.0   -27.0
     E4XT conversion       -45.3    -85.4     -86.0    -86.1   -86.2
 
 -85 dB is the noise floor. The source sustains for seconds; the conversion
@@ -20433,7 +20433,7 @@ stops.
 **whole key range**. A mute group can only bite on the keys the two keygroups
 SHARE — elsewhere the partner is not sounding and nothing chokes.
 
-split patch 4's converted voices, before:
+That test program's converted voices, before:
 
     keys  24- 38   decay 9.123 s
     keys  39- 52   decay 0.084 s   <- cut
@@ -20479,6 +20479,108 @@ range writes back as a keygroup with a short envelope — self-consistent, and
 the mismatch it does produce was already being dismissed as the deliberate
 re-model (§155). Only playing the conversion next to its source finds a note
 that stops when it should ring, and only doing that for SEVERAL PROGRAMS finds
-it at all: the one program under study all evening, split patch 2, is the one whose
+it at all: the one program under study all evening, the key-tracked test EP, is the one whose
 keygroups overlap completely, where whole-voice and shared-key cutting are the
 same thing. **The bug was invisible on the patch we were staring at.**
+
+## §KRZRELKNEE — the two-leg release wrote an upward "release" below the knee (2026-08-27)
+
+Chasing an ear report on the §CORPUSRT release-rate fix ("the test EP on the K2000
+still sounds like ~3s, not ~6s") led to a second, independent bug in
+`writers/krz_writer.py::_fill_env`.
+
+### The bug
+
+The two-leg release shape (long fade to a 33% knee, then a short tail to
+silence) was validated once, on AlphaPad #200 (2026-06-24), at a sustain
+comfortably above 33%. Nothing guarded the case where **sustain itself sits
+below the knee**. The key-tracked test EP's slow-release voices (AKAI source, voices 1-3 of
+4) have `env.sustain = 0.033` (3.3%). Written literally:
+
+    Dec1  5.1s -> 3%    (decay to sustain)
+    Rel1  5.2s -> 33%   (release "fades" UP from 3% to 33%)
+    Rel2  1.3s -> 0%    (then down to silence)
+
+Rel1 asks the K2000 to *increase* level after note-off. A release only ever
+decreases; this is not a smaller version of the intended release, it is a
+request the hardware was never going to honour sensibly. Bench capture (note
+65, 2s hold -- so note-off lands mid-decay, before the 5.1s decay stage
+settles): the tail crashes to the noise floor by ~2.5-3s, matching neither
+leg's own nominal duration. That is what read as "the release fix didn't
+work" -- it was a second, unrelated defect wearing the first one's symptom.
+
+### The fix
+
+    if sus > _REL_KNEE_PCT:
+        pairs_rel = [(rel * _REL1_TIME_FRAC, _REL_KNEE_PCT),
+                    (rel * (1.0 - _REL1_TIME_FRAC), 0)]
+    else:
+        pairs_rel = [(rel, 0), (0.0, 0)]
+
+The two-leg shape exists to avoid "holds too loud then collapses" when
+sustain is high. That problem cannot occur when sustain is already below the
+knee, so the fix is not a smaller knee -- it is dropping the knee and fading
+straight from sustain to 0 over the full release time, monotonic by
+construction. `test_krz_writer.py` / `test_krz_roundtrip.py` unaffected
+(18/18) -- the high-sustain path is untouched.
+
+### Confirmed, and what it exposed
+
+Rebuilt the isolated voice (`SPACE_ISO2.KRZ`, `_decode_env` read back
+directly: `Rel1 = (6.5s, 0)`, one clean leg) and re-captured on the bench with
+a **7s hold** -- past the 5.1s decay stage, so release starts from a settled
+sustain rather than mid-decay. The crash is gone: the tail is now a real,
+gradual multi-second decline. But it does not match the intended
+~15.3 dB/s / 6.5s law either -- see §KRZLONGENVGRID, filed from this
+capture. The shape bug is fixed and verified different on hardware; the
+release-rate fix's own audible confirmation is still blocked on that.
+
+Related: [[project_krz_program_re]] (envelope byte layout this patches),
+TODO.md's §CORPUSRT (the release-rate law this was blocking a listen on).
+
+## §KRZLONGENVGRID — `KRZ_ENV_TIME_GRID`'s 5-10s band is unconfirmed at these durations (2026-08-27)
+
+Filed while confirming §KRZRELKNEE. Not yet resolved -- this is the
+open-question half, for whoever picks it up next.
+
+### What's measured
+
+The 7s-hold capture of `SPACE_ISO2.KRZ` (encoded Dec1 5.1s -> 3%, Rel1
+6.5s -> 0%, both in `KRZ_ENV_TIME_GRID`'s `(5, 10, 0.10)` band) shows, from a
+settled sustain:
+
+    t after note-off   dB rel. note-off level
+    0.0 s               -0.4
+    0.2 s               -14.6
+    0.5 - 6.5 s          -14 .. -18   (roughly flat)
+    8.0 s                -20.4
+
+Two phases: a fast ~14 dB drop in the first 0.2s, then an unusually SHALLOW
+tail -- about 0.8 dB/s, nowhere near the intended ~15.3 dB/s, and nothing
+close to reaching silence by 8s.
+
+### Two live hypotheses, not distinguished yet
+
+1. **The grid segment itself is wrong.** `KRZ_ENV_TIME_GRID`'s bands were
+  laid out with the byte OFFSET LAYOUT confirmation (2026-06-24) but the
+  §CORPUSRT rate-law campaign that validated the K2000-is-a-rate-machine
+  conclusion only ever measured Rel1 at **1.00s and 3.00s** -- both inside
+  the finer 0-2s/2-5s bands. The 5-10s segment (0.10 s/byte step) has no
+  independent hardware point behind it.
+2. **Note-off timing relative to a long DECAY stage.** §CORPUSRT's own test
+  subject (program 199's edit buffer) was deliberately built to jump
+  straight to sustain -- "no filter stage, envelope jumping straight to
+  sustain so the release is the only thing moving" -- specifically to avoid
+  whatever this interaction might be. This project has never measured a
+  release starting after a multi-second DECAY stage before.
+
+### What would settle it
+
+A bench sweep of DEC1/REL1 TIME bytes confined to the 5-10s band, on a
+subject with an instant decay (same shape as §CORPUSRT's qualified subject,
+so a note-off at any hold length starts release from the same settled
+level) -- extending the rate-law method past 5s for the first time. Until
+then, do not trust a KRZ-written decay or release longer than ~5s to land
+where its seconds say it should.
+
+Related: §KRZRELKNEE (found this), §CORPUSRT (the rate law this borders).

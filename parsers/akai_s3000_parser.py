@@ -47,7 +47,7 @@ from models.common import (
     akai_lfo_rate_hz, akai_lfo_depth_to_pitch, akai_lfo_delay_seconds,
     akai_env2_target_hz, E4B_CUTOFF_MAX_HZ, E4XT_FENV_BYTE_PER_UNIT,
     AKAI_ENV2_OCT_PER_UNIT, AKAI_ENV2_FULL_LEVEL, AKAI_FILTER_OPEN_HZ, AKAI_FILTER_FLOOR_HZ,
-    key_track_to_filter_amount,
+    key_track_to_filter_amount, AKAI_KEYFOLLOW_NEG_SCALE,
     Envelope)
 import math
 
@@ -781,7 +781,16 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
         # to an EOS cord fraction here and saturated at 0.713 oct/oct, which
         # threw away every value past K_FREQ 9 -- and real material reaches -30
         # and +40.
-        voice.filter_keytrack = kg.get('filter_keyfollow', 0) / 12.0
+        #
+        # NEGATIVE K_FREQ SCALED, POSITIVE NOT (§AKAIKEYFOLLOWHW, 2026-08-27):
+        # K_FREQ/12 measured ~0.6x too strong on the negative side -- see
+        # AKAI_KEYFOLLOW_NEG_SCALE's own comment for the measurement. The
+        # positive side is a real, unresolved nonlinearity, not left alone out
+        # of caution; applying an unmeasured correction there would be the
+        # same mistake this fixes.
+        _kfreq12 = kg.get('filter_keyfollow', 0) / 12.0
+        voice.filter_keytrack = (_kfreq12 * AKAI_KEYFOLLOW_NEG_SCALE
+                                 if _kfreq12 < 0 else _kfreq12)
         # AMPLITUDE ENVELOPE. Never assigned until 2026-08-23, so every
         # AKAI-sourced voice carried VoiceLayer's default and the two distinct
         # envelopes of a layered program came out identical -- eosed read all
@@ -1094,7 +1103,7 @@ def _apply_mute_groups(voices, kgs, prog_name, quiet=False):
     # keygroups share. Measured on the bench: four of the six programs on one
     # volume converted to a click followed by silence, because the voices
     # covering the middle of the keyboard were cut by partners that overlap
-    # them only at one end. split patch 4 at note 48 --
+    # them only at one end. On one test program, at note 48 --
     #
     #     v1 keys 39-52  cut     v2 keys 45-76  cut     nothing else plays there
     #

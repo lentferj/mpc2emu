@@ -976,13 +976,45 @@ def _fill_env(b: bytearray, env) -> None:
         rel = KRZ_RELEASE_SPAN_DB / _rrate
     else:
         rel = env.release * _KRZ_RELEASE_FACTOR      # KRZ-only time correction
+    # THE KNEE IS ABOVE-SUSTAIN ONLY WHEN SUSTAIN IS ABOVE THE KNEE.
+    #
+    # `_REL_KNEE_PCT` is a fixed 33% of full scale, and the two-leg shape it
+    # anchors was validated on AlphaPad #200 at a sustain comfortably above
+    # that (2026-06-24). Nothing guarded the case where SUSTAIN ITSELF sits
+    # below 33% -- found 2026-08-27 on an AKAI source converted at sustain
+    # 3.3%. Written literally, Rel1 asks the K2000 to move from a 3.3% start
+    # UP to a 33% target over 5.2s: not a release at all, since a release only
+    # ever decreases, and undefined behaviour on real hardware -- measured on
+    # this exact patch, the audible tail collapsed to the noise floor by
+    # ~2.5-3s instead of the intended ~6.5s, matching neither leg's own
+    # nominal duration.
+    #
+    # The two-leg shape exists to avoid "holds too loud then collapses" when
+    # sustain is high; that problem does not exist when sustain is already
+    # below the knee, so the fix is not a smaller knee -- it is aiming BOTH
+    # legs at silence instead of one of them at the knee.
+    #
+    # NOT `[(rel, 0), (0.0, 0)]` — found on the bench the same day (§KRZDBLZERO):
+    # a Rel2 with time AND level both zero, immediately followed by Rel3
+    # (always (0.0, 0)), reads to the K2000 as TWO CONSECUTIVE null stages —
+    # and it responds by looping the whole envelope back to Att1 while the
+    # key is still held, repeating every ~rel seconds, rather than holding at
+    # silence. The validated two-leg shape never hits this: its own Rel2 has
+    # a real nonzero TIME (`rel * (1-frac)`) even though its level is 0, so
+    # only Rel3 is ever a genuine (0, 0). Keeping the same 80/20 time split
+    # here — both legs now aimed at 0 instead of one at the knee — reproduces
+    # that same "one zero-zero stage, not two" shape and stays monotonic.
+    if sus > _REL_KNEE_PCT:
+        pairs_rel = [(rel * _REL1_TIME_FRAC, _REL_KNEE_PCT),  # Rel1 — fade to the knee
+                    (rel * (1.0 - _REL1_TIME_FRAC), 0)]       # Rel2 — short tail to silence
+    else:
+        pairs_rel = [(rel * _REL1_TIME_FRAC, 0),              # Rel1 — fade toward silence
+                    (rel * (1.0 - _REL1_TIME_FRAC), 0)]       # Rel2 — nonzero time, same target
     pairs = [(env.attack, 100),                      # Att1 — ramp to full
              (0.0, 100),                             # Att2
              (0.0, 100),                             # Att3
-             (env.decay, sus),                       # Dec1 — decay to sustain
-             (rel * _REL1_TIME_FRAC, _REL_KNEE_PCT), # Rel1 — fade to the knee
-             (rel * (1.0 - _REL1_TIME_FRAC), 0),     # Rel2 — short tail to silence
-             (0.0, 0)]                               # Rel3
+             (env.decay, sus)] + pairs_rel + [        # Dec1 — decay to sustain
+             (0.0, 0)]                                # Rel3
     o = 0
     for t, l in pairs:
         b[o] = tb(t); b[o + 1] = lv(l); o += 2
