@@ -22211,7 +22211,11 @@ exception:
 **Then verify the release rather than assume it.** After killing a held tone,
 a 1-second capture read −93 dBFS — that is the check, and it takes seconds.
 "The handler ran" is a claim about the code; "the instrument is silent" is a
-claim about the world (§GATESUBJECT).
+claim about the world (§GATESUBJECT). And a handler that provably ran still
+says nothing about whether the note-off *reached* the instrument: the port may
+have closed first, a filtering route may have swallowed it, the machine may
+have been mid-load. Every rig here already has a recorder open, so the
+evidence costs one second.
 
 ### `pkill -f` matches the shell that is running it
 
@@ -22233,6 +22237,24 @@ Same hazard makes `pgrep -f` report a process that is only ever your own
 grep — twice on 2026-09-02 it printed "STILL RUNNING" for something already
 gone, which is the harmless direction of a failure whose other direction kills
 your shell.
+
+**THE `[f]oo` BRACKET TRICK DOES NOT FIX THIS** (eosed, who hit the same fault
+on 2026-08-31 with the same "an edit that silently did not happen" outcome, and
+again harmlessly on 2026-09-01). The bracket idiom stops **grep** matching its
+own process-table entry — the folklore problem — and does nothing about the
+**enclosing shell**, whose command line contains the pattern as literal text.
+Having the standard fix installed is exactly what let it recur.
+
+So the rule is not a better pattern, it is excluding yourself by PID:
+
+```bash
+    ps -eo pid,args | awk '$1 != PID && /pattern/ {print $1}' PID=$$
+```
+
+**A pattern is a claim about a string; a PID is a claim about a process** — and
+only one of those is what you meant. That is §GATESUBJECT arriving in a shell
+command: the pattern is satisfied by the wrong subject, and every check
+downstream is satisfied along with it.
 
 ### A script that edits a parameter restores it and prints the read-back
 
