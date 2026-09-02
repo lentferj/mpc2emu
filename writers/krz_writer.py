@@ -95,7 +95,7 @@ from models.common import (
     AKAI_MUTE_CUT_SECONDS, RESONANCE_FULL_DB,
     KRZ_RES_KEYTRK_PIVOT_KEY, KRZ_RES_KEYTRK_DB_PER_UNIT,
     krz_db_to_level_pct, krz_level_pct_to_db,
-    krz_cutoff_byte_to_hz, KRZ_2POLE_F0_TO_3DB,
+    krz_cutoff_byte_to_hz, KRZ_2POLE_F0_TO_3DB, KRZ_4POLE_F0_TO_3DB,
     LFO_VOLUME_MODEL_FULL_DB, KRZ_F4_AMP_SRC1_INDEX,
     KRZ_F4_AMP_DEPTH_INDEX, KRZ_F4_AMP_SRC_LFO1, KRZ_F4_AMP_SRC_LFO2,
     KRZ_F4_AMP_DEPTH_DB_PER_UNIT, KRZ_F4_AMP_DEPTH_CLAMP,
@@ -1929,8 +1929,9 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False):
         # placed the corner ~406 cents too high on 77 % of real layers.
         # The 4-pole's factor runs the other way and is NOT applied -- see
         # KRZ_2POLE_F0_TO_3DB.
-        _f0_hz = (_hz / KRZ_2POLE_F0_TO_3DB
-                  if ftype_byte == _K2_FILTER_2P_LP else _hz)
+        _f0_factor = {_K2_FILTER_2P_LP: KRZ_2POLE_F0_TO_3DB,
+                      _K2_FILTER_LP:    KRZ_4POLE_F0_TO_3DB}.get(ftype_byte)
+        _f0_hz = _hz / _f0_factor if _f0_factor else _hz
         hob_f1[1] = _cutoff_byte_hz(_f0_hz)
         if _vel_ct:
             hob_f1[4] = krz_cents_to_depth_byte(_vel_ct) & 0xFF

@@ -2198,6 +2198,26 @@ def lfo_volume_depth_to_amount(db: float) -> float:
 #: note above krz_cutoff_byte_to_hz.
 KRZ_2POLE_F0_TO_3DB = 1.264
 
+#: 4POLE LOPASS W/SEP: its label is f0 of each SECTION, and the cascade's
+#: -3 dB sits BELOW it -- so this correction runs the opposite way to the
+#: 2-pole's (+444 cents rather than -406).
+#:
+#: **DERIVED, not fitted, and that is why 0.802 is used rather than the
+#: measured 0.774.** k2kremote measured -6.11 dB at the displayed corner,
+#: which is 0.703^2 against a Butterworth section's 0.7071^2 -- confirming to
+#: 0.5 % that the filter IS two Butterworth sections at one f0. Two such
+#: sections are -6 dB at the section corner, so their combined -3 dB falls at
+#: exactly 0.802 x f0. The measured 0.774 carries the scatter of a fit over
+#: ~3.5 %; 0.802 follows from a topology that was independently confirmed.
+#: Jan's call 2026-09-02, after asking whether a listen could choose between
+#: them: it cannot -- they are 60 cents apart, at or below what is
+#: distinguishable on a corner across two machines.
+#:
+#: SEP was verified 0 off the panel for that measurement, so the sections
+#: really were co-located and the cascade arithmetic applies. A non-zero SEP
+#: separates them and this factor would not hold.
+KRZ_4POLE_F0_TO_3DB = 0.802
+
 def krz_cutoff_byte_to_hz(b: int) -> float:
     """K2000 HOB0[1] signed-semitone cutoff byte -> Hz.
     Inverse of krz_writer._cutoff_byte: Hz = 440 * 2**((s-9)/12), s in -48..79."""
