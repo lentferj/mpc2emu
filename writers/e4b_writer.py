@@ -110,6 +110,7 @@ import struct
 from typing import List
 from models.common import (
     e4xt_cents_to_cord_amount, e4xt_cord_saturates, E4XT_VEL_SOURCE_UNITS,
+    E4XT_VEL_AMPVOL_DB_PER_PERCENT,
     key_track_to_filter_amount,
     e4xt_cutoff_byte_to_position,Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            LoopType, lfo_rate_hz_to_byte,
@@ -718,6 +719,10 @@ _MOD_LFO_TO_PITCH_AMT   = 10   # slot 2: LFO1 → Pitch ("Cord 02", src 0x60 dst
 _MOD_LFO_TO_PITCH_SLOT  = 2    #   …its cord slot (for the wheel-gate dest 0xA8+2)
 _MOD_WHEEL_GATE_SLOT    = 3    # slot 3: default ModWheel → C02Amt gate (template)
 _MOD_VEL_TO_CUTOFF_AMT  = 18   # slot 4: Velocity → Filter-Freq ("Cord 04")
+#: slot 0 amount: Vel< → AmpVol. The value the template carries (30 = 23.62 %
+#: = 22.37 dB) is now a FALLBACK for sources that ask for a velocity response
+#: without stating a measurable one, not an unconditional write.
+_MOD_VEL_TO_VOL_AMT = 2
 _MOD_VEL_TO_CUTOFF_SRC  = 16   #   …its source byte (slot 4 byte 0)
 _MOD_FENV_TO_CUTOFF_AMT = 22   # slot 5: FilterEnv → Filter-Freq ("Cord 05")
 _MOD_KEY_TO_CUTOFF_AMT  = 26   # slot 6: Key → Filter-Freq ("Cord 06")
@@ -1170,7 +1175,38 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
         return amt
     _fenv_amt = _cord(voice.filter_env_cents)
     _vel_amt = _cord(voice.velocity_to_filter_cents, E4XT_VEL_SOURCE_UNITS)
+    # VELOCITY -> VOLUME, slot 0 of the template. THREE STATES (§KRZAMPVEL's
+    # E4B half; Jan's decision 2026-09-01):
+    #
+    #   known swing    -> write it
+    #   requested,     -> keep the template's own value; the source asked for a
+    #     unscaled        response and silencing it would be worse than
+    #                     carrying an unmeasured one
+    #   nothing known  -> write NO velocity->volume cord
+    #
+    # Until 2026-09-01 every voice got the template's 23.62 % regardless, which
+    # eosed's measured law makes **22.37 dB of velocity swing that no source
+    # asked for** -- imposed even on an AKAI program whose V_LOUD is 0, a value
+    # s3ked measured as genuinely neutral to 0.00001 dB/unit.
+    #
+    # PIVOT: written as `Vel<` (pivot 127), the template's own source and the
+    # convention the E4XT and its factory library use. An AKAI swing pivots at
+    # 64 and is therefore NOT reproduced exactly -- constructing that needs
+    # `Vel+` plus a static trim of -swing/2, which runs out of range against
+    # E4XT_VOL_MEASURED_FLOOR_DB on the loudest real sources. That trade is
+    # still Jan's to make; this is the status-quo half of it.
+    _vv_db = getattr(voice, 'velocity_to_volume_db', None)
+    _vv_req = bool(getattr(voice, 'velocity_to_volume_requested', False))
+    if _vv_db is not None:
+        _vv_byte = max(-127, min(127, int(round(
+            abs(_vv_db) / E4XT_VEL_AMPVOL_DB_PER_PERCENT * 127.0 / 100.0))))
+    elif _vv_req:
+        _vv_byte = _MOD_TMPL[_MOD_VEL_TO_VOL_AMT]
+    else:
+        _vv_byte = 0
+
     needs_mod = (voice.non_transpose
+                 or _vv_byte != 0
                  or _q(_fenv_amt / 100.0) not in (0, 256)
                  or _q(key_track_to_filter_amount(voice.filter_keytrack)) not in (0, 256)
                  or _q(_vel_amt / 100.0) not in (0, 256)
@@ -1178,6 +1214,7 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
                  or has_extra)
     if needs_mod:
         mod = bytearray(_MOD_TMPL)
+        mod[_MOD_VEL_TO_VOL_AMT] = _vv_byte & 0xFF
         # Mod-wheel→LFO-depth gating: split each LFO cord (depth D) into a static
         # part D*(1-Kw) + a ModWheel→CordN-Amount cord of D*Kw (Kw=0 → unchanged).
         Kw = max(0.0, min(1.0, voice.wheel_to_lfo))

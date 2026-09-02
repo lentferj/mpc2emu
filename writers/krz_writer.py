@@ -92,6 +92,14 @@ from models.common import (
     KEY_FILTER_OCT_PER_OCT,
     krz_cents_to_depth_byte,
     krz_cents_to_lfo_pitch_byte, LFO_PITCH_FULL_CENTS,
+    AKAI_MUTE_CUT_SECONDS, RESONANCE_FULL_DB,
+    KRZ_RES_KEYTRK_PIVOT_KEY, KRZ_RES_KEYTRK_DB_PER_UNIT,
+    krz_db_to_level_pct, krz_level_pct_to_db,
+    krz_cutoff_byte_to_hz,
+    LFO_VOLUME_MODEL_FULL_DB, KRZ_F4_AMP_SRC1_INDEX,
+    KRZ_F4_AMP_DEPTH_INDEX, KRZ_F4_AMP_SRC_LFO1, KRZ_F4_AMP_SRC_LFO2,
+    KRZ_F4_AMP_DEPTH_DB_PER_UNIT, KRZ_F4_AMP_DEPTH_CLAMP,
+    KRZ_F4_AMP_ADJUST_INDEX, KRZ_F4_AMP_ADJUST_DB_PER_UNIT,
 )
 from processors.loop_renderer import bake_alternating_loop
 # The K2000 and the E4B both store stereo PCM planar (whole left channel, then
@@ -144,6 +152,26 @@ FIRST_MAPPABLE_KEY = 12
 SHARE_IDENTICAL_KEYMAPS = False
 
 KEYMAP_ENTRY_SIZE = 5  # Method2Size(0x13) = 2+2+1
+
+#: Keymap variant that adds a PER-KEY-RANGE volume byte (§KRZSHAREDGAIN).
+#:
+#: `method` is a bitfield -- each bit adds one per-entry field, in this order:
+#: 0x10 tuning i16 | 0x08 tuning i8 | 0x04 volumeAdjust i8 | 0x02 sampleID i16
+#: | 0x01 subSample u8 -- so 0x17 is 0x13 plus the volume byte, which sits
+#: between the i16 tuning and the i16 sampleID. See docs/KRZ_FORMAT.md 3.2;
+#: `krz_parser._decode_table` has always decoded this, only the writer never
+#: emitted it.
+#:
+#: HW-MEASURED on the panel (k2kremote, 2026-09-01): exactly **0.5 dB per
+#: click, symmetric**, and the rails are **-63.5 .. +63.5 dB**, i.e. bytes
+#: -127..+127 -- the field never uses 0x80. Do NOT clamp to -128 on the
+#: assumption that a signed i8 reaches -64.0 the way the SAMPLE editor's
+#: equivalent field does; 0x80 is the one value the panel cannot produce.
+#: Per-key-range scoping confirmed by experiment rather than manual wording:
+#: setting one range to 63.5 dB left the other two at 0.0 and it held.
+KEYMAP_METHOD_VOL = 0x0017
+KEYMAP_ENTRY_SIZE_VOL = 6   # Method2Size(0x17) = 2+1+2+1
+_KEYMAP_VOL_MIN, _KEYMAP_VOL_MAX = -127, 127
 
 NUM_KEYS = 128          # K2000 keyboard range
 _MAX_KRZ_LAYERS = 32    # K2000 hardware maximum layers per program
@@ -408,11 +436,21 @@ def _write_sample_object(f, sample: SampleData, obj_id: int,
 def _build_keymap_entries(voice: VoiceLayer,
                            sample_id_map: dict,
                            samples_by_name: dict,
-                           base_pitch: int) -> bytes:
+                           base_pitch: int,
+                           zone_gain_db: dict = None) -> bytes:
     """
-    Build 128 5-byte keymap entries for one voice's zones.
+    Build 128 keymap entries for one voice's zones.
 
     Entry layout (method=0x0013): tuning(int16) sampleID(int16) SSNr(uint8).
+
+    PER-RANGE VOLUME (§KRZSHAREDGAIN). `zone_gain_db` maps id(zone) -> the dB
+    this zone needs ON TOP of the per-sample `volumeAdjust`. When any of them
+    is non-zero the keymap is written in the 6-byte `0x17` form instead, with
+    a volumeAdjust byte between the tuning and the sampleID. When they are all
+    zero -- every bank that does not share a sample across presets at
+    different levels -- the 5-byte `0x13` form is written exactly as before,
+    so unaffected banks stay BYTE-IDENTICAL and the HW-verified unity banks
+    cannot regress.
 
     The K2000 already transposes each key automatically from the sample's own
     rootkey and centsPerEntry=100 — entry[key] plays the sample shifted by
@@ -459,7 +497,15 @@ def _build_keymap_entries(voice: VoiceLayer,
     earlier ones per key, and lets distinct voices (key splits, layers, and the
     velocity layers our parsers model as separate voices) coexist.
     """
-    entries = bytearray(NUM_KEYS * KEYMAP_ENTRY_SIZE)
+    # Only pay the 6-byte form when a zone actually needs a per-range volume;
+    # otherwise emit exactly what we always did (§KRZSHAREDGAIN).
+    zone_gain_db = zone_gain_db or {}
+    _use_vol = any(round((zone_gain_db.get(id(z), 0.0)) * 2)
+                   for z in (getattr(voice, 'zones', []) or []))
+    _method = KEYMAP_METHOD_VOL if _use_vol else KEYMAP_METHOD
+    _esize = KEYMAP_ENTRY_SIZE_VOL if _use_vol else KEYMAP_ENTRY_SIZE
+
+    entries = bytearray(NUM_KEYS * _esize)
     lost_zones: list = []   # zones no part of which can be placed (see below)
     for zone in voice.zones:
         sid = sample_id_map.get(zone.sample_name, 0)
@@ -480,7 +526,16 @@ def _build_keymap_entries(voice: VoiceLayer,
         sample = samples_by_name.get(zone.sample_name)
         r_sample = sample.root_note if sample is not None else 60   # written rootkey
         r_zone = zone.root_key if zone.root_key else r_sample
-        tuning = 100 * (r_sample - r_zone) + zone.fine_tune
+        # `zone.coarse_tune` (whole semitones -- a source that intentionally
+        # repitches a zone by a full octave or more, e.g. AKAI TUNE combining
+        # keygroup+zone fields to more than +/-100 cents) was never folded in
+        # here (§KRZCOARSETUNE, found 2026-08-31): only `fine_tune` reached
+        # the K2000 keymap entry, so any zone whose source tuning exceeded
+        # +/-99 cents was silently detuned by whole semitones on write. The
+        # E4B and AKAI writers both already read `coarse_tune` (`e4b_writer.py`
+        # `_zone_entry`, `akai_s3000_writer.py`); the K2000 path is the one
+        # that dropped it, not a deliberate KRZ-specific choice.
+        tuning = 100 * (r_sample - r_zone + zone.coarse_tune) + zone.fine_tune
         tuning = max(-32768, min(32767, tuning))
 
         # Up-pitch ceiling (HW-confirmed 2026-06-21): a sample can only transpose
@@ -496,19 +551,23 @@ def _build_keymap_entries(voice: VoiceLayer,
         #
         # The ceiling must be evaluated against r_zone (the zone's EFFECTIVE
         # root), not r_sample: the hardware's actual total pitch shift at key K
-        # is (K - r_sample)*100 [auto-transpose] + tuning = (K - r_zone)*100 +
-        # fine_tune (substitute tuning above) — i.e. r_zone, not r_sample, is
-        # what the 48kHz internal engine limit is measured from. Using r_sample
-        # here mis-flagged deliberately retuned zones (r_zone != r_sample, e.g.
-        # a drum map that cancels keytracking via a large per-entry tuning
-        # offset — found 2026-07-27 building krz_parser.py, real third-party soundset
+        # is (K - r_sample)*100 [auto-transpose] + tuning = (K - r_zone +
+        # coarse_tune)*100 + fine_tune (substitute tuning above, now that it
+        # carries coarse_tune too) — i.e. r_zone minus coarse_tune is what the
+        # 48kHz internal engine limit is measured from: a positive coarse_tune
+        # uses up exactly as much up-pitch headroom as lowering the effective
+        # root by that many semitones would. Using r_sample here mis-flagged
+        # deliberately retuned zones (r_zone != r_sample, e.g. a drum map that
+        # cancels keytracking via a large per-entry tuning offset — found
+        # 2026-07-27 building krz_parser.py, real third-party soundset
         # content) as over-ceiling even though their true shift is nowhere near
         # it, silently dropping the sample from the keymap.
         hi_key = min(zone.hi_key, NUM_KEYS - 1)   # defensive: never index past the 128-key buffer
         orig_hi = hi_key
         over_ceiling = False
         if sample is not None:
-            ceiling = _compute_max_pitch(sample.sample_rate, r_zone) // 100
+            ceiling = _compute_max_pitch(sample.sample_rate,
+                                         r_zone - zone.coarse_tune) // 100
             over_ceiling = ceiling < zone.lo_key
             hi_key = min(hi_key, ceiling)
 
@@ -544,9 +603,18 @@ def _build_keymap_entries(voice: VoiceLayer,
             entry = key - 12
             if not 0 <= entry < NUM_KEYS:
                 continue
-            offset = entry * KEYMAP_ENTRY_SIZE
-            struct.pack_into('>hHB', entries, offset,
-                             tuning, sid & 0xFFFF, 1)
+            offset = entry * _esize
+            if _use_vol:
+                # tuning i16 | volumeAdjust i8 | sampleID i16 | subSample u8.
+                # Clamped to +-127: the panel's rails are -63.5..+63.5 dB at
+                # 0.5 dB/step, so 0x80 is a value the machine cannot produce.
+                _vb = max(_KEYMAP_VOL_MIN, min(_KEYMAP_VOL_MAX,
+                          int(round(zone_gain_db.get(id(zone), 0.0) * 2))))
+                struct.pack_into('>hbHB', entries, offset,
+                                 tuning, _vb, sid & 0xFFFF, 1)
+            else:
+                struct.pack_into('>hHB', entries, offset,
+                                 tuning, sid & 0xFFFF, 1)
 
     # CRITICAL (HW-confirmed 2026-06-24): every K2000 keymap key MUST reference a
     # valid sample — real keymaps never leave a key empty.  The up-pitch ceiling
@@ -557,9 +625,15 @@ def _build_keymap_entries(voice: VoiceLayer,
     # constant tuning).  Above-ceiling fills may clamp / lose keytracking on
     # playback — a far lesser evil than the delete lockup; downsample via
     # --max-sample-rate to raise the ceiling and avoid both.
-    ES = KEYMAP_ENTRY_SIZE
+    ES = _esize
+    # The sampleID sits after the i16 tuning, and after the volume byte too
+    # when the 0x17 form is in use -- so its offset within the entry is not a
+    # constant. Getting this wrong would read the tuning's low byte as half a
+    # sample id, making every entry look non-empty and silently disabling the
+    # hole-fill below, which is the delete-lockup guard.
+    _SID_OFF = 3 if _use_vol else 2
     def _sid(off):
-        return (entries[off + 2] << 8) | entries[off + 3]
+        return (entries[off + _SID_OFF] << 8) | entries[off + _SID_OFF + 1]
     carry = None                                   # forward-fill into later holes
     for key in range(NUM_KEYS):
         off = key * ES
@@ -575,14 +649,14 @@ def _build_keymap_entries(voice: VoiceLayer,
         elif carry is not None:
             entries[off:off + ES] = carry
 
-    return bytes(entries), KEYMAP_METHOD, KEYMAP_ENTRY_SIZE, 0, lost_zones
+    return bytes(entries), _method, _esize, 0, lost_zones
 
 
 def _write_keymap_object(f, name: str, voice: VoiceLayer, obj_id: int,
                           sample_id_map: dict, samples_by_name: dict,
-                          base_pitch: int) -> list:
+                          base_pitch: int, zone_gain_db: dict = None) -> list:
     entries, method, entry_size, header_sid, lost = _build_keymap_entries(
-        voice, sample_id_map, samples_by_name, base_pitch)
+        voice, sample_id_map, samples_by_name, base_pitch, zone_gain_db)
 
     bw = _BlockWriter(f, _hash(T_KEYMAP, obj_id))
     bw.begin(name)
@@ -620,6 +694,14 @@ def _spans_disjoint(a, b):
     la, ha = _voice_span(a)
     lb, hb = _voice_span(b)
     return ha < lb or hb < la
+
+
+def _spans_adjacent(a, b):
+    """True when two DISJOINT spans touch with no key between them -- fusing
+    them leaves no hole for `_build_keymap_entries`'s gap-fill to patch."""
+    la, ha = _voice_span(a)
+    lb, hb = _voice_span(b)
+    return ha + 1 == lb or hb + 1 == la
 
 
 #: CONTINUOUS voice-level quantities: averaged when two layers fuse.
@@ -691,6 +773,105 @@ def _fuse_voices(a, b):
     return a
 
 
+def _group_overlapping(voices):
+    """Partition voices into clusters of transitively overlapping key spans.
+
+    `_fit_layers` only fuses DISJOINT pairs, so whatever is left when it gives
+    up is, by construction, made of one or more clusters where every voice
+    overlaps at least one other in the same cluster. Grouped by transitive
+    overlap (union-find) rather than a single shared span, since three voices
+    covering 0-40 / 30-70 / 60-100 pairwise-overlap their neighbours without
+    all three sharing one common range.
+    """
+    n = len(voices)
+    parent = list(range(n))
+
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            if not _spans_disjoint(voices[i], voices[j]):
+                ri, rj = find(i), find(j)
+                if ri != rj:
+                    parent[ri] = rj
+    groups = {}
+    for i in range(n):
+        groups.setdefault(find(i), []).append(voices[i])
+    return list(groups.values())
+
+
+def _thin_velocity_voices(voices, limit):
+    """Reduce a VELOCITY-SPLIT group (voices that share/overlap one key
+    region, split only by velocity -- e.g. a 4-layer soft/hard piano stack)
+    to `limit`, widening survivors' velocity ranges to absorb the gap.
+
+    This is `_fit_layers`'s counterpart for the axis it deliberately leaves
+    alone: `_fit_layers` fuses DISJOINT (key-split) voices only, because
+    fusing overlapping ones "would delete a voice rather than approximate
+    one" -- true for two voices covering the SAME velocity range, but a
+    velocity-split voice does not need fusing, it needs its neighbour's
+    range widened, which is a lossy-but-real approximation (fewer dynamic
+    steps), not a deletion. Reuses `zone_reducer`'s redistribution so the
+    two velocity-reduction code paths in this project (this one, and
+    `--reduce-velocity-layers`) share one implementation.
+    """
+    if len(voices) <= limit:
+        return voices, 0
+    from processors.zone_reducer import _thin_and_redistribute
+
+    def voice_lo(v):
+        return min((z.lo_vel for z in getattr(v, 'zones', []) or []), default=0)
+
+    def voice_hi(v):
+        return max((z.hi_vel for z in getattr(v, 'zones', []) or []), default=127)
+
+    def set_range(v, lo, hi):
+        for z in getattr(v, 'zones', []) or []:
+            z.lo_vel = lo
+            z.hi_vel = hi
+
+    before = len(voices)
+    keep_pct = 100.0 * limit / before
+    kept = _thin_and_redistribute(list(voices), keep_pct, voice_lo, voice_hi, set_range)
+
+    # VERIFY NOTHING WAS SILENTLY DROPPED. `_thin_and_redistribute` widens
+    # survivors to absorb a gap only when the whole set forms one contiguous
+    # non-overlapping chain; when it does not (found 2026-08-30 on split patch 1
+    # E: after `_fit_layers`'s disjoint pass, one surviving "voice" carries
+    # BOTH a full-range zone and a hard-hit-only zone -- min/max over its
+    # zones makes it look like one wide band to `voice_lo`/`voice_hi`, which
+    # is not what any of its individual zones actually cover) it falls back
+    # to dropping the surplus item outright, unchanged ranges on the rest.
+    # For a real drum kit's parallel velocity layers that drop is the
+    # existing, accepted, lossy-but-reasonable compromise `--reduce-
+    # velocity-layers` already ships. Here it is not: a voice built by
+    # cross-key fusion can hold a low-velocity zone found nowhere else, and
+    # dropping it leaves a real gap wearing a "regular 3-layer program"
+    # label -- worse than the drum program it was meant to replace, because
+    # a drum program is at least honestly silent about the tradeoff.
+    #
+    # So: check every zone in a REMOVED voice against the survivors. If some
+    # (key range, low-velocity edge) it covered is not covered by a
+    # surviving zone at least as low, this reduction was a deletion, not an
+    # approximation -- refuse it and let the caller fall back to a drum
+    # program instead.
+    kept_zones = [z for v in kept for z in (getattr(v, 'zones', []) or [])]
+    dropped_voices = [v for v in voices if v not in kept]
+    for dv in dropped_voices:
+        for dz in getattr(dv, 'zones', []) or []:
+            covered = any(
+                z.lo_key <= dz.lo_key and z.hi_key >= dz.hi_key and z.lo_vel <= dz.lo_vel
+                for z in kept_zones)
+            if not covered:
+                return voices, 0    # unsafe: refuse rather than delete content
+
+    return kept, before - len(kept)
+
+
 def _fit_layers(voices, limit=3):
     """Fuse the most similar DISJOINT voices until `limit` layers remain.
 
@@ -707,6 +888,31 @@ def _fit_layers(voices, limit=3):
     layer. Voices that overlap therefore survive, and if too many of them do,
     the program stays a drum program and says so.
 
+    TWO PASSES, not one (§AKAILAYERGAP, 2026-08-31, the reference preset, Jan). A single
+    greedy pass fuses only the MINIMUM number of pairs needed to reach
+    `limit` -- for the reference preset's 4 voices (1 merged choke-loser + 3 disjoint,
+    identically-shaped pad survivors, see §AKAIMUTEGRP) that fused exactly
+    two of the three pads and left the third standing alone, covering its own
+    60-71 range. The two fused pads' spans don't touch (24-59 and 72-127,
+    with the third pad's OWN 60-71 sitting between them), so the fused
+    voice's own keymap gained a 60-71 HOLE -- and `_build_keymap_entries`'s
+    delete-lockup-avoidance gap-fill (mandatory, HW-confirmed 2026-06-24)
+    patched it by extending the 24-59 zone's sample across 60-71, the exact
+    range the third, un-fused pad ALSO covers with its own, correct sample.
+    Two layers now sound together over that one octave where the source only
+    ever sounds one -- not a subtler rendering, an unintended doubling.
+
+    PASS 1 fuses only ADJACENT (touching, `_spans_adjacent`) fusable pairs,
+    repeatedly, with NO regard for `limit` -- a chain of adjacent same-shaped
+    voices (all three of the reference preset's pads) collapses all the way to one, since
+    doing so can never create a hole (adjacent spans tile with nothing
+    between them) and is free: it costs no MORE parameter-averaging than
+    fusing just two of them would have, while a partial fusion pays the same
+    averaging cost AND leaves a hole. PASS 2, only if still over `limit`
+    afterward, falls back to today's behaviour -- the closest fusable pair
+    regardless of adjacency, accepting a real hole when there is truly no
+    gap-free option left.
+
     Returns (voices, notes) where notes describes what was given up, so the
     caller can print it rather than leave the user to notice.
     """
@@ -720,12 +926,25 @@ def _fit_layers(voices, limit=3):
     voices = [_copy.copy(v) for v in voices]
     for v in voices:
         v.zones = list(getattr(v, 'zones', []) or [])
+        # REMEMBER EACH ZONE'S OWN RESONANCE BEFORE ANY FUSION AVERAGES IT
+        # (§KRZRESKEYTRK). `filter_resonance` is per VOICE, so once two voices
+        # merge the individual values are gone -- and that averaging is the
+        # defect Jan heard. Stamping the zones keeps the source values
+        # available to `_patch_layer`, which can then fit the K2000's own
+        # per-key resonance ramp across them instead of writing a scalar.
+        # Copied zones, so the caller's Bank is untouched.
+        v.zones = [_copy.copy(z) for z in v.zones]
+        for z in v.zones:
+            z.src_resonance = getattr(v, 'filter_resonance', 0.0) or 0.0
     notes = []
-    while len(voices) > limit:
+
+    def _fuse_one(require_adjacent):
         best = None
         for i in range(len(voices)):
             for j in range(i + 1, len(voices)):
                 if not _spans_disjoint(voices[i], voices[j]):
+                    continue
+                if require_adjacent and not _spans_adjacent(voices[i], voices[j]):
                     continue
                 d = _voice_distance(voices[i], voices[j])
                 if d is None:
@@ -733,7 +952,7 @@ def _fit_layers(voices, limit=3):
                 if best is None or d < best[0]:
                     best = (d, i, j)
         if best is None:
-            break                      # nothing left that may legally fuse
+            return False
         d, i, j = best
         before = tuple(round(getattr(voices[i], n, 0.0) or 0.0, 4)
                        for n in _VOICE_FIT_FIELDS)
@@ -744,6 +963,31 @@ def _fit_layers(voices, limit=3):
                       for n in _VOICE_FIT_FIELDS)
         notes.append((before, other, after, d))
         voices.pop(j)
+        return True
+
+    # PASS 1: prefer ADJACENT fusions, which cannot leave a hole -- but stop at
+    # the limit like any other pass.
+    #
+    # THIS USED TO RUN UNCONDITIONALLY (2026-08-31 -> 2026-09-01), on the
+    # stated grounds that collapsing a whole adjacent chain "costs no MORE
+    # parameter-averaging than fusing just two of them would have". That is
+    # simply false: fusing three voices averages three values, fusing two
+    # averages two. The error cost real fidelity on the reference preset, whose three pad
+    # keygroups carry DIFFERENT resonances (FILQ 14/15/13 = 18.7/25.5/14.9 dB)
+    # that the AKAI applies per key range. Collapsing all three gave every key
+    # one averaged 17.5 dB -- 8.1 dB too little over 60-71 and 2.5 dB too MUCH
+    # above 72, which is audible as a resonant "snap" that worsens with pitch
+    # (Jan, by ear, 2026-09-01). Fusing only as far as the limit leaves the
+    # third keygroup its own layer and its own resonance.
+    #
+    # Unlike gain (§KRZSHAREDGAIN) this has no per-key-range escape hatch: the
+    # K2000's resonance is a per-LAYER DSP parameter, so a fused layer can
+    # only hold one value. Fusing less is the only lever.
+    while len(voices) > limit and _fuse_one(require_adjacent=True):
+        pass
+    while len(voices) > limit:
+        if not _fuse_one(require_adjacent=False):
+            break                       # PASS 2: nothing left that may legally fuse
     return voices, notes
 
 
@@ -832,8 +1076,11 @@ def _make_layer_segments(keymap_id: int, stereo: bool = False,
 #   resonance    = HOB1(0x51)[1] (dB*2, 0..48 = 0..24 dB)
 #   filter-env routing: HOB0[5]=121(=ENV2 source), HOB0[6]=depth
 #   AMPENV mode  = ENC(0x20)[1]  (1=Natural -> 0=User)
-#   AMPENV       = ENV(0x21)[0..13]  7 (time,level) pairs from byte 0
-#                  (Att1 Att2 Att3 Dec1 Rel1 Rel2 Rel3); byte 14 = loop flag
+#   AMPENV       = ENV(0x21)  byte 0 = loop flag, then 7 (LEVEL,time) pairs
+#                  from byte 1 (Att1 Att2 Att3 Dec1 Rel1 Rel2 Rel3).
+#                  NOT (time,level)-from-byte-0 with the flag last: that was
+#                  this file's assumption until §KRZENVLOOP disproved it on
+#                  hardware 2026-08-31. See _fill_env for the full trace.
 #   ENV2 (filter env) = ENC(0x22)[0..13]   (same layout)
 #   LFO1 rate/shape/phase = LFO(0x14)[2]/[4]/[5]
 #   LFO1->Pitch routing   = CAL(0x40)[21]=114(LFO1 source), CAL[22]=depth
@@ -901,7 +1148,33 @@ def _env_time_byte(seconds: float) -> int:
 
 
 def _lvl_byte(pct: float) -> int:
+    """A K2000 envelope-level byte from a DISPLAYED PERCENT.
+
+    Raw, deliberately: the percent is what the machine's own page shows, and
+    several callers legitimately want to name a display value (Att stages at
+    100 %, a null stage at 0). Callers that hold an AMPLITUDE -- a model
+    `sustain`, a level in dB -- must convert through `_lvl_byte_amp` or
+    `krz_db_to_level_pct` first, because the display is NOT linear amplitude
+    (§KRZLEVELCURVE).
+    """
     return round(max(-100.0, min(100.0, pct))) & 0xFF       # signed %
+
+
+def _lvl_byte_amp(fraction: float) -> int:
+    """A K2000 envelope-level byte from a LINEAR AMPLITUDE fraction (0..1).
+
+    §KRZLEVELCURVE, 2026-08-31: the displayed percent is dB-linear in two
+    segments and then collapses -- 50 % is -18.07 dB, not -6.02 dB. Writing
+    `fraction * 100` into the field, which is what this writer did from the
+    beginning, therefore lands every level far below where the source asked,
+    and worst at the bottom: the reference preset's 3.26 % pad sustain measured -69 dB
+    against the AKAI's own -29.73 dB, about 39 dB adrift. Going through the
+    measured table puts it at 21.1 %, which reproduces -29.7 dB on hardware.
+    """
+    f = max(0.0, min(1.0, fraction))
+    if f <= 0.0:
+        return 0
+    return _lvl_byte(krz_db_to_level_pct(20.0 * math.log10(f)))
 
 
 def _vel_byte(lo_vel: int, hi_vel: int) -> int:
@@ -912,14 +1185,58 @@ def _vel_byte(lo_vel: int, hi_vel: int) -> int:
     two 0–7 dynamic marks (ppp=0 … fff=7) — LoVel in bits 3–5, HiVel in bits 0–2
     stored INVERTED (7−mark).  So a full-range layer (ppp…fff) is 0, which is why
     every factory layer reads 0 and the field was invisible in static files.
+
+    LO_MARK ROUNDS DOWN, NOT TO NEAREST (2026-08-30, §KRZVELBOUND). A note
+    played AT EXACTLY a mark's own first-defining velocity is not reliable on
+    real hardware: an AKAI velocity-split layer with lo_vel=100 -- which
+    round(100/127*7) computes as exactly the first integer velocity of mark 6
+    -- played SILENT at velocity 100 on the K2000R and clean at 99 and 110,
+    both neighbours. k2kremote confirmed the mechanism surgically: nudging
+    that live layer's mark down by one (6 -> 5) fixed the exact-100 dropout
+    with nothing else changed. The K2000 firmware cannot cleanly resolve a
+    note landing exactly on a mark's boundary-defining value, so this writer
+    now never places a boundary there deliberately -- floor() puts `lo_mark`
+    a step below the nearest edge instead of on it, same principle as this
+    project's key-zone/velocity-layer widening elsewhere: prefer a layer
+    that starts a few velocity units early over one that can silently drop
+    the exact value it was built to include. `hi_mark` uses the mirror
+    (ceil()) for the same reason on the top edge, untested on hardware but
+    the same mechanism applies by symmetry.
     """
-    lo_mark = max(0, min(7, round(lo_vel / 127 * 7)))
-    hi_mark = max(0, min(7, round(hi_vel / 127 * 7)))
+    import math
+    lo_mark = max(0, min(7, math.floor(lo_vel / 127 * 7)))
+    hi_mark = max(0, min(7, math.ceil(hi_vel / 127 * 7)))
     return ((lo_mark & 0x07) << 3) | ((7 - hi_mark) & 0x07)
 
 
 # Two-leg release shape (see _fill_env) — HW-validated knee/split, AlphaPad #200.
-_REL_KNEE_PCT   = 33.0    # Rel1 target level (% of full)
+#
+# _REL_KNEE_PCT IS A DISPLAYED PERCENT AND STAYS ONE, DELIBERATELY
+# (§KRZLEVELCURVE, 2026-08-31). It was chosen as "33 % of full", meaning
+# -9.6 dB, on the assumption the field was linear amplitude. It is not: 33 %
+# measures about -24.8 dB, so the knee has always sat ~15 dB below where it
+# was described as sitting.
+#
+# It is NOT being "corrected" to 71 % (the percent that would really give
+# -9.6 dB), and that is a decision rather than an oversight. The knee and the
+# 80/20 split were validated BY EAR on real hardware (AlphaPad #200,
+# 2026-06-24) -- so what was actually judged good was the shape this constant
+# really produces, not the shape its label claimed.
+#
+# THAT NOW RESTS ON MEASUREMENT, NOT INFERENCE (2026-08-31). When this comment
+# was first written the release stages were only ASSUMED to share the level
+# curve measured on Dec1. They were then tested: Rel 50 % renders -18.06 dB
+# against a predicted -18.07, so -24.8 dB really is what 33 % produces here
+# and the listener's approval attaches to that shape. Moving it to the intended
+# -9.6 dB would discard that validation and change a release that a listener
+# already approved. The label was wrong; the sound was right.
+#
+# So: the number stays, the comment now says what it means, and re-deriving
+# the knee in dB is a job for whoever next validates a release by ear.
+# Contrast the SUSTAIN, which is genuinely wrong rather than mislabelled --
+# it has to match a level the source specifies, and now goes through
+# `_lvl_byte_amp`.
+_REL_KNEE_PCT   = 33.0    # Rel1 target, DISPLAYED percent (~-24.8 dB, measured)
 _REL1_TIME_FRAC = 0.8     # fraction of the release time spent reaching the knee
 
 # KRZ-only release-time correction.  The shared MPC value→seconds curve
@@ -932,23 +1249,111 @@ _REL1_TIME_FRAC = 0.8     # fraction of the release time spent reaching the knee
 _KRZ_RELEASE_FACTOR = KRZ_RELEASE_FACTOR   # = 2.63 / 1.39
 
 
+#: The AKAI mute-cut re-model's REAL curve (§155 amendment, s3ked, 2026-08-31)
+#: is two-stage: a fast fall to -23.4 dB by 12 ms, then a much slower second
+#: fall (fit at 366 dB/s, 12-80 ms window, +-5.2 dB worst case) reaching the
+#: noise floor well past 200 ms. `parsers.akai_s3000_parser._apply_mute_groups`
+#: cannot carry that shape for every target format: `sustain` only means "the
+#: level a held note stays at" on hardware whose release is gated on note-off,
+#: which every format EXCEPT the K2000 is presumed to be (unverified for E4B/
+#: EIII, so left alone there) -- writing a nonzero sustain there would turn a
+#: too-short click into a WORSE bug, an audible choke that holds indefinitely.
+#:
+#: The K2000 is provably not gated: the entire §KRZENVLOOP investigation
+#: (2026-08-27 -> 2026-08-31) only makes sense because Dec1->Rel1->Rel2->Rel3
+#: run to completion automatically over TIME while a note is held, regardless
+#: of note-off -- so a real sustain-then-release shape is SAFE here, and this
+#: function substitutes it for the plain single-stage click the shared AKAI
+#: model still carries, right before that click would otherwise be written.
+_AK_CHOKE_STAGE1_DB = 23.4       # fall to this by 12 ms
+_AK_CHOKE_STAGE1_S = 0.012
+_AK_CHOKE_STAGE2_RATE_DB_S = 366.0
+
+
+def _krz_choke_env(env):
+    """AKAI mute-cut re-model, K2000-specific: swap the plain single-stage
+    click for the real two-stage curve (see `_AK_CHOKE_STAGE1_DB` above).
+
+    Matches by VALUE, not by a carried flag -- `_apply_mute_groups` builds
+    `cut_env` as a plain `Envelope(0.0, AKAI_MUTE_CUT_SECONDS, 0.0, 0.0)` with
+    nothing else distinguishing it, and this is the one place that constant's
+    exact shape is meaningful rather than coincidental: nothing else in this
+    project ever asks for a fixed 0.058s decay to absolute silence.
+    """
+    if (env is not None and getattr(env, 'attack', None) == 0.0
+            and getattr(env, 'decay', None) == AKAI_MUTE_CUT_SECONDS
+            and getattr(env, 'sustain', None) == 0.0
+            and getattr(env, 'release', None) == 0.0
+            and not getattr(env, 'release_rate_db_per_s', None)):
+        import copy as _copy
+        env = _copy.copy(env)
+        env.decay = _AK_CHOKE_STAGE1_S
+        env.sustain = 10.0 ** (-_AK_CHOKE_STAGE1_DB / 20.0)
+        env.release_rate_db_per_s = _AK_CHOKE_STAGE2_RATE_DB_S
+    return env
+
+
 def _fill_env(b: bytearray, env) -> None:
     """Write an ADSR Envelope into a 15-byte ENV/ENC segment IN PLACE.
 
-    K2000 layout (HW-confirmed 2026-06-24, Jan — read the AMPENV LCD against the
-    on-disk bytes): seven `(time, level)` pairs packed from byte 0 —
+    TRUE K2000 layout (§KRZENVLOOP, HW-confirmed 2026-08-31 — see TODO.md /
+    RESOLUTION_NOTES.md for the full trace): byte **0 is a loop flag**
+    (0=Off, 1=seg1F, 2=seg2F, 3=seg3F), then seven `(level, time)` pairs —
+    NOT `(time, level)` — packed from byte **1**: `Att1 Att2 Att3 Dec1 Rel1
+    Rel2 Rel3`, with levels on the odd bytes [1,3,…,13] and times on the even
+    bytes [2,4,…,14].
+
+    THIS SUPERSEDES THE 2026-06-24 "HW-confirmed" NOTE BELOW, WHICH WAS WRONG.
+    Triple-confirmed independently on 2026-08-31: (1) k2kremote's controlled
+    991/992 single-byte A/B DUMP diff, which is what first read the values
+    0/1/2/3 = Off/seg1F/seg2F/seg3F at byte 0; (2) the reference preset Layer 2's real,
+    correctly-sounding envelope, whose on-disk bytes are byte-identical to the
+    device's and decode correctly ONLY under this convention; (3) a genuine,
+    untouched ROM factory object (program 1, "Acoustic Piano") with seven
+    independently distinguishable values that match this convention field for
+    field and fail the old one at the first non-trivial field. No load-path
+    transform exists between file and device — file bytes are device bytes.
+
+    ROOT CAUSE OF §KRZENVLOOP (the "envelope re-cycle" finding first raised
+    2026-08-27 and originally mistaken for a K2000 firmware defect): under the
+    OLD (wrong) convention this function wrote byte 0 as `tb(env.attack)` —
+    the "Att1 time" byte under the old scheme. `_env_time_byte` floors at 3,
+    so nearly any zero/short-attack envelope wrote literal byte value 3 into
+    what is ACTUALLY the loop-flag byte — engaging an active loop (seg3F) by
+    accident, on nearly every envelope this writer has ever produced for the
+    K2000. Not a firmware quirk: a self-inflicted byte-layout bug, now fixed.
+
+    ORIGINAL (WRONG) NOTE, preserved for the trace, NOT to be trusted:
+    "K2000 layout (HW-confirmed 2026-06-24, Jan — read the AMPENV LCD against
+    the on-disk bytes): seven `(time, level)` pairs packed from byte 0 —
     `Att1 Att2 Att3 Dec1 Rel1 Rel2 Rel3` — with times on the even bytes
     [0,2,…,12] and levels on the odd bytes [1,3,…,13]; byte 14 is a trailing
-    flag (loop), left untouched.
+    flag (loop), left untouched." k2kremote's own guess (unverified) is that
+    this was checked by eye against a case where the shift happened to look
+    plausible, rather than via a controlled byte-flip.
 
-    BUG FIXED 2026-06-24: the old code started writing at byte **2**, shifting
-    every segment by one pair — the decay-to-sustain landed in the K2000's Rel1
-    (so Rel1 read 100 % and never faded) and the release fade landed in Rel2.
-    HW symptom (AlphaPad #200): levels Att1..Rel2 all read 100 % except Rel2=0,
-    giving a held-then-cut release instead of a fade from sustain to silence.
+    BUG FIXED 2026-06-24 (this part is unaffected by the above — still true):
+    the old code started writing at byte **2**, shifting every segment by one
+    pair — the decay-to-sustain landed in the K2000's Rel1 (so Rel1 read
+    100% and never faded) and the release fade landed in Rel2. HW symptom
+    (AlphaPad #200): levels Att1..Rel2 all read 100% except Rel2=0, giving a
+    held-then-cut release instead of a fade from sustain to silence.
     """
     tb, lv = _env_time_byte, _lvl_byte
-    sus = env.sustain * 100.0
+    # THE SUSTAIN IS AN AMPLITUDE AND THE FIELD IS NOT (§KRZLEVELCURVE).
+    # `env.sustain` is a linear amplitude fraction; the K2000's displayed
+    # percent is dB-linear in two segments and then collapses. `sus` below is
+    # therefore the DISPLAYED PERCENT that reproduces that amplitude, not the
+    # fraction times 100 -- which is what this line used to be, and is why
+    # the reference preset's 3.26 % pad sustain measured -69 dB on hardware against the
+    # AKAI's own -29.73 dB. It now writes 21.1 %.
+    #
+    # Keeping `sus` in DISPLAY space also makes the `sus > _REL_KNEE_PCT`
+    # test below a like-for-like comparison for the first time: the knee is a
+    # displayed percent too, and the old code was comparing a linear-amplitude
+    # figure against it.
+    sus = (krz_db_to_level_pct(20.0 * math.log10(env.sustain))
+           if env.sustain > 0.0 else 0.0)
     # Two-leg release: the MPC release is ~exponential (linear in dB); a single
     # linear K2000 Rel1 sus→0 holds too loud then collapses ("sharp cutoff").
     # Approximate with a long first leg down to a knee, then a short tail to
@@ -1015,16 +1420,20 @@ def _fill_env(b: bytearray, env) -> None:
              (0.0, 100),                             # Att3
              (env.decay, sus)] + pairs_rel + [        # Dec1 — decay to sustain
              (0.0, 0)]                                # Rel3
-    o = 0
+    b[0] = 0   # loop flag -- Off (§KRZENVLOOP byte-layout fix, 2026-08-31)
+    o = 1
     for t, l in pairs:
-        b[o] = tb(t); b[o + 1] = lv(l); o += 2
-    # byte 14 (loop/flag) left as the template set it
+        b[o] = lv(l); b[o + 1] = tb(t); o += 2
 
 
 #: The K2000 cutoff byte is signed semitones on the standard pitch scale,
 #: Hz = 440 * 2**((b - 9) / 12) -- so byte 9 is A4. `krz_cutoff_byte_to_hz` in
 #: models.common is that law, and the KRZ READER already decodes through it.
 _KRZ_CUT_BYTE_MIN, _KRZ_CUT_BYTE_MAX = -48, 79
+
+#: F2 RES KeyTrk rail: the panel stops at +-2.00 dB/key = +-100 units.
+#: NOT the +-127 a signed i8 would allow (HW-measured 2026-09-01).
+_KRZ_RES_KT_CLAMP = 100
 
 
 def _cutoff_byte_hz(hz: float) -> int:
@@ -1064,6 +1473,65 @@ def _cutoff_byte_hz(hz: float) -> int:
     semitones = 9.0 + 12.0 * math.log2(max(1e-6, hz) / 440.0)
     return max(_KRZ_CUT_BYTE_MIN,
                min(_KRZ_CUT_BYTE_MAX, round(semitones))) & 0xFF
+
+
+def _reson_keytrack_fit(voice):
+    """Fit the K2000's per-key resonance ramp across a fused layer's zones.
+
+    Returns `(adjust_db, keytrack_db_per_key)`, or None when a flat value is
+    as good or better -- which is the common case and must stay the default.
+
+    WHY THIS EXISTS. `filter_resonance` is per VOICE while a source's is often
+    per key range, so fusing layers averages resonances the source applied
+    separately. On the reference preset that was audible: three pad keygroups at 18.7 /
+    25.5 / 14.9 dB collapsed to one value, 2.5 dB too resonant above key 72,
+    which Jan heard as a resonant snap worsening with pitch (§AKAILAYERGAP).
+    Fusing less fixed the top range but left keys 60-71 6.5 dB under, and with
+    the program already at the K2000's three-layer maximum there is no further
+    lever -- except this one.
+
+    THE LAW (k2kremote, HW-measured 2026-09-01, §KRZRESKEYTRK):
+
+        resonance(key) = Adjust + KeyTrk * (key - 60)
+
+    linear in key and in the setting, pivot at middle C, displayed dB/key
+    literal to within 1 %, and 0 genuinely neutral.
+
+    ONLY WHEN IT ACTUALLY HELPS, and that is not a formality. KeyTrk is a
+    LINEAR RAMP while a source's resonances are PIECEWISE CONSTANT, so a ramp
+    can only help when they trend one way. the reference preset's rise then fall (18.7 ->
+    25.5 -> 14.9); fitting all three in one layer measured WORSE than the
+    three-layer split (RMS 2.81 dB against v15's, worst 7.8 dB). So the fit is
+    computed, scored against the flat alternative over the actual key span,
+    and discarded unless it wins.
+    """
+    zones = [z for z in (getattr(voice, 'zones', []) or [])
+             if z.src_resonance is not None]
+    if len(zones) < 2:
+        return None
+    # One point per KEY, so a wide zone counts for more than a narrow one --
+    # the error that matters is per key played, not per zone authored.
+    pts = [(k, z.src_resonance * RESONANCE_FULL_DB)
+           for z in zones for k in range(z.lo_key, z.hi_key + 1)]
+    if len({round(r, 3) for _k, r in pts}) < 2:
+        return None                      # all the same: a scalar is exact
+    n = len(pts)
+    sx = sum(k - KRZ_RES_KEYTRK_PIVOT_KEY for k, _r in pts)
+    sy = sum(r for _k, r in pts)
+    sxx = sum((k - KRZ_RES_KEYTRK_PIVOT_KEY) ** 2 for k, _r in pts)
+    sxy = sum((k - KRZ_RES_KEYTRK_PIVOT_KEY) * r for k, r in pts)
+    den = n * sxx - sx * sx
+    if not den:
+        return None
+    slope = (n * sxy - sx * sy) / den
+    intercept = (sy - slope * sx) / n
+    flat = sy / n
+    err_ramp = sum((intercept + slope * (k - KRZ_RES_KEYTRK_PIVOT_KEY) - r) ** 2
+                   for k, r in pts)
+    err_flat = sum((flat - r) ** 2 for _k, r in pts)
+    if err_ramp >= err_flat * 0.95:      # must be a real win, not a rounding
+        return None
+    return intercept, slope
 
 
 def _reson_byte(reson01: float) -> int:
@@ -1310,9 +1778,52 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False):
         hob = seg(0x53)
         hob[14] = ((step & 0x0F) << 4) | (hob[14] & 0x0F)
 
+    # --- LFO -> amplitude (tremolo), with an automatic headroom trim -------
+    #
+    # WRITING THIS COSTS HEADROOM, WHICH IS WHY THE TRIM IS NOT OPTIONAL.
+    # `Depth` is the ONE-SIDED amplitude in dB and the swing is bipolar about
+    # the un-modulated level (k2kremote, §KRZF4AMPDEPTH: Depth 12 -> peak
+    # +12.08 dB, Depth 24 -> +24.47), so a layer within D dB of full scale
+    # clips on every tremolo peak. The layer's static `Adjust` is therefore
+    # dropped by the same D, at the 1 dB/unit that field was measured at.
+    #
+    # Jan's call, 2026-09-01, choosing this over writing it untrimmed: the
+    # trade is that a tremolo voice arrives D dB quieter than it otherwise
+    # would. That is audible and deliberate -- the alternative is clipping on
+    # material that happens to be hot, which is not recoverable by ear or by
+    # gain staging afterwards.
+    #
+    # The trim uses the FULL depth rather than half. The measured half-swing is
+    # ~0.96-0.98 x D and the modulation centre sits slightly ABOVE nominal, so
+    # the peak is >= D; budgeting D is very slightly conservative and errs the
+    # safe way.
+    #
+    # ONE LFO CAN DRIVE BOTH DESTINATIONS. Routing LFO1 here does not conflict
+    # with LFO1 -> pitch above: it is one oscillator with two destinations,
+    # exactly as on the AKAI, where a single LFO feeds pitch and loudness
+    # through separate amounts.
+    _trem1 = abs(getattr(voice, 'lfo1_to_volume', 0.0) or 0.0)
+    _trem2 = abs(getattr(voice, 'lfo2_to_volume', 0.0) or 0.0)
+    if _trem1 or _trem2:
+        _use1 = _trem1 >= _trem2
+        _depth_db = (_trem1 if _use1 else _trem2) * LFO_VOLUME_MODEL_FULL_DB
+        _d = min(KRZ_F4_AMP_DEPTH_CLAMP,
+                 int(round(_depth_db / KRZ_F4_AMP_DEPTH_DB_PER_UNIT)))
+        if _d > 0:
+            _hob4 = seg(0x53)
+            _hob4[KRZ_F4_AMP_SRC1_INDEX] = (KRZ_F4_AMP_SRC_LFO1 if _use1
+                                            else KRZ_F4_AMP_SRC_LFO2)
+            _hob4[KRZ_F4_AMP_DEPTH_INDEX] = _d
+            _adj = _hob4[KRZ_F4_AMP_ADJUST_INDEX]
+            _adj = _adj - 256 if _adj > 127 else _adj
+            _hob4[KRZ_F4_AMP_ADJUST_INDEX] = max(
+                -KRZ_F4_AMP_DEPTH_CLAMP,
+                min(KRZ_F4_AMP_DEPTH_CLAMP,
+                    _adj - int(round(_d * KRZ_F4_AMP_ADJUST_DB_PER_UNIT)))) & 0xFF
+
     # --- amp envelope (always User mode + the source ADSR) ---
     seg(0x20)[1] = 0                                         # AMPENV mode -> User
-    _fill_env(seg(0x21), voice.amp_env)
+    _fill_env(seg(0x21), _krz_choke_env(voice.amp_env))
 
     hob_f1 = seg(0x50)
     hob_f2 = seg(0x51)
@@ -1354,8 +1865,30 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False):
             # flattened.
             print(f"  [krz] velocity->filter floor {_vel_min_ct:.0f} ct folded "
                   f"into the cutoff: VelTrk carries no floor byte")
-            _hz = _hz * (2.0 ** (_vel_min_ct / 1200.0))
+            _true_floor_hz = _hz * (2.0 ** (_vel_min_ct / 1200.0))
+            _hz = _true_floor_hz
             _vel_ct -= _vel_min_ct
+            # THE FLOOR CAN ITSELF BE BELOW THE K2000'S OWN 16 Hz FLOOR
+            # (§AKAICHOKEFILTER, 2026-08-31, found chasing the reference preset's remaining
+            # brightness gap after §AKAICHOKECURVE). `_cutoff_byte_hz` below
+            # clamps the WRITTEN byte up to 16 Hz when that happens -- correct,
+            # the K2000 genuinely cannot go lower -- but until now nothing
+            # compensated `_vel_ct`, which was computed against the
+            # UNCLAMPED floor. The result: the resting corner reads brighter
+            # than intended (unavoidable, a real hardware limit) AND the top
+            # of the sweep ALSO reads brighter than intended by the same
+            # amount (avoidable -- the depth is a choice, not a limit).
+            # the reference preset's Layer 1 hits this at velocity 0 -- 96 Hz * 2^(-4390 ct)
+            # = 7.6 Hz, clamped to 16.35 Hz -- and the un-compensated depth put
+            # the top of its sweep at ~2.6 kHz where the source's own ceiling
+            # is ~1.2 kHz, a real 1.1-octave error stacked on the unavoidable
+            # floor error, for every zone this fold branch ever fires on (0 of
+            # 1383 in the original corpus sweep -- untested until the reference preset).
+            _min_hz = krz_cutoff_byte_to_hz(_KRZ_CUT_BYTE_MIN)
+            if _true_floor_hz < _min_hz:
+                _lost_ct = 1200.0 * math.log2(_min_hz / _true_floor_hz)
+                _vel_ct = max(0.0, _vel_ct - _lost_ct)
+                _hz = _min_hz
         # NOT clamped to E4B_CUTOFF_MAX_HZ. The K2000's cutoff byte reaches
         # 25088 Hz and the E-MU's scale stops at 20 kHz, so trimming here
         # imposed one machine's ceiling on a K2000->K2000 trip: 3.5% of the
@@ -1390,7 +1923,38 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False):
         hob_f1[3] = max(-128, min(127,
                                   int(round(_kt_oct * 100.0 / 2.0)))) & 0xFF
         if has_res:                                          # 1-pole has fixed -3 dB res
-            hob_f2[1] = _reson_byte(getattr(voice, 'filter_resonance', 0.0))
+            # PER-KEY RESONANCE when a fused layer needs it (§KRZRESKEYTRK).
+            # `_reson_keytrack_fit` returns a ramp only when it genuinely
+            # beats the flat value over the layer's own key span, so the
+            # common case still writes a scalar and hob_f2[3] stays 0.
+            #
+            #   resonance(key) = Adjust + KeyTrk * (key - 60)     HW-measured
+            #
+            # BYTE: hob_f2[3], signed, **0.02 dB/key per unit**, clamped to
+            # +-100 and NOT +-127 -- the panel's rails are +-2.00 dB/key, so a
+            # full signed i8 would reach +-2.56 and let us write values the
+            # machine cannot produce. Same shape as the keymap VolumeAdjust
+            # rail stopping at -63.5 rather than -64.0.
+            #
+            # The offset was measured by DUMP-diff (k2kremote: only byte 228
+            # of the program object moved across four scratch programs
+            # differing in nothing else) and mapped onto our own layout two
+            # ways that agree: their layer block starts 24 bytes later than
+            # ours because `_TPL_GLOBAL` omits the four zero-bodied segments
+            # between PGM and FX, so their 228 is our 204 = hob_f2[3]; and
+            # independently, their F2 KeyTrk sits exactly one 16-byte segment
+            # stride above the already-measured F1 FRQ KeyTrk at hob_f1[3],
+            # i.e. the same index in the next segment.
+            _ramp = _reson_keytrack_fit(voice)
+            if _ramp is not None:
+                _adj_db, _slope = _ramp
+                hob_f2[1] = _reson_byte(
+                    max(0.0, min(1.0, _adj_db / RESONANCE_FULL_DB)))
+                hob_f2[3] = max(-_KRZ_RES_KT_CLAMP,
+                                min(_KRZ_RES_KT_CLAMP,
+                                    int(round(_slope / KRZ_RES_KEYTRK_DB_PER_UNIT)))) & 0xFF
+            else:
+                hob_f2[1] = _reson_byte(getattr(voice, 'filter_resonance', 0.0))
         elif ftype_byte == _K2_FILTER_2P_BP:                 # bandpass F2 = width
             hob_f2[1] = _K2_BP_DEFAULT_WIDTH
         elif ftype_byte == _K2_FILTER_PARA_MID:              # PARA MID F2-AMP = boost dB
@@ -1768,6 +2332,28 @@ def write_krz(bank: Bank, output_path: str,
                 _sample_vols.setdefault(_z.sample_name, []).append(_z.volume)
     sample_gain_db = {name: sum(v) / len(v) for name, v in _sample_vols.items()}
 
+    # §KRZSHAREDGAIN: what each zone still needs after the per-sample mean.
+    # `volumeAdjust` is per SAMPLE and `ZoneMapping.volume` is per ZONE, so a
+    # sample used by several zones AT DIFFERENT LEVELS -- across presets, not
+    # just within one -- has its gain averaged and every one of those zones
+    # comes out wrong. Measured on an AKAI bank whose presets share samples:
+    # up to 8.08 dB, always TOO LOUD, because averaging a quiet zone with
+    # louder uses can only pull it up.
+    #
+    # The K2000 keymap carries a per-KEY-RANGE volumeAdjust that is a
+    # one-to-one match for our per-zone volume, and -- decisively -- the
+    # keymap object is private to its preset, so other presets sharing the
+    # sample cannot contaminate it. Writing the RESIDUAL here means the two
+    # fields sum to the right level for every zone, and the residual is
+    # identically zero wherever a sample is not shared, so banks without this
+    # bug are byte-identical to before.
+    zone_gain_db = {}
+    for _preset in bank.presets:
+        for _voice in _preset.voices:
+            for _z in _voice.zones:
+                _mean = sample_gain_db.get(_z.sample_name, 0.0)
+                zone_gain_db[id(_z)] = (_z.volume or 0.0) - _mean
+
     # Pre-compute per-sample word offsets into the PCM region
     word_offsets: list[int] = []
     cursor = 0
@@ -1824,6 +2410,23 @@ def write_krz(bank: Bank, output_path: str,
             # subtler rendering of the preset.
             _was = len(voices)
             voices, _notes = _fit_layers(voices, 3)
+            _vel_thinned = 0
+            if len(voices) > 3:
+                # DISJOINT fusion alone couldn't reach 3 -- what's left
+                # overlaps in key range. That is a genuine velocity split
+                # (preset 4's 4 same-key-range dynamics layers is the case
+                # that motivated this) ONLY when every remaining voice
+                # belongs to a single overlapping cluster. Scoped narrowly
+                # on purpose: a REAL drum kit that survives fusion as
+                # several small overlapping clusters (distinct pads, each
+                # already reduced by fusion) is left as a drum program
+                # rather than having its per-pad velocity layers thinned
+                # unasked -- that is the "too broad... flips melodic
+                # patches" mistake `_voices_stacked` already recorded,
+                # applied to the wrong axis, and is not attempted here.
+                _groups = _group_overlapping(voices)
+                if len(_groups) == 1:
+                    voices, _vel_thinned = _thin_velocity_voices(voices, 3)
             if len(voices) <= 3:
                 # LOUD ON PURPOSE (Jan, 2026-08-24). This is the one place the
                 # converter knowingly changes what the source says, and the
@@ -1832,8 +2435,11 @@ def write_krz(bank: Bank, output_path: str,
                 print(f"  [!!] '{preset.name}': APPROXIMATED to fit the K2000's "
                       f"3-layer limit")
                 print(f"       {_was} layers → {len(voices)}: "
-                      f"{_was - len(voices)} disjoint layer(s) FUSED, and their "
-                      f"filter settings AVERAGED (key-span weighted).")
+                      f"{_was - len(voices) - _vel_thinned} disjoint layer(s) FUSED, "
+                      f"their filter settings AVERAGED (key-span weighted)"
+                      + (f", and {_vel_thinned} velocity layer(s) THINNED "
+                         f"(neighbours' velocity ranges widened to cover the gap)"
+                         if _vel_thinned else "") + ".")
                 for _b, _o, _a, _d in _notes:
                     # Every averaged field, named. The banner used to say
                     # "filter settings" while quietly averaging (or dropping)
@@ -1852,9 +2458,10 @@ def write_krz(bank: Bank, output_path: str,
                 n = min(len(voices), _MAX_KRZ_LAYERS)
                 print(f"  [layers] '{preset.name}': {n} split layers → DRUM "
                       f"PROGRAM (play on a drum channel). Could not fit to 3: "
-                      f"the remaining layers OVERLAP on the keyboard, so "
-                      f"fusing them would delete a voice rather than "
-                      f"approximate one.")
+                      f"the remaining layers form more than one overlapping "
+                      f"group (several distinct key regions, each still over "
+                      f"budget) rather than one clean velocity split, so "
+                      f"thinning was not attempted unsupervised.")
                 voices = voices[:_MAX_KRZ_LAYERS]
         elif len(voices) > 3:
             n = min(len(voices), _MAX_KRZ_LAYERS)
@@ -1870,7 +2477,7 @@ def write_krz(bank: Bank, output_path: str,
                 # Key on the bytes the keymap would actually contain, not on
                 # the voice: two different voices can yield the same keymap.
                 entries = _build_keymap_entries(
-                    voice, sample_id_map, samples_by_name, 0)[0]
+                    voice, sample_id_map, samples_by_name, 0, zone_gain_db)[0]
                 kid = _shared_keymaps.get(entries)
                 if kid is None:
                     kid = km_id
@@ -1919,7 +2526,8 @@ def write_krz(bank: Bank, output_path: str,
                 lost_zones.extend(
                     (preset.name, *z) for z in _write_keymap_object(
                         f, preset.name, voice, kid,
-                        sample_id_map, samples_by_name, base_pitch))
+                        sample_id_map, samples_by_name, base_pitch,
+                        zone_gain_db))
 
         # --- Program objects (one layer per voice) ---
         for pi, preset in enumerate(bank.presets):

@@ -22,7 +22,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§KRZNAME16 — a full-length KRZ name picked up the bytes after it (2026-08-09)](#krzname16-a-full-length-krz-name-picked-up-the-bytes-after-it-2026-08-09)
 - [§ISODIR — EMU3 CD image drops banks past the 16th (how to fix)](#isodir-emu3-cd-image-drops-banks-past-the-16th-how-to-fix)
 - [§E4BRATE — EOS4 sample-rate field (how to fix the resample pitch bug)](#e4brate-eos4-sample-rate-field-how-to-fix-the-resample-pitch-bug)
-- [§MPCFILT — MPC filter dropped at max cutoff (how to fix)](#mpcfilt-mpc-filter-dropped-at-max-cutoff-how-to-fix)
+- [§MPCFILT — MPC filter dropped at max cutoff (FIXED 2026-08-31)](#mpcfilt-mpc-filter-dropped-at-max-cutoff-fixed-2026-08-31)
 - [§MODELPARAMS — carry choke group / one-shot / key-track / round-robin (design)](#modelparams-carry-choke-group-one-shot-key-track-round-robin-design)
 - [§MPC39 — MPC Standalone 3.9.0 gzipped-JSON `.xpm` parser (how to fix)](#mpc39-mpc-standalone-390-gzipped-json-xpm-parser-how-to-fix)
 - [§AUTOLOOP — Auto sustain-loop (IMPLEMENTED, branch `autoloop`, 2026-07-25)](#autoloop-auto-sustain-loop-implemented-branch-autoloop-2026-07-25)
@@ -213,6 +213,34 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIENV2PEAK — the filter envelope was read at its sustain and written as its peak, and that is where the click went (2026-08-25)](#akaienv2peak-the-filter-envelope-was-read-at-its-sustain-and-written-as-its-peak-and-that-is-where-the-click-went-2026-08-25)
 - [§AKAIKEYFOLLOWHW — key tracking fails its first hardware test, and the test only happened because the parameter was missing (2026-08-25)](#akaikeyfollowhw-key-tracking-fails-its-first-hardware-test-and-the-test-only-happened-because-the-parameter-was-missing-2026-08-25)
 - [§AKAIMUTESCOPE — the mute cut was applied to a whole voice when it can only bite on shared keys (2026-08-25)](#akaimutescope-the-mute-cut-was-applied-to-a-whole-voice-when-it-can-only-bite-on-shared-keys-2026-08-25)
+- [§KRZRELKNEE — the two-leg release wrote an upward "release" below the knee (2026-08-27)](#krzrelknee-the-two-leg-release-wrote-an-upward-release-below-the-knee-2026-08-27)
+- [§KRZLONGENVGRID — `KRZ_ENV_TIME_GRID`'s 5-10s band is unconfirmed at these durations (2026-08-27)](#krzlongenvgrid-krz_env_time_grids-5-10s-band-is-unconfirmed-at-these-durations-2026-08-27)
+- [§AKAIVFRREAD — the AKAI reader finally populates velocity->filter, gated by which assignable slot actually names velocity (2026-08-31)](#akaivfrread-the-akai-reader-finally-populates-velocity-filter-gated-by-which-assignable-slot-actually-names-velocity-2026-08-31)
+- [§AKAILFOWAVE — LFO1WAVE was never read, every AKAI conversion assumed triangle (2026-08-31)](#akailfowave-lfo1wave-was-never-read-every-akai-conversion-assumed-triangle-2026-08-31)
+- [§AKAIPRGNUM0 — fallback-numbering-starts-at-1 proposed and REVERTED same night: it fixes an operating-procedure question, not our output (2026-08-31)](#akaiprgnum0-fallback-numbering-starts-at-1-proposed-and-reverted-same-night-it-fixes-an-operating-procedure-question-not-our-output-2026-08-31)
+- [§AKAICARDTRANSFER — an AKAI append wrote source rates instead of resampled ones, off the media path not the converter (2026-08-30)](#akaicardtransfer-an-akai-append-wrote-source-rates-instead-of-resampled-ones-off-the-media-path-not-the-converter-2026-08-30)
+- [§KRZsplit patch 1 — a pure velocity split has nothing for disjoint-fuse to fuse (2026-08-30)](#krzvelstack-a-pure-velocity-split-has-nothing-for-disjoint-fuse-to-fuse-2026-08-30)
+- [§KRZVELBOUND — a K2000 dynamic-mark boundary cannot resolve a note landing exactly on it (2026-08-30, HW-confirmed)](#krzvelbound-a-k2000-dynamic-mark-boundary-cannot-resolve-a-note-landing-exactly-on-it-2026-08-30-hw-confirmed)
+- [§KRZCOARSETUNE — `zone.coarse_tune` reached the E4B and AKAI writers but never the K2000 one (2026-08-31)](#krzcoarsetune-zonecoarse_tune-reached-the-e4b-and-akai-writers-but-never-the-k2000-one-2026-08-31)
+- [§KRZROOTLFO — K2000 LFO1->pitch "root-vs-transposed" depth distortion -- WITHDRAWN, and the reference preset's separate note-30 refusal fully explained as a second, unrelated sideband-tool ceiling, not a hardware or content effect (2026-08-31)](#krzrootlfo-k2000-lfo1-pitch-root-vs-transposed-depth-distortion----withdrawn-and-the-reference-presets-separate-note-30-refusal-fully-explained-as-a-second-unrelated-sideband-tool-ceiling-not-a-hardware-or-content-effect-2026-08-31)
+- [§KRZENVLOOP — a KRZ envelope held past its own total RE-CYCLES instead of holding silent -- NOT a general K2000 firmware defect (2026-08-31, HW-confirmed against the final firmware with a clean control); specific to this project's own output, real cause under investigation (2026-08-27, mechanism 2026-08-31, corrected 2026-08-31)](#krzenvloop-a-krz-envelope-held-past-its-own-total-re-cycles-instead-of-holding-silent----not-a-general-k2000-firmware-defect-2026-08-31-hw-confirmed-against-the-final-firmware-with-a-clean-control-specific-to-this-projects-own-output-real-cause-under-investigation-2026-08-27-mechanism-2026-08-31-corrected-2026-08-31)
+- [§AKAICHOKECURVE — the AKAI mute-cut's real two-stage curve is wired for K2000 output only, pending E4B/EIII verification (2026-08-31)](#akaichokecurve-the-akai-mute-cuts-real-two-stage-curve-is-wired-for-k2000-output-only-pending-e4beiii-verification-2026-08-31)
+- [§AKAICHOKEFILTER — the velocity-to-filter floor fold clamped the resting corner but not the depth (2026-08-31)](#akaichokefilter-the-velocity-to-filter-floor-fold-clamped-the-resting-corner-but-not-the-depth-2026-08-31)
+- [§AKAILAYERGAP — a partial layer fusion left a hole that gap-fill patched with the wrong sample (2026-08-31)](#akailayergap-a-partial-layer-fusion-left-a-hole-that-gap-fill-patched-with-the-wrong-sample-2026-08-31)
+- [§KRZDECAYRATE — REFUTED: the K2000 decay field is a time to the target after all, and the real defect is the LEVEL (2026-08-31)](#krzdecayrate-refuted-the-k2000-decay-field-is-a-time-to-the-target-after-all-and-the-real-defect-is-the-level-2026-08-31)
+- [§KRZDBLZERO — two consecutive null release stages loop the envelope back to Att1 (2026-08-27)](#krzdblzero-two-consecutive-null-release-stages-loop-the-envelope-back-to-att1-2026-08-27)
+- [§KRZLEVELCURVE — the K2000 envelope LEVEL field is dB-linear, not linear amplitude percent (2026-08-31)](#krzlevelcurve-the-k2000-envelope-level-field-is-db-linear-not-linear-amplitude-percent-2026-08-31)
+- [§SPACEEPREDICT — what v12 should sound like, written down before anyone hears it (2026-08-31)](#spaceepredict-what-v12-should-sound-like-written-down-before-anyone-hears-it-2026-08-31)
+- [§KRZAMPVEL — every K2000 voice inherits #199's velocity→amplitude, and the model cannot carry the source's own (2026-09-01)](#krzampvel-every-k2000-voice-inherits-199s-velocityamplitude-and-the-model-cannot-carry-the-sources-own-2026-09-01)
+- [§AKAINAMEDOT — the AKAI program name was run through a filename helper and lost its tail (2026-09-01)](#akainamedot-the-akai-program-name-was-run-through-a-filename-helper-and-lost-its-tail-2026-09-01)
+- [§KRZVELOFFSET — the pivot asymmetry's predicted level deficit, written down before it is measured (2026-09-01)](#krzveloffset-the-pivot-asymmetrys-predicted-level-deficit-written-down-before-it-is-measured-2026-09-01)
+- [§AKAIVELARCH — the reference preset's velocity architecture is level plus filter-envelope depth plus attack rate, and only the level is carried (2026-09-01)](#akaivelarch-the-reference-presets-velocity-architecture-is-level-plus-filter-envelope-depth-plus-attack-rate-and-only-the-level-is-carried-2026-09-01)
+- [§KRZSHAREDGAIN — per-zone gain is averaged across presets into one per-sample byte (2026-09-01)](#krzsharedgain-per-zone-gain-is-averaged-across-presets-into-one-per-sample-byte-2026-09-01)
+- [§KRZRESKEYTRK — per-key DSP on the K2000: `F2 RES KeyTrk` and the FUNs (idea, 2026-09-01)](#krzreskeytrk-per-key-dsp-on-the-k2000-f2-res-keytrk-and-the-funs-idea-2026-09-01)
+- [§KRZPANREAD — the KRZ writer emits pan and the reader never read it (2026-09-01)](#krzpanread-the-krz-writer-emits-pan-and-the-reader-never-read-it-2026-09-01)
+- [§KRZF4AMPDEPTH — the K2000 tremolo law, and the constant that must be split before it is used (2026-09-01)](#krzf4ampdepth-the-k2000-tremolo-law-and-the-constant-that-must-be-split-before-it-is-used-2026-09-01)
+- [§AKAILFOAMP — the AKAI tremolo law is a product, and the model's ceiling was below the material (2026-09-01)](#akailfoamp-the-akai-tremolo-law-is-a-product-and-the-models-ceiling-was-below-the-material-2026-09-01)
+- [§MPCFILTER — the MPC filter section, measured (SETTLED 2026-09-01, hardware)](#mpcfilter-the-mpc-filter-section-measured-settled-2026-09-01-hardware)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -749,32 +777,57 @@ per-sample token, not "header".)
 
 ---
 
-## §MPCFILT — MPC filter dropped at max cutoff (how to fix)
+## §MPCFILT — MPC filter dropped at max cutoff (FIXED 2026-08-31)
 
-`parsers/pgm_parser.py` ~285:
+`parsers/pgm_parser.py`, inside `_parse_mpc1000`, used to drop the filter
+(`type=0`, discarding resonance and any filter-envelope modulation) whenever
+an MPC1000-family pad's cutoff was fully open (`f1_freq >= 100`):
 ```python
-# CURRENT — drops the filter (type=0) when fully open, losing resonance:
+# WAS -- gated the filter's existence on the cutoff position:
 if f1_type in _PGM_FILTER_XPM and f1_freq < 100:
     voice.filter_type      = _PGM_FILTER_XPM[f1_type]
-    voice.filter_cutoff    = min(1.0, f1_freq / 99.0)
+    voice.filter_cutoff    = nominal_knob_to_hz(f1_freq / 99.0)
     voice.filter_resonance = min(1.0, f1_res / 100.0)
 else:
     voice.filter_type   = 0
     voice.filter_cutoff = 1.0
 ```
-Fix: create the filter whenever `f1_type` is a real type, regardless of `f1_freq`:
+Fixed by dropping the `f1_freq < 100` condition -- the filter now exists
+whenever `f1_type` names a real type, at any cutoff:
 ```python
 if f1_type in _PGM_FILTER_XPM:
     voice.filter_type      = _PGM_FILTER_XPM[f1_type]
-    voice.filter_cutoff    = min(1.0, f1_freq / 100.0)   # /100 (was /99)
+    voice.filter_cutoff    = nominal_knob_to_hz(f1_freq / 99.0)
     voice.filter_resonance = min(1.0, f1_res / 100.0)
 else:
     voice.filter_type   = 0
     voice.filter_cutoff = 1.0
 ```
-Then grep `parsers/xpm_parser.py` for a `Cutoff >= 1.0 → skip filter` pattern and
-apply the same. Verify against a pad that has resonance (or a filter env) at max
-cutoff — it should now keep its bite. Cross-ref ConvertWithMoss `c7b9641`.
+The note that first identified this (2026-07-24) proposed changing the
+cutoff-knob divisor from `/99` to `/100` in the same patch, citing
+ConvertWithMoss `c7b9641`. That detail is now stale on its own terms: the
+code has since moved through `nominal_knob_to_hz(f1_freq / 99.0)` (the
+2026-08-25 "route unmeasured knobs through a named function" change), and
+`/99` is the divisor every other call site in this project already uses for
+the same knob -- changing it here alone, on the strength of a two-month-old
+note, would have made this one field inconsistent with its neighbours for
+no measured reason. Left as `/99.0`; the cutoff-scale question is
+independent of this bug and not addressed by this fix.
+
+`parsers/xpm_parser.py` was checked for the same "cutoff gates the filter's
+existence" pattern -- its MPC 2.x/3.x path constructs `filt_type` from
+`FilterType` directly, never conditioned on the cutoff value, so it does not
+have this bug and needed no change.
+
+**Tests**, `tests/test_pgm_parser.py` (new file -- `pgm_parser` had no
+dedicated unit tests before this): a synthetic single-pad `.pgm` built
+directly against the byte layout documented in the module's own docstring
+(no real corpus file used, to avoid embedding commercial sample-library
+content in a tracked test fixture). Three cases -- filter at a middle
+cutoff, filter at fully-open cutoff (the bug), and `filter_type=0`
+explicitly requested (confirms the fix is about the cutoff gate, not about
+ignoring the type field). The fully-open case confirmed to fail with the
+fix reverted.
 
 ## §MODELPARAMS — carry choke group / one-shot / key-track / round-robin (design)
 
@@ -6277,6 +6330,23 @@ f(n) = 21.377 * 1.05326^n      n = the UI knob 0..127
 **21.4 Hz .. 15.6 kHz, 9.51 octaves, 0.898 semitones per step.**
 
 ### Measurement
+
+**ENGINE MODE: LEGACY** — added 2026-09-01, and it was missing rather than
+implied. The note recorded the *firmware* (3.9.0.31) but not which keygroup
+engine was in use, and on a 3.9 machine that is a real fork: 3.9 keygroups have
+**two filters, routable in serial or parallel**, while legacy keygroups have
+one. Jan's rule for this bench is that anything not noted was legacy, and the
+fitted slopes below (−11.6 / −12.5 / −11.8 dB per octave, i.e. a single 2-pole)
+confirm it independently — two filters in series would have read ~24 dB/oct.
+
+Recording it because the omission cost an hour on 2026-09-01: a velocity→filter
+measurement taken in legacy mode was compared against this curve and the
+agreement was written up as a *cross-engine* result, then withdrawn, then
+reinstated once Jan confirmed both runs were the same engine. The measurement
+was never in doubt; the scope condition was. **A measured law needs its
+conditions stated even when they were obvious to whoever ran it** — this is the
+same discipline as the K2000 resonance law being explicitly scoped to
+`2POLE LOWPASS` and `4POLE LOPASS W/SEP` and no other algorithm.
 
 White noise through a single keygroup, Filter 1 set to **Low2**, resonance 0,
 filter-envelope amount 0. One recording per knob position; each spectrum is
@@ -20584,3 +20654,1368 @@ then, do not trust a KRZ-written decay or release longer than ~5s to land
 where its seconds say it should.
 
 Related: §KRZRELKNEE (found this), §CORPUSRT (the rate law this borders).
+
+## §AKAIVFRREAD — the AKAI reader finally populates velocity->filter, gated by which assignable slot actually names velocity (2026-08-31)
+
+Full writeup in `TODO.md` (the preset 4 v=40 entry); this heading exists
+so the citation resolves and to record the two mistakes made building it,
+since both are reusable lessons.
+
+**The gap.** `writers/akai_s3000_writer.py:496` already documented, since an
+unrelated 2026-08-25 writer-bug writeup, that "the AKAI reader does not
+populate `velocity_to_filter_cents`" -- never turned into a read-side fix
+until tonight. Root-caused to explain a real hardware symptom: `K_FREQ`
+correctly drags a keygroup's filter down at low notes (already modeled),
+and the AKAI compensates with a velocity-to-filter-frequency routing that
+opens it back up at low velocity -- which this project's reader silently
+read as zero, so the compensation never reached the K2000 output and low
+notes on the affected patch came out closed instead of merely quiet.
+
+**First mistake, caught before shipping (s3ked).** Keygroup bytes 151/152/
+153 are NOT fixed "velocity/LFO2/env2" fields, despite this project's own
+earlier §AKAIVFR write-up framing them that way. They are AMOUNTS for three
+program-level ASSIGNABLE modulation-source slots (`MODSFILT1/2/3`, program
+bytes 84/85/86, 15 possible sources each). Treating byte 151 as
+unconditionally velocity would misattribute an LFO or envelope depth to
+velocity on any program where the assignment differs. Fixed by reading the
+assignable-source byte alongside the amount and gating on it
+(`AKAI_MODSRC_VELOCITY = 5`, confirmed identically on two programs, the reference preset
+and preset 4 -- may be this library's common template rather than a fixed
+convention, so read per-program rather than assumed).
+
+**Second mistake, caught by checking the output rather than trusting the
+formula.** The derived cents span (from the writer's own `akai_velocity_filter`
+law, `_AKAI_VELFILT_CENTS = 4.368` cents/depth-unit/velocity-unit) can run to
+several octaves at the field's nominal scale -- §AKAIVFR's own measurement
+already says "most of the +-50 the field accepts is unusable" because the
+corner saturates at the machine's own Hz floor/ceiling well before the
+field's numerical limit. A first clamp attempt used `AKAI_FILTER_FLOOR_HZ`,
+which is a documented alias for a DIFFERENT modulation path's floor (the
+ENV2 sweep, 100 Hz) -- every keygroup on the test program sits below that,
+so the clamp silently zeroed every result instead of bounding it. Fixed by
+reading the filter's own true floor directly off `akai_filfrq_to_hz(0)`
+(7.6 Hz) rather than a same-sounding constant scoped to something else.
+
+**What is NOT fixed.** The clamp is symmetric (same magnitude up and down)
+and centred on `filter_cutoff` as already read, which is the writer's own
+PIVOT-adjusted value (velocity 64.56), not the true velocity-zero resting
+corner -- recovering that split exactly is underdetermined without a second
+independent measurement (documented in the parser's own comment). This is a
+real, acknowledged approximation of where the sweep centres, not an exact
+value; it recovers the right total swing where the field previously read
+zero, which is the improvement that mattered for the symptom that motivated
+it. Not yet hardware-confirmed end to end.
+
+**Deliberately held back from the card, 2026-08-31 (s3ked's catch).** This
+fix also fires on the reference preset -- same `MODSFILT1=velocity` assignment as
+preset 4 -- at a real, non-subtle depth (`MODVFILT1=35` of a possible
+±50, ~70%, on every keygroup, opening the filter strongly at high
+velocity). the reference preset is the live subject of a concurrent, unrelated
+investigation (§KRZLFOPITCH's low-byte vibrato-depth question, still open)
+on the SAME card. Retransferring this fix now would change the reference preset's
+filter character in the middle of that comparison -- exactly the shape of
+confound that already cost hours once tonight (an earlier release-rate
+investigation that turned out to be comparing against the wrong preset).
+Built locally (`out_MXS3toKRZ_v3`) and verified, but NOT retransferred to
+the card until the vibrato investigation concludes, specifically to avoid
+that confound rather than by oversight.
+
+## §AKAILFOWAVE — LFO1WAVE was never read, every AKAI conversion assumed triangle (2026-08-31)
+
+**The gap.** `akai_lfo_depth_to_pitch`'s RMS-to-one-sided-peak conversion
+hardcoded `sqrt(3.0)` (the triangle-wave factor) regardless of the source
+program's actual LFO1 shape, and program byte 97 (`LFO1WAVE`) was never
+read at all. Flagged during the the reference preset vibrato investigation as "real,
+smaller effect, not fixed" (TODO.md) before being fixed tonight, in
+parallel with the still-open depth-curve question.
+
+**Confirmed not to move the reference preset.** s3ked's §46 (2026-08-12, live K2000R --
+wrong machine name, that measurement is on the AKAI's own LFO1 via pitch
+tracking of its output over one cycle) named three of four values from
+their shape alone: 0=triangle, 1=sawtooth, 2=square. The fourth read as
+real but unidentified by shape ("consistent with a sine or trapezoid, not
+resolved" -- §46's own conclusion was to refuse to pick rather than
+assume), until Jan named it directly from the S3000XL manual itself
+(flitemedia.com S3000XL.PDF, page 80, 2026-08-31): **3=random**. the reference preset's
+`LFO1WAVE` reads 0 -- triangle -- so the pre-existing hardcoded factor was
+already correct for this specific program. The bug is real for any OTHER
+program using 1/2/3: sawtooth happens to share triangle's `sqrt(3)` so it
+was accidentally safe, but square's true factor is `1.0` against the
+`sqrt(3)` every prior conversion used for it -- a 73% depth error in the
+opposite direction (too much, not too little) from the reference preset's symptom.
+
+**The fix, `models/common.py` `AKAI_LFO_WAVE_RMS_TO_PEAK`.** A byte->factor
+table: 0/1 -> `sqrt(3)`, 2 -> `1.0`, 3 -> `sqrt(3)` again as an UNMEASURED
+stand-in, not the source of truth this note originally claimed. A first
+attempt derived the last one from a uniform-distribution assumption (a
+sample-and-hold process whose held values are uniform has RMS = peak/
+sqrt(3), same ratio as a triangle) -- proposed and WITHDRAWN the same
+night, s3ked (2026-08-31): §46's own "time near centre" statistic is
+self-calibrating, predicting and measuring ~0.33 for the two known
+uniform/ramp shapes (triangle, sawtooth) and 0.0 for square, and it reads
+0.16 for value 3 -- half the uniform prediction, so the generator is NOT
+uniform, weighted toward the extremes somewhere between uniform (RMS/peak
+0.577) and a sine's arcsine distribution (0.707). A higher RMS/peak ratio
+than uniform means a LOWER real peak for the same measured RMS, so `sqrt(3)`
+most likely OVER-estimates value 3's peak deviation -- the direction of the
+error is known, the number is not, and it is left unchanged rather than
+patched with a second guess. s3ked has offered a direct ten-minute
+measurement (their rig is warm) whenever the random path matters to
+something in flight; not run, because it does not touch the reference preset.
+Any value outside 0-3 falls back to this same, now-honestly-provisional
+factor -- a documented stand-in for anything truly unidentified, not a
+claim about its real shape. `akai_lfo_depth_to_pitch` takes the byte as an
+optional third argument; `None` (every call site before this fix, and any
+future caller that doesn't have the byte) keeps the old triangle-only
+behaviour exactly, so nothing already-shipped changes silently.
+
+**Also carries the actual shape, not just a corrected number.** Both the
+K2000 (`krz_writer.py` `_LFO_SHAPE`, byte-confirmed live 2026-06-17) and
+E4B (`e4b_writer.py`) writers already accept `voice.lfo1_shape` from the
+same triangle|sine|sawtooth|square|random|hemiquaver vocabulary, so
+`AKAI_LFO1WAVE_TO_SHAPE` (`parsers/akai_s3000_parser.py`) maps the AKAI
+byte straight onto it, including 3->`'random'` now that it has a name --
+the K2000 has no true S&H LFO and already approximates any `'random'`
+`lfo1_shape` with its own 8-step pattern (`_LFO_SHAPE`'s pre-existing
+fallback, unrelated to this fix). A sawtooth, square, or random AKAI source
+now writes the matching K2000 LFO, not a triangle carrying a depth number
+corrected to compensate -- the audible shape matches, not just the RMS.
+
+**Open, raised by Jan 2026-08-31 evening, not yet answered.** The K2000
+side of `_LFO_SHAPE`'s 2026-06-17 probe only confirmed byte<->LCD-LABEL
+correspondence (wheeling through values, reading what the panel calls each
+one) -- it never measured what the K2000 actually *outputs* when it says
+"Square" against the textbook RMS-to-peak ratios this fix assumes
+(`sqrt(3)` triangle/sawtooth, `1.0` square). If the K2000's real shapes
+deviate from ideal, that is an independent, unmeasured contributor to
+write-side depth error, additive to whatever the CAL[22] byte-curve
+question turns out to be. Asked of k2kremote, queued behind the current
+clean-material sweep, not yet run.
+
+**s3ked's attempted `random` (value 3) measurement, 2026-08-31 late:
+FAILED ITS OWN CONTROLS, no factor obtained -- but confirms the manual's
+naming a second, independent way.** They tried measuring RMS/max directly
+off the AKAI's own LFO1 pitch centroid on a white-noise carrier and
+included triangle and square as controls. Both controls came back wrong
+(triangle's RMS/max measured 0.335 against a required 0.577; square 0.319
+against a required 1.000), so the random figure alongside them (0.155) is
+not usable -- correctly withheld rather than reported. Diagnosis: the LFO
+signal itself is real and strong (a sharp spectral line at 8.25 Hz, 51x the
+surrounding median for triangle) but a spectral centroid taken over a short
+window of WHITE NOISE is itself a noisy estimator, and that noise inflates
+the observed maximum far more than the RMS -- 1.7x for triangle, 3x for
+square. Fixing it needs noise-floor subtraction in quadrature, fitting the
+known waveform rather than reading its extremes, or working from the
+amplitude distribution the way §46 did -- a design job, correctly deferred
+rather than improvised into a number that would only coincidentally look
+right.
+
+**What DID survive, and it matters independently of the failed factor:**
+triangle and square both show a strong, sharp spectral line exactly at the
+LFO rate (51x and 14x the local median); value 3 shows none -- its energy
+is scattered with no periodicity, the signature of an actually-random
+process and not of any periodic waveform. So "random" is now confirmed
+from the AUDIO side, independently of Jan finding the name in the manual.
+`AKAI_LFO_WAVE_RMS_TO_PEAK[3]` stays exactly as documented: `sqrt(3)`, an
+unmeasured stand-in, likely too high in a known direction. No code change
+from this measurement -- it added evidence for the shape's identity, not
+a number for its factor.
+
+## §AKAIPRGNUM0 — fallback-numbering-starts-at-1 proposed and REVERTED same night: it fixes an operating-procedure question, not our output (2026-08-31)
+
+**Found sideways, not by looking for it.** s3ked was verifying the AKAI was
+undamaged after a MIDI-flood power cycle (k2kremote's, unrelated to this
+writer) and, while comparing a cold-boot state against their own
+`clear_memory` baseline, noticed the two disagree: a cold boot leaves the
+machine with `TEST PROGRAM` at PRGNUM 0 **and four ROM samples resident**
+(`SINE`, `SQUARE`, `SAWTOOTH`, `PULSE`), while their own loader always runs
+`clear_memory` first, which deletes samples before programs -- so every
+measurement taken all night had `TEST PROGRAM` silent by construction, and
+an earlier claim that a PRGNUM-0 clash there was "harmless" was correct for
+the wrong reason (parked at a different number during capture, AND
+believed-silent when the second half of that belief was actually an
+artifact of the test workflow, not a property of the machine).
+
+**Why it matters here.** `write_akai_bank` (`writers/akai_s3000_writer.py`,
+the `_pnum` line inside `build_akai_volume`) numbers programs positionally
+starting at 0 whenever the source gives no distinct, in-range numbering to
+respect -- which includes every volume this project's OWN AKAI reader
+produces, since it always reports `program_number=0` (a documented, correct
+choice: 0 for every preset is "no information", and the fallback exists
+exactly for that case). That put our own first-written program on PRGNUM 0
+-- the same slot the machine boots into with an actually-sounding
+`TEST PROGRAM`/`SINE` pair. AKAI volume loads APPEND rather than replace
+(§94), so "power on, load a volume, play it" without a clear-memory first
+is an ordinary sequence, not a contrived one -- meaning a real user, on real
+hardware, with no unusual steps, could get an audible sine tone bleeding
+under program 1 of a volume this project wrote.
+
+**The fix that was built, then reverted.** The positional fallback was
+changed to start at 1 (`n_written + 1` instead of bare `n_written`),
+leaving source-honoured numbering (`_usable == True`) untouched. Two
+pre-existing tests pinning the old 0-based numbers were updated, a new
+roundtrip test was added, all confirmed to fail with the change reverted --
+the usual bar for shipping it.
+
+**Reverted the same night, Jan: this is not a converter defect.** Loading
+with CLR first is the ordinary panel workflow, not a special precaution --
+Jan does it as a matter of course, and it already clears the boot-resident
+`TEST PROGRAM`/`SINE` before anything of ours loads. So the specific
+sequence this fix was defending against ("power on, load a volume, play it,
+no clear in between") is not how the machine gets used in practice; framing
+it as "an entirely normal sequence, not an edge case" upstream in this same
+note was the mistake -- an assumption about operating procedure, stated as
+if it were a fact about the machine, and not checked against how the rig is
+actually run before code changed to defend against it. Whatever hazard a
+skipped CLR creates (and AKAI loads already APPENDING rather than replacing,
+§94, means a skipped CLR has other consequences too, not just this one) is
+a workflow question for whoever operates the machine -- s3ked's rig, in
+this case -- not something this project's PRGNUM choice can fix from the
+writer side. **All three changes (writer, both test files) reverted; the
+positional fallback is back to starting at 0.**
+
+**What's still true and worth keeping.** s3ked's underlying finding stands
+independent of the fix that was built on top of it: a cold boot and a
+`clear_memory`'d state are NOT the same S3000XL state (cold boot carries
+`TEST PROGRAM` + four ROM samples resident; `clear_memory` deletes samples
+first, leaving programs but no samples to sound), and an earlier claim that
+a PRGNUM-0 clash was "harmless" during tonight's measurements was correct
+for the wrong reason -- believed-silent was actually an artifact of always
+running `clear_memory` before capture, not a property of the machine in
+general. That distinction is real and worth remembering the next time
+someone reasons about what state the AKAI is in; it just doesn't call for
+a change on this project's side.
+
+## §AKAICARDTRANSFER — an AKAI append wrote source rates instead of resampled ones, off the media path not the converter (2026-08-30)
+
+Full writeup in `TODO.md` under the same tag; this entry exists so the
+citation resolves and to record the diagnostic method, since it is reusable.
+
+Two AKAI volumes (`MX1 E4XT V2`, `MX2 KRZ V2`) played mistuned on the card —
+up to 655 cents on the KRZ-sourced one, 0-4 cents (masked) on the E4B-sourced
+one, same mechanism, different exposure depending on how far the source rate
+sat from an AKAI-legal one. Isolated by reading the actual bytes at every
+stage rather than trusting logs: `convert.py`'s own build output on disk
+(`out_MXKRtoAKAI_v2/*.S3`, `out_MXE4toAKAI_v2/EMU_BANK.hda`) was confirmed
+byte-correct (SSRATE + byte 0x01 both right) by two independent reads; the
+verbatim block-copy function that writes an image (`append_akai_volumes`,
+`writers/akai_s3000_image.py`) was read line by line and confirmed incapable
+of touching a header byte. So the corruption was neither the converter nor
+the final image-write step — it happened in whatever process moved bytes
+between them, run earlier in the session and not recoverable. Fixed by
+re-transferring from the already-verified-correct build output via a single
+`append_akai_volumes()` call and confirming the result byte-for-byte and,
+separately, on the actual hardware (see TODO.md's HW-CONFIRMED entries).
+
+**The method, not just the result:** when a build step's own output and a
+later step's own logic are BOTH independently verified correct, the defect
+must be off that path entirely — worth checking both ends before assuming
+either one lied.
+
+## §KRZsplit patch 1 — a pure velocity split has nothing for disjoint-fuse to fuse (2026-08-30)
+
+Full writeup in `TODO.md` under the same tag.
+
+The K2000's 3-layer default guard (`_fit_layers`, `writers/krz_writer.py`)
+only fuses voices that are DISJOINT in key range — correct for a spread-out
+drum kit, but a pure velocity split (every layer sharing one key region,
+distinguished only by velocity, e.g. an AKAI keygroup's soft/hard dynamic
+layers) has no disjoint pair to offer it, so it fell through unchanged to
+becoming a >3-layer "drum program" — silent except on the drum channel.
+Added `_group_overlapping()` (union-find on the same disjoint check) and
+`_thin_velocity_voices()` (reuses `zone_reducer._thin_and_redistribute`, the
+same primitive `--reduce-velocity-layers` already uses) as a second reduction
+axis, applied only when what survives disjoint fusion is a single overlapping
+cluster — a real drum kit surviving as several small clusters is left alone,
+deliberately, to avoid thinning per-pad velocity layers nobody asked to have
+touched. HW-confirmed 2026-08-30: the motivating patches (preset 4, split patch 3
+E on the AKAI->KRZ route) went from unplayable-except-on-drum-channel to
+matching the pre-regression build's own behaviour exactly.
+
+## §KRZVELBOUND — a K2000 dynamic-mark boundary cannot resolve a note landing exactly on it (2026-08-30, HW-confirmed)
+
+`_vel_byte()` (`writers/krz_writer.py`) packs a layer's velocity window into
+two 0-7 "dynamic marks" (ppp...fff). An AKAI velocity-split layer with
+lo_vel=100 computes, under the writer's own forward mapping, to exactly the
+FIRST integer velocity of mark 6 — confirmed correct against the AKAI's own
+inclusive zone-2 boundary by a separate spectral measurement (s3ked), so the
+arithmetic was never in question.
+
+**HW-confirmed the K2000 firmware itself cannot reliably resolve a note
+played at that exact value.** k2kremote's own multi-velocity capture on the
+built KRZ file found all 4 test notes completely silent at velocity 100
+specifically, with both neighbours (99, 110) fully clean — a precise,
+complete dropout at one value, not a partial boundary miss. Confirmed
+surgically: nudging the live program's affected layer down one mark (6 -> 5)
+via SysEx, with nothing else changed, took the same velocity-100 test from
+0/4 to 4/4 sounded.
+
+**Fix:** `lo_mark` now floors instead of rounds to nearest (`math.floor`
+instead of `round`), and `hi_mark` mirrors with `math.ceil` — biasing every
+velocity-split layer's boundary a few units away from the fragile mark edge
+rather than depositing it exactly on one. `hi_mark`'s ceil() side is
+untested on hardware (the confirmed case was the low edge) but follows from
+the same mechanism by symmetry. Same general principle as this project's
+key-zone and velocity-layer widening elsewhere: prefer a boundary a few
+units too generous over one that can silently exclude the exact value it
+was built to include.
+
+## §KRZCOARSETUNE — `zone.coarse_tune` reached the E4B and AKAI writers but never the K2000 one (2026-08-31)
+
+**Found while chasing the reference preset's vibrato, not by looking for it.**
+k2kremote's isolated-layer capture (Layer 2 alone, no other layer sounding)
+still showed the same huge, unmeasurable pitch deviation as the unisolated
+capture -- ruling out layer contamination/beating as the cause, and leaving
+"something about this specific layer's own content, not a modulation-routing
+parameter" as the live hypothesis. Reading the reference preset's AKAI source directly
+(`MXS3.hda` via this project's own `akai_image_parser`) to check exactly
+that: the surviving vibrato'd keygroup covering note 48 (`sample A`, root 48)
+carries `coarse_tune=12` -- a full OCTAVE of AKAI TUNE (keygroup+zone TUNE
+combined, correctly read by `akai_s3000_parser.py` since the 2026-08-23
+§AKAITUNEREAD fix: AKAI TUNE is 1/256-semitone units, split here into whole
+semitones (`coarse_tune`) and the sub-100-cent remainder (`fine_tune`)).
+
+**`writers/krz_writer.py` never read `zone.coarse_tune` at all** -- confirmed
+by grep, zero matches in the whole file before this fix. Only `fine_tune`
+(by construction always in roughly -99..+99 cents) reached the K2000 keymap
+entry's tuning field. `writers/e4b_writer.py` (`_zone_entry`) and
+`writers/akai_s3000_writer.py` both already read `coarse_tune` correctly;
+the K2000 path is the one writer that silently dropped it. Any source zone
+whose tuning exceeds the +/-100-cent range that fits in `fine_tune` alone --
+which a full-octave AKAI TUNE correction like this one does by construction
+-- was written to K2000 output with WHOLE SEMITONES of its intended pitch
+correction missing. the reference preset's Layer 2 specifically: a full octave.
+
+**Whether this explains the vibrato-depth measurement itself is NOT yet
+established.** LFO-to-pitch modulation is proportional (cents), so a static
+octave error should not, on its own, change a correctly-measured cents
+figure -- the mechanism connecting the two, if there is one, is more likely
+that a wrong-octave carrier throws off whatever frequency-domain assumptions
+the sideband tool's harmonic-neighbour band-selection makes (which is
+exactly the shape of the tool's own refusal: a required integration band
+reaching an unexpected neighbouring harmonic). Not confirmed either way --
+this is a real, independently-worth-fixing bug regardless of whether it
+turns out to be the the reference preset answer, and the next hardware step (does note
+48 actually sound an octave low on the currently-loaded, unfixed build) is
+what will show whether the two are connected.
+
+**The fix.** `_krz_write_keymap` (name approximate -- the zone-to-keymap-entry
+loop in `writers/krz_writer.py`): `tuning` now includes
+`zone.coarse_tune * 100`; the up-pitch ceiling check (which must stay
+consistent with whatever `tuning` actually contains, per its own existing
+`r_zone`-not-`r_sample` reasoning) evaluates against `r_zone - coarse_tune`
+rather than bare `r_zone`, since a positive `coarse_tune` uses exactly as
+much up-pitch headroom as lowering the effective root by the same amount
+would. One unrelated heuristic ceiling estimate elsewhere in the same file
+(the velocity-stack-overflow probe, `_compute_max_pitch` call near line
+1674) was NOT touched -- it only estimates whether a fusion heuristic should
+fire, not a value written to hardware, and folding `coarse_tune` in there
+too is a separate, lower-stakes cleanup if anyone gets to it.
+
+**Second half, found the same morning: the resample-headroom step had the identical gap.** `convert.py`'s KRZ headroom-aware downsample step (decides how far a sample can shrink while still being able to pitch UP cleanly to whatever key a zone needs) computed its required headroom from `hi_key - root_note` alone -- the exact same omission as the keymap-tuning bug, in a different function. For the reference preset's `sample A` (zone hi_key 59, root 48, coarse_tune 12): the old code budgeted `59-48=11` semitones of headroom and resampled to 25427 Hz -- enough for 11 semitones, nowhere near the real 23 the zone needs once coarse_tune is included. That undersized resample is why the FIRST coarse_tune fix (the keymap-tuning half, above) still left note 48 hitting the up-pitch ceiling at key 37: the ceiling was correctly computed from the sample's actual rate, but the rate itself was wrong going in.
+
+Fixed the same way: extracted the per-sample headroom computation into `krz_needed_up_semitones(bank)` (`convert.py`, module-level, was inline in `main()`) so it could be unit-tested, and added `+ zone.coarse_tune` to the per-zone need, taking the worst case across all zones sharing a sample. Verified the refactor is behaviour-preserving (rebuilt the reference preset before/after, byte-identical output) before trusting the fix's own effect. With the fix, `sample A` resamples to 24000 Hz (the project's own KRZ rate floor) instead of 25427 Hz, giving ~24 semitones of true headroom -- computed to fully cover note 48 (ceiling lands at key 48, exactly matching where the zone's own +12-semitone-shifted note 48 sits) where the tuning-only fix alone left it clamped at key 37.
+
+**Tests**, `tests/test_convert_resample_headroom.py` (new file): 5 tests on `krz_needed_up_semitones` directly -- coarse_tune included, coarse_tune=0 matches old behaviour, worst-case-across-zones for a shared sample, a zone referencing a missing sample is ignored rather than crashing, and `root_key=0` (the "use the sample's own root" default) still works. Confirmed to fail on revert (import error, since the function is new -- the refactor and the fix shipped together).
+
+**Hardware-confirmed, 2026-08-31 late morning: note 48 measures clean for the first time all night.** `carrier 260.78 Hz, mod 3.79 Hz, rms 9.66+/-0.73 ct, peak-sine 13.66ct, C/N 116.6dB, contained 100%` -- a clean octave-up carrier (confirming the ceiling is now fully cleared) and a peak-sine figure matching the programmed Depth=13ct within the measurement's own uncertainty. Both coarse_tune fixes are real and correct. **What they do NOT explain: note 30, same zone, same fixes, still fails identically to before.** A "root-vs-transposed" hypothesis was raised and briefly confirmed on synthetic material -- then WITHDRAWN the same day as its own analysis-window artifact; see §KRZROOTLFO below. Note 30's own refusal is unexplained again, and whether it is real or another analysis artifact has not yet been checked with the same rigor.
+
+## §KRZROOTLFO — K2000 LFO1->pitch "root-vs-transposed" depth distortion -- WITHDRAWN, and the reference preset's separate note-30 refusal fully explained as a second, unrelated sideband-tool ceiling, not a hardware or content effect (2026-08-31)
+
+**WITHDRAWN, 2026-08-31, same day, by k2kremote's own re-check.** Everything below this notice was reported as "HW-confirmed, general, not converter-specific" and was wrong. The root cause: the sideband tool's analysis window (t0/t1) defaulted too short to resolve this test program's actual ~2 Hz LFO rate (needs several full cycles -- "2.5 bins" -- to resolve a slow modulation, and a ~2.25s default window does not give a 2 Hz LFO enough of them). Every "CANNOT MEASURE" result attributed to root-vs-transposed position, including the note-42 capture originally reported as confirming it, **resolves cleanly once the window is extended to match the LFO period** -- note 42 (6 semitones off root): rms~3.6ct, peak-sine~5.1ct, matching Depth=5's calibration almost exactly, same as the root-key result. A full 11-point sweep at Depth=2 across +/-12 semitones, captured correctly the second time (see the JACK-wedge note below) and analysed with a properly extended window, resolved CLEANLY AT EVERY POINT: rms 1.26-2.0ct throughout, tightly matching Depth=2's own calibration, no distortion anywhere in the range. **There is no root-vs-transposed LFO depth effect.** k2kremote caught this themselves, by deliberately re-checking a result against the same discipline (extend the window, see if the refusal survives) already applied earlier the same night to the ORIGINAL calibration sweep's Depth=13/20 refusals -- which DID survive that check and are not implicated by this withdrawal.
+
+**the reference preset's own note-30 refusal was chased separately and is now ALSO fully explained -- as a second, unrelated tool limitation, not a hardware or content effect either.** k2kremote confirmed the "band needed X Hz reaches the neighbouring harmonic Y Hz" refusal is structurally different from the window artifact above (it does not depend on t1/sub_len, persisted at every window length tried up to 7.5s) and chased several real leads (a loop-boundary click in `sample A`, ruled out since the loop is exactly one fundamental cycle so a click there cannot produce a spectral line distinct from the harmonic series; a ROM-native acoustic piano at the same Depth measuring cleanly across a full octave, arguing against a general real-timbre effect). **eosed then read the tool's own source rather than reasoning about it from outside, and found the actual mechanism: a hard-coded guard, `half = 14*mod; refuse if half >= carrier*0.40` -- i.e. refuse whenever `mod >= carrier/35`.** At note 30's 92 Hz carrier that is a hard ceiling of **2.63 Hz** of LFO rate -- the reference preset's own LFO runs at ~3.76 Hz, so this zone was never measurable by this tool AT ANY DEPTH, independent of coarse_tune, the octave fix, the sample, or anything about the K2000. (The octave-correction fix, if anything, made this note MORE measurable, not less -- at its old, wrong, un-fixed pitch of 46 Hz the ceiling would have been 1.3 Hz, worse still.) **Two real bugs in the tool itself surfaced by this:** the refusal message prints the CARRIER frequency labelled as "the neighbouring harmonic," which is what made this look like a harmonic-collision problem in the first place; and `carrier_lo` defaults to 150 Hz, so any run that used tool defaults against a sub-150Hz carrier would have locked onto the wrong peak entirely and reported a harmonic as if it were the carrier -- worth checking which of tonight's runs passed an explicit `carrier_lo` versus relying on the default. **Conclusion: there is no unexplained K2000, converter, or sample effect left in this entire investigation.** Both real bugs found tonight (§KRZCOARSETUNE, the keymap-tuning and resample-headroom halves) are fixed, tested, and hardware-confirmed correct at note 48 (a clean, matching measurement). Note 30's continued refusal is fully accounted for by a measurement-tool ceiling, not a defect. **Do not cite anything below this notice, or the TODO.md rows built on it, as a real K2000 behavior** -- kept for the trace of how a genuinely thorough, honest investigation still took several wrong turns before finding the real, boring, entirely tool-side explanation.
+
+**Loose end from eosed's own fix, CLOSED same afternoon.** eosed fixed both tool bugs (corrected refusal message naming carrier/limit/ratio separately; both `sideband.py` and the `sideband_HANDOVER.py` copy k2kremote actually runs) and flagged `carrier_lo=150Hz`'s default as checkable-after-the-fact -- a run relying on it against a true carrier below 150Hz would have silently measured a harmonic instead of the fundamental. Checked: k2kremote grepped the actual `measure()` calls in all three scripts rather than trusting memory. Every one passes an explicit, per-note `carrier_lo` scaled to that note's own expected pitch (`expected_hz*0.75` in the Depth=2 sweep, `hz*0.6` in both ROM instrument tests, `carrier_lo=30.0` explicit even on the original note-30 re-check) -- none of tonight's runs ever touched the 150Hz default. "No distortion anywhere in the range" stands as measured, nothing provisional about it.
+
+---
+
+**Below this line: the original write-up, WITHDRAWN, kept only for the trace of how the false conclusion was reached.**
+
+**Not a converter bug. Confirmed on synthetic, non-AKAI material, so this is not a claim about mpc2emu's output -- it is a claim about the K2000R itself.** *(WRONG -- see withdrawal notice above. Kept verbatim below.)*
+
+**The finding.** With both §KRZCOARSETUNE fixes in, the reference preset's Layer 2 (a real AKAI-sourced electric-piano voice with `LFO1->Pitch Depth=13ct`) measures clean at note 48 (`rms 9.66ct, peak-sine 13.66ct` -- matches) but still refuses to measure at note 30, same zone, same voice, same fixes. The difference between the two notes is not tuning correctness (both are now written correctly, confirmed by carrier frequency: 260.78 Hz at note 48, a clean octave-up; 92 Hz at note 30, exactly the expected pitch for its own -6-semitone net shift) -- it is how much of that pitch shift comes from REAL-TIME key-tracking. Note 48 sits exactly on the zone's root key, so its shift is 100% the static `coarse_tune` field; note 30 needs the K2000's own live auto-transpose to do most of the work.
+
+**Confirmed directly, with a clean synthetic sawtooth, no AKAI content at all** (k2kremote): a K2000-native test program (ROM keymap 151, `LFO1->Pitch Depth=5`, previously calibrated `peak_cents==byte` at multiple depths -- see the CAL[22] byte-table clearing, TODO.md's the reference preset entry) --
+
+```
+  note 48 (its own root key): carrier 130.80 Hz, rms 3.60+/-0.10 ct -- matches the
+                              original root-key calibration exactly.
+  note 42 (6 semitones off root, SAME program, SAME Depth=5): carrier correctly
+                              locked to 92 Hz (so key-tracking/playback pitch itself
+                              is fine) but CANNOT MEASURE: the band needed (42 Hz)
+                              would reach the neighbouring harmonic at 92 Hz.
+```
+
+Same shape of refusal as every failed the reference preset measurement tonight, on material with zero AKAI heritage, zero coarse_tune, zero resample history -- moved 6 semitones off root and nothing else. **This settles it: LFO1->pitch depth is only correctly "byte=cents" at (or very near) a voice's own root key, and distorts/amplifies once the K2000 is simultaneously doing its own real-time pitch-shift interpolation on the same voice.**
+
+**Reframes both of tonight's earlier notes/30 results.** Note 30's continued failure after both §KRZCOARSETUNE fixes landed was never a second, unaddressed zone/keygroup bug (there is only one zone here) -- it is the SAME general effect, since note 30 requires -18 semitones of real auto-transpose. Note 48 measured clean specifically BECAUSE it happens to sit at the zone's own root, once the tuning fixes got that root landing correctly there. One finding explains both results.
+
+**Scope: far-reaching, not a the reference preset-specific or AKAI-specific issue.** This affects every LFO-pitch-modulated K2000 program this project has ever measured or will ever write, any time a note is played away from its own sample's root key -- which is the normal case for any multisample keymap with fewer zones than keys. It is a property of the K2000R itself, not of anything this project's writer does or fails to do.
+
+**What is NOT yet known.** The mechanism (does the LFO's cents-modulation somehow scale with the magnitude of live key-tracking transposition? Is it a fixed-point/interpolation-precision artifact in the K2000's own DSP engine when two independent pitch operations stack? Something else entirely) is unidentified. Whether the distortion is monotonic in `|note - root|`, whether it depends on shift DIRECTION (up vs down), and whether there is any usable compensation law are all open -- only two points exist so far (0 semitones: correct; -6 semitones: broken), nowhere near enough to fit or even characterise a curve. **No compensation should be attempted from two points** -- the same discipline this project has already been burned by breaking, and re-learned, more than once tonight.
+
+**Consequence for the reference preset, tonight's actual goal.** The two coarse_tune fixes are real, verified, worth keeping regardless. Whether they meaningfully close Jan's "way too much vibrato" complaint depends on where he actually plays/hears the preset: clean at the root (note 48) and in whatever neighbourhood stays close to it, still exaggerated further from it (like note 30) by this newly-identified, general, unfixed hardware effect. The only way to know whether the fixes already shipped are "close enough" is to actually listen to the corrected build against the AKAI reference across the range the reference preset is normally played -- not a further measurement round.
+
+**Blocked on:** Jan's decision on whether/how far to characterise this further (a proper multi-point sweep across semitone distance, in both directions, on the clean synthetic material, would be needed before any compensation could be responsibly designed) versus treating it as a documented, real K2000 hardware limitation and moving on. Not pursued further without that direction, given the scope of a new characterisation effort and how much ground has already been covered tonight.
+
+## §KRZENVLOOP — a KRZ envelope held past its own total RE-CYCLES instead of holding silent -- NOT a general K2000 firmware defect (2026-08-31, HW-confirmed against the final firmware with a clean control); specific to this project's own output, real cause under investigation (2026-08-27, mechanism 2026-08-31, corrected 2026-08-31)
+
+**CORRECTED, 2026-08-31, read this first -- everything below up to this point was written believing this was a general K2000 firmware defect. It is not.** Jan asked, reasonably, why a bug this impactful would still be in the last firmware ever shipped for the machine. k2kremote checked two things: the K2000R's OS is confirmed **3.87, the final release** -- there is no later version this could have been silently fixed in, so "already fixed" was never available as an answer either way. Then a clean control, entirely independent of this project's software: a fresh, disposable ROM-based program (199 "Default Program", AMPENV switched Natural->User) with the SAME short decay (Dec1=0.06s, Dec1%%=0) hand-set from the panel, Loop left untouched at its real default (Off), never saved. Held 5s: one clean attack transient, then flat at the noise floor (mean 3.1e-5, max 5.1e-5) for the entire remaining hold -- **no retrigger of any kind**, against every converted-layer test tonight showing bursts 5-30x the between-burst floor. **A correctly-structured, hand-programmed envelope on the actual final firmware does not exhibit this at all.** Kurzweil never needed to fix it, because normal use -- programming an envelope from the panel -- never produces it. Whatever is happening on the reference preset's Layer 1 is specific to a byte pattern this project's own writer produces, not the base envelope engine. Live thread on what that byte pattern actually is: reading the raw file bytes directly (not any interpreted view) shows this object's ENV loop-flag byte (offset 14) as 0 -- which should mean "Off" -- while the device's own panel display showed "Loop: seg3F / Inf" for the identical object. A direct contradiction between file and device, not yet resolved. (A separate suspected anomaly, an apparent Att3/Dec1 field swap, was checked directly against the file bytes and RETRACTED -- the decay value is correctly in Dec1; that was a misreading of which panel label maps to which byte position, not a writer bug.)
+
+**A logical constraint on the byte-14 hypothesis, caught by s3ked before more hardware time went into it: byte 14 is a CONSTANT in this project's output.** Confirmed from code -- every layer segment is initialized as a literal copy of the `_TPL_LAYER` template array, and no code path ever reassigns offset 14 afterward, so every object this writer has EVER emitted carries the identical value. A constant cannot by itself explain a symptom whose RATE depends on decay time (`period = T + 41.7ms`, established across a 25x range of T) -- if byte 14 alone were the cause, the retrigger period would not track T at all. So byte 14, if implicated, is at most a NECESSARY condition (something that gates whether re-cycling is even possible) rather than the whole mechanism -- the actual timing must come from somewhere else, most likely the envelope engine's own normal decay/rate behavior interacting with whatever byte 14 enables. Refines the target rather than ruling it out.
+
+**Two more targeted, cheaper checks identified, not yet run:** (1) a LIKE-FOR-LIKE byte-diff -- hand-program a SECOND control matching the reference preset Layer 1's actual envelope values as closely as possible, then diff against Layer 1's real bytes; a diff between two objects that differ in name/samples/every value already (the ORIGINAL "diff control vs the reference preset" idea) would return noise, not signal. (2) A separate, independent test of whether this project's stored `_TPL_LAYER` citation is itself stale: dump ROM #199 as it exists on this unit TODAY and diff against the template array on file -- matters on its own regardless of this bug, since every object ever written clones from it. Also queued: whether the retrigger appears on ALL converted K2000 patches or only short-decay ones (context for the constant-vs-selective question above), and a free, no-hardware check of what the earlier spurious t=4.135s onset-detector artifact actually landed on in that capture's own data, to either confirm or replace the "note-off arriving on schedule" story rather than leave it an inferred guess. All requested of k2kremote, none yet run.
+
+**The timing formula and the sustain finding below remain real, measured results -- they are just evidence of a converter-side bug now, not a hardware limit.** Read everything past this point with that correction in mind.
+
+**The bug, first found 2026-08-27.** `SPACE_ISO2` (real 5.1s decay, real 6.5s release) held for 22s decays and releases cleanly on schedule, reaches the noise floor by ~11.5s -- then rises back toward peak, plateaus, and decays a SECOND time, back to the floor by ~22s. A full second Att+Dec+Rel-shaped cycle, period ~11.6s, closely matching the encoded Dec1+Rel1+Rel2 total. Confirmed genuine K2000 firmware/engine behavior, not this project's writer, by three separate hardware checks: the ENV loop-flag byte (Type=Off vs seg1F) does not change WHEN the recurrence happens, only whether an extra burst rides on top; the level passes straight through the sustain band to the true noise floor rather than plateauing early (rules out a too-quiet sustain misread as silence); and a direct MIDI wire capture during the hold shows exactly one Note On and one Note Off, nothing synthesizing a spurious retrigger. Affects every KRZ file this converter has ever written whenever a note is held longer than that preset's own envelope total -- do not trust any KRZ-written envelope to hold at sustain/silence past roughly its own duration until this is settled.
+
+**Mechanism found, 2026-08-31, via an unrelated investigation (the reference preset's Layer 1) -- see TODO.md for the full trace of how it connected.** Jan, listening to a corrected the reference preset build, isolated K2000 Layer 1 alone and confirmed the vibrato complaint survived -- Layer 1 turned out to be the mute-choke "click" voice (§AKAIMUTESCOPE), whose envelope (attack=0, decay=0.058s, sustain=0, release=0) is about as short as this project has ever written, and its own LFO1-pitch cord was confirmed genuinely off by direct byte inspection. k2kremote captured it in isolation and found a rock-solid periodic amplitude retrigger at 10.03Hz sustained for the entire hold -- the SAME defect as `SPACE_ISO2`, just fast enough on this much shorter envelope to sound like flutter/vibrato rather than a single distant recurrence.
+
+**A precise formula, not just a confirmation.** s3ked proposed testing the flutter rate at multiple decay settings to discriminate between competing models of how the period scales with envelope length -- their first proposal (period = decay time exactly) was refuted by k2kremote's own initial 10.03Hz-at-0.058s reading before the wider test even ran (predicted 17.24Hz), caught and corrected the same afternoon rather than let a wrong prediction stand. Three revised models were tested at 0.040s and 0.100s decay: k2kremote measured 12.29Hz and 7.05Hz (switching mid-run from peak-picking to onset-detection when the 0.100s capture's multi-lobed bursts confused the peak-picker, then re-running the 0.058s point through the same corrected method as a cross-check rather than mixing techniques across points). **`period = decay_time + ~41.7ms` fits all three points to within 0.1-1.7%** (12.24/10.03/7.06Hz predicted); a proportional-scaling model and a fixed-rate-independent-of-decay model are both clearly excluded by the same data.
+
+**What this answers, and what it does not.** It answers this row's own original open question ("does a shorter total avoid it?"): no -- the fixed +41.7ms overhead means every envelope re-cycles eventually, including the original 11.6s `SPACE_ISO2` case (11.6s decay+release + 41.7ms is consistent with the originally-measured ~11.6s period, within either measurement's own precision). **A longer envelope does not escape the bug, it only slows it down.** s3ked computed the practical consequence: even a much longer envelope (200ms: 4.14Hz; 500ms: 1.85Hz; 1000ms: 0.96Hz) stays audible as a slow pulse rather than disappearing -- real mitigation, not a fix, and should not be sold as one. The root firmware cause -- WHY the K2000 re-cycles at all, and what the +41.7ms overhead physically corresponds to (a fixed voice-retrigger or engine-timing latency is the obvious guess, unconfirmed) -- remains open.
+
+**A possible structural fix, proposed by s3ked, REFUTED the same afternoon.** The idea: if the re-cycle fires on envelope COMPLETION (reaching its final target while the note is still held) rather than on a fixed timer, an envelope with a genuine nonzero SUSTAIN would never complete while held and would have nothing to re-cycle from. Cheap, decisive test: k2kremote set Dec1%% (the AMPENV field controlling the decay target, confirmed by watching its own display increment as the wheel turned) from 0 to 30 on the same 0.058s Layer 1 and held a note for 5s. **Result: no change at all** -- 9.99Hz retrigger rate at both 0 and 30, essentially identical to the original 10.03Hz baseline, persisting unchanged right to note-off. **Completion-based is dead: the re-cycle is genuinely time-based**, matching the `decay + ~41.7ms` formula regardless of what the envelope's target level is. One side finding worth keeping regardless: the trough level between bursts did NOT rise toward 30% of peak as a real sustain-holding envelope should -- it stayed under 1% either way, suggesting either the field doesn't mean what was assumed or the retrigger mechanism ignores/overrides the sustain state entirely. Not chased further.
+
+**Where this leaves the bug: real, precisely characterized (period = decay + ~41.7ms), and with no known way to eliminate it via envelope shaping -- only slow it (a longer envelope) or, per the refuted idea above, NOT stop it (a nonzero sustain).** The root firmware cause remains unidentified; solving that would need deeper reverse engineering than this session had room for.
+
+**Duration and loudness turn out to be independent, separately-tunable levers, not one blunt choice -- s3ked's reframing.** Everything above reaches for envelope DURATION (a longer decay slows the retrigger RATE, per the formula, but per s3ked's own numbers even a 1s envelope still re-cycles at ~1Hz, audibly). But the re-cycle retriggers the envelope's own ONSET, and the AKAI's real choke-cut holds full level for only 4-5ms before falling -- so the part that makes each retrigger burst LOUD is also the briefest part of the true curve. **Starting the modelled cut at a later point on that curve trades a small amount of onset fidelity for a large reduction in how loud each burst is, independent of how often it fires:** sacrificing the first 8ms (of the AKAI's own measured curve, §155's amendment) buys ~13dB quieter bursts; sacrificing 12ms buys ~21dB (revised from an initial ~23dB, see below). On a layer that is a choke-click by nature, losing a few milliseconds of onset is a small, bounded, explicitly-stated infidelity -- a materially easier thing to defend than an arbitrarily lengthened envelope, which is unfaithful across its entire duration and only slows the artefact rather than quieting it. **The two levers combine:** the two-stage AKAI choke-cut curve (§155's amendment, independently motivated by fidelity regardless of this bug) both lengthens the envelope (slowing the re-cycle) and, if started partway through rather than at 0dB, quiets each individual retrigger too.
+
+**The two levers converge on a single, non-arbitrary point rather than requiring a taste-based tradeoff -- s3ked's final synthesis.** Set the onset to the AKAI's own measured level past 12ms and the duration to its own measured tail (~200ms) and the result is not a compromise: **it IS the measured AKAI curve with only its first 12ms (the part that cannot be modelled at all without reproducing the very burst causing the artefact) removed.** That point is simultaneously MORE faithful than the current 0.058s linear model from 12ms onward, quieter per retrigger burst (down instead of full level), and slower (~4Hz instead of ~10Hz) -- three improvements from one change, not three things traded against each other. The entire cost is a stated, bounded 12ms of onset -- the full-level hold and the cliff -- against a 10Hz full-level buzz. **If Jan wants a different balance either lever can still move independently -- but the default has a principled position (model exactly what was measured, starting where it becomes modellable) rather than an arbitrary one.**
+
+**Level figure revised, same session: -21dB, not -23dB, and "knee" not "plateau" -- s3ked re-measured the exact band a model would actually hold.** Six repeats, averaged envelope-wise (not longer windows, which would smear an 18ms feature). The 12ms point reproduced almost exactly (-23.36dB here against -23.18dB before, separate captures) -- that number is the KNEE, the bottom of the fast initial fall, not a level to sit at. Past 12ms the cut recovers about 3dB by 14ms before resuming its decline (real, well outside repeat-to-repeat precision of 0.33dB median) -- so the band mean a held onset level should actually target is **-21.2dB over 12-25ms**, not the knee's -23dB. What originally read as a "plateau" (a hold, then a second fall) is actually a shallow, continuously steepening decline that only LOOKED flat because a ~1.6dB deterministic ripple in the uncut reference sits on top of a decline of under 0.5dB/ms -- comparable magnitudes over a 13ms window. **The design argument is unchanged; only the number moved.** One process note volunteered by s3ked: a slope fitted to the same 12-25ms band was checked (leave-one-out) before it shipped and found not real (moved between -0.232 and -0.532 dB/ms on one point dropped, since seven points across 13ms can't carry a gradient when one of them is a 3dB step) -- withdrawn before it reached this document, the same discipline that caught the LFO1WAVE=3 and sustain-collapse near-misses elsewhere in this session.
+
+**Result, 2026-08-31, TWO findings bigger than the question asked -- both flagged by k2kremote as "what was measured," not claimed as understood mechanism.** Att3=1.00s, Dec1%%=30, held 5s:
+
+1. **Sustain still does not hold, even here.** One attack/decay arc over 0-1.25s, then the level collapses to 0.1-0.9% of peak (indistinguishable from this rig's noise floor) and stays flat for the remaining ~4.6s -- no 30% plateau anywhere. Rules out "sustain works normally, only overridden during the fast re-cycle" -- **this is a real, separate problem with how a sustain level translates to a held level on this K2000 layer, independent of the flutter bug entirely, and potentially affects every sustaining K2000 patch this project has ever converted, not just choke-style short envelopes.** Genuinely bigger in scope than the the reference preset investigation this grew out of.
+2. **The re-cycle itself does not extrapolate the way the short-T formula suggests.** At T=1.0s the envelope fires ONCE, then goes flat for the rest of the hold -- it does NOT keep re-cycling roughly every ~1.04s the way `period = T + 41.7ms` (fit from three much shorter T values) would predict for continuous retriggering. A real boundary/threshold effect at longer T, separate from the sustain question, not yet understood.
+
+**Discriminator run, 2026-08-31, same afternoon -- s3ked's suspicion was correct about WHICH finding was the artifact, but the two split: one dissolved, one is now confirmed cleaner than before.** k2kremote's explanation: the T=1.0s/5s-hold capture's onset-detection found a spurious first-crossing at t=4.135s absolute instead of the real note-on near 0.4s, so "collapses at 1.275s and stays flat" was simply note-off at 5.4s arriving on schedule. **Root-caused directly, not just inferred, per s3ked's follow-up request:** the audio at t=4.135s is a real acoustic event (a genuine attack transient), and the capture's total file length (10.069s) ran nearly 2x the requested ~5.9s -- almost exactly the ~4.1s gap accounts for itself as excess leading silence before the real note. That one-off capture script created a fresh MIDI/JACK client per call rather than using this project's established persistent-recorder pattern (the exact client-churn issue that pattern exists to avoid) -- a capture-pipeline artifact, not a detection-script logic bug and not real K2000 envelope behavior. Confirmed, not merely plausible. Every substantive envelope finding tonight was built on the corrected 8s capture or other independently-verified captures, so nothing else changes -- this closes out where that one number came from.
+
+**"The re-cycle doesn't extrapolate past T=1.0s" -- RETRACTED, and the underlying formula is now stronger than before, not weaker.** Re-run with an 8s hold and WALL-CLOCK-VERIFIED note-on/off (0.400s/8.401s, logged directly from the MIDI send calls, not inferred from audio): onset-detection restricted to [0.45s, 8.38s] to stay clear of both edges found 7 onsets, evenly spaced at ~1040ms (std 4ms) = 0.96Hz, running continuously from t=1.519s to t=7.761s -- for the entire hold, not stopping. Matches `period = T + 41.7ms` almost exactly (predicted 0.96Hz). **The formula now holds confirmed across FOUR points spanning a 25x range in T** (0.040/0.058/0.100/1.000s), not three.
+
+**"Sustain does not hold" -- CONFIRMED, cleanly, on the same wall-clock-verified capture.** Trough between the ~1.04s cycles: 0.8-0.9% of peak, essentially zero, during a period where the note is unambiguously still held (verified against the logged MIDI timing, not a note-off artifact this time). This part of the original finding stands and is now on firmer ground than before, not weaker -- **a real, separate problem with how a sustain level translates to a held level on this K2000 layer, independent of the re-cycle bug, and potentially affecting every sustaining K2000 patch this project has ever converted.** Not yet chased further -- past the scope this investigation started from (the reference preset's Layer 1 vibrato), needs Jan's priority call on whether/how to pursue it.
+
+**Edit-buffer drift RULED OUT, 2026-08-31, by a fresh-reload control.** k2kremote loaded `FROM_S3.KRZ` into a brand-new, never-touched bank (program 702) specifically to sidestep any question about hours of accumulated live editing on the original object (602). DUMP'd immediately after load, before opening the panel at all: identical bytes to 602 (`Dec1=6` real, everything else floor, loop byte 0). THEN opened the panel for the first time ever on this object: same disagreement exactly -- big value shown at "Att3," Loop shown as "seg3F." **Reproduces on an object with zero edit history, from the very first time it is ever viewed.** The DUMP-vs-panel disagreement is real and reproducible, not testing artifact.
+
+**AMPENV mode (Natural vs User) RULED OUT as the cause, from code, no hardware needed.** `_patch_layer` unconditionally sets `seg(0x20)[1] = 0` (User mode) for every voice before writing the envelope -- confirmed by direct read of `writers/krz_writer.py`, no exceptions, no code path that could leave a voice in Natural mode (where the K2000 ignores the ENV bytes and plays the sample's own envelope instead, which is why k2kremote's own control needed that same switch made manually).
+
+**"Panel-vs-DUMP disagreement" RETRACTED by k2kremote themselves, and replaced with something more precise: it was their own segment-layout misparse, not a device quirk.** They had assumed the loop byte came AFTER the 7 (time,level) pairs and matched the file's own pair order; the clean 991/992 single-byte diff, re-examined carefully, actually shows **loop byte FIRST (right after the tag), then 7 pairs in (level,time) order** -- the opposite of both assumptions. With that correction, the device's raw bytes for the reference preset's Layer 1 (602 and the fresh 702, byte-identical) decode as: `loop=3(seg3F), Att1=(100,3), Att2=(100,3), Att3=(100,6), Dec1=(0,3), Rel1=(0,3), Rel2=(0,3), Rel3=(0,0)` -- **matching the live panel exactly, field for field.** No panel/DUMP disagreement after all.
+
+**What survives, now on solid, cross-checked ground: this is a real FILE-vs-DEVICE difference, not a display bug.** This project's own file bytes (`_fill_env`'s convention: time,level pairs, loop byte LAST) put the one real value at Dec1 (byte pair index 3) with loop=0. The verified device/RAM bytes (loop FIRST, level,time pairs) put that same real value at Att3 (index 2) with loop=3. Something in the path from this project's `.KRZ` file bytes to the K2000's live RAM object is not a straight copy -- it is reordering pair components (time<->level) and/or shifting which stage the real value lands in, and setting loop non-zero where the file specifies zero. That translation is squarely this project's own file-format-vs-RAM-format territory to trace, not something further hardware probing alone can settle.
+
+**Open question, not yet answered: is this shift specific to this DEGENERATE envelope shape (six near-identical floor-value stages, one real value), or does it happen on every envelope this writer produces, invisibly, because normal envelopes have no repeated stages to expose it?** Layer 2 (the reference preset's real electric-piano envelope -- decay 5.1s, release ~2.7s, KNOWN correct all night by measurement) is a genuinely different, non-degenerate shape. Requested of k2kremote: DUMP Layer 2 on the same object with the now-corrected parsing and compare against this project's own file bytes for it. If Layer 2 matches 1:1, the shift is specific to the degenerate shape (six floor-value stages) and something like a run-length/deduplication quirk in the K2000's own load parsing becomes the leading candidate. If Layer 2 ALSO shows a similar shift, there is a general file->RAM transformation on every envelope this writer has ever produced, and its exact rule needs to be found and reversed. Not yet run.
+
+**Answered: Layer 2 matches too -- there is NO file-to-RAM transformation at all. The "shift" was always in how this project's OWN docs/code read the file bytes, not in what the device does with them.** k2kremote DUMP'd Layer 2 and applied the corrected parsing (loop byte first, then seven `(level,time)` pairs) directly to the *file* bytes this project wrote, with no device-side reinterpretation assumed: Att3=5.10s, Dec1=5.20s, Rel1=1.30s, Loop=Off -- matching the reference preset Layer 2's known-correct, all-night-verified real envelope field for field. File bytes and device bytes are byte-identical (as they always were -- there is no load-time reordering); what was wrong was `docs/KRZ_FORMAT.md` §4.4 and `_fill_env`/`_decode_env`'s own shared assumption about which byte holds which field.
+
+**Third, independent, decisive confirmation: a genuine ROM factory object this converter never touched.** k2kremote DUMP'd K2000R program 1, "Acoustic Piano" -- pure factory ROM, never written or edited by this project's software -- and read its ENV segment: `[0, 100,0, 70,26, 45,32, 0,243, 24,14, 0,28, 0,0]`. Under the corrected convention (byte 0 = loop = 0/Off; then seven `(level,time)` pairs) this decodes to seven independently distinguishable, plausible piano-envelope values -- not a degenerate all-same-value case like Layer 1's click voice, so this is not a coincidence of a shape with few constraints. Under the OLD (wrong, `docs/KRZ_FORMAT.md`'s "HW-confirmed 2026-06-24") convention the very first non-trivial field is already wrong. **Three for three: the controlled 991/992 A/B diff, the reference preset Layer 2's real correct envelope, and this untouched ROM object all agree on the same convention, on hardware that has never seen this writer's output for the ROM case.** k2kremote's own guess (unverified) for how the original 2026-06-24 validation went wrong: it was likely checked by eye against a case where the shift happened to look plausible, or against the wrong field, rather than via a controlled byte-flip.
+
+**RESOLVED, 2026-08-31. Root cause and fix.** The TRUE K2000 ENV/ENC segment layout: byte 0 is a loop flag (`0`=Off, `1`/`2`/`3`=loop to Att1/Att2/Att3), then seven `(level, time)` pairs from byte 1 (levels on the odd bytes [1,3,...,13], times on the even bytes [2,4,...,14]). This directly explains the ENTIRE re-cycle mechanism documented above, not just the byte-layout question: `_env_time_byte` floors at raw value **3** -- even a zero-length attack encodes to 3, never lower. Under the OLD (wrong) layout, `_fill_env` wrote that floored value into byte 0 as "Att1's time byte" -- which is *actually* the loop flag, and `3` there means an active loop back to Att3. So nearly every voice this writer has ever converted for the K2000 with a short or zero attack got an accidental active envelope loop, retriggering roughly every `decay time + ~41.7ms` while the key was held -- exactly matching the timing formula measured above, to the byte. **Not a K2000 firmware defect. A self-inflicted byte-layout bug, present in this converter's entire K2000-writing history, now fixed.**
+
+**Code fix, 2026-08-31:**
+- `writers/krz_writer.py::_fill_env` -- now writes `b[0] = 0` (loop, explicit Off) and the seven pairs as `(level, time)` starting at byte 1, instead of `(time, level)` from byte 0 with byte 14 left as the template default. Docstring rewritten with the full three-way HW-confirmation trace and the old (wrong) note preserved, marked superseded, for the record.
+- `parsers/krz_parser.py::_decode_env` -- carried the identical byte-layout error (it's the reducer this project uses to read ANY K2000 program, including real corpus/RE files), so it was silently misreading every KRZ file's envelope, not just this project's own output. Fixed to match: pairs read as `(krz_env_byte_to_seconds(seg[2+2i]), level(seg[1+2i]))`. The "decay stage unused, holds previous level" special case (§KRZDBLZERO-adjacent, ConvertWithMoss PR #232) shifted its raw-byte check from `seg[6]==0 and seg[7]==0` (old Dec1 time/level) to `seg[7]==0 and seg[8]==0` (new Dec1 level/time).
+- `docs/KRZ_FORMAT.md` §4.4 corrected; the old table kept struck through in place, not deleted, with the three-way confirmation cited.
+- `README.md`'s "Fixed defects" section gained a new entry (newest-first) for anyone rebuilding banks from before this date.
+- New regression test `tests/test_krz_roundtrip.py::test_decode_env_rom_acoustic_piano_matches_the_corrected_byte_layout`, built on the real ROM "Acoustic Piano" bytes above, confirmed to fail with the parser fix reverted (decay/release both come out to nonsense values -- a ~50s decay and a multi-minute release for a piano). `tests/test_krz_roundtrip.py::test_decode_env_unused_decay_stage_holds_peak` (the existing ConvertWithMoss PR #232 test) updated to construct its fixture bytes at the corrected byte positions. Full suite: 538 passed, same 2 pre-existing citation-index failures as before this change (`§KRZRELKNEE`/`§KRZLONGENVGRID` missing index entries, unrelated).
+
+**HARDWARE RE-CONFIRMED, 2026-08-31, same afternoon -- the actual point of the whole investigation.** k2kremote rebuilt and re-tested against a fresh build (v7) transferred to the SD card and loaded into a brand-new, never-touched bank (program 302, sidestepping any edit-buffer-drift question the way the earlier 702 control did). First read the raw AMPENV before touching anything: `Att1=0.01 Att2=0.01 Att3=0.01 Dec1=0.06 Rel1=0.01 Rel2=0.01 Rel3=0.01, Loop=Off` -- the decay value is correctly in Dec1 now (not Att3), Att3 itself is back to a normal floor value, and Loop reads clean Off, exactly as the fix predicts. Then isolated Layer 1 (Layer 2/3 Enable:Off, same setup as every prior test) and held note 48 for 6s: **one clean attack burst (peak 0.0085 at ~25ms), decays over ~150ms, then flat at the noise floor (mean 2.8e-5, max 1.6e-4) for the entire remaining ~5.7s of the hold -- zero retriggering, zero bursts, nothing resembling the old 10.03Hz pattern.** Matches the original clean hand-programmed control (§KRZENVLOOP's own firmware-innocence test, above) exactly. **§KRZENVLOOP is closed: a real, fixed converter bug, not a K2000 hardware limit, confirmed end to end from ROM byte layout through a rebuilt file through the actual device.**
+
+**Checked, 2026-08-31, same afternoon: the "sustain does not hold" finding is NOT the same root cause -- confirmed genuinely separate.** k2kremote re-ran the exact same Dec1%%=30 test on the reference preset Layer 1 on the CORRECTED object (Loop now reads Off, Dec1 time correctly 0.06s -- the fix verified above): same pattern as before the fix, a quick decay to a low floor (mean 1.5%, max 5.1% of peak across a 0.5-5.3s hold window), nothing resembling a real 30% plateau. Since it persists identically on an object where the byte-layout bug is now fixed, it cannot be a symptom of that bug -- it is a genuinely separate, still-open issue with how a sustain level translates to a held level on this K2000 layer. Reverted Dec1%% back to 0 afterward. Worth its own investigation whenever there's time; does not affect §KRZENVLOOP's own resolution, which stands fully verified.
+
+**Still open:** `§KRZDBLZERO`'s own "two consecutive (0,0) release stages loops back to Att1" finding (cited in `_fill_env`'s comments) has not yet been reconciled against the new byte-layout understanding -- the existing two-leg release shape already avoids that pattern by construction, so no code change is required there regardless, but the mechanism explanation may need revisiting.
+
+## §AKAICHOKECURVE — the AKAI mute-cut's real two-stage curve is wired for K2000 output only, pending E4B/EIII verification (2026-08-31)
+
+**Found while chasing a live listening complaint, not a bench measurement.** With §KRZENVLOOP fixed and hardware-confirmed, Jan compared the rebuilt the reference preset Layer 1 against the original AKAI by ear (unmuted, unmodified, exactly as loaded from disc) and reported the K2000 version as lower in pitch and less metallic/clicky. A round of filter-cutoff and pitch investigation on both machines (k2kremote isolating the K2000 layer at multiple velocities, s3ked capturing the AKAI original) found the K2000's programmed VelTrk (velocity->filter depth) correct but audibly inert on both machines alike, and pitch matching almost exactly (131.15-131.51Hz K2000 vs 131.15Hz AKAI, both close to the 130.81Hz nominal for note 48) -- neither line of investigation explained the complaint.
+
+**The real cause: Layer 1's envelope was never the source keygroup's own envelope.** the reference preset's AKAI source has kg0 (the "click" voice, sample sample D, keys 24-59) and kg1 (the "real" electric-piano voice, sample sample A, same keys 24-59, `mute_group=0` on both) -- s3ked's isolated capture (deliberately moving kg1 out of range via HINOTE to bypass the choke) found kg0's TRUE programmed envelope is `ATTAK1=5, DECAY1=85, SUSTN1=6, RELSE1=45` -- a real, multi-second decay, not a click at all. Directly confirmed against our own parser: `parse_program_bytes` on the raw file reads the identical raw bytes (5, 85, 6, 45), byte for byte. So the parser's raw read was never wrong.
+
+What actually reaches the model is `parsers/akai_s3000_parser.py::_apply_mute_groups` (§AKAIMUTEGRP/§AKAIMUTESCOPE): kg0 and kg1 share a mute group and both cover keys 24-59, so on every real note-on both keygroups trigger together and kg0 (lower index, the "loser") has its envelope REPLACED with the synthetic choke-cut model (`AKAI_MUTE_CUT_SECONDS=0.058`, a plain linear-in-dB ramp to silence by 58ms) -- correct, measured, intended AKAI behaviour (the choke is real and Jan's unmuted listening test confirms it should apply), just modelled too crudely. Jan confirmed his AKAI reference was the normal, unmuted, disc-loaded patch -- so kg0 SHOULD be choked in his reference too, ruling out the "comparing an isolated vs. choked voice" mismatch as the explanation.
+
+**The crude model is a known, already-measured gap -- TODO.md's "the AKAI mute cut needs a HOLD stage" (§155 amendment, filed 2026-08-25).** s3ked's later, more careful re-measurement (using the choke SURVIVOR's own envelope to self-silence instead of quieting it via `VLOUD1`, which had floored the old technique at -21.56dB/30ms) found the real curve is two-stage: violent fall starting 6-8ms in (-3.4dB at 6ms, -13.2dB at 8ms), reaching **-23.4dB by 12ms** (reproducible to under 0.1dB across two independent sessions, averaged), then a real non-monotonic recovery (back up ~5dB by 16ms) before a much slower, non-exponential tail that is at least -31dB by 40ms and still audible past 200ms (floor-limited past that point; s3ked separately flagged that the previously-recorded "-42 by 50ms, -48 by 80ms, -60 by 200ms" figures straddle an analysis-window artifact and need re-measuring before anyone leans on them further -- not used here). Our current model reaches full silence at 58ms, well inside where the real machine is still meaningfully audible -- exactly consistent with "less metallic/clicky" (a truncated transient carries mostly the fast attack/noise content; the real machine's longer tail carries more of the sample's actual pitched body) and plausibly "lower in pitch" too, for the same reason.
+
+**Why this could not simply be a bigger `AKAI_MUTE_CUT_SECONDS`, or a richer shared model-level `Envelope`.** `_apply_mute_groups` builds `cut_env` ONCE, before any target format is chosen, and every writer (E4B, EIII, K2000) consumes the same object. A real two-stage curve needs `sustain` to mean "the level a HELD note sits at while stage two keeps advancing" -- safe ONLY on hardware whose release does not wait for note-off. Standard ADSR (presumed for E4B/EIII, not yet verified) gates release strictly on note-off, so writing a nonzero sustain there would leave a HELD note stuck audibly at -23.4dB indefinitely -- a worse bug than today's too-short click, not a fix. The K2000 is the one machine this project has hardware-proven is NOT gated this way: the entire §KRZENVLOOP investigation (above) only makes sense because Dec1->Rel1->Rel2->Rel3 run to completion automatically over time while a note is held, regardless of note-off, and (since the fix) correctly hold at true silence once done rather than looping.
+
+**Fix: `writers/krz_writer.py::_krz_choke_env`, K2000-scoped, shared AKAI-side model untouched.** Matches `voice.amp_env` against the EXACT mute-cut signature (`attack=0.0, decay=AKAI_MUTE_CUT_SECONDS, sustain=0.0, release=0.0, release_rate_db_per_s` unset) -- a deliberate, narrow value match, not a heuristic, since nothing else in this project ever asks for that specific fixed decay to absolute silence. When matched, substitutes `decay=0.012s` (reaches sustain by ~12ms, quantised to the K2000's own 20ms time-grid step on write), `sustain=10^(-23.4/20)≈6.8%`, and `release_rate_db_per_s=366.0` for the second stage. Called only at the amp-envelope call site in `_patch_layer`, not the filter-envelope one.
+
+**The 366 dB/s figure, and why a single rate rather than a genuine second release leg.** s3ked fit several options for the slower second stage (453 dB/s over 12-40ms, 193 dB/s over 50-80ms, or 207 dB/s anchored end to end) and recommended 366 dB/s (12-80ms window fit, +-5.2dB worst case) as the best single-rate compromise if a true multi-segment model wasn't worth building. Asked directly whether to instead chain a third segment through `_fill_env`'s existing two-leg release (Rel1/Rel2): s3ked ran a clean single-session sweep specifically to settle it and found **the dominant error in the audible region is the machine's own non-monotonic recovery bump (back up ~5dB between 12-16ms), which no additional monotonic segment can follow either way** -- a second leg (hold + 425 dB/s) only buys about 1dB of mean error over the single-rate fit (2.6dB vs 3.6dB mean, 12-40ms), not worth the rewrite or the risk of touching release code the §KRZENVLOOP fix had just stabilised. 366 dB/s was confirmed the right choice for an additional, better reason than originally given: it errs QUIET in the far tail (2.2dB under-measured at 80ms) rather than loud (207 dB/s would land 8.5dB over-measured at 80ms) -- too quiet in an inaudible tail costs nothing, too loud reproduces the exact artefact being removed.
+
+**Data quality, on the record:** the -23.4dB/12ms figure and everything out to 40ms is reproducible to a mean difference of 0.07dB across two independent capture sessions (once properly averaged -- an earlier, single-capture session had disagreed by 2.68dB at 30ms, resolved by the averaging). Anything past 40ms in the historical §155 doc should not be trusted without a re-measurement using a uniform analysis window (s3ked's own flag, correcting an artifact in their earlier wider-window pass at the 50ms point) -- not needed for this fix, since 366 dB/s already only touches the well-measured 12-80ms region and everything past that is inaudible under the K2000's own natural floor regardless.
+
+**Tests.** `tests/test_krz_writer.py::test_akai_mute_cut_gets_the_real_two_stage_curve_on_k2000` asserts the exact substitution (decay shortened, sustain at -23.4dB, release_rate_db_per_s=366.0) and that a similarly-shaped but NOT-exactly-matching envelope (a real nonzero sustain) passes through unchanged -- confirmed to fail with the substitution reverted to a no-op. Full suite: 539 passed, same 2 pre-existing citation-index failures as before this change.
+
+**Not yet done:** hardware re-confirmation (rebuild, transfer to the SD card, reload, and have Jan/k2kremote listen again -- the actual point, since this whole investigation started from his ears). Also still open: whether E4B/EIII actually gate release on note-off -- if not, the same fix could extend there; if so, today's shorter model is already the correct, safe choice for them and nothing needs to change. Filed in TODO.md rather than assumed either way.
+
+**A scare, raised and retracted the same evening: does the fix even reach the audible output?** A whole-patch (all 3 layers) capture found Layer 1's fundamental (131Hz) at nearly identical level whether the choke curve was v7's old 58ms model or v8's new two-stage one -- read at first as "the fix isn't reaching the mix at all," alarming enough to nearly redirect the whole investigation. **Retracted after a proper positive control:** k2kremote live-edited Layer 1's Dec1%% to 100 (obviously, deliberately unchoked) on the same loaded bank and re-measured -- absolute FFT magnitude at 131Hz jumped ~8x (~18dB) against both v7 and v8. AMPENV demonstrably does reach and control the audible output; v7 and v8 simply sit too close to each other (both end near-silence well inside the analysis window) to show a measurable DIFFERENCE relative to EACH OTHER, which is not the same claim as "neither one is being applied." The real open question was never "is AMPENV bypassed" -- it's whether the shape (now the two-stage curve, sustain=-23.4dB by 12ms then 366dB/s) is the right target to close the remaining brightness gap, which is what the next whole-patch listen/measurement on v9 should settle.
+
+## §AKAICHOKEFILTER — the velocity-to-filter floor fold clamped the resting corner but not the depth (2026-08-31)
+
+**Found chasing the remaining ~24% brightness gap after §KRZENVLOOP and §AKAICHOKECURVE landed.** With the envelope re-cycle fixed and hardware-confirmed, and the choke-cut curve corrected for K2000, Jan and k2kremote's whole-patch spectral comparison (see §AKAICHOKECURVE's tail and the live investigation thread) still showed the K2000 conversion measurably darker than the AKAI original -- a real but modest gap (K2000 centroid ~5173Hz vs AKAI ~6790Hz, about 24% lower), not the earlier isolated-layer comparison's since-retracted 4.6x figure (that one turned out to be comparing against the wrong AKAI reference entirely -- an unchoked kg0, see s3ked's correction in the live thread; not a code defect).
+
+**The lead: the reference preset's Layer 1 already had a known, real, unrelated bug from earlier the same night** (found while investigating the velocity/filter thread before the choke-curve pivot): `writers/krz_writer.py::_patch_layer`'s velocity-to-filter fold branch (§KRZVELFOLD's own fallback path, "0 of 1383 corpus routings take this branch" per that fix's own comment -- the reference preset's Layer 1 is apparently one of the first real zones to actually exercise it). The AKAI source has a large, genuinely floored velocity->filter sweep on this voice: base cutoff 96.05 Hz, `velocity_to_filter_cents=+4390`, `velocity_to_filter_min_cents=-4390` -- a source that moves its own resting corner even at velocity zero, which the K2000's VelTrk byte cannot represent (it has no separate floor byte), so the fold anchors the WRITTEN base cutoff at the floor instead: `96.05 * 2**(-4390/1200) ~= 7.6 Hz`.
+
+**The bug: 7.6 Hz is below the K2000's own absolute cutoff floor (16.35 Hz, byte -48).** `_cutoff_byte_hz` correctly clamps the WRITTEN byte up to 16.35 Hz when asked for something the hardware genuinely cannot go below -- that half is unavoidable, a real limit, not a defect. But the velocity DEPTH byte (`hob_f1[4]`, `_vel_ct` in code) was computed as `vel_ct - vel_min_ct = 8780 ct` against the UNCLAMPED 7.6 Hz anchor, and written unchanged regardless of where the anchor actually ended up. Since the K2000's own VelTrk is unipolar from the WRITTEN (clamped) corner -- soft notes at the written cutoff, hard notes at cutoff + depth -- applying the full 8780 ct swing on top of the clamped 16.35 Hz anchor instead of the true 7.6 Hz one overshoots the ceiling by exactly the same 1.1 octaves the floor got compressed by: `16.35 * 2**(8780/1200) ~= 2.6 kHz`, where the AKAI source's own true ceiling (`96.05 * 2**(4390/1200)`) is `~1210 Hz`. Confirmed by direct calculation on the actual v8 build's written bytes before any code change: implied ceiling 2.58 kHz.
+
+**Not the whole 24% gap -- a real, measurable piece of it, on the one voice where the fold branch fires.** This bug is specific to sources with a genuinely floored velocity-to-filter sweep (both `velocity_to_filter_cents` and `velocity_to_filter_min_cents` nonzero) whose floor lands below the K2000's own 16.35 Hz representable minimum -- a narrow, previously-unexercised condition (§KRZVELFOLD's own corpus sweep found zero real-world hits before the reference preset). Doesn't explain the whole-patch centroid gap by itself, but is a genuine, unambiguous over-brightening on exactly the layer under investigation, worth fixing regardless of how much of the remaining gap it turns out to account for.
+
+**Fix: `writers/krz_writer.py::_patch_layer`, inside the existing fold branch.** After computing the floored anchor and the initial depth (`_vel_ct -= _vel_min_ct`, unchanged), check whether the floored anchor (`_true_floor_hz`) sits below the K2000's own minimum representable Hz (`krz_cutoff_byte_to_hz(_KRZ_CUT_BYTE_MIN)`). If it does, compute the lost headroom in cents (`1200 * log2(min_hz / true_floor_hz)`) and subtract it from `_vel_ct` before encoding, clamped at zero so a pathological case can't go negative. The written cutoff byte itself is untouched (still correctly clamps to the hardware floor) -- only the depth is adjusted, so the ceiling lands back near the source's true value regardless of where the floor had to clamp.
+
+**Verified against the reference preset's actual numbers, before and after:** rebuilt (v9) and re-parsed the written KRZ -- `velocity_to_filter_cents` for Layer 1 reads back as 7500 ct (was 8780 implicitly via the old, unadjusted 8800 ct byte), giving an implied max-velocity ceiling of ~1244.5 Hz against the AKAI's true ~1210 Hz -- close, appropriately quantised by the depth byte's own table, and nowhere near the old ~2.6 kHz overshoot.
+
+**HARDWARE-CONFIRMED END TO END, 2026-09-01** (k2kremote, read live off v13 at program 702 against s3ked's live read of the AKAI source). This branch had never been exercised by real material before the reference preset -- its own comment says "ZERO of 1383 velocity routings in the corpus take this branch" -- so this is its first real test, and it passes:
+
+| | source intent | K2000 actual | top-of-sweep error |
+|---|---|---|---|
+| L1 | 7.61 – 1212.73 Hz | 16.35 – 1244.51 Hz | +44.8 ct |
+| L2 | 84.04 – 8479.36 Hz | 73.42 – 8372.02 Hz | −22.1 ct |
+
+Both sweep tops land within ~45 cents of what the AKAI actually does. The resting corner on L1 sits at 16.35 Hz instead of 7.61 — unavoidable, it is the machine's floor — and the depth is correctly reduced by the 1325 ct lost to that clamp, which is exactly what this fix added.
+
+**A 200-cent discrepancy in an independent forward-run was traced and is not a defect.** k2kremote calculated kg1 alone and got byte −20 / 7989 ct against the hardware's −22 / 8200. The missing step is **§AKAILAYERGAP**: since that fix the writer does not emit kg1 alone — `_fit_layers` fuses all three pad voices into one K2000 layer and `_fuse_voices` key-span-weighted-averages the continuous filter fields on the way (kg1's 844.18 Hz / 3994.3 ct becoming the fused 797.90 Hz / 4124.6 ct). Both calculations were correct; they were of different objects.
+
+**Worth stating generally, because it will catch anyone comparing per-keygroup source values to per-layer K2000 values:** since v13, **K2000 layer 1 is the three choke-losers fused and layer 2 is the three survivors fused** — neither corresponds to a single AKAI keygroup, and cutoff, resonance, filter-env depth, keytrack and both velocity-filter fields are all averaged across the merge by design.
+
+**And an incidental finding that retires a standing suspicion: ROM #199 — the program `_TPL_LAYER` is byte-identical to — has F1/F2/F3 OFF and a single layer, i.e. no filter at all.** So every filter value on a converted program is written by us and none of it is template residue. That closes a class of doubt carried since the template audit (§KRZAMPVEL), where the AMP block's inherited VelTrk 35 dB *did* turn out to be real template content.
+
+**Tests.** `tests/test_krz_writer.py::test_velocity_floor_fold_compensates_when_the_floor_clamps` builds the reference preset Layer 1's exact real-world case (96.05 Hz, +/-4390 ct) and asserts both halves: the written cutoff still clamps to the K2000's own floor byte (the unavoidable part, unchanged), and the ceiling implied by the written depth byte now lands in 1000-1400 Hz (the source's true ~1210 Hz) rather than the old ~2.6 kHz -- confirmed to fail with the compensation reverted. Full suite: 540 passed, same 2 pre-existing citation-index failures as before this change.
+
+**Not yet HW re-confirmed.** Rebuilt (v9, includes both this fix and §AKAICHOKECURVE together) -- awaiting transfer to the SD card and another whole-patch spectral capture / listen to see how much of the remaining brightness gap this closes.
+
+## §AKAILAYERGAP — a partial layer fusion left a hole that gap-fill patched with the wrong sample (2026-08-31)
+
+**Found by ear, by Jan, looking at the K2000R panel: "why does Layer 3 only cover one octave?"** Not by any measurement — the whole-patch spectral numbers had been flat across three builds and gave no hint of it.
+
+**The source shape.** the reference preset on the AKAI is 6 keygroups in 3 identically-shaped choke pairs, verified by direct raw-byte read (not inferred): kg0/kg1 both keys 24-59, kg2/kg3 both 60-71, kg4/kg5 both 72-127, every one `mute_group=0`, every zone full-velocity 0-127. `_apply_mute_groups` (§AKAIMUTEGRP) collapses the three choke-losers into one click voice, so `_fit_layers` sees 4 voices: 1 click spanning 24-127, plus 3 disjoint, identically-shaped pad survivors that tile the keyboard exactly.
+
+**The bug.** `_fit_layers` ran a single greedy pass that fused only the MINIMUM pairs needed to reach the K2000's 3-layer limit — one fusion. It picked the two closest by continuous-parameter distance, which were the two NON-adjacent pads (24-59 and 72-127), leaving the middle pad (60-71) standing alone. The fused voice's own keymap now had a real hole at 60-71, and `_build_keymap_entries`'s gap-fill — mandatory, HW-confirmed 2026-06-24, a genuine delete-lockup hazard and correct in isolation — patched it by extending the 24-59 zone's sample across 60-71. That is the exact range the third, un-fused pad already covers with its own correct sample. **Two layers sounding together over one octave where the AKAI plays one.**
+
+**Why it read as "better" rather than "wrong".** Jan's own observation, and it is the tell: the doubled octave sounded *closer to the original* than the rest of the keyboard. The accidental second voice was adding back some of the brightness the conversion was otherwise missing. A bug that improves the sound in the range it corrupts is not going to be found by listening for faults.
+
+**Fix.** Two passes. PASS 1 closes every ADJACENT (`_spans_adjacent` — touching, no key between them), envelope-matching fusion, repeatedly, with NO regard for `limit`: an adjacent fusion can never create a hole, and it costs no more parameter-averaging than a partial fusion that leaves one. PASS 2, only if still over `limit`, falls back to the old closest-fusable-pair behaviour. the reference preset now goes 4 voices → **2** clean layers (click + one merged pad carrying all three original samples in their own correct zones), using fewer of the K2000's three layers rather than more.
+
+**Confirmed on hardware** (k2kremote, DUMP rather than panel-hunting): the reference preset now has exactly 2 keymaps in RAM against 3 for every other program in the file; ALG page reads `Layer:1/2`; the merged keymap's per-key sample-ID table shows exactly 3 distinct, cleanly-separated values in a 48/12/46-key split with no interleaving and no fourth value. Two limits on that verification, stated rather than glossed: the keymap format's key-index-to-MIDI-note offset is not calibrated, so the boundaries could not be confirmed to land exactly at 24/60/72; and the small integer sample IDs could not be resolved to names, so "the right sample in the right zone" rests on the structure being right, not on identity.
+
+**Test.** `tests/test_krz_writer.py::test_fit_layers_closes_every_gap_free_fusion_even_past_the_limit` builds the reference preset's exact shape and asserts 2 layers, 2 fusions, and gap-free non-overlapping zones — confirmed to reproduce the old 3-layer/hole result exactly when the two-pass logic is reverted to one pass.
+
+**Measured effect.** v10 was the first build of the night to move both whole-patch centroid and roll95 toward the AKAI at once (5173→5352 Hz and 8070→8410 Hz; v9 had moved the wrong way). And on note 63 — inside the repaired octave, and never measured before Jan suggested it — roll95 reads 18850 Hz against 8410 Hz at note 48, more than double any other note. A before/after at note 63 against v8/v9 is the outstanding evidence and has not been captured.
+
+## §KRZDECAYRATE — REFUTED: the K2000 decay field is a time to the target after all, and the real defect is the LEVEL (2026-08-31)
+
+**STATUS: REFUTED ON HARDWARE AND FULLY REVERTED. The hypothesis in this section is WRONG** -- kept because the investigation that produced it corrected two other things that matter, and because the near-miss is worth the record. The discriminator ran (k2kremote, K2000R, Layer 2 solo, Att1 0, Dec1 5.10s @ 50%, note 48 vel 127, 9s hold, verified MIDI timing) and came back **decisively for the OLD reading**: the level falls steadily then goes flat, reaching within 0.5dB of its plateau at t+4.97s against a programmed 5.10s -- a ~1% match, not the 16x miss a rate law would give (which predicted the target at 0.30s; at 0.30s the level was still ~-16dB and visibly falling). `krz_writer`'s original comment -- "the DECAY deliberately gets no such field: it ends at the sustain level, which both machines agree on, so its seconds are sound" -- was right. Both the `_fill_env` and `_decode_env` changes were reverted in full.
+
+**The guard is the point.** The change was marked NOT-YET-CONFIRMED in the code before any build was made, on the explicit grounds that `_decode_env` had been changed to match `_fill_env` and the two were therefore exact inverses that would agree with each other whether or not the machine agreed with either -- §KRZENVDEPTH2's lesson ("reader and writer were exact inverses and 433 tests saw nothing -- self-consistency is not correctness") applied prospectively rather than in hindsight. A green round-trip suite was produced by a wrong theory, exactly as predicted, and no hardware time or card swap was spent on it.
+
+**Original status line, for the trace:** implemented in code, NOT confirmed on hardware; do not ship a build until the discriminator comes back positive. The round-trip tests passing is not evidence — `_decode_env` was changed to match `_fill_env`, so reader and writer are exact inverses and would agree with each other whether or not the machine agrees with either. §KRZENVDEPTH2 records this project doing exactly that once already ("reader and writer were exact inverses and 433 tests saw nothing — self-consistency is not correctness").
+
+**Found chasing Jan's report that "the sustain on the original seems louder and more prominent."**
+
+**First, a reasoning error it exposed, which matters independently.** Two standing findings — §KRZENVLOOP's "Dec1→Rel1→Rel2→Rel3 advance regardless of note-off" mechanism, and the separate "K2000 sustain does not hold" row — had **both been measured on Layer 1 only**: the choke click, whose envelope is designed to reach silence in 0.24 s and would therefore look identical whether either claim were true or false. Neither had ever been tested on a sustaining layer. Testing Layer 2 (k2kremote, isolated, 18 s hold, verified MIDI timing) gave the opposite answer: the level settles by ~3 s and holds **flat for the remaining 15 s**, straight through 5.1 s and 10.3 s, with no change across note-off. **The release stages do not run while a note is held, and §KRZENVLOOP's mechanism does not generalise beyond the click layer.** Both prior findings are scoped to Layer 1 and should not be cited for anything else.
+
+**What is actually wrong is the decay RATE.** Same note, both machines:
+
+| | rate over the decay | floor | when it gets there |
+|---|---|---|---|
+| AKAI (s3ked, 12 s hold, repeat sd 0.01-0.04 dB) | **5.09 dB/s** | −47 dB vs peak | flat from 6 s to 11.5 s |
+| K2000 v10 (k2kremote, hotter capture vs a measured silence floor) | **~17.0 dB/s** | reaches the noise floor | ~3 s, and stays there |
+
+The K2000 capture was re-run at velocity 127 against 6 s of recorded silence at identical gain: from 3 s on, the signal sits 0.2-1.0 dB above the silence floor and at two points *below* it. **There is no audible sustain on Layer 2 at all** — the earlier 0.8 %-of-peak reading, which happened to match a correct-conversion prediction to within 2 dB, was room noise. That coincidence is worth recording as a near-miss: it would have been read as confirmation.
+
+**The hypothesis.** The K2000 is already known to be a RATE machine for its RELEASE — the displayed time is seconds to cross a fixed ~99.37 dB span, not seconds to reach the target (§CORPUSRT, `KRZ_RELEASE_SPAN_DB`), and `_fill_env` has written the release that way since 2026-08-25. The decay was deliberately left as a plain duration, and the code said why: *"The DECAY deliberately gets no such field: it ends at the sustain level, which both machines agree on, so its seconds are sound."* That reasoning assumes the decay field means seconds-to-target. If it is the same rate field one stage over, the assumption is wrong. For the reference preset's Layer 2 (Dec1 written 5.10 s to a 3 % sustain):
+
+    time-to-target reading:   5.97 dB/s, target reached at 5.10 s
+    rate reading:            19.48 dB/s, target reached at 1.56 s
+    measured:               ~17.0 dB/s
+
+**Blast radius, from the local corpus** (52 readable KRZ files, 567 voices, 378 with a real decay): the error is `span / travel`, so it is worst for shallow decays — **median 3.26x too fast, 58.2 % of decays more than 2x too fast, 19.0 % more than 5x.** It applies to every K2000 amp *and* filter envelope this project has ever written, and — because `_decode_env` had the same reading — to every K2000 source it has ever read.
+
+**The discriminator, not yet run.** On the K2000R: Layer 2 (its sample sustains strongly, so the envelope is what is visible), Att1 0, Dec1 time 5.0 s at level 50 % (−6 dB), hold and time the crossing. Time-to-target predicts −6 dB at **5.0 s**; rate predicts it at **0.30 s**. 16x apart, both far above any noise floor. The same capture also settles an open question of s3ked's for free — whether K2000 segments fall linearly in amplitude or in dB — since a constant dB/s and an accelerating dB/s are distinguishable in one trace.
+
+**Implemented, pending that result.** `_fill_env` derives a rate (preferring the model's carried `decay_rate_db_per_s`, which the AKAI reader already sets, else `travel / seconds`) and writes `span / rate`. For the reference preset's Layer 2 that is 17.0 s on the wire, giving an effective 5.85 dB/s against the AKAI's own 5.79 dB/s — 0.9 %. `_decode_env` mirrors it and now carries `decay_rate_db_per_s` out, for the same reason the release's rate is carried: a decay to full sustain has zero travel and its seconds are unrecoverable from the byte.
+
+## §KRZDBLZERO — two consecutive null release stages loop the envelope back to Att1 (2026-08-27)
+
+**Cited by `writers/krz_writer.py::_fill_env` since 2026-08-27 and never given a heading here** — one of two dangling citations `test_citations_resolve.py` has been failing on ever since. Written up now from the code comment that is its only record, plus what the later §KRZENVLOOP work established about the same bytes.
+
+**The finding, as recorded on the bench.** A release shaped `[(rel, 0), (0.0, 0)]` gives Rel2 a time AND level of both zero, immediately followed by Rel3 which is always `(0.0, 0)`. The K2000 reads that as **two consecutive null stages** and responds by looping the whole envelope back to Att1 while the key is still held, repeating every ~`rel` seconds, instead of holding at silence.
+
+**Why the shipped shape never hits it.** The validated two-leg release gives its own Rel2 a real nonzero TIME (`rel * (1 - _REL1_TIME_FRAC)`) even though its level is 0, so Rel3 is the only genuine `(0, 0)` stage. When §KRZRELKNEE later added the low-sustain branch (both legs aimed at silence rather than one at the knee), it deliberately kept the same 80/20 time split for this reason — "one zero-zero stage, not two" — rather than collapsing to the simpler `[(rel, 0), (0.0, 0)]`.
+
+**Relationship to §KRZENVLOOP, which is the part that needs stating plainly.** §KRZENVLOOP (2026-08-31) found that `_fill_env` had the ENV segment's byte layout wrong: byte 0 is a loop flag, not Att1's time, and the pairs are `(level, time)` not `(time, level)`. Because `_env_time_byte` floors at raw value 3, that bug wrote a literal 3 into the loop-flag byte on nearly every short-attack envelope — an active loop back to Att3 — which produced exactly the symptom described above: the envelope re-cycling while the key is held. **So the observed behaviour is real and was correctly recorded, but the mechanism attributed to it here (a rule about consecutive null stages) is very likely wrong**; both shapes tested on the bench that day would have carried the same accidental loop byte, and the one that "worked" differed for an unrelated reason. This has not been re-tested since the byte-layout fix landed.
+
+**What to do about it.** Nothing, for now, and deliberately: the existing two-leg shape avoids the pattern by construction, costs nothing, and is independently validated by ear (AlphaPad #200). Removing the avoidance on the strength of a mechanism that is now doubtful would be trading a working shape for an untested one. The right resolution is a cheap re-test on the corrected writer — write `[(rel, 0), (0.0, 0)]` with the loop byte verified 0 and see whether the re-cycle appears — and until that is run, this section stands as "symptom real, mechanism unconfirmed, mitigation retained".
+
+## §KRZLEVELCURVE — the K2000 envelope LEVEL field is dB-linear, not linear amplitude percent (2026-08-31)
+
+**The root cause of Jan's "the sustain on the original seems louder and more prominent."** Found at the end of a long chain that discarded three wrong answers first (see §KRZDECAYRATE for the refuted one, and the re-scoping of the "sustain does not hold" row in TODO.md for two findings that turned out to have been measured on the wrong layer entirely).
+
+**`_lvl_byte` treats the field as a signed linear-amplitude percent** — `round(pct)`, where `pct = env.sustain * 100`. It is not. Measured on a purpose-built RAM-only rig (k2kremote: ROM program 199 edit buffer, never saved; KeyMap 151 Sawtooth so there is no sample contour underneath; Algorithm 1, filter NONE, no LFO, AMPENV User; Att1/2/3 all 0 s at 100 %; Dec1 time 0.50 s; note 48 vel 100, held 2.5 s; only Dec1's level swept; every value referenced to the 100 % capture's own plateau, so no absolute reference enters):
+
+| Dec1 % | measured dB vs 100 % | effective amplitude | linear-% would be |
+|---|---|---|---|
+| 100 | 0.00 | 1.000 | 1.000 |
+| 71 | −9.71 | 0.327 | 0.710 |
+| 50 | −18.07 | 0.125 | 0.500 |
+| 35 | −24.06 | 0.0626 | 0.350 |
+| 25 | −28.02 | 0.0397 | 0.250 |
+| 18 | −31.93 | 0.0253 | 0.180 |
+| 12 | −37.47 | 0.0134 | 0.120 |
+| 6 | ≤ −43.79 | — | 0.060 |
+| 3 | ≤ −45.89 | — | 0.030 |
+
+The 6 % and 3 % rows are **floor-limited** (2.9 dB and 0.2 dB above the measured noise floor) and are lower bounds, not measurements — flagged as such by k2kremote rather than reported as values.
+
+**Over 25–71 % the field is dB-linear at 0.398 dB per displayed-% unit, and the fit is essentially exact** (errors 0.00/0.00/0.02/0.00 dB at 71/50/35/25). It then **breaks at both ends**: +1.83 dB at 100 %, +1.12 dB at 18 %, +4.28 dB at 12 %, with the step size climbing from 0.398 to 0.559 to 0.923 dB/unit as the level falls. So it is dB-linear through its usable middle and a curve at the extremes — not one law. A power-law fit drifts (exponent ~2.6 at the top to ~1.7 at the bottom) and was correctly not asserted.
+
+**The third instance of one pattern in this writer.** §KRZENVDEPTH2 (filter-envelope depth) and §KRZLFOPITCH (LFO→pitch depth) were both a plausible linear mapping onto a field that is actually a curve; both were found the same way and both were fixed by storing the **measured curve as a table and interpolating** (`KRZ_DEPTH_CENTS`, built from a byte-by-byte hardware walk). The level field is the same mistake and wants the same fix. **Note the symmetry that makes it embarrassing:** the AKAI's own `SUSTN1` is *also* dB-linear, at 0.60676 dB/unit, and that has been measured and wired in `_AK_SUSTAIN_DB_PER_UNIT` since August. Both machines store sustain in dB; only the K2000 side was read as linear amplitude.
+
+**Consequence for the reference preset.** The AKAI's sustain is −29.73 dB. Under the mid-range fit that needs Dec1 ≈ **20.7 %**. The converter writes **3 %**, which the fit puts at −36.8 dB and the floor-limited measurement bounds at ≤ −44 dB. So the written sustain is somewhere between **7 and 15 dB too quiet** — at the reference preset's actual value it lands at or below the rig noise floor and is simply inaudible, which is precisely the complaint.
+
+**The envelope TIME grid is fully confirmed (2026-08-31), which retires §KRZLONGENVGRID.** Displayed step size click-mapped end to end: 0.020 s/click from 0.020-2.000, 0.040 from 2.000-5.000, 0.100 from 5.000-10.000, 0.500 above 10 -- every step exact, matching `KRZ_ENV_TIME_GRID` in full. Displayed-vs-actual in the long band lands within 0.3% (mean ratio 0.9995, sd 0.0027 at 6/8/10 s). k2kremote reclassified their own earlier 3% short-band figure as a measurement systematic rather than a device offset -- extrapolating a dB-linear fit into the rounded bottom of a 160 ms decay overshoots proportionally more -- and said so unprompted. `r2 = 0.995` at every long setting, so the dB-linear segment law holds across the full 0.16-10 s range.
+
+**A retracted shape claim, and it flipped a diagnosis.** k2kremote first reported the decay as "steepest early, shallowing toward the plateau -- straight in AMPLITUDE, not dB," inferred from a coarse eyeball of the slope, and it was carried into the choke analysis. **Re-measured properly it is decisively dB-LINEAR:** the amplitude falls by a constant ratio per unit time (0.63/0.59/0.59/0.58/0.59 per 0.42 s) and a dB-vs-time fit across 13 points gives **r2 = 0.986 against 0.69 for an amplitude-linear fit.** s3ked's original suspicion was right and the intermediate correction was wrong. This matters because s3ked had explicitly flagged the segment law as load-bearing -- "'we linger' versus 'we lack attack' are opposite conclusions and the segment law is what picks between them" -- so the choke diagnosis reverts to *we lack attack*, s3ked's first reading.
+
+**Two things confirmed in passing, both worth keeping.** The decay reached its plateau in exactly the programmed 0.50 s (flat from ~0.9 s after a 0.4 s note-on) — an independent re-confirmation of the timing result that killed §KRZDECAYRATE. And the plateaus are genuinely flat (seven readings across 0.9–2.8 s within 0.5 dB at 50 %), so these are steady-state levels rather than points on a still-moving curve.
+
+**IMPLEMENTED 2026-08-31 from the full 25-point sweep.** `KRZ_LEVEL_PCT_DB` in `models/common.py` carries the measured points verbatim with `krz_level_pct_to_db` / `krz_db_to_level_pct` interpolating between them — the same measured-table-plus-interpolation shape `KRZ_DEPTH_CENTS` already uses. `krz_writer._fill_env` converts the model's linear-amplitude `sustain` through the table (via `krz_db_to_level_pct`) instead of multiplying by 100, and a new `_lvl_byte_amp` exists for any future caller holding an amplitude rather than a display value. `krz_parser._decode_env` mirrors it: the ratio of two displayed percents is not an amplitude ratio, so both levels go through the curve and the amplitudes are divided — that error read every K2000 program's sustain far too HIGH and affected every K2000 source this project reads, not only its own output. **the reference preset's pad sustain now writes 21 %, which the table puts at −29.84 dB against the AKAI's own −29.73 dB: 0.11 dB.** Suite green at 543; the tests were confirmed to fail when the table is swapped for a naive linear-dB law, so they pin the curve's shape and not merely reader/writer agreement.
+
+**The full measured sweep (25 points), superseding the 9-point table above.** Stitched from two gain settings tied on a 7-point overlap (50/45/40/35/25/18/12) where both arms are demonstrably linear: offset 29.925 dB, sd 0.211 dB. Low-gain arm (F4 AMP Adjust 6 dB) supplies 100–25 %, high-gain (36 dB) supplies 30–1 %.
+
+| % | dB | % | dB | % | dB |
+|---|---|---|---|---|---|
+| 100 | 0.00 | 50 | −18.07 | 18 | −31.95 |
+| 95 | −1.68 | 45 | −20.07 | 12 | −37.96 |
+| 90 | −3.34 | 40 | −22.08 | 9 | −41.98 |
+| 85 | −5.03 | 35 | −24.07 | 6 | −47.99 |
+| 80 | −6.70 | 30 | −25.92 | 4 | −59.92 |
+| 75 | −8.37 | 25 | −28.03 | 3 | −69.01 |
+| 71 | −9.71 | 22 | −29.13 | | |
+
+**Shape: two dB-linear segments and then a collapse** — 0.331–0.337 dB/unit above 75 % (a distinct slope, *not* the mid-range figure), 0.366–0.423 from 71 down to 25 %, then accelerating hard: 0.70 at 22 %, 1.00 at 18 %, 1.34 at 12 %, 2.01 at 9 %, 5.96 at 6 %, 9.09 at 4 %. No single law fits.
+
+**A hardware finding that came free with the method, worth keeping on its own:** the +30 dB pass saturates the K2000's own amp stage at the top — at F4 AMP Adjust 36 dB, 100 % against 50 % differed by 3.7 dB instead of 18, with a capture peak of only 0.108. **F4 AMP Adjust saturates well before its 48 dB maximum on a full-level signal.** That is why the high-gain arm contributes only 30 % and below.
+
+**Honest holes, preserved rather than smoothed:** 3 % carries about ±1 dB (9.7 dB above floor). 2 % and 1 % were floor-limited lower bounds and *visibly non-monotonic in slope* — the giveaway that they are noise — and are **excluded from the table entirely** rather than recorded as values. Below 3 % the table extrapolates and says so; 0 % is special-cased to true silence rather than the extrapolated tail.
+
+**One table, not several — the ATTACK stages measured (k2kremote, 2026-08-31).** Same sawtooth rig, with Dec1 set to ramp UP to 100 % over 3.80 s so that the level just after note-on is whatever the attack stages ended at. Att1/2/3 all at 50 % measured **−16.76 dB** raw against all three at 100 %. Correcting for the Dec1 ramp already rising inside the measurement window (a computable bias, checked across four progressively tighter windows: −17.90 / −17.59 / −17.93 / −16.87 dB) puts it at **−17.6 to −17.9 dB against Dec1's own −18.07 dB** — agreement within a few tenths, with linear amplitude (−6.02 dB) excluded by about 12 dB. So `KRZ_LEVEL_PCT_DB` governs the attack stages too and one table is correct for all seven.
+
+**The RELEASE stage levels are now MEASURED too, and share the curve (2026-08-31).** Flagged as inference when the attack test was run, then tested rather than left standing — at s3ked's urging, on the grounds that "a plausible inference from a code comment, load-bearing for a shipped value, never measured" is precisely the shape that had already reversed twice that night. **Rel 50 % measures −18.06 dB against Rel 100 %, where the Dec1/attack curve predicts −18.07 dB and linear amplitude predicts −6.02 dB** — 0.01 dB from prediction, 12 dB from the alternative. One table covers all seven stage levels, without hedging.
+
+The capture needed a different shape from the attack test, since the release only runs at note-off: Dec1 set to 0 s at 100 % so the level sits at full through the hold, then **both Rel1 (1.00 s) and Rel2 (5.00 s) targeted at the same level X**, so once Rel1 lands the level holds flat at X for five seconds and there is a real plateau to measure instead of a moving target. Plateau read as RMS over 2.0–4.5 s after note-off. Positive control asserted on both captures (57 dB above floor; the quieter plateau still 30.7 dB above floor).
+
+**A navigation artefact worth recording, since it caused two off-by-one slips earlier that evening** (one of which briefly wheeled a release time to 60 s on the scratch buffer): the AMPENV cursor ring, re-verified rather than counted from memory, is 16 positions from the Loop anchor — `0 Loop, 1 Inf, 2 Att1t, 3 Att1%, 4 Att2t, 5 Att2%, 6 Att3t, 7 Att3%, 8 Dec1t, 9 Dec1%, 10 Rel1t, 11 Rel1%, 12 Rel2t, 13 Rel2%, 14 Rel3t, 15 Rel3 (User/Natural toggle)`. Position 15 is the envelope-shape toggle, **not** a Rel3 percentage — consistent with what this project already recorded elsewhere. Index-from-Loop beats counting clicks.
+
+**A method worth copying, from the same run:** the positive control was promoted from a habit into a hard assertion in the capture script — the baseline must read >30 dB above the measured noise floor or the run aborts. It read 48.7 dB above floor. Given how much of this night was lost to measurements that were confidently reading the noise floor (see the retracted 0.8 % sustain reading above, and §KRZDECAYRATE), that check belongs in every capture script from here.
+
+**The knock-on nobody had noticed: this shifted every level the writer has ever emitted, not just sustains.** `_REL_KNEE_PCT = 33` was chosen meaning “33 % of full”, i.e. −9.6 dB. It measures **−24.8 dB** — the two-leg release knee has always sat ~15 dB below its own label. It has **deliberately not been “corrected”**, and that decision now rests on measurement rather than inference — the release-stage level law was tested (above) and does share the curve, so −24.8 dB is what 33 % genuinely renders. The knee and the 80/20 split were validated *by ear* on real hardware (AlphaPad #200, 2026-06-24), so what a listener actually approved is the shape the constant really produces, not the shape its name claimed. Moving it to 71 % (the true −9.6 dB) would discard that validation and change a release someone already signed off. The label is now correct in the code; the sound is untouched; re-deriving the knee in dB is left for whoever next validates a release by ear. The contrast with the sustain is the point: a sustain has to match a level the *source* specifies and was therefore genuinely wrong, while the knee was merely mis-described.
+
+**Original pre-sweep note, for the trace.** Fitting a law from six usable points that visibly breaks at both ends would be extrapolating into 3–12 % — exactly where real material lives and exactly where the present data is weakest. A fuller sweep is requested before any code changes: the low end lifted off the floor (12/9/6/4/3/2/1 % at higher velocity or program output), the top end where the 100→71 step is steepest (100/95/90/85/80/75 %), and mid-range fill-in (60/45/40/30/22 %). Open question that decides how wide the fix goes: whether the same curve governs the ATTACK and RELEASE stage levels, or only Dec1 — `_fill_env` writes all seven stage levels through one encoder and the filter envelope (segment 0x22) uses the identical function, so a per-field law would need per-field handling.
+
+## §SPACEEPREDICT — what v12 should sound like, written down before anyone hears it (2026-08-31)
+
+**Recorded before the listening test, deliberately, so the A/B tests a prediction instead of collecting an impression** — s3ked's framing, and the right discipline given how much of this night was spent discovering that a confident reading was an artefact. If Jan's ears disagree with what follows, the model is wrong and that is the useful outcome; a vague "sounds better" would settle nothing.
+
+**The build.** `out_MXS3toKRZ_v12` carries every fix of 2026-08-31: §KRZENVLOOP (envelope byte layout), §AKAICHOKECURVE (two-stage choke), §AKAICHOKEFILTER (velocity-floor depth compensation), §AKAILAYERGAP (layer fusion), §KRZLEVELCURVE (the level table). the reference preset is 2 layers; pad sustain 0.0322 against the AKAI source's 0.0326; choke stage-1 target −23.27 dB.
+
+**Prediction 1 — the sustain becomes audible, and this is the strong one.** v10 wrote the pad sustain as 3 %, which measures **−69 dB**: at or below the rig's own noise floor, i.e. genuinely inaudible rather than merely quiet. v12 writes **21 %**, measuring −29.84 dB against the AKAI's −29.73 dB. This is a ~39 dB correction on the single thing Jan actually complained about ("the sustain on the original seems louder and more prominent"). If the held note does not now sustain audibly and comparably to the AKAI, something is wrong that no measurement tonight has found.
+
+**Prediction 2 — it should read as MORE clicky than v10, and this is a defect removal, not a trade.** v10's choke stage-1 was written as a raw 7 %, which plays at about **−46 dB** rather than the −23.4 dB it was designed for — so v10 suppressed the click layer by 23 dB more than intended. With the level table the same intent now writes 37 % and lands at −23.27 dB. Against s3ked's measured AKAI curve the attack-window mean error roughly halves (10.3 dB → 4.6 dB; at 4 ms, −10.14 → −5.59 dB). Unlike the byte3/byte4 question this costs nothing elsewhere. **If "clicky" does not move at all, the percept is not in the choke envelope and that rules out a whole line of investigation.**
+
+**Prediction 3 — the 60–71 octave should stop standing out.** §AKAILAYERGAP had that range playing two layers where the AKAI plays one, and Jan noticed it sounded *closer* to the original than its neighbours. v12 plays one layer there like everywhere else, so the range should now match its neighbours — which, if predictions 1 and 2 hold, means the whole keyboard improves rather than that octave regressing.
+
+**What v12 will NOT fix, stated so it is not read as failure.** The AKAI's choke is at full level at 4 ms and 23 dB down at 12 ms; a straight dB-linear segment over the K2000's minimum 20 ms step cannot be both, and the grid offers no step between 0 and 20 ms. **That 20 ms step is now audio-verified, not merely click-mapped** (2026-09-01): displayed 0.020 s measures ~21 ms and 0.040 s measures ~42 ms, resolved by moving the test to note 96 where ~42 waveform cycles fit inside a 20 ms decay instead of the under-3 cycles available at note 48. So the unreachability is a measured property of the machine rather than an inference from its display. The shape stays unreachable — only *where we sit on it* is adjustable. If more attack sharpness is wanted, s3ked mapped the continuous lever: raising the stage-1 target to −12…−16 dB more than halves the attack-window error again at the cost of lingering (−12 dB: attack-window 1.8 dB, but 12 ms error +15.9 dB). That is a by-ear tuning decision, not a correctness one, and should only be reached for if prediction 2 lands and Jan still wants more.
+
+**Bench state at the end of the session (2026-09-01, 00:10), so the next reader knows what is on the box.** K2000R in ProgramMode, no editor open, nothing mid-edit, no live connection held. The sawtooth calibration rig lived entirely in ROM #199's *unsaved* edit buffer and was discarded on exit, so no scratch objects are resident. RAM holds only the the reference preset build family — 200s (v9), 400s (v8), 500s (v9), 600s (v10) — leaving a free bank for v12 whenever the card is swapped.
+
+**RESULT (2026-09-01, v13). Prediction 1 confirmed on the bench; prediction 3 holds; prediction 2 awaits Jan's ears.**
+
+Structural check on load, all four markers present: program `the reference preset.P` (§AKAINAMEDOT — the free confirmation that the right build is in), 496 bytes against 720 for the 3-layer programs, `Layer:1/2`, two keymaps where the others have three, and both sustain targets exactly as specified (L1 Dec1 37 % was 7 %, L2 Dec1 21 % was 3 %, Loop Off on both).
+
+**Prediction 1 — CONFIRMED, and v13 is the first build in the series to move the sustain at all.** Identical window and method across the whole run:
+
+| build | centroid | roll85 | roll95 | late-sustain above floor |
+|---|---|---|---|---|
+| v7 | 5192.6 | 1710 | 8090 | 10.6 dB |
+| v8 | 5173.1 | 1710 | 8070 | 11.1 dB |
+| v9 | 4999.6 | 1710 | 8070 | 11.2 dB |
+| v10 | 5352.4 | 1710 | 8410 | 11.1 dB |
+| **v13** | 5396.2 | 1710 | 8410 | **24.1 dB (+13.0)** |
+
+Four builds sat within 0.6 dB of each other; v13 jumps 13.0 dB. On an 8 s hold it stays **14.6–21.2 dB above the measured noise floor for the entire hold**, where v10's Layer-2-solo plateau sat 0.5–1.0 dB above floor — indistinguishable from room noise. The sustain has gone from genuinely inaudible to genuinely present.
+
+**The magnitude, stated honestly rather than flattered:** +13.0 dB, not the ~39 dB the field change implies, and k2kremote flagged the distinction unprompted. The measurement window (1.2–1.9 s after onset) is still inside Layer 2's 5.1 s decay, so it samples the ramp rather than the settled sustain, and the whole-patch figure also carries Layer 1. **39 dB is the field-level correction; 13 dB is what a listener meets at that point in the note.** The two should not be quoted as the same measurement.
+
+**Prediction 3 — holds, no regression.** Note 63, v10 → v13: centroid 5104.9 → 4965.9, roll85 3470 → 3430, roll95 18850 → 18760. Essentially unchanged, which is the correct result: the 60–71 octave was already fixed structurally in v10 by §AKAILAYERGAP, and v13 keeps it rather than re-breaking it.
+
+**Prediction 2 — objective correlate present, percept outstanding.** Layer 1's choke target moved 7 % → 37 %, which the measured level table puts at roughly **−46 dB → −23 dB**: a large, real change in exactly the place the prediction names. Whether it reads as "more clicky" is not answerable by instrument, and per the prediction the *informative* outcome is if it does **not** move — that would rule out the choke envelope as the seat of the percept.
+
+**The rig gain changed mid-session, and the v13 numbers above were checked against it rather than assumed safe.** Jan played the keyboard during the captures and separately turned the K2000's Volume knob up. k2kremote set the originals aside, re-captured, and then established *which* set was trustworthy instead of assuming the redo was better:
+
+| file | peak | pre-note roll | onsets |
+|---|---|---|---|
+| v13 note48 (first run) | 0.00985 | −0.6 dB > floor | [0.37] |
+| v10 note48 (reference) | 0.00892 | −0.3 dB > floor | [0.36] |
+| v13 note48 (re-capture) | 0.02800 | −1.9 dB > floor | [0.34] |
+
+The first v13 run has silent pre-roll and exactly one onset, so the playing did not land in it — and its peak is **within 0.87 dB of v10**, i.e. taken at the same output gain, which is what makes the +13.0 dB comparison valid at all. **The v13 figures above stand.**
+
+**But the rig is now ~9.94 dB hotter than the whole v7–v10 series**, so: every absolute-level comparison across that series must use captures taken *before* the change (those are files and are intact); any NEW capture is on a different scale and cannot join the series without a re-measured offset. Centroid and rolloff are unaffected — verified empirically on one patch captured at both gains, roll85 identical at 1710 Hz both times — which is why prediction 3 is unharmed.
+
+**This lands directly on the §KRZVELOFFSET trim measurement.** That plan rests on the two capture chains differing by a fixed constant; the K2000's own output level is part of that constant, and it has just moved. So the trim must be measured *after* this change, and **the Volume knob must not move again between measuring it and capturing** — otherwise one offset gets measured and applied to captures taken under another, which would look like a conversion defect.
+
+**Unchanged and expected:** roll85 still pinned at 1710 Hz (Layer 1 anchoring the percentile, §KRZLEVELCURVE's own finding), centroid still ~5.4 kHz against the AKAI's 6790. The K2000 VelTrk half is deliberately unwired pending the trim-offset measurement, so residual level difference between the machines is not a v13 defect.
+
+**A caveat on every earlier number in these notes.** Because v10's choke was 23 dB from its own intent, all of tonight's earlier "we are X dB out" comparisons — including s3ked's error tables — were scoring a model that was not the design. Not worth re-deriving, but they should not be read as measurements of the intended conversion.
+
+## §KRZAMPVEL — every K2000 voice inherits #199's velocity→amplitude, and the model cannot carry the source's own (2026-09-01)
+
+**Found by the `_TPL_LAYER` audit, which was looking for something else entirely and found nothing.** The audit question was whether the stored template had drifted from the ROM object it was captured from. It has not: k2kremote dumped ROM #199 as it exists on this unit and diffed all 18 layer segments plus both globals **programmatically against the arrays read straight out of `writers/krz_writer.py`** — so a transcription slip could not fake a match — and every segment is byte-for-byte identical. The 2026-06-15 capture was faithful and the ROM object is still what the code thinks it is. That also disposes of the subtler worry: nothing is being masked by our own overwrites, because there is nothing to mask.
+
+**What the audit found instead is that #199 is not a neutral donor.** `_patch_layer` writes exactly one byte of the F4/AMP segment (0x53) — byte 14, the pan nibble. Bytes 0–13 are inherited verbatim, and among them `byte[4] = 35` is **VelTrk 35 dB** and `byte[1] = 6` is **Adjust 6 dB**. Thirty-five dB of velocity-to-amplitude is a substantial musical choice; a neutral default would be 0.
+
+**It is not a double-application, which was the first thing to rule out.** The KRZ writer encodes velocity→amplitude nowhere else, and `models.common` has no `velocity_to_volume`-style field at all — the AKAI reader takes `V_LOUD` as a static per-zone `volume`, not as a velocity sensitivity. So this inherited 35 dB is the *only* velocity→amplitude in our K2000 output, and nothing is fighting it.
+
+**The defect is one of provenance rather than magnitude.** Every voice this project has ever written to a K2000 has the same dynamic response, taken from a template, regardless of what the source program asked for — and the source's own velocity→level behaviour cannot be honoured because there is nowhere in the model to put it. 35 dB may well be a perfectly reasonable default; the point is that nobody chose it, and no source can override it.
+
+**Audible exposure is at the quiet end.** At the velocities Jan actually plays (100–127) everything sits near the top of the curve, so a wrong sensitivity barely shows; it is soft playing where a 35 dB law and the source's real law would diverge. That is also why this has gone unnoticed through every listening test so far.
+
+**The AKAI half is now measured and wired (2026-09-01, s3ked §171, commit `b1d7c4b`).** `swing_dB = 1.19557 * V_LOUD` (r² 0.9999816), the response **rotating about velocity 64** rather than scaling from silence, and V_LOUD 0 genuinely neutral (0.00001 dB/unit, r² 0.029). An apparent compressive collapse at the loud end is **not in the law** — it is an absolute output ceiling near −25.6 dBFS, diagnosed by a distinguishing prediction rather than fitted: lowering PRLOUD buys headroom, so the clamp should move while the slope stays put, and it did (PRLOUD 80 clips above V_LOUD ~20, PRLOUD 60 above ~40, ceiling reading −25.62 dBFS at both). A straight fit over the full range would have shipped a compressive curve that does not exist. Wired as `AKAI_VLOUD_SWING_DB_PER_UNIT` plus the new `VoiceLayer.velocity_to_volume_db`; reader reads byte 0x1a signed; writer emits the source's value and keeps 20 only as the fallback for sources that state nothing.
+
+**A property of the field that matters for the K2000 half specifically: the swing is NOMINAL, not necessarily realised.** The number is what the source asked for; what a machine produces is that swing clipped against its own ceiling — preset 6's 43.04 dB needs ~21.5 dB of headroom above its own v64 level, and some real source values are therefore partly unrealised *on the AKAI itself*. For AKAI→AKAI that is harmless and carrying the number is correct, since the destination clips it identically. **It bites on a target whose headroom differs**, where the same nominal number would produce a larger actual swing than the original ever made. So the K2000 comparison to make is not nominal dB against nominal dB but what each machine actually produces at v1 and v127 — which needs the K2000's own ceiling and pivot, not merely its VelTrk scaling.
+
+**The K2000 amp delivers its VelTrk setting in full — and the run that appeared to show otherwise was a broken experiment (k2kremote, retracted 2026-09-01).** An earlier measurement reported only 28.77 dB of swing where VelTrk 35 was written, with a hard plateau below v4, and was used to gate the whole VelTrk decision. It was invalid: the probe helper's `leave_editor()` exits the Program Editor answering the save prompt **"No"**, so every panel edit was discarded before the captures ran and both "conditions" were in fact the same condition.
+
+Redone with the editor held open and the edit verified live, the answer to "fixed floor or proportional?" is **neither — there is no floor**:
+
+| | slope (v≥32) | v1..v127 swing |
+|---|---|---|
+| A baseline: AMP VelTrk 35, filter 7500/8200 | 0.26534 | 30.01 dB |
+| B filter VelTrk zeroed | 0.27141 | **34.59 dB of a 35 dB setting** |
+| C AMP VelTrk 24, filter restored | 0.17662 | 19.16 dB |
+| the amp's own law, measured independently | 0.27618 | |
+
+v1's *absolute* level moved **+10.94 dB** when AMP VelTrk went 35 → 24, against **+11.0 predicted for full delivery** and **+0.0 for a fixed floor**. The residual shortfall is **constant rather than proportional** (4.99 dB at VelTrk 35, 4.84 dB at 24) and is the **velocity→filter route** — real patch behaviour, present on the AKAI too at ~4.6 dB of the shape change, and not something to compensate for. With the filter route zeroed the curve is monotonic all the way to v1 and the "plateau below v4" disappears entirely.
+
+**THE METHODOLOGICAL POINT, which nearly cost a real constant and is the sharpest of this whole investigation — s3ked's formulation:** *if a neutralisation is real, the measurement must move; if it does not move, you have not established a null result, you have established nothing.* The invalid run moved the slope by 0.010 dB/unit and that was reported as a null result refuting a hypothesis. The valid run moved it by 3.4 percentage points and 4.6 dB at the bottom. **A "nothing changed" outcome should be treated as a broken experiment until the manipulation is shown to have been live.** This is the same family as §KRZENVDEPTH2's reader/writer mirror — a check that agrees with itself while measuring nothing — but arrived at from the opposite direction, and it is more dangerous because a null result *feels* like evidence.
+
+**How to fix the K2000 half, in order — and the first step is not a code change.** (1) Measure the AKAI's own velocity→amplitude law on hardware, so there is a real quantity to carry rather than a second guess. (2) Add a model field for it — which is deliberately not a KRZ-local change, since every writer would then have to honour it, and the project has been bitten before by a writer law measured and wired while the matching read path was left alone (three of the seven defects found on 2026-08-23 were exactly that). (3) Only then decide what to write into `0x53[4]`. Until (1) exists, leaving the inherited 35 dB alone is the honest position: it is an unexamined default, and replacing it with a different unmeasured number would be worse, not better.
+
+**A second, unrelated observation from the same dump, explicitly unconfirmed.** ROM #199 carries 24 bytes between PGM (ends @16) and FX (starts @40) that `_TPL_GLOBAL` does not contain: `11 00 00 00 00 00 00 00 19 00 00 00 15 00 00 00 00 00 00 00 1b 00 00 00`. The non-zero bytes are tags **0x11, 0x19, 0x15, 0x1B** at offsets 16/24/28/36 — ASR2, FUN2, LFO2, FUN4, the "second" of each paired module, each with an all-zero body, at lengths matching the template's own for those tags. k2kremote flagged the ambiguity rather than asserting the reading: apart from the four tag bytes the region is entirely zeros, so "four zero-bodied segments" cannot be distinguished from "padding that happens to contain those values". What argues for segments is that the tags are real, non-zero, and in a coherent 2-variant order. Our writer omits them and the K2000 accepts our objects, so they appear optional; worth resolving only if an object is ever rejected, or if a paired module needs writing.
+
+## §AKAINAMEDOT — the AKAI program name was run through a filename helper and lost its tail (2026-09-01)
+
+**Jan's observation, and the right instinct:** the AKAI original is `the reference preset.P`, the E4B and KRZ conversions say `the reference preset`, and both target name fields hold 16 characters — so a 9-character name has no business being truncated. It was not a capacity limit. It was a bug.
+
+**Cause.** `parsers/akai_s3000_parser.build_preset_from_program` built the preset as `Preset(name=_safe_name(prog['name'] or fallback_name))`. `_safe_name` is an **XPM filename helper**: it calls `os.path.splitext` and maps every non-alphanumeric character to `_`. Both behaviours are correct for a file on disk and wrong for a sampler-side name field. `.P` is read as an extension and stripped.
+
+**`.P` is name content, not an extension.** The AKAI's own charset is `0123456789 A-Z#+-.` — the dot is a legal character in it, and library programs conventionally end in `.P`. The parser reads the field correctly (`akai_to_str(raw[0x03:0x0f])` → `'the reference preset.P'`); the name was intact right up to the line that sanitised it. Note the second, quieter half: even without `splitext`, the `isalnum()` filter would have turned the dot into `_`, giving `split patch 2_P`. Two independent filename behaviours, both firing on something that is not a filename.
+
+**This reader was the only one doing it.** Every other parser passes the preset name through with at most a length cap (`krz_parser` `name[:MAX_NAME]`, `mpc60_parser` `name[:16]`, `e4b_parser`/`eiii_parser`/`exs24_parser`/`gig_parser` unmodified). And the codebase already carried the warning: `models.common.safe_filename`'s own docstring opens **"NOT FOR SAMPLER-SIDE NAME FIELDS — host filesystems only"**, written after a related incident where filename sanitising an AKAI directory entry turned `#` into `_`, which is absent from the AKAI charset, so the encoder wrote a space and fifteen samples failed to load. The rule existed; this call site predated or ignored it.
+
+**Fix.** The program's own name passes through with a 16-character cap (matching the E4B and KRZ fields, both above the AKAI's own 12, so nothing real is truncated). The **fallback** genuinely is a filename — `the reference preset.P.P3` — so it keeps `_safe_name` and its extension strip. The two cases were being handled by one call precisely because the distinction had not been noticed.
+
+**Effect, measured against the disc:** `the reference preset.P`, `preset 3.P`, `preset 5.P`, `preset 1.P`, `preset 6.P`, `preset 4.P` — all six restored, on every AKAI-sourced conversion, not just this bank. Full suite green with no other movement, golden AKAI image hashes included.
+
+**Not changed, deliberately:** `build_map.py`'s correspondence key normalises names to alphanumerics anyway (`re.sub(r'[^a-z0-9]', '', ...)`) and its `pname()` comment already documented that "the AKAI keeps a '.P' inside its 12-char name, the E4B/KRZ side drops it" — an accurate description of the *symptom*, recorded as if it were a property of the formats rather than a defect in our reader. The matching still works either way; the comment is now wrong and is corrected there.
+
+## §KRZVELOFFSET — the pivot asymmetry's predicted level deficit, written down before it is measured (2026-09-01)
+
+**Recorded before the capture, deliberately.** Same discipline as §SPACEEPREDICT: the measurement k2kremote and s3ked are designing is now a *test* rather than a reading, and a prediction stated afterwards is worth much less.
+
+**The setup.** Both velocity→amplitude laws are measured. The AKAI rotates about **v64** (`swing_dB = 1.19557 × V_LOUD`, s3ked §171); the K2000 attenuates downward from **v127** (swing = the VelTrk setting 1:1, k2kremote 2026-09-01, ten settings, max deviation 0.21 dB). Both are linear in velocity. the reference preset's source swing is 23.91 dB; the converter currently writes the template-inherited VelTrk 35.
+
+**The prediction.** With an unknown alignment offset `D` — the amount by which the K2000's "full level" fails to correspond to the AKAI's "nominal level" in our actual conversion, which is precisely what has never been verified:
+
+| velocity | predicted deficit (AKAI − K2000) |
+|---|---|
+| 1 | 23.05 dB + D |
+| 32 | 20.32 dB + D |
+| 64 | 17.50 dB + D |
+| 96 | 14.68 dB + D |
+| 127 | 11.96 dB + D |
+
+Slope **−0.0880 dB per velocity unit**, a total fall of 11.09 dB across the range.
+
+**The property that makes this a good test, and it is stronger than it first looks: `D` shifts every row equally.** So the *shape* — the slope across velocity — is a pure prediction from two independently measured laws and does not depend on the unverified assumption at all, while `D` is exactly the unknown the same capture measures. One set of three velocities therefore both validates the model and delivers the number it was blocked on.
+
+- **A ~23→12 dB falling slope confirms** the pivot-asymmetry model, and the intercept gives `D` directly.
+- **A flat difference refutes it** — the two machines would then be anchoring their level references somewhere other than where their measured pivots say, and the whole account needs rebuilding.
+- **A slope of the wrong magnitude** would mean one of the two swing figures is wrong in our conversion path rather than on the bench.
+
+**Credit where due:** the three-velocity design is k2kremote's addition. My original request was for a single note and velocity, which would have produced a number that silently *assumed* the model instead of testing it, at identical capture cost.
+
+**THE CLAMP-REFERENCE DESIGN WAS KILLED BY ITS OWN PREMISE CHECK, before either side captured anything (2026-09-01).** Both machines were tested to see whether "reference each to its own hard clamp" meant the same thing on both. It does not — and they fail in *opposite* directions:
+
+- **The AKAI's ceiling is a GAIN ceiling, not a clip.** Two samples driven across ~12 dB of demanded gain both freeze, but their crest factors do not move — nothing is being flattened, the gain simply stops rising. So the two samples freeze **5.47 dB apart**, each parked at `sample amplitude × max gain`. There is no shared full-scale mark to reference to.
+- **The K2000's limit is a POWER limiter.** Three very different ROM keymaps at Adjust +48, all genuinely limited (rms moves only +0.46/+0.14 dB from Adjust 24 to 48): peak spread **5.63 dB**, rms spread **0.60 dB**, flat-top ~0.01–0.15 %. So **RMS is sample-independent here and PEAK is not — the exact reverse of the AKAI side** — and the near-zero flat-top says it is compression, not clipping.
+
+Referencing each machine to "its own clamp" would therefore have compared a gain ceiling against a power limiter and reported the difference as a conversion defect: a clean, confident, wrong number.
+
+**A retraction that came with it, volunteered by k2kremote.** They had earlier offered the K2000's falling crest factor (8.26 → 7.31 entering clamp) as independent evidence of genuine clipping. It is not: a crest change on a *single* waveform cannot distinguish clipping from compression — only the multi-sample test can, and it says compression. Killed rather than left sitting in this section's supporting notes.
+
+**The replacement is much simpler, and it came from asking about ports rather than about levels.** Both sessions are on the **same JACK server and the same converter** — `jackd -dalsa -dhw:USB,0`, one Focusrite Scarlett 18i8, s3ked on `system:capture_13/14` and k2kremote on `17/18`. Same ADC, same clock. The two chains therefore differ **only by per-channel analogue trim, which is a measurable constant rather than an unknown.** So the whole subject-minus-reference apparatus is unnecessary: absolute dBFS compares directly once that constant is known. **Blocked on measuring it** — one machine patched into both channel pairs in succession and captured on each, so the offset is measured rather than assumed matched. Needs Jan, since it touches physical patching.
+
+Nothing changes on the subject side: still RMS over 0.10–0.60 s from note-on, still the five velocities below, still v64 as the primary reading and the slope as the falsifier. Only the reference changed.
+
+**THE AKAI'S CURVED VELOCITY RESPONSE IS NOT IN THE LEVEL DOMAIN AT ALL — proved structurally, not just fitted (2026-09-01).** s3ked measured the whole patch's velocity slope as non-linear: **0.042 dB/unit over v32→v64 against 0.185 over v64→v96**, a factor of 4.4, and read it as two layers with different velocity sensitivities crossfading (the per-keygroup `VLOUD1` values 0/−20/−8/−20 being the mechanism). Two eliminations killed that:
+
+- **Different static levels cannot curve it.** Two layers sharing a slope sum in power to `10^(kv/10) × (10^(a/10) + 10^(b/10))`, which in dB is `kv + const` — a straight line. Verified numerically at the reference preset's own offsets (0 and −12.115 dB): fits a line to **1.4e−14 dB**.
+- **Different per-layer *slopes* cannot curve it either, and this is the stronger result.** k2kremote swept a grid of slope pairs and offsets (k across 0–0.6, offsets 0 to −24 dB); the closest achievable segment ratio was **0.537 against the measured 0.227**, only at implausible extremes. **The structural reason: a sum of two exponentials is monotonic in slope.** It moves from the shallower contributor's slope toward the steeper one and never dips *below both*. The measured shape — 0.042 then 0.185 — requires the composite to be shallower than either contributor and then steeper, which no two-layer level sum can produce, at any values.
+
+**So the curve comes from outside the level domain**, and `V_ATT1` (velocity moving the envelope contour under a fixed analysis window) is the leading explanation by elimination rather than by preference. It is independently supported by s3ked's own crest-factor observation — 8.85 dB at v32 against ~15.9 above — which is a *shape* change, not something any level term produces.
+
+**Interpretive consequence, and it is the important one: if the curve is a window artefact, part of it belongs to our measurement rather than to the instrument.** Two sessions measuring "the curve" with different windows would then get different curves for reasons unrelated to either machine. Both sides must handle the window identically or the comparison is meaningless.
+
+**The cross-machine reference design was superseded again, and the trim measurement is no longer needed.** Rather than referencing each machine to a clamp (dead — see below) or measuring a per-channel trim constant, both sides now report `subject_RMS − reference_RMS` with **both terms taken in the machine's own linear region, through the same chain at the same knob position**, so chain gain and knob cancel exactly *within* each machine. No cross-channel constant, and no patching required from Jan. k2kremote verified the cancellation rather than assuming it: across two knob positions the linear-region reference tracked the knob at **−16.67 dB**, i.e. it simply scales, where a drive-to-limit reference leaked 1.38 dB on RMS and 6.28 dB on peak over the same change. **The surviving constraint is much weaker than the earlier one:** the knob must not move between the reference and subject captures *within a single machine's run* — minutes, not a standing freeze — and its absolute position is irrelevant.
+
+**The design's original stated failure mode**, flagged by k2kremote and now confirmed to be the one that fired: the plan references each machine to its own hard output clamp (a real physical property — the DAC's full scale — so every chain-dependent term cancels). That only works if the AKAI's limiting is a comparably clean flat clamp. If it is not, the reference does not mean the same thing on both boxes and the design collapses; the fallback is one identical WAV loaded on both, played at unity with a flat envelope and the filter out of the path — cleaner in principle, more setup, and needing to be redone after any K2000 power cycle since its sample RAM is volatile.
+
+## §AKAIVELARCH — the reference preset's velocity architecture is level plus filter-envelope depth plus attack rate, and only the level is carried (2026-09-01)
+
+**Found by s3ked while refuting one of their own hypotheses**, which is worth noting because the refutation is what produced it: they had proposed that `VLOUD1` was a second, per-keygroup *velocity* term summing with the program's `V_LOUD`. Sweeping it settled that cleanly — `VLOUD1` moves the intercept only (0.59955 dB/unit, r² 0.999801, against our stored 0.60576) while the slope stays constant to ±0.0013 dB/velocity across a 41 dB range of level. It is a static per-zone offset; the "velocity" in its name denotes the *zone*, not a dependence. Our converter is correct as built and the 2026-08-17 law stands, now tested against its alternative for the first time.
+
+**But reading every velocity route on kg0/kg1 to do that turned up the real architecture:**
+
+| field | kg0 | kg1 | what it does |
+|---|---|---|---|
+| `V_ATT1` | −6 | −6 | velocity → envelope-1 **attack rate** |
+| `V_ENV2` | +25 | +25 | velocity scales **envelope 2**, the filter envelope |
+| `VLOUD1` | 0 | −20 | static level offset — carried |
+| `VFREQ1` | 0 | 0 | — |
+| `ATTAK1` | 5 | 40 | the two layers' attacks differ by an order of magnitude |
+
+**`V_ENV2` +25 means the patch gets *brighter* with velocity, not merely louder.** Combined with `V_ATT1` −6 acting on two contours that already differ enormously, the whole-patch response across velocity folds in a timbre change and a contour change, not just a level law.
+
+**Neither field is read by our parser at all** — confirmed by grep; the only occurrence of `V_ATT1` anywhere in the reader is a passing comment about pivot conventions. And the model has no field for either: `velocity_to_filter_cents` is `VFREQ1`, a static corner offset, and cannot stand in for an envelope scaling.
+
+**So a converted patch with the level exactly right will still not track the original across velocity.** That is a different and less tractable failure than a gain error, because a listener meets it as the patch responding wrongly to how hard they play rather than as it being too quiet.
+
+**It also bounds what the §KRZVELOFFSET cross-machine run can show, which is the reason to take it first.** That run compares *levels*; a brightness difference reads as a level difference; so any residual it finds is partly this, and the offset number would be contaminated by exactly the thing not being carried. Better to know the size of that before interpreting a residual than after.
+
+**This also explains the curve that killed the two-layer hypothesis.** s3ked measured the whole patch's velocity slope as non-linear (0.042 dB/unit over v32→v64 against 0.185 over v64→v96) and k2kremote proved no two-layer *level* sum can produce it — a sum of two exponentials is monotonic in slope and can never be shallower than both contributors and then steeper. The cause was never in the level domain: it is `V_ENV2` and `V_ATT1` moving timbre and contour under a fixed analysis window, supported by s3ked's own crest-factor observation (8.85 dB at v32 against ~15.9 above), which is a *shape* change no level term produces.
+
+**PRIORITY REVERSED BY MEASUREMENT, 2026-09-01 — by the same person who first recommended it.** s3ked had put `V_ENV2` ahead of everything on the strength of crest factor, then noted that crest shows *that* shape moves and not *what it sounds like*, and measured brightness directly instead. The comparison was deliberately not "all routes off": the mod-matrix velocity→filter route **is** already carried by our writer (k2kremote verified 7500/8200 ct on the K2000, correct to ~45 cents), so the honest question is what the conversion loses **on top of** a route it reproduces correctly.
+
+| velocity | AKAI centroid | conversion | difference |
+|---|---|---|---|
+| 32 | 1348 Hz | 1563 Hz | **−256 cents** |
+| 64 | 4321 | 4331 | −4 cents |
+| 96 | 4264 | 4275 | −4 cents |
+| 110 | 4257 | 4240 | +7 cents |
+| 127 | 4222 | 4241 | −8 cents |
+
+**Above v64 the difference is under 8 cents — inaudible, and inside the run-to-run spread.** Total lost centroid swing across v32..v127 is **248 cents (0.21 octaves)**, essentially all of it at the bottom of the velocity range.
+
+**The sign is the opposite of what anyone guessed, and it changes what to listen for.** Dropping `V_ENV2` makes the conversion **brighter** at low velocity, not darker: `V_ENV2` +25 scales the filter envelope *with* velocity, so the AKAI applies *less* envelope at soft velocities and darkens, while a conversion without it keeps the full envelope open. **The audible symptom of this omission is soft notes that are too bright.**
+
+**So the recommendation is now: low priority, behind §KRZSHAREDGAIN** — 0.21 octaves confined below v64, against up to 8 dB of key-dependent level error in shipping output. If it is ever built it wants to be an **envelope-scaling** field; a `velocity_to_volume`-shaped one would carry none of it, since the level effect was under 0.3 dB above v64.
+
+**Two caveats kept attached, both s3ked's own:** this is one patch at one operating point (the reference preset's `V_ENV2` is +25 and the law is unmeasured, so +50 could be roughly double and should not be extrapolated from a single point); and **v1 is excluded as floor-limited, which is exactly where the effect was growing** — the difference was −256 cents at v32 and still increasing as velocity fell, so the bottom of the range is likely worse than this table shows.
+
+**Blocked on:** measuring `V_ENV2`'s law — does it scale the envelope's depth in cents or its rate, is it linear in the byte, does it pivot at a velocity the way `V_LOUD` pivots at 64 — then `V_ATT1`'s, then two new model fields, then a writer for each target. And per §171's own hard-won lesson, gate the sweep on **headroom** as well as the noise floor: a ceiling-clipped point manufactures a fake slope change, and in that run it would have manufactured exactly the evidence being looked for.
+
+## §KRZSHAREDGAIN — per-zone gain is averaged across presets into one per-sample byte (2026-09-01)
+
+**Found while checking whether §AKAILAYERGAP's layer fusion loses the AKAI's per-keygroup level offset. It does not — this does.**
+
+The K2000's `Soundfilehead.volumeAdjust` is **per sample**. Our `ZoneMapping.volume` is **per zone**. `write_krz` bridges the two by taking the **mean of every zone referencing a sample, across the whole bank rather than within a preset**. Its own comment justifies that as lossy-but-rare on the grounds that the common MPC case is one zone to one sample.
+
+**That premise does not hold for AKAI banks.** Presets there routinely share samples at different levels, and on this disc it is not the rare case but the normal one. Measured on the reference preset, whose samples are also used by preset 5 and preset 4:
+
+| sample | source asks | written | error |
+|---|---|---|---|
+| `sample A` | −12.115 dB | −6.461 dB | **+5.65 dB too loud** |
+| `sample B` | −4.846 dB | −0.969 dB | **+3.88 dB too loud** |
+| `sample C` | −12.115 dB | −4.038 dB | **+8.08 dB too loud** |
+
+All three sit on **L2, the layer that survives the choke** — most of what a listener actually hears.
+
+**The error has a direction, which makes it worse than noise.** Averaging a quiet zone with louder uses of the same sample always pulls it *up*, never down. So the intended balance between the reference preset's two layers is compressed and its deliberately-quiet layer comes out systematically too prominent — a patch-level change in character, not a per-sample inaccuracy.
+
+**Layer fusion is explicitly not the cause**, and this was checked rather than assumed: `volume` is deliberately absent from `_VOICE_FIT_FIELDS`, so `_fuse_voices` concatenates zones rather than averaging them and every zone carries its own source value intact right up to this aggregation. The loss happens at the very last step.
+
+**THE EXACT FIX EXISTS AND IS DOCUMENTED IN OUR OWN FORMAT NOTES — the writer simply never emits it.** k2kremote found it on the panel first (`EditKeyMap` on keymap 707 shows three key ranges matching the three fused zones exactly — 24-59 / 60-71 / 72-127 — each with its own sample **and its own `VolumeAdjust`, all three sitting at 0.0 dB**), and the manual describes it in terms that are a verbatim statement of this bug: *"adjust the volume of the notes in the current key range... so each key range plays at the same volume even if the samples were recorded at different volumes."*
+
+`docs/KRZ_FORMAT.md` §3.2 already documents the keymap `method` word as a bitfield where each bit adds one per-entry field: `0x10` tuning i16, `0x08` tuning i8, **`0x04` volumeAdjust i8**, `0x02` sampleID i16, `0x01` subSample u8, with `entrySize` the sum of the selected widths. We write **`0x13`** (5 bytes). Adding per-entry volume is **`0x17`**, entry size **6**, the volume byte between the i16 tuning and the i16 sampleID. **And `krz_parser._decode_table` already decodes the full bitfield including `0x04`** — so this has always been a write-side-only gap. The doc says so in as many words: *"mpc2emu always writes 0x13; it does not read/write i8-tuning, per-entry-volume, or compacted keymaps."* The capability was known, written down, and unused.
+
+**Why the keymap is the right home and the per-layer AMP `Adjust` is not.** `Adjust` carries one value for a whole layer, so it would relocate the averaging rather than remove it. The keymap's `VolumeAdjust` is per key range — a one-to-one structural match to the model's per-zone `volume` — and, decisively, **the keymap object is private to the preset that uses it**, so preset 5 and preset 4 cannot contaminate the reference preset's copy however the samples are shared. All three errors go to zero rather than being redistributed.
+
+**Specified shape (k2kremote's, adopted):** leave the per-sample `volumeAdjust` at the bank-wide mean exactly as now, and write **`zone.volume − sample_gain_db[zone.sample_name]`** into the entry's volume byte. The two then sum to the right level for every zone, and the residual is **identically zero wherever a sample is not shared** — so every bank without this bug stays byte-identical and the HW-verified unity banks cannot regress. `_vol_adjust_byte` already does the signed-i8 encoding.
+
+**One unknown left, and it is small:** the keymap field's step is assumed to be the sample field's 0.5 dB (the panel displays `0.0dB` in the same format, and a signed i8 at 0.5 dB gives ±64 dB, matching the sample editor's documented −64.0..+63.5). That is an inference, not a measurement, and wants one panel check before shipping.
+
+**IMPLEMENTED 2026-09-01.** `_build_keymap_entries` takes a `zone_gain_db` map of `id(zone) -> dB needed on top of the per-sample mean`, and switches the keymap to `method 0x17` / 6-byte entries **only when at least one residual is non-zero**. `write_krz` computes those residuals beside the existing per-sample mean. Verified selective: v13 wrote `0x13` on all 15 keymaps; v14 writes `0x17` on the 8 that need it and `0x13` on the other 7, so **banks without this bug remain byte-identical and the HW-verified unity banks cannot regress.**
+
+Two details that mattered in the implementation:
+- The hole-filling pass reads a sample id at a fixed offset within each entry to decide whether a key is empty. That offset is **+2 in the 5-byte form and +3 in the 6-byte form** — getting it wrong would have read the tuning's low byte as half a sample id, made every entry look occupied, and silently disabled the delete-lockup guard. It now follows the layout.
+- Clamped to **±127, not ±128**, per k2kremote's panel measurement of the rails (−63.5..+63.5 dB at 0.5 dB/step). `0x80` is the one value the machine cannot produce.
+
+**Measured effect on the reference preset**, per-zone gain as round-tripped from the written file:
+
+| sample | source | v13 wrote | v14 writes |
+|---|---|---|---|
+| `sample A` | −12.115 dB | −6.461 (**+5.65 too loud**) | **−12.00** |
+| `sample B` | −4.846 dB | −0.969 (**+3.88 too loud**) | **−5.00** |
+| `sample C` | −12.115 dB | −4.038 (**+8.08 too loud**) | **−12.00** |
+
+The residual error is now just the field's own 0.5 dB quantisation (0.115 and 0.154 dB), against up to 8.08 dB before.
+
+**HARDWARE-CONFIRMED 2026-09-01 (k2kremote), parameters and audio both.** v14 loaded into a verified-empty bank 800 alongside v13 at 702, so both versions were resident simultaneously and could be captured back to back — same chain, same knob, same minute, chain and gain cancelling exactly, with no reference design needed at all.
+
+Parameters: the two fields sum to the source gain on every zone — `sample A` keymap −5.5 + sample −6.5 = −12.00 (source −12.115), `sample B` −4.0 + −1.0 = −5.00 (−4.846), `sample C` −8.0 + −4.0 = −12.00 (−12.115). Max error **0.154 dB** against a 0.5 dB field quantisation. Layer 1's keymap ranges all read 0.0 dB, consistent with the selective `0x17`/`0x13` split.
+
+Audio, layer 2 isolated: **v13→v14 deltas of −5.55 / −4.02 / −8.07 dB at notes 48 / 63 / 80, against predicted −5.65 / −3.88 / −8.08. Max error 0.14 dB across all three zones.**
+
+**And an anomaly that was tested rather than explained away.** The *whole-patch* deltas (−1.55 / −2.57 / −5.33) had the wrong ordering — the zone errors predict 80 > 48 > 63, but 80 > 63 > 48 was observed. Rather than rationalise it, k2kremote muted layer 1 (unchanged by this fix, therefore pure dilution) and re-measured; the ordering was restored exactly and the errors collapsed to ≤0.14 dB. The cause was layer 1's note-dependent share diluting the change unequally: at note 48 the whole-patch delta is only 27 % of the L2 change, against 66 % at notes 63 and 80.
+
+**A correction in our favour, also from that run:** the Volume knob moved *before* the previous evening's captures, not after — program 702 reproduces them to +0.23 dB at v127 and +0.35 dB at v64, inside the 0.5 dB capture spread. So the earlier v13-era absolute levels remain valid and comparable.
+
+**An incidental safety property worth recording**, given this project has been bitten by a destructive load once: for a **verified-empty** target bank the K2000 offers only `Append / Fill / Cancel` — `OvFill`, `Overwrt` and `Merge` are simply absent from the chooser. A load into an empty bank therefore cannot go destructively wrong even if soft-key disambiguation fails.
+
+**A test was pinning the bug rather than the intent.** `test_sample_gain` asserted that two zones sharing a sample at −6 and −18 dB should both read back as their mean −12, with its own comment calling that "the averaging path". It now asserts both round-trip exactly. Worth noting as its own lesson: a test can encode a defect as expected behaviour and pass for years, and this one described what the code did rather than what the format allows.
+
+**Superseded note, kept for the trace:** changing `KEYMAP_ENTRY_SIZE` from 5 to 6 touches `_build_keymap_entries`, the mandatory hole-filling pass (which copies whole entries by size — see the delete-lockup hazard), the shared-keymap dedup, and the golden tests. Well-defined, but wants doing carefully rather than quickly.
+
+**Superseded fix direction, kept for the trace.** The K2000's AMP block `Adjust` is **per layer**, so per-layer gain is fully representable and the per-sample byte is simply the wrong and only place currently used. Carrying the key-span-weighted layer gain in `Adjust` and leaving only the within-layer residual to `volumeAdjust` would make the shared-sample case exact whenever a layer's zones agree on a level — the common shape. the reference preset is harder than that (its L2 zones are −12.115/−4.846/−12.115, not uniform), so some residual would remain, but the bulk would be carried correctly.
+
+**Blocked on** deciding how to split gain between the two destinations, and on the Adjust knee bounding what it can absorb (linear 1:1 to +6, knee at +12, hard clamp from +24 — k2kremote, measured).
+
+**And it contaminates §KRZVELOFFSET**: a cross-machine *level* comparison would read this as part of the pivot-asymmetry residual, which is a second independent reason that run's number cannot be interpreted until both this and §AKAIVELARCH are settled.
+
+## §KRZRESKEYTRK — per-key DSP on the K2000: `F2 RES KeyTrk` and the FUNs (idea, 2026-09-01)
+
+**Jan's question, after hearing §AKAILAYERGAP's over-fusion: could the K2000 model a per-key-range resonance distribution natively, rather than us fusing less to avoid averaging it?**
+
+**The short answer is yes, and for the common case no FUN is needed.**
+
+**1. `F2 RES` already has its own key tracking.** The page carries `Adjust`, `Src1`/`Depth`, `Src2`/`DptCtl`/`MinDpt`/`MaxDpt`, `VelTrk`, and — the relevant one — **`KeyTrk: 0.00dB/key`**. So a resonance that rises or falls monotonically across the keyboard is directly expressible, with no function generator involved. **Our writer never touches this field**; it is part of the `_TPL_LAYER` bytes we inherit wholesale, and ROM #199 has no filter at all, so it arrives as 0.
+
+**2. FUNs can drive resonance, and `KeyNum` is a valid input.** The manual names Key Number explicitly as a FUN input (and `BKeyNum` for the bipolar form), and `F2 RES` exposes `Src1`/`Depth`, so a FUN's output can be assigned to it like any control source.
+
+**3. the reference preset's own shape is reachable, which was not obvious.** Its distribution is non-monotonic — 18.7 dB over keys 24–59, 25.5 over 60–71, 14.9 over 72–127, i.e. a *peak* in the middle — so a linear `KeyTrk` cannot express it. But the FUN equation set includes **`|a-b|`**: with `a = KeyNum` and `b` a constant, that is a V centred on any key, and routed to `F2 RES` with a negative `Depth` it becomes a peak. A single-peak or single-dip curve is therefore available.
+
+**The limits, stated so this is not oversold.** There is one `KeyTrk` and a handful of FUNs per layer, so a fused layer gets **one shaped curve per DSP parameter**, not arbitrary per-zone values — a line through the points, or one bump, and no more. The equation set is arithmetic and waveform-shaping (`a+b`, `a-b`, `a*b`, `(a+b)/2`, `a/2+b`, `(a+2b)/3`, `-a*b`, `|a-b|`, `(a+b)^2`, the `warp1..8`, `ramp` and `lowpass` families); there is **no min/max, no quantise and no piecewise**, so a true step function is not available. FUN slots are also finite and shared with anything else a layer needs.
+
+**Why it would be worth having, and it is not to reproduce the reference preset.** v15 already gets the reference preset's top range exact by fusing *less*. The value is in **raising the ceiling on fusion**: today we can only merge voices whose DSP parameters are similar, because merging averages them — which is precisely the defect Jan heard. A source with many disjoint layers pays that cost heavily (preset 6 collapses 11 voices into 3). If per-key DSP were expressible, aggressive fusion would stop being lossy.
+
+**BLOCKED ON MEASURING THE LAW FIRST — Jan's call, and the right one.** `KeyTrk` is displayed in dB/key, but this project has now been caught three times by a plausible reading of a displayed unit (§KRZLEVELCURVE, §KRZENVDEPTH2, §KRZLFOPITCH), and once by a *panel label* whose rails differed from the obvious inference (the keymap `VolumeAdjust` stopping at −63.5 rather than −64.0). The same four questions that the VelTrk work needed apply here:
+
+1. **Where does it pivot?** The key whose resonance does not move as `KeyTrk` changes. `F1 FRQ`'s key tracking and the AKAI's `K_FREQ` both pivot, at different places; this one's pivot is unknown and a curve quoted about the wrong pivot is wrong everywhere except at one key.
+2. **Is it linear in key, and linear in the setting?** One number only characterises it if both hold.
+3. **What does the displayed dB/key actually mean** — dB per key at the pivot, or something that scales?
+4. **Is 0 genuinely neutral**, or a smallest-available value?
+
+And the two guards this project has learned the hard way: **gate on HEADROOM as well as the noise floor** (a ceiling-clipped point manufactures a fake slope — §171's near-miss), and **treat a null result as a broken experiment until the manipulation is shown to have been live** (the `leave_editor()` incident, where every edit was discarded before capture and the flat result read as a clean refutation).
+
+**THE LAW IS NOW MEASURED (k2kremote, 2026-09-01):**
+
+    resonance(key) = Adjust + KeyTrk * (key - 60)
+
+| question | answer |
+|---|---|
+| pivot | **key 60** (middle C), independently 59.2 and 59.8 at two settings — **not** the endpoint pivot the amp's VelTrk uses, so the machine is not internally consistent and neither may be assumed from the other |
+| linear? | in key (r² 0.9989 / 1.0000) **and** in the setting (0.04 and 0.10 give the same 1.01 gradient) |
+| unit | **literal** — displayed dB/key is dB/key, gradient 1.010 / 1.009, within 1 % of unity |
+| is 0 neutral? | **yes** — flat to 0.00 dB across six octaves, not a smallest-available value |
+
+Wired as `KRZ_RES_KEYTRK_DB_PER_KEY` / `KRZ_RES_KEYTRK_PIVOT_KEY`.
+
+**PROVENANCE, because Jan asked the right question at the right moment.** k2kremote's **first attempt was built on program 902** — a real converted the reference preset. They neutralised all seven confounds (layers 1 and 3 disabled, ENV2 depth 0, F1 VelTrk 0, keymap swapped to a sine, keymap KeyTrk 0, L2 widened so no layer boundary is crossed, LFO→pitch 0) and their control came back flat. It was still the wrong object to measure, and the cost was visible: **each confound took a run to find, two further runs were lost to state left behind in the rig, and the clean rebuild reached a better result in ONE run than 902 managed in six.** The numbers from 902 were discarded rather than adjusted.
+
+The clean rig also caught something no amount of neutralising on 902 would have: **#199 defaults its F3 block to BAND2 under algorithm 5**, where the reference preset's layer 2 has NONE. That would have coloured every reading, and it is only visible when you start from a known program rather than a subtracted one.
+
+**A separate finding that changes how any resonance delta should be read: resonance → output level SATURATES.** Level tracks `Adjust` at 1.00 dB/dB from 0 to 6 dB, then flattens — 6→12 dB buys 1.4 dB, 12→24 almost nothing. **the reference preset's layers sit at 19 and 14 dB, already well past the knee**, so a several-dB resonance change up there moves the output far less than its number suggests. Recorded as `KRZ_RES_LEVEL_LINEAR_MAX_DB`. Do not predict audibility from a resonance delta.
+
+**Does this remove the keys 60–71 limit? Partly, and less than hoped.**
+
+| L2 (keys 24–71) | RMS error | worst |
+|---|---|---|
+| v15 today: flat 19.0 dB | 3.26 dB | 6.5 dB |
+| best ramp: 22.4 dB, KeyTrk 0.159 | **1.95 dB** | 3.5 dB |
+
+KeyTrk **halves** the error on that layer — but does not eliminate it, because **KeyTrk is a linear ramp and the source is piecewise-constant.** Matching kg3 costs accuracy inside kg1, where v15 is currently almost exact. It trades a 6.5 dB error concentrated in one octave for ±3.5 dB spread across four.
+
+**And on the wider hope — that this would stop fusion being lossy in general — the honest answer is: only when the source resonances are MONOTONIC in key.** the reference preset's run 18.7 → 25.5 → 14.9, rising then falling, and no ramp can follow that. Fusing all three into one layer with the best available ramp gives RMS error 2.81 dB and worst 7.8 dB — **worse than v15's three-layer split.** So the rule is: use KeyTrk to improve a fused layer whose members trend one way; keep separate layers where they do not.
+
+**Not applied to the reference preset, and that is deliberate.** Halving an RMS error while introducing error into a range that is currently almost exact is a trade Jan should hear before it ships, not a clear win to be taken on a measurement alone. v15 stands as the best build.
+
+Recorded as an idea to explore, not as work in progress.
+
+**HARDWARE RESULT for the v15 fusion fix (k2kremote, 2026-09-01), and it corrects two things I said.**
+
+Read off all three resident builds rather than assumed: `702 (v13)` and `802 (v14)` both carry **L1 5.0 dB / L2 16.5 dB**; `902 (v15)` carries **L1 5.0 / L2 19.0 [C1-B4] / L3 14.0 [C5-G9]**.
+
+**Correction 1 — I quoted the fused value as 17.5 dB; the device has 16.5.** 17.5 is the *intended* figure (fused 0.684 x `RESONANCE_FULL_DB` 25.51); 16.5 is what the byte actually encodes (`round(0.684*48) = 33`, at 0.5 dB/step). **This is the second time in one day I have stated a model-side number as though it were the device value** — the first was quoting `Dec1` as 7 %/3 % when the panel shows 37 %/21 %. The lesson is narrow and worth obeying: **when predicting what a device will show, compute it through the writer's own encoder, never from the model field.**
+
+**Correction 2 — "below key 60 the builds are near-identical" was wrong, and a control caught it.** Fusing two voices instead of three does not merely release kg5; it also **re-averages what remains**, and kg1+kg3 average higher than kg1+kg3+kg5 did. So the change is **symmetric**: +2.5 dB below key 72 and −2.5 dB above it. k2kremote had set note 48 up as a control on my claim, saw it move +9.4 % in centroid — three times the effect being looked for — and read the parameters rather than reporting a result. That is exactly the discipline that has been paying all week.
+
+**Measured, all three builds resident and captured back to back (paired, same chain and knob; centroid over 0.10–0.60 s, 3 reps, v127):**
+
+| note | Δrms (v14→v15) | Δcentroid |
+|---|---|---|
+| 48 | −0.22 dB | **+265.0 Hz (+9.4 %)** — L2, now more resonant |
+| 72 | +0.07 dB | −67.8 Hz (−2.5 %) |
+| 80 | +0.07 dB | −136.6 Hz (−3.2 %) |
+| 88 | −0.09 dB | −107.2 Hz (−2.3 %) |
+
+RMS flat to ±0.22 dB everywhere, so **§KRZSHAREDGAIN's level fix survives v15 intact** — the change is purely spectral, as it should be.
+
+**Scored against the source, v15 improves every range:**
+
+| keys | source | v13/v14 | v15 |
+|---|---|---|---|
+| 24–59 | 18.7 dB | 16.5 (−2.2) | **19.0 (+0.3)** |
+| 60–71 | 25.5 dB | 16.5 (−9.0) | 19.0 (−6.5) |
+| 72–127 | 14.9 dB | 16.5 (+1.6) | **14.0 (−0.9)** |
+
+**The remaining error is concentrated in keys 60–71 at −6.5 dB, and it is a HARD LIMIT rather than a bug.** kg1 and kg3 are still fused and differ by 6.8 dB, but the program is already at the K2000's three-layer maximum and resonance is a per-LAYER DSP parameter — so there is no lever to split them. Stated explicitly so nobody re-derives it. **This is precisely the case the `F2 RES KeyTrk` / FUN idea above would address**, since a single shaped curve across one fused layer could hold two different resonances where a scalar cannot.
+
+## §KRZPANREAD — the KRZ writer emits pan and the reader never read it (2026-09-01)
+
+**Found by a cross-format field-coverage audit**, not by listening: tabulating which readers populate each model field against which writers consume it showed `pan` marked as written by all four writers and read by three. The KRZ reader was the gap.
+
+**The scale of it, measured before fixing rather than assumed:** across 40 real K2000 banks, **1715 of 2504 layers carry a non-zero pan — 68 %.** Hard-left (−7) alone appears 412 times. So every KRZ-sourced conversion was centring two thirds of its layers, and a KRZ→KRZ round trip discarded pan silently. This is the same family as §AKAIZONELOUD, §AKAITUNEREAD and the `0x1a` velocity-loudness hardcode — a field written but never read — and the fourth such found on this project.
+
+**The encoding.** `_patch_layer` packs pan into the F4/AMP segment (`0x53`) byte 14's **high nibble**, as a signed −7..+7 step: `hob[14] = ((step & 0x0F) << 4) | (hob[14] & 0x0F)`. The reader now inverts exactly that, and the round trip is exact to the field's own 1/7 quantisation (−1.00 → −1.000, −0.43 → −0.429, +0.57 → +0.571).
+
+**One interaction that had to be respected, and it is not obvious from the writer alone:** the stereo path writes `0x90` into the same byte to pull one header hard left as **channel routing**, not as a musical pan. A naive inversion reports every stereo layer as hard left. Pan is therefore suppressed for a zone whose sample is stereo.
+
+**And that guard was got wrong first, in a way worth recording.** The initial attempt tested `getattr(cur, 'is_stereo_pair', False)` — an attribute no dataclass has, so it returned `False` forever and the check never fired. `test_no_getattr_default_hides_a_misspelled_model_field` caught it immediately. **That is the second time in one session that test has caught this exact pattern** (the first was `_src_reson` stamped as an ad-hoc attribute), which is a strong argument for the guard: a `getattr` with a default is indistinguishable from working code when the name is wrong. The fix tests the SAMPLE's own `channels`, a real field, at the point where the sample is actually in scope.
+
+**Test:** `tests/test_krz_roundtrip.py::test_zone_pan_round_trips`, using three voices with incompatible filter types so `_fit_layers` cannot merge them — pan is per LAYER on the K2000, so a fused layer keeps only the first zone's pan and would have tested nothing. The first version of the fixture used five voices and silently exercised the fusion path instead.
+
+## §KRZF4AMPDEPTH — the K2000 tremolo law, and the constant that must be split before it is used (2026-09-01)
+
+**What landed.** k2kremote measured `F4 AMP`'s modulation section on the
+K2000: `Src1` at byte offset **262** (OFF = 0, LFO1 = 114), `Depth` at
+**263**, signed i8, **1.0 dB per unit**, panel rails **±96**. Recorded in
+`models/common.py` as `KRZ_F4_AMP_*`. This is the first hardware anchor
+anywhere on this project for LFO→amplitude: `lfo1_to_volume` is set only by
+`sfz_parser` and `sf2_parser` and written by no writer at all, so tremolo has
+never reached a piece of hardware from here.
+
+**Two things about the measurement worth keeping.**
+
+The adjacency of `Src1`/`Depth` was guessed correctly in advance; the absolute
+offsets and the scale were not. That half-right guess is the dangerous shape —
+0.02 dB/unit two pages over on `F2 RES KeyTrk` versus 1.0 dB/unit here, same
+panel, same edit buffer, 50× apart. Extrapolating would have produced tremolos
+too shallow to hear, which reads as a broken feature rather than a wrong
+constant and would have been correspondingly slow to diagnose.
+
+±96 is the third measured rail this week narrower than the byte holding it
+(keymap `VolumeAdjust` ±63.5, `F2 RES KeyTrk` ±100, this one ±96). Clamp to
+the measured rail, never to the container.
+
+### Do this first, before writing any tremolo
+
+**1. Split `LFO_VOLUME_FULL_DB`. DONE 2026-09-01** — now
+`LFO_VOLUME_MODEL_FULL_DB` (the model's fixed unit) and
+`E4B_LFO_VOLUME_FULL_DB` (the unmeasured EOS fact). It was documented as
+an EOS-specific number —
+the dB swing of an E4B mod cord at amount 100 % — but `lfo_volume_depth_to_amount`
+uses it as the model's *universal* dB↔amount convention. So it is simultaneously
+(a) a fact about EOS hardware, currently a plausible guess, and (b) the meaning
+of every `lfo1_to_volume` value in the model, arriving from SFZ and SF2. The
+day someone measures the real EOS full scale and edits this one line, every
+SFZ and SF2 tremolo silently changes depth on every target, including targets
+with no EOS involvement.
+
+```python
+# models/common.py
+LFO_VOLUME_MODEL_FULL_DB = 24.0   # the model's dB <-> 0..1 convention; arbitrary
+                                  # but fixed. Changing it re-scales every
+                                  # existing lfo1_to_volume value. Don't.
+E4B_LFO_VOLUME_FULL_DB = 24.0     # EOS mod-cord amount 100% -> dB. UNMEASURED;
+                                  # this is the constant to edit when it is.
+```
+
+`lfo_volume_depth_to_amount` takes `LFO_VOLUME_MODEL_FULL_DB`; only the E4B
+writer takes the other. Cheap now, invisible-and-expensive later.
+
+**2. Settle the swing direction. ANSWERED 2026-09-01 (k2kremote), and the
+answer is the expensive one.** The swing is **bipolar about the un-modulated
+level**, and `Depth` is the **one-sided amplitude in dB**: at Depth 12 the peak
+read +12.08 dB and the trough −11.51; at Depth 24, +23.85 and −22.52.
+Peak-to-peak is 2×Depth. **Writing depth D costs the full D dB of headroom
+above nominal** — not D/2, and not zero — so a zone within D dB of full scale
+clips on every tremolo peak. The write side must budget for this; that is why
+the writer half of this note is still not implemented.
+
+The old question, for the record, was: With `Depth` non-zero, does the modulated **peak**
+sit above the un-modulated level, at it, or below it? Symmetric costs
+`depth/2` of headroom and can clip a zone already near full scale; downward-only
+costs none. `lfo_volume_depth_to_amount`'s docstring asserted downward-only from
+2026-07-28 until 2026-09-01 on no evidence at all — retracted in the source, and
+a good example of the §KRZENVLOOP failure mode (a confident note nobody had
+checked, believed for months because it was written in the same voice as the
+measured ones).
+
+Do not assume the two machines agree. They already disagree about velocity
+pivots — the AKAI's `V_LOUD` rotates about velocity 64, the K2000's amp VelTrk
+about 127 — so a shared answer here is a finding, not a default.
+
+### Then the writer
+
+Once direction is known, in `krz_writer._patch_layer`, alongside the other
+measured-constant writes:
+
+```python
+amt = abs(getattr(voice, 'lfo1_to_volume', 0.0) or 0.0)
+if amt > 0.0:
+    db = amt * LFO_VOLUME_MODEL_FULL_DB
+    d = max(-KRZ_F4_AMP_DEPTH_CLAMP,
+            min(KRZ_F4_AMP_DEPTH_CLAMP,
+                int(round(db / KRZ_F4_AMP_DEPTH_DB_PER_UNIT))))
+    b[KRZ_F4_AMP_SRC1_OFFSET] = KRZ_F4_AMP_SRC_LFO1
+    b[KRZ_F4_AMP_DEPTH_OFFSET] = d & 0xFF
+```
+
+Guarded, because LFO1 is a shared resource: `krz_writer` already routes LFO1 to
+pitch for vibrato, and the same oscillator cannot carry two independent depths.
+`sfz_parser` handles exactly this conflict on its own side (`test_lfo_volume.py`
+asserts `lfo1_to_volume` is left at 0.0 when LFO1 is claimed by pitch) — mirror
+that precedence here rather than inventing a second one, and if both are wanted
+the second must go to LFO2.
+
+**The read side is DONE (2026-09-01)** — the half Jan asked for. `krz_parser`
+recovers `lfo1_to_volume` / `lfo2_to_volume` from the `HOB_F4_TAG` branch as
+`|depth| * KRZ_F4_AMP_DEPTH_DB_PER_UNIT / LFO_VOLUME_MODEL_FULL_DB`. Safe ahead
+of the direction question — reading a byte the machine already wrote cannot
+clip anything. The write is what waits.
+
+**LFO2 was wired as well as LFO1, and that is not symmetry for its own sake.**
+Of the 36 layers carrying LFO→amplitude across the local corpus, **24 route
+LFO2 and only 12 route LFO1**. LFO1 is the one that got measured, so wiring
+only the measured source would have dropped two thirds of the real cases — a
+reminder that "what was measured" and "what is common" are different questions
+and the corpus answers the second one for free.
+
+The sign is dropped deliberately: inverting an LFO shifts its phase, so the
+model's 0..1 depth is a magnitude by definition. That is *not* a general
+licence — the filter-envelope read in the same file had `abs()` applied to it
+wrongly, where the sign meant a corner sweeping down rather than up, which is a
+different patch.
+
+Tested by `test_lfo_to_amplitude_is_read_back_from_the_f4_segment`, which
+patches the bytes into a written file rather than round-tripping (the writer
+does not emit the field, so a round-trip would pass for the wrong reason today
+and silently become a real test later). Confirmed to fail with the read
+reverted; carries its own no-tremolo control so it cannot pass on a default
+that happens to match.
+
+Caveat on scope: `Src2`, `DptCtl`, `MinDpt` and `MaxDpt` offsets remain
+**inferred from adjacency, not measured** — the same inference that was
+half-right about `Src1`/`Depth`. Read and write `Src1`/`Depth` only.
+
+## §AKAILFOAMP — the AKAI tremolo law is a product, and the model's ceiling was below the material (2026-09-01)
+
+**Route.** LFO→loudness on the S3000XL is a mod-matrix destination with three
+slots: sources in program bytes `MODSAMP1/2/3` (79/80/88), amounts in program
+`MODVAMP1/2` (92/93) for slots 1–2 and in **keygroup** byte 155 for slot 3.
+LFO1 is source value 7. Offsets live in `models/common.py` beside the law, not
+in the parser — the amount byte means nothing without its source byte, the same
+trap as `MODSFILT1`/`MODVFILT1`.
+
+**Law** (s3ked, two runs). One-sided swing in dB:
+
+```
+    one_sided_dB = 0.010068 * LFODEP * amount
+```
+
+`LFODEP` and the amount **multiply**, as §160 already found for pitch. What
+establishes that is not linearity in each variable — which would have been
+consistent with a sum — but **equal-product equivalence**: 99×20, 50×40 and
+40×50 landed within 0.17 dB of each other across a 2.5× range of each variable.
+Joint fit through the origin, 12 points from three runs, max residual 0.74 dB.
+
+The first run reported a flat **0.9717 dB/unit at LFODEP 99**; the joint fit
+gives 0.9968 there. Use the product form. Treating the flat figure as absolute
+would over-read a LFODEP-50 program by 2× and a LFODEP-10 program by **9.9×** —
+arriving with the authority of a measured constant, which is worse than not
+reading tremolo at all.
+
+**Two machines agree.** 0.9968 dB/unit at full depth against the K2000's
+1.0 (§KRZF4AMPDEPTH) — two rigs, two agents, nothing shared between the
+derivations. Set against velocity→amplitude, where the same two machines pivot
+at 64 and at 127 and nothing transfers, that is worth noting.
+
+**But they differ on symmetry, and the better method won.** s3ked tracked the
+**median** across five depths: 0.42 dB of drift while the swing went 0→49 dB,
+which is strong evidence the AKAI swings symmetrically about the zone level.
+k2kremote's K2000 endpoints are *not* symmetric — the modulation centre sits
+above nominal by an amount growing with depth (+0.29 dB at Depth 12, +1.47 at
+24), confirmed against the noise-floor explanation by measuring at two gains
+8 dB apart. Median tracking is the better proof precisely because it is
+insensitive to the endpoint effects that caught the max/min method out.
+
+For the write side both give the same rule anyway: **budget the full amount in
+dB above nominal**, since the cost is the peak.
+
+### The corpus check found something the law did not
+
+Surveying **10,933 real AKAI programs across 21 CD-ROM images**: LFO1 is named
+as a loudness source 103 times (slot 1 ×97, slot 2 ×1, slot 3 ×5), and
+**25 keygroups carry a non-zero amount**. Their one-sided depths run **0.31 to
+49.84 dB**, median 3.38.
+
+A first pass reported "8 programs, median 12.46" — wrong, and wrong in an
+instructive way: slot 3's amount is a **per-keygroup** field and that scan read
+only the first keygroup of each program, so it both under-counted and pulled
+the median up by a factor of nearly four. The law was right, the unit of
+counting was not.
+
+Six of those 25 exceeded `LFO_VOLUME_MODEL_FULL_DB was 24.0`, and
+`lfo_volume_depth_to_amount` clamps at 1.0 — so **the model's "arbitrary unit"
+was a ceiling sitting below the real material**, truncating a 49.84 dB tremolo
+to 24 and losing half its depth. Raised to **96.0**, matching the K2000's own
+±96 dB rail.
+
+**That raise also corrects a note written here earlier the same day**, which
+said changing this constant would silently rescale every SFZ and SF2 tremolo.
+True while one constant served both as an EOS hardware fact and as the model's
+unit; false after the split, because the value is now used symmetrically —
+readers divide by it, writers multiply by it, in one process, and no `Bank` is
+ever serialised. The dB is preserved across any change of scale; only the
+intermediate 0..1 number moves. The real hazard was ever letting a measurement
+and a unit share a name.
+
+**The rarity is itself the argument for care.** 25 keygroups across 10,933
+programs is a fraction of a percent.
+A field that rare will never be noticed if it is read wrongly — nobody
+A/B-tests the one patch in ten thousand — which is exactly why it had to be
+right before it was wired, rather than after.
+
+### Not done
+
+The **write** side. The K2000 has no second multiplier: its `Depth` carries the
+whole product, so AKAI→KRZ must collapse `LFODEP × amount` into one number.
+That is fine for playback and **not invertible**, and worse than it looks —
+`LFODEP` is **program-wide** and also feeds LFO1's pitch destination via
+`L_PTCH` (the same product form), while the amount is specific to loudness. So
+normalising `LFODEP` silently rescales the **vibrato**, and normalising the
+amount rescales the **tremolo**. On a patch using both there is no single
+correct collapse. Do not write a tremolo writer that "normalises" either factor
+without deciding explicitly which modulation is allowed to move.
+
+**Rails, and this one runs opposite to the K2000's.** Three K2000 rails this
+week were *narrower* than their containers (±63.5, ±100, ±96); the AKAI clamps
+nothing at all over SysEx — `MODVAMP1` written −128..+127 reads back verbatim,
+and `MODSAMP1` accepts 15, 20 and 255, which are not valid sources. The
+container **is** the rail; ±50 is a panel or spec limit the machine does not
+enforce. The writer must clamp, because nothing else will. Whether the machine
+*acts* sensibly on an invalid source is a separate question nobody has asked.
+
+## §MPCFILTER — the MPC filter section, measured (SETTLED 2026-09-01, hardware)
+
+Every constant this project applied to an MPC filter was an **E4XT**
+measurement standing in for one nobody had taken. All of them are now measured
+on Jan's MPC One, in one bench session, against a program he built and stepped
+by hand.
+
+| | was | measured |
+|---|---|---|
+| cutoff curve, classic XML path | `nominal_knob_to_hz` (unmeasured) | `21.377·728^knob` |
+| velocity → filter, full depth | 9,120 cents (E4XT) | **11,409** |
+| filter envelope, full depth | 4,383 cents (E4XT) | **11,409** |
+| resonance, Low 2 | 25.51 dB, linear (E4XT) | `0.15 + 18.21·res^0.502` |
+| resonance, MPC LP | 25.51 dB, linear (E4XT) | `2.15 + 20.54·res^0.390` |
+| KB>FLT at max | 1.000 oct/oct (assumed) | **0.945** |
+
+### One law for filter-frequency modulation
+
+Every filter-frequency destination adds in **knob units at full efficiency**,
+so full depth sweeps the entire cutoff knob range. Measured three ways:
+
+```
+  velocity -> filter      11409 cents   (efficiency 1.008 against nominal)
+  filter envelope Depth 64  11394
+  filter envelope Depth 96  11485
+  the knob range itself    11409
+```
+
+Spread 0.8 %. The third point was not ceremony: Depth 127 saturates the
+analysis, so two points plus a saturated endpoint is a line by definition. The
+AKAI tremolo had already shown what assuming linearity in the second variable
+costs — a flat constant fitted at one depth was 9.9× wrong at the other end.
+
+**The envelope error was the largest single defect found:** 4,383 against
+11,409 is 2.60×, on the **41.6 %** of real keygroups that use a filter
+envelope. Those have all been converting at 38 % of their true sweep.
+
+### The cutoff curve belongs to the engine, not the file format
+
+§MPCCUTOFF's curve was applied only when `is_mpc3`, with classic XML sent
+through the unmeasured nominal scale. **That split was drawn on the wrong
+axis.** The curve is a property of the filter, and a classic XPM played on a
+modern MPC runs through the same legacy keygroup engine §MPCCUTOFF was
+measured on. Confirmed directly here — legacy mode, velocity and envelope out
+of circuit, two knob positions reading back within **0.8 %**:
+
+```
+  knob 32/127 = 0.2520   measured 111.0 Hz -> implied knob 0.2499  (-0.8 %)
+  knob 95/127 = 0.7480   measured 2862.6 Hz -> implied knob 0.7431  (-0.7 %)
+```
+
+The local corpus is 6,079 classic XPMs, so this was not a corner case.
+
+### Three filter types, and what they share
+
+- **Low 2** (35 % of keygroups) — 12 dB/oct, the reference.
+- **MPC LP** (31 %) — the MPC3000 emulation, also 12 dB/oct, and **on the same
+  cutoff curve to under 1 %**. But a different voicing: ~2 dB more energy in
+  the octave above the corner and a faster fall beyond, and a **different
+  resonance law in all three terms**.
+- **Low 4** (2.4 %) — genuinely 24 dB/oct (measured directly off the spectrum
+  at −23.8 / −22.9 dB per octave). Consistent with the shared curve to ~10 %;
+  three 24 dB/oct topologies fit about equally (2.0–2.2 dB residual), so the
+  absolute corner is model-dependent by ±8 % and no departure can be claimed.
+  The **ratio** between two knob settings is topology-independent and gives
+  16.4–16.6 against a predicted 14.9 — a hint of being ~10 % steeper, recorded
+  as a hint.
+
+### MPC LP is not neutral at resonance 0
+
+It carries **+2.15 dB** of inherent resonant peak where Low 2 measures +0.15.
+Character of the emulation, not an offset error. A resonance-0 MPC LP patch
+converted at resonance 0 loses a bump it actually has.
+
+Resonance also **moves the corner**: 184.6 → 213.9 Hz across the range on both
+filters, about 2.5 semitones.
+
+`RESONANCE_FULL_DB`'s own note said the blocker for putting every parser on the
+shared peak-height scale was "knowing each machine's peak-height range, which
+only the AKAI and the E4XT currently have measured". The MPC now has it, and
+`xpm_parser` joins them instead of normalising by its own dial.
+
+### Method notes worth more than the constants
+
+**Do not take a −3 dB crossing.** `hw_measure.corner_frequency` is accurate to
+0.3 % on synthetic ideal 2-pole data and reads **~25 % low on real spectra**.
+It was caught only because §MPCCUTOFF disagreed, and it had already produced a
+confident law over six points that were all the reference band's edge. Fit the
+whole curve with a pole model instead.
+
+**Exclude bins that have reached the noise floor.** A 4-pole hits the floor
+four times sooner than a 2-pole, so a fixed upper bound that is harmless at
+12 dB/oct poisons the fit at 24 — the model is asked to reproduce a flat floor
+with a falling curve. First attempt returned 13,366 Hz for a 220 Hz corner.
+
+**`anchor_offset` fails on any wide-dynamic-range sweep.** It thresholds at 5 %
+of the loudest note, so a closing filter's quiet end falls below the threshold
+and every analysis window slides. It read as "velocity does nothing" on a
+correctly configured program. Use a comb grid search over the whole schedule
+and print the offset beside `LEAD_IN`.
+
+**A gate that fires on correct data is worse than no gate.** The
+constant-corner check (three identical corners = the band edge, not a filter)
+was right for velocity sweeps and wrong for a deliberate velocity-off run. It
+is now mode-aware.
+
+**Two points beat one when a model is ambiguous.** Low 4's absolute corner
+depends on which 24 dB/oct topology you assume; the *ratio* between two knob
+settings does not, because the same unknown factor appears at both and
+cancels. Jan pushed for the second point after a single-point result; he was
+right.

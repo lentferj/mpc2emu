@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Optional
 
 from models.common import (
+    AKAI_VLOUD_SWING_DB_PER_UNIT,
     AKAI_LFO_DEPTH_CAL_LPTCH,
     akai_01_to_filq,
     KEY_FILTER_OCT_PER_OCT,
@@ -1774,7 +1775,7 @@ _PROGRAM_HW_DEFAULTS = {
 
 def _program_common(name: str, n_keygroups: int, lo_key: int, hi_key: int,
                     lfo1_rate=None, prog_num: int = 0,
-                    midi_channel=None) -> bytearray:
+                    midi_channel=None, vel_to_volume_db=None) -> bytearray:
     """The 192-byte program common block, filled with the format's own
     documented defaults rather than zeros."""
     p = bytearray(PROGRAM_COMMON_LEN)
@@ -1897,7 +1898,27 @@ def _program_common(name: str, n_keygroups: int, lo_key: int, hi_key: int,
     p[0x17] = 99                        # stereo level
     p[0x18] = 0                         # pan
     p[0x19] = 80                        # loudness
-    p[0x1a] = 20                        # velocity > loudness
+    # V_LOUD, "velocity > loudness". HARDCODED AT 20 UNTIL 2026-09-01
+    # (§KRZAMPVEL): the reader never read offset 0x1a at all, so the source's
+    # own value was discarded on read and invented here on write. It is real,
+    # varying content -- 20/20/25/25/30/36 across six programs on one disc --
+    # so an AKAI->AKAI round trip flattened every program's dynamic response
+    # to a single number.
+    #
+    # Through the measured law (s3ked §171): the response rotates about
+    # velocity 64 and the full-scale swing is 1.19557 dB per unit, so the byte
+    # is the swing divided by that. SIGNED and clamped to the field's own
+    # -50..+50: a negative V_LOUD means harder is quieter, which is unusual
+    # but legal, and an unsigned clamp would silently drop it.
+    #
+    # The old 20 stays as the fallback for a source that states nothing, so
+    # conversions from formats with no such field are byte-identical to before.
+    if vel_to_volume_db:
+        p[0x1a] = _clamp(int(round(vel_to_volume_db
+                                   / AKAI_VLOUD_SWING_DB_PER_UNIT)),
+                         -50, 50) & 0xFF
+    else:
+        p[0x1a] = 20
     p[0x1e] = 99                        # pan depth
     # LFO1 speed. Fixed at 50 until 2026-08-11; now from the source when it
     # carries an LFO rate, through the measured linear law. A preset with no
@@ -2683,8 +2704,13 @@ def build_program(preset, name: str, prog_num: int = 0,
     # PROGRAM while ours is per voice, so there is one to pick and this is it.
     _lfo = next((v.lfo1_rate for v in preset.voices
                  if getattr(v, 'lfo1_rate', None) is not None), None)
+    # V_LOUD is per PROGRAM on the AKAI while ours is per voice, so take the
+    # first voice that states one -- the same rule the LFO rate above uses.
+    _vvol = next((v.velocity_to_volume_db for v in preset.voices
+                  if getattr(v, 'velocity_to_volume_db', 0.0)), None)
     out = _program_common(name, len(keygroups), lo, hi, lfo1_rate=_lfo,
-                          prog_num=prog_num, midi_channel=midi_channel)
+                          prog_num=prog_num, midi_channel=midi_channel,
+                          vel_to_volume_db=_vvol)
     dead: list = []
     for i, ((klo, khi), owner, zs) in enumerate(keygroups):
         out += _keygroup(klo, khi, zs, i, voice=owner, dead_key_ranges=dead)
@@ -3115,7 +3141,18 @@ def build_akai_volume(bank: Bank, bank_name: Optional[str] = None,
             for z in v.zones:
                 z.sample_name = name_map.get(z.sample_name, z.sample_name)
         fn = f"{safe_filename((pname or f'PROGRAM{i}').strip().upper(), 'PROGRAM')}.P3"
-        _pnum = (getattr(preset, 'program_number', 0) or 0) if _usable else n_written
+        # PRGNUM 0 IN THE FALLBACK -- CONSIDERED AND REJECTED (§AKAIPRGNUM0).
+        # s3ked flagged that a cold-booted S3000XL carries a boot-resident
+        # `TEST PROGRAM`/`SINE` at PRGNUM 0, and a first version of this
+        # comment shifted the positional fallback to start at 1 to avoid a
+        # collision there. Jan corrected it the same night: loading with CLR
+        # first -- the normal panel workflow, not a special precaution --
+        # already clears that boot-resident program before anything of ours
+        # loads, so the collision this was defending against does not occur
+        # in ordinary use. Shifting our own numbering is not the fix for an
+        # operating-procedure question on the machine side; reverted.
+        _pnum = ((getattr(preset, 'program_number', 0) or 0) if _usable
+                 else n_written)
         if _pnum > 127 and not _over_127:
             _over_127 = True
         _pdata = build_program(preset, pname, prog_num=_pnum,

@@ -519,6 +519,37 @@ def write_akai_output(output_banks: List[Bank], out_dir: Path, bank_name: str,
         print(f"{'='*60}\n")
 
 
+def krz_needed_up_semitones(bank: Bank) -> dict:
+    """Sample name -> highest EFFECTIVE up-pitch semitones any zone in
+    `bank` needs from it, for the KRZ headroom-aware downsample step below.
+
+    `zone.coarse_tune` (a source that repitches a zone by whole semitones
+    on top of the key -> sample-root auto-transpose, e.g. AKAI TUNE
+    combining keygroup+zone into a full-octave correction) was missing
+    from this computation until 2026-08-31 (§KRZCOARSETUNE) -- it used only
+    `hi_key - root_note`, so a sample needing MORE up-pitch headroom than
+    that (because its zone also carries a real coarse_tune) could be
+    resampled to a rate that gives LESS headroom than the zone actually
+    needs, tightening the up-pitch ceiling `writers/krz_writer.py`'s
+    `_build_keymap_entries` enforces beyond what the source material
+    requires. Mirrors that same function's `(K - r_zone) + coarse_tune`
+    total-shift formula.
+    """
+    samples_by_name = {s.name: s for s in bank.samples}
+    need_up: dict = {}
+    for p in bank.presets:
+        for v in p.voices:
+            for z in v.zones:
+                samp = samples_by_name.get(z.sample_name)
+                if samp is None:
+                    continue
+                r_zone = z.root_key if z.root_key else samp.root_note
+                this_needed = (z.hi_key - r_zone) + getattr(z, 'coarse_tune', 0)
+                need_up[z.sample_name] = max(need_up.get(z.sample_name, 0),
+                                             this_needed)
+    return need_up
+
+
 def main():
     ap = argparse.ArgumentParser(
         description='mpc2emu — Multi-format Sampler Converter',
@@ -1177,17 +1208,11 @@ def main():
               f"{_KRZ_RATE_FLOOR} Hz; override --max-sample-rate, 0 disables)...")
         step_n += 1
         for bank in source_banks:
-            need_hi = {}    # sample name → highest key any zone asks it to play
-            for p in bank.presets:
-                for v in p.voices:
-                    for z in v.zones:
-                        need_hi[z.sample_name] = max(need_hi.get(z.sample_name, 0),
-                                                     z.hi_key)
+            need_up = krz_needed_up_semitones(bank)
             for i, s in enumerate(bank.samples):
-                hi = need_hi.get(s.name)
-                if hi is None or s.sample_rate <= _KRZ_RATE_FLOOR:
+                if s.name not in need_up or s.sample_rate <= _KRZ_RATE_FLOOR:
                     continue
-                needed_up = max(0, hi - s.root_note)        # semitones up required
+                needed_up = max(0, need_up[s.name])         # semitones up required
                 cur_head = (1200 * math.log(48000.0 / s.sample_rate, 2) / 100
                             if s.sample_rate < 48000 else 0)
                 if needed_up <= cur_head + 0.5:             # already tracks (+tol)

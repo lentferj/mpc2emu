@@ -241,6 +241,18 @@ def key_track_to_filter_amount(oct_per_oct: float) -> float:
 #: pivot clusters around note ~70, not the assumed 64 -- recorded in
 #: TODO.md/RESOLUTION_NOTES.md, not yet acted on (unclear where in the model a
 #: pivot-not-64 correction belongs without more thought).
+#:
+#: NOT A CONFIRMED LAW (2026-08-28, s3ked). This same field, measured on the
+#: same physical S3000XL, gave K_FREQ/12 unscaled to 96-103% -- a real,
+#: unresolved disagreement between two instruments (see TODO.md). Four
+#: candidate mechanisms for the gap have been named and refuted (masking,
+#: band-limited compression, a pivot error, a fixed-frequency anchor in the
+#: corner estimator), so 0.622 is not simply a mistake either. Treat this as
+#: an unexplained empirical correction from ONE bench sweep, not a physical
+#: constant -- in particular, it has NOT been ruled out as note-dependent
+#: (correct near the sweep's own test notes, 42-78, and increasingly wrong
+#: toward the ends of the keyboard, which by construction sounds fine
+#: everywhere it was checked and is the hardest kind of error to catch by ear).
 AKAI_KEYFOLLOW_NEG_SCALE = 0.622
 
 
@@ -679,6 +691,79 @@ AKAI_ENV2_DEPTH_MAX = (E4B_FENV_OCT_PER_UNIT * 100.0 * 100.0
 #: tests/test_docs_constants_agree.py on that test's first run.
 
 
+#: V_LOUD (program byte 0x1a, "velocity > loudness") -> the full-scale
+#: amplitude swing in dB from velocity 1 to 127.
+#:
+#: CONFIRMED INDEPENDENTLY 2026-09-01 on a different program by a different
+#: measurement: slope 0.1886 measured against 0.1892 predicted at V_LOUD +20.
+#:
+#: And `VLOUD1` was tested against this and is a STATIC offset, not a second
+#: velocity term -- a hypothesis raised and then refuted by its own author.
+#: Sweeping VLOUD1 -50..+10 at fixed V_LOUD moves the intercept at 0.59955
+#: dB/unit (r2 0.999801, against this file's own 0.60576) while the slope
+#: stays constant to +-0.0013 dB/velocity across a 41 dB range of level. The
+#: "velocity" in VLOUD1's name denotes the ZONE, not a dependence.
+#:
+#: A TRAP FROM THAT RUN, worth carrying to any repeat: the VLOUD1 +20 row had
+#: to be excluded because v127 sat flat against the gain ceiling, which fitted
+#: as a slope of 0.137 and would have looked exactly like the velocity-term
+#: evidence being looked for. **A ceiling-clipped point manufactures a fake
+#: slope change.** Gate on HEADROOM, not only on the noise floor.
+#:
+#: CONFIRMED INDEPENDENTLY 2026-09-01 on a different program by a different
+#: measurement: slope 0.1886 measured against 0.1892 predicted at V_LOUD +20.
+#:
+#: And `VLOUD1` was tested against this and is a STATIC offset, not a second
+#: velocity term -- a hypothesis raised and then refuted by its own author.
+#: Sweeping VLOUD1 -50..+10 at fixed V_LOUD moves the intercept at 0.59955
+#: dB/unit (r2 0.999801, against this file's own 0.60576) while the SLOPE
+#: stays constant to +-0.0013 dB/velocity across a 41 dB range of level. The
+#: "velocity" in VLOUD1's name denotes the ZONE, not a dependence.
+#:
+#: A TRAP FROM THAT RUN, worth carrying to any repeat: the VLOUD1 +20 row had
+#: to be excluded because v127 sat flat against the gain ceiling, which fitted
+#: as a slope of 0.137 and would have looked exactly like the velocity-term
+#: evidence being looked for. **A ceiling-clipped point manufactures a fake
+#: slope change.** Gate on HEADROOM, not only on the noise floor.
+#:
+#: MEASURED (s3ked §171, 2026-09-01) on a white-noise program with VLOUD1,
+#: VFREQ1 and V_ATT1 all zeroed -- the first sums with the field under test,
+#: the second lets velocity change timbre so RMS moves for a reason that is
+#: not loudness, and the third changes the contour under the analysis window.
+#:
+#:     dB(vel) = L64 + 0.009460 * V_LOUD * (vel - 64)
+#:     swing_dB = 1.19557 * V_LOUD          r2 = 0.9999816
+#:
+#: THE RESPONSE ROTATES ABOUT VELOCITY 64, it does not scale from silence:
+#: the level at v64 measured -37.9 dBFS at V_LOUD 0, 25 and 50 alike. Same
+#: pivot `K_FREQ` uses for key-follow (§167). V_LOUD 0 is genuinely neutral
+#: (slope 0.00001 dB/unit, r2 0.029 -- i.e. no velocity dependence at all),
+#: so it is a real zero rather than a smallest-available value.
+#:
+#: Per end about the pivot that is 0.598 dB/unit, against VLOUD1's 0.60576
+#: and PRLOUD's measured 0.603 -- all three AKAI loudness fields step about
+#: 0.6 dB per unit, which is a useful consistency check on any of them.
+#:
+#: **A SWEEP ACROSS THE WHOLE RANGE LOOKS COMPRESSIVE AND IS NOT.** A straight
+#: fit over everything gives r2 0.987 with +-5.5 dB residuals in a clear W --
+#: the loud end running into an ABSOLUTE OUTPUT CEILING at -25.6 dBFS, not a
+#: curve in the law. Tested rather than asserted: the ceiling is fixed, so
+#: lowering PRLOUD buys headroom and should move the clamp while leaving the
+#: slope alone -- at PRLOUD 80 (12.3 dB headroom) V_LOUD 20 is clean and 30
+#: clips; at PRLOUD 60 (24.3 dB) V_LOUD 40 is within 0.4 dB and only 50 clips,
+#: with the ceiling reading -25.62 dBFS at both. **So the law has no ends to
+#: it** -- a program with more headroom simply uses more of the range, and a
+#: converter should carry the source's number rather than any curve fitted
+#: from a clipped sweep.
+#:
+#: NOT CLAIMED: the ceiling was measured on one program through one signal
+#: path and may be this rig's rather than the machine's; whether it belongs to
+#: the voice or to something downstream was not separated. And the v64 pivot
+#: is measured at note 60 on one keygroup of noise -- that it holds across
+#: notes is assumed, not shown.
+AKAI_VLOUD_SWING_DB_PER_UNIT = 1.19557
+
+
 #: VLOUD1 (per-zone level offset) -> dB. s3ked 2026-08-17: the full law is
 #: `dB = 0.60576 * VLOUD1 - 20.1778`, r2 0.999896 over -50..+20; the intercept
 #: is the absolute output level at VLOUD 0, so an OFFSET uses the slope alone.
@@ -915,7 +1000,50 @@ def akai_lfo_rms_cents(lfodep: int, l_ptch: int) -> float:
             * max(0, min(99, lfodep)) * abs(max(-50, min(50, l_ptch))))
 
 
-def akai_lfo_depth_to_pitch(byte: int, l_ptch: int = None) -> float:
+#: `LFO1WAVE` (program byte 97) -> RMS-to-one-sided-peak factor.
+#:
+#: RMS is waveform-independent (a second moment about the carrier equals the
+#: mean square FM deviation for any periodic shape), which is why
+#: `AKAI_LFO_RMS_CENTS_PER_PRODUCT` could be measured without knowing the
+#: wave. Converting RMS to the one-sided peak this project's model field
+#: wants DOES need the shape, and until 2026-08-31 nobody read this byte —
+#: every AKAI-sourced LFO1 was silently treated as a triangle.
+#:
+#: s3ked's §46 (2026-08-12) measured all four values on hardware by the
+#: direct argument: LFO1 drives pitch, so the pitch track over one LFO cycle
+#: IS the waveform. Values 0/1/2 came back exactly as the AKAI spec names
+#: them (triangle/sawtooth/square) and give an exact factor. Value 3 read as
+#: real but unidentified by shape alone at the time — symmetric like a
+#: triangle (slope asymmetry 1.04) but spending half as long near centre
+#: (0.16 against triangle's 0.34) — until Jan named it from the S3000XL
+#: manual itself (2026-08-31): **random**.
+#:
+#: `random`'s factor is UNMEASURED and left at the triangle's `sqrt(3)` as a
+#: provisional stand-in, not a derivation — a first attempt at one (assuming
+#: the AKAI's random generator is uniformly distributed, which would give
+#: the same RMS/peak ratio as a triangle) was proposed 2026-08-31 and
+#: WITHDRAWN THE SAME NIGHT: s3ked pointed out §46's own "time near centre"
+#: statistic is self-calibrating (it predicts, and measures, ~0.33 for the
+#: two known uniform/ramp shapes and 0.0 for square) and reads 0.16 for
+#: value 3 — half the uniform prediction. So the generator is NOT uniform;
+#: it is weighted toward the extremes, somewhere between uniform (RMS/peak
+#: 0.577) and a sine's arcsine distribution (0.707). Since a HIGHER RMS/peak
+#: ratio means a LOWER peak for the same measured RMS, `sqrt(3)` most likely
+#: OVER-estimates the peak for a genuinely random source — the direction is
+#: known, the number is not. Left unchanged rather than replaced with a
+#: second guess; s3ked has offered a direct ten-minute measurement (set
+#: `LFO1WAVE` 3, capture, take RMS and peak straight off the pitch trace)
+#: when the random path actually matters to something in flight.
+AKAI_LFO_WAVE_RMS_TO_PEAK = {
+    0: math.sqrt(3.0),     # triangle -- what every reading used before this
+    1: math.sqrt(3.0),     # sawtooth -- happens to share the triangle factor
+    2: 1.0,                 # square -- 73% LOWER peak than the triangle guess
+    3: math.sqrt(3.0),     # random -- UNMEASURED, likely too high (see above)
+}
+
+
+def akai_lfo_depth_to_pitch(byte: int, l_ptch: int = None,
+                             waveform: int = None) -> float:
     """LFODEP (+ the keygroup's `L_PTCH` gate) -> one-sided `lfo1_to_pitch`.
 
     The field is PEAK-TO-PEAK cents and our model field is one-sided against
@@ -924,33 +1052,31 @@ def akai_lfo_depth_to_pitch(byte: int, l_ptch: int = None) -> float:
     where the half-swing convention had to be checked on both sides before a
     factor of two could be ruled out.
 
-    **`l_ptch` GATES, and does not yet SCALE.** MEASURED 2026-08-24 against a
-    floor established in the same run: LFODEP 99 with L_PTCH 0 produces no
-    vibrato, L_PTCH 50 with LFODEP 0 produces none either, and both non-zero
-    produces a strong one. So 0 means silence here and that is applied.
+    **`l_ptch` GATES AND SCALES.** MEASURED 2026-08-24 against a floor
+    established in the same run: LFODEP 99 with L_PTCH 0 produces no vibrato,
+    L_PTCH 50 with LFODEP 0 produces none either, and both non-zero produces
+    a strong one — so 0 means silence, applied via the early return below.
 
-    What is NOT applied is a proportional scaling, and the temptation is
-    considerable — this program carries L_PTCH 7 of a possible 50, and 7/50
-    would take a vibrato Jan calls "far too extreme" down to a plausible ±11
-    cents. It is not applied because **nobody has shown the two compose
-    multiplicatively**, and because 19.4932 was itself measured at an
-    unrecorded non-zero L_PTCH, so there is no reference point to scale
-    *from*. s3ked's pitch tracker could not resolve the composition — octave
-    errors dominate at exactly the swings involved — and the honest instrument
-    for it is sideband analysis, which does not exist yet (§AKAILPTCH).
+    The scaling itself is `akai_lfo_rms_cents`'s product law
+    (AKAI_LFO_RMS_CENTS_PER_PRODUCT), s3ked's §160 hardware measurement —
+    confirmed 2026-08-31 to 5 decimal places against the reference preset's own
+    LFODEP=8/L_PTCH=7 (predicted 7.351 rms ct, measured 7.35). This
+    docstring used to say scaling was an unproven guess and NOT applied;
+    that was accurate before §160 and is stale now (§AKAILPTCH).
 
-    Applying 7/50 on the strength of it looking right would be fitting a
-    constant to one listener's word for a symptom, which is the shape of most
-    of the false findings this week.
+    `waveform` is `LFO1WAVE` (0/1/2/3) — see `AKAI_LFO_WAVE_RMS_TO_PEAK`.
+    `None` (the default) uses the triangle factor, matching every reading
+    made before the byte was read at all.
     """
     if l_ptch is None:
         l_ptch = AKAI_LFO_DEPTH_CAL_LPTCH      # the calibration's own routing
     if l_ptch == 0:
         return 0.0
     # Through the MEASURED product, not through §35 scaled by a guess. RMS is
-    # the form that was measured; the triangle factor takes it to one-sided
+    # the form that was measured; the waveform factor takes it to one-sided
     # peak, which is what `lfo1_to_pitch` means.
-    one_sided = akai_lfo_rms_cents(byte, l_ptch) * math.sqrt(3.0)
+    factor = AKAI_LFO_WAVE_RMS_TO_PEAK.get(waveform, math.sqrt(3.0))
+    one_sided = akai_lfo_rms_cents(byte, l_ptch) * factor
     return max(0.0, min(1.0, one_sided / LFO_PITCH_FULL_CENTS))
 
 
@@ -1845,7 +1971,67 @@ LFO_PITCH_FULL_CENTS = 1593.0
 # sources express depth directly in dB). Chosen as a plausible "full tremolo"
 # swing pending real calibration; flag alongside any future MOD_DEPTH_CAL-style
 # hardware test.
-LFO_VOLUME_FULL_DB = 24.0
+#
+# TWO PROBLEMS WITH THIS CONSTANT, recorded 2026-09-01, neither yet fixed:
+#
+# 1. It serves two roles at once and they will diverge. It is documented above
+#    as an EOS-specific number -- the dB swing of an E4B mod cord at amount
+#    100 % -- but `lfo_volume_depth_to_amount` uses it as the model's UNIVERSAL
+#    dB <-> amount convention, so it is what an SFZ `amplfo_depth` in dB means
+#    once it reaches the model, and what any future writer would multiply back
+#    out by. The moment someone measures the real EOS full scale and edits this
+#    line, every SFZ and SF2 tremolo silently changes depth, on every target,
+#    including ones that have nothing to do with EOS. When the EOS measurement
+#    lands, split this into a format constant and a model convention FIRST,
+#    then change the format one.
+#    RESOLVED the same day: the split was done, and with it this hazard went
+#    away entirely -- see LFO_VOLUME_MODEL_FULL_DB, which was then safely
+#    raised to 96.0 precisely because the two roles no longer share a name.
+#
+# 2. The swing DIRECTION underneath it is unmeasured -- see the docstring of
+#    `lfo_volume_depth_to_amount`, which asserts a downward-only swing with
+#    nothing behind it. The K2000 now has a real per-unit law for the same
+#    modulation (`KRZ_F4_AMP_DEPTH_DB_PER_UNIT`, measured), so the missing
+#    piece for writing tremolo at hardware is direction and headroom, not
+#    scale. Questions are out to k2kremote and s3ked as of 2026-09-01.
+#
+# SPLIT 2026-09-01 into the two roles the single constant was carrying. They
+# hold the same number today and are NOT the same fact: one is a claim about
+# EOS hardware, the other is an arbitrary-but-fixed unit for the model.
+#: The model's dB <-> 0..1 convention for `lfo1_to_volume` / `lfo2_to_volume`.
+#: A unit, not a measurement: there is nothing here to calibrate.
+#:
+#: RAISED 24.0 -> 96.0 on 2026-09-01, and the reason is worth keeping because
+#: it corrects an over-cautious note written here earlier the same day.
+#:
+#: WHY IT WAS RAISED. `lfo_volume_depth_to_amount` clamps at 1.0, so this
+#: constant is a CEILING on any tremolo the model can carry. Surveying 10,933
+#: real AKAI programs across 21 CD-ROMs, **25 keygroups** carry a non-zero
+#: LFO->loudness amount, with one-sided depths from 0.31 to 49.84 dB (median
+#: 3.38) -- so **6 of the 25 were being truncated at 24 dB**, the deepest
+#: losing half its depth. A ceiling below the material is not a neutral unit
+#: choice. 96 matches the K2000's own +/-96 dB rail, the widest measured
+#: hardware range on this project; nothing in the corpus reaches it.
+#:
+#: (A first pass reported "8 programs, median 12.46". That scan checked only
+#: the FIRST keygroup for the slot-3 amount, which is a PER-KEYGROUP field --
+#: so it both under-counted and biased the median upward. The corrected sweep
+#: walks every keygroup. Counting in the wrong unit is not a rounding error.)
+#:
+#: WHY CHANGING IT IS SAFE, having earlier been recorded as dangerous. The
+#: warning was written while ONE constant served two roles, and it was correct
+#: then. After the split it is not: this value is now used symmetrically --
+#: readers divide by it, writers multiply by it, all in one process, and no
+#: Bank is ever serialised -- so the dB a tremolo means is preserved across
+#: any change of scale. Only the intermediate 0..1 number moves. The real
+#: hazard was ever letting a hardware fact and an internal unit share a name.
+LFO_VOLUME_MODEL_FULL_DB = 96.0
+
+#: EOS mod-cord amount 100 % -> dB of amplitude swing. **UNMEASURED** -- this
+#: is the one to edit when a MOD_DEPTH_CAL-style E4XT run finally pins it, and
+#: editing it then affects the E4B writer ALONE, which is the entire point of
+#: the split.
+E4B_LFO_VOLUME_FULL_DB = 24.0
 
 
 def lfo_rate_byte_to_hz(byte: int) -> float:
@@ -1881,11 +2067,23 @@ def lfo_pitch_depth_to_amount(cents: float) -> float:
 
 
 def lfo_volume_depth_to_amount(db: float) -> float:
-    """Map an LFO→volume (tremolo) depth in dB to an EOS mod-cord amount
-    (0..1 — always positive: a tremolo swings symmetrically down from the
-    zone's own volume, there's no "negative" direction). See
-    LFO_VOLUME_FULL_DB for calibration status."""
-    return max(0.0, min(1.0, abs(db) / LFO_VOLUME_FULL_DB))
+    """Map an LFO→volume (tremolo) depth in dB to a 0..1 mod amount.
+
+    Always positive: the depth is a magnitude, and swapping an LFO's sign
+    only shifts its phase, so there is no meaningful "negative" direction to
+    preserve. That much is safe.
+
+    What is NOT established is where the swing sits relative to the
+    un-modulated level -- whether its peak rises above that level (symmetric
+    about it, costing depth/2 of headroom and able to clip a zone already near
+    full scale) or merely ducks down to it. This docstring asserted the
+    downward reading from 2026-07-28 until 2026-09-01, when the assertion was
+    found to rest on nothing; it is now an open question with both hardware
+    sessions. Do not rely on it to decide headroom.
+
+    The scale is LFO_VOLUME_MODEL_FULL_DB, a fixed unit rather than a
+    measurement; E4B_LFO_VOLUME_FULL_DB is the EOS-specific one."""
+    return max(0.0, min(1.0, abs(db) / LFO_VOLUME_MODEL_FULL_DB))
 
 
 # ── KRZ (K2000) scalar codecs ───────────────────────────────────────────────
@@ -1893,6 +2091,65 @@ def lfo_volume_depth_to_amount(db: float) -> float:
 # exact inverses (CR-13/CR-18 pattern: single home, not "kept in sync by
 # comment"). All HW-confirmed via krz_program_re.md; see docs/KRZ_FORMAT.md §4.
 
+#: **THE K2000's DISPLAYED CUTOFF IS f0, NOT THE -3 dB CORNER -- RESOLVED
+#: 2026-09-02 (k2kremote, swept sine). The label is HONEST; it just denotes a
+#: different frequency than the other three formats do.** This supersedes both
+#: the earlier "within ~10 %" bound and the intermediate reading of it as a
+#: calibration error.
+#:
+#: Measured by reading the gain AT the displayed corner rather than inferring
+#: Q from the -3 dB point, which would have been circular:
+#:
+#:     2POLE   gain at the label -0.10 dB -> Q = 0.989   (Butterworth: -3.01)
+#:             -3 dB crossing at 1.264*f0 -> Q = 0.986
+#:             two independent readings of one curve, agreeing to 0.2 %
+#:     4POLE   gain at the label -6.11 dB -> |H| = 0.495 = 0.703^2
+#:             i.e. two BUTTERWORTH sections (0.7071) at the same f0
+#:             -3 dB at 0.774*f0 against 0.802 predicted (-3.5 %)
+#:
+#: So the two filters really do have different zero-resonance Q, which is what
+#: the arithmetic demanded: no single Q can put a 2-pole at 1.242 and a
+#: cascade at 0.760. The 2-pole is designed for **unity gain at the labelled
+#: frequency** -- an obvious choice once seen. SEP was verified 0 off the panel
+#: (`Coarse/Fine/KeyTrk/Depth` all 0), so the sections were genuinely
+#: co-located and the cascade arithmetic applies.
+#:
+#: **CONSEQUENCE, AND IT IS A REAL CORRECTION rather than an error to fix.**
+#: Every source format this project reads carries a MEASURED -3 dB CORNER
+#: (AKAI and E4XT say so explicitly; the MPC's fitted 2-pole fc is one). The
+#: K2000's byte denotes f0. Mapping one onto the other needs:
+#:
+#:     source is a -3 dB corner ->  2-pole: byte_Hz = f_3dB / 1.264  (-406 ct)
+#:                                  4-pole: byte_Hz = f_3dB / 0.774  (+444 ct)
+#:
+#: **They go in OPPOSITE directions**, and the 2-pole is 77 % of real layers --
+#: so writing the AKAI's -3 dB frequency straight into the byte, which is what
+#: happens today, puts the K2000's f0 about **four semitones too high** on the
+#: common case. §KRZCUTCAL could never have seen this: it only ever compared
+#: our law to the machine's own label, and the label was right all along.
+#:
+#: **NOT WIRED -- Jan's call.** Held on k2kremote's own advice: one rig, one
+#: day, and a 4-semitone change on the dominant KRZ path deserves a listen
+#: before it ships. Repeatability is partial (1047 Hz measured twice at
+#: 1.265/1.264; the 4-pole twice at 0.775/0.774). The 4-pole's residual -3.5 %
+#: against the ideal cascade is unchased and may just be non-identical
+#: sections.
+#:
+#: METHOD, and why it beat the noise runs: a chromatic scale on a sine keymap
+#: IS a swept sine. All energy at one frequency, so a deep stopband point still
+#: measures; the corner is read off the curve so no model and no topology
+#: assumption is needed; and there is NO FIT BAND -- the knob whose sensitivity
+#: had forced the earlier bound. Purity median 1.000, span 12.2 octaves,
+#: plateau +0.0 dB.
+#:
+#: THE FAILED FIRST ATTEMPT, kept because the cause generalises: 49 notes gave
+#: 0.8 octaves and purity 0.64. Neither a band-limited estimator (mpc2emu's
+#: guess -- theirs is an unrestricted rfft argmax) nor pitch keytracking
+#: (k2kremote's). **The CUT programs' layer spans exactly one key,
+#: `LoKey C 4 / HiKey C 4`**, so 48 of 49 notes were silent and the
+#: "measurement" was 48 noise-floor captures averaged with one real tone.
+#: Jan's one-note test found it in a single capture -- which is why **play ONE
+#: note and look at the raw waveform** belongs before any sweep logic exists.
 def krz_cutoff_byte_to_hz(b: int) -> float:
     """K2000 HOB0[1] signed-semitone cutoff byte -> Hz.
     Inverse of krz_writer._cutoff_byte: Hz = 440 * 2**((s-9)/12), s in -48..79."""
@@ -2062,6 +2319,19 @@ class ZoneMapping:
     root_key: int = 60          # Playback root (overrides sample default)
     fine_tune: int = 0          # Cents (-100..+100); vpar[36] stores 1/64-semitone units
     coarse_tune: int = 0        # Semitones (-72..+24); vpar[35] — repitches sample (not key remap)
+    #: The resonance of the VOICE this zone came from, stamped before any
+    #: layer fusion averages it away (§KRZRESKEYTRK). `filter_resonance` is a
+    #: per-voice field, so once two voices merge the individual values are
+    #: gone -- and that averaging is a defect a listener caught. Keeping it on
+    #: the zone lets the KRZ writer fit the K2000's own per-key resonance ramp
+    #: across a fused layer instead of writing a scalar.
+    #:
+    #: DECLARED HERE RATHER THAN STAMPED AD HOC, because a runtime attribute
+    #: read through `getattr(z, '_src_reson', 0.0)` returns the default
+    #: forever if the name is ever misspelled, and nothing fails --
+    #: `test_no_getattr_default_hides_a_misspelled_model_field` exists for
+    #: exactly that and caught this on its first run.
+    src_resonance: Optional[float] = None
     volume: float = 0.0         # dB, -96..+12
     pan: float = 0.0            # -1.0 (L) .. +1.0 (R)
     transpose: int = 0          # Semitones; vpar[34] — key remap (keyboard offset)
@@ -2167,7 +2437,23 @@ class VoiceLayer:
     #: converts at the point of use and each parser stores what it actually
     #: knows. `hz_to_e4b_cutoff` remains for the E-MU byte, and
     #: `nominal_knob_to_hz` exists for the sources that only have a knob.
-    filter_cutoff: float = E4B_CUTOFF_MAX_HZ   #: Hz (default = fully open)
+    #: **THE -3 dB CORNER, IN HZ.** "Hz" alone was the whole definition until
+    #: 2026-09-02, and it is not enough: two machines can both report "cutoff
+    #: in Hz" and mean different frequencies.
+    #:
+    #: Every source that fills this field measures a -3 dB corner --
+    #: `akai_filfrq_to_hz` says so in its own docstring, §E4BFILTCAL read the
+    #: E4XT's "-3 dB corner off the noise spectrum in 1/6-octave bands", and
+    #: §MPCCUTOFF fitted a 2-pole response whose fc IS the -3 dB point (the
+    #: MPC's resonance-0 response measures +0.15 dB, i.e. near-Butterworth).
+    #:
+    #: **THE K2000 DOES NOT.** Its displayed cutoff is f0, the section's
+    #: NATURAL frequency: its 2-pole runs Q ~ 0.99 (unity gain at the label,
+    #: -3 dB at 1.264*f0) and its 4-pole is two Butterworth sections at one f0
+    #: (-6.11 dB at the label, -3 dB at 0.774*f0). See krz_cutoff_byte_to_hz.
+    #: So a KRZ byte and an AKAI corner are NOT the same quantity, and the
+    #: conversion between them is pending Jan's decision rather than applied.
+    filter_cutoff: float = E4B_CUTOFF_MAX_HZ
     filter_resonance: float = 0.0  # 0.0-1.0
     #: Cents the FILTER ENVELOPE moves the corner at full envelope level.
     #: Signed. Cents since 2026-08-25 (SS_CENTS_DEPTHS) -- see the note on
@@ -2248,6 +2534,88 @@ class VoiceLayer:
     lfo2_to_filter: float = 0.0      # LFO2 → Filter-Freq (0x68→0x38)
     lfo2_to_filter_q: float = 0.0    # LFO2 → Filter-Q    (0x68→0x39)
     lfo2_to_volume: float = 0.0      # LFO2 → Volume (tremolo); 0.0-1.0 depth
+    #: VELOCITY -> AMPLITUDE, as the full-scale swing in dB from velocity 1 to
+    #: 127. Positive means harder is louder; 0.0 means no velocity dependence
+    #: at all, which is a real neutral rather than a stand-in (measured).
+    #:
+    #: Added 2026-09-01 (§KRZAMPVEL / s3ked §171) because BOTH sides of the
+    #: AKAI<->K2000 path were inventing this rather than carrying it: the AKAI
+    #: writer hardcoded `p[0x1a] = 20` while the reader never read offset 0x1a
+    #: at all, and the K2000 writer inherited 35 dB from the #199 template it
+    #: clones, never setting the field deliberately. Real source material
+    #: varies -- 20/20/25/25/30/36 across six programs on one disc.
+    #:
+    #: NOMINAL, NOT NECESSARILY REALISED -- and this is the property to check
+    #: before wiring any NEW target (s3ked, 2026-09-01). The number states what
+    #: the source ASKED FOR; what a machine actually produces is that swing
+    #: clipped against its own output ceiling. On the AKAI that ceiling sits at
+    #: about -25.6 dBFS, so preset 6's 43.04 dB needs ~21.5 dB of headroom
+    #: above its own v64 level and a program with 12.3 dB realises only part of
+    #: it. **Some real source values are therefore partly unrealised on the
+    #: source machine itself.**
+    #:
+    #: For AKAI->AKAI that is harmless and carrying the number is exactly
+    #: right: the destination clips it the same way the source did, so
+    #: byte-for-byte fidelity is the correct target. **It bites on a target
+    #: whose headroom differs** -- the same nominal number would then produce a
+    #: LARGER actual swing than the original ever made. So a new writer must
+    #: compare what each machine actually produces at v1 and v127, not nominal
+    #: dB against nominal dB, which needs that machine's own ceiling and pivot
+    #: measured rather than just its scaling law.
+    #:
+    #: A SWING rather than a slope, and about a PIVOT rather than from silence:
+    #: on the AKAI the response rotates about velocity 64 (measured -- the
+    #: level at v64 does not move as the field changes), the same pivot
+    #: `K_FREQ` uses for key-follow. Machines that pivot elsewhere convert
+    #: through their own law; the swing is the quantity both can state.
+    #: **THE PIVOT IS PART OF THE QUANTITY, and the field carried a swing
+    #: without one until 2026-09-01.** A swing in dB says how far the response
+    #: moves between velocity 1 and 127; it does not say about WHICH velocity
+    #: it rotates, and the machines genuinely disagree:
+    #:
+    #:     AKAI S3000XL   pivot 64    (V_LOUD, V_ENV2 and K_FREQ all measured
+    #:                                 at 64 -- a machine-wide convention)
+    #:     Kurzweil K2000 pivot 127   (AMP VelTrk attenuates downward from the
+    #:                                 loudest note; nothing gets louder)
+    #:     E-MU E4XT      pivot 0, 89.4 or 127, depending on the SOURCE chosen
+    #:                                 (Vel+, Vel~, Vel< -- and Vel~ is NOT 64
+    #:                                 despite its name)
+    #:
+    #: Filling this field from two of those readers without recording which
+    #: convention produced it would make a pivot-127 swing and a pivot-64 swing
+    #: interchangeable under one name -- the same class of defect as
+    #: §KRZENVLOOP, where a plausible reading went unchallenged for two months.
+    #: So the pivot travels WITH the swing, and neither is meaningful alone.
+    #:
+    #: `None` means NOT READ -- distinct from 0.0, which means measured and
+    #: genuinely neutral. The AKAI reader can state the difference (V_LOUD 0 is
+    #: neutral to 0.00001 dB/unit); a reader that never looked cannot, and a
+    #: writer choosing a default needs to tell those apart.
+    velocity_to_volume_db: Optional[float] = None
+    #: Velocity at which `velocity_to_volume_db` has no effect. Set together
+    #: with the swing or not at all.
+    velocity_to_volume_pivot: Optional[int] = None
+    #: THIRD STATE: the source asks for a velocity->volume response but states
+    #: no amount this project can convert to dB yet. MPC's `VelocitySensitivity`
+    #: is the case that forced it -- the field is present in every keygroup,
+    #: 0.0 unambiguously means "none" whatever the law turns out to be, but a
+    #: non-zero value has no measured dB law behind it until the MPC One is
+    #: put on the bench.
+    #:
+    #: Three states, not two, because "no field at all" and "a field asking
+    #: for something we cannot yet quantify" call for opposite defaults:
+    #:
+    #:     db=None, requested=False  -> nothing is known    -> write no cord
+    #:     db=None, requested=True   -> wants some, unscaled -> keep the
+    #:                                  target's own default rather than
+    #:                                  silencing a response the source asked
+    #:                                  for
+    #:     db=<value>                -> known               -> write it
+    #:
+    #: Collapsing the middle case into either neighbour is wrong in an audible
+    #: direction: into the first it flattens 65.8 % of MPC presets, into the
+    #: third it invents a constant.
+    velocity_to_volume_requested: bool = False
     # Mod-wheel→LFO-depth gating (MPC <KeygroupWheelToLfo>, 0.0-1.0).  On the E4XT
     # this is a cascaded cord ModWheel(0x11) → CordN-Amount(0xA8+N), splitting each
     # LFO→dest cord into a static part D*(1-wheel) and a wheel-added part D*wheel
@@ -2385,3 +2753,798 @@ def walk_files_deterministic(root):
         dirnames.sort()          # in place: os.walk reads this back for descent
         for name in sorted(filenames):
             yield os.path.join(dirpath, name)
+
+
+#: K2000 `F2 RES KeyTrk`: resonance as a function of key.
+#:
+#:     resonance(key) = Adjust + KRZ_RES_KEYTRK_DB_PER_KEY * KeyTrk * (key - 60)
+#:
+#: MEASURED (k2kremote, 2026-09-01, §KRZRESKEYTRK) on a purpose-built rig and
+#: answering all four of the questions this project now asks of any displayed
+#: unit:
+#:
+#:   PIVOT  = key 60 (middle C). Measured independently at two settings, 59.2
+#:            and 59.8. NOT the endpoint pivot the amp's VelTrk uses (127), so
+#:            the machine is not internally consistent about this and neither
+#:            reading may be assumed from the other.
+#:   LINEAR in key (r2 0.9989 and 1.0000) AND in the setting -- KeyTrk 0.04 and
+#:            0.10 give the same gradient -- so one number characterises it.
+#:   UNIT   = literal. The displayed dB/key is dB/key, gradient 1.010 and 1.009
+#:            about the pivot, within 1 % of unity.
+#:   ZERO   = genuinely neutral. Flat to 0.00 dB across six octaves, not a
+#:            smallest-available value.
+#:
+#: Rig, because the first attempt was built on a real converted program and had
+#: to be discarded: ROM #199 edit buffer, one layer, ALG 5, keymap 163 Sine
+#: Wave with BOTH keymap and PITCH KeyTrk at 0 so pitch is frozen at 262 Hz and
+#: the source cannot move with the key, corner parked on it, F1
+#: KeyTrk/Depth/VelTrk 0, AMP VelTrk 0. Control: level spread 0.00 dB across
+#: six octaves at crest 3.03 against a clean sine's 3.01.
+#:
+#: **CORRECTION 2026-09-02: the F3 block was NEVER switched off, here or in
+#: §40/§42, and this note claimed it was.** Pressing the `F3` soft key
+#: NAVIGATES to that block's page; it does not change the block's TYPE, which
+#: lives on the ALG page. ROM #199 defaults F3 to **BAND2** under algorithm 5,
+#: so a bandpass sat in series with the filter under test for every one of
+#: those runs.
+#:
+#: **THE LAW ABOVE SURVIVES, and the reason is a MEASUREMENT, not an
+#: argument.** The tempting justification -- "a fixed stage in series
+#: contributes the same offset at every key, so it divides out of a gradient"
+#: -- is valid but rests on a premise nobody checked: that BAND2 *was* fixed.
+#: A bandpass has its own block parameters, and `F3 SEP` on the 4-pole turned
+#: out to carry its own `KeyTrk`/`VelTrk`. Had BAND2's centre tracked the key,
+#: its contribution would have varied with key, and **that failure would be
+#: invisible in every fit because it would look exactly like resonance
+#: keytracking.**
+#:
+#: What actually clears it is §40's control run -- KeyTrk 0, keys 24-96,
+#: **level spread 0.00 dB across six octaves**. If BAND2's contribution had
+#: moved with key by any amount, that spread could not have been 0.00. So the
+#: stage was empirically key-independent on that rig whatever its parameters
+#: were. A control run for an unrelated purpose turns out to be exactly the
+#: test that excludes the confound.
+#:
+#: (Stronger still: the level->equivalent-resonance calibration curve was
+#: measured through BAND2 as well, so the constant gain cancels in the mapping
+#: before the difference is even taken.)
+#:
+#: A rogue stage IS fatal to an ABSOLUTE corner measurement, and was -- it is
+#: what forced the 2026-09-02 K2000 corner run to be redone.
+#:
+#: **Do not describe the §40/§42 rigs as having F3 off.** They had BAND2 in
+#: circuit and the results survive anyway, for the reason above. That is a
+#: different and more honest claim than the original write-up made.
+#:
+#: **The fix is Jan's, and it generalises: verify by SysEx, not by reading the
+#: screen.** A DUMP-diff of two saved copies isolates the F3 block type to
+#: **program-object offset 241** (`BAND2 = 35`, `NONE = 60`), one byte apart --
+#: and 60 matches `krz_writer`'s own `f3_byte` constant, derived independently.
+#: Assert `byte@241 == 60` before capturing; do not parse the ALG row, and do
+#: not trust a soft key to have changed what its label suggests.
+#: CONFIRMED IDENTICAL ON THE 4-POLE (2026-09-01): gradient 1.052 / 1.020 and
+#: pivot 59.0 / 59.5 at two settings, byte 228 encoding unchanged (1.00 ->
+#: 50). **And the manual explains WHY, which is a better footing than two
+#: matching numbers:** "Four-pole Lowpass Filter with Separation ... combines
+#: 2POLE LOWPASS and LOPAS2 in one three-stage function ... **F2 RES affects
+#: the resonance of 2POLE LOWPASS**." The 4-pole's resonance stage IS the
+#: 2-pole's, with a second lowpass cascaded after it, so the law is shared
+#: structurally rather than coincidentally.
+#:
+#: **SCOPE: `2POLE LOWPASS` and `4POLE LOPASS W/SEP` only.** Algorithm 1 alone
+#: offers HIFREQ STIMULATOR, PARAMETRIC EQ, STEEP RESONANT BASS, 4POLE HIPASS
+#: W/SEP, TWIN PEAKS BANDPASS and DOUBLE NOTCH W/SEP; none is measured, and
+#: the 4-pole result transfers ONLY because the manual says the stage is
+#: shared. Do not assume the highpass or bandpass follow without the check.
+#:
+#: A TRAP AVOIDED, worth carrying to any filter work: the plan for the 4-pole
+#: run was to "switch F3 off" as a confound, as on the 2-pole. **On a 4-pole
+#: F3 is not a spare slot -- it is the filter's own SEP stage**, and disabling
+#: it would have dismantled the thing being measured. `F3 SEP` also carries
+#: its OWN KeyTrk/VelTrk, so a non-zero SEP KeyTrk moves the second lowpass's
+#: corner with key -- exactly the confound the rig exists to exclude -- and
+#: nothing on the F2 RES page would reveal it. (Also: the manual prints that
+#: page's first field as `Adjust:0ct`; the machine shows `Coarse:0ct`. The
+#: manual is authoritative on structure, not always on labels.)
+KRZ_RES_KEYTRK_DB_PER_KEY = 1.010
+
+#: Byte encoding for F2 RES KeyTrk: 0.02 dB/key per unit, signed, measured by
+#: DUMP-diff at three settings including a 10x check (+1.00 dB/key -> byte 50),
+#: so the scale is confirmed linear rather than fitted through two points.
+KRZ_RES_KEYTRK_DB_PER_UNIT = 0.02
+KRZ_RES_KEYTRK_PIVOT_KEY = 60
+
+#: K2000 resonance -> OUTPUT LEVEL saturates, and the reference preset already sits past the
+#: knee. Level tracks `Adjust` at 1.00 dB/dB from 0 to 6 dB, then flattens:
+#: 6->12 dB of resonance buys only 1.4 dB of level, and 12->24 almost nothing.
+#: Measured alongside the KeyTrk law. **Do not predict audibility from a
+#: resonance delta** -- the reference preset's layers sit at 19 and 14 dB, well inside the
+#: saturated region, so a several-dB resonance change there moves the output
+#: far less than its dB value suggests.
+KRZ_RES_LEVEL_LINEAR_MAX_DB = 6.0
+
+
+#: K2000 `F4 AMP` modulation section: LFO -> amplitude (tremolo).
+#:
+#: `Src1` at byte offset 262 selects the modulation source (OFF = 0,
+#: LFO1 = 114); `Depth` at 263 is its amount, signed i8.
+#:
+#: MEASURED (k2kremote, 2026-09-01, §KRZF4AMPDEPTH) by DUMP-diff plus captured
+#: swing. Two points are worth keeping attached to the number:
+#:
+#:   UNIT   = 1.0 dB per unit. This was NOT derivable and must not be inferred
+#:            from its neighbours: `F2 RES KeyTrk`, on the same panel two pages
+#:            over, is 0.02 dB per unit. Same container, same edit buffer, two
+#:            orders of magnitude apart. Extrapolating the resonance scale here
+#:            would have written every tremolo 50x too shallow -- silent rather
+#:            than wrong, which is the failure mode that gets misread as "the
+#:            feature does not work".
+#:   RAILS  = +/-96 on the panel, NOT the +/-127 the signed byte would hold.
+#:            Third measured rail this week narrower than its own container
+#:            (keymap `VolumeAdjust` +/-63.5 not +/-64.0, `F2 RES KeyTrk`
+#:            +/-100, this one +/-96). "Signed i8" is not a range on this
+#:            machine; clamp to the measured rail, never to the byte.
+#:
+#: The adjacency of Src1/Depth was correctly guessed here before the run; the
+#: absolute offsets and the scale were not. Recorded because the guess being
+#: half-right is exactly what makes this class of inference dangerous.
+#:
+#: **DIRECTION, MEASURED (k2kremote, same day): the swing is BIPOLAR about the
+#: un-modulated level, and `Depth` is the ONE-SIDED amplitude in dB.** At
+#: Depth 12 the peak read +12.08 dB and the trough -11.51 dB; at Depth 24,
+#: +23.85 and -22.52. So peak-to-peak is 2x Depth, and **writing depth D costs
+#: the full D dB of headroom above nominal** -- not D/2, and not zero. A zone
+#: sitting within D dB of full scale will clip on every tremolo peak. Budget
+#: for it at write time.
+#: **NOT exactly +/-D, and the first explanation for that was wrong.** The
+#: shallow troughs were initially put down to the bench noise floor. Tested
+#: 2026-09-01 at two gains 8 dB apart, and they are not:
+#:
+#:     Adjust   peak-nom   trough-nom   centre   half-swing   trough headroom
+#:      -24.0    +24.46      -21.53      +1.46      23.00         9.68 dB
+#:      -16.0    +24.48      -21.05      +1.72      22.77        18.17 dB
+#:
+#: The trough moved 0.48 dB while its headroom over the floor nearly DOUBLED;
+#: if the floor were responsible the gap would have closed. Floor-correcting
+#: the power still leaves it ~2.5 dB short of -24. And the peak is identical
+#: at both gains to 0.01 dB, which rules out compression at the top -- the
+#: louder run had 5.21 dB of peak headroom and read the same as the quiet one
+#: with 13.12 dB.
+#:
+#: So the modulation CENTRE sits slightly ABOVE nominal, by an amount that
+#: grows with depth (+0.29 at D=12, +1.47 at D=24), and the half-swing is
+#: ~0.96-0.98 x D. No mechanism is offered from two depths and none should be
+#: invented; nothing currently depends on it.
+#:
+#: **This does not change the write-side rule.** The headroom cost is the
+#: PEAK, which is >= D (+12.08 at D=12, +24.47 at D=24), so "budget the full
+#: Depth above nominal" stands and is if anything slightly conservative. What
+#: it changes is that the swing must NOT be recorded as exactly symmetric --
+#: +/-D is the setting's nominal meaning, not a measured device fact.
+#:
+#: (s3ked's AKAI, by contrast, tracked the MEDIAN across five depths and saw
+#: 0.42 dB of drift over a 0->49 dB swing, which is strong evidence that
+#: machine IS symmetric. So the two differ here after all -- and median
+#: tracking is the better proof, being insensitive to exactly the endpoint
+#: effects that caught the K2000 measurement out.)
+#:
+#: Worth keeping as method: "probably my noise floor" was a HYPOTHESIS
+#: attached to sound data, hedged, recorded here WITH the hedge, and wrong.
+#: The hedge is what made it cheap -- it was visibly unproven, and closing it
+#: took one run. The same caveat asserted would now be a false constant.
+#: Rig: ROM #199 at its DEFAULT algorithm, PITCH / NONE / AMP -- F1/F2/F3 all
+#: off, so no filter anywhere to colour an amplitude reading -- sine keymap
+#: 163, LFO1 at its default 2.00 Hz, ~4.5 cycles in the window. Linearity was
+#: verified BEFORE the sweep (Adjust -18 -> -24 gave -5.95 dB against -6.0),
+#: because a clipped peak would have read as "down only" whatever the truth
+#: was.
+#:
+#: This corrected the docstring of `lfo_volume_depth_to_amount`, which had
+#: claimed "always positive ... swings symmetrically down" since 2026-07-28 --
+#: wrong in both halves, and the truth is the more expensive of the two
+#: readings. It also corrected k2kremote's own classifier, which printed
+#: "UP ONLY" because it tested the peak against D and never checked whether
+#: the trough had stayed at nominal. The numbers were right and the label on
+#: top of them was wrong -- the same failure as the byte-detector's empty
+#: summary earlier that day, and worth remembering as a class: a derived
+#: verdict can fail while every input to it is sound.
+#:
+#: POSITION. k2kremote reported absolute program-object offsets 262 and 263.
+#: OUR layout is 24 bytes shorter before the layer block (`_TPL_GLOBAL` omits
+#: four zero-bodied segments between PGM and FX), so those are indices 5 and 6
+#: of HOB segment 0x53 -- and that is not merely arithmetic:
+#:   * The four HOB segments share ONE parameter layout, and index 5 = Src1,
+#:     index 6 = Depth is already what this project reads and writes for F1
+#:     (`hob_f1[5] = _K2_CS_ENV2`, `hob_f1[6] = depth`).
+#:   * Corpus check over 21,355 real F4 segments: byte 5 draws from the SAME
+#:     control-source enumeration as F1 byte 5 -- 114 appears in both -- and
+#:     `_K2_CS_LFO1 = 114` was already in this codebase from independent RE,
+#:     matching the measured value with nothing shared between the two
+#:     derivations.
+#:   * LFO1 -> AMP is genuinely RARE in the wild: 10 of 21,355 layers (0.05%),
+#:     depths 2..10. Reading it correctly changes almost nothing; the value is
+#:     in not silently discarding the ones that have it.
+KRZ_F4_AMP_SEG_TAG = 0x53
+KRZ_F4_AMP_SRC1_INDEX = 5
+KRZ_F4_AMP_DEPTH_INDEX = 6
+KRZ_F4_AMP_SRC_OFF = 0
+KRZ_F4_AMP_SRC_LFO1 = 114
+KRZ_F4_AMP_DEPTH_DB_PER_UNIT = 1.0
+KRZ_F4_AMP_DEPTH_CLAMP = 96
+
+#: K2000 `F4 AMP Adjust`, HOB segment 0x53 index 1: the layer's static level
+#: in dB, 1 dB per unit. MEASURED as a by-product of the tremolo work --
+#: k2kremote's linearity control set Adjust -18 -> -24 and the capture moved
+#: **-5.95 dB against -6.0 asked**, and the two-gain symmetry run set -24 and
+#: -16 and saw the levels 8 dB apart as set. That control existed to prove the
+#: signal path was linear before the depth sweep; it doubles as a calibration
+#: of this field.
+#:
+#: This is the byte the tremolo's HEADROOM TRIM moves. ROM #199 leaves it at
+#: +6 dB, so a converted layer starts 6 dB up before any trim.
+#:
+#: RAIL UNMEASURED. Depth's panel rail is +/-96 and this uses the same clamp
+#: as a conservative proxy -- an inference, not a measurement, and flagged as
+#: such because three K2000 rails this week turned out narrower than their
+#: containers. Real trims land in -90..+6, well inside any plausible rail.
+KRZ_F4_AMP_ADJUST_INDEX = 1
+KRZ_F4_AMP_ADJUST_DB_PER_UNIT = 1.0
+KRZ_F4_AMP_SRC_LFO2 = 116
+
+
+#: AKAI S3000XL LFO1 -> LOUDNESS (tremolo). Loudness is a mod-matrix
+#: destination with three slots: sources in program bytes MODSAMP1/2/3
+#: (79/80/88), amounts in program MODVAMP1/2 (92/93) and keygroup MODVAMP3
+#: (155). LFO1 is source value 7.
+#:
+#: MEASURED (s3ked, 2026-09-01, their §172) on white noise with a flat sustain
+#: and every other route zeroed, five amounts, each verified clear of BOTH
+#: rails:
+#:
+#:     peak-to-peak swing_dB = 1.94340 * amount + 0.967    r2 = 0.9993764
+#:     => one-sided amplitude = 0.9717 dB per unit of amount
+#:
+#: DIRECTION: symmetric about the zone level, proved by the MEDIAN rather than
+#: by peak and trough separately -- downward-only modulation would drag the
+#: median down as depth rises, and it moved 0.42 dB while the swing went from
+#: 0 to 49 dB. Sign inverts phase without changing size (|+25| 49.12 dB
+#: against |-25| 48.14).
+#:
+#: **THE TWO MACHINES AGREE TO 3 %, AND THAT IS THE HEADLINE.** The AKAI's
+#: amount is the ONE-SIDED amplitude in dB at 0.9717 dB/unit; the K2000's F4
+#: AMP `Depth` is the one-sided amplitude at 1.0 dB/unit. Two different
+#: machines, two agents, two rigs, two months of unrelated RE -- so an AKAI
+#: tremolo maps onto a K2000 one at very nearly 1:1, and the AKAI's +/-50
+#: panel range (+/-48.6 dB one-sided) sits inside the K2000's +/-96 rails with
+#: room to spare. Contrast the velocity->amplitude story, where the same two
+#: machines pivot at 64 and at 127 and nothing transfers.
+#:
+#: HEADROOM: writing amount A costs the FULL 0.9717*A dB above nominal, not
+#: half of it. Both peers independently phrased this as "D/2", which is true
+#: only when D means the peak-to-peak SWING and false when D means the amount
+#: -- the quantity a writer actually clamps on. Budget on the one-sided value.
+#:
+#: RAILS -- and this one runs OPPOSITE to the three K2000 rails above. The
+#: device does not clamp at all over SysEx: MODVAMP1 written -128..+127 reads
+#: back verbatim, and MODSAMP1 accepts 15, 20 and 255, which are not valid
+#: sources. So here the CONTAINER is the rail and the +/-50 is a panel or spec
+#: limit the machine does not enforce. Whether it ACTS sensibly on an invalid
+#: source is a separate question nobody has asked. Clamp in the writer; the
+#: machine will not do it for us.
+#:
+#: **THE LAW IS A PRODUCT, NOT A PER-UNIT CONSTANT** (s3ked, 2026-09-01,
+#: second run). `LFODEP` and the destination amount MULTIPLY, as §160 already
+#: found for pitch. Established by equal-product equivalence, which is the
+#: sharp test -- linearity in each variable separately would not have shown it:
+#:
+#:     depth 99 x amount 20 = 1980  ->  39.98 dB peak-to-peak
+#:     depth 50 x amount 40 = 2000  ->  39.80 dB
+#:     depth 40 x amount 50 = 2000  ->  39.90 dB
+#:     spread 0.17 dB across a 2.5x range of EACH variable
+#:
+#: Joint fit through the origin, 12 points from three runs, max residual
+#: 0.74 dB (3.6 % of value):
+#:
+#:     one_sided_dB = 0.010068 * LFODEP * amount
+#:
+#: THE EARLIER 0.9717 dB/unit FIGURE IS SUPERSEDED. It was a single-depth
+#: slice at LFODEP 99; the joint fit gives 0.9968 dB/unit there, 2.6 % away,
+#: with three times the leverage. **And the corrected value lands within a
+#: third of a percent of the K2000's 1.0 dB/unit** -- see
+#: KRZ_F4_AMP_DEPTH_DB_PER_UNIT. Two machines, two rigs, nothing shared.
+#:
+#: WHAT TREATING IT AS A FLAT CONSTANT WOULD HAVE COST, since this was very
+#: nearly shipped as one:
+#:
+#:     LFODEP 99 -> over-reads by 1.00x      LFODEP 25 -> 3.96x  (+18.0 dB)
+#:     LFODEP 50 ->               1.98x      LFODEP 10 -> 9.90x  (+21.8 dB)
+#:
+#: A program at LFODEP 10 would have had its tremolo read TEN TIMES too deep,
+#: arriving with the authority of a measured constant.
+#:
+#: **THE COLLAPSE TO A K2000 `Depth` IS LOSSY AND NOT MERELY "DIFFERENT".**
+#: The K2000 has no second multiplier, so AKAI->KRZ must fold the product into
+#: one number. That is fine for playback and NOT invertible -- a round trip
+#: cannot recover which factor held the magnitude. It is worse than it looks,
+#: because the two factors are not interchangeable: **`LFODEP` is
+#: PROGRAM-WIDE** and also feeds LFO1's other destinations (pitch via
+#: `L_PTCH`, the same product form again), while **`amount` is specific to
+#: loudness**. So normalising `LFODEP` and pushing the magnitude into the
+#: amount silently rescales the VIBRATO, and doing the reverse rescales the
+#: tremolo. On a patch using both there is no single correct collapse. Do not
+#: write an AKAI tremolo writer that "normalises" either factor without
+#: deciding, explicitly, which modulation is allowed to move.
+AKAI_LFO_LOUDNESS_DB_PER_PRODUCT = 0.010068
+AKAI_MODSAMP_OFFSETS = (79, 80, 88)
+AKAI_MODVAMP_PROG_OFFSETS = (92, 93)
+AKAI_MODVAMP3_KG_OFFSET = 155
+AKAI_MOD_SOURCE_LFO1 = 7
+AKAI_MODVAMP_PANEL_RAIL = 50
+
+
+#: E4XT velocity -> AmpVol mod cord: dB of swing per PERCENT of cord amount.
+#:
+#: MEASURED (eosed, 2026-09-01, their §83) on a single-voice single-zone
+#: preset, note 48, nine velocities, four cord amounts:
+#:
+#:     amount%   0.00   23.62   50.39   100.00
+#:     dB/unit   ~0     0.1775  0.3790  0.7511
+#:     per 1 %   --     0.9470  0.9477  0.9464     <- agree to +/-0.07 %
+#:
+#:     swing_dB(v1 -> v127) = 0.9470 * amount_percent          (94.7 dB at 100 %)
+#:     attenuation_dB(v)    = 0.9470 * amount_percent * (127 - v) / 126
+#:
+#: Linear in velocity (r2 0.9997+) AND in the setting. Amount 0 is genuinely
+#: neutral -- 0.01 dB across the whole velocity range -- which also proves
+#: this cord is the ONLY velocity->volume path in the voice, so nothing else
+#: has to be accounted for.
+#: REFITTED 2026-09-01 (eosed, after this project queried a 0.8 % discrepancy
+#: between two statements of the law). The primitive is per VELOCITY UNIT,
+#: which has no denominator to argue about -- it is what a straight-line fit
+#: of level against velocity returns:
+#:
+#:     0.75097 dB per velocity unit at 100 % cord amount
+#:     sd 0.02288, 95 % CI +/-0.01088, n = 17
+#:     (three sources, five amounts, three headroom settings, each divided by
+#:      its own TRUE amount -- stored byte / 127 -- not the value asked for)
+#:
+#: from which both swings derive, and the two differ by 0.75 dB:
+#:
+#:     v1..v127  (126 steps) = 94.62 dB   what a player can actually reach
+#:     v0..v127  (127 units) = 95.37 dB   the machine's applied range
+#:
+#: **This project's field is a v1..v127 swing, so 126 is the right divisor
+#: here** -- MIDI has no note-on at velocity 0 (that is a note-off), so 127 is
+#: right about the machine and 126 is right about anything playable. The rule
+#: eosed drew from it is worth more than the number: **state a measured law in
+#: the units it was measured in.** "Full swing" is a derived summary and cannot
+#: be quoted without saying across what -- a summary that reads as a
+#: measurement, which is the same family as the other four faults of that day.
+#:
+#: Superseded 0.9470 (n=3). The two differ by 0.08 %, i.e. nothing audible;
+#: the point is provenance, not the value.
+E4XT_VEL_AMPVOL_DB_PER_PERCENT = 0.9462
+E4XT_VEL_AMPVOL_DB_PER_VELOCITY_UNIT_AT_FULL = 0.75097
+
+#: PIVOTS, measured in the same run at +10 and -10 against an amount-0
+#: control. **`Vel~` does not pivot mid-scale**, which is the finding that
+#: broke the plan built on its name:
+#:
+#:     Vel+   pivot velocity   0     (as named)
+#:     Vel~   pivot velocity  89.4   (NOT 64)
+#:     Vel<   pivot velocity 127     (as named)
+#:
+#: `Vel~`'s span at a given amount is the same ~9.5 dB as the unipolar
+#: sources rather than twice it, so it is not `2*Vel+ - 1` either.
+#:
+#: **THE MANUAL DISAGREES ABOUT `Vel~`, AND ONLY ABOUT `Vel~`** (Jan, EOS 4.0
+#: Software Manual p.351, 2026-09-01). The polarity figure maps the control
+#: value 0..127 onto each source's applied range:
+#:
+#:     +   0..127  ->    0 .. +127     zero effect at control 0     -> pivot 0
+#:     ~   0..127  ->  -63 ..  +64     zero effect at control 63    -> pivot 63
+#:     <   0..127  -> -127 ..    0     zero effect at control 127   -> pivot 127
+#:
+#: `+` and `<` match the measurement exactly. `~` is predicted at **63** and
+#: was measured at **89.4** -- a 26-unit disagreement on one source of three.
+#:
+#: **The manual also EXPLAINS the span, which the measurement could not.**
+#: eosed found `Vel~`'s span equal to the unipolar sources' rather than double,
+#: and had no account of it; the figure shows why -- all three ranges are 127
+#: units wide, `~` merely straddles zero. So the manual corroborates the
+#: measurement on span and conflicts with it on pivot, which isolates the
+#: pivot as the anomaly rather than leaving the whole `Vel~` reading in doubt.
+#:
+#: **RESOLVED IN FAVOUR OF THE MEASUREMENT (eosed §85, 2026-09-01). The
+#: prediction of 63 was mine and it failed.** Re-measured 12 ways -- two
+#: destinations (AmpVol, FilFreq), two presets, two observables (level,
+#: spectral centroid), three headroom settings, three amount magnitudes --
+#: giving crossings from 87.1 to 94.0. Pooled: **mean 89.66, sd 1.79, 95 % CI
+#: +/-1.01**, the two destinations agreeing within the scatter (AmpVol 89.92
+#: n=10, FilFreq 88.35 n=2). The manual's 63 is 26.7 units away -- about **51
+#: standard errors**. That forecloses a category of follow-up rather than
+#: merely settling a number: no further measurement ON THIS MACHINE can move
+#: it, so the firmware test is not one option among several, it is the only
+#: one left. The two artefacts that
+#: can displace a midpoint were excluded by construction rather than by
+#: argument:
+#:
+#:   * A FIXED INSERTION LOSS when the cord is active looks exactly like a
+#:     shifted pivot at one amount and separates at another. It would have put
+#:     the +/-5 crossing near velocity 117; it is at 88.86. The crossing is
+#:     invariant across a 5x change of amount.
+#:   * A CEILING would move the crossing as the voice is attenuated. ~15 dB
+#:     more headroom moved nothing, and no capture clipped.
+#:
+#: And the displacement tracks the amount in BOTH sign and magnitude, which is
+#: the definition of a pivot -- a sign-independent offset would have put the
+#: -10 crossing at velocity 36, not 88.9. That was already derivable from the
+#: original §83 data.
+#:
+#: **The manual is confirmed on the span and wrong only about the zero.** Spans
+#: scale 1:2:5 exactly with amount, and `Vel~` carries the identical constant
+#: to `Vel<` -- 0.9456 dB/% against 0.9470. So "all three ranges are 127 units
+#: wide" is right; only where `~` sits inside its range is not.
+#:
+#: **Most likely a FIRMWARE difference, and not testable on one machine.** The
+#: figure is from the EOS **4.0** manual; the bench machine runs EOS **4.70**.
+#: A source's zero point moving between revisions fits every measurement here.
+#: Anyone with E4-series hardware on another revision settles it in one
+#: capture. Recorded this way deliberately rather than as "the machine
+#: contradicts its own documentation", because the document may simply
+#: describe an older machine.
+#:
+#: No mechanism is offered for 89.6. It is 0.70 of full scale; that is recorded
+#: as numerology, not as a finding, in case a 0.70 turns up elsewhere.
+#:
+#: WHAT THIS COST: nothing, because nothing was built on it -- the writer's
+#: template uses `Vel<` and no local E4B routes `Vel~` into AmpVol. The lesson
+#: is the cheaper one: a source named for the middle that is NOT in the middle
+#: is exactly what gets assumed once and never rechecked, and the wrong
+#: assumption would have come from a document correct about everything else on
+#: its page. Checked against
+#: the obvious artefact: a ceiling compressing the gain half would push the
+#: +10 crossing later and the -10 crossing earlier, so the two would diverge;
+#: they agree to one velocity unit on all three sources, and nothing clipped
+#: in any capture.
+#:
+#: **CONSEQUENCE FOR THE WRITER: no E4XT source pivots at 64**, so an AKAI
+#: swing (which rotates about velocity 64, s3ked §171) cannot be carried by
+#: choosing a source. It has to be CONSTRUCTED:
+#:
+#:     Vel+ at amount A           -> swing S = 0.9470 * A, pivoting at v0
+#:     + static volume trim -S/2  -> moves the pivot to velocity 64
+#:
+#: Two hazards in that construction, both real:
+#:   1. **The trim must NOT be written as dB.** `E4_GEN_VOLUME` is specified in
+#:      dB and is not: asked -12, the capture moved -8.86 dB (0.03 dB spread
+#:      over nine velocities, so the edit path is live and repeatable and the
+#:      LABEL is what is wrong). This independently confirms
+#:      `e4xt_byte_to_volume_db`, which predicts -9.172 dB for byte -12 --
+#:      0.31 dB apart from two completely unrelated paths (editor SysEx on a
+#:      resident preset vs our calibration against written banks). Put the trim
+#:      through `e4xt_volume_byte`.
+#:   2. **A large swing runs out of trim.** 43 dB of AKAI swing needs -21.5 dB
+#:      of static trim against an `E4XT_VOL_MEASURED_FLOOR_DB` of -22.90 -- the
+#:      loudest real sources sit at the very edge of the calibrated range.
+#: `Vel~` is 89.6 MEASURED (mean of 12 runs, EOS 4.70); the EOS 4.0 manual
+#: says 63.0, kept below as E4XT_VEL_PIVOT_MANUAL. See the note above --
+#: probably a firmware difference, and the measurement is the one that
+#: survived every control.
+E4XT_VEL_PIVOT = {'Vel+': 0.0, 'Vel~': 89.6, 'Vel<': 127.0}
+E4XT_VEL_PIVOT_MANUAL = {'Vel+': 0.0, 'Vel~': 63.0, 'Vel<': 127.0}
+
+#: What the E4B writer's `_MOD_TMPL` currently IMPOSES on every voice, in dB.
+#: Slot 0 is `Vel< -> AmpVol` at amount 30/127 = 23.62 %, so by the law above
+#: it is a **22.37 dB velocity swing that no source asked for** -- and an AKAI
+#: program with `V_LOUD` 0, measured genuinely neutral, arrives on the E4XT
+#: carrying it. Not a rounding error; this is the size of the bug.
+E4XT_IMPOSED_VEL_AMPVOL_SWING_DB = 22.37
+
+
+# ── MPC filter section, measured on an MPC One 2026-09-01 ──────────────────
+#
+# Every constant below replaced an E4XT number that was being applied to MPC
+# sources for want of anything better. Measured in LEGACY keygroup mode (the
+# engine that plays classic XPMs -- 3.9 keygroups have two filters and are a
+# different animal), white noise through a wide-open reference, corners from a
+# fitted pole model rather than a -3 dB crossing.
+#
+# **WHY NOT A -3 dB CROSSING:** `hw_measure.corner_frequency` is accurate to
+# 0.3 % on synthetic ideal data and reads ~25 % LOW on real spectra. That was
+# caught only because an independent prior measurement (§MPCCUTOFF) disagreed,
+# and it nearly became a recorded law. Fit the whole curve; and exclude bins
+# that have reached the noise floor, which a 4-pole hits four times sooner
+# than a 2-pole.
+
+#: MPC filter-frequency MODULATION depth, full scale, in cents.
+#:
+#: **One law covers every filter-frequency destination on this machine**: they
+#: all add in KNOB units at full efficiency, so full depth sweeps the entire
+#: cutoff knob range. Measured twice through two different parameters:
+#:
+#:     velocity -> filter, full depth   11409 cents   (efficiency 1.008)
+#:     filter envelope, full depth      11394 cents   (Depth 64)
+#:                                      11485 cents   (Depth 96)
+#:     the cutoff knob range itself     11409 cents
+#:
+#: Spread 0.8 %. The envelope was confirmed linear in the DEPTH setting, not
+#: just in the modulation -- two points plus a saturated endpoint would have
+#: been a line by definition, and the AKAI tremolo showed what assuming that
+#: costs (9.9x at the far end of the other variable).
+#:
+#: REPLACES, for MPC sources only:
+#:   VEL_FILTER_FULL_CENTS  9120  (E4XT) -- 1.25x too small
+#:   FILTER_ENV_FULL_CENTS  4383  (E4XT) -- 2.60x too small, and the filter
+#:                                envelope is non-zero in 41.6 % of real
+#:                                keygroups, so nearly half the corpus has
+#:                                been converting at 38 % of its true depth.
+MPC_FILTER_MOD_FULL_CENTS = 11409.0
+
+#: MPC `KB>FLT` (XPM `FilterKeytrack`) at maximum, in octaves of cutoff per
+#: octave of key. MEASURED 0.945 over keys 36..72 (0.926 / 0.933 / 0.976 per
+#: octave); the model previously assumed 1.000, i.e. 6 % high. Only ONE
+#: setting was measured, so linearity in the setting is untested -- acceptable
+#: because the field is 0.0 in 96.7 % of real keygroups.
+#: (The panel calls it `KB>FLT` and the manual files it under a *Velocity
+#: Sensitivity* heading, which shares no word with the XPM field name.)
+MPC_KEYTRACK_OCT_PER_OCT = 0.945
+
+#: MPC resonance -> peak height in dB above the passband, per filter type.
+#: `(zero_offset_db, scale_db, exponent)`, evaluated as
+#: `zero + scale * res**exponent` with `res` = setting/127.
+#:
+#: MEASURED at five settings each, residuals <= 0.6 dB. The two filters differ
+#: in ALL THREE terms, so a shared law would have been wrong for whichever one
+#: it was not fitted to -- and they are 35 % and 31 % of real keygroups:
+#:
+#:     Low 2   0.15 + 18.21 * res**0.502     ceiling 18.4 dB
+#:     MPC LP  2.15 + 20.54 * res**0.390     ceiling 22.7 dB
+#:
+#: **MPC LP IS NOT NEUTRAL AT RESONANCE 0** -- it carries +2.15 dB of inherent
+#: peak, which is character of the 3000 emulation rather than an offset error
+#: (Low 2 measures +0.15 dB at the same setting). A resonance-0 MPC LP patch
+#: converted at resonance 0 loses a bump it actually has.
+#:
+#: What this replaces was wrong in three ways at once: RESONANCE_FULL_DB
+#: (25.51, an E4XT number) applied LINEARLY, so gentle resonance was
+#: understated by ~2.7 dB, strong resonance overstated by ~7.6 dB, and the
+#: error changed SIGN across the range.
+MPC_RESONANCE_LAW = {
+    2:  (0.15, 18.21, 0.502),     # Low 2  (2-pole, 12 dB/oct)
+    29: (2.15, 20.54, 0.390),     # MPC LP (MPC3000 LPF emulation, 12 dB/oct)
+}
+#: Filter types with no measured law of their own fall back to Low 2's, which
+#: is the closest measured lowpass. Recorded as a fallback, not a measurement.
+MPC_RESONANCE_DEFAULT_TYPE = 2
+
+
+def mpc_resonance_db(setting_01: float, filter_type: int = 2) -> float:
+    """MPC `Resonance` (0..1 as stored in the XPM) -> peak dB above passband."""
+    z, a, p = MPC_RESONANCE_LAW.get(filter_type,
+                                    MPC_RESONANCE_LAW[MPC_RESONANCE_DEFAULT_TYPE])
+    r = max(0.0, min(1.0, setting_01))
+    return z + a * (r ** p) if r > 0.0 else z
+
+
+def mpc_resonance_to_model(setting_01: float, filter_type: int = 2) -> float:
+    """MPC `Resonance` -> this project's 0..1 peak-height convention.
+
+    The model's 0..1 is a fraction of RESONANCE_FULL_DB (a measured PEAK
+    HEIGHT, not a fraction of anybody's dial). RESONANCE_FULL_DB's own note
+    says the blocker for putting every parser on that scale is "knowing each
+    machine's peak-height range, which only the AKAI and the E4XT currently
+    have measured" -- as of 2026-09-01 the MPC has it too, so this parser
+    joins them instead of normalising by its own dial.
+    """
+    return max(0.0, min(1.0, mpc_resonance_db(setting_01, filter_type)
+                        / RESONANCE_FULL_DB))
+
+
+#: MPC `VelocitySensitivity` -> gain. MEASURED on an MPC One 2026-09-01
+#: (`tests/re_banks/measure_xpm_velocity.py`, procedure in
+#: docs/re_procedures/xpm_velocity.md), 81 points, 9 sensitivities x 9
+#: velocities in ONE capture:
+#:
+#:     gain_linear(v, s) = (1 - s) + s * (v / 127)
+#:
+#: **RMS residual 0.033 dB, max 0.174 dB over all 81 points.** The machine
+#: crossfades, IN AMPLITUDE, between a flat response and one where amplitude
+#: is proportional to velocity. Gates all passed: gain drift across the run
+#: 0.02 dB, negative control flat to 0.06 dB, peak -11.19 dBFS (no clipping),
+#: manipulation live at 42.26 dB.
+#:
+#: PIVOT 127. At v=127 the gain is 1 for every sensitivity -- measured spread
+#: 0.06 dB across all nine settings. Same convention as the K2000's amp
+#: VelTrk, NOT the AKAI's 64.
+#:
+#: ZERO IS GENUINELY NEUTRAL: 0.01 dB across the full velocity range at
+#: sensitivity 0. That was already the shipped reader's assumption, now
+#: measured rather than assumed.
+#:
+#: **THE SHAPE IS A THIRD AXIS, and this is the part that does not fit the
+#: model.** The AKAI, K2000 and E4XT velocity laws are linear in dB; this one
+#: is linear in AMPLITUDE, which is strongly concave in dB (at sensitivity 1
+#: the top half of the velocity range spans 6 dB and the bottom half spans 36).
+#: `VoiceLayer` carries a swing and a pivot, so it can express "how far" and
+#: "about what" but not "along what curve" -- an MPC source therefore converts
+#: with the right endpoints and an approximated middle. Fitting a dB-linear
+#: slope to this data gives r2 0.70 at full sensitivity, which is the model
+#: being wrong rather than the measurement being noisy. Do not read a poor r2
+#: here as scatter.
+#:
+#: The one visibly larger residual (-0.174 dB) is v1 at sensitivity 1.0, the
+#: quietest point in the grid at -64 dB -- still 31 dB clear of the capture's
+#: floor, so not a floor effect; most likely the machine's own quantisation of
+#: a very small gain. Not chased; nothing depends on it.
+MPC_VELSENS_PIVOT = 127
+
+
+def mpc_velsens_gain_db(velocity: float, sensitivity: float) -> float:
+    """dB the MPC applies at `velocity` for a given `VelocitySensitivity`,
+    relative to the level at velocity 127. Always <= 0."""
+    s = max(0.0, min(1.0, sensitivity))
+    v = max(1.0, min(127.0, velocity))
+    g = (1.0 - s) + s * (v / 127.0)
+    return 20.0 * math.log10(g) if g > 0.0 else -120.0
+
+
+def mpc_velsens_swing_db(sensitivity: float) -> float:
+    """The v1..v127 swing in dB for a given `VelocitySensitivity`.
+
+    Full sensitivity is 42.08 dB (amplitude proportional to velocity, so
+    20*log10(1/127)); sensitivity 0 is 0.0.
+    """
+    return -mpc_velsens_gain_db(1.0, sensitivity)
+
+#: Velocity pivots per machine, for `VoiceLayer.velocity_to_volume_pivot`.
+#: All three MEASURED, none assumed: the AKAI's 64 from V_LOUD/V_ENV2/K_FREQ
+#: independently (s3ked §167/§171 and the V_ENV2 run, the last exact to 1 cent
+#: across the full velocity range), the K2000's 127 from AMP VelTrk delivering
+#: its setting in full downward from the loudest note (k2kremote), the E4XT's
+#: three from E4XT_VEL_PIVOT above.
+VEL_VOL_PIVOT_AKAI = 64
+VEL_VOL_PIVOT_KRZ = 127
+
+#: K2000 `F4 AMP VelTrk`, HOB segment 0x53 index 4: dB of velocity swing per
+#: unit. MEASURED at ~1:1 (k2kremote): with the velocity->filter route zeroed,
+#: a setting of 35 delivered **34.59 dB** of v1..v127 swing, and v1's absolute
+#: level moved +10.94 dB when the setting went 35 -> 24, against +11.0
+#: predicted for full delivery and +0.0 for a fixed floor. The residual ~5 dB
+#: shortfall in the un-zeroed case is the velocity->filter route, i.e. real
+#: patch behaviour, not a scaling error -- do not compensate for it.
+#:
+#: The run that originally suggested a compressed delivery (28.77 dB of a 35
+#: setting, with a plateau below v4) was a BROKEN EXPERIMENT, retracted: the
+#: probe's `leave_editor()` answered the save prompt "No", so both conditions
+#: were the same condition. §KRZAMPVEL keeps the full account.
+#:
+#: SIGNED. 38 of 16,649 real layers carry a negative value (0.23 %, clustered
+#: at -1..-9), meaning louder-when-soft. Reading the byte unsigned would turn
+#: -1 dB into +255 dB.
+KRZ_AMP_VELTRK_DB_PER_UNIT = 1.0
+
+
+def velocity_volume_gain_db(swing_db, pivot, velocity):
+    """dB the velocity response applies at `velocity`, relative to the level
+    at `pivot`.
+
+    One formula covers all three machines because the pivot is a parameter
+    rather than a per-format special case:
+
+        gain(v) = swing * (v - pivot) / 126
+
+        pivot   0  ->  gain(1) ~ 0,          gain(127) = +swing
+        pivot  64  ->  gain(1) = -swing/2,   gain(127) = +swing/2
+        pivot 127  ->  gain(1) = -swing,     gain(127) = 0
+
+    The span between velocity 1 and 127 is `swing` in every case -- that is
+    what makes the swing comparable across machines while the pivot is not.
+
+    **/126 AND NOT /127, DELIBERATELY.** eosed has stated the E4XT law both
+    ways -- `(127 - v) / 126` in §83 and `(v - pivot) / 127` in §85 -- and the
+    two differ by 0.8 %. The constants were FITTED as a v1..v127 swing, so 126
+    (the number of velocity steps between those endpoints) is the divisor that
+    reproduces the fitted quantity exactly; 127 is the width of the control
+    range including velocity 0, which no note ever sends. The difference is
+    ~0.2 dB on a 24 dB swing and inaudible, but the two normalisations diverge
+    silently and would otherwise surface later as an unexplained mismatch
+    between a predicted and a measured swing.
+
+    Returns 0.0 when the swing is unknown (None), NOT when it is 0.0: a
+    measured-neutral response and an unread field are different facts, and
+    only the caller knows what to do about the second.
+    """
+    if swing_db is None or pivot is None:
+        return 0.0
+    return swing_db * (max(1, min(127, velocity)) - pivot) / 126.0
+
+
+#: K2000 envelope LEVEL field: displayed percent -> dB relative to 100 %.
+#:
+#: **MEASURED, not derived (§KRZLEVELCURVE, k2kremote, 2026-08-31).** The field
+#: is NOT the linear amplitude percent it is displayed as. 50 % is -18.07 dB,
+#: not -6.02 dB; 25 % is -28.03 dB, not -12.04 dB. Treating the display as
+#: linear amplitude -- which `krz_writer._lvl_byte` did from the beginning --
+#: writes every envelope level far quieter than intended, worst at the bottom.
+#:
+#: Rig, because a naive version of this measurement is wrong: ROM program 199
+#: edit buffer (never saved), KeyMap 151 Sawtooth so no sample contour sits
+#: underneath, Algorithm 1 with filter NONE, no LFO, AMPENV User, Att1/2/3 all
+#: 0 s at 100 %, Dec1 time 0.50 s, note 48 vel 100, plateau = RMS over
+#: 1.2-2.2 s, every value referenced to the 100 % capture's own plateau so no
+#: absolute reference enters. Stitched from two gain settings tied on a
+#: 7-point overlap (50/45/40/35/25/18/12) where both are demonstrably linear:
+#: offset 29.925 dB, sd 0.211 dB.
+#:
+#: **The +30 dB pass saturates the K2000's own amp stage at the top** -- at
+#: F4 AMP Adjust 36 dB, 100 % against 50 % differed by 3.7 dB instead of 18 --
+#: so the high-gain arm supplies only 30 % and below. Worth knowing on its own:
+#: F4 AMP Adjust saturates well before its 48 dB maximum on a full-level signal.
+#:
+#: Shape: TWO dB-linear segments and then a collapse -- 0.335 dB/unit above
+#: 75 %, 0.398 dB/unit from 71 down to 25 %, then accelerating hard (0.70 at
+#: 22 %, 1.34 at 12 %, 2.01 at 9 %, 5.96 at 6 %, 9.09 at 4 %). No single law
+#: fits; a power law drifts from exponent ~2.6 to ~1.7. Hence a table, the
+#: same answer §KRZENVDEPTH2 and §KRZLFOPITCH reached for the same reason.
+#:
+#: GOVERNS ALL SEVEN STAGE LEVELS, measured on each family rather than assumed:
+#: the ATTACK stages match Dec1 within a few tenths (50 % -> -17.6..-17.9 dB
+#: after correcting for the measurement window's own ramp bias, against Dec1's
+#: -18.07), and the RELEASE stages match to 0.01 dB (50 % -> -18.06). Linear
+#: amplitude (-6.02 dB) is excluded by ~12 dB in both cases.
+#:
+#: 3 % carries about +-1 dB (9.7 dB above the noise floor). 2 % and 1 % were
+#: floor-limited lower bounds, visibly non-monotonic, and are DELIBERATELY
+#: EXCLUDED rather than recorded as values -- below 3 % this table extrapolates
+#: and says so.
+KRZ_LEVEL_PCT_DB = [
+    (100, 0.00), (95, -1.68), (90, -3.34), (85, -5.03), (80, -6.70),
+    (75, -8.37), (71, -9.71), (65, -12.06), (60, -14.07), (55, -16.09),
+    (50, -18.07), (45, -20.07), (40, -22.08), (35, -24.07), (30, -25.92),
+    (25, -28.03), (22, -29.13), (18, -31.95), (12, -37.96), (9, -41.98),
+    (6, -47.99), (4, -59.92), (3, -69.01),
+]
+
+
+def krz_level_pct_to_db(pct: float) -> float:
+    """K2000 displayed envelope-level percent -> dB relative to 100 %.
+
+    Linear interpolation in dB between measured points. Below the measured
+    floor (3 %) this extrapolates on the last segment's slope, which is steep
+    and poorly constrained -- callers wanting a specific dB should go through
+    `krz_db_to_level_pct` instead of inverting this by search.
+    """
+    tbl = KRZ_LEVEL_PCT_DB
+    if pct <= 0.0:
+        return float('-inf')    # 0 % is silence, not the extrapolated tail
+    if pct >= tbl[0][0]:
+        return 0.0
+    if pct <= tbl[-1][0]:
+        (p1, d1), (p0, d0) = tbl[-1], tbl[-2]
+        slope = (d0 - d1) / (p0 - p1)
+        return d1 + (pct - p1) * slope
+    for (p0, d0), (p1, d1) in zip(tbl, tbl[1:]):
+        if p1 <= pct <= p0:
+            return d1 + (pct - p1) * (d0 - d1) / (p0 - p1)
+    return 0.0
+
+
+def krz_db_to_level_pct(db: float) -> float:
+    """dB relative to full -> the K2000 displayed envelope-level percent that
+    produces it. Inverse of `krz_level_pct_to_db`, by interpolation.
+
+    Clamped to the measured range: anything at or below the table's floor
+    (-69.01 dB at 3 %) returns 0, because the hardware's own resolution there
+    is worse than the step between adjacent percents and the two points below
+    it could not be measured above the noise floor at all.
+    """
+    tbl = KRZ_LEVEL_PCT_DB
+    if db >= 0.0:
+        return 100.0
+    if db <= tbl[-1][1]:
+        return 0.0
+    for (p0, d0), (p1, d1) in zip(tbl, tbl[1:]):
+        if d1 <= db <= d0:
+            return p1 + (db - d1) * (p0 - p1) / (d0 - d1)
+    return 0.0

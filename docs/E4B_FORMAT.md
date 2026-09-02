@@ -405,8 +405,29 @@ matrix 2026-06-10):
 | `0x60` / `0x61` | LFO1 ~ / + | | `0x38` | Filter Frequency (cutoff) |
 | `0x68` / `0x69` | LFO2 ~ / + | | `0x39` | **Filter-Q (resonance)** |
 | `0x50` | Filter Envelope | | `0x4A` | **Vol-Env Decay (VEnvDcy)** |
-| `0x0C` | Velocity        | | `0x40` | (Velocity default dest) |
+| `0x0A` / `0x0B` / `0x0C` | **Vel+ / Vel~ / Vel<** — see note below | | `0x40` | **AmpVol** (amplitude) |
 | `0x08` | Key (note)      | | `0x30` | Pitch |
+
+> **The velocity SOURCE is a triad, not one id, and the difference is the
+> PIVOT** (eosed, 2026-09-01). `0x0A` `Vel+` is unipolar and anchored at
+> velocity 0 — measured, `E4XT_VEL_SOURCE_UNITS`, spanning 0 → 2.08 cord units
+> over velocity 0..127 at r = 0.9999. `0x0B` `Vel~` is bipolar, i.e. anchored
+> mid-scale — the convention the AKAI's `V_LOUD` uses (pivot at velocity 64).
+> `0x0C` `Vel<` is inverted, and with a NEGATIVE amount is neutral at 127 and
+> attenuates downward — the convention the K2000's amp `VelTrk` uses.
+>
+> This table previously labelled `0x0C` as plain "Velocity", which is a trap:
+> it invites building an AmpVol cord by analogy with the factory
+> Velocity→FilFreq default, whose amount is 0 and which therefore has never
+> been heard. `e4b_writer` already uses `_SRC_VEL_PLUS = 0x0A` deliberately —
+> its own comment records that "the old default `Vel<` subtracted, anchoring
+> HARD notes at base — wrong for veltrack."
+>
+> **Consequence for any writer: choosing a source IS choosing a pivot**, so it
+> must be a deliberate decision rather than whatever a template cord happened
+> to hold. The E4XT is the only one of the three machines that can express
+> either convention. `Vel~`'s and `Vel<`'s pivots are INFERRED from the naming
+> triad (which recurs for Key, VEnv, FEnv and AEnv) and are not yet measured.
 | `0x11` | **ModWheel**    | | `0x60` | **LFO1 Rate** (`Lfo1Rt`) |
 | (id `0x60`/`0x68` as a *destination* = that LFO's **Rate**) | | | `0x68` | **LFO2 Rate** (`Lfo2Rt`) |
 

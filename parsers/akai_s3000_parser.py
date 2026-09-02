@@ -42,12 +42,17 @@ from models.common import (
     akai_filfrq_to_hz, hz_to_e4b_cutoff, AKAI_FILTER_LAW, AKAI_FILTER_OPEN,
     AKAI_ENV2_ATTACK, AKAI_ENV2_DECAY, AKAI_ENV2_RELEASE,
     AKAI_ENV2_DEPTH_OFFSET, AKAI_ENV2_DEPTH_MAX, akai_env2_stage_seconds,
-    AKAI_VLOUD_DB_PER_UNIT, AKAI_TUNE_UNITS_PER_SEMITONE,
+    AKAI_VLOUD_DB_PER_UNIT, AKAI_VLOUD_SWING_DB_PER_UNIT,
+    AKAI_TUNE_UNITS_PER_SEMITONE,
     akai_filq_to_01, AKAI_MUTE_CUT_SECONDS,
     akai_lfo_rate_hz, akai_lfo_depth_to_pitch, akai_lfo_delay_seconds,
     akai_env2_target_hz, E4B_CUTOFF_MAX_HZ, E4XT_FENV_BYTE_PER_UNIT,
     AKAI_ENV2_OCT_PER_UNIT, AKAI_ENV2_FULL_LEVEL, AKAI_FILTER_OPEN_HZ, AKAI_FILTER_FLOOR_HZ,
     key_track_to_filter_amount, AKAI_KEYFOLLOW_NEG_SCALE,
+    AKAI_LFO_LOUDNESS_DB_PER_PRODUCT, LFO_VOLUME_MODEL_FULL_DB,
+    VEL_VOL_PIVOT_AKAI,
+    AKAI_MODSAMP_OFFSETS, AKAI_MODVAMP_PROG_OFFSETS,
+    AKAI_MODVAMP3_KG_OFFSET, AKAI_MOD_SOURCE_LFO1,
     Envelope)
 import math
 
@@ -60,9 +65,60 @@ AKAI_FILQ_OFFSET = 149        #: resonance, 0..15 (s3ked §52)
 #: none on others -- which is what Jan heard before anyone read the field.
 AKAI_LPTCH_OFFSET = 150
 AKAI_LPTCH_MAX = 50
+#: `MODVFILT1`, the AMOUNT for whichever source `MODSFILT1` (program byte
+#: 84) names -- NOT unconditionally "velocity", despite this project's own
+#: earlier §AKAIVFR write-up describing it that way. s3ked corrected this
+#: 2026-08-31: bytes 151/152/153 are amounts for three ASSIGNABLE modulation
+#: source slots (`MODSFILT1/2/3`, program bytes 84/85/86, one of 15 possible
+#: sources each), so a reader that assumes byte 151 is always velocity
+#: misattributes an LFO or envelope depth to velocity on any program where
+#: the assignment differs. Read alongside `AKAI_MODSFILT1_OFFSET` and only
+#: trusted as velocity when that byte equals `AKAI_MODSRC_VELOCITY`.
+AKAI_MODVFILT1_OFFSET = 151
+#: Program-level assignable-source selectors (one per filter-freq mod slot).
+#: Measured on two programs (the reference preset, preset 4) reading identically --
+#: MODSFILT1=5 (velocity), MODSFILT2=8 (LFO2), MODSFILT3=10 (env2) -- which
+#: may be this library's common template rather than a fixed convention, so
+#: this is read per-program rather than assumed.
+AKAI_MODSFILT1_OFFSET = 84
+AKAI_MODSFILT2_OFFSET = 85
+AKAI_MODSFILT3_OFFSET = 86
+#: The assignable-source byte value meaning "velocity", confirmed on the same
+#: two programs. Not independently verified against the S3000XL's full
+#: 15-source enum -- if a program reads a source value other than this or
+#: `AKAI_MODSRC_NONE`-ish defaults and sounds routed from velocity anyway,
+#: the enum mapping needs re-checking rather than this constant.
+AKAI_MODSRC_VELOCITY = 5
 AKAI_KGMUTE_OFFSET = 160      #: keygroup mute group; **255 is off, 0 is a
                               #: real group** (§AKAIMUTEGRP)
 AKAI_KGMUTE_OFF = 255
+#: `LFO1WAVE`, program byte 97. s3ked's §46 hardware measurement (2026-08-12,
+#: read live by tracking the pitch shape LFO1 itself produces over one
+#: cycle) named three of four values from their shape alone: 0=triangle,
+#: 1=sawtooth, 2=square. The fourth came back real but unidentified by
+#: shape ("consistent with a sine or trapezoid, not resolved") until Jan
+#: named it from the S3000XL manual itself (flitemedia.com S3000XL.PDF p.80,
+#: 2026-08-31): **3=random**. See `models.common.AKAI_LFO_WAVE_RMS_TO_PEAK`.
+AKAI_LFO1WAVE_OFFSET = 97
+
+# LFO -> LOUDNESS (tremolo) offsets live in models.common with the law they
+# belong to -- NOT re-declared here. Loudness is a mod-matrix destination with
+# THREE slots: the source of each is a program byte, and so is the amount for
+# slots 1-2, while slot 3's amount is per KEYGROUP. Same trap as
+# MODSFILT1/MODVFILT1 above: an amount byte means nothing until its source
+# byte says what it belongs to.
+#: `LFO1WAVE` value -> this project's shared `lfo1_shape` vocabulary
+#: (`models.common.VoiceLayer.lfo1_shape`, consumed identically by the K2000
+#: and E4B writers -- both already carry a hardware-confirmed shape table of
+#: their own, and 'random' is already first-class in both: K2000 has no true
+#: S&H LFO and approximates it with an 8-step pattern, E4B writes a genuine
+#: random byte).
+AKAI_LFO1WAVE_TO_SHAPE = {
+    0: 'triangle',
+    1: 'sawtooth',
+    2: 'square',
+    3: 'random',
+}
 
 # ── AKAI character encoding ────────────────────────────────────────────────
 # Not ASCII: names are a 41-symbol alphabet packed one byte per character.
@@ -640,6 +696,10 @@ def parse_program_bytes(data: bytes, fallback_name: str = '',
                       if len(kg) > AKAI_FILQ_OFFSET else 0),
             lfo_to_pitch=(_s8(kg[AKAI_LPTCH_OFFSET])
                           if len(kg) > AKAI_LPTCH_OFFSET else 0),
+            mod_amount_amp3=(_s8(kg[AKAI_MODVAMP3_KG_OFFSET])
+                             if len(kg) > AKAI_MODVAMP3_KG_OFFSET else 0),
+            mod_amount_filt1=(_s8(kg[AKAI_MODVFILT1_OFFSET])
+                              if len(kg) > AKAI_MODVFILT1_OFFSET else 0),
             # 255 is off. An S1000 keygroup is 150 bytes and has no offset
             # 160 at all, so a short block reports OFF rather than group 0 --
             # reporting 0 would invent an active mute group for every S1000
@@ -657,11 +717,31 @@ def parse_program_bytes(data: bytes, fallback_name: str = '',
         lo_key=data[0x13], hi_key=data[0x14],
         octave_shift=_s8(data[0x15]),
         loudness=data[0x19],
+        # V_LOUD, byte 0x1a ("velocity > loudness") -- read by nobody until
+        # 2026-09-01 (§KRZAMPVEL). Like the LFO it is per PROGRAM, not per
+        # keygroup, so it lands on every voice. SIGNED: the V_ fields are
+        # -50..+50 and a negative value means harder is QUIETER, which is
+        # unusual but legal and would be dropped entirely by an unsigned read.
+        vel_loudness=_s8(data[0x1a]),
         pan=_s8(data[0x18]),
         tune=_s16(data, 0x41),
+        # Which source each filter-frequency modulation AMOUNT (keygroup
+        # bytes 151/152/153) actually belongs to -- see AKAI_MODVFILT1_OFFSET.
+        mod_source_filt1=(data[AKAI_MODSFILT1_OFFSET]
+                          if len(data) > AKAI_MODSFILT1_OFFSET else None),
         # LFO1, read by nobody until 2026-08-24 (§AKAILFO). The AKAI LFO is
         # per PROGRAM, not per keygroup, so it lands on every voice.
         lfo_rate=data[0x21], lfo_depth=data[0x22], lfo_delay=data[0x23],
+        # LFO1WAVE, byte 97 -- s3ked's §46 hardware measurement (2026-08-12),
+        # read by nobody until 2026-08-31. Feeds the RMS->peak factor in
+        # `akai_lfo_depth_to_pitch`; see AKAI_LFO_WAVE_RMS_TO_PEAK.
+        lfo1_wave=(data[AKAI_LFO1WAVE_OFFSET]
+                   if len(data) > AKAI_LFO1WAVE_OFFSET else None),
+        # LFO -> loudness slots (§AKAILFOAMP).
+        mod_src_amp=tuple(data[o] if len(data) > o else None
+                          for o in AKAI_MODSAMP_OFFSETS),
+        mod_amt_amp=tuple(_s8(data[o]) if len(data) > o else 0
+                          for o in AKAI_MODVAMP_PROG_OFFSETS),
         keygroups=keygroups,
     )
 
@@ -716,7 +796,25 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
         cache = {}
     if taken is None:
         taken = set()
-    preset = Preset(name=_safe_name(prog['name'] or fallback_name),
+    # THE PROGRAM NAME IS NOT A FILENAME, and running it through the
+    # filename helper was silently truncating it (§AKAINAMEDOT, 2026-09-01).
+    # `_safe_name` is an XPM helper: it does `os.path.splitext` and maps every
+    # non-alphanumeric to '_', both correct for a file on disk and wrong for a
+    # sampler-side name field. Real AKAI library programs end in '.P' -- it is
+    # name content, not an extension, and '.' is in the AKAI's own charset
+    # (`0123456789 A-Z#+-.`) -- so 'the reference preset.P' was read correctly by the
+    # parser and then cut to 'the reference preset' here, on every AKAI program converted.
+    # `models.common.safe_filename` already carries this exact warning in its
+    # own docstring ("NOT FOR SAMPLER-SIDE NAME FIELDS -- host filesystems
+    # only"), and this reader was the one place ignoring it: every other
+    # parser passes the preset name through with at most a length cap.
+    #
+    # The FALLBACK genuinely is a filename ('the reference preset.P.P3'), so it keeps the
+    # extension strip; only the program's own name is now passed through.
+    # Capped at 16 to match the E4B and KRZ name fields, which is above the
+    # AKAI's own 12, so nothing real is truncated.
+    _pname = prog['name']
+    preset = Preset(name=(_pname[:16] if _pname else _safe_name(fallback_name)),
                     program_number=0)
     missing: set = set()
 
@@ -747,20 +845,121 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
         # sounds like it is affecting all voices" -- while we were applying the
         # program depth to every voice.
         #
-        # **THE DEPTH IS SCALED BY L_PTCH AND THE LAW IS NOT KNOWN.**
-        # `akai_lfo_depth_to_pitch` rests on s3ked's 19.4932 cents/unit, and
-        # their sweep never set L_PTCH -- it sat at whatever the calibration
-        # program carried, unrecorded. Since L_PTCH 0 gates the vibrato off
-        # entirely, that program cannot have had 0, so 19.4932 is the law at
-        # some unknown non-zero routing rather than a full-scale reference.
-        # A linear ratio is the obvious guess and is NOT applied: nobody has
-        # shown the two compose multiplicatively (§AKAILPTCH).
+        # THE DEPTH IS SCALED BY L_PTCH -- MEASURED AS A PRODUCT, NOT A GUESS.
+        # `akai_lfo_depth_to_pitch` -> `akai_lfo_rms_cents` multiplies LFODEP
+        # by L_PTCH directly (AKAI_LFO_RMS_CENTS_PER_PRODUCT, s3ked's §160
+        # hardware measurement, matched to 5 decimal places on the reference preset's own
+        # LFODEP=8/L_PTCH=7). This paragraph used to say a linear ratio was
+        # "the obvious guess and NOT applied" -- that was true before
+        # 2026-08-31 and is stale now; corrected here rather than left to
+        # mislead the next reader (§AKAILPTCH, TODO.md Space-E entry).
         if prog.get('lfo_depth') and kg.get('lfo_to_pitch'):
             voice.lfo1_rate = akai_lfo_rate_hz(prog.get('lfo_rate', 0))
             voice.lfo1_to_pitch = akai_lfo_depth_to_pitch(
-                prog['lfo_depth'], kg['lfo_to_pitch'])
+                prog['lfo_depth'], kg['lfo_to_pitch'], prog.get('lfo1_wave'))
             voice.lfo1_delay = akai_lfo_delay_seconds(prog.get('lfo_delay', 0))
+            # WAVEFORM -- carried since 2026-08-31 (§46/§AKAILFOWAVE). Not
+            # just the depth factor: the K2000 and E4B writers can select
+            # their own matching shape, so a sawtooth or square source now
+            # sounds like one instead of a triangle with a corrected number.
+            _shape = AKAI_LFO1WAVE_TO_SHAPE.get(prog.get('lfo1_wave'))
+            if _shape:
+                voice.lfo1_shape = _shape
+
+        # LFO1 -> LOUDNESS (tremolo), §AKAILFOAMP. Read by nobody until
+        # 2026-09-01; before that the AKAI, E4B, KRZ and EIII readers all
+        # dropped tremolo and only the SFZ/SF2 parsers ever set the field.
+        #
+        # THE LAW IS A PRODUCT: one-sided swing in dB is
+        # AKAI_LFO_LOUDNESS_DB_PER_PRODUCT * LFODEP * amount, established by
+        # equal-product equivalence (99x20, 50x40 and 40x50 all landing within
+        # 0.17 dB) rather than by linearity in each variable, which would not
+        # have shown it. Reading `amount` alone against a flat per-unit
+        # constant would over-read a LFODEP-10 program by 9.9x -- so the
+        # program-wide depth is not optional context here, it is half the value.
+        #
+        # GATED ON THE SOURCE BYTE, like MODSFILT1 below: an amount is an
+        # amount for whichever source its MODSAMP slot names, and reading it
+        # unconditionally would report an envelope or a mod-wheel depth as
+        # tremolo.
+        #
+        # Slots ACCUMULATE. Two slots may both name LFO1, and the machine
+        # sums their contributions rather than picking one.
+        _amp_amt = 0
+        _srcs = prog.get('mod_src_amp') or ()
+        _prog_amts = prog.get('mod_amt_amp') or ()
+        for _i, _amt in enumerate(_prog_amts):
+            if _i < len(_srcs) and _srcs[_i] == AKAI_MOD_SOURCE_LFO1:
+                _amp_amt += _amt
+        if len(_srcs) > 2 and _srcs[2] == AKAI_MOD_SOURCE_LFO1:
+            _amp_amt += kg.get('mod_amount_amp3', 0)
+        if _amp_amt and prog.get('lfo_depth'):
+            # Sign inverts the LFO's phase, not its size -- see the matching
+            # note in krz_parser. The model's depth is a magnitude.
+            _db = (AKAI_LFO_LOUDNESS_DB_PER_PRODUCT
+                   * prog['lfo_depth'] * abs(_amp_amt))
+            voice.lfo1_to_volume = min(1.0, _db / LFO_VOLUME_MODEL_FULL_DB)
+            if voice.lfo1_rate is None:
+                voice.lfo1_rate = akai_lfo_rate_hz(prog.get('lfo_rate', 0))
         voice.filter_cutoff = _cutoff_of(kg['filter_freq'], prog['is_s3000'])
+        # VELOCITY -> FILTER FREQUENCY -- carried since 2026-08-31 (§AKAIVFRREAD).
+        # Never read before this: `writers/akai_s3000_writer.py:496` already
+        # documented the gap ("the AKAI reader does not populate
+        # velocity_to_filter_cents") but nobody had turned it into a fix.
+        #
+        # ONLY TRUSTED WHEN MODSFILT1 NAMES VELOCITY. Keygroup byte 151 is an
+        # AMOUNT for whichever of 15 possible sources program byte 84
+        # (`MODSFILT1`) selects -- treating it as unconditionally "velocity"
+        # (this project's own earlier §AKAIVFR framing) would misattribute an
+        # LFO or envelope depth to velocity on any program where the
+        # assignment differs (s3ked, 2026-08-31, caught before this shipped).
+        # Slots 2/3 (LFO2, env2) are not read here -- this project already
+        # carries LFO1->pitch and env2->filter through their own dedicated
+        # fields, and slot 2/3 assigned to something else entirely is a
+        # separate gap, not silently folded into this one.
+        #
+        # PIVOT NOT CORRECTED -- A KNOWN APPROXIMATION. The writer's own
+        # `akai_velocity_filter` places FILFRQ at the SLOPE'S PIVOT (velocity
+        # 64.56), not at velocity 0, so the exact inverse would need to shift
+        # `filter_cutoff` by the pivot's own cents offset to recover the true
+        # resting corner -- and that offset depends on the very depth/span
+        # being solved for, an underdetermined split without an independent
+        # second measurement. Applying the depth's SPAN, symmetric about the
+        # `filter_cutoff` already read, is deliberately an approximation of
+        # WHERE the sweep centres rather than an invented exact value -- it
+        # recovers the right total swing (which is what was silently zero
+        # before) at the cost of the sweep's centre being off by up to half
+        # the pivot's own share of the span. Better than the alternative this
+        # replaces, since that alternative was reading zero unconditionally.
+        if (prog.get('mod_source_filt1') == AKAI_MODSRC_VELOCITY
+                and kg.get('mod_amount_filt1')):
+            from writers.akai_s3000_writer import _AKAI_VELFILT_CENTS
+            _span_ct = kg['mod_amount_filt1'] * 127.0 * _AKAI_VELFILT_CENTS
+            _half = abs(_span_ct) / 2.0
+            # CLAMP TO THE AKAI'S OWN REACHABLE RANGE, THROUGH THE RAW TABLE.
+            # The nominal span from depth alone can run to several octaves
+            # (§AKAIVFR: "most of the +-50 the field accepts is unusable" --
+            # the corner saturates at the machine's own Hz floor/ceiling well
+            # before the field's numerical limit). Writing the unclamped span
+            # would hand the K2000 a sweep this AKAI never actually produces.
+            #
+            # FIRST ATTEMPT USED THE WRONG FLOOR (2026-08-31, same evening):
+            # `AKAI_FILTER_FLOOR_HZ` is a documented alias for
+            # `AKAI_ENV2_SWEEP_FLOOR_HZ` -- a different modulation path's
+            # floor (100 Hz), not the filter's own. Every keygroup on this
+            # program sits BELOW that, so the clamp silently zeroed every
+            # result instead of bounding it -- caught by checking the output
+            # rather than trusting the constant's name. The filter's real
+            # floor is the bottom of `akai_filfrq_to_hz`'s own table
+            # (FILFRQ 0 -> 7.6 Hz), read directly rather than via a
+            # same-sounding constant scoped to something else.
+            _floor_hz = akai_filfrq_to_hz(0) or 7.6
+            _ceil_hz = AKAI_FILTER_OPEN_HZ
+            _room_down = max(0.0, 1200.0 * math.log2(max(1.0, voice.filter_cutoff) / _floor_hz))
+            _room_up = max(0.0, 1200.0 * math.log2(_ceil_hz / max(1.0, voice.filter_cutoff)))
+            _half = max(0.0, min(_half, _room_down, _room_up))
+            voice.velocity_to_filter_min_cents = -_half
+            voice.velocity_to_filter_cents = _half
         # KEY FOLLOW OF FILTER FREQUENCY -- carried since 2026-08-24, dropped
         # silently before that on every AKAI-sourced conversion in every
         # format. See `filter_keyfollow` in parse_program_bytes for the law and
@@ -802,6 +1001,19 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
         voice.amp_env = akai_env_from_bytes(
             kg['amp_attack'], kg['amp_decay'], kg['amp_sustain'],
             kg['amp_release'])
+        # V_LOUD -> the model's velocity->amplitude swing, through the
+        # measured law (§KRZAMPVEL / s3ked §171). Program-level like the LFO,
+        # so it lands on every voice. Zero is genuinely neutral on this
+        # machine -- measured at 0.00001 dB per velocity unit -- so a program
+        # that does not use velocity converts as not using it, rather than as
+        # a smallest-available amount.
+        voice.velocity_to_volume_db = (prog.get('vel_loudness', 0)
+                                       * AKAI_VLOUD_SWING_DB_PER_UNIT)
+        # The pivot travels with the swing: this machine rotates about
+        # velocity 64, the K2000 about 127, and a swing without its pivot is
+        # not a comparable quantity. Set unconditionally -- including when the
+        # swing is 0.0, which here means MEASURED neutral rather than unread.
+        voice.velocity_to_volume_pivot = VEL_VOL_PIVOT_AKAI
         _fe, _amt = _filter_env_of(kg.get('env2'), kg.get('env2_depth', 0),
                                    kg.get('filter_freq', 99), prog['is_s3000'])
         if _fe is not None:

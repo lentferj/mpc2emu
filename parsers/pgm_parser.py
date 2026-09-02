@@ -283,8 +283,15 @@ def _parse_mpc1000(p: Path, data: bytes,
             else:
                 voice.env_release = 0.05
 
-            # Filter 1 (only when engaged and not fully open).
-            if f1_type in _PGM_FILTER_XPM and f1_freq < 100:
+            # Filter 1 -- engaged whenever a real type is selected, REGARDLESS
+            # of cutoff position (§MPCFILT). Until 2026-08-31 a fully-open
+            # cutoff (f1_freq >= 100) dropped the filter entirely
+            # (filter_type=0), which also discarded its resonance and any
+            # filter-envelope modulation -- a pad dialled wide open for
+            # maximum brightness lost its bite along with the closure, which
+            # is not what "wide open" means on the source hardware. Matches
+            # ConvertWithMoss `c7b9641`, which made the same fix.
+            if f1_type in _PGM_FILTER_XPM:
                 voice.filter_type      = _PGM_FILTER_XPM[f1_type]
                 # An UNMEASURED knob. This stored the raw 0..1 into a field
                 # the pipeline then read as a position on the nominal

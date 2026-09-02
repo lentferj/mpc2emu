@@ -54,11 +54,16 @@ from typing import Dict, Iterator, List, Optional, Tuple
 from models.common import (Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            LoopType, Envelope, krz_cutoff_byte_to_hz,
                            krz_reson_byte_to_01, krz_env_byte_to_seconds,
-                           KRZ_RELEASE_FACTOR, hz_to_e4b_cutoff,
+                           KRZ_RELEASE_FACTOR, krz_level_pct_to_db,
+                           hz_to_e4b_cutoff,
                            key_track_to_filter_amount,
                            krz_depth_byte_to_cents, KRZ_DEPTH_MAX_CENTS,
                            KRZ_FENV_FULL_CENTS, LFO_PITCH_FULL_CENTS,
-                           krz_lfo_pitch_byte_to_cents)
+                           krz_lfo_pitch_byte_to_cents,
+                           LFO_VOLUME_MODEL_FULL_DB,
+                           KRZ_F4_AMP_DEPTH_DB_PER_UNIT,
+                           KRZ_AMP_VELTRK_DB_PER_UNIT,
+                           VEL_VOL_PIVOT_KRZ)
 
 
 # ---------------------------------------------------------------------------
@@ -398,6 +403,18 @@ LYR_TAG, CAL_TAG = 0x09, 0x40
 ENC_AMPMODE_TAG, ENV_AMP_TAG, ENC_FILTERENV_TAG = 0x20, 0x21, 0x22
 HOB_F1_TAG, HOB_F2_TAG, HOB_F3_TAG = 0x50, 0x51, 0x52
 
+#: The F4/AMP HOB segment. Byte 14's HIGH NIBBLE carries pan as a signed
+#: -7..+7 step (§KRZPANREAD) -- the writer has emitted it since stereo support
+#: landed and this reader never inverted it, so every KRZ-sourced zone came
+#: back centred. Measured over 40 real K2000 banks: **1715 of 2504 layers
+#: carry a non-zero pan (68 %)**, so the loss was the normal case.
+#:
+#: NOT ALWAYS A USER PAN. The stereo path writes `0x90` into this byte to pull
+#: one header hard left as CHANNEL ROUTING, so a stereo layer would otherwise
+#: read back as pan -1.0 for a reason that has nothing to do with panning.
+HOB_F4_TAG = 0x53
+_KRZ_PAN_STEPS = 7
+
 # HOW MANY DSP FUNCTIONS EACH ALGORITHM ACTUALLY HAS.
 #
 # Transcribed from the K2000 manual's algorithm chapter (31 algorithms, each
@@ -589,12 +606,17 @@ def _vel_marks_to_range(byte: int) -> Tuple[int, int]:
 def _decode_env(seg: bytes) -> Envelope:
     """15-byte ENV/ENC segment -> Envelope. This is a REDUCER, not a strict
     inverse of krz_writer._fill_env (which always writes a fixed Att/Dec/Rel
-    shape): real K2000 programs use all 7 (time,level) stages arbitrarily, so
-    peak/sustain/release are recovered generically. See docs/KRZ_FORMAT.md §4.4."""
+    shape): real K2000 programs use all 7 (level,time) stages arbitrarily, so
+    peak/sustain/release are recovered generically. See docs/KRZ_FORMAT.md §4.4.
+
+    Byte 0 is a loop flag (0=Off, 1=seg1F, 2=seg2F, 3=seg3F), not the first
+    stage -- and each stage is (level, time), not (time, level). §KRZENVLOOP,
+    HW-confirmed 2026-08-31, supersedes the 2026-06-24 layout this reducer
+    used to assume; see writers/krz_writer.py::_fill_env for the full trace."""
     def _spct(b):
         return b - 256 if b >= 128 else b
 
-    pairs = [(krz_env_byte_to_seconds(seg[2 * i]), float(_spct(seg[2 * i + 1])))
+    pairs = [(krz_env_byte_to_seconds(seg[2 + 2 * i]), float(_spct(seg[1 + 2 * i])))
              for i in range(7)]
     att = pairs[0:3]
     dec = pairs[3]
@@ -617,10 +639,24 @@ def _decode_env(seg: bytes) -> Envelope:
     # ConvertWithMoss PR #232 (2026-07-27): K2000 programs that leave decay
     # unused (e.g. FM basses sustaining at the attack level, fading only via
     # the release stages) were converted to silent presets before this check.
-    if seg[6] == 0 and seg[7] == 0:
+    if seg[7] == 0 and seg[8] == 0:
         sustain = 1.0  # holds at the attack peak, i.e. 100% of `peak`
     else:
-        sustain = max(0.0, min(1.0, dec[1] / peak)) if peak else 0.0
+        # THE RATIO OF TWO DISPLAYED PERCENTS IS NOT AN AMPLITUDE RATIO
+        # (§KRZLEVELCURVE, 2026-08-31). The field is dB-linear in two segments
+        # and then collapses, so `dec[1] / peak` -- what this computed until
+        # now -- reads a K2000 program's sustain far too HIGH: a real 21 %
+        # against a 100 % peak came back as 0.21 when the machine plays it at
+        # -29.8 dB, i.e. 0.032. Both levels go through the measured curve and
+        # the amplitudes are divided, which is the same fix the writer takes
+        # in the other direction. Affects every K2000 source this project
+        # reads, not only its own output.
+        if peak:
+            _d_db = krz_level_pct_to_db(dec[1])
+            _p_db = krz_level_pct_to_db(peak)
+            sustain = max(0.0, min(1.0, 10.0 ** ((_d_db - _p_db) / 20.0)))
+        else:
+            sustain = 0.0
 
     release = 0.0
     for t, l in rel:
@@ -659,8 +695,22 @@ class _KrzLayer:
         self.lfo1_to_filter = 0.0
         self.lfo2_to_filter = 0.0
         self.lfo1_to_pitch = 0.0
+        #: Tremolo (§KRZF4AMPDEPTH). Declared here AND in the VoiceLayer
+        #: construction below for the reason the comment above gives -- a
+        #: field assigned during the walk and missing from either place is
+        #: a stray attribute that reads as 0.0 forever, silently.
+        self.lfo1_to_volume = 0.0
+        self.lfo2_to_volume = 0.0
+        self.velocity_to_volume_db = None
+        self.velocity_to_volume_pivot = None
         self.lfo1_rate: Optional[float] = None
         self.lfo1_shape: Optional[str] = None
+        #: Pan, -1..+1, from the F4/AMP segment (§KRZPANREAD). Declared here
+        #: because this intermediate layer is NOT the model voice -- a field
+        #: assigned during the walk but missing from both this __init__ and
+        #: the VoiceLayer construction becomes a stray attribute nobody reads,
+        #: silently, which this class's own comment already records happening.
+        self.pan: float = 0.0
         self.amp_env: Optional[Envelope] = None     # None = leave model default (Natural)
         self.filter_env: Optional[Envelope] = None
 
@@ -914,6 +964,50 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
                         cur.lfo2_to_filter = _amt
             else:
                 cur.filter_type = 0
+        elif tag == HOB_F4_TAG:
+            # Pan, from byte 14's high nibble (§KRZPANREAD). Skipped for a
+            # STEREO layer, where the same nibble is the writer's own channel
+            # routing rather than a musical pan -- reading it there would
+            # report every stereo layer as hard left.
+            _nib = (seg[14] >> 4) & 0x0F
+            _step = _nib - 16 if _nib > 7 else _nib
+            cur.pan = max(-1.0, min(1.0, _step / float(_KRZ_PAN_STEPS)))
+            # Tremolo, from Src1/Depth at indices 5/6 of this same segment
+            # (§KRZF4AMPDEPTH, k2kremote-measured 2026-09-01: 1.0 dB per unit,
+            # bipolar about the un-modulated level, so Depth is the ONE-SIDED
+            # amplitude in dB).
+            #
+            # Indices 5 and 6 are Src1/Depth in the shared HOB layout -- the
+            # same pair this file already reads for F1 above and the writer
+            # already writes there. Confirmed on 21,355 real F4 segments: byte
+            # 5 draws from the same control-source enumeration as F1's.
+            #
+            # SIGN DROPPED DELIBERATELY, and this is the one place it is safe
+            # to do so: inverting an LFO only shifts its phase, so the model's
+            # 0..1 depth is a magnitude by definition. That is NOT a licence to
+            # abs() elsewhere -- the filter-envelope read two branches up had
+            # exactly this applied to it wrongly, where the sign meant a corner
+            # sweeping DOWN rather than up, which is a different patch.
+            # AMP VelTrk, index 4 -- velocity -> volume, in dB, pivoting at
+            # velocity 127 (the loudest note is fixed and everything below it
+            # attenuates). NOT the AKAI's pivot-64 rotation, which is why the
+            # model carries the pivot alongside the swing.
+            #
+            # SIGNED: 38 of 16,649 real layers are negative (louder when
+            # soft), and an unsigned read would turn -1 dB into +255.
+            _vt = seg[4] - 256 if seg[4] > 127 else seg[4]
+            cur.velocity_to_volume_db = _vt * KRZ_AMP_VELTRK_DB_PER_UNIT
+            cur.velocity_to_volume_pivot = VEL_VOL_PIVOT_KRZ
+
+            _asrc, _adep = seg[5], seg[6]
+            if _asrc in (_K2_CS_LFO1, _K2_CS_LFO2) and _adep:
+                _adb = abs(_adep - 256 if _adep > 127 else _adep) \
+                    * KRZ_F4_AMP_DEPTH_DB_PER_UNIT
+                _amt = min(1.0, _adb / LFO_VOLUME_MODEL_FULL_DB)
+                if _asrc == _K2_CS_LFO1:
+                    cur.lfo1_to_volume = _amt
+                else:
+                    cur.lfo2_to_volume = _amt
         elif tag == HOB_F2_TAG:
             hob[HOB_F2_TAG] = seg
             f1 = hob.get(HOB_F1_TAG)
@@ -1210,6 +1304,21 @@ def parse_krz(path: str) -> Bank:
                     lo_vel=lo_vel, hi_vel=hi_vel, root_key=root_key,
                     coarse_tune=0, fine_tune=fine,
                     volume=zone_volume,
+                    # Pan is per-LAYER on the K2000 and per-ZONE in the model,
+                    # so every zone of a layer takes the layer's pan -- the
+                    # exact inverse of the writer, which takes the first zone
+                    # that states one (§KRZPANREAD).
+                    # STEREO LAYERS CARRY CHANNEL ROUTING IN THE SAME NIBBLE,
+                    # not a musical pan: the writer puts 0x90 there to pull one
+                    # header hard left. Reading it as pan would report every
+                    # stereo layer as hard left. Tested on the SAMPLE's own
+                    # channel count, which is a real field -- an earlier
+                    # attempt guarded on a `is_stereo_pair` attribute that no
+                    # dataclass has, so the check silently never fired and
+                    # `test_no_getattr_default_hides_a_misspelled_model_field`
+                    # caught it.
+                    pan=(0.0 if getattr(sd, 'channels', 1) >= 2
+                         else (layer.pan or 0.0)),
                 ))
                 n_zones += 1
             if zones:
@@ -1225,6 +1334,10 @@ def parse_krz(path: str) -> Bank:
                     lfo1_to_filter=layer.lfo1_to_filter,
                     lfo2_to_filter=layer.lfo2_to_filter,
                     lfo1_to_pitch=layer.lfo1_to_pitch,
+                    lfo1_to_volume=layer.lfo1_to_volume,
+                    velocity_to_volume_db=layer.velocity_to_volume_db,
+                    velocity_to_volume_pivot=layer.velocity_to_volume_pivot,
+                    lfo2_to_volume=layer.lfo2_to_volume,
                     lfo1_rate=layer.lfo1_rate,
                     lfo1_shape=layer.lfo1_shape,
                     amp_env=layer.amp_env if layer.amp_env else Envelope(),

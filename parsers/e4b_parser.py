@@ -38,6 +38,7 @@ import struct
 from pathlib import Path
 from models.common import (
     e4xt_cord_amount_to_cents, E4XT_VEL_SOURCE_UNITS,
+    E4XT_VEL_PIVOT, E4XT_VEL_AMPVOL_DB_PER_PERCENT,
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            env_sustain_from_byte,
                            LoopType, Envelope, lfo_rate_byte_to_hz,
@@ -78,6 +79,13 @@ _SRC_MOD_WHEEL          = 0x11
 _CORD_AMT_DEST_BASE     = 0xA8
 _MOD_WHEEL_GATE_DEFAULT = 16
 _MOD_VEL_TO_CUTOFF_AMT  = 18  # slot 4: Velocity → Filter-Freq ("Cord 04")
+#: Velocity sources and the AmpVol destination, for the velocity→volume read.
+#: The three sources differ ONLY in their pivot (measured, eosed 2026-09-01):
+#: Vel+ pivots at velocity 0, Vel< at 127, and Vel~ at 89.4 -- NOT at 64,
+#: despite the name, and with the same span as the unipolar pair rather than
+#: twice it, so it is not `2*Vel+ - 1` either.
+_SRC_VEL_PLUS, _SRC_VEL_TILDE, _SRC_VEL_LESS = 0x0A, 0x0B, 0x0C
+_DST_AMP_VOL = 0x40
 _MOD_FENV_TO_CUTOFF_AMT = 22  # slot 5: FilterEnv → Filter-Freq ("Cord 05")
 _MOD_KEY_TO_CUTOFF_AMT  = 26  # slot 6: Key → Filter-Freq ("Cord 06")
 # (src, dst) of LFO routings written into free cord slots (mirror of writer).
@@ -500,6 +508,34 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
                 return mod_region[o + 2]
         return 0
 
+    # VELOCITY -> VOLUME, read for the first time 2026-09-01. The E4XT states
+    # this as a mod cord like any other, and this parser already walked the
+    # cord table for four other routings -- the slot was simply never in the
+    # list, so every E4B-sourced conversion arrived claiming to know nothing
+    # about velocity while the machine had it written down.
+    #
+    # LAW (eosed, measured): swing_dB(v1..v127) = 0.9470 * amount_percent,
+    # linear in velocity (r2 0.9997+) and in the setting, with amount 0
+    # genuinely neutral (0.01 dB) -- which also establishes that this cord is
+    # the ONLY velocity->volume path in the voice, so nothing else needs
+    # accounting for.
+    #
+    # THE PIVOT COMES FROM THE SOURCE, not from a convention. Searched by
+    # (src, dst) rather than at a fixed slot: the writer's template puts it in
+    # slot 0, but a preset made on the machine can put it anywhere, and this
+    # reader must handle the machine's files, not only its own.
+    velocity_to_volume_db = None
+    velocity_to_volume_pivot = None
+    for _src, _piv in ((_SRC_VEL_PLUS, E4XT_VEL_PIVOT['Vel+']),
+                       (_SRC_VEL_TILDE, E4XT_VEL_PIVOT['Vel~']),
+                       (_SRC_VEL_LESS, E4XT_VEL_PIVOT['Vel<'])):
+        _slot = _cord_slot(_src, _DST_AMP_VOL)
+        if _slot >= 0:
+            _pct = cord_byte_to_amount(mod_region[_slot * 4 + 2]) * 100.0
+            velocity_to_volume_db = _pct * E4XT_VEL_AMPVOL_DB_PER_PERCENT
+            velocity_to_volume_pivot = _piv
+            break
+
     # (attr, src, dst, fixed_slot-or-None) for every LFO routing
     _lfo_defs = [
         ('lfo1_to_pitch',    0x60, 0x30, _MOD_LFO_TO_PITCH_SLOT),
@@ -751,6 +787,8 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
         filter_env_cents  = filter_env_cents,
         filter_keytrack    = filter_keytrack,
         velocity_to_filter_cents = velocity_to_filter_cents,
+        velocity_to_volume_db = velocity_to_volume_db,
+        velocity_to_volume_pivot = velocity_to_volume_pivot,
         lfo1_rate          = lfo1_rate,
         lfo1_shape         = lfo1_shape,
         lfo1_delay         = lfo1_delay,

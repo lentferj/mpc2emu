@@ -546,21 +546,55 @@ resonance (`_K2_PARAMID_GAIN_MIN_DB = 12`, `_K2_PARAMID_GAIN_SPAN_DB = 12`).
 Amp and filter envelopes share one 7-segment ADSR model written by
 `_fill_env()`. The **amplitude envelope** is the `ENV` segment (0x21); the
 **filter envelope (ENV2)** is an `ENC` segment (0x20). Within a 15-byte segment
-the layout is **seven `(time, level)` pairs packed from byte 0**:
+the layout is **byte 0 = loop flag, then seven `(level, time)` pairs packed
+from byte 1**:
 
-| Bytes | Stage | Bytes | Stage |
-|---|---|---|---|
-| `[0]`/`[1]`   | Att1 time/level | `[8]`/`[9]`   | Rel1 time/level |
-| `[2]`/`[3]`   | Att2 time/level | `[10]`/`[11]` | Rel2 time/level |
-| `[4]`/`[5]`   | Att3 time/level | `[12]`/`[13]` | Rel3 time/level |
-| `[6]`/`[7]`   | Dec1 time/level | `[14]`        | loop flag (template default) |
+| Byte | Field | Bytes | Stage | Bytes | Stage |
+|---|---|---|---|---|---|
+| `[0]` | loop flag (`0`=Off, `1`/`2`/`3`=loop to Att1/Att2/Att3) | `[5]`/`[6]`   | Att3 level/time | `[11]`/`[12]` | Rel2 level/time |
+| | | `[7]`/`[8]`   | Dec1 level/time | `[13]`/`[14]` | Rel3 level/time |
+| | | `[1]`/`[2]`   | Att1 level/time | `[9]`/`[10]`  | Rel1 level/time |
+| | | `[3]`/`[4]`   | Att2 level/time | | |
 
-(HW-confirmed 2026-06-24 by reading the AMPENV LCD against the on-disk bytes.
-An earlier off-by-one started writing at byte 2, shifting every pair.) mpc2emu
-fills `Att1 → full`, `Dec1 → sustain`, then a **two-leg release**: `Rel1` fades
-to a 33 % knee over 80 % of the release time, `Rel2` a short tail to silence
-(`_REL_KNEE_PCT`, `_REL1_TIME_FRAC`), approximating the MPC's exponential
-release with the K2000's linear segments.
+**§KRZENVLOOP, HW-confirmed 2026-08-31 — supersedes the layout table this
+section used to give (below, kept for the trace, NOT to be trusted):**
+
+> ~~Within a 15-byte segment the layout is seven `(time, level)` pairs packed
+> from byte 0: `[0]`/`[1]` Att1 time/level, `[2]`/`[3]` Att2, `[4]`/`[5]`
+> Att3, `[6]`/`[7]` Dec1, `[8]`/`[9]` Rel1, `[10]`/`[11]` Rel2, `[12]`/`[13]`
+> Rel3, `[14]` loop flag (template default). HW-confirmed 2026-06-24 by
+> reading the AMPENV LCD against the on-disk bytes.~~
+
+That note was wrong. Triple-confirmed independently on 2026-08-31: (1) a
+controlled single-byte A/B `DUMP` diff on the K2000R establishing loop values
+`0`/`1`/`2`/`3` = Off/seg1F/seg2F/seg3F at byte 0; (2) a real, already-correct-
+sounding envelope whose on-disk bytes are byte-identical to the device's and
+decode correctly only under the corrected convention; (3) a genuine, untouched
+ROM factory object ("Acoustic Piano", program 1) with seven independently
+distinguishable values that match the corrected convention field-for-field and
+fail the old one at the first non-trivial field. No load-path transform exists
+between file and device — file bytes are device bytes verbatim. The likely
+explanation for the original error: it was checked by eye against a case where
+the shift happened to look plausible, rather than via a controlled byte-flip.
+
+**This directly explains §KRZENVLOOP** (`TODO.md` / `docs/RESOLUTION_NOTES.md`)
+— the "envelope re-cycle" finding first raised 2026-08-27 and originally
+mistaken for K2000 firmware behaviour. `_env_time_byte` floors at raw value
+**3** — even a zero-length attack encodes to 3, never lower. Under the old
+(wrong) layout, `_fill_env` wrote that floored value into byte 0 as "Att1's
+time byte" — which is *actually* the loop flag, and `3` there means an active
+loop back to Att3. So nearly every voice converted with a short or zero
+attack silently got an accidental active envelope loop, retriggering roughly
+every `decay time + ~42 ms` while the key was held. Not a firmware quirk —
+a self-inflicted byte-layout bug in this converter, fixed 2026-08-31 in both
+`krz_writer._fill_env` (write side) and `krz_parser._decode_env` (read side,
+which carried the identical error and so read affected banks back as correct).
+
+mpc2emu fills `Att1 → full`, `Dec1 → sustain`, then a **two-leg release**:
+`Rel1` fades to a 33 % knee over 80 % of the release time, `Rel2` a short tail
+to silence (`_REL_KNEE_PCT`, `_REL1_TIME_FRAC`), approximating the MPC's
+exponential release with the K2000's linear segments, and explicitly writes
+byte 0 = `0` (loop Off).
 
 **Encodings** (HW-confirmed):
 - *Time byte* = `steps(seconds) + 3` (`_env_time_byte`), where `steps()` walks a

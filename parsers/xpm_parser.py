@@ -41,7 +41,9 @@ from models.common import (
     nominal_knob_to_hz,
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType, lfo_knob_to_hz,
     cap_voices_by_coverage, stereo_to_mono, hz_to_e4b_cutoff,
-)
+    mpc_velsens_swing_db, MPC_VELSENS_PIVOT,
+    MPC_FILTER_MOD_FULL_CENTS, MPC_KEYTRACK_OCT_PER_OCT,
+    mpc_resonance_to_model)
 
 
 # MPC LFO <Type> string → canonical E4B shape name (substring match; MPC ships
@@ -1708,16 +1710,67 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
             # MPC 3's knob->Hz is MEASURED (§MPCCUTOFF); the 2.x path's is
             # not, and goes through the nominal scale so the assumption is
             # visible rather than implied by the field's old units.
-            filt_cutoff = (_xpm3_cutoff_to_hz(_cut_raw) if is_mpc3
-                           else nominal_knob_to_hz(_cut_raw))
+            # MEASURED CURVE FOR BOTH PATHS since 2026-09-01. It used to be
+            # applied only when `is_mpc3`, with classic XML going through the
+            # unmeasured `nominal_knob_to_hz`. **That split was drawn on the
+            # wrong axis**: the cutoff curve belongs to the FILTER, and a
+            # classic XPM played on a modern MPC runs through the same legacy
+            # keygroup engine §MPCCUTOFF was measured on. Confirmed directly on
+            # 2026-09-01 -- legacy mode, velocity and envelope out of circuit,
+            # two knob positions read back to within 0.8 % of this curve, and a
+            # third filter type (MPC LP) landing on it too.
+            filt_cutoff = _xpm3_cutoff_to_hz(_cut_raw)
             filt_res     = float(_get_text(instrument, 'Resonance',     '0.0'))
             filt_env_amt = float(_get_text(instrument, 'FilterEnvAmt',  '0.0'))
             filt_atk     = _env('FilterAttack')
             filt_dec     = _env('FilterDecay')
             filt_sus     = float(_get_text(instrument, 'FilterSustain', '1.0'))
             filt_rel     = _env('FilterRelease')
+            # `FilterKeytrack` is **`KB>FLT`** on the MPC's own GUI -- "sets how
+            # much the note value will be added to the filter cutoff", i.e.
+            # brighter as you play higher. Recorded because the manual lists it
+            # under a *Velocity Sensitivity* heading, which cost Jan a search on
+            # 2026-09-01: the XPM field name and the panel name share no word.
+            #
+            # RARE IN PRACTICE: 0.0 in 96.7 % of 30,047 real keygroups sampled
+            # from the local corpus, so this is a low-impact field -- against
+            # `FilterEnvAmt` non-zero in 41.6 % and `Resonance` in 9.4 %.
             filt_keytrk  = max(-1.0, min(1.0, float(_get_text(instrument, 'FilterKeytrack',   '0.0'))))
             filt_velamt  = max(-1.0, min(1.0, float(_get_text(instrument, 'VelocityToFilter', '0.0'))))
+
+            # VELOCITY -> VOLUME. `VelocitySensitivity` is present in every
+            # keygroup of every real XPM checked (30,552 occurrences across a
+            # 400-file sample) and was read by nobody until 2026-09-01, so an
+            # MPC preset reached the E4B writer stating nothing about velocity
+            # and collected that writer's template swing of 22.37 dB instead.
+            #
+            # ONLY THE ZERO IS CARRIED AS A VALUE, and deliberately. 0.0 means
+            # "no velocity response" whatever the dB law turns out to be, so it
+            # needs no measurement; a non-zero value has no measured law behind
+            # it on the MPC and is recorded as a REQUEST rather than an amount.
+            # Inventing the full-scale dB here is the one thing that would make
+            # this worse than not reading the field, and it is what the third
+            # model state exists to avoid.
+            #
+            # Distribution over 263 real presets carrying the field: 65.8 % all
+            # keygroups at 1.0, 13.7 % all at 0.0, 11.8 % a uniform other
+            # value, and 8.7 % MIXED WITHIN ONE PRESET -- that last group
+            # cannot be expressed by a single template cord at all, which is
+            # the structural argument for reading it rather than defaulting.
+            _velsens = _get_text(instrument, 'VelocitySensitivity', '')
+            vel_vol_db = None
+            vel_vol_requested = False
+            if _velsens.strip():
+                try:
+                    _vs = float(_velsens)
+                except ValueError:
+                    _vs = None
+                if _vs is not None:
+                    # MEASURED on an MPC One 2026-09-01, so this no longer
+                    # needs the "asks for something unquantified" state it was
+                    # written with: gain = (1-s) + s*(v/127) in AMPLITUDE, RMS
+                    # residual 0.033 dB over 81 points, pivot 127.
+                    vel_vol_db = mpc_velsens_swing_db(_vs)
 
             # LFO (MPC has a single per-keygroup LFO → maps to E4B LFO1).  Only
             # emit it when something is actually routed (LfoPitch / LfoCutoff),
@@ -1753,13 +1806,31 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
                 env_attack=env_attack, env_decay=env_decay,
                 env_sustain=env_sustain, env_release=env_release,
                 filter_type=filt_type, filter_cutoff=filt_cutoff,
-                filter_resonance=filt_res,
+                # MEASURED per filter type, and converted to the model's
+                # PEAK-HEIGHT convention rather than passed through as a
+                # fraction of this machine's own dial. Low 2 and MPC LP differ
+                # in ceiling, curvature AND zero point (MPC LP carries +2.15 dB
+                # at resonance 0), so the filter type is load-bearing here.
+                filter_resonance=mpc_resonance_to_model(filt_res, filt_type),
                 # MPC states 0..1 knobs for both depths, never cents.
-                filter_env_cents=nominal_filter_env_cents(filt_env_amt),
+                filter_env_cents=(max(-1.0, min(1.0, filt_env_amt))
+                                  * MPC_FILTER_MOD_FULL_CENTS),
                 filter_env_attack=filt_atk, filter_env_decay=filt_dec,
                 filter_env_sustain=filt_sus, filter_env_release=filt_rel,
-                filter_keytrack=filt_keytrk,
-                velocity_to_filter_cents=nominal_velocity_filter_cents(filt_velamt),
+                # KB>FLT at maximum is 0.945 oct/oct, not the 1.000 assumed
+                # until 2026-09-01 (measured over keys 36..72).
+                filter_keytrack=filt_keytrk * MPC_KEYTRACK_OCT_PER_OCT,
+                # MEASURED (MPC_FILTER_MOD_FULL_CENTS): every filter-frequency
+                # destination on this machine adds in knob units at full
+                # efficiency, so full depth is the whole knob range. The E4XT
+                # nominals these replace were 1.25x (velocity) and 2.60x
+                # (envelope) too small.
+                velocity_to_filter_cents=(max(-1.0, min(1.0, filt_velamt))
+                                          * MPC_FILTER_MOD_FULL_CENTS),
+                velocity_to_volume_db=vel_vol_db,
+                velocity_to_volume_pivot=(MPC_VELSENS_PIVOT
+                                          if vel_vol_db is not None else None),
+                velocity_to_volume_requested=vel_vol_requested,
             )
             # MPC 3 second LFO (<LFO2>, emitted only by the JSON converter — an
             # MPC 2.x XML program never has one, so this is inert there).  Routed

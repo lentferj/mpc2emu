@@ -1355,6 +1355,33 @@ already did to files you *have*.
 **Newest first** — if you last read this section on a given date, everything
 above that date's entry is new to you.
 
+### If you built KRZ banks with envelopes before 2026-08-31, rebuild them — short-attack envelopes could silently self-loop and retrigger while held
+
+The 15-byte ENV/ENC segment's byte 0 is a **loop flag** (`0`=Off, `1`/`2`/`3`
+= loop back to Att1/Att2/Att3 while the key is held), followed by seven
+`(level, time)` stage pairs from byte 1. mpc2emu wrote that segment as seven
+`(time, level)` pairs starting at byte 0 instead — so byte 0 held whatever it
+computed as Att1's *time*, not the loop flag at all.
+
+The K2000's time-byte encoding never produces a raw value below **3** — even
+a zero-length attack floors to that. Byte value 3 in the real loop-flag
+position means an **active loop back to Att3**. So any voice converted with a
+short or zero attack (the common case for sampled instruments — plucks,
+mallets, most drums, most "instant attack" pads) got an accidental active
+envelope loop: held past its own attack+decay+release span, it would retrigger
+roughly once per `decay time + ~42 ms` instead of holding at sustain or
+silence, for as long as the key stayed down.
+
+Confirmed on hardware (K2000R, OS 3.87 — the final firmware ever released) at
+four points spanning a 25× range in decay time, and cross-checked against a
+genuine ROM factory program never touched by this converter. This was mistaken
+for K2000 firmware behaviour when first found (2026-08-27) before being
+root-caused to this byte-layout bug (2026-08-31); see `TODO.md` / `docs/
+RESOLUTION_NOTES.md` §KRZENVLOOP for the full trace. mpc2emu's own reader
+carried the identical byte-layout error, so re-reading an affected bank here
+reported the envelope you asked for and looked correct — the retrigger is only
+audible on the K2000/K2000R itself.
+
 ### If you built KRZ banks with vibrato before 2026-08-22, rebuild them — the vibrato was ~20× too shallow
 
 mpc2emu scaled the requested LFO→pitch depth straight onto the K2000's depth
