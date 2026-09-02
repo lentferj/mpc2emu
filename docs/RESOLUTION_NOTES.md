@@ -242,6 +242,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAILFOAMP — the AKAI tremolo law is a product, and the model's ceiling was below the material (2026-09-01)](#akailfoamp-the-akai-tremolo-law-is-a-product-and-the-models-ceiling-was-below-the-material-2026-09-01)
 - [§MPCFILTER — the MPC filter section, measured (SETTLED 2026-09-01, hardware)](#mpcfilter-the-mpc-filter-section-measured-settled-2026-09-01-hardware)
 - [§GATESUBJECT — gates that the wrong subject can satisfy (2026-09-02)](#gatesubject-gates-that-the-wrong-subject-can-satisfy-2026-09-02)
+- [§POLEFIT — the corner-fitting instrument, rescued from `tests/` (2026-09-02)](#polefit-the-corner-fitting-instrument-rescued-from-tests-2026-09-02)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -22088,3 +22089,85 @@ work: you cannot see between two things you hold as one.
 Two statistics rather than one, and if they disagree neither is the answer
 yet. A prediction stated before the run so it can fail. A control that
 measures the subject's identity and not merely its signal.
+
+## §POLEFIT — the corner-fitting instrument, rescued from `tests/` (2026-09-02)
+
+Applying eosed's test — *would this be re-derived only by re-hitting the fault
+it fixes?* — to a session's worth of untracked rig code. Almost all of it is
+correctly scratch. This is not: it is the instrument behind every filter
+measurement of 2026-09-01/02 (the MPC cutoff/resonance/modulation laws and the
+K2000 f0 result), and it lives in `tests/`, which this repo gitignores.
+
+```python
+def fit_pole(freqs, mag, n_pole, reference=None, f_lo=25.0, margin=8.0):
+    """Corner of an n-pole lowpass: fit |H|^2 = 1/(1+(f/fc)^(2n)).
+
+    n_pole=1/2/4 for 6/12/24 dB per octave. `reference` is the same source
+    with the filter wide open; pass it and the source's own spectrum and the
+    interface response divide out together.
+
+    Fit ALL THREE pole counts and report all three residuals: the best-fitting
+    order tells you how many poles are actually in circuit, independently of
+    what the panel claims. That is how both MPC filters were confirmed as
+    12 dB/oct and Low 4 as 24.
+    """
+    import numpy as np, math
+    f = np.asarray(freqs, float); m = np.asarray(mag, float)
+    if reference is not None:
+        m = m / np.maximum(np.asarray(reference, float), 1e-12)
+    k = (f >= f_lo) & (m > 0); f, m = f[k], m[k]
+    y = 20 * np.log10(m)
+    # EXCLUDE BINS THAT HAVE REACHED THE NOISE FLOOR, truncating at the FIRST
+    # crossing scanning upward. A 4-pole reaches the floor four times sooner
+    # than a 2-pole, so a fixed upper bound that is harmless at 12 dB/oct
+    # poisons the fit at 24 -- the model is asked to reproduce a FLAT floor
+    # with a falling curve. First attempt returned 13366 Hz for a 220 Hz
+    # corner, residual 13.6 dB. Taking the LAST usable bin instead of the
+    # first crossing does not work: the referenced tail bumps back up.
+    floor = float(np.median(np.sort(y)[:max(5, len(y) // 20)]))
+    below = np.where(y < floor + margin)[0]
+    cut = below[0] if len(below) else len(y)
+    f, y = f[:cut], y[:cut]
+    if len(f) < 20:
+        return float('nan'), float('nan')
+    best, be = float('nan'), 1e18
+    for fc in np.exp(np.linspace(math.log(20.), math.log(24000.), 1600)):
+        p = -10 * np.log10(1 + (f / fc) ** (2 * n_pole))
+        o = np.median(y - p)
+        e = float(np.mean((y - p - o) ** 2))
+        if e < be:
+            best, be = float(fc), e
+    return best, math.sqrt(be)          # corner Hz, rms residual dB
+```
+
+**Why not `hw_measure.corner_frequency`.** It takes a −3 dB crossing against a
+reference BAND, and it is accurate to 0.3 % on synthetic ideal 2-pole data but
+reads **~25 % low on real spectra**. That was caught only because §MPCCUTOFF
+disagreed; before that it had produced a confident law over six points which
+were all the reference band's own edge (identical to 0.1 Hz across a 5x change
+in velocity — see §MPCFILTER). Band placement is also a trap in its own right:
+the band must sit well BELOW the corner, and when it does not the fit returns
+the band edge rather than failing.
+
+**Two gates that belong with it.** A low residual is not a quality gate — a
+truncated curve is easy to fit well, and a 65 Hz point once fitted 23.6 Hz
+(ratio 0.363) at 2.9 dB residual, sailing through `resid < 3`. Gate on usable
+bandwidth and plausibility. And three or more identical corners across a swept
+parameter means the reference band, not the filter.
+
+**Validate before trusting.** Generate `1/sqrt(1+(f/fc)^(2n))` at a known fc
+and check it comes back; this fitter recovers synthetic corners to 0.1 %, and
+the wrong pole count fails loudly (3–17 dB residual) rather than returning a
+plausible number.
+
+### Also worth knowing, and untracked until now
+
+**`hw_measure.anchor_offset` fails on any wide-dynamic-range sweep.** It
+thresholds at 5 % of the LOUDEST note in its window, so a closing filter's or
+a velocity ladder's quiet end falls below the threshold and every analysis
+window slides. It read as "velocity does nothing" on a correctly configured
+program. Replace with a comb grid search over the whole schedule — score each
+candidate offset by energy inside the scheduled note windows minus energy in
+the gaps — **and print the offset it found beside `LEAD_IN`** so the two can
+disagree visibly. eosed committed the same fix on their side after the same
+fault; it is a property of the experiment's shape, not of one rig.
