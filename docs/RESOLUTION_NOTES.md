@@ -241,6 +241,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§KRZF4AMPDEPTH — the K2000 tremolo law, and the constant that must be split before it is used (2026-09-01)](#krzf4ampdepth-the-k2000-tremolo-law-and-the-constant-that-must-be-split-before-it-is-used-2026-09-01)
 - [§AKAILFOAMP — the AKAI tremolo law is a product, and the model's ceiling was below the material (2026-09-01)](#akailfoamp-the-akai-tremolo-law-is-a-product-and-the-models-ceiling-was-below-the-material-2026-09-01)
 - [§MPCFILTER — the MPC filter section, measured (SETTLED 2026-09-01, hardware)](#mpcfilter-the-mpc-filter-section-measured-settled-2026-09-01-hardware)
+- [§GATESUBJECT — gates that the wrong subject can satisfy (2026-09-02)](#gatesubject-gates-that-the-wrong-subject-can-satisfy-2026-09-02)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -22019,3 +22020,71 @@ depends on which 24 dB/oct topology you assume; the *ratio* between two knob
 settings does not, because the same unknown factor appears at both and
 cancels. Jan pushed for the second point after a single-point result; he was
 right.
+
+## §GATESUBJECT — gates that the wrong subject can satisfy (2026-09-02)
+
+Recorded here because it emerged in messages between sessions that both ended
+that night, and because the rig code it came from lives in `tests/`, which
+this repo does not track. The lesson would otherwise have evaporated with the
+scratch directory.
+
+### The class
+
+Most measurement gates ask **"is this signal real?"** — a level check, an SNR
+check, a lift-over-pre-roll check, a liveness control ("did the manipulation
+change anything?"), even a JACK connection readback. **Every one of them can
+be satisfied by a perfectly real signal from the wrong subject.**
+
+Two instances from one evening, both of which produced clean, analysable,
+entirely wrong captures:
+
+- **A K2000 program change with the wrong bank convention.** MIDI's standard
+  is `bank = id // 128`; the K2000 is **bank-of-100** (`CC0 = id // 100`,
+  `PC = id % 100`, banks to 99). Asking for program 402 the standard way
+  selects **318** — a real program on another bank. It sounds, has a plausible
+  envelope, passes level, passes SNR, and passes a liveness control *because
+  the manipulation genuinely did something, to the wrong program*. Caught only
+  when Jan read the front panel.
+- **A cached JACK recorder.** A persistent capture client connected its ports
+  once at construction, so a device switch moved the MIDI port, the channel
+  and the program change but not the audio. An "MPC capture" recorded the
+  K2000's inputs.
+
+Note the asymmetry: **silence announces itself; a wrong subject does not.**
+The stale-recorder case gave silence and was obvious once gated. The
+bank-select case gave good audio and defeated every internal check at once.
+
+### What actually distinguishes them
+
+**Verify by EFFECT, not by identity** (eosed's formulation). A signal-based
+gate cannot tell you *which* machine you recorded — but a manipulation that
+shows up in the signal can:
+
+> A recording of the wrong machine cannot track edits made to this one.
+
+If a −12 dB edit moves the capture by a repeatable amount, or three parameter
+settings return the same constant to ±0.1 %, the recording is of the subject
+you edited. It costs nothing extra whenever the run already sweeps something,
+which most calibration runs do.
+
+A connection readback still belongs *below* that, as the cheap early failure —
+it stops a run before it wastes captures rather than after — but it is not a
+substitute, because it proves a path exists and says nothing about what is on
+the other end.
+
+### The general form
+
+Across three sessions on 2026-09-01/02 every fault found was **already visible
+in data somebody held**. A wrong classifier label, a units ambiguity, a
+noise-floor hypothesis, an envelope index, an assumed block state, a wrong
+bank convention, a statistic that could not answer the question asked. None
+was hidden. Each needed a comparison nobody had made yet — against a second
+statistic, a prior measurement, a manual, or another reader.
+
+And nobody was going to make that comparison unprompted against their own
+work: you cannot see between two things you hold as one.
+
+**So the comparison has to be structural, not a matter of being more careful.**
+Two statistics rather than one, and if they disagree neither is the answer
+yet. A prediction stated before the run so it can fail. A control that
+measures the subject's identity and not merely its signal.
