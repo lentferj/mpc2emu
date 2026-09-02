@@ -63,7 +63,8 @@ from models.common import (Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            LFO_VOLUME_MODEL_FULL_DB,
                            KRZ_F4_AMP_DEPTH_DB_PER_UNIT,
                            KRZ_AMP_VELTRK_DB_PER_UNIT,
-                           VEL_VOL_PIVOT_KRZ)
+                           VEL_VOL_PIVOT_KRZ,
+                           KRZ_2POLE_F0_TO_3DB)
 
 
 # ---------------------------------------------------------------------------
@@ -501,6 +502,7 @@ _K2_CONTROL_SOURCES = {
 }
 
 _K2_CS_LFO1, _K2_CS_LFO2 = 114, 116
+_K2_FILTER_2P_LP_R = 2       # Alg5 2POLE LOWPASS, mirrors krz_writer
 _K2_CS_FUN4, _K2_CS_BKEYNUM = 119, 99
 
 _K2_CS_ENV2 = 121
@@ -845,7 +847,11 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
                 cur.filter_type = 0
             elif b0 != _K2_FILTER_NONE:
                 cur.filter_type = _K2_FILTER_TO_XPM[b0]
+                # The byte denotes f0; the model carries a -3 dB corner
+                # (2026-09-02). Inverse of the writer's division.
                 hz = krz_cutoff_byte_to_hz(seg[1])
+                if b0 == _K2_FILTER_2P_LP_R:
+                    hz *= KRZ_2POLE_F0_TO_3DB
                 cur.filter_cutoff = hz            # the model carries Hz (2026-08-25)
                 # BOTH SOURCE SLOTS, ONE SCALE.
                 #

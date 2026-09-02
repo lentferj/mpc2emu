@@ -95,7 +95,7 @@ from models.common import (
     AKAI_MUTE_CUT_SECONDS, RESONANCE_FULL_DB,
     KRZ_RES_KEYTRK_PIVOT_KEY, KRZ_RES_KEYTRK_DB_PER_UNIT,
     krz_db_to_level_pct, krz_level_pct_to_db,
-    krz_cutoff_byte_to_hz,
+    krz_cutoff_byte_to_hz, KRZ_2POLE_F0_TO_3DB,
     LFO_VOLUME_MODEL_FULL_DB, KRZ_F4_AMP_SRC1_INDEX,
     KRZ_F4_AMP_DEPTH_INDEX, KRZ_F4_AMP_SRC_LFO1, KRZ_F4_AMP_SRC_LFO2,
     KRZ_F4_AMP_DEPTH_DB_PER_UNIT, KRZ_F4_AMP_DEPTH_CLAMP,
@@ -1778,6 +1778,33 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False):
         hob = seg(0x53)
         hob[14] = ((step & 0x0F) << 4) | (hob[14] & 0x0F)
 
+    # --- velocity -> volume (AMP VelTrk) -----------------------------------
+    #
+    # ROM #199 leaves `hob_f4[4]` at **35 dB** and we inherited it on every
+    # voice ever written. Jan heard it 2026-09-02: an MPC bass whose source
+    # says `VelocitySensitivity 0.000000` on every keygroup -- no velocity
+    # response at all -- arrived on the K2000 with 35 dB of it. That is not a
+    # trim, it is the patch's whole dynamic response, invented.
+    #
+    # THE BYTE IS THE v1..v127 SWING IN dB, 1:1 (k2kremote, ten settings 0-48,
+    # max deviation 0.21 dB), so no table is needed. Signed: 38 of 16,649 real
+    # layers are negative, i.e. louder when played soft.
+    #
+    # PIVOT. The K2000 attenuates DOWNWARD from velocity 127. Sources that
+    # share that convention (MPC, KRZ) transfer exactly. An AKAI source
+    # rotates about velocity 64, so carrying its swing leaves the K2000 a
+    # uniform half-swing below the source at every velocity -- **but that is
+    # still strictly better than the inherited 35**, because the swing itself
+    # becomes correct and the residual deficit is flat rather than velocity-dependent.
+    # Jan's call 2026-09-02: write it. The pivot OFFSET remains open (§KRZVELOFFSET)
+    # and is a separate, additive correction to the layer level.
+    #
+    # `None` means no reader looked, and then the template value stands --
+    # unchanged behaviour for formats that state nothing.
+    _vv = getattr(voice, 'velocity_to_volume_db', None)
+    if _vv is not None:
+        seg(0x53)[4] = max(-128, min(127, int(round(_vv)))) & 0xFF
+
     # --- LFO -> amplitude (tremolo), with an automatic headroom trim -------
     #
     # WRITING THIS COSTS HEADROOM, WHICH IS WHY THE TRIM IS NOT OPTIONAL.
@@ -1895,7 +1922,16 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False):
         # corpus, `25087.7 -> 19912.1`. `_cutoff_byte_hz` clamps to this
         # machine's own byte range, which is the only ceiling that belongs
         # in a K2000 writer.
-        hob_f1[1] = _cutoff_byte_hz(_hz)
+        # THE MODEL CARRIES A -3 dB CORNER; THE K2000 BYTE DENOTES f0.
+        # Measured 2026-09-02: the 2-pole's -3 dB sits at 1.264 x its label
+        # (Q 0.989 -- it is built for unity gain AT the labelled frequency).
+        # Writing a source's -3 dB frequency straight into the byte therefore
+        # placed the corner ~406 cents too high on 77 % of real layers.
+        # The 4-pole's factor runs the other way and is NOT applied -- see
+        # KRZ_2POLE_F0_TO_3DB.
+        _f0_hz = (_hz / KRZ_2POLE_F0_TO_3DB
+                  if ftype_byte == _K2_FILTER_2P_LP else _hz)
+        hob_f1[1] = _cutoff_byte_hz(_f0_hz)
         if _vel_ct:
             hob_f1[4] = krz_cents_to_depth_byte(_vel_ct) & 0xFF
         # KEY TRACKING, seg[3]: a straight signed byte, 2 cents per key per

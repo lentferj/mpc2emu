@@ -2128,7 +2128,38 @@ def lfo_volume_depth_to_amount(db: float) -> float:
 #: common case. §KRZCUTCAL could never have seen this: it only ever compared
 #: our law to the machine's own label, and the label was right all along.
 #:
-#: **NOT WIRED -- Jan's call.** Held on k2kremote's own advice: one rig, one
+#: **CONFIRMED AGAINST AN INDEPENDENT INSTRUMENT (2026-09-02).** The MPC
+#: measures cutoff as a -3 dB corner, the same quantity we do, so the two
+#: machines can be asked directly. MPC static filter (Cutoff 70, Depth 0) =
+#: 808 Hz corner; K2000 program with its envelope zeroed at cutoff bytes 20
+#: (displays 831) and 15 (displays 622):
+#:
+#:     level    MPC      A(831)     B(622)
+#:     -40 dB   1256 Hz  1498 Hz    1287 Hz     A +305 ct   B  +43 ct
+#:     -50 dB   1592 Hz  1756 Hz    1611 Hz     A +169 ct   B  +20 ct
+#:     mean |error| vs MPC over 1-2 kHz:  A 7.9 dB    B 2.2 dB
+#:
+#: **B lands within 20-43 cents of the source; A is 170-305 cents bright.**
+#: So three independent lines now agree the label is f0: gain at the corner
+#: (-0.10 dB -> Q 0.989), the -3 dB crossing (1.264 -> Q 0.986), and an
+#: external instrument measuring the same physical quantity.
+#:
+#: **METHOD WARNING, and it nearly inverted the answer: SPECTRAL CENTROID
+#: CANNOT MEASURE A FILTER CORNER ON A PITCHED SOURCE.** mpc2emu asked for
+#: centroid; on this material it moved only 115 cents where 406 was
+#: predicted, and `rolloff85` moved 272 cents in the OPPOSITE direction --
+#: two summary statistics disagreeing in SIGN over the same captures. Both
+#: are dominated by the bass fundamental and its low harmonics, which sit far
+#: below either corner. The 1/3-octave comparison above works because it
+#: looks where the filter is actually acting. Reported as centroid, the
+#: honest reading would have been "under-powered, inconclusive" -- and wrong.
+#:
+#: The cross-machine caveat shows up exactly where predicted: at 630-800 Hz
+#: both K2000 versions sit 13-18 dB above the MPC, which is the converted
+#: sample's own spectrum near the fundamental rather than the filter. Compare
+#: on the SLOPE ABOVE the corner, where the source difference has died away.
+#:
+#: **STILL NOT WIRED -- Jan's call, pending his ears.** Held on k2kremote's own advice: one rig, one
 #: day, and a 4-semitone change on the dominant KRZ path deserves a listen
 #: before it ships. Repeatability is partial (1047 Hz measured twice at
 #: 1.265/1.264; the 4-pole twice at 0.775/0.774). The 4-pole's residual -3.5 %
@@ -2150,6 +2181,23 @@ def lfo_volume_depth_to_amount(db: float) -> float:
 #: "measurement" was 48 noise-floor captures averaged with one real tone.
 #: Jan's one-note test found it in a single capture -- which is why **play ONE
 #: note and look at the raw waveform** belongs before any sweep logic exists.
+#: The K2000's displayed cutoff is **f0**, the section's natural frequency;
+#: every source format this project reads carries a **-3 dB corner**. For the
+#: 2-pole (Q 0.989, 77 % of real layers) the two differ by a measured factor:
+#:
+#:     f_3dB = f0 * 1.264        f0 = f_3dB / 1.264      (-406 cents)
+#:
+#: Confirmed four ways -- gain at the corner, the -3 dB crossing, an external
+#: instrument (the MPC, which measures the same quantity) and Jan's ears on an
+#: A/B of the two. WIRED 2026-09-02 in both directions.
+#:
+#: **The 4-POLE IS DELIBERATELY NOT CORRECTED.** Its label is also f0 and its
+#: factor goes the OTHER way (about 0.774-0.802, i.e. +444 cents), but it is
+#: 2.4 % of real layers, measured to only ~3.5 %, and an uncorrected 4-pole is
+#: wrong by less than a corrected-in-the-wrong-direction one would be. See the
+#: note above krz_cutoff_byte_to_hz.
+KRZ_2POLE_F0_TO_3DB = 1.264
+
 def krz_cutoff_byte_to_hz(b: int) -> float:
     """K2000 HOB0[1] signed-semitone cutoff byte -> Hz.
     Inverse of krz_writer._cutoff_byte: Hz = 440 * 2**((s-9)/12), s in -48..79."""
