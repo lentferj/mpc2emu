@@ -243,6 +243,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§MPCFILTER — the MPC filter section, measured (SETTLED 2026-09-01, hardware)](#mpcfilter-the-mpc-filter-section-measured-settled-2026-09-01-hardware)
 - [§GATESUBJECT — gates that the wrong subject can satisfy (2026-09-02)](#gatesubject-gates-that-the-wrong-subject-can-satisfy-2026-09-02)
 - [§POLEFIT — the corner-fitting instrument, rescued from `tests/` (2026-09-02)](#polefit-the-corner-fitting-instrument-rescued-from-tests-2026-09-02)
+- [§HWSAFETY — driving an instrument somebody else is sitting at (2026-09-02)](#hwsafety-driving-an-instrument-somebody-else-is-sitting-at-2026-09-02)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -22171,3 +22172,75 @@ candidate offset by energy inside the scheduled note windows minus energy in
 the gaps — **and print the offset it found beside `LEAD_IN`** so the two can
 disagree visibly. eosed committed the same fix on their side after the same
 fault; it is a property of the experiment's shape, not of one rig.
+
+## §HWSAFETY — driving an instrument somebody else is sitting at (2026-09-02)
+
+Hardware disciplines rather than measurement ones. Losing these does not cost a
+re-derivation; it costs a note ringing on an instrument in a room somebody is
+working in, or a script that kills the shell that launched it. Both were hit on
+2026-09-02 and neither was recorded anywhere tracked.
+
+### A script that sounds a note must guarantee the note-off on every exit path
+
+`try/finally` is **not sufficient**, and this is the whole content of the rule:
+the exit path that actually happens is **SIGTERM** — you kill a held tone from
+another terminal, or a timeout fires — and Python's default SIGTERM
+disposition terminates the process *without* running `finally` or `atexit`. So
+the cleanup must be registered **and** the signal converted into a normal
+exception:
+
+```python
+    import signal
+    def _bail(signum, frame):
+        raise KeyboardInterrupt
+    for _sig in (signal.SIGTERM, signal.SIGHUP):
+        try:
+            signal.signal(_sig, _bail)
+        except (ValueError, OSError):
+            pass
+    try:
+        ...                                   # hold the note
+    except KeyboardInterrupt:
+        pass
+    finally:
+        for n in list(sounding):
+            m.send_message([0x80 | ch, n, 0])  # explicit note-offs
+        m.send_message([0xB0 | ch, 123, 0])    # + All Notes Off, belt and braces
+```
+
+**Then verify the release rather than assume it.** After killing a held tone,
+a 1-second capture read −93 dBFS — that is the check, and it takes seconds.
+"The handler ran" is a claim about the code; "the instrument is silent" is a
+claim about the world (§GATESUBJECT).
+
+### `pkill -f` matches the shell that is running it
+
+`pkill -TERM -f "send_cc.py --cc 1"` **killed the shell executing that very
+command**, because the pattern appears in its own command line. The visible
+symptom was an exit code of 144 and a compound command that stopped halfway,
+leaving the rest of its work undone — including, in one case, an edit that
+silently did not happen.
+
+Match against real processes and kill by PID:
+
+```bash
+    PIDS=$(ps -eo pid,args | grep "scratchpad/send_cc" \
+           | grep -v grep | grep -v "bin/bash" | awk '{print $1}')
+    [ -n "$PIDS" ] && kill -TERM $PIDS
+```
+
+Same hazard makes `pgrep -f` report a process that is only ever your own
+grep — twice on 2026-09-02 it printed "STILL RUNNING" for something already
+gone, which is the harmless direction of a failure whose other direction kills
+your shell.
+
+### A script that edits a parameter restores it and prints the read-back
+
+eosed's, recorded here because it applies to any of the three machines. The
+handler must **re-select its edit target** before restoring — `PRESET_SELECT` /
+`VOICE_SELECT` are device state and may have moved, and restoring the right
+values to the wrong voice is worse than not restoring, because it corrupts a
+second voice while reporting success. And the failure message should **name
+the recovery**: these edits are RAM-only, so a failed restore costs a bank
+reload rather than data. That is the entire reason RAM work is delegable, and
+saying so turns an alarming message into an instruction.
