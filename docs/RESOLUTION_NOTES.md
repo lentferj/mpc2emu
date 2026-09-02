@@ -22091,6 +22091,41 @@ Two statistics rather than one, and if they disagree neither is the answer
 yet. A prediction stated before the run so it can fail. A control that
 measures the subject's identity and not merely its signal.
 
+### It is not really about measurement — it is addressing
+
+The three instances share no code and no concepts:
+
+| layer | the address | what it resolved to |
+|---|---|---|
+| MIDI program select | bank-select convention | a real program on another bank |
+| JACK port connection | a cached recorder handle | a different instrument's inputs |
+| process matching | `pkill -f <pattern>` | the shell issuing the command |
+
+Every one is an **addressing fault** — a name, a pattern or a cached handle
+resolving to something other than what was meant, after which every downstream
+check is satisfied by the substitute.
+
+**Measurement is only where it becomes visible**, because measurement is where
+a wrong subject still produces a plausible number. Everywhere else it quietly
+works on the wrong thing and nothing complains.
+
+The general form falls out as pairs, and in each the cheap side is satisfiable
+by the wrong subject while the expensive side is not:
+
+    a pattern          vs   a PID
+    a program number   vs   the program dumped back
+    a port name        vs   a verified signal path
+    a preset selector  vs   a read-back
+    "connect() did not raise"  vs  "an edit I made shows up in the capture"
+
+**And the repair is never a better pattern.** Resolve the address to the thing
+itself, then verify the thing — one extra step, and the only step that can
+fail for the right reason.
+
+(eosed's formulation, 2026-09-02, from three faults found across two sessions
+in one evening. Recorded here as well as there because the MIDI, JACK and
+process-handling code all lives in this repo.)
+
 ## §POLEFIT — the corner-fitting instrument, rescued from `tests/` (2026-09-02)
 
 Applying eosed's test — *would this be re-derived only by re-hitting the fault
