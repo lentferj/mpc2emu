@@ -79,13 +79,38 @@ would leave tangled.
   grows harmonics a THD reading finds unambiguously. A tone that already has
   eleven of them hides it completely.
 
+## The dynamic range, and why it needs a floor guard
+
+The grid spans **85 dB**: `A VPLUS 60` at v127 is +57.1 over the control and
+`VLESS 30` at v1 is −28.3 under it. Trim the loudest note to −6 dBFS and the
+quietest sits near −91 dBFS, below the analogue noise floor of most chains.
+
+That is survivable only because the reading is **spectral** — the level of the
+1 kHz bin, not broadband energy — so the floor that matters is the noise *in
+that bin*. The analysis measures it from the capture's own lead-in silence and
+marks any cell within 10 dB of it as `floor` rather than printing a number, and
+excludes it from the verdict entirely.
+
+Excluded, not merely annotated, because **a cell sitting in the noise reads as
+"the cord did less than predicted" — which is the same shape as the answer we
+are looking for.** A floor-limited cell left in the verdict would be believed.
+If every `Vel+` cell comes back floor-limited the runner says so and declines to
+answer instead of reporting a ceiling that is really a noise floor.
+
 ## Running it
 
 ```
-python3 tests/re_banks/measure_e4xt_velplus.py gain      # set the input trim
+python3 tests/re_banks/measure_e4xt_velplus.py gain      # identity + input trim
 python3 tests/re_banks/measure_e4xt_velplus.py capture   # ONE recording, ~2.5 min
 python3 tests/re_banks/measure_e4xt_velplus.py analyse
 ```
+
+**`gain` checks the bank's identity before anything else, by effect.** It plays
+key 49 — the `Vel<` fingerprint — at v127 then v1, alternating twice. You must
+hear loud, then much quieter, ~28 dB apart. "A note sounded" is satisfied by
+whatever bank happened to be resident: the E4XT would play the previous disc's
+preset just as willingly and the capture would produce a complete, plausible,
+wrong answer. No other bank on this card does loud-then-quiet on that key.
 
 **Set the trim against the LOUDEST note, not the first.** `A VPLUS 60` at v127
 predicts +57 dB over the control. If the interface clips there, the capture
