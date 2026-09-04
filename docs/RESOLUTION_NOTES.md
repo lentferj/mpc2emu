@@ -245,7 +245,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§POLEFIT — the corner-fitting instrument, rescued from `tests/` (2026-09-02)](#polefit-the-corner-fitting-instrument-rescued-from-tests-2026-09-02)
 - [§HWSAFETY — driving an instrument somebody else is sitting at (2026-09-02)](#hwsafety-driving-an-instrument-somebody-else-is-sitting-at-2026-09-02)
 - [§VELPIVOT — the pivot mismatch is a level, and the level moves DOWN (2026-09-04)](#velpivot-the-pivot-mismatch-is-a-level-and-the-level-moves-down-2026-09-04)
-- [§E4XTVELSRC — REFUTED: `Vel<` is not what the EOS library uses; a real library CD is 96.9 % `Vel+` (2026-09-04)](#e4xtvelsrc-refuted-vel-is-not-what-the-eos-library-uses-a-real-library-cd-is-969--vel-2026-09-04)
+- [§E4XTVELSRC — REFUTED: `Vel<` is not what the EOS library uses; a real library CD is 96.9 % `Vel+` (2026-09-04)](#e4xtvelsrc-refuted-vel-is-not-what-the-eos-library-uses-a-real-library-cd-is-969-vel-2026-09-04)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
