@@ -22907,6 +22907,52 @@ The PRGNUM column is what makes the check safe, not the row order. Same shape as
 VELPLUS's `Vel+`/`Vel<` pair: **a check whose expected value is also its
 failure's value proves nothing.**
 
+### K2000 byte verification, and a format offset confirmed from two directions
+
+k2kremote loaded `VELCHECK.KRZ` into bank 800 (Fill, 158 K against 1,305 K free,
+nothing of Jan's touched) and read back:
+
+    program 800  VT00 NULL   AMP VelTrk  0 dB
+    program 801  VT05 SOFT   AMP VelTrk  5 dB
+    program 802  VT15 FULL   AMP VelTrk 15 dB
+    program 803  VT36 AKAI   AMP VelTrk 36 dB
+
+**No 35 anywhere**, including on the null. ROM #199's inherited default is gone.
+
+**Read two independent ways, and the first is the better method.** A DIFFERENTIAL
+DUMP: all four objects whole, printing every offset that DIFFERS across them,
+with no target byte in mind. Exactly two offsets varied -- 189, the keymap
+pointer, and **261**. A dump like that cannot confirm a byte you hoped to find;
+it can only report what actually varies, and the keymap pointer varying is
+itself evidence the four objects were otherwise identical. Then confirmed
+independently on the F4 AMP panel page.
+
+**So Program object offset 261 is `AMP VelTrk`, unsigned, 1 dB per unit** -- new
+for the map, sitting beside 262 (`Src1`) and 263 (`Depth`).
+
+**And it cross-checks against our writer without either side trusting the
+other's map.** We address that byte as segment 0x53 index 4:
+
+    Src1     theirs 262 - ours 5 = 257
+    Depth    theirs 263 - ours 6 = 257
+    VelTrk   theirs 261 - ours 4 = 257
+
+All three differ by the same constant, so the two address spaces are the same
+bytes with one frame offset. Worth contrasting with what was asked of s3ked --
+a read of a NAMED byte, which is strictly weaker, and which the `TEST PROGRAM`
+coincidence above shows can return the right value from the wrong program.
+
+### All three machines, on bytes
+
+    E4XT    cord source `Vel+`, amounts as fitted          eosed
+    AKAI    V_LOUD 0 / 4 / 13 on PRGNUM 94/95/96           s3ked
+    K2000   AMP VelTrk 0 / 5 / 15 / 36 on 800-803          k2kremote
+
+Three formats, three independent readers, and the inherited defaults gone from
+all of them: ROM #199's 35 on the K2000, the hardcoded 20 on the AKAI, the
+template's 23.6 % cord on the E4XT. **That trio was the entirety of
+§KRZAMPVEL.**
+
 ### A dB convention that differs by exactly 2x between two correct tables
 
 s3ked's header table prints V_LOUD in dB **one-sided about the velocity-64
