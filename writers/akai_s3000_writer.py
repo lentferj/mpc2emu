@@ -1913,7 +1913,12 @@ def _program_common(name: str, n_keygroups: int, lo_key: int, hi_key: int,
     #
     # The old 20 stays as the fallback for a source that states nothing, so
     # conversions from formats with no such field are byte-identical to before.
-    if vel_to_volume_db:
+    # `is not None`, NOT truthiness -- the SECOND of two places this mattered
+    # (the selection in build_akai_volume was the first, and fixing only that
+    # one changed nothing because this line swallowed the 0.0 again). A
+    # measured-neutral 0.0 is a source stating it has NO velocity response;
+    # only `None` means nobody looked, and only that deserves the fallback.
+    if vel_to_volume_db is not None:
         p[0x1a] = _clamp(int(round(vel_to_volume_db
                                    / AKAI_VLOUD_SWING_DB_PER_UNIT)),
                          -50, 50) & 0xFF
@@ -2706,8 +2711,16 @@ def build_program(preset, name: str, prog_num: int = 0,
                  if getattr(v, 'lfo1_rate', None) is not None), None)
     # V_LOUD is per PROGRAM on the AKAI while ours is per voice, so take the
     # first voice that states one -- the same rule the LFO rate above uses.
+    # `is not None`, NOT truthiness. A measured-neutral 0.0 is a source
+    # STATING that it has no velocity response, and it is falsy -- so the old
+    # test fell through to the writer's fallback of 20 and invented a 23.9 dB
+    # swing for a program that explicitly asks for none. Found 2026-09-03
+    # building the AKAI leg of a listening test from an MPC bass whose every
+    # keygroup carries `VelocitySensitivity 0.000000`; it wrote V_LOUD 20.
+    # Same None-vs-0.0 confusion Jan heard on the KRZ path a day earlier, and
+    # the LFO line directly above already had it right.
     _vvol = next((v.velocity_to_volume_db for v in preset.voices
-                  if getattr(v, 'velocity_to_volume_db', 0.0)), None)
+                  if getattr(v, 'velocity_to_volume_db', None) is not None), None)
     out = _program_common(name, len(keygroups), lo, hi, lfo1_rate=_lfo,
                           prog_num=prog_num, midi_channel=midi_channel,
                           vel_to_volume_db=_vvol)
