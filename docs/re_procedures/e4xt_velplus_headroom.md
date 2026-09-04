@@ -97,6 +97,15 @@ are looking for.** A floor-limited cell left in the verdict would be believed.
 If every `Vel+` cell comes back floor-limited the runner says so and declines to
 answer instead of reporting a ceiling that is really a noise floor.
 
+**And the same guard at the other end, which is the more dangerous one.** A cell
+clipped at the *interface* reads as "the E4XT stopped getting louder" **and**
+grows harmonics — so it imitates *both* halves of the answer, in the direction
+that would make us wrongly conclude the machine has a ceiling. The analysis
+counts full-scale samples per note and excludes any clipped cell, naming them
+and saying to drop 6 dB and re-capture. Between the two guards, the only cells
+that reach the verdict are ones where the converter is demonstrably not the
+subject.
+
 ## Running it
 
 ```
@@ -105,12 +114,33 @@ python3 tests/re_banks/measure_e4xt_velplus.py capture   # ONE recording, ~2.5 m
 python3 tests/re_banks/measure_e4xt_velplus.py analyse
 ```
 
-**`gain` checks the bank's identity before anything else, by effect.** It plays
-key 49 — the `Vel<` fingerprint — at v127 then v1, alternating twice. You must
-hear loud, then much quieter, ~28 dB apart. "A note sounded" is satisfied by
-whatever bank happened to be resident: the E4XT would play the previous disc's
-preset just as willingly and the capture would produce a complete, plausible,
-wrong answer. No other bank on this card does loud-then-quiet on that key.
+**`gain` checks the bank's identity before anything else, by effect** — four
+notes, and the fourth is the one that matters:
+
+| | expected |
+|---|---|
+| key 48 v127 (control) | reference level |
+| key 49 v127 (`Vel<` 30) | **the same** as it |
+| key 49 v1 | ~28 dB **below** |
+| key 52 v127 (`Vel+` 30) | ~28 dB **above** |
+
+"A note sounded" is satisfied by whatever bank happened to be resident: the
+E4XT would play the previous disc's preset just as willingly and the capture
+would produce a complete, plausible, wrong answer.
+
+**The first version of this check was two notes, and it was wrong — caught by
+eosed, 2026-09-04.** It played key 49 at v127 and v1 and called ~28 dB between
+them "the `Vel<` fingerprint". It is nothing of the kind: `Vel+` and `Vel<`
+carry the **same** dB-per-percent constant and differ only in **pivot**, so key
+52 (`Vel+` at the same 30 %) has an identical span — 28.32 against 28.31, from
+this bank's own expectation table. The check therefore confirmed *a 28 dB
+velocity swing on key 49*, which identifies the bank fine and is **blind to the
+one property the whole experiment is about**.
+
+A gate that passes on either subject, in a tool written specifically to avoid
+that — §GATESUBJECT, in the apparatus rather than in the measurement. What
+discriminates is the level **relative to the control at v127**, because that is
+where the pivot lives; the span is the same either way.
 
 **Set the trim against the LOUDEST note, not the first.** `A VPLUS 60` at v127
 predicts +57 dB over the control. If the interface clips there, the capture
