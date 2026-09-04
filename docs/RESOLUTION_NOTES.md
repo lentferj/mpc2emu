@@ -23014,12 +23014,33 @@ restored linearity as well as magnitude -- two independent signatures, not one.
 through an E-MU Z-plane filter and an S3000XL 12 dB/octave respectively.
 
 Stated carefully, because two points is two points: this is **not** evidence that
-the two filters behave alike. It is consistent with the peak-level effect being
-governed by the source spectrum and the depth in cents rather than by either
-filter's slope. What it does establish on its own is that **the velocity->filter
-depth converted faithfully to both targets** -- verified by an effect neither
-writer was aimed at and neither reader predicted. A third machine would separate
-the two readings.
+the two filters behave alike. What it does establish on its own is that **the
+velocity->filter depth converted faithfully to both targets** -- verified by an
+effect neither writer was aimed at and neither reader predicted. A third machine
+would separate the two readings.
+
+**THE THIRD MACHINE ARRIVED AN HOUR LATER AND THE AGREEMENT DID NOT SURVIVE IT.**
+
+    target   depth written   filter as written              excess
+    E4XT     5958 ct         210 Hz resting corner          14.43 dB  (inferred)
+    AKAI     ~5900 ct        FILFRQ 70, 12 dB/oct           14.42 dB  (neutralised)
+    K2000    5900 ct         2-pole LOPASS, NO envelope     20.75 dB  (neutralised)
+
+k2kremote ran the same neutralisation on the K2000 -- zeroed `F1 FRQ VelTrk`,
+re-captured, and watched 25.75 dB collapse to **5.14 against a byte of 5**. Same
+experiment, same conclusion about the writer, **completely different excess**.
+
+So the 0.01 dB agreement between the first two was a coincidence of their resting
+corners, not a law. The level change from opening a filter depends on where the
+corner STARTS and on the source's spectrum, not on the depth in cents alone --
+which is why a third machine with a different resting corner lands 6 dB away.
+
+**The caution was worth having.** Two points agreeing to 0.01 dB is exactly the
+shape that invites a shared-constant claim, and the only thing that stopped one
+being written down was declining to make it on two points. The finding that
+survives is the one that was safe at two points and is now confirmed at three:
+**the velocity->filter depth converts faithfully to every target**, measured
+three times by removing it and watching the excess vanish.
 
 ### Reading the wrong keygroups, and a null that was confounded for one routing and clean for the other
 
