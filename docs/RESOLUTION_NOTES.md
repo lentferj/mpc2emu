@@ -245,6 +245,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§POLEFIT — the corner-fitting instrument, rescued from `tests/` (2026-09-02)](#polefit-the-corner-fitting-instrument-rescued-from-tests-2026-09-02)
 - [§HWSAFETY — driving an instrument somebody else is sitting at (2026-09-02)](#hwsafety-driving-an-instrument-somebody-else-is-sitting-at-2026-09-02)
 - [§VELPIVOT — the pivot mismatch is a level, and the level moves DOWN (2026-09-04)](#velpivot-the-pivot-mismatch-is-a-level-and-the-level-moves-down-2026-09-04)
+- [§E4XTVELSRC — REFUTED: `Vel<` is not what the EOS library uses; a real library CD is 96.9 % `Vel+` (2026-09-04)](#e4xtvelsrc-refuted-vel-is-not-what-the-eos-library-uses-a-real-library-cd-is-969--vel-2026-09-04)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -22463,3 +22464,88 @@ edit-run-revert loop this fast wants `python3 -B`.
   corrected. A stale "blocked on" outlives the block.
 - Nothing here has been heard on hardware yet. The arithmetic is measured; the
   musical result is not.
+
+
+## §E4XTVELSRC — REFUTED: `Vel<` is not what the EOS library uses; a real library CD is 96.9 % `Vel+` (2026-09-04)
+
+**The claim.** Our E4B writer emits velocity→volume as `Vel<`, and the reason on
+record (TODO row, §VELPIVOT, and what I told Jan on 2026-09-04) was that *"`Vel<`
+is not a lossy fallback but the convention the machine and its whole factory
+library use."* On that basis I recommended closing the `Vel+`+trim question as
+decided.
+
+**The evidence behind it was 22 presets resident in the E4XT's memory** — a
+population that includes our own conversions and Jan's own material. A statement
+about a *library* was supported by a reading of a *machine's current contents*.
+Same family as §GATESUBJECT: the check was satisfiable by the wrong subject.
+
+**Jan asked for the corpus number.** Here it is, censused straight from the IFF
+container (streaming the E4P1 chunks only, so a 136 MB bank costs its preset
+bytes and not its samples), counting **every** velocity→AmpVol cord in a voice
+rather than the first — the parser stops at the first by design, which is right
+for conversion and wrong for a census.
+
+| population | voices | `Vel+` | `Vel~` | `Vel<` |
+|---|---|---|---|---|
+| A commercial EOS-native library CD-ROM, 11 banks, 2,035 presets | 11,806 | **11,449 (96.9 %)** | 36 (0.3 %) | 238 (2.0 %) |
+| 23 banks off Jan's own E4XT hard disk (mostly vintage-synth ROM sets) | 1,454 | **0** | 156 | 809 |
+| 2 banks sampled on the E4XT itself | 14 | 0 | 0 | 12 |
+
+Percentages are of *active* cords; a further 488 and 85 cords respectively are
+present at amount 0, and every one of those names `Vel<`, so `Vel<` does appear
+to be the machine's **default source for a neutral cord**. That is the true
+statement the false one was built from.
+
+**So the claim is refuted, and the population that refutes it is the more
+authoritative one.** The library CD is EOS-native, authored for this machine.
+The 23 hard-disk banks that use `Vel<` are conversions of vintage-synth ROM
+libraries — tool output, the same kind of evidence as looking at our own.
+
+**And it takes the clipping argument with it.** I argued to Jan that `Vel+` is
+dangerous because it puts velocity 127 at nominal **plus** the full swing, up to
+43 dB above a level the sample is normalised to. Measured on the same 11,449
+`Vel+` voices:
+
+    mean swing            28.6 dB
+    mean static level     -2.9 dB   (median 0.0, p10 -14.5, p90 +10.0)
+    corr(swing, level)    +0.068
+
+**The library does not budget headroom for the swing at all** — the correlation
+is zero and the wrong sign, and half the voices sit at exactly nominal while
+their v127 runs ~30 dB above it. Whatever "nominal" means on this machine, it is
+not a clipping ceiling. My headroom objection assumed it was, with nothing
+behind that.
+
+### What this does and does not settle
+
+**Settles:** the reason we picked `Vel<` was not true, and the reason I gave for
+keeping it was not true either. Both are withdrawn.
+
+**Does not settle:** whether to switch. `Vel+`, `Vel~` and `Vel<` all draw the
+same line (one measured slope, 0.9462 dB/%; only the zero crossing differs), so
+the choice remains a choice about where the preset's level sits — it cannot make
+the velocity *response* more or less faithful. What has changed is that the
+argument now runs the other way: the machine's own library puts the swing above
+nominal as a matter of course.
+
+**Blocked on one measurement, not a decision:** what the E4XT actually does with
+a `Vel+` voice at velocity 127 and nominal level — does it have that headroom,
+or does the library's own material clip and nobody minds? One capture at two
+velocities on a `Vel+` preset from that CD answers it, and it is the only thing
+still standing between here and a defensible choice. Until then `Vel<` stays,
+now for an honest reason: it is what we have heard.
+
+### Method note
+
+Coverage is complete for the material on hand: the E4XT's 19 GB hard disk (FAT32
+— read with mtools, never written), the EOS-native CD-ROMs on the card, and the
+loose banks under `~/temp`. The two remaining discs are EIII-format (`E3 Main
+Code`), a different container with no mod-cord table of this kind, so there is
+nothing there to count.
+
+One trap worth keeping: the first version of the census walked voice blocks
+assuming a 2-byte length prefix, which they do not have — a voice is
+`VOICE_FIXED` plus its zone entries, with the zone count derived from the
+trailer offset at `vpar[2:4]`. It yielded **zero voices across 627 presets** and
+printed a clean, plausible, entirely empty table. A census that counts nothing
+still formats nicely.
