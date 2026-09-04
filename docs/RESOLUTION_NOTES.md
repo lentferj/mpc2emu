@@ -22880,6 +22880,52 @@ Body RMS measured the decay tail. The source swings described a real quantity
 that was not the one on the disc. The criterion described noise. None of the
 three has a failure mode that looks like failure.
 
+### AKAI byte verification: passed, and one coincidence that nearly faked a failure
+
+s3ked loaded `TC13 LISTEN` and read the headers raw before stating expectations:
+
+    idx  program         PRGNUM   V_LOUD
+      0  'TEST PROGRAM'      0        20
+      1  'MPC MIXED'        94         0
+      2  'MPC SOFT'         95         4
+      3  'MPC FULL'         96        13
+
+**0 / 4 / 13, on the right PRGNUMs.** The hardcoded fallback did not fire, the
+source values arrived, and 96 carries the **fitted 13** rather than the raw-span
+35 -- the first evidence on a second machine that §MPCVELSHAPE's curve work
+reaches hardware.
+
+**AND `TEST PROGRAM` READS V_LOUD 20 -- numerically identical to the fallback the
+writer used to hardcode.** The machine's own boot default sits at index 0, one
+row above ours. So a read of "the first program", or of index 0 on a machine
+whose indices had shifted, returns the right value in the right field from the
+WRONG PROGRAM, and reads as a specific and confident diagnosis: *the fallback
+fired, the source value never arrived.* It would survive a sanity check, because
+20 is exactly the number a knowledgeable reader expects that failure to produce.
+
+The PRGNUM column is what makes the check safe, not the row order. Same shape as
+VELPLUS's `Vel+`/`Vel<` pair: **a check whose expected value is also its
+failure's value proves nothing.**
+
+### A dB convention that differs by exactly 2x between two correct tables
+
+s3ked's header table prints V_LOUD in dB **one-sided about the velocity-64
+pivot** (0.59779 dB/unit); everything in this repo is the **full v1..v127 swing**
+(1.19557 dB/unit). Both derive from §171 and neither is wrong, but a fitted value
+compared against the wrong one is out by a factor of two.
+
+Traced rather than asserted, at every hop: `fit_velocity_line` fits against
+`x = (v - pivot)/126`, so its slope is dB across the whole span by construction,
+and the writer divides by the full-swing constant. No hop is one-sided.
+
+    MPC source span v1..v127   42.08 dB
+    fitted slope               14.97 dB
+    written V_LOUD                 13
+    means                      15.54 dB full swing  /  7.77 one-sided
+
+Worth naming because it is the tremolo referent trap again in a different field:
+two people reading the same byte, both correctly, in units that differ by 2.
+
 ### One more, in the same family, on my side of the wire
 
 `E4_GEN_SAMPLE` reads **-1** on a multi-zone voice, and eosed reasonably inferred
