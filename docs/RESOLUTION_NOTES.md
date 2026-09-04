@@ -23225,6 +23225,51 @@ field cannot express.
 blocked** on the source rig: ch14 sounds but ignores velocity entirely, ch15 is
 30 dB down, ch16 silent.
 
+### The nine rows, built 2026-09-04
+
+    e4b   -> krz     0.5 MB    10/10 zones over the up-pitch ceiling
+    e4b   -> akai    0.9 MB
+    krz   -> e4b     1.0 MB
+    krz   -> akai    1.0 MB
+    akai  -> e4b     1.2 MB    the S3000 originals (MX3)
+    s1000 -> e4b     1.4 MB    the S1000 originals (MX4)
+    mpc   -> e4b    29.4 MB
+    mpc   -> krz    23.3 MB    13/163 zones over
+    mpc   -> akai   51.7 MB    fits one AKAI partition, 60 MB cap
+
+**`e4b -> krz` has EVERY zone above the up-pitch ceiling.** Not new breakage --
+the same 24 kHz `_KRZ_RATE_FLOOR` limitation the AKAI material hit, and the old
+matrix's `E4B original -> K2000` row was built under it too. Worth stating
+because **that row's poor scores may have been measuring the floor rather than
+the writer**, and the rebuilt score will now say so as dropped notes rather
+than as a vague spectral difference. Left in rather than rescued: what the
+shipping pipeline produces is what the matrix should measure.
+
+### Three build faults, all mine, all found by checking the output rather than the code
+
+**A sample drawn from the front of a sorted list is a sample of the sort key.**
+The MPC selector scanned `sorted(rglob('*.xpm'))` and took the first 1,200 --
+which inside `EXPANSIONS/` is two expansion packs. It returned six sources, ALL
+uniform `VelocitySensitivity` 1.0, and filled none of the other three classes,
+because none of them appear in that stretch of the alphabet. Re-ordered by a
+hash of the path: same determinism, and the first 200 files now come from **40
+folders instead of 4**. The class mix then matched the library's distribution
+on the first try.
+
+**The whole card instead of one volume.** `parse_akai_image` returns every
+preset on the disk -- 157 -- and the matrix's "S3000 original" row is the six
+programs in `MX3 S3000 OR`. Caught mid-run by the source line reading `akai 157
+presets` where it should read 6. Converting the whole card would have produced a
+much larger artefact under the same row name, which is the substitution that
+makes two runs incomparable.
+
+**Eight rows where the matrix has nine.** The S1000 row was simply never added:
+the AKAI got one source key when it needs two, MX3 and MX4. The parser reads
+S1000 `.P1` programs perfectly -- `_PROGRAM_TYPES` has included them since the
+reader was written -- so the missing row was an omission in the build script and
+not a format limitation. Found by counting the manifest against the row list
+rather than by reading the code.
+
 Implementation in `tools/matrix_score.py` and
 `tests/re_banks/build_matrix_v4.py`, both untracked by project convention --
 the design is here so it is reproducible without them.
