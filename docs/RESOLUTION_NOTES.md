@@ -22455,8 +22455,11 @@ edit-run-revert loop this fast wants `python3 -B`.
 - The E4XT cord is still written as `Vel<`. Constructing the AKAI's pivot 64
   natively would use `Vel+` plus the same static trim; with the preset shift now
   in place that is a smaller question than it was, but it is still Jan's call.
-- MPC's dB law for a non-zero `VelocitySensitivity` is unmeasured, so those
-  sources still keep the target default rather than an invented constant. One
-  MPC One bench session closes it.
+- ~~MPC's dB law for a non-zero `VelocitySensitivity`~~ — **not open; it was
+  measured at the 2026-09-01 bench session and wired the same day**
+  (`mpc_velsens_swing_db`, verified end-to-end from a real XPM on 2026-09-04).
+  It was still described as open in `xpm_parser`'s own comment and in the TODO
+  row, which is how it got reported to Jan as open a second time. Both
+  corrected. A stale "blocked on" outlives the block.
 - Nothing here has been heard on hardware yet. The arithmetic is measured; the
   musical result is not.

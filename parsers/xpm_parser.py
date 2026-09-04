@@ -1744,13 +1744,15 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
             # MPC preset reached the E4B writer stating nothing about velocity
             # and collected that writer's template swing of 22.37 dB instead.
             #
-            # ONLY THE ZERO IS CARRIED AS A VALUE, and deliberately. 0.0 means
-            # "no velocity response" whatever the dB law turns out to be, so it
-            # needs no measurement; a non-zero value has no measured law behind
-            # it on the MPC and is recorded as a REQUEST rather than an amount.
-            # Inventing the full-scale dB here is the one thing that would make
-            # this worse than not reading the field, and it is what the third
-            # model state exists to avoid.
+            # WRITTEN WHEN ONLY THE ZERO WAS CARRIED, and now stale in its
+            # premise: for a while a non-zero value had no measured law behind
+            # it and was recorded as a REQUEST rather than an amount, because
+            # inventing the full-scale dB is the one thing that would have made
+            # reading this field worse than ignoring it. The MPC One bench
+            # session of 2026-09-01 measured the law, so the third model state
+            # is no longer reached from here -- see the call below. Kept as the
+            # record of why the request state exists at all; other formats
+            # still need it.
             #
             # Distribution over 263 real presets carrying the field: 65.8 % all
             # keygroups at 1.0, 13.7 % all at 0.0, 11.8 % a uniform other
