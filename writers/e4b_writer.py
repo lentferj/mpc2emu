@@ -568,21 +568,29 @@ _LEVEL_CLAMPED: list = []
 
 
 def _offset_level_db(base_db: float, offset_db: float) -> float:
-    """Add a pivot offset to a level, clamped at the measured floor.
+    """Add a pivot offset to a level, recording when it leaves calibrated range.
 
-    `e4xt_volume_byte` will happily EXTRAPOLATE its fitted quadratic past
-    E4XT_VOL_MEASURED_FLOOR_DB and stay monotonic, which is fine for a level
-    the user asked for and wrong for one we are adding ourselves: below the
-    floor the byte no longer stands for a measured number of dB, so the
-    relative balance this offset exists to preserve stops being preserved.
-    Clamp instead, and record it -- on 10,933 real presets this fires on 4.5%.
+    EXTRAPOLATES RATHER THAN CLAMPS, which reverses what this function did when
+    it was written this morning -- because the situation reversed. Under `Vel<`
+    the offsets were UPWARD and a clamp protected against asking the field for
+    gain it does not have. Under `Vel+` they are downward, and the field really
+    does go there: the byte reaches about -94 dB and the fitted law stays
+    monotonic all the way.
+
+    So the choice is between a few dB of extrapolation error and, for a
+    full-sensitivity MPC keygroup, **19 dB of clamp error**. Clamping would be
+    the more damaging of the two while looking like the more cautious one.
+
+    What is recorded is not "clamped" but "past the measured floor", which is
+    the honest description: below `E4XT_VOL_MEASURED_FLOOR_DB` the byte is a
+    monotonic extrapolation of a quadratic fitted over 0..-22.9 dB, not a
+    measured number of dB.
     """
     if not offset_db:
         return base_db
     want = base_db + offset_db
     if want < E4XT_VOL_MEASURED_FLOOR_DB:
         _LEVEL_CLAMPED.append(E4XT_VOL_MEASURED_FLOOR_DB - want)
-        return E4XT_VOL_MEASURED_FLOOR_DB
     return want
 
 
@@ -751,6 +759,7 @@ _MOD_VEL_TO_CUTOFF_AMT  = 18   # slot 4: Velocity → Filter-Freq ("Cord 04")
 #: = 22.37 dB) is now a FALLBACK for sources that ask for a velocity response
 #: without stating a measurable one, not an unconditional write.
 _MOD_VEL_TO_VOL_AMT = 2
+_MOD_VEL_TO_VOL_SRC = 0
 _MOD_VEL_TO_CUTOFF_SRC  = 16   #   …its source byte (slot 4 byte 0)
 _MOD_FENV_TO_CUTOFF_AMT = 22   # slot 5: FilterEnv → Filter-Freq ("Cord 05")
 _MOD_KEY_TO_CUTOFF_AMT  = 26   # slot 6: Key → Filter-Freq ("Cord 06")
@@ -1225,6 +1234,30 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
     # `Vel+` plus a static trim of -swing/2, which runs out of range against
     # E4XT_VOL_MEASURED_FLOOR_DB on the loudest real sources. That trade is
     # still Jan's to make; this is the status-quo half of it.
+    # CORD SOURCE: `Vel+`, JAN'S DECISION 2026-09-04, and it is the cheaper
+    # choice as well as the conventional one.
+    #
+    # The template ships `Vel<` (pivot 127) and we wrote that until today, on
+    # the belief that it was the machine's own convention. The corpus census
+    # (§E4XTVELSRC) refuted that -- a commercial EOS-native library CD is 96.9 %
+    # `Vel+` -- and the bench (§VELPLUSHDRM) refuted the objection that `Vel+`
+    # must clip: it tracks prediction to tenths of a dB up to +43 dB above
+    # nominal at 0-1 % THD.
+    #
+    # THE ARITHMETIC FOLLOWS THE CONVENTION RATHER THAN FIGHTING IT. The static
+    # level needed to carry a source swing is `L + S*(P_dst - P_src)/126`, so
+    # with P_dst = 0 every offset is NEGATIVE -- downward, the direction the
+    # volume field has range in. An AKAI source that needed an impossible
+    # +21.5 dB as `Vel<` needs a comfortable -21.9 dB as `Vel+`, and its pivot
+    # becomes EXACT instead of compensated. The per-preset shift of §VELPIVOT
+    # correctly falls to zero as a result: nothing has to be traded away when
+    # every offset already fits.
+    #
+    # THE COST, stated because it is real: a source ALREADY at pivot 127 (MPC,
+    # KRZ) needed no trim at all as `Vel<` and needs -S as `Vel+` -- up to
+    # -42 dB for a full-sensitivity MPC keygroup. That is inside the field's
+    # byte range (which reaches about -94 dB) but roughly 20 dB past where the
+    # volume law was actually MEASURED, so those levels are extrapolated.
     _vv_db = getattr(voice, 'velocity_to_volume_db', None)
     _vv_req = bool(getattr(voice, 'velocity_to_volume_requested', False))
     if _vv_db is not None:
@@ -1245,6 +1278,7 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
     if needs_mod:
         mod = bytearray(_MOD_TMPL)
         mod[_MOD_VEL_TO_VOL_AMT] = _vv_byte & 0xFF
+        mod[_MOD_VEL_TO_VOL_SRC] = _SRC_VEL_PLUS
         # Mod-wheel→LFO-depth gating: split each LFO cord (depth D) into a static
         # part D*(1-Kw) + a ModWheel→CordN-Amount cord of D*Kw (Kw=0 → unchanged).
         Kw = max(0.0, min(1.0, voice.wheel_to_lfo))
@@ -1393,7 +1427,7 @@ def _build_preset_body(preset: Preset, preset_idx: int,
     # the volume field does not have, so the whole preset moves DOWN by its own
     # largest offset instead: inter-voice balance comes out exact and only the
     # preset's overall loudness changes. Jan's call, 2026-09-04.
-    _shift = velocity_pivot_preset_shift(voices, E4XT_VEL_PIVOT['Vel<'])
+    _shift = velocity_pivot_preset_shift(voices, E4XT_VEL_PIVOT['Vel+'])
     voice_parts = []
     last = num_voices - 1
     _before = len(_LEVEL_CLAMPED)
@@ -1401,16 +1435,16 @@ def _build_preset_body(preset: Preset, preset_idx: int,
         _off = velocity_pivot_offset_db(
             getattr(v, 'velocity_to_volume_db', None),
             getattr(v, 'velocity_to_volume_pivot', None),
-            E4XT_VEL_PIVOT['Vel<']) - _shift
+            E4XT_VEL_PIVOT['Vel+']) - _shift
         voice_parts.append(_build_voice(v, sample_name_to_idx,
                                         is_last=(i == last),
                                         level_offset_db=_off))
     if len(_LEVEL_CLAMPED) > _before:
         _lost = _LEVEL_CLAMPED[_before:]
-        print(f"  [INFO] preset '{preset.name}': velocity-pivot shift of "
-              f"{_shift:.1f} dB ran past the measured volume floor on "
-              f"{len(_lost)} level(s); clamped, up to {max(_lost):.1f} dB of "
-              f"the correction not applied")
+        print(f"  [INFO] preset '{preset.name}': the velocity-pivot trim puts "
+              f"{len(_lost)} level(s) up to {max(_lost):.1f} dB below the "
+              f"measured volume floor ({E4XT_VOL_MEASURED_FLOOR_DB} dB). "
+              f"Written by extrapolation -- monotonic, but not a measured dB.")
     voice_data = b''.join(voice_parts)
     return bytes(hdr) + voice_data
 
