@@ -746,15 +746,29 @@ AKAI_ENV2_DEPTH_MAX = (E4B_FENV_OCT_PER_UNIT * 100.0 * 100.0
 #:
 #: **A SWEEP ACROSS THE WHOLE RANGE LOOKS COMPRESSIVE AND IS NOT.** A straight
 #: fit over everything gives r2 0.987 with +-5.5 dB residuals in a clear W --
-#: the loud end running into an ABSOLUTE OUTPUT CEILING at -25.6 dBFS, not a
-#: curve in the law. Tested rather than asserted: the ceiling is fixed, so
-#: lowering PRLOUD buys headroom and should move the clamp while leaving the
-#: slope alone -- at PRLOUD 80 (12.3 dB headroom) V_LOUD 20 is clean and 30
-#: clips; at PRLOUD 60 (24.3 dB) V_LOUD 40 is within 0.4 dB and only 50 clips,
-#: with the ceiling reading -25.62 dBFS at both. **So the law has no ends to
-#: it** -- a program with more headroom simply uses more of the range, and a
-#: converter should carry the source's number rather than any curve fitted
-#: from a clipped sweep.
+#: the loud end running into a CEILING, not a curve in the law. Tested rather
+#: than asserted: lowering PRLOUD buys headroom and should move the clamp while
+#: leaving the slope alone -- at PRLOUD 80 (12.3 dB headroom) V_LOUD 20 is clean
+#: and 30 clamps; at PRLOUD 60 (24.3 dB) V_LOUD 40 is within 0.4 dB and only 50
+#: clamps. **So the law has no ends to it** -- a program with more headroom
+#: simply uses more of the range, and a converter should carry the source's
+#: number rather than any curve fitted from a clamped sweep.
+#:
+#: **THE CEILING IS A GAIN CEILING, NOT AN ABSOLUTE OUTPUT CEILING** (s3ked,
+#: 2026-09-04, superseding their own earlier reading and this comment's). Both
+#: were consistent with the PRLOUD test above; what separates them is whether
+#: two different SAMPLES freeze at the same level. They do not -- they froze
+#: **5.47 dB apart**, with the crest factor unmoved, so no peak is being
+#: flattened: the gain coefficient simply stops rising and the output rests at
+#: `sample amplitude x max gain`. The -25.62 dBFS figure this comment used to
+#: quote as "the ceiling" was one sample's freeze point, not the machine's.
+#:
+#: The consequence is the one that matters here: **the realised swing is
+#: SAMPLE-DEPENDENT**, so "how much headroom does the AKAI have" has no single
+#: answer per machine. Nothing below changes -- every constant and every call
+#: site uses the NOMINAL law and none of them ever read the ceiling -- but a
+#: future target must match the nominal law and not a realised range, because
+#: the realised range is a property of the material rather than the instrument.
 #:
 #: NOT CLAIMED: the ceiling was measured on one program through one signal
 #: path and may be this rig's rather than the machine's; whether it belongs to
@@ -2616,11 +2630,17 @@ class VoiceLayer:
     #: NOMINAL, NOT NECESSARILY REALISED -- and this is the property to check
     #: before wiring any NEW target (s3ked, 2026-09-01). The number states what
     #: the source ASKED FOR; what a machine actually produces is that swing
-    #: clipped against its own output ceiling. On the AKAI that ceiling sits at
-    #: about -25.6 dBFS, so preset 6's 43.04 dB needs ~21.5 dB of headroom
-    #: above its own v64 level and a program with 12.3 dB realises only part of
-    #: it. **Some real source values are therefore partly unrealised on the
-    #: source machine itself.**
+    #: clamped against its own ceiling. On the AKAI that ceiling is a GAIN
+    #: ceiling and therefore SAMPLE-DEPENDENT (s3ked 2026-09-04: two samples
+    #: froze 5.47 dB apart, crest factor unmoved), so there is no single dBFS
+    #: number to subtract -- preset 6's 43.04 dB needs more headroom above its
+    #: own v64 level than a quiet program has, and how much depends on what is
+    #: loaded. **Some real source values are therefore partly unrealised on the
+    #: source machine itself**, by an amount that is a property of the material.
+    #:
+    #: An earlier version of this comment named "-25.6 dBFS" as the ceiling and
+    #: computed a fixed 21.5 dB from it. That arithmetic only works for an
+    #: ABSOLUTE ceiling, which the 5.47 dB spread between samples rules out.
     #:
     #: For AKAI->AKAI that is harmless and carrying the number is exactly
     #: right: the destination clips it the same way the source did, so
