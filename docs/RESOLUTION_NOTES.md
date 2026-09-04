@@ -22953,6 +22953,74 @@ all of them: ROM #199's 35 on the K2000, the hardcoded 20 on the AKAI, the
 template's 23.6 % cord on the E4XT. **That trio was the entirety of
 §KRZAMPVEL.**
 
+### AUDIO verification, all three machines
+
+Bytes were the easy half. These are ladders -- key 60, nine velocities, peak
+level per note, gain staged on the whole ladder rather than on one note.
+
+**K2000** (k2kremote), `VELCHECK`, one flat sine, no filter modulation:
+
+    program  byte   swing measured   error
+      800      0        0.00 dB      +0.00     <- the NULL
+      801      5        5.27         +0.27
+      802     15       15.49         +0.49
+      803     36       36.13         +0.13
+
+**800 is the result that closes §KRZAMPVEL.** Nine velocities spanning
+-14.156 to -14.068 dBFS: peak-to-peak spread **0.097 dB**, sd 0.036. A voice
+that asks for no velocity response has none, to within a tenth of a dB. ROM
+#199's inherited 35 dB is not there.
+
+**AKAI** (s3ked), program 96, the clean case with no filter routing:
+
+    slope 0.12180 dB/vel   r2 0.999809   span 15.43 dB   predicted 15.54
+    peak and RMS agree on the span to 0.09 dB
+    floor margin 40.8 dB at the QUIETEST point; repeat sd 0.003-0.056 dB
+
+**E4XT** (eosed), `MPC FULL`, likewise the only preset with no filter routing:
+
+    measured 14.60 dB   file 14.90   delta -0.30   RMS residual 0.18
+
+**Three machines, three formats, three independent readers, and the same source
+preset lands within half a dB on all of them.** The E4XT and AKAI fits produce
+the same fitted swing (14.97 dB) from the same logarithmic source, differing
+only in static level (-14.11 vs -6.51 dB) because their pivots differ -- so the
+pivot arithmetic of §VELPIVOT is confirmed by the two machines agreeing after
+being told different numbers.
+
+**And the convention fork closed empirically.** s3ked's measured 15.43 is 2.0x
+the one-sided reading of 7.77, so full-swing holds end to end -- settled by the
+hardware rather than by tracing the code, which is the stronger of the two.
+
+### A finding nobody was looking for: the K2000's velocity curve shape is mildly VelTrk-dependent
+
+k2kremote normalised each preset to its own v127 and divided by its VelTrk. If
+the response were a single shape scaled by the setting, all three would collapse
+onto one curve. They nearly do:
+
+    vel   801(5)    802(15)   803(36)   spread
+      1  -1.0539   -1.0326   -1.0036    0.050
+     48  -0.5486   -0.6574   -0.6236    0.109
+     96  -0.2240   -0.2804   -0.2303    0.056
+    112  -0.1109   -0.1021   -0.1186    0.017
+
+Endpoints agree to well under a dB; the MIDDLE of the 5 dB preset sits higher
+than the other two. In absolute terms 0.5 dB on 801, so it threatens nothing
+currently shipped -- **but it says the shape is not simply the setting times a
+fixed curve.** If anyone later fits a curve shape rather than an endpoint swing
+on this machine, that has to be measured rather than assumed.
+
+### Two self-corrections from the peers, both worth more than the numbers
+
+**k2kremote flagged "inversions" on the null preset at v64->v80 and v96->v112,
+then withdrew it:** the deviations were 0.07 and 0.10 dB, below the rig's own
+repeatability, and **monotonicity is a meaningless question to ask of a
+constant.** The test was wrong, not the data.
+
+**s3ked proved the capture path on 96 before trusting 94's flatness.** A flat
+ladder and a dead capture look identical; the null is only evidence once the
+path is known live. That was agreed in advance rather than noticed afterwards.
+
 ### A dB convention that differs by exactly 2x between two correct tables
 
 s3ked's header table prints V_LOUD in dB **one-sided about the velocity-64
