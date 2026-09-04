@@ -247,6 +247,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§VELPIVOT — the pivot mismatch is a level, and the level moves DOWN (2026-09-04)](#velpivot-the-pivot-mismatch-is-a-level-and-the-level-moves-down-2026-09-04)
 - [§E4XTVELSRC — REFUTED: `Vel<` is not what the EOS library uses; a real library CD is 96.9 % `Vel+` (2026-09-04)](#e4xtvelsrc-refuted-vel-is-not-what-the-eos-library-uses-a-real-library-cd-is-969-vel-2026-09-04)
 - [§VELPLUSHDRM — MEASURED: `Vel+` does not clip; +43 dB of clean headroom and the ceiling is in the cord (2026-09-04)](#velplushdrm-measured-vel-does-not-clip-43-db-of-clean-headroom-and-the-ceiling-is-in-the-cord-2026-09-04)
+- [§MPCVELSHAPE — the MPC's velocity curve is not dB-linear and the other three are, so our scalar swing is 14 dB RMS wrong (2026-09-04)](#mpcvelshape-the-mpcs-velocity-curve-is-not-db-linear-and-the-other-three-are-so-our-scalar-swing-is-14-db-rms-wrong-2026-09-04)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -22633,3 +22634,79 @@ same path. My `capture` dumped the return value over it, replacing the metadata
 with the list. The notes survived, so the capture was still analysable, but the
 provenance was gone. The reader now accepts both shapes so captures taken under
 the bug stay usable, and `capture` no longer writes the file at all.
+
+
+## §MPCVELSHAPE — the MPC's velocity curve is not dB-linear and the other three are, so our scalar swing is 14 dB RMS wrong (2026-09-04)
+
+**Found by an end-to-end check that was only meant to confirm the `Vel+` wiring**
+— convert a real MPC keygroup, then compare what the E4XT will produce against
+what the MPC produces, velocity by velocity. They agree at both ends and diverge
+by **19.75 dB in the middle**.
+
+    vel   MPC s=1.0    our dB-linear 42.08 swing    error
+      1      -42.08                      -42.08     0.00
+     32      -11.97                      -31.73   +19.75
+     64       -5.95                      -21.04   +15.09
+     96       -2.43                      -10.35    +7.92
+    127        0.00                        0.00     0.00
+
+### Why
+
+`VoiceLayer.velocity_to_volume_db` is **one scalar: the v1..v127 span in dB.**
+That description is complete only for a response that is straight in dB, and
+three of our four machines are:
+
+    AKAI    swing_dB = 1.19557 * V_LOUD, linear in velocity   (s3ked §171)
+    K2000   0.27618 dB per velocity unit, r2 0.999996         (k2kremote)
+    E4XT    0.75097 dB per velocity unit at 100 % amount      (eosed §83)
+    MPC     gain = (1-s) + s*(v/127) in AMPLITUDE             (bench 2026-09-01)
+
+The MPC's is amplitude-linear, so **in dB it is logarithmic** — steep at the
+bottom, nearly flat at the top. A single dB span cannot describe it, and the
+span we pick is the worst possible one: anchoring on v1 lets the one extreme
+point at the bottom of a log curve set the slope for the whole range.
+
+    our current choice, the full v1..v127 span    swing 42.08 dB   RMS 14.03 dB
+    best dB-linear fit over v1..v127              swing 18.9 dB    RMS  4.18 dB
+    best dB-linear fit over v32..v127             swing 13.0 dB    RMS  0.76 dB
+    best dB-linear fit over v64..v127             swing 10.9 dB    RMS  0.21 dB
+
+**14 dB of RMS error, in the velocity range people actually play.**
+
+### What it is not
+
+**Not caused by the `Vel+` change, and not fixed by reverting it.** Under `Vel<`
+the same comparison gives the same errors — the mismatch is between a
+logarithmic source curve and a dB-linear destination cord, and the pivot only
+decides where the two curves are pinned together. It has been there since the
+MPC law was wired on 2026-09-01.
+
+**Not an MPC-to-E4XT problem.** All three targets are dB-linear, so an MPC source
+carries the same distortion to the K2000 and the AKAI as well.
+
+**Not a defect in the MPC law**, which is measured and good to 0.033 dB RMS. The
+defect is in the model field it is squeezed through.
+
+### Options, in ascending order of work
+
+1. **Pick a better scalar.** One line in `xpm_parser`: fit over v32..v127 instead
+   of taking the v1..v127 span. RMS 14.03 -> 0.76 dB. Cheap, and it makes every
+   MPC conversion audibly closer over the range that is played. It gives up the
+   v1 endpoint, which on a log curve is 30 dB below v32 and inaudible anyway.
+2. **Carry the shape.** Add a curve descriptor to the model beside the scalar,
+   so a source can say "logarithmic" and each writer can decide what to do. More
+   honest and much more work, and only worth it if a second non-linear source
+   turns up.
+3. **Leave it and document.** Defensible only if nobody converts MPC velocity
+   material, which is not the case.
+
+**Option 1 changes the dynamics of every MPC conversion, so it is Jan's call and
+not a silent fix.** Recorded here with the numbers rather than applied.
+
+### The method note
+
+This is the second time today that an end-to-end check found something no unit
+test could. The tests pin what the writer writes; they cannot pin whether what
+it writes SOUNDS like the source, because nothing in the test knows the source
+machine's law. The check that found it was three lines: run the real converter
+on real material, then evaluate both laws at five velocities and subtract.
