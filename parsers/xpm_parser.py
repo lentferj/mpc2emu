@@ -42,6 +42,7 @@ from models.common import (
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType, lfo_knob_to_hz,
     cap_voices_by_coverage, stereo_to_mono, hz_to_e4b_cutoff,
     mpc_velsens_swing_db, MPC_VELSENS_PIVOT,
+    VELOCITY_CURVE_DB_LINEAR, VELOCITY_CURVE_AMPLITUDE_LINEAR,
     MPC_FILTER_MOD_FULL_CENTS, MPC_KEYTRACK_OCT_PER_OCT,
     mpc_resonance_to_model)
 
@@ -1762,6 +1763,7 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
             _velsens = _get_text(instrument, 'VelocitySensitivity', '')
             vel_vol_db = None
             vel_vol_requested = False
+            vel_vol_curve = VELOCITY_CURVE_DB_LINEAR
             if _velsens.strip():
                 try:
                     _vs = float(_velsens)
@@ -1773,6 +1775,12 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
                     # written with: gain = (1-s) + s*(v/127) in AMPLITUDE, RMS
                     # residual 0.033 dB over 81 points, pivot 127.
                     vel_vol_db = mpc_velsens_swing_db(_vs)
+                    # AND THE SHAPE, which the span alone cannot carry. The
+                    # MPC's law is amplitude-linear, so in dB it is logarithmic
+                    # -- every target we write is dB-linear, and squeezing this
+                    # through the scalar alone was 14 dB RMS wrong in the middle
+                    # of the velocity range (§MPCVELSHAPE).
+                    vel_vol_curve = VELOCITY_CURVE_AMPLITUDE_LINEAR
 
             # LFO (MPC has a single per-keygroup LFO → maps to E4B LFO1).  Only
             # emit it when something is actually routed (LfoPitch / LfoCutoff),
@@ -1833,6 +1841,7 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
                 velocity_to_volume_pivot=(MPC_VELSENS_PIVOT
                                           if vel_vol_db is not None else None),
                 velocity_to_volume_requested=vel_vol_requested,
+                velocity_to_volume_curve=vel_vol_curve,
             )
             # MPC 3 second LFO (<LFO2>, emitted only by the JSON converter — an
             # MPC 2.x XML program never has one, so this is inert there).  Routed

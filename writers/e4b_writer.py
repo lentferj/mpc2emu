@@ -118,7 +118,9 @@ from models.common import (
                            env_level_to_byte, env_sustain_to_byte, cord_amount_to_byte,
                            e4xt_cutoff_position, e4xt_volume_byte, e4xt_pan_byte,
                            E4XT_VOL_MEASURED_FLOOR_DB, E4XT_VEL_PIVOT,
+                           VELOCITY_CURVE_DB_LINEAR,
                            velocity_pivot_offset_db, velocity_pivot_preset_shift,
+                           fit_velocity_line,
                            E4B_CUTOFF_MIN_HZ, E4B_CUTOFF_MAX_HZ,
                            env_level_byte_to_db,
                            E4B_MIN_AUDIBLE_DECAY_RATE,
@@ -802,7 +804,8 @@ def _set_cord(mod: bytearray, slot: int, src: int, dst: int,
 
 
 def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
-                 level_offset_db: float = 0.0) -> bytes:
+                 level_offset_db: float = 0.0,
+                 vel_swing_db=None) -> bytes:
     # NT secondary voices use the same structure as KT voices with vpar[38]=0x01.
     # Confirmed from B.030-1V-2V-3V_2.E4B P012 V2 (hardware-created NT secondary):
     # P012 V2 == P011 V2 (KT) in every byte except vpar[38]=0x01.
@@ -1258,7 +1261,15 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
     # -42 dB for a full-sensitivity MPC keygroup. That is inside the field's
     # byte range (which reaches about -94 dB) but roughly 20 dB past where the
     # volume law was actually MEASURED, so those levels are extrapolated.
-    _vv_db = getattr(voice, 'velocity_to_volume_db', None)
+    #
+    # THE SWING WRITTEN IS THE FITTED ONE, not the source's own span. For a
+    # dB-linear source the two are identical (the fit is exact); for a curved
+    # one -- the MPC -- the span is the wrong number to write, by 14 dB RMS.
+    # The caller does the fit because it also produces the static level, and
+    # the two have to come from the same line or they describe different
+    # responses (§MPCVELSHAPE).
+    _vv_db = vel_swing_db if vel_swing_db is not None else getattr(
+        voice, 'velocity_to_volume_db', None)
     _vv_req = bool(getattr(voice, 'velocity_to_volume_requested', False))
     if _vv_db is not None:
         _vv_byte = max(-127, min(127, int(round(
@@ -1427,18 +1438,33 @@ def _build_preset_body(preset: Preset, preset_idx: int,
     # the volume field does not have, so the whole preset moves DOWN by its own
     # largest offset instead: inter-voice balance comes out exact and only the
     # preset's overall loudness changes. Jan's call, 2026-09-04.
-    _shift = velocity_pivot_preset_shift(voices, E4XT_VEL_PIVOT['Vel+'])
+    # ONE FIT PER VOICE, feeding BOTH knobs the writer has. A dB-linear target
+    # gives us a slope (the cord amount) and an offset (the static level); the
+    # fit solves for both against the source's true curve, so a curved source
+    # is approximated as well as two parameters allow instead of having its
+    # span copied and its shape discarded.
+    _fits = [fit_velocity_line(getattr(v, 'velocity_to_volume_db', None),
+                               getattr(v, 'velocity_to_volume_curve',
+                                       VELOCITY_CURVE_DB_LINEAR),
+                               getattr(v, 'velocity_to_volume_pivot', None),
+                               E4XT_VEL_PIVOT['Vel+']) for v in voices]
+    # Under `Vel+` every offset is already downward so this is 0, but it stays
+    # in place: the shift is what keeps a preset coherent if a future target or
+    # cord source puts an offset the other way again.
+    _shift = max([0.0] + [lv for _sw, lv, _r in _fits])
+    _worst = max([0.0] + [r for _sw, _lv, r in _fits])
+    if _worst > 1.0:
+        print(f"  [INFO] preset '{preset.name}': the source's velocity curve is "
+              f"not straight in dB; the best dB-linear fit this target can hold "
+              f"is {_worst:.1f} dB RMS off")
     voice_parts = []
     last = num_voices - 1
     _before = len(_LEVEL_CLAMPED)
-    for i, v in enumerate(voices):
-        _off = velocity_pivot_offset_db(
-            getattr(v, 'velocity_to_volume_db', None),
-            getattr(v, 'velocity_to_volume_pivot', None),
-            E4XT_VEL_PIVOT['Vel+']) - _shift
+    for i, (v, (_sw, _lv, _r)) in enumerate(zip(voices, _fits)):
         voice_parts.append(_build_voice(v, sample_name_to_idx,
                                         is_last=(i == last),
-                                        level_offset_db=_off))
+                                        level_offset_db=_lv - _shift,
+                                        vel_swing_db=_sw))
     if len(_LEVEL_CLAMPED) > _before:
         _lost = _LEVEL_CLAMPED[_before:]
         print(f"  [INFO] preset '{preset.name}': the velocity-pivot trim puts "

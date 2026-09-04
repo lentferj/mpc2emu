@@ -39,7 +39,8 @@ from pathlib import Path
 from typing import Optional
 
 from models.common import (
-    AKAI_VLOUD_SWING_DB_PER_UNIT,
+    AKAI_VLOUD_SWING_DB_PER_UNIT, fit_velocity_line,
+    VELOCITY_CURVE_DB_LINEAR, VEL_VOL_PIVOT_AKAI,
     AKAI_LFO_DEPTH_CAL_LPTCH,
     akai_01_to_filq,
     KEY_FILTER_OCT_PER_OCT,
@@ -2719,8 +2720,25 @@ def build_program(preset, name: str, prog_num: int = 0,
     # keygroup carries `VelocitySensitivity 0.000000`; it wrote V_LOUD 20.
     # Same None-vs-0.0 confusion Jan heard on the KRZ path a day earlier, and
     # the LFO line directly above already had it right.
-    _vvol = next((v.velocity_to_volume_db for v in preset.voices
+    # THE FITTED SWING, not the source's own span (§MPCVELSHAPE). The AKAI is
+    # dB-linear about velocity 64, so a dB-linear source fits exactly and this
+    # is the number it always was; a CURVED source -- the MPC -- has no single
+    # span that describes it, and its v1..v127 figure is the worst available
+    # choice because one inaudible point at the bottom of a log curve sets the
+    # slope for everything. `fit_velocity_line` returns the best line this
+    # field can hold instead.
+    #
+    # ONLY THE SLOPE IS USED HERE. The fit's static level belongs to the voice,
+    # and V_LOUD is per PROGRAM on this machine, so there is nowhere to put it
+    # -- which is the same reason the pivot correction collapses on this target
+    # (see the note above `_program_common`).
+    _vsrc = next((v for v in preset.voices
                   if getattr(v, 'velocity_to_volume_db', None) is not None), None)
+    _vvol = None if _vsrc is None else fit_velocity_line(
+        _vsrc.velocity_to_volume_db,
+        getattr(_vsrc, 'velocity_to_volume_curve', VELOCITY_CURVE_DB_LINEAR),
+        getattr(_vsrc, 'velocity_to_volume_pivot', None),
+        VEL_VOL_PIVOT_AKAI)[0]
     # NO VELOCITY-PIVOT OFFSET HERE, and that is a result rather than an
     # omission. The AKAI rotates its velocity->loudness response about
     # velocity 64 while a KRZ/MPC/E4XT source rotates about 127, so carrying a

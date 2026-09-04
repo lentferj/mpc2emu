@@ -2479,6 +2479,43 @@ def _filter_env() -> Envelope:  # filter-envelope default (attack 0, sustain ful
     return Envelope(0.0, 0.3, 1.0, 0.0)
 
 
+#: SHAPE of a velocity->volume response, beside the scalar span that has always
+#: been carried in `velocity_to_volume_db`. Added 2026-09-04 (§MPCVELSHAPE) after
+#: an end-to-end check found the scalar alone to be **14 dB RMS wrong** on MPC
+#: material: a single dB span describes a response completely only if that
+#: response is STRAIGHT IN dB, and three of our four machines are while the
+#: fourth is not.
+#:
+#:     AKAI    swing_dB = 1.19557 * V_LOUD, linear in velocity   (s3ked §171)
+#:     K2000   0.27618 dB per velocity unit, r2 0.999996         (k2kremote)
+#:     E4XT    0.75097 dB per velocity unit at 100 % amount      (eosed §83)
+#:     MPC     gain = (1-s) + s*(v/127) in AMPLITUDE             (bench 2026-09-01)
+#:
+#: Jan's call, 2026-09-04: carry the shape rather than pick a better scalar, so
+#: each writer decides what to do with it instead of the parser guessing on
+#: everyone's behalf.
+VELOCITY_CURVE_DB_LINEAR = 'db-linear'
+VELOCITY_CURVE_AMPLITUDE_LINEAR = 'amplitude-linear'
+
+#: Velocity range the dB-linear fit below is taken over. **This has NO effect on
+#: a dB-linear source** -- that fit is exact over any range -- so it only ever
+#: chooses how a curved source is approximated, and every existing AKAI, KRZ and
+#: E4B conversion is unaffected by it.
+#:
+#: 32 rather than 1 because the MPC's curve is logarithmic: v1 sits 30 dB below
+#: v32 and anchoring on it lets one inaudible extreme point set the slope for
+#: the whole range. Measured over the MPC's own law at full sensitivity:
+#:
+#:     v1..127    swing 24.89   RMS 3.67   worst 21.17 dB
+#:     v32..127   swing 14.97   RMS 0.58   worst  1.66 dB
+#:     v64..127   swing 11.73   RMS 0.15   worst  0.38 dB
+#:
+#: v32 keeps the worst case under 2 dB while still covering everything a player
+#: reaches. Going further up buys accuracy in a narrower band at the cost of the
+#: soft end, which is where a curved response is most audible.
+VELOCITY_FIT_RANGE = (32, 127)
+
+
 @dataclass
 class VoiceLayer:
     """
@@ -2683,6 +2720,11 @@ class VoiceLayer:
     #: Velocity at which `velocity_to_volume_db` has no effect. Set together
     #: with the swing or not at all.
     velocity_to_volume_pivot: Optional[int] = None
+    #: SHAPE of that response: VELOCITY_CURVE_DB_LINEAR (the default, and what
+    #: AKAI/K2000/E4XT all measure as) or VELOCITY_CURVE_AMPLITUDE_LINEAR (the
+    #: MPC). The span above describes a response completely only for the first
+    #: kind; see §MPCVELSHAPE for the 14 dB RMS this was worth on MPC material.
+    velocity_to_volume_curve: str = VELOCITY_CURVE_DB_LINEAR
     #: THIRD STATE: the source asks for a velocity->volume response but states
     #: no amount this project can convert to dB yet. MPC's `VelocitySensitivity`
     #: is the case that forced it -- the field is present in every keygroup,
@@ -3511,6 +3553,75 @@ VEL_VOL_PIVOT_KRZ = 127
 #: at -1..-9), meaning louder-when-soft. Reading the byte unsigned would turn
 #: -1 dB into +255 dB.
 KRZ_AMP_VELTRK_DB_PER_UNIT = 1.0
+
+
+
+
+def mpc_velsens_from_swing_db(swing_db: float) -> float:
+    """Inverse of `mpc_velsens_swing_db`: the MPC sensitivity behind a span.
+
+    The model stores the v1..v127 SPAN, because that is what every dB-linear
+    machine's field means and what the readers and writers already exchange.
+    Reconstructing the MPC's own parameter from it keeps that interface intact
+    rather than adding a second, format-specific number to the model.
+    """
+    g1 = 10.0 ** (-max(0.0, swing_db) / 20.0)     # amplitude at v1 relative to v127
+    denom = 1.0 - 1.0 / 127.0
+    return max(0.0, min(1.0, (1.0 - g1) / denom))
+
+
+def velocity_source_gain_db(swing_db, curve, pivot, velocity) -> float:
+    """The SOURCE's own gain at `velocity`, in dB relative to its reference.
+
+    For a dB-linear source this is the straight line `S*(v-pivot)/126` that the
+    whole model has assumed since the field existed. For an amplitude-linear one
+    it is the MPC's measured law, reconstructed from the stored span.
+    """
+    if swing_db is None or pivot is None:
+        return 0.0
+    v = max(1.0, min(127.0, float(velocity)))
+    if curve == VELOCITY_CURVE_AMPLITUDE_LINEAR:
+        # The MPC's reference is v127, so shift onto the caller's pivot to keep
+        # both curves in the same coordinates.
+        s = mpc_velsens_from_swing_db(swing_db)
+        return mpc_velsens_gain_db(v, s) - mpc_velsens_gain_db(pivot, s)
+    return swing_db * (v - pivot) / 126.0
+
+
+def fit_velocity_line(swing_db, curve, src_pivot, dst_pivot,
+                      v_lo=None, v_hi=None):
+    """Best dB-linear approximation of a source's velocity response, for a
+    target that pivots at `dst_pivot`.
+
+    Returns `(swing_to_write, level_offset_db, rms_error_db)`.
+
+    EVERY TARGET WE WRITE IS dB-LINEAR, so a writer has exactly two knobs -- the
+    cord/field AMOUNT (the slope) and the static LEVEL (the offset) -- and this
+    fits both at once by least squares. That is strictly more general than the
+    older `velocity_pivot_offset_db`, which set the slope to the source's span
+    and solved only for the offset.
+
+    **It reduces to that function exactly when the source is dB-linear**: the
+    fit is then exact, the slope comes back as the source's own swing and the
+    offset as `S*(dst-src)/126`, RMS 0. Verified to 1e-9, which is what makes
+    this safe to route AKAI, KRZ and E4B conversions through unchanged.
+    """
+    if swing_db is None or src_pivot is None or dst_pivot is None:
+        return (swing_db, 0.0, 0.0)
+    lo, hi = (v_lo or VELOCITY_FIT_RANGE[0]), (v_hi or VELOCITY_FIT_RANGE[1])
+    vs = range(int(lo), int(hi) + 1)
+    xs = [(v - dst_pivot) / 126.0 for v in vs]
+    ys = [velocity_source_gain_db(swing_db, curve, src_pivot, v) for v in vs]
+    n = len(xs)
+    mx, my = sum(xs) / n, sum(ys) / n
+    sxx = sum((x - mx) ** 2 for x in xs)
+    if sxx <= 0.0:
+        return (swing_db, my, 0.0)
+    slope = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / sxx
+    level = my - slope * mx
+    rms = math.sqrt(sum((level + slope * x - y) ** 2
+                        for x, y in zip(xs, ys)) / n)
+    return (slope, level, rms)
 
 
 def velocity_pivot_offset_db(swing_db, src_pivot, dst_pivot):

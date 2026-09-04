@@ -101,6 +101,7 @@ from models.common import (
     KRZ_F4_AMP_DEPTH_DB_PER_UNIT, KRZ_F4_AMP_DEPTH_CLAMP,
     KRZ_F4_AMP_ADJUST_INDEX, KRZ_F4_AMP_ADJUST_DB_PER_UNIT,
     velocity_pivot_offset_db, velocity_pivot_preset_shift,
+    fit_velocity_line, VELOCITY_CURVE_DB_LINEAR,
     VEL_VOL_PIVOT_KRZ,
 )
 from processors.loop_renderer import bake_alternating_loop
@@ -1693,8 +1694,13 @@ def _preset_layers(layers, samples_by_name):
     # balance inside the preset stays exact; only its overall loudness moves,
     # which is a knob. Jan's design; over 10,933 real programs the shift is
     # 12 dB median, 29.9 max, and every one of them fits.
-    shift = velocity_pivot_preset_shift(
-        [v for v, _ in layers if v is not None], VEL_VOL_PIVOT_KRZ)
+    fits = {id(v): fit_velocity_line(
+                getattr(v, 'velocity_to_volume_db', None),
+                getattr(v, 'velocity_to_volume_curve', VELOCITY_CURVE_DB_LINEAR),
+                getattr(v, 'velocity_to_volume_pivot', None),
+                VEL_VOL_PIVOT_KRZ)
+            for v, _ in layers if v is not None}
+    shift = max([0.0] + [lv for _s, lv, _r in fits.values()])
     for voice, kid in layers:
         if voice is None:
             segs = [(tag, bytearray(data)) for tag, data in _TPL_LAYER]
@@ -1703,17 +1709,16 @@ def _preset_layers(layers, samples_by_name):
             cal[11] = (kid >> 8) & 0xFF
             cal[12] = kid & 0xFF
         else:
+            _sw, _lv, _r = fits[id(voice)]
             segs = _patch_layer(voice, kid,
                                 _voice_is_stereo(voice, samples_by_name),
-                                level_offset_db=velocity_pivot_offset_db(
-                                    getattr(voice, 'velocity_to_volume_db', None),
-                                    getattr(voice, 'velocity_to_volume_pivot', None),
-                                    VEL_VOL_PIVOT_KRZ) - shift)
+                                level_offset_db=_lv - shift,
+                                vel_swing_db=_sw)
         yield voice, kid, segs
 
 
 def _patch_layer(voice, keymap_id: int, stereo: bool = False,
-                 level_offset_db: float = 0.0):
+                 level_offset_db: float = 0.0, vel_swing_db=None):
     """Return a patched copy of the template layer segments for one voice."""
     segs = [(tag, bytearray(data)) for tag, data in _TPL_LAYER]
     by = {}
@@ -1840,7 +1845,13 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
     #
     # `None` means no reader looked, and then the template value stands --
     # unchanged behaviour for formats that state nothing.
-    _vv = getattr(voice, 'velocity_to_volume_db', None)
+    # THE FITTED SWING, not the source's own span. Identical for a dB-linear
+    # source (the fit is exact there) and materially different for a curved one
+    # -- an MPC keygroup's span is 42 dB where the best line the K2000 can hold
+    # is 15, and writing 42 was 14 dB RMS wrong across the played range
+    # (§MPCVELSHAPE). The caller fits, because the same line also sets Adjust.
+    _vv = vel_swing_db if vel_swing_db is not None else getattr(
+        voice, 'velocity_to_volume_db', None)
     if _vv is not None:
         seg(0x53)[4] = max(-128, min(127, int(round(_vv)))) & 0xFF
 
