@@ -23037,7 +23037,21 @@ which is why a third machine with a different resting corner lands 6 dB away.
 
 **The caution was worth having.** Two points agreeing to 0.01 dB is exactly the
 shape that invites a shared-constant claim, and the only thing that stopped one
-being written down was declining to make it on two points. The finding that
+being written down was declining to make it on two points.
+
+**And k2kremote's framing of why it worked is better than mine, so it is kept
+verbatim:**
+
+> A number only refutes something if somebody wrote the claim down first in a
+> form that could fail.
+
+They did not set out to test the 14.4 dB figure. They measured 801 because it
+came in 20.75 dB high and wanted to know why; the cross-machine consequence
+existed only because the two-point claim had already been written down together
+with what a third reading would settle. **The refutation was free -- but only
+because the claim had been made falsifiable before the data arrived.** A claim
+recorded as "these two agree, interesting" rather than "a third machine would
+separate these" would have absorbed the third number as noise. The finding that
 survives is the one that was safe at two points and is now confirmed at three:
 **the velocity->filter depth converts faithfully to every target**, measured
 three times by removing it and watching the excess vanish.
