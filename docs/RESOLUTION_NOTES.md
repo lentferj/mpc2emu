@@ -248,6 +248,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§E4XTVELSRC — REFUTED: `Vel<` is not what the EOS library uses; a real library CD is 96.9 % `Vel+` (2026-09-04)](#e4xtvelsrc-refuted-vel-is-not-what-the-eos-library-uses-a-real-library-cd-is-969-vel-2026-09-04)
 - [§VELPLUSHDRM — MEASURED: `Vel+` does not clip; +43 dB of clean headroom and the ceiling is in the cord (2026-09-04)](#velplushdrm-measured-vel-does-not-clip-43-db-of-clean-headroom-and-the-ceiling-is-in-the-cord-2026-09-04)
 - [§MPCVELSHAPE — the MPC's velocity curve is not dB-linear and the other three are, so our scalar swing is 14 dB RMS wrong (2026-09-04)](#mpcvelshape-the-mpcs-velocity-curve-is-not-db-linear-and-the-other-three-are-so-our-scalar-swing-is-14-db-rms-wrong-2026-09-04)
+- [§VELHW1 — first hardware hearing of the velocity work: two of four presets verify, two are floor-limited (2026-09-04)](#velhw1-first-hardware-hearing-of-the-velocity-work-two-of-four-presets-verify-two-are-floor-limited-2026-09-04)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -22741,3 +22742,85 @@ test could. The tests pin what the writer writes; they cannot pin whether what
 it writes SOUNDS like the source, because nothing in the test knows the source
 machine's law. The check that found it was three lines: run the real converter
 on real material, then evaluate both laws at five velocities and subtract.
+
+
+## §VELHW1 — first hardware hearing of the velocity work: two of four presets verify, two are floor-limited (2026-09-04)
+
+Bank `LISTEN3` on the E4XT, four presets, five velocities each at key 60.
+Captured and analysed by eosed; numbers theirs, fits and conclusions joint.
+
+### What verified
+
+    P000 MPC MIXED   5 usable cells   fitted swing  0.07 dB   file: 0 (no cord)   MATCH
+    P003 AKAI VEL    2 usable cells   fitted swing 36.82 dB   file: 35.8          MATCH
+
+**P003 is the one that matters most.** Its source is an AKAI program with 35.9 dB
+of swing about velocity 64, and it is the first hardware evidence that the
+2026-09-04 cord-source change (`Vel<` -> `Vel+`, §E4XTVELSRC) and the pivot
+arithmetic (§VELPIVOT) both survive to the machine.
+
+**P000 is a real control, not an absence of evidence.** Its dominant voice
+carries no velocity cord at all, and five cells across the full velocity span
+measure 0.07 dB of swing. That is the imposed-response fault of §KRZAMPVEL
+confirmed absent on hardware.
+
+### What did NOT verify, and why that is not a null result
+
+**P001 has zero usable cells and P002 has one.** Both sit within 1.4 dB of
+nominal, and the bench trim was staged for VELPLUS whose loudest cell was +57 dB
+above nominal — so they land near -86 dBFS against a floor of -87. They are not
+quiet, they are absent.
+
+**P002 is the whole curve-fit test.** Its source is the logarithmic
+`VelocitySensitivity` 1.0 case, i.e. the 66.5 % of Jan's library that
+§MPCVELSHAPE is about. So the change with the largest measured corpus impact is
+the one still without hardware evidence.
+
+### Confidence, stated as the lever rather than as a number
+
+P003's fit is two points spanning 31 velocity units, extrapolated 4x to a
+126-unit swing. That amplifies per-point error **8.1x**: ±0.2 dB per point
+becomes ±1.6 dB on the swing, ±1.0 becomes ±8.1. At SNR 16.0 and 25.1 dB the
+points are inside ±0.2-0.3, so **36.8 ± ~2 dB against 35.8** — agreement well
+inside the bar, and the bar honestly wide.
+
+**And a caveat that survives the agreement (eosed's, and it is right): fitting
+v96..v127 and extrapolating to v1 ASSUMES the linearity it is testing.** The
+result is evidence for the model, not a measurement of the low end. The low end
+is exactly where P001 and P002 would have checked it.
+
+### Three method faults, all of the same shape
+
+**A criterion that admits noise.** I proposed keeping cells whose PEAK clears the
+RMS floor by 10 dB. Broadband noise peaks run **15-16 dB above its own RMS**, so
+that test is passed by noise alone — it would have given P001 five "surviving"
+cells and a fitted slope through nothing. Caught by eosed before any number was
+produced; the fix is RMS against RMS.
+
+**An observable carried across a change of material.** eosed measured body RMS
+over a 1 s window — correct for VELPLUS's sustained sine tones, wrong for
+decaying sampled notes, where it reports the decay tail. It produced
+"nothing sounded" for presets whose notes are plainly present at peak.
+
+**An expectation carried across a change of code.** I briefed eosed with the
+SOURCE's swings (0.0/17.2/19.0) as the values to verify against, when the writer
+now stores the FITTED ones (0.0/none/11.9/11.9). Their read matched the artefact;
+my expectation did not. Giving someone the wrong expectation is worse than giving
+them none, because it converts their correct reading into a reported fault.
+
+**The clause that unifies all three is eosed's and worth keeping verbatim:**
+
+> It does not error — it returns a well-formed number about the wrong thing.
+
+Body RMS measured the decay tail. The source swings described a real quantity
+that was not the one on the disc. The criterion described noise. None of the
+three has a failure mode that looks like failure.
+
+### One more, in the same family, on my side of the wire
+
+`E4_GEN_SAMPLE` reads **-1** on a multi-zone voice, and eosed reasonably inferred
+"no sample assigned" — corroborated, as it seemed, by the silence. Both halves
+had one cause. The voice-level sample/volume/pan bytes are meaningless for a
+voice with 2+ zones; the zone table carries them, which our own writer documents
+and a real E4XT bank off Jan's HD0 does the same way. **Two consistent readings
+of one underlying cause are not two confirmations.**
