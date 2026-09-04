@@ -749,7 +749,25 @@ def _voice_distance(a, b):
     # too: a velocity-tracking depth is not obviously interpolable, and a
     # program that stays a drum program is a visible failure where a silently
     # dropped modulation is not.
-    for name in ('lfo1_shape', 'lfo1_delay'):
+    #
+    # VELOCITY->VOLUME JOINED THIS LIST 2026-09-04, and it is the same fault the
+    # paragraph above describes, in a field added after that paragraph was
+    # written. `velocity_to_volume_db` was neither averaged nor compared, so
+    # fusing two voices kept the FIRST one's swing and dropped the other's in
+    # silence. Caught building the listening set: an MPC preset whose four
+    # voices ask for 0.0, 17.2 and 19.0 dB came out of the writer as two layers
+    # both reading AMP VelTrk 0 -- the 0.0 voice won both fusions and the entire
+    # velocity response of the preset was gone, with nothing printed.
+    #
+    # REFUSING rather than averaging, for the reason already given here: the
+    # pivot and the curve have no meaningful interpolation at all (what is the
+    # average of an amplitude-linear voice and a dB-linear one?), and a swing
+    # averaged across voices that deliberately differ is not the source's
+    # intent either. A program that declines to fuse is a visible outcome; a
+    # program whose dynamics quietly vanished is not.
+    for name in ('lfo1_shape', 'lfo1_delay',
+                 'velocity_to_volume_db', 'velocity_to_volume_pivot',
+                 'velocity_to_volume_curve'):
         if getattr(a, name, None) != getattr(b, name, None):
             return None
     d = 0.0
