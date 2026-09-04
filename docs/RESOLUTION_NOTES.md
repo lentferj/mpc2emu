@@ -246,6 +246,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§HWSAFETY — driving an instrument somebody else is sitting at (2026-09-02)](#hwsafety-driving-an-instrument-somebody-else-is-sitting-at-2026-09-02)
 - [§VELPIVOT — the pivot mismatch is a level, and the level moves DOWN (2026-09-04)](#velpivot-the-pivot-mismatch-is-a-level-and-the-level-moves-down-2026-09-04)
 - [§E4XTVELSRC — REFUTED: `Vel<` is not what the EOS library uses; a real library CD is 96.9 % `Vel+` (2026-09-04)](#e4xtvelsrc-refuted-vel-is-not-what-the-eos-library-uses-a-real-library-cd-is-969-vel-2026-09-04)
+- [§VELPLUSHDRM — MEASURED: `Vel+` does not clip; +43 dB of clean headroom and the ceiling is in the cord (2026-09-04)](#velplushdrm-measured-vel-does-not-clip-43-db-of-clean-headroom-and-the-ceiling-is-in-the-cord-2026-09-04)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -21386,7 +21387,7 @@ The first v13 run has silent pre-roll and exactly one onset, so the playing did 
 
 **Audible exposure is at the quiet end.** At the velocities Jan actually plays (100–127) everything sits near the top of the curve, so a wrong sensitivity barely shows; it is soft playing where a 35 dB law and the source's real law would diverge. That is also why this has gone unnoticed through every listening test so far.
 
-**The AKAI half is now measured and wired (2026-09-01, s3ked §171, commit `b1d7c4b`).** `swing_dB = 1.19557 * V_LOUD` (r² 0.9999816), the response **rotating about velocity 64** rather than scaling from silence, and V_LOUD 0 genuinely neutral (0.00001 dB/unit, r² 0.029). An apparent compressive collapse at the loud end is **not in the law** — it is an absolute output ceiling near −25.6 dBFS, diagnosed by a distinguishing prediction rather than fitted: lowering PRLOUD buys headroom, so the clamp should move while the slope stays put, and it did (PRLOUD 80 clips above V_LOUD ~20, PRLOUD 60 above ~40, ceiling reading −25.62 dBFS at both). A straight fit over the full range would have shipped a compressive curve that does not exist. Wired as `AKAI_VLOUD_SWING_DB_PER_UNIT` plus the new `VoiceLayer.velocity_to_volume_db`; reader reads byte 0x1a signed; writer emits the source's value and keeps 20 only as the fallback for sources that state nothing.
+**The AKAI half is now measured and wired (2026-09-01, s3ked §171).** *(This cited s3ked's commit `b1d7c4b` until 2026-09-04, when they rewrote that unpushed history to strip three commercial program names; it is now `5949171` and the old hash survives only on a local backup branch. Recorded as a rule rather than a re-pointing: **cite the § number, not the SHA, for anything in a sibling repo that has not been pushed** -- the section survives a rebase and the hash does not, and `test_citations_resolve` checks sections for exactly that reason.)* `swing_dB = 1.19557 * V_LOUD` (r² 0.9999816), the response **rotating about velocity 64** rather than scaling from silence, and V_LOUD 0 genuinely neutral (0.00001 dB/unit, r² 0.029). An apparent compressive collapse at the loud end is **not in the law** — it is an absolute output ceiling near −25.6 dBFS, diagnosed by a distinguishing prediction rather than fitted: lowering PRLOUD buys headroom, so the clamp should move while the slope stays put, and it did (PRLOUD 80 clips above V_LOUD ~20, PRLOUD 60 above ~40, ceiling reading −25.62 dBFS at both). A straight fit over the full range would have shipped a compressive curve that does not exist. Wired as `AKAI_VLOUD_SWING_DB_PER_UNIT` plus the new `VoiceLayer.velocity_to_volume_db`; reader reads byte 0x1a signed; writer emits the source's value and keeps 20 only as the fallback for sources that state nothing.
 
 **A property of the field that matters for the K2000 half specifically: the swing is NOMINAL, not necessarily realised.** The number is what the source asked for; what a machine produces is that swing clipped against its own ceiling — preset 6's 43.04 dB needs ~21.5 dB of headroom above its own v64 level, and some real source values are therefore partly unrealised *on the AKAI itself*. For AKAI→AKAI that is harmless and carrying the number is correct, since the destination clips it identically. **It bites on a target whose headroom differs**, where the same nominal number would produce a larger actual swing than the original ever made. So the K2000 comparison to make is not nominal dB against nominal dB but what each machine actually produces at v1 and v127 — which needs the K2000's own ceiling and pivot, not merely its VelTrk scaling.
 
@@ -22549,3 +22550,86 @@ assuming a 2-byte length prefix, which they do not have — a voice is
 trailer offset at `vpar[2:4]`. It yielded **zero voices across 627 presets** and
 printed a clean, plausible, entirely empty table. A census that counts nothing
 still formats nicely.
+
+
+## §VELPLUSHDRM — MEASURED: `Vel+` does not clip; +43 dB of clean headroom and the ceiling is in the cord (2026-09-04)
+
+**My objection was wrong and the library was right.** I argued that `Vel+` must
+clip, since it puts velocity 127 at nominal plus the whole swing, and used that
+to recommend keeping `Vel<`. Measured on the E4XT the same afternoon: it does
+not clip, and there is far more headroom than the library ever asks for.
+
+Procedure and disc: `docs/re_procedures/e4xt_velplus_headroom.md`, `CD1-VELPLUS.iso`.
+One preset, 13 voices on keys 48-60, 65 notes, one capture. Loaded by eosed;
+captured and analysed here.
+
+### The result
+
+    controls CTL-A vs CTL-B          +0.02 dB          (alignment sound)
+    control's own velocity span       0.08 dB          (no machine-side response)
+    `Vel<` row, all five velocities   within 2.4 dB of pivot-127 prediction
+    `Vel+`, every cell to +43.1 dB    within a few TENTHS of prediction
+    THD across the loud A series      0-1 %            (nothing clipping)
+
+    A VPLUS 60 v127   measured +47.6   predicted +57.1   short 9.5 dB
+    B VPLUS 60 v127   measured +27.6   predicted +37.1   short 9.5 dB
+
+**The two sample levels earned their place.** Both series stop at the same
+**cord contribution** — +47.6 dB — while sitting exactly 20 dB apart in absolute
+level. An output ceiling would have capped them at the same *absolute* level. So
+
+> **the ceiling is in the CORD, not the output.** A quieter sample buys no more
+> swing and a louder one loses none, and the output is nowhere near its limit.
+
+It is also *soft*: THD stays at 0 % where the level falls 9.5 dB short, so the
+cord stops rising cleanly rather than breaking up. Nothing in this bank clipped
+anywhere, at any velocity, at any level.
+
+### What it settles
+
+`Vel+` is safe to write. The library's mean swing of 28.6 dB (p90 38.7) sits
+comfortably inside a region where the cord tracks prediction to within a few
+tenths of a dB. The 11,449 `Vel+` voices that budget no headroom are not living
+dangerously; they are living inside the linear range with 15 dB to spare.
+
+The control voice being velocity-flat to **0.08 dB** independently reproduces
+eosed's §83 finding that this cord is the only velocity->volume path in the
+voice — from the opposite direction, by removing the cord instead of zeroing it.
+
+### What it does NOT settle, and this has not moved
+
+Whether to switch. `Vel+`, `Vel~` and `Vel<` all draw the same line at one
+measured slope and differ only in where it crosses zero, so the choice remains
+about where the preset's level sits and cannot make the velocity *response* more
+or less faithful. Constructing the AKAI's pivot 64 still costs `-S/2` of static
+trim against a `-22.9 dB` floor, which is still tight on the loudest sources.
+
+What has changed is that the two arguments that decided it are both gone: the
+premise (`Vel<` is the library convention) was refuted by census, and the
+objection (`Vel+` clips) has now been refuted by measurement. If `Vel<` stays it
+should be for the one honest reason left — it needs no trim — and not for either
+of those.
+
+### Two method failures, both mine, both caught by the data
+
+**The anchor.** `hw.anchor_offset` returned **-0.000 s** where the true offset is
+2.185. It finds the first envelope point above 5 % of the local max, and latched
+onto the recording's own start transient. Every window was then read 2.2 s early,
+landing on the previous note — and the first analysis printed a complete,
+plausible, fully-formatted grid in which near-silent cells were the loudest in
+the table. It even produced a confident ANSWER line.
+
+I first blamed the first note being velocity 1 and inaudible. **The corrected
+grid shows that note sounding at full level, so that guess was wrong and is
+retracted.** Replaced with a comb fit over all 65 notes at once — energy inside
+the scheduled windows minus energy in the gaps — which no single silent or loud
+note can move. This is the third appearance of the LEAD_IN anchor fault in this
+project, and the first where the *search* rather than the *assumption* was what
+failed.
+
+**The schedule.** `play_sequence` RETURNS the bare note list but has already
+WRITTEN a richer dict — lead-in, program, capture ports, device, UTC — to the
+same path. My `capture` dumped the return value over it, replacing the metadata
+with the list. The notes survived, so the capture was still analysable, but the
+provenance was gone. The reader now accepts both shapes so captures taken under
+the bug stay usable, and `capture` no longer writes the file at all.
