@@ -22789,6 +22789,70 @@ v96..v127 and extrapolating to v1 ASSUMES the linearity it is testing.** The
 result is evidence for the model, not a measurement of the low end. The low end
 is exactly where P001 and P002 would have checked it.
 
+### The full four-preset result, and why one number is not a bug
+
+Gain re-staged (Jan, at the desk), key 60, nine velocities, peak level:
+
+| preset | vel->filter | measured | file | delta | RMS res |
+|---|---|---|---|---|---|
+| `MPC MIXED` | 8,229 ct | -0.01 dB | 0.00 | -0.01 | 0.00 |
+| `MPC FULL` | **0 ct** | **14.60 dB** | 14.90 | **-0.30** | 0.18 |
+| `AKAI VEL` | 2,421 ct | 34.26 dB | 35.76 | -1.50 | 0.65 |
+| `MPC SOFT` | 5,958 ct | 19.65 dB | 5.22 | **+14.43** | 1.44 |
+
+**PEAK LEVEL IS NOT A VELOCITY->VOLUME MEASUREMENT.** It tracks velocity->FILTER
+too, and the error orders perfectly with it: 0 cents gives -0.30 dB, 2,421 gives
+-1.50, 5,958 gives +14.43. `MPC SOFT` is not a writer fault; the observable was
+measuring two routings at once and attributing both to one.
+
+`MPC FULL` is the only preset with NO filter modulation, and it is the
+`VelocitySensitivity` 1.0 logarithmic case -- the 66.5 % of the library
+§MPCVELSHAPE is about. **It is therefore both the cleanest measurement in the set
+and the one that matters most, and it lands at -0.30 dB.**
+
+### The gain staging, which nearly produced a fake writer bug
+
+Set by ear on one loud note at 3 o'clock, nothing clipping, meters happy. The
+nine-point ladder at that setting:
+
+    vel     1    32    64    80    96   112   127
+    delta +0.0  -0.6  -1.9  -3.9  -6.8 -11.5 -15.6   (dB below the straight line)
+
+Zero samples at digital full scale, so nothing hard-clipped -- an analogue stage
+before the converter was compressing, and **v112 measured quieter than v96.** Had
+the A/B run there, `AKAI VEL` would have measured ~20 dB against 35.8 and looked
+exactly like a plausible writer bug.
+
+At 12 o'clock the same ladder fits **35.76 dB against a file 35.80 over v1..v96,
+RMS residual 0.19 dB** -- a 0.04 dB match across seven points and 95 velocity
+units.
+
+**The rule: stage on the LADDER, not on the loudest note.** A single note not
+clipping and a nine-point response staying straight are different questions, and
+only the second is what a velocity measurement depends on.
+
+### The MPC source leg does not work yet
+
+Captured on Jan's stated channels 14/15/16, key 60, same nine velocities:
+
+    ch14  MPC MIXED   -15.0 -15.6 -15.9 -15.4 -15.5 -15.9 -15.5 -15.5 -15.8
+    ch15  MPC SOFT    -49.0 -90.3 then silence
+    ch16  MPC FULL    silent
+
+A single probe at velocity 110 agrees: ch14 -12.3 dBFS, ch15 -43.4, ch16 and
+ch1 nothing. So ch14 sounds and **ignores velocity entirely -- 0.9 dB across the
+full range** -- where a `VelocitySensitivity` 1.0 keygroup program should give
+~42 dB. That is the source rig, not a conversion result, and it is out to Jan.
+
+`hw_measure.use_device` gained a `channel=` override for this, since the MPC can
+hold several programs at once on separate channels and the DEVICES table has one.
+
+**And I re-made the anchor mistake here within the hour**, having just written it
+up below: the MPC captures were first segmented on `hw.LEAD_IN` rather than the
+comb fit, which put the windows in silence on decaying notes. Re-analysed with
+the comb fit, ch14's anchor is sound at 1.615 s -- so its flatness is real and
+not a windowing artefact. Writing a trap down does not stop you walking into it.
+
 ### Three method faults, all of the same shape
 
 **A criterion that admits noise.** I proposed keeping cells whose PEAK clears the
