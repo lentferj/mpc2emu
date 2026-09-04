@@ -249,6 +249,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§VELPLUSHDRM — MEASURED: `Vel+` does not clip; +43 dB of clean headroom and the ceiling is in the cord (2026-09-04)](#velplushdrm-measured-vel-does-not-clip-43-db-of-clean-headroom-and-the-ceiling-is-in-the-cord-2026-09-04)
 - [§MPCVELSHAPE — the MPC's velocity curve is not dB-linear and the other three are, so our scalar swing is 14 dB RMS wrong (2026-09-04)](#mpcvelshape-the-mpcs-velocity-curve-is-not-db-linear-and-the-other-three-are-so-our-scalar-swing-is-14-db-rms-wrong-2026-09-04)
 - [§VELHW1 — first hardware hearing of the velocity work: two of four presets verify, two are floor-limited (2026-09-04)](#velhw1-first-hardware-hearing-of-the-velocity-work-two-of-four-presets-verify-two-are-floor-limited-2026-09-04)
+- [§MATRIXV4 — the confidence score, rebuilt on measures that survived review (2026-09-04)](#matrixv4-the-confidence-score-rebuilt-on-measures-that-survived-review-2026-09-04)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -23139,3 +23140,91 @@ had one cause. The voice-level sample/volume/pan bytes are meaningless for a
 voice with 2+ zones; the zone table carries them, which our own writer documents
 and a real E4XT bank off Jan's HD0 does the same way. **Two consistent readings
 of one underlying cause are not two confirmations.**
+
+
+## §MATRIXV4 — the confidence score, rebuilt on measures that survived review (2026-09-04)
+
+Jan asked for the confidence matrix to be rebuilt and re-measured with the MPC
+added. Reading the old one first turned up why that is more than a refresh.
+
+### The old score was already void, and its data has no signal without it
+
+`worklist.py`'s own docstring, written 2026-08-22:
+
+> Its `confidence` field is NOT [trustworthy]: that score weights
+> `d_attack_oct` and the two spectral-centroid deltas, and **all three were
+> withdrawn the same evening** — the attack scalar because two defensible
+> definitions gave opposite signs, and the centroid because it follows each
+> rig's noise floor rather than the sound.
+
+Only four measures survived: silence, dropped notes, octave shift, tuning.
+
+**And on those four, the 56 existing comparisons have essentially nothing:**
+
+    silent                     0 of 56
+    with dropped notes         0 of 56
+    a tuning figure recorded   1 of 56   (and only inside prose, not as a field)
+
+Its confidence range of 0.03-1.00 came **entirely** from the three withdrawn
+metrics. `RESULTS.json` does not even store `d_cents` or `d_octave` as fields,
+so the old data cannot be rescored -- it has to be re-measured, and the
+measurement side has to start emitting them.
+
+**So this is not "re-measure a table with better inputs". It is building the
+first version of that table whose score means anything.**
+
+### The rebuilt score
+
+Five measures. The three withdrawn ones are still computed and reported BESIDE
+the score, never inside it -- each is real and each is rig-dependent in a way
+that makes a cross-machine comparison of it a comparison of rigs.
+
+    SILENT          binary. Nothing else matters for a patch that does not sound.
+    DROPPED NOTES   count; full penalty at 3.
+    OCTAVE SHIFT    octaves; full penalty at 0.25 (3 semitones).
+    TUNING          cents; full penalty at 50 (half a semitone).
+    VELOCITY SWING  dB of v1..v127 error; full penalty at 12 dB.   NEW
+
+**Velocity swing is in the score because §VELHW1 established what it means
+before it was used to judge anything** -- three machines, three formats,
+agreeing with their files to within a tenth of a dB. That is precisely the
+property the withdrawn three lacked.
+
+**`confidence = 1 - max(penalty)`, not a weighted mean.** These failures do not
+average: a silent patch is not redeemed by being perfectly in tune. The old
+score's mean let one catastrophic measure be diluted by four good ones.
+
+**The explanation names the DOMINANT measure first.** The old report listed
+reasons in a fixed order, so the thing that actually set the score could appear
+third, and a score whose reason has to be hunted for is one people stop reading.
+
+    clean          1.00   12 cents      0.76   1 semitone     0.67
+    25 cents       0.50   1 octave      0.00   silent         0.00
+    swing 3 dB     0.75   swing 6 dB    0.50   swing 20 dB    0.00
+
+### The tolerances are provisional and that is stated in the source
+
+There is no distribution to fit them against -- see above, the old data has no
+spread on any surviving measure. They are musical judgement written down openly
+rather than a fit dressed up as one, and the rebuild's own results are the first
+chance to calibrate them.
+
+### Scope of the rebuild
+
+Nine rows, not six: the existing four sources plus **MPC**, which has never been
+in the matrix -- so the format whose velocity law is least like the others
+(amplitude-linear against three dB-linear targets) was the one never scored.
+
+The MPC sources are picked to match the library's own distribution, measured
+over 3,776 real presets rather than chosen by ear: 6 uniform 1.0, 2 uniform 0.0,
+1 other uniform value, 1 mixed. A set over-weighting the mixed case would
+flatter the per-voice work; one ignoring it would hide the only case a single
+field cannot express.
+
+~86 comparisons and ~172 captures across four machines. **The three MPC rows are
+blocked** on the source rig: ch14 sounds but ignores velocity entirely, ch15 is
+30 dB down, ch16 silent.
+
+Implementation in `tools/matrix_score.py` and
+`tests/re_banks/build_matrix_v4.py`, both untracked by project convention --
+the design is here so it is reproducible without them.
