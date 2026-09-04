@@ -244,6 +244,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§GATESUBJECT — gates that the wrong subject can satisfy (2026-09-02)](#gatesubject-gates-that-the-wrong-subject-can-satisfy-2026-09-02)
 - [§POLEFIT — the corner-fitting instrument, rescued from `tests/` (2026-09-02)](#polefit-the-corner-fitting-instrument-rescued-from-tests-2026-09-02)
 - [§HWSAFETY — driving an instrument somebody else is sitting at (2026-09-02)](#hwsafety-driving-an-instrument-somebody-else-is-sitting-at-2026-09-02)
+- [§VELPIVOT — the pivot mismatch is a level, and the level moves DOWN (2026-09-04)](#velpivot-the-pivot-mismatch-is-a-level-and-the-level-moves-down-2026-09-04)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -22301,3 +22302,161 @@ second voice while reporting success. And the failure message should **name
 the recovery**: these edits are RAM-only, so a failed restore costs a bank
 reload rather than data. That is the entire reason RAM work is delegable, and
 saying so turns an alarming message into an instruction.
+
+
+## §VELPIVOT — the pivot mismatch is a level, and the level moves DOWN (2026-09-04)
+
+**Status: FIXED and wired on all three writers. No hardware time was spent, and
+none was needed** — every constant this uses had already been measured.
+
+**And it changes nothing on any source we currently hold** — byte-identical
+output on a real 157-preset AKAI card and on 1,511 corpus E4B presets. Why that
+is the correct outcome rather than a disappointing one is the third section
+below; read it before quoting this note as an audible fix.
+
+### The problem, stated exactly
+
+The three machines do not agree about which velocity means "no change":
+
+| machine | pivot | source |
+|---|---|---|
+| AKAI S3000XL | 64 | s3ked §171, measured (`V_LOUD`, and `V_ENV2`/`K_FREQ` agree) |
+| Kurzweil K2000 | 127 | k2kremote, measured (`AMP VelTrk` only ever attenuates) |
+| Akai MPC | 127 | bench 2026-09-01, `gain = (1-s) + s*(v/127)` |
+| E-MU E4XT | 0 / 89.6 / 127 | eosed, measured per cord source (`Vel+`/`Vel~`/`Vel<`) |
+
+So writing a source's swing `S` on a target whose pivot differs is wrong by
+
+    S * (P_dst - P_src) / 126
+
+and **that expression has no velocity in it.** The error is the same at every
+velocity — verified directly rather than left as algebra: 0.0000 dB of spread
+across v1..v127. A constant in dB is a level. The whole pivot mismatch is
+therefore repairable with a static level offset, and the velocity response
+itself is left alone.
+
+`/126` and not `/127`: velocity 0 is note-off and never sounds, so the usable
+span is 1..127. It matters — an AKAI `V_LOUD` of 20 is 23.911 dB of swing and
+the offset is 11.956 dB, which is the number that shows up against real
+programs.
+
+### Why the obvious repair does not work, and what Jan chose instead
+
+The offset an AKAI source needs on the K2000 or the E4XT is **positive**:
+`+S/2`, make it louder. That is the direction none of these targets has room
+in. The K2000's `AMP Adjust` is linear to +6 dB, knees at +12 and hard-clamps
+from +24; the E4XT's volume field is calibrated down to
+`E4XT_VOL_MEASURED_FLOOR_DB = -22.90` and above nominal buys nothing.
+
+Three options were on the table (compensate and clamp; carry the destination's
+convention and accept the flat deficit; leave it). Jan proposed a fourth and it
+is better than all of them:
+
+> *"isn't there a 4th option? Bring the overall level down so the offset fits
+> in it's entirety?"*
+
+Shift the **whole preset** down by its own largest offset. Then every voice's
+offset is at or below zero, so all of it fits, in the direction the hardware
+has range in. What that preserves is the **relative balance between voices** —
+which is what a listener hears as the patch. What it gives up is the preset's
+absolute loudness, which is a knob.
+
+Measured over 10,933 real AKAI programs: median shift **12.0 dB**, max **29.9
+dB**. Every preset fits on the K2000. 96 % fit on the E4XT; the remaining 4.5 %
+(488 presets) run past the measured floor and are clamped **and logged**,
+because a silent 7 dB is exactly the kind of thing that gets blamed on the
+sampler.
+
+Clamping the offsets instead — the option this replaces — would have left 24 %
+of presets past the K2000's knee **with a distorted relative balance**, i.e. it
+trades away the property you hear to protect the one you do not.
+
+### Where it landed
+
+- `models/common.py`: `velocity_pivot_offset_db(swing, src_pivot, dst_pivot)`
+  and `velocity_pivot_preset_shift(voices, dst_pivot)`. Both return 0.0 when
+  either pivot or the swing is `None` — **"nobody looked" is not "measured
+  neutral"**, the same distinction that bit the AKAI writer twice in two days.
+- `writers/krz_writer.py`: new `_preset_layers()` holds the per-preset shift and
+  hands each layer its own offset; `_patch_layer(level_offset_db=…)` folds it
+  into `F4 AMP Adjust`. The tremolo headroom trim writes the same byte, so the
+  two were merged into **one clamped write** rather than a read-modify-write
+  between two clamps.
+- `writers/e4b_writer.py`: applied through `e4xt_volume_byte` at both level
+  sites — `vpar[54]` for a single-zone voice and the per-zone `entry[15]` for a
+  multi-zone one, which is not a choice but the machine's own split. Clamped at
+  the measured floor by `_offset_level_db`, which records what it lost so
+  `write_e4b` can report it once per preset instead of once per voice.
+- `writers/akai_s3000_writer.py`: **deliberately nothing**, and that is a result
+  rather than an omission. `V_LOUD` is per PROGRAM on the S3000XL — exactly one
+  voice's swing survives the write — so there is one offset, identical for every
+  keygroup and every velocity. Applying it and then subtracting the preset's own
+  maximum, which is that same number, leaves zero. The correction reduces to a
+  change in the program's overall loudness. It comes back the day a per-keygroup
+  velocity→loudness cord is written; the mod matrix has the slots.
+
+### Measured blast radius: ZERO on every source we hold, and that is the result
+
+**Checked by byte-diff, not by argument.** A real AKAI card image (157 presets,
+364 samples, `~/temp/HD4-card-backup-20260903.img`) converted to `.KRZ` and to
+`.E4B` with the correction in place and with it disabled is **byte-identical on
+both targets.** The 1,511 presets in the local E4B corpus give the same answer:
+**0 with differing offsets between voices.**
+
+That is not a failed fix. It is the fix telling us what the fault actually was:
+
+- **AKAI sources: `V_LOUD` is per PROGRAM.** Every voice of a parsed AKAI preset
+  carries the same swing, so every offset is the same, so the shift equals the
+  offset and the difference is zero. Measured on the card: shift 5.98 / 11.96 /
+  21.52 dB, median 11.96, and `AMP Adjust` written as the template's 6 on all
+  190 layers — unchanged.
+- **MPC and KRZ sources pivot at 127**, which is the K2000's and the E4XT
+  `Vel<` convention, so their offset is 0 before any shift.
+- Only an **E4B source with mixed cord sources**, or a bank assembled from
+  several formats, can produce differing offsets within one preset. 199 `Vel~`
+  voices exist locally; none share a preset with a differently-offset voice.
+
+So the pivot mismatch was never a within-preset balance error on the material
+we have. It is a **flat per-preset level difference** — an AKAI→K2000
+conversion sits `S/2` (about 12 dB) below the source at every velocity — and a
+flat level difference is a knob, not a fidelity fault. **The thing a knob could
+not fix was the SWING, and that is what actually changed on this path:** the
+same card now writes `AMP VelTrk` 24/12/30/36/43 from the source instead of
+ROM #199's inherited 35 on every layer.
+
+What this code buys is therefore a **correctness guarantee with a measured zero
+blast radius**: the general case is handled, three TODO rows stop being blocked
+on a decision, and nothing that currently converts changes by a byte. Worth
+saying plainly rather than dressed up as an audible improvement.
+
+### The tests, and two traps hit while writing them
+
+`tests/test_velocity_pivot.py`. Every assertion was confirmed to fail with its
+own fix reverted — five separate mutations, not one.
+
+**Trap 1: a per-preset quantity cannot be tested through a per-layer call.**
+The first KRZ helper called `_patch_layer` per voice and computed the shift
+itself. It passed with the writer's shift deleted, because it was re-deriving
+the thing under test. That is what `_preset_layers` was extracted for.
+
+**Trap 2: "0 failures" is satisfied by a crash.** One mutation was counted with
+`grep -c '\[FAIL\]'`, which returned 0 — not because nothing failed but because
+the mutated writer raised before printing anything. Same shape as §GATESUBJECT:
+the check was satisfiable by something other than its subject.
+
+A third, unrelated to the tests: a restore from backup landed in the **same
+wall-clock second** as the `.pyc` written during the revert, so Python reused
+stale bytecode and a correct source file produced wrong answers — including an
+`inspect.getsource` that showed the right code next to the wrong result. Any
+edit-run-revert loop this fast wants `python3 -B`.
+
+### Still open
+
+- The E4XT cord is still written as `Vel<`. Constructing the AKAI's pivot 64
+  natively would use `Vel+` plus the same static trim; with the preset shift now
+  in place that is a smaller question than it was, but it is still Jan's call.
+- MPC's dB law for a non-zero `VelocitySensitivity` is unmeasured, so those
+  sources still keep the target default rather than an invented constant. One
+  MPC One bench session closes it.
+- Nothing here has been heard on hardware yet. The arithmetic is measured; the
+  musical result is not.

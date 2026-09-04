@@ -2721,6 +2721,22 @@ def build_program(preset, name: str, prog_num: int = 0,
     # the LFO line directly above already had it right.
     _vvol = next((v.velocity_to_volume_db for v in preset.voices
                   if getattr(v, 'velocity_to_volume_db', None) is not None), None)
+    # NO VELOCITY-PIVOT OFFSET HERE, and that is a result rather than an
+    # omission. The AKAI rotates its velocity->loudness response about
+    # velocity 64 while a KRZ/MPC/E4XT source rotates about 127, so carrying a
+    # swing across sits a constant S*(64-P_src)/126 off -- which the KRZ and
+    # E4B writers repair with a static level shift. Here it collapses.
+    #
+    # V_LOUD is per PROGRAM on this machine (see `_vvol` above: exactly one
+    # voice's swing survives, the rest are discarded on the way in). One swing
+    # written means ONE offset, identical for every keygroup and every
+    # velocity -- so applying it and then subtracting the preset's own maximum,
+    # which is that same number, leaves zero. The correction is a pure change
+    # of the program's overall loudness, and overall loudness is a knob.
+    #
+    # It would come back the day a per-keygroup velocity->loudness cord is
+    # written (the mod matrix has the slots), because then the offsets differ
+    # between keygroups and the difference is audible balance.
     out = _program_common(name, len(keygroups), lo, hi, lfo1_rate=_lfo,
                           prog_num=prog_num, midi_channel=midi_channel,
                           vel_to_volume_db=_vvol)

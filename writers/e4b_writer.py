@@ -117,6 +117,8 @@ from models.common import (
                            env_seconds_to_rate, env_rate_to_seconds,
                            env_level_to_byte, env_sustain_to_byte, cord_amount_to_byte,
                            e4xt_cutoff_position, e4xt_volume_byte, e4xt_pan_byte,
+                           E4XT_VOL_MEASURED_FLOOR_DB, E4XT_VEL_PIVOT,
+                           velocity_pivot_offset_db, velocity_pivot_preset_shift,
                            E4B_CUTOFF_MIN_HZ, E4B_CUTOFF_MAX_HZ,
                            env_level_byte_to_db,
                            E4B_MIN_AUDIBLE_DECAY_RATE,
@@ -560,7 +562,32 @@ def _build_sample_header(sample: SampleData, sample_idx: int) -> bytes:
 # Zone entry (22 bytes, secondary zone table)
 # ---------------------------------------------------------------------------
 
-def _zone_entry(zone: ZoneMapping, sample_idx: int, write_absolute: bool = False) -> bytes:
+#: Presets whose pivot shift ran past E4XT_VOL_MEASURED_FLOOR_DB, collected
+#: during a write so `write_e4b` can report them once instead of per voice.
+_LEVEL_CLAMPED: list = []
+
+
+def _offset_level_db(base_db: float, offset_db: float) -> float:
+    """Add a pivot offset to a level, clamped at the measured floor.
+
+    `e4xt_volume_byte` will happily EXTRAPOLATE its fitted quadratic past
+    E4XT_VOL_MEASURED_FLOOR_DB and stay monotonic, which is fine for a level
+    the user asked for and wrong for one we are adding ourselves: below the
+    floor the byte no longer stands for a measured number of dB, so the
+    relative balance this offset exists to preserve stops being preserved.
+    Clamp instead, and record it -- on 10,933 real presets this fires on 4.5%.
+    """
+    if not offset_db:
+        return base_db
+    want = base_db + offset_db
+    if want < E4XT_VOL_MEASURED_FLOOR_DB:
+        _LEVEL_CLAMPED.append(E4XT_VOL_MEASURED_FLOOR_DB - want)
+        return E4XT_VOL_MEASURED_FLOOR_DB
+    return want
+
+
+def _zone_entry(zone: ZoneMapping, sample_idx: int, write_absolute: bool = False,
+                level_offset_db: float = 0.0) -> bytes:
     """22-byte secondary zone entry.
 
     Decoded by ConvertWithMoss (git-moss/ConvertWithMoss #220, commit
@@ -594,7 +621,8 @@ def _zone_entry(zone: ZoneMapping, sample_idx: int, write_absolute: bool = False
         struct.pack_into('>h', entry, 12, ft_64)
         # dB -> the byte that actually DELIVERS that dB; writing the value
         # straight in delivers only half to three-quarters of it (§E4BFILTCAL).
-        entry[15] = e4xt_volume_byte(zone.volume) & 0xFF
+        entry[15] = e4xt_volume_byte(
+            _offset_level_db(zone.volume, level_offset_db)) & 0xFF
         entry[16] = e4xt_pan_byte(zone.pan) & 0xFF
     # HARDWARE-CONFIRMED 2026-08-16 on Jan's E4XT. This field is where the
     # machine gets its pitch from -- the sample's own root is carried only in
@@ -764,7 +792,8 @@ def _set_cord(mod: bytearray, slot: int, src: int, dst: int,
     mod[o + 3] = flag & 0xFF
 
 
-def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> bytes:
+def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
+                 level_offset_db: float = 0.0) -> bytes:
     # NT secondary voices use the same structure as KT voices with vpar[38]=0x01.
     # Confirmed from B.030-1V-2V-3V_2.E4B P012 V2 (hardware-created NT secondary):
     # P012 V2 == P011 V2 (KT) in every byte except vpar[38]=0x01.
@@ -817,7 +846,8 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
                       f"-- dropped. This means a parser emitted a zone "
                       f"pointing at a sample it did not write.")
             continue
-        zones_raw += _zone_entry(zone, idx, write_absolute=_multi)
+        zones_raw += _zone_entry(zone, idx, write_absolute=_multi,
+                                 level_offset_db=level_offset_db)
         voice_lo_vel = min(voice_lo_vel, zone.lo_vel)
         voice_hi_vel = max(voice_hi_vel, zone.hi_vel)
         voice_lo_key = min(voice_lo_key, zone.lo_key)
@@ -898,7 +928,7 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool) -> 
     # above when the voice has 2+ zones — see the per-zone entries instead;
     # a second hardware test showed this is NOT a voice-value + per-zone-
     # delta composition, the multi-zone case simply doesn't use these bytes).
-    vpar[54] = e4xt_volume_byte(_vol) & 0xFF
+    vpar[54] = e4xt_volume_byte(_offset_level_db(_vol, level_offset_db)) & 0xFF
     vpar[55] = e4xt_pan_byte(_pan) & 0xFF
     vpar[58] = _XPM_FILTER_TYPE.get(voice.filter_type, 0x00)
     # The 0-1 `filter_cutoff` is the SHARED internal position, defined by the
@@ -1356,10 +1386,31 @@ def _build_preset_body(preset: Preset, preset_idx: int,
     # [56-59] MIDI any-note/any-channel
     hdr[56] = hdr[57] = hdr[58] = hdr[59] = 0xFF
 
+    # VELOCITY-PIVOT OFFSET. We write the source's swing as `Vel<`, which
+    # attenuates from velocity 127; a source that rotates about some other
+    # velocity therefore sits a CONSTANT S*(127-P_src)/126 off, and a constant
+    # in dB is a level, not a curve. Repairing it upward would need headroom
+    # the volume field does not have, so the whole preset moves DOWN by its own
+    # largest offset instead: inter-voice balance comes out exact and only the
+    # preset's overall loudness changes. Jan's call, 2026-09-04.
+    _shift = velocity_pivot_preset_shift(voices, E4XT_VEL_PIVOT['Vel<'])
     voice_parts = []
     last = num_voices - 1
+    _before = len(_LEVEL_CLAMPED)
     for i, v in enumerate(voices):
-        voice_parts.append(_build_voice(v, sample_name_to_idx, is_last=(i == last)))
+        _off = velocity_pivot_offset_db(
+            getattr(v, 'velocity_to_volume_db', None),
+            getattr(v, 'velocity_to_volume_pivot', None),
+            E4XT_VEL_PIVOT['Vel<']) - _shift
+        voice_parts.append(_build_voice(v, sample_name_to_idx,
+                                        is_last=(i == last),
+                                        level_offset_db=_off))
+    if len(_LEVEL_CLAMPED) > _before:
+        _lost = _LEVEL_CLAMPED[_before:]
+        print(f"  [INFO] preset '{preset.name}': velocity-pivot shift of "
+              f"{_shift:.1f} dB ran past the measured volume floor on "
+              f"{len(_lost)} level(s); clamped, up to {max(_lost):.1f} dB of "
+              f"the correction not applied")
     voice_data = b''.join(voice_parts)
     return bytes(hdr) + voice_data
 
@@ -1395,6 +1446,7 @@ def write_e4b(bank: Bank, output_path: str) -> None:
     # Names are preserved, so zone→sample references still resolve.  Work on a
     # local list — never mutate the caller's bank (it may be written to other
     # formats too).
+    del _LEVEL_CLAMPED[:]        # per-write, not per-process
     samples = [bake_alternating_loop(s) for s in bank.samples]
     n_baked = sum(1 for s in bank.samples if s.loop_type == LoopType.ALTERNATING)
     if n_baked:

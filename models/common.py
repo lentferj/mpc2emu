@@ -3493,6 +3493,59 @@ VEL_VOL_PIVOT_KRZ = 127
 KRZ_AMP_VELTRK_DB_PER_UNIT = 1.0
 
 
+def velocity_pivot_offset_db(swing_db, src_pivot, dst_pivot):
+    """Static level offset that makes a target's velocity response match a
+    source's when their PIVOTS differ.
+
+    Writing the source's swing about a different pivot is wrong by
+
+        S * (dst_pivot - src_pivot) / 126
+
+    which is **CONSTANT in velocity** -- verified to 0.0000 dB of spread across
+    v1..v127. So the whole pivot mismatch is repaired by one static level
+    offset, and no new hardware measurement was needed to establish it: the
+    pivots (AKAI 64, K2000 127, MPC 127, E4XT 0/89.6/127), the swing laws and
+    the three targets' static-level laws were all already measured.
+
+    Positive means the target must be made LOUDER to match. AKAI (64) -> K2000
+    or E4XT (127) needs +S/2; MPC or KRZ (127) -> AKAI (64) needs -S/2.
+
+    Returns 0.0 when either side's pivot is unknown -- a swing whose pivot
+    nobody recorded cannot be corrected, and guessing one would be worse than
+    leaving the flat error in place.
+    """
+    if swing_db is None or src_pivot is None or dst_pivot is None:
+        return 0.0
+    return swing_db * (dst_pivot - src_pivot) / 126.0
+
+
+def velocity_pivot_preset_shift(voices, dst_pivot):
+    """The per-PRESET downward shift that makes every voice's pivot offset fit.
+
+    Jan's design, 2026-09-03, and it is better than clamping the offsets: the
+    target's static level has far more range DOWNWARD than up (the K2000's
+    Adjust knees at +12 and clamps from +24, but reaches about -96), so
+    shifting the whole preset down by its largest required offset leaves every
+    voice's offset at or below zero. **Relative balance inside the preset is
+    then exact and only the preset's overall loudness moves** -- which is a
+    knob, not a fidelity property. Clamping instead trades the property you
+    hear for the one you do not.
+
+    Measured over 10,933 real AKAI programs: median shift 12.0 dB, max 29.9.
+    Every preset fits on the K2000; 96 % fit on the E4XT, whose measured floor
+    is -22.9 dB, leaving 4.5 % that still need a clamp and a log line.
+
+    Applies per PRESET because the level fields are per layer/voice -- presets
+    play one at a time, so a level difference between them is far less harmful
+    than an imbalance inside one.
+    """
+    offs = [velocity_pivot_offset_db(getattr(v, 'velocity_to_volume_db', None),
+                                     getattr(v, 'velocity_to_volume_pivot', None),
+                                     dst_pivot)
+            for v in voices]
+    return max([0.0] + offs)
+
+
 def velocity_volume_gain_db(swing_db, pivot, velocity):
     """dB the velocity response applies at `velocity`, relative to the level
     at `pivot`.

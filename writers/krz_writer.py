@@ -100,6 +100,8 @@ from models.common import (
     KRZ_F4_AMP_DEPTH_INDEX, KRZ_F4_AMP_SRC_LFO1, KRZ_F4_AMP_SRC_LFO2,
     KRZ_F4_AMP_DEPTH_DB_PER_UNIT, KRZ_F4_AMP_DEPTH_CLAMP,
     KRZ_F4_AMP_ADJUST_INDEX, KRZ_F4_AMP_ADJUST_DB_PER_UNIT,
+    velocity_pivot_offset_db, velocity_pivot_preset_shift,
+    VEL_VOL_PIVOT_KRZ,
 )
 from processors.loop_renderer import bake_alternating_loop
 # The K2000 and the E4B both store stereo PCM planar (whole left channel, then
@@ -1674,7 +1676,44 @@ def _voice_is_stereo(voice, samples_by_name: dict) -> bool:
                for z in voice.zones)
 
 
-def _patch_layer(voice, keymap_id: int, stereo: bool = False):
+def _preset_layers(layers, samples_by_name):
+    """Yield `(voice, keymap_id, segments)` for one preset's layers.
+
+    Pulled out of `write_krz` so the VELOCITY-PIVOT SHIFT below is reachable
+    without writing a file. It is a per-PRESET quantity, so a test that called
+    `_patch_layer` per layer would be re-deriving the shift itself and would
+    pass with the shift removed from the writer -- which is exactly what
+    happened on the first attempt at these tests.
+    """
+    # The K2000 attenuates its velocity->volume from velocity 127; an AKAI
+    # source rotates about 64, so carrying that swing sits a constant S/2 low.
+    # A constant in dB is a level, and repairable as one -- but +S/2 can exceed
+    # what Adjust reaches upward (it knees at +12 and clamps at +24), so the
+    # whole preset is shifted DOWN by its own largest offset instead. Relative
+    # balance inside the preset stays exact; only its overall loudness moves,
+    # which is a knob. Jan's design; over 10,933 real programs the shift is
+    # 12 dB median, 29.9 max, and every one of them fits.
+    shift = velocity_pivot_preset_shift(
+        [v for v, _ in layers if v is not None], VEL_VOL_PIVOT_KRZ)
+    for voice, kid in layers:
+        if voice is None:
+            segs = [(tag, bytearray(data)) for tag, data in _TPL_LAYER]
+            cal = next(d for t, d in segs if t == 0x40)
+            cal[7] = cal[8] = 0      # CAL[7,8] is a 2nd keymap slot — keep 0
+            cal[11] = (kid >> 8) & 0xFF
+            cal[12] = kid & 0xFF
+        else:
+            segs = _patch_layer(voice, kid,
+                                _voice_is_stereo(voice, samples_by_name),
+                                level_offset_db=velocity_pivot_offset_db(
+                                    getattr(voice, 'velocity_to_volume_db', None),
+                                    getattr(voice, 'velocity_to_volume_pivot', None),
+                                    VEL_VOL_PIVOT_KRZ) - shift)
+        yield voice, kid, segs
+
+
+def _patch_layer(voice, keymap_id: int, stereo: bool = False,
+                 level_offset_db: float = 0.0):
     """Return a patched copy of the template layer segments for one voice."""
     segs = [(tag, bytearray(data)) for tag, data in _TPL_LAYER]
     by = {}
@@ -1841,12 +1880,23 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False):
             _hob4[KRZ_F4_AMP_SRC1_INDEX] = (KRZ_F4_AMP_SRC_LFO1 if _use1
                                             else KRZ_F4_AMP_SRC_LFO2)
             _hob4[KRZ_F4_AMP_DEPTH_INDEX] = _d
-            _adj = _hob4[KRZ_F4_AMP_ADJUST_INDEX]
-            _adj = _adj - 256 if _adj > 127 else _adj
-            _hob4[KRZ_F4_AMP_ADJUST_INDEX] = max(
-                -KRZ_F4_AMP_DEPTH_CLAMP,
-                min(KRZ_F4_AMP_DEPTH_CLAMP,
-                    _adj - int(round(_d * KRZ_F4_AMP_ADJUST_DB_PER_UNIT)))) & 0xFF
+            level_offset_db -= _d * KRZ_F4_AMP_ADJUST_DB_PER_UNIT
+
+    # --- one clamped write of the layer's static level ------------------
+    #
+    # TWO THINGS MOVE THIS BYTE and they are both dB, so they add rather than
+    # compete: the tremolo headroom trim above (subtracting the depth, because
+    # the swing is bipolar about nominal) and the velocity-pivot offset passed
+    # in by the caller. Writing them separately would have meant two clamps and
+    # a read-modify-write between them.
+    if level_offset_db:
+        _a = seg(0x53)[KRZ_F4_AMP_ADJUST_INDEX]
+        _a = _a - 256 if _a > 127 else _a
+        seg(0x53)[KRZ_F4_AMP_ADJUST_INDEX] = max(
+            -KRZ_F4_AMP_DEPTH_CLAMP,
+            min(KRZ_F4_AMP_DEPTH_CLAMP,
+                _a + int(round(level_offset_db
+                               / KRZ_F4_AMP_ADJUST_DB_PER_UNIT)))) & 0xFF
 
     # --- amp envelope (always User mode + the source ADSR) ---
     seg(0x20)[1] = 0                                         # AMPENV mode -> User
@@ -2054,15 +2104,7 @@ def _write_program_object(f, preset: Preset, prog_id: int,
             d[1] = n
         f.write(_pack_segment(tag, bytes(d)))
 
-    for voice, kid in layers:
-        if voice is None:
-            segs = [(tag, bytearray(data)) for tag, data in _TPL_LAYER]
-            cal = next(d for t, d in segs if t == 0x40)
-            cal[7] = cal[8] = 0          # CAL[7,8] is a 2nd keymap slot — keep 0
-            cal[11] = (kid >> 8) & 0xFF
-            cal[12] = kid & 0xFF
-        else:
-            segs = _patch_layer(voice, kid, _voice_is_stereo(voice, samples_by_name))
+    for voice, kid, segs in _preset_layers(layers, samples_by_name):
         for tag, data in segs:
             f.write(_pack_segment(tag, bytes(data)))
 
