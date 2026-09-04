@@ -23210,6 +23210,59 @@ spread on any surviving measure. They are musical judgement written down openly
 rather than a fit dressed up as one, and the rebuild's own results are the first
 chance to calibrate them.
 
+### The repeatability baseline, measured 2026-09-04
+
+Same patch twice, nothing changed between:
+
+    machine   swing delta   tilt dB/oct   shape dB RMS
+    E4XT         0.062         0.020         0.145
+    MPC          0.000         0.001         0.013
+    K2000        0.004         0.009         0.082      (k2kremote)
+    AKAI          --            --            --
+
+The rig's own noise is **50x below the tilt tolerance and 21x below shape**, so
+the spectral pair may enter the score. **This is the thing the three withdrawn
+metrics never had** -- not a better metric, just the number that says how much
+it moves when nothing changes.
+
+**Two caveats, both from k2kremote and both narrowing what this licenses.** The
+shape figures come from real multisampled notes whose own attack transient is
+not identical between two triggerings of a sampler even in principle, so some
+unknown part of 0.082-0.145 dB is the INSTRUMENT legitimately not repeating --
+an upper bound on rig noise, which is the right way round for a threshold. And
+all of these are back-to-back within seconds: they bound NOISE, not DRIFT over
+a session. A drift run on an idle machine is scheduled; drift under load needs a
+session with load in it.
+
+### The velocity measure had to change, and the first version condemned the work
+
+`compare_patch` first emitted `d_swing_db` -- the conversion's v1..v127 span
+minus the source's -- and the score read it. On a real pair that scored:
+
+    d_swing_db  -27.73 dB   ->  confidence 0.00, "check first"
+
+**and the conversion was correct.** The MPC's law is logarithmic and every
+target is dB-linear, so §MPCVELSHAPE's fit deliberately trades the bottom 30 dB
+-- inaudible, below v32 -- for the range that is played. An endpoint-span
+comparison scores that intended behaviour as total failure. The most carefully
+verified change of the day would have been the worst cell in the table.
+
+Replaced with **`velocity_rms_db`**: RMS of `(conv - src)` after removing a
+constant offset, over v32..127 -- the same window and statistic the fit itself
+was built with. Same pair, re-measured:
+
+    velocity_rms_db  0.715 dB over 7 points   ->  confidence 0.94, "looks faithful"
+    d_cents 0.0   octave_shift 0.0   tilt -0.192   shape 0.408
+
+**And 0.715 dB is itself a cross-check.** §MPCVELSHAPE predicted the fit's own
+RMS error at **0.58 dB** from the arithmetic alone, before any hardware
+existed. Measuring it through a real MPC, a real E4XT and a whole capture chain
+gives 0.715. The arithmetic and the hardware agree on the size of a deliberate
+approximation, which is a stronger result than either.
+
+`d_swing_db` is kept as a diagnostic: it is the honest headline for a dB-linear
+source and it names the fit's trade for a curved one.
+
 ### Scope of the rebuild
 
 Nine rows, not six: the existing four sources plus **MPC**, which has never been
