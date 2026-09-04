@@ -455,21 +455,24 @@ def e4xt_volume_byte(db: float) -> int:
     fitted range and are not precise -- real hardware flattens out somewhere
     and a quadratic will not. They stay monotonic, which is what matters.
     """
-    if db >= 0.0:
-        return int(max(-128, min(127, round(db))))
+    # ONE QUADRATIC ACROSS THE WHOLE RANGE. This used to special-case db >= 0
+    # as `round(db)`, a 1:1 positive branch that was ASSUMED rather than fitted
+    # -- the 2026-07-31 measurement covered 0 to -22.9 dB and nothing above.
+    # eosed measured the positive half on 2026-09-04 (§VELHW1): moving a voice
+    # from byte -4 to +7 delivered 8.53 dB, where the 1:1 branch predicts 10.07
+    # and this quadratic extended through zero predicts 8.45. The branch was
+    # 1.54 dB optimistic there and grows worse -- 2.3 dB at +10, 3.0 at +13.
     disc = _E4XT_VOL_C1 ** 2 + 4.0 * _E4XT_VOL_C2 * db
     if disc < 0.0:
         return -128
     root = (-_E4XT_VOL_C1 + math.sqrt(disc)) / (2.0 * _E4XT_VOL_C2)
-    return int(max(-128, min(0, round(root))))
+    return int(max(-128, min(127, round(root))))
 
 
 def e4xt_byte_to_volume_db(byte: int) -> float:
     """Inverse of `e4xt_volume_byte`: the dB a written byte actually delivers.
     Same round-trip requirement as the cutoff above."""
     b = float(byte)
-    if b >= 0.0:
-        return b
     return _E4XT_VOL_C1 * b + _E4XT_VOL_C2 * b * b
 
 
