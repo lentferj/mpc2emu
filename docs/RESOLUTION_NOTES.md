@@ -22687,6 +22687,37 @@ carries the same distortion to the K2000 and the AKAI as well.
 **Not a defect in the MPC law**, which is measured and good to 0.033 dB RMS. The
 defect is in the model field it is squeezed through.
 
+### How much of Jan's real MPC library this touches (measured 2026-09-04)
+
+Surveyed straight off the MPC One's own SD-card backup, `EXPANSIONS/` — the
+MPC-authored material, as opposed to `KEYGROUPS/`, which is older
+ConvertWithMoss output where **0 of 60** files carry the field at all.
+
+    3,801 XPMs, 3,776 carrying VelocitySensitivity, 15 unreadable
+
+      66.5 %   2,502   uniform 1.0  (a 42.08 dB span, the LOGARITHMIC extreme)
+      16.9 %     637   uniform 0.0  (asks for no velocity response)
+      12.3 %     464   uniform, some other value  (3.3 to 11.3 dB observed)
+       4.2 %     157   MIXED within one preset
+
+**Two-thirds of the library sits at exactly the case this section is about.**
+Every one of those 2,502 presets was being written with a 42.08 dB span onto a
+dB-linear target — 14 dB RMS off across the played range — until the fit landed.
+
+**The 4.2 % is the part no scalar can rescue.** 157 presets carry different
+swings on different voices, and the extremes are stark: one 7-voice piano
+program pairs voices at **0.0 dB** with voices at **42.1 dB**, in the same
+preset. A single template cord is wrong in both directions at once there,
+whatever value it is set to — which is the structural argument for reading the
+field per voice rather than defaulting it, independent of any curve question.
+
+**And the 16.9 % is the earlier fix's constituency**: 637 presets explicitly ask
+for no velocity response, and before the three-state read (§KRZAMPVEL) each was
+receiving the E4B template's 22.37 dB.
+
+Supersedes the earlier "263 real MPC presets" figure, which was a smaller and
+less representative sample.
+
 ### Options, in ascending order of work
 
 1. **Pick a better scalar.** One line in `xpm_parser`: fit over v32..v127 instead
