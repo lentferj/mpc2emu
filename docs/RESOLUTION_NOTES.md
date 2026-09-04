@@ -22992,6 +22992,62 @@ being told different numbers.
 the one-sided reading of 7.77, so full-swing holds end to end -- settled by the
 hardware rather than by tracing the code, which is the stronger of the two.
 
+### The velocity->filter confound, resolved by experiment rather than argument
+
+`MPC SOFT` measured 19.65 dB on the E4XT against an expected 5.22, and the same
+source measured 19.02 on the AKAI against 4.78. I attributed both to
+velocity->filter contaminating a peak-level reading. **s3ked tested it instead of
+accepting it**: zeroed `MODVFILT1` on all sixteen keygroups and re-ran the
+ladder.
+
+    live         span 19.02 dB   and the ladder is a CURVE
+                 (+4.08 +5.58 +4.77 +2.45 +0.99 +0.25 -- flattening as the
+                  filter runs out of range)
+    neutralised  span  4.60 dB   predicted 4.78   -3.8 %   r2 0.997825
+                 and a straight line to 0.14 dB
+
+So the filter route accounted for **14.42 dB** of the excess, and removing it
+restored linearity as well as magnitude -- two independent signatures, not one.
+
+**AND THE TWO MACHINES AGREE TO 0.01 dB.** The E4XT excess was 14.43, the AKAI's
+14.42, from the same source preset carrying 5,929 cents of velocity->filter,
+through an E-MU Z-plane filter and an S3000XL 12 dB/octave respectively.
+
+Stated carefully, because two points is two points: this is **not** evidence that
+the two filters behave alike. It is consistent with the peak-level effect being
+governed by the source spectrum and the depth in cents rather than by either
+filter's slope. What it does establish on its own is that **the velocity->filter
+depth converted faithfully to both targets** -- verified by an effect neither
+writer was aimed at and neither reader predicted. A third machine would separate
+the two readings.
+
+### Reading the wrong keygroups, and a null that was confounded for one routing and clean for the other
+
+Two corrections from s3ked, both of which I would have got wrong.
+
+**The route table I supplied was read at the voice level and named keygroups that
+do not sound at key 60.** The ones that do: kg12 alone for 96; kg5 alone for 95;
+and for 94, kg5 plus three keygroups spanning 24-127 with no velocity routing at
+all. My "94 has a bigger filter route than 95 yet is flat" puzzle was built on
+rows that never sound, and dissolved once the right ones were read.
+
+**And 94's flatness is evidence about one routing and not the other.** Three
+velocity-inert keygroups spanning the whole keyboard dominate the sum and mask
+kg5's filter route -- so the flat ladder is NOT evidence about velocity->filter.
+But `V_LOUD` is a PROGRAM-level field: a non-zero value would move every
+keygroup including the inert ones, so the flat ladder DOES confirm `V_LOUD` 0
+behaving.
+
+s3ked nearly reported it as a confounded null. It is the opposite -- confounded
+for one routing, clean for the other -- and the lesson is that "flat, therefore
+the null verified" has to be asked as **which routing is this flatness evidence
+about**.
+
+**It also puts a number on the per-program limitation.** 94's source asks for
+0.0, 17.2 and 19.0 dB across four voices; `V_LOUD` is per program so exactly one
+survives; the other two produce **zero** velocity response. Not "lossy" --
+measured, and zero.
+
 ### A finding nobody was looking for: the K2000's velocity curve shape is mildly VelTrk-dependent
 
 k2kremote normalised each preset to its own v127 and divided by its VelTrk. If
