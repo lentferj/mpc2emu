@@ -250,6 +250,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§MPCVELSHAPE — the MPC's velocity curve is not dB-linear and the other three are, so our scalar swing is 14 dB RMS wrong (2026-09-04)](#mpcvelshape-the-mpcs-velocity-curve-is-not-db-linear-and-the-other-three-are-so-our-scalar-swing-is-14-db-rms-wrong-2026-09-04)
 - [§VELHW1 — first hardware hearing of the velocity work: two of four presets verify, two are floor-limited (2026-09-04)](#velhw1-first-hardware-hearing-of-the-velocity-work-two-of-four-presets-verify-two-are-floor-limited-2026-09-04)
 - [§MATRIXV4 — the confidence score, rebuilt on measures that survived review (2026-09-04)](#matrixv4-the-confidence-score-rebuilt-on-measures-that-survived-review-2026-09-04)
+- [§MPCSRC — the source A/B: two presets faithful, one different by design, and three wrong diagnoses on the way (2026-09-04)](#mpcsrc-the-source-ab-two-presets-faithful-one-different-by-design-and-three-wrong-diagnoses-on-the-way-2026-09-04)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -23273,3 +23274,72 @@ rather than by reading the code.
 Implementation in `tools/matrix_score.py` and
 `tests/re_banks/build_matrix_v4.py`, both untracked by project convention --
 the design is here so it is reproducible without them.
+
+
+## §MPCSRC — the source A/B: two presets faithful, one different by design, and three wrong diagnoses on the way (2026-09-04)
+
+The first comparison of a source against its conversions, rather than of a
+conversion against its file. Key 60, nine velocities, peak span v1..v127.
+
+    preset        MPC src     E4XT     AKAI    K2000
+    MPC MIXED        0.05    -0.01       --       --
+    MPC SOFT        19.91    19.65    19.02       --
+    MPC FULL        42.08    14.60    15.43    15.05
+
+### `MPC SOFT` retires a confound that was never there
+
+§VELHW1 records ~14.4 dB of "excess" on this preset across two machines,
+attributed to velocity->filter contaminating a peak-level reading, and s3ked and
+k2kremote each neutralised the filter route to recover a "true" 4.6 / 5.14 dB.
+Both experiments were sound and both conclusions about the writer stand.
+
+**But the SOURCE measures 19.91 dB.** So 19.65 and 19.02 were never excess --
+they are the conversion reproducing what the MPC actually does, to within
+0.9 dB. The filter route converted faithfully, the peak metric was measuring
+the right thing, and what was missing was the only reference that could show
+it: the source.
+
+**A metric is not confounded merely because it measures more than one thing.**
+It is confounded when the extra thing is not in the reference. Peak level
+includes velocity->filter on both sides of this comparison, so it cancels.
+
+### `MPC MIXED` is flat at the source too
+
+Source 0.05 dB, E4XT -0.01. The voice that sounds at key 60 has no velocity
+response and masks the ones that do -- exactly as s3ked found on the AKAI, where
+three keyboard-spanning inert keygroups mask the routed one. So the concern that
+the K2000's 3-layer cap had destroyed something audible **at this key** was
+misplaced. The layer loss is real and unfixed; it simply does not show here.
+
+### `MPC FULL` is the one real difference and it is deliberate
+
+The source spans 42.08 dB through a LOGARITHMIC curve; three dB-linear targets
+hold 14.60 / 15.43 / 15.05. That is §MPCVELSHAPE's fit declining to chase 30 dB
+of inaudible bottom end -- and the three targets agree with each other to 0.8 dB
+after being told three different numbers derived for three different pivots.
+
+### Three confident diagnoses, all accurate, none of them the cause
+
+The MPC leg was reported blocked for three hours. In order:
+
+1. **"The MPC ignores velocity."** Measured: 0.9 dB across the full range on
+   ch14, where `VelocitySensitivity` 1.0 should give ~42.
+2. **"Only the focused track responds."** Measured: a 16-channel sweep found
+   exactly one channel sounding, and WHICH one had moved between two runs an
+   hour apart.
+3. **"MIDI arrives but produces no sound."** Jan's own observation at the desk.
+
+**The cause was that the other two tracks were not armed for record.** Every one
+of those three readings was a real measurement of a real symptom, correctly
+taken, and each pointed somewhere other than the cause. The first was the wrong
+track entirely; the second and third were true and downstream.
+
+I was three steps into engineering around it -- proposing per-source projects,
+MPC-side sequencing, and one manual track selection per capture -- for a
+ten-source run that now needs none of them.
+
+**The general form, which this project keeps meeting from new directions:** a
+symptom accurately measured is not a diagnosis, and a chain of them is not a
+better one. The 16-channel sweep that would have shown the real shape took
+thirty seconds and I ran it only after two hours of assuming the channels Jan
+had named were the channels responding.
