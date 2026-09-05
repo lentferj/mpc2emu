@@ -177,6 +177,8 @@ KEYMAP_ENTRY_SIZE_VOL = 6   # Method2Size(0x17) = 2+1+2+1
 _KEYMAP_VOL_MIN, _KEYMAP_VOL_MAX = -127, 127
 
 NUM_KEYS = 128          # K2000 keyboard range
+from models.diagnostics import emit as _diag, WARNING as _W, INFO as _I
+
 _MAX_KRZ_LAYERS = 32    # K2000 hardware maximum layers per program
 NUM_VELO_LEVELS = 8     # K2000 velocity buckets (ppp..fff)
 
@@ -934,6 +936,63 @@ def _thin_velocity_voices(voices, limit):
                 return voices, 0    # unsafe: refuse rather than delete content
 
     return kept, before - len(kept)
+
+
+
+def _thin_velocity_bands(voices, limit=3):
+    """Reduce velocity-split layers to `limit`, keeping the WIDEST band per group.
+
+    `_split_voice_by_velocity` turns one voice into one layer per velocity band,
+    because a K2000 keymap holds a single sample per key and has no per-key
+    velocity zones — bands that share a keymap collide, brightest wins. That is
+    necessary and it is also what pushes a preset past three layers.
+
+    When the program must play on a normal channel, something has to go, and
+    what goes is dynamic resolution rather than key coverage: layers are grouped
+    by key territory, and within each group the band with the WIDEST velocity
+    window survives — the one a player spends most time inside. Dropping a key
+    region instead would silence part of the keyboard, which is the failure this
+    whole path exists to avoid.
+
+    Returns (kept_voices, dropped_bands) so the caller can name what was lost.
+    """
+    def _terr(v):
+        return (min(z.lo_key for z in v.zones), max(z.hi_key for z in v.zones))
+
+    groups: dict = {}
+    for v in voices:
+        groups.setdefault(_terr(v), []).append(v)
+
+    kept, dropped = [], []
+    for terr in sorted(groups):
+        band = sorted(groups[terr],
+                      key=lambda v: -(max(z.hi_vel for z in v.zones)
+                                      - min(z.lo_vel for z in v.zones)))
+        kept.append(band[0])
+        for v in band[1:]:
+            dropped.append((min(z.lo_vel for z in v.zones),
+                            max(z.hi_vel for z in v.zones)))
+
+    # WIDEN THE SURVIVOR TO THE FULL VELOCITY RANGE, or the cure is worse than
+    # the disease. The band we keep carries the window the SOURCE gave it —
+    # e.g. 48-111 on this preset — and a layer only sounds inside its window.
+    # Keeping it unchanged therefore leaves velocities 0-47 and 112-127 silent:
+    # a program that plays on any channel but not at any dynamic, which is a
+    # partial version of exactly the silence this default exists to prevent.
+    # Verified on the rebuilt bank before this was added — the surviving layers
+    # read vel 48-111 and would have shipped that way.
+    for v in kept:
+        for z in v.zones:
+            z.lo_vel, z.hi_vel = 0, 127
+    # Still over budget (many key regions): keep the widest-spanning ones.
+    if len(kept) > limit:
+        kept.sort(key=lambda v: -(max(z.hi_key for z in v.zones)
+                                  - min(z.lo_key for z in v.zones)))
+        for v in kept[limit:]:
+            dropped.append((min(z.lo_vel for z in v.zones),
+                            max(z.hi_vel for z in v.zones)))
+        kept = kept[:limit]
+    return kept, dropped
 
 
 def _fit_layers(voices, limit=3):
@@ -2345,7 +2404,8 @@ def _voices_stacked(voices) -> bool:
 # ---------------------------------------------------------------------------
 
 def write_krz(bank: Bank, output_path: str,
-              faithful_layers: bool = False) -> None:
+              faithful_layers: bool = False,
+              drum_program: bool = False) -> None:
     """Serialize a Bank to a Kurzweil .KRZ file.
 
     `faithful_layers` keeps every layer even when that makes the program a
@@ -2605,17 +2665,92 @@ def write_krz(bank: Bank, output_path: str,
                       f"-- that makes it a DRUM PROGRAM, playable only on a "
                       f"drum channel.")
                 fitted.append((preset.name, _was, len(voices), _notes))
-            else:
+            elif drum_program:
                 n = min(len(voices), _MAX_KRZ_LAYERS)
-                print(f"  [layers] '{preset.name}': {n} split layers → DRUM "
-                      f"PROGRAM (play on a drum channel). Could not fit to 3: "
-                      f"the remaining layers form more than one overlapping "
-                      f"group (several distinct key regions, each still over "
-                      f"budget) rather than one clean velocity split, so "
-                      f"thinning was not attempted unsupervised.")
+                _diag(_W, 'KRZ_DRUM_PROGRAM',
+                      f"{n} split layers written as a K2000 drum program; it "
+                      f"sounds ONLY on a drum channel",
+                      subject=preset.name,
+                      # Nothing is dropped unless the layer clamp bites.  But
+                      # the program is SILENT on every normal channel, which is
+                      # not "content lost" and is still the worst outcome we
+                      # ship -- so it is called out separately rather than
+                      # smuggled into the bool. Filter on either.
+                      content_lost=len(voices) > _MAX_KRZ_LAYERS,
+                      detail={'layers': n, 'requested': True,
+                              'layers_clamped': max(0, len(voices) - _MAX_KRZ_LAYERS),
+                              'silent_on_normal_channel': True,
+                              'cli_flag': '--krz-drum-program'},
+                      # REMEDY TEXT CARRIES NO CLI FLAG. VinSamLib renders these
+                      # in a GUI that has no command line, and was already
+                      # rewriting our flag names into its own control names by
+                      # hand. Flags belong in `detail`, where a CLI front end
+                      # can pick them up and a GUI can ignore them.
+                      remedy='play it on the drum channel, or convert it as a '
+                             'normal program to get three layers that play '
+                             'anywhere',
+                      echo=f"  [layers] '{preset.name}': {n} split layers → DRUM "
+                           f"PROGRAM (play on a drum channel; --krz-drum-program "
+                           f"was given). Could not fit to 3: the remaining layers "
+                           f"form more than one overlapping group.")
+                voices = voices[:_MAX_KRZ_LAYERS]
+            else:
+                # A DRUM PROGRAM IS NEVER PRODUCED BY DEFAULT (Jan, 2026-09-05).
+                #
+                # This branch used to leave the program at >3 layers and say so,
+                # on the grounds that thinning several overlapping groups
+                # "unsupervised" was worse than reporting the limit. In practice
+                # the automatism is wrong far more often than right: the user
+                # gets an instrument that is SILENT on every normal channel, and
+                # the only notice is one line in a build log. The ch10 lead
+                # program reached three sessions and a hardware measurement
+                # campaign that way before anyone read the line (2026-09-05).
+                #
+                # Converting a drum kit is a thing people know they are doing.
+                # So it is now opt-in via --krz-drum-program, and the default
+                # produces something that plays.
+                _was2 = len(voices)
+                voices, _dropped = _thin_velocity_bands(voices, 3)
+                _diag(_W, 'KRZ_LAYERS_THINNED',
+                      f"{_was2} split layers reduced to {len(voices)} so the "
+                      f"program plays on a normal channel",
+                      subject=preset.name,
+                      # Velocity bands were DROPPED to fit three layers.  This
+                      # is real loss and the default path, so it is the code a
+                      # consumer will see most often.
+                      content_lost=bool(_dropped),
+                      detail={'layers_before': _was2, 'layers_after': len(voices),
+                              'dropped_velocity_bands': [list(b) for b in _dropped],
+                              'cli_flag': '--krz-drum-program'},
+                      remedy='converting it as a drum program keeps every '
+                             'layer, but that program sounds ONLY on a drum '
+                             'channel',
+                      echo=f"  [layers] '{preset.name}': {_was2} split layers → "
+                           f"{len(voices)} (regular program, plays on any channel).")
+                if _dropped:
+                    print(f"       DROPPED {len(_dropped)} velocity band(s): "
+                          + ", ".join(f"v{a}-{b}" for a, b in _dropped))
+                    print(f"       The source switches samples at those "
+                          f"velocities and the K2000 keymap has no per-key "
+                          f"velocity zones, so each band costs a layer and only "
+                          f"three are playable. Use --krz-drum-program to keep "
+                          f"all {_was2} — that program sounds ONLY on a drum "
+                          f"channel.")
                 voices = voices[:_MAX_KRZ_LAYERS]
         elif len(voices) > 3:
             n = min(len(voices), _MAX_KRZ_LAYERS)
+            _diag(_W, 'KRZ_DRUM_PROGRAM',
+                  f"{n} split layers kept as a K2000 drum program; it sounds "
+                  f"ONLY on a drum channel",
+                  subject=preset.name,
+                  content_lost=len(voices) > _MAX_KRZ_LAYERS,
+                  detail={'layers': n, 'requested': True,
+                          'layers_clamped': max(0, len(voices) - _MAX_KRZ_LAYERS),
+                          'silent_on_normal_channel': True,
+                          'via': '--krz-faithful', 'cli_flag': '--krz-faithful'},
+                  remedy='play it on the drum channel, or convert without '
+                         'faithful mode',
+                  echo='')
             print(f"  [layers] '{preset.name}': {n} split layers → DRUM PROGRAM "
                   f"(play on a drum channel; --krz-faithful was given)."
                   + ("" if len(voices) <= _MAX_KRZ_LAYERS

@@ -571,6 +571,13 @@ def main():
         metavar='DIR', help='Output directory (default: current directory)')
     ap.add_argument('--overwrite', action='store_true',
         help='Overwrite existing output files without prompting')
+    ap.add_argument('--krz-drum-program', action='store_true',
+        help='KRZ: allow a preset with more than three split layers to be '
+             'written as a K2000 DRUM PROGRAM, which sounds ONLY on a drum '
+             'channel. Off by default: the converter reduces such a preset to '
+             'three layers so it plays on any channel, and prints which '
+             'velocity bands it dropped. Turn this on when you are converting '
+             'an actual drum kit and know the target channel.')
     ap.add_argument('--krz-faithful', action='store_true',
         help='KRZ: keep every layer even when that exceeds the K2000\'s '
              '3-layer limit for a REGULAR program. A program with more than '
@@ -1389,7 +1396,8 @@ def main():
                 write_eiii(bank, out_path, variant=args.eiii_variant)
             else:
                 write_krz(bank, out_path,
-                          faithful_layers=args.krz_faithful)
+                          faithful_layers=args.krz_faithful,
+                          drum_program=args.krz_drum_program)
             out_paths.append(out_path)
         except Exception as e:
             print(f"  [ERROR] {bank.name}{ext}: {e}")

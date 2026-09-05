@@ -354,6 +354,15 @@ Output:
                       minus headroom for setups and effects) → ~117 presets per
                       bank.  Raise it if the target machine has a PRAM
                       expansion: --pram 760 is a common one and allows ~810.
+  --krz-drum-program  KRZ: allow a preset with more than three split layers to be
+                      written as a K2000 DRUM PROGRAM, which sounds ONLY on a
+                      drum channel.  OFF BY DEFAULT: the converter reduces such
+                      a preset to three layers so it plays on any channel, and
+                      prints which velocity bands it dropped.  Turn this on when
+                      you are converting an actual drum kit and know the target
+                      channel.  (A K2000 keymap holds one sample per key with no
+                      per-key velocity zones, so every velocity band costs a
+                      layer and only three are playable on a normal channel.)
   --krz-faithful      KRZ: keep every layer even when that exceeds the K2000's
                       3-layer limit for a *regular* program.  A program with
                       more than three SPLIT layers is a **drum program** and
