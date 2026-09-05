@@ -217,12 +217,55 @@ def _compute_sample_period(sample_rate: int) -> int:
 
 
 def _compute_max_pitch(sample_rate: int, root_note: int) -> int:
-    # The MIDI pitch (×100 cents) at which the sample, transposed upward, reaches
-    # the K2000's 48 kHz internal playback ceiling.  Reverse-engineered from real
-    # third-party soundsets (soundset 002): maxPitch = 100*root + 1200*log2(48000/sr)
+    # THE STORED maxPitch FIELD.  Reverse-engineered from real third-party
+    # soundsets (soundset 002): maxPitch = 100*root + 1200*log2(48000/sr)
     # (sr=30 kHz → +814, sr=15 kHz → +2014, both confirmed).
+    #
+    # THIS IS AN AUTHORING CONVENTION, NOT THE MACHINE'S PLAYBACK LIMIT, and
+    # conflating the two cost us an octave of range (§KRZUPPITCH).  The K2000
+    # plays a FULL OCTAVE past this value -- hardware-confirmed 2026-09-05 on
+    # two samples an octave apart in stored rate, by raising a layer's HiKey
+    # and reading the partial ladder.  A sample whose stored maxPitch says
+    # key 83 tracks cleanly to key 95.
+    #
+    # So this function still writes the field the way every real soundset
+    # writes it, and _compute_playback_ceiling() below -- NOT this -- decides
+    # how far a zone may extend.
     return int(round(
         100 * root_note + 1200.0 * math.log(48000.0 / sample_rate, 2)
+    ))
+
+
+def _compute_playback_ceiling(sample_rate: int, root_note: int) -> int:
+    # The MIDI pitch (×100 cents) above which the K2000 stops tracking and
+    # freezes at one rate.  HARDWARE-MEASURED 2026-09-05 (§KRZUPPITCH):
+    #
+    #   smp root 71, stored 23999.808 Hz:  +24 plays (95 999 Hz), +25 caps
+    #   smp root 66, stored 42762.455 Hz:  +14 plays (95 998 Hz), +15 caps
+    #
+    # Both last-playing rates are ~95 999 Hz and both first-capped rates are
+    # ~101 707 Hz, so the ceiling lies strictly inside (95 999, 101 707) Hz.
+    # 96000 is in that interval and 48000 is nowhere near it; 96000 is also
+    # already the constant in _compute_base_pitch() below, which is what made
+    # the 48000 here look wrong before anyone measured it.
+    #
+    # PINNED 2026-09-05 by a THIRD sample at an off-grid rate.  The two above
+    # are 9.98 semitones apart -- the same semitone grid -- so their ladders
+    # bracket the ceiling identically and gave a one-semitone interval rather
+    # than four independent constraints.  A 44 099.488 Hz sample transposed
+    # +14 asks for 99 000 Hz, which lands INSIDE that interval.  It caps.
+    #
+    # And the capped notes MEASURE the ceiling instead of bracketing it: above
+    # the limit every key plays at the same frozen rate, so the plateau's pitch
+    # IS the ceiling.  Key 64 plays a known 93 443.6 Hz; the plateau sits
+    # +0.475 semitones above it -> 96 044 Hz, which is 0.8 cents from 96 000.
+    # All six observations across three samples fit that value.
+    #
+    # Above the ceiling a note does NOT go silent: it plays at full level,
+    # cleanly, at a frozen wrong pitch.  Any level-based check calls those keys
+    # a success -- only the partials show it.
+    return int(round(
+        100 * root_note + 1200.0 * math.log(96000.0 / sample_rate, 2)
     ))
 
 
@@ -569,8 +612,8 @@ def _build_keymap_entries(voice: VoiceLayer,
         orig_hi = hi_key
         over_ceiling = False
         if sample is not None:
-            ceiling = _compute_max_pitch(sample.sample_rate,
-                                         r_zone - zone.coarse_tune) // 100
+            ceiling = _compute_playback_ceiling(sample.sample_rate,
+                                                r_zone - zone.coarse_tune) // 100
             over_ceiling = ceiling < zone.lo_key
             hi_key = min(hi_key, ceiling)
 
@@ -2226,7 +2269,7 @@ def _coverage_remap_voices(voices, samples_by_name):
             if s is None:
                 return voices, False
             root = z.root_key if z.root_key else s.root_note
-            ceil = _compute_max_pitch(s.sample_rate, root) // 100
+            ceil = _compute_playback_ceiling(s.sample_rate, root) // 100
             if z.hi_key > ceil + 3:
                 overflow = True
             by_root.setdefault(root, []).append((ceil, z))
