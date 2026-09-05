@@ -262,6 +262,8 @@ _E4XT_FILTER_BYTES = {
 
 _NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 
+from models.diagnostics import (emit as _diag, WARNING as _W,
+                                INFO as _I)
 
 def _name16(s: str) -> bytes:
     """16-byte space-padded name, latin-1.
@@ -853,10 +855,20 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
             # zone pointing at a sample it did not write -- an internal
             # inconsistency worth surfacing rather than dropping in silence.
             if zone.sample_name:
-                print(f"  [WARN] zone keys {zone.lo_key}-{zone.hi_key} names "
-                      f"sample '{zone.sample_name}', which is not in the bank "
-                      f"-- dropped. This means a parser emitted a zone "
-                      f"pointing at a sample it did not write.")
+                _diag(_W, 'E4B_ZONE_SAMPLE_MISSING',
+                      f"zone keys {zone.lo_key}-{zone.hi_key} names sample "
+                      f"'{zone.sample_name}', which is not in the bank; the "
+                      f"zone was dropped",
+                      subject=zone.sample_name,
+                      content_lost=True,
+                      detail={'lo_key': zone.lo_key, 'hi_key': zone.hi_key,
+                              'sample': zone.sample_name},
+                      remedy='a parser emitted a zone pointing at a sample it '
+                             'did not write; the source may be incomplete',
+                      echo=f"  [WARN] zone keys {zone.lo_key}-{zone.hi_key} names "
+                           f"sample '{zone.sample_name}', which is not in the bank "
+                           f"-- dropped. This means a parser emitted a zone "
+                           f"pointing at a sample it did not write.")
             continue
         zones_raw += _zone_entry(zone, idx, write_absolute=_multi,
                                  level_offset_db=level_offset_db)
@@ -1410,9 +1422,18 @@ def _build_preset_body(preset: Preset, preset_idx: int,
     for v in preset.voices:
         split = _split_by_velocity(v)
         if len(split) > 1:
-            print(f"  [INFO] preset '{preset.name}': a voice carries "
-                  f"{len(split)} velocity windows — split into {len(split)} "
-                  f"voices, since E4B switches velocity per voice")
+            _diag(_I, 'E4B_VELOCITY_SPLIT',
+                  f"a voice carrying {len(split)} velocity windows was split "
+                  f"into {len(split)} voices; E4B switches velocity per voice",
+                  subject=preset.name,
+                  content_lost=False,
+                  # voices_added, not just a count of windows: a split spends
+                  # the target's voice budget, which the consumer budgets.
+                  detail={'windows': len(split),
+                          'voices_added': len(split) - 1},
+                  echo=f"  [INFO] preset '{preset.name}': a voice carries "
+                       f"{len(split)} velocity windows — split into {len(split)} "
+                       f"voices, since E4B switches velocity per voice")
         voices.extend(split)
     num_voices = len(voices)
     hdr = bytearray(PRES_HDR)

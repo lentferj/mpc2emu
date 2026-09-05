@@ -120,6 +120,8 @@ class _RiffReader:
     def str(self, n: int) -> str:
         return self.read(n).split(b'\x00')[0].decode('ascii', errors='replace')
 
+from models.diagnostics import (emit as _diag, WARNING as _W,
+                                INFO as _I)
 
 def _find_chunks(data: bytes, parent_offset: int,
                  parent_size: int) -> Dict[str, Tuple[int, int]]:
@@ -344,6 +346,21 @@ def parse_sf2(sf2_path: str, max_presets: int = 64) -> Bank:
 
     # Iterate presets (last phdr is sentinel "EOP")
     n_presets = min(max_presets, phdr_cnt - 1)
+    # TRUNCATION IS SILENT WITHOUT THIS.  The default max_presets is 64 and
+    # eleven SoundFonts in the local library hold more; the largest holds 444.
+    # VinSamLib only avoids it by passing the listed count at every call site --
+    # anyone calling this parser with the default is truncating and cannot tell.
+    if phdr_cnt - 1 > n_presets:
+        _diag(_W, 'SF2_PRESETS_TRUNCATED',
+              f"SoundFont holds {phdr_cnt - 1} presets; only the first "
+              f"{n_presets} were imported",
+              content_lost=True,
+              detail={'listed': phdr_cnt - 1, 'imported': n_presets,
+                      'limit': max_presets},
+              remedy='raise the preset limit to the number the file lists',
+              echo=f"  [WARN] SoundFont holds {phdr_cnt - 1} preset(s); "
+                   f"importing the first {n_presets}")
+    _dropped_ordinals: list = []
     for pi in range(n_presets):
         ph   = phdrs[pi]
         name = _safe_name(ph['name']) or f"Preset{pi}"
@@ -546,6 +563,30 @@ def parse_sf2(sf2_path: str, max_presets: int = 64) -> Bank:
             preset.voices.append(voice)
             bank.presets.append(preset)
             print(f"  Preset '{name}': {len(voice.zones)} zone(s)")
+        else:
+            # A DROPPED ENTRY RENUMBERS EVERY LATER ONE, which is worse than a
+            # shortfall at the end: a caller that asks for "the 4th preset"
+            # silently gets the 5th.  VinSamLib measured 27 such drops across a
+            # 25-file SF2 sample and had to write an alignment routine
+            # (resolve_ordinal) purely to survive it, because nothing reported
+            # the drop.  Publishing the indices replaces that with a lookup.
+            _dropped_ordinals.append({'index': pi, 'name': name})
+
+    if _dropped_ordinals:
+        _diag(_W, 'SF2_ENTRIES_DROPPED',
+              f"{len(_dropped_ordinals)} preset entr(y/ies) yielded no zones "
+              f"and were dropped; every later preset's ordinal has shifted",
+              content_lost=True,
+              detail={'dropped': len(_dropped_ordinals),
+                      'dropped_indices': [d['index'] for d in _dropped_ordinals],
+                      'dropped_names': [d['name'] for d in _dropped_ordinals],
+                      'listed': n_presets,
+                      'imported': len(bank.presets),
+                      'ordinals_shifted': True},
+              remedy='address presets by name, or map through dropped_indices; '
+                     'position in this bank is not position in the file',
+              echo=f"  [WARN] {len(_dropped_ordinals)} preset entr(y/ies) had "
+                   f"no zones and were dropped — later preset numbers shift")
 
     print(f"  Loaded {len(bank.presets)} presets, {len(bank.samples)} samples")
     return bank

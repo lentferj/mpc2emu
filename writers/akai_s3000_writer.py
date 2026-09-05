@@ -96,6 +96,8 @@ _ACTIVE_LOOP_COUNT_FROM_STATE = True
 #: byte 0x01 value for each playable rate.
 _AKAI_RATE_FLAG = {22050: 0, 44100: 1}
 
+from models.diagnostics import (emit as _diag, WARNING as _W,
+                                INFO as _I)
 
 def akai_target_rate(rate: int) -> int:
     """The supported rate a sample at `rate` should be resampled to.
@@ -2521,6 +2523,7 @@ def build_program(preset, name: str, prog_num: int = 0,
 
     keygroups = []
     dropped = 0
+    spill_keygroups = 0        # extra keygroups the spill created (object budget)
     for key, owner, zs in _groups:
         # OVERLAPPING SPANS LAYER.
         #
@@ -2714,6 +2717,7 @@ def build_program(preset, name: str, prog_num: int = 0,
             if len(chunk) + len(_grp) > MAX_ZONES_PER_KEYGROUP and chunk:
                 if not first:
                     dropped += len(chunk)
+                    spill_keygroups += 1
                 keygroups.append((key, owner, chunk))
                 chunk, first = [], False
             chunk.extend(_grp)
@@ -2721,15 +2725,47 @@ def build_program(preset, name: str, prog_num: int = 0,
             if not first:
                 dropped += len(chunk)      # counted as "carried into an extra
                                            # keygroup", reported as such below
+                spill_keygroups += 1       # and the EXTRA KEYGROUPS are counted
+                                           # separately: VinSamLib budgets an
+                                           # S3000XL volume against a pool of
+                                           # 1006 resident objects, in which a
+                                           # keygroup costs the same as a
+                                           # program. A faithful, nothing-lost
+                                           # restructure can still be what stops
+                                           # a volume loading, so they need the
+                                           # NUMBER, not the category.
             keygroups.append((key, owner, chunk))
 
     if dropped:
-        print(f"    [INFO] {dropped} velocity layer(s) beyond "
-              f"{MAX_ZONES_PER_KEYGROUP} per keygroup carried into additional "
-              f"keygroups over the same key range — all layers kept")
+        # NOT a loss -- the layers are kept, in extra keygroups.  Published as
+        # INFO so a consumer can distinguish this from the real loss below,
+        # which the printed text alone makes easy to confuse.
+        _diag(_I, 'AKAI_LAYERS_SPILLED',
+              f"{dropped} velocity layer(s) beyond {MAX_ZONES_PER_KEYGROUP} "
+              f"per keygroup carried into additional keygroups over the same "
+              f"key range; all layers kept",
+              content_lost=False,
+              detail={'spilled': dropped,
+                      'keygroups_added': spill_keygroups,
+                      'max_per_keygroup': MAX_ZONES_PER_KEYGROUP},
+              echo=f"    [INFO] {dropped} velocity layer(s) beyond "
+                   f"{MAX_ZONES_PER_KEYGROUP} per keygroup carried into "
+                   f"additional keygroups over the same key range — all "
+                   f"layers kept")
     if len(keygroups) > MAX_KEYGROUPS:
-        print(f"    [WARN] {len(keygroups)} key ranges — AKAI allows "
-              f"{MAX_KEYGROUPS}; the highest {len(keygroups)-MAX_KEYGROUPS} dropped")
+        _diag(_W, 'AKAI_KEYGROUPS_DROPPED',
+              f"{len(keygroups)} key ranges exceed the AKAI limit of "
+              f"{MAX_KEYGROUPS}; the highest "
+              f"{len(keygroups) - MAX_KEYGROUPS} were dropped",
+              content_lost=True,
+              detail={'keygroups': len(keygroups),
+                      'limit': MAX_KEYGROUPS,
+                      'dropped': len(keygroups) - MAX_KEYGROUPS},
+              remedy='reduce the number of key zones in the source preset, or '
+                     'split it across more than one program',
+              echo=f"    [WARN] {len(keygroups)} key ranges — AKAI allows "
+                   f"{MAX_KEYGROUPS}; the highest "
+                   f"{len(keygroups)-MAX_KEYGROUPS} dropped")
         keygroups = keygroups[:MAX_KEYGROUPS]
     if not keygroups:
         raise ValueError(f"preset '{name}' has no zones to write")
@@ -3136,9 +3172,17 @@ def build_akai_volume(bank: Bank, bank_name: Optional[str] = None,
         files.append((fn, build_sample(sd, name=nm, root_override=_chosen_root(sd))))
         if not quiet:
             print(f"  Sample: {fn} ({sd.sample_rate}Hz, {len(sd.data)//2} frames)")
-    if renamed and not quiet:
-        print(f"    [INFO] {len(renamed)} sample name(s) shortened to the AKAI "
-              f"12-character limit")
+    if renamed:
+        _diag(_I, 'AKAI_NAMES_SHORTENED',
+              f"{len(renamed)} sample name(s) shortened to the AKAI "
+              f"{AKAI_NAME_LEN}-character limit",
+              content_lost=False,
+              detail={'count': len(renamed),
+                      'limit': AKAI_NAME_LEN,
+                      'renamed': dict(list(renamed.items())[:64])},
+              echo=('' if quiet else
+                    f"    [INFO] {len(renamed)} sample name(s) shortened to "
+                    f"the AKAI 12-character limit"))
 
     name_map = {sd.name: (stereo_pairs[sd.name][0] if sd.name in stereo_pairs
                           else (renamed.get(sd.name)

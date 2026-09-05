@@ -281,6 +281,8 @@ _PANORAMA = [
 _E4B_CUTOFF_MIN_HZ = 57.0
 _E4B_CUTOFF_MAX_HZ = 20000.0
 
+from models.diagnostics import (emit as _diag, WARNING as _W,
+                                INFO as _I)
 
 def _e4b_cutoff_position_to_hz(position: float) -> float:
     position = max(0.0, min(1.0, position))
@@ -810,8 +812,18 @@ def write_eiii(bank: Bank, output_path: str, variant: str = 'e3x') -> None:
     sample_info_by_name: Dict[str, Tuple[int, bool]] = {}
     for i, s in enumerate(bank.samples):
         if len(prepared) >= bank_format.max_samples:
-            print(f"  [WARN] bank exceeds {bank_format.max_samples}-sample "
-                  f"{bank_format.device_name} limit, '{s.name}' and later dropped")
+            _diag(_W, 'EIII_SAMPLE_LIMIT',
+                  f"bank exceeds the {bank_format.max_samples}-sample "
+                  f"{bank_format.device_name} limit; '{s.name}' and every "
+                  f"later sample were dropped",
+                  subject=s.name,
+                  content_lost=True,
+                  detail={'limit': bank_format.max_samples,
+                          'device': bank_format.device_name,
+                          'first_dropped': s.name},
+                  remedy='split the source across more than one bank',
+                  echo=f"  [WARN] bank exceeds {bank_format.max_samples}-sample "
+                       f"{bank_format.device_name} limit, '{s.name}' and later dropped")
             break
         pcm, has_loop, loop_start, loop_end, loop_in_release = _prepare_sample_pcm(s)
         disk_name = _unique_disk_name(s.name, used_names)
@@ -837,17 +849,36 @@ def write_eiii(bank: Bank, output_path: str, variant: str = 'e3x') -> None:
         for voice in preset.voices:
             split = _split_key_overlaps(voice)
             if len(split) > 1:
-                print(f"  [WARN] preset '{preset.name}': {len(voice.zones)} zones "
-                      f"overlap on the same keys and an EIII preset maps each key "
-                      f"to one zone — split across {len(split)} linked layers "
-                      f"(they play together)")
+                _diag(_I, 'EIII_KEY_OVERLAP_SPLIT',
+                      f"{len(voice.zones)} zones overlap on the same keys; an "
+                      f"EIII preset maps each key to one zone, so they were "
+                      f"split across {len(split)} linked layers that play "
+                      f"together",
+                      subject=preset.name,
+                      content_lost=False,
+                      detail={'zones': len(voice.zones), 'layers': len(split),
+                              'layers_added': len(split) - 1},
+                      echo=f"  [WARN] preset '{preset.name}': {len(voice.zones)} zones "
+                           f"overlap on the same keys and an EIII preset maps each key "
+                           f"to one zone — split across {len(split)} linked layers "
+                           f"(they play together)")
             voices.extend(split)
         multi = len(voices) > 1
         for i, voice in enumerate(voices):
             if len(preset_bodies) >= bank_format.max_presets:
-                print(f"  [WARN] bank exceeds {bank_format.max_presets}-preset "
-                      f"{bank_format.device_name} limit, '{preset.name}' voice "
-                      f"{i + 1} and later dropped")
+                _diag(_W, 'EIII_PRESET_LIMIT',
+                      f"bank exceeds the {bank_format.max_presets}-preset "
+                      f"{bank_format.device_name} limit; '{preset.name}' voice "
+                      f"{i + 1} and later were dropped",
+                      subject=preset.name,
+                      content_lost=True,
+                      detail={'limit': bank_format.max_presets,
+                              'device': bank_format.device_name,
+                              'first_dropped_voice': i + 1},
+                      remedy='split the source across more than one bank',
+                      echo=f"  [WARN] bank exceeds {bank_format.max_presets}-preset "
+                           f"{bank_format.device_name} limit, '{preset.name}' voice "
+                           f"{i + 1} and later dropped")
                 hit_limit = True
                 break
             name = _preset_name(preset.name, (i + 1) if multi else 0)

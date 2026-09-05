@@ -83,7 +83,7 @@ NUM_VELO_LEVELS = 8    # K2000 velocity buckets (ppp..fff), 16 MIDI values each
 # nearest standard rate within +/-2 Hz (matches ConvertWithMoss's approach).
 _STANDARD_SAMPLE_RATES = (8000, 11025, 16000, 22050, 24000, 32000, 44100,
                           48000, 96000)
-
+from models.diagnostics import emit as _diag, INFO as _I
 
 def _snap_sample_rate(hz: float) -> int:
     for std in _STANDARD_SAMPLE_RATES:
@@ -1438,10 +1438,28 @@ def parse_krz(path: str) -> Bank:
     # Every one of them converted to an empty bank whose only explanation was a
     # row of zeros -- correct behaviour, reported identically to a failure.
     if not samples and program_objs:
-        print(f"  [INFO] This bank holds {len(program_objs)} program(s) but no "
-              f"sample or keymap objects: it references the K2000's ROM "
-              f"soundset, which is not in the file. Nothing to convert — this "
-              f"is the bank's nature, not a read error.")
+        # PUBLISHED AS A DIAGNOSTIC CODE, NOT ONLY A PRINT (2026-09-05).
+        # VinSamLib's conversion wrapper discards a successful run's stdout, so
+        # this line never reached their GUI. They re-derived the same fact by
+        # counting sample objects in the assembled bytes and raising their own
+        # error -- a parallel implementation of something we had already
+        # diagnosed and said out loud. 433 KRZ banks in the corpus are ROM-only,
+        # so it is the common case, not a corner.
+        _diag(_I, 'KRZ_ROM_ONLY',
+              f"bank holds {len(program_objs)} program(s) and no sample or "
+              f"keymap objects: it references the K2000's ROM soundset, which "
+              f"is not in the file",
+              # Nothing was lost BY US: the bank never held audio. The sounds
+              # live in the machine's ROM.
+              content_lost=False,
+              detail={'programs': len(program_objs), 'samples': 0,
+                      'rom_only': True},
+              remedy='nothing to convert from this file; the sounds live in '
+                     'the machine, not in the bank',
+              echo=f"  [INFO] This bank holds {len(program_objs)} program(s) but no "
+                   f"sample or keymap objects: it references the K2000's ROM "
+                   f"soundset, which is not in the file. Nothing to convert — this "
+                   f"is the bank's nature, not a read error.")
     print(f"  {len(presets)} preset(s), {len(samples)} sample(s), "
           f"{n_zones} zone(s) total")
     return bank

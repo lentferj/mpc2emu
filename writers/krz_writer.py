@@ -2593,9 +2593,15 @@ def write_krz(bank: Bank, output_path: str,
         # keymaps so the whole range sounds at the right octave (see func docstring).
         base_voices, _cov = _coverage_remap_voices(preset.voices, samples_by_name)
         if _cov:
-            print(f"  [coverage] '{preset.name}': octave-slice stack → "
-                  f"{len(base_voices)} coverage multisample layer(s) "
-                  f"(K2000 up-pitch ceiling)")
+            _diag(_I, 'KRZ_COVERAGE_REMAP',
+                  f"octave-slice stack remapped to {len(base_voices)} coverage "
+                  f"multisample layer(s) for the K2000 up-pitch ceiling",
+                  subject=preset.name,
+                  content_lost=False,       # a restructure: every slice kept
+                  detail={'coverage_layers': len(base_voices)},
+                  echo=f"  [coverage] '{preset.name}': octave-slice stack → "
+                       f"{len(base_voices)} coverage multisample layer(s) "
+                       f"(K2000 up-pitch ceiling)")
         voices = [sv for v in base_voices for sv in _split_voice_by_velocity(v)]
         n_split = len(voices) - len(base_voices)
         if n_split:
@@ -2880,6 +2886,21 @@ def write_krz(bank: Bank, output_path: str,
             print(f"       --krz-faithful keeps every layer; those presets then "
                   f"become DRUM PROGRAMS and sound only on a drum channel.")
     if lost_zones:
+        # PUBLISHED FOR CONSUMERS (VinSamLib priority 2: content silently
+        # dropped).  echo='' because the human-readable form below is several
+        # lines with a per-reason explanation; the structured record carries
+        # the same facts in `detail` so a GUI can render them its own way.
+        _diag(_W, 'KRZ_ZONES_DROPPED',
+              f"{len(lost_zones)} zone(s) could not be placed and were dropped",
+              content_lost=True,        # the name IS the loss
+              detail={'count': len(lost_zones),
+                      'reasons': sorted({w for _, _, _, _, w in lost_zones}),
+                      'zones': [{'preset': pn, 'sample': sn,
+                                 'lo_key': lo, 'hi_key': hi, 'why': w}
+                                for pn, sn, lo, hi, w in lost_zones[:64]]},
+              remedy='those keys are filled from a neighbouring zone, so they '
+                     'sound the wrong sample rather than falling silent',
+              echo='')
         print(f"  [WARN] {len(lost_zones)} zone(s) could not be placed and were "
               f"dropped:")
         for pname, sname, lo, hi, why in lost_zones[:8]:
