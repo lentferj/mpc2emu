@@ -519,6 +519,9 @@ def write_akai_output(output_banks: List[Bank], out_dir: Path, bank_name: str,
         print(f"{'='*60}\n")
 
 
+from writers.krz_writer import KRZ_PLAYBACK_CEILING_HZ  # noqa: E402
+
+
 def krz_needed_up_semitones(bank: Bank) -> dict:
     """Sample name -> highest EFFECTIVE up-pitch semitones any zone in
     `bank` needs from it, for the KRZ headroom-aware downsample step below.
@@ -679,7 +682,7 @@ def main():
     ap.add_argument('--max-sample-rate', type=int, default=-1, metavar='HZ',
         help='Clean-downsample any sample above HZ down to HZ (linear, no '
              'vintage coloring). Buys K2000 up-pitch headroom for wide key '
-             'zones (log2(48000/HZ) octaves) and shrinks the bank to fit a '
+             'zones (log2(96000/HZ) octaves) and shrinks the bank to fit a '
              'floppy. e.g. 12000 keeps full multisample tracking on a 1.44 MB '
              'floppy. **Defaults to 24000 Hz for --format krz** (the K2000 only '
              'gives +1.46 st headroom at 44.1 kHz, so wide zones clamp); pass 0 '
@@ -1191,8 +1194,12 @@ def main():
                           workers=args.jobs)
 
     # ── Clean downsample for K2000 up-pitch headroom (+ floppy fit) ────────────
-    # The K2000 can only pitch a sample UP to its 48 kHz playback ceiling, so a
-    # 44.1 kHz sample tracks just +1.46 st before clamping.  Two modes:
+    # The K2000 pitches a sample UP only to its playback-rate ceiling, so a
+    # sample whose zones ask for more than that must be downsampled to buy the
+    # headroom.  THE CEILING IS 96 kHz, NOT 48 kHz (§KRZUPPITCH, measured on
+    # three samples): a 44.1 kHz sample tracks +13.5 st, not +1.46, so this
+    # block used to downsample samples that already tracked perfectly well.
+    # Two modes:
     #   --max-sample-rate HZ  (explicit, >0): blanket — downsample EVERY sample
     #       above HZ to HZ.  Uniform/predictable size; used for floppy fit.
     #   default (krz, unset = -1): HEADROOM-AWARE — only downsample a sample whose
@@ -1203,7 +1210,7 @@ def main():
     max_sr = args.max_sample_rate
     if max_sr > 0:
         print(f"\n[{step_n}] Downsampling to max {max_sr} Hz "
-              f"(+{1200*math.log(48000.0/max_sr, 2)/100:.1f} st "
+              f"(+{1200*math.log(KRZ_PLAYBACK_CEILING_HZ/max_sr, 2)/100:.1f} st "
               f"up-pitch headroom)...")
         step_n += 1
         for bank in source_banks:
@@ -1220,11 +1227,13 @@ def main():
                 if s.name not in need_up or s.sample_rate <= _KRZ_RATE_FLOOR:
                     continue
                 needed_up = max(0, need_up[s.name])         # semitones up required
-                cur_head = (1200 * math.log(48000.0 / s.sample_rate, 2) / 100
-                            if s.sample_rate < 48000 else 0)
+                cur_head = (1200 * math.log(KRZ_PLAYBACK_CEILING_HZ
+                                            / s.sample_rate, 2) / 100
+                            if s.sample_rate < KRZ_PLAYBACK_CEILING_HZ else 0)
                 if needed_up <= cur_head + 0.5:             # already tracks (+tol)
                     continue
-                target = int(48000.0 / (2 ** (needed_up / 12.0)))   # just-enough rate
+                target = int(KRZ_PLAYBACK_CEILING_HZ
+                             / (2 ** (needed_up / 12.0)))       # just-enough rate
                 target = max(_KRZ_RATE_FLOOR, min(s.sample_rate, target))
                 if target < s.sample_rate:
                     bank.samples[i] = resample_to_rate(s, target)

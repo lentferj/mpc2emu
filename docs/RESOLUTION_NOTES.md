@@ -24833,6 +24833,29 @@ survived so long.
 clipped.** A dropped zone is not silence — the hole-filling extends a neighbour
 over those keys, so they sounded the WRONG sample.
 
+### The 48000 was in THREE places, and the other two cost audio quality
+
+Splitting `_compute_max_pitch()` fixed the writer's zone clamp. It did **not**
+fix the two other copies of the same constant, found 2026-09-05 while rebuilding
+the matrix from scratch:
+
+    convert.py:1223      "headroom-aware downsample" for KRZ output
+    processors/resampler.py:688   the message it prints
+
+`convert.py` downsamples a sample whose zones ask it to play higher than its
+rate allows. Computed against 48000, a 44.1 kHz sample appears to have only
+**+1.46 st** of headroom; against the measured 96000 it has **+13.5 st**. So the
+default KRZ path was **downsampling samples that already tracked perfectly
+well** — 45 of 152 in one matrix build, to 42763 Hz and 24000 Hz.
+
+**This is why the hardware-measured samples had those rates at all.** The
+23999.808 Hz and 42762.455 Hz samples used to pin the ceiling were 44.1 kHz in
+the source; *we* downsampled them, to buy headroom the machine never needed.
+
+All three now use one exported constant, `KRZ_PLAYBACK_CEILING_HZ` in
+`writers/krz_writer.py`. **A measured constant that lives in more than one file
+is a constant that will be fixed in one of them.**
+
 ### The failure mode, for whoever measures this next
 
 **Above the ceiling a note does not go silent. It plays at full level, cleanly,

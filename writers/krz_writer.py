@@ -238,6 +238,14 @@ def _compute_max_pitch(sample_rate: int, root_note: int) -> int:
     ))
 
 
+#: The K2000's real playback-rate ceiling, measured 2026-09-05 (§KRZUPPITCH).
+#: Exported because convert.py and processors/resampler.py buy "up-pitch
+#: headroom" against the same limit and had their own copies of the OLD 48000 --
+#: which meant we downsampled 45 of 152 samples in a matrix build to buy
+#: headroom the machine did not need, losing fidelity for nothing.
+KRZ_PLAYBACK_CEILING_HZ = 96000.0
+
+
 def _compute_playback_ceiling(sample_rate: int, root_note: int) -> int:
     # The MIDI pitch (×100 cents) above which the K2000 stops tracking and
     # freezes at one rate.  HARDWARE-MEASURED 2026-09-05 (§KRZUPPITCH):
@@ -267,7 +275,8 @@ def _compute_playback_ceiling(sample_rate: int, root_note: int) -> int:
     # cleanly, at a frozen wrong pitch.  Any level-based check calls those keys
     # a success -- only the partials show it.
     return int(round(
-        100 * root_note + 1200.0 * math.log(96000.0 / sample_rate, 2)
+        100 * root_note
+        + 1200.0 * math.log(KRZ_PLAYBACK_CEILING_HZ / sample_rate, 2)
     ))
 
 

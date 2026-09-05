@@ -658,7 +658,7 @@ def resample_to_rate(sample: SampleData, dst_rate: int,
     loop-point rescaling.  16-bit and the channel count are preserved.
 
     The motivating use is KRZ floppy banks: the K2000 can only pitch a sample
-    UP by log2(48000/sr) octaves before clamping (see docs/RESOLUTION_NOTES.md
+    UP by log2(96000/sr) octaves before clamping (see docs/RESOLUTION_NOTES.md
     "KRZ up-pitch clamp"), so storing multisamples at a LOWER rate buys the
     up-pitch headroom that wide key zones need — and shrinks the bank to fit a
     1.44 MB floppy at the same time.  Pitching down is unlimited, so the lower
@@ -685,7 +685,7 @@ def resample_to_rate(sample: SampleData, dst_rate: int,
     signal = _pcm_to_float(sample.data)
     if verbose:
         print(f"    Downsample '{sample.name}' {src_rate} → {dst_rate} Hz "
-              f"(up-pitch headroom +{1200*math.log(48000.0/dst_rate, 2)/100:.1f} st)")
+              f"(up-pitch headroom +{1200*math.log(96000.0/dst_rate, 2)/100:.1f} st)")
 
     # Band-limited conversion: the windowed-sinc kernel is both the
     # anti-alias filter and the interpolator (see _sinc_resample).
