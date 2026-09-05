@@ -1877,6 +1877,19 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
                 if not sample_name:
                     continue
 
+                # The SOURCE layer number, kept because layer 1 and layer 2 are
+                # different ROLES in an MPC keygroup (typically the pitched
+                # multisample member and a texture/noise layer), and the lane
+                # allocator below otherwise has no way to tell them apart.
+                # See §XPMLANEMIX. Note this loop SKIPS empty-SampleName
+                # layers, so the ordinal position within the loop is NOT the
+                # layer number -- an instrument that carries only a layer 2 is
+                # exactly the case that breaks first-fit allocation.
+                try:
+                    _xpm_layer_no = int(layer.get('number') or 0)
+                except (TypeError, ValueError):
+                    _xpm_layer_no = 0
+
                 vel_lo = int(_get_text(layer, 'VelStart', '0'))
                 vel_hi = int(_get_text(layer, 'VelEnd',   '127'))
                 # RootNote=0 is the MPC "root unset" sentinel (NOT non-transpose).
@@ -2055,7 +2068,8 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
                     fine_tune   = fine_cents,
                     coarse_tune = coarse_tune,
                 )
-                all_units.append(((iparam_tuple, non_transpose), zone))
+                all_units.append(
+                    ((iparam_tuple, non_transpose), zone, _xpm_layer_no))
 
         # Lane-allocate units into voices: zones that overlap in key AND velocity
         # must go to *separate* voices (the E4XT plays one zone per note per voice,
@@ -2071,21 +2085,60 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
         # adding level, not character, and would blow the voice budget.  Keep one.
         _seen_units: set = set()
         deduped_units: list = []
-        for sig, zone in all_units:
+        for sig, zone, lay_no in all_units:
             key = (sig, zone.sample_name, zone.lo_key, zone.hi_key,
                    zone.lo_vel, zone.hi_vel, zone.root_key, zone.fine_tune)
             if key in _seen_units:
                 continue
             _seen_units.add(key)
-            deduped_units.append((sig, zone))
+            deduped_units.append((sig, zone, lay_no))
         if len(deduped_units) < len(all_units):
             print(f"    Deduplicated {len(all_units) - len(deduped_units)} identical stacked unit(s)")
 
-        voice_lanes: list = []   # list of [sig, VoiceLayer]
-        for sig, zone in deduped_units:
+        # LANE IDENTITY INCLUDES THE SOURCE LAYER NUMBER (§XPMLANEMIX).
+        #
+        # First fit on key-overlap alone has no notion that layer 1 and layer 2
+        # are different ROLES. When every instrument carries both, first fit
+        # happens to put all the layer 1s in one lane and all the layer 2s in
+        # the next, and the omission is invisible. ONE instrument that carries
+        # only a layer 2 breaks that coincidence and every later layer lands a
+        # lane off -- putting a noise texture inside a pitched multisample
+        # ladder, which reached hardware as a note 30 dB down (§KRZWRONGSAMPLE).
+        #
+        # Including the layer number makes the role explicit instead of
+        # emergent. Layer 0 (no number attribute) is left as a wildcard so
+        # files that do not number their layers behave exactly as before.
+        # TWO-PASS: PREFER a lane of the same source layer, then fall back to
+        # ANY compatible lane -- do NOT go straight to a new lane.
+        #
+        # A first version of this made the layer number part of lane identity
+        # outright. It fixed the bug and cost more than it saved, which the
+        # corpus showed and one file could not: a program whose 64 zones form a
+        # proper 16-root x 4-velocity map lived in ONE voice, because velocity
+        # bands do not overlap and first fit packed them together correctly.
+        # Hard-splitting by layer turned it into FOUR parallel voices --
+        # quadruple polyphony on the E4XT, and past the K2000's 3-layer limit,
+        # so it would have been thinned and lost content. Two of 1124 corpus
+        # files regressed that way (String-DX7 4->7, Lead-PRO5 2->8).
+        #
+        # The preference alone is enough: a zone joins its own layer's lane
+        # when one fits, so a sparse layer no longer shifts later layers into
+        # the wrong role, while zones that legitimately share a lane still do.
+        voice_lanes: list = []   # list of [(sig, lay_no), VoiceLayer]
+        for sig, zone, lay_no in deduped_units:
             placed = False
-            for lane_sig, v in voice_lanes:
-                if lane_sig == sig and not any(_overlaps(z, zone) for z in v.zones):
+            for want_same in (True, False):
+                if placed:
+                    break
+                for lane_key, v in voice_lanes:
+                    lane_sig, lane_lay = lane_key
+                    if lane_sig != sig:
+                        continue
+                    same = bool(lay_no) and bool(lane_lay) and lane_lay == lay_no
+                    if want_same and not same:
+                        continue
+                    if any(_overlaps(z, zone) for z in v.zones):
+                        continue
                     v.zones.append(zone)
                     placed = True
                     break
@@ -2095,7 +2148,7 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
                 for k, val in inst_params[iparam_tuple].items():
                     setattr(v, k, val)
                 v.zones.append(zone)
-                voice_lanes.append((sig, v))
+                voice_lanes.append(((sig, lay_no), v))
 
         # Cap to the E4XT per-preset voice limit, keeping the widest-coverage voices
         # (shared with the SFZ parser; limit pinned by the VOICECOUNT RE bank).
