@@ -251,6 +251,26 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§VELHW1 — first hardware hearing of the velocity work: two of four presets verify, two are floor-limited (2026-09-04)](#velhw1-first-hardware-hearing-of-the-velocity-work-two-of-four-presets-verify-two-are-floor-limited-2026-09-04)
 - [§MATRIXV4 — the confidence score, rebuilt on measures that survived review (2026-09-04)](#matrixv4-the-confidence-score-rebuilt-on-measures-that-survived-review-2026-09-04)
 - [§MPCSRC — the source A/B: two presets faithful, one different by design, and three wrong diagnoses on the way (2026-09-04)](#mpcsrc-the-source-ab-two-presets-faithful-one-different-by-design-and-three-wrong-diagnoses-on-the-way-2026-09-04)
+- [§MATRIXKEYS — five keys, and why the aggregation rule had to change with them](#matrixkeys-five-keys-and-why-the-aggregation-rule-had-to-change-with-them)
+- [§MATRIXALIGN — the conversion bank was built from the wrong source list](#matrixalign-the-conversion-bank-was-built-from-the-wrong-source-list)
+- [§E4XTCORDSAT — the velocity→filter saturation guard is unreachable](#e4xtcordsat-the-velocityfilter-saturation-guard-is-unreachable)
+- [§NOISEFLOOR — the pre-roll is not a noise floor](#noisefloor-the-pre-roll-is-not-a-noise-floor)
+- [§ANCHOR — the offset is a property of the rig, not of the capture](#anchor-the-offset-is-a-property-of-the-rig-not-of-the-capture)
+- [§WINDOWCONF — confidence is window-dependent, and the spread is itself a measure](#windowconf-confidence-is-window-dependent-and-the-spread-is-itself-a-measure)
+- [§DRUMKEYFOLLOW — a confident 0.000 that the files refute](#drumkeyfollow-a-confident-0000-that-the-files-refute)
+- [§PEAKFORPERC — windowed RMS is not a level statistic on percussive material](#peakforperc-windowed-rms-is-not-a-level-statistic-on-percussive-material)
+- [§KRZBANK100 — a K2000 bank holds 100 objects per type, not 800](#krzbank100-a-k2000-bank-holds-100-objects-per-type-not-800)
+- [§AKAIFILTSWEEP — the four AKAI zeros are NOT faithful (conclusion WITHDRAWN)](#akaifiltsweep-the-four-akai-zeros-are-not-faithful-conclusion-withdrawn)
+- [§AKAICORNER — the filter corner must clear the played fundamentals](#akaicorner-the-filter-corner-must-clear-the-played-fundamentals)
+- [§GAINVSFILTER — quiet is not the same as over-filtered](#gainvsfilter-quiet-is-not-the-same-as-over-filtered)
+- [§KRZDRUMCHAN — a drum program is silent unless the channel matches DrumChan](#krzdrumchan-a-drum-program-is-silent-unless-the-channel-matches-drumchan)
+- [§ATTACKSHAPE — "attack time" means different things on the MPC and the E4XT](#attackshape-attack-time-means-different-things-on-the-mpc-and-the-e4xt)
+- [§RAMPSUBJECT — the ch5 ramp numbers are contaminated; measure on a sine](#rampsubject-the-ch5-ramp-numbers-are-contaminated-measure-on-a-sine)
+- [§KRZUPPITCH — the up-pitch ceiling is an octave higher than we clamp to](#krzuppitch-the-up-pitch-ceiling-is-an-octave-higher-than-we-clamp-to)
+- [§KRZWRONGSAMPLE — a keymap run points at the wrong sample object](#krzwrongsample-a-keymap-run-points-at-the-wrong-sample-object)
+- [§ANCHORCHECK — a flat signal cannot catch a late anchor](#anchorcheck-a-flat-signal-cannot-catch-a-late-anchor)
+- [§XPMLANEMIX — a sparse layer shifts every later layer into the wrong voice](#xpmlanemix-a-sparse-layer-shifts-every-later-layer-into-the-wrong-voice)
+- [§DIAGIFACE — the structured diagnostics interface, and the hole a consumer found](#diagiface-the-structured-diagnostics-interface-and-the-hole-a-consumer-found)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -23396,3 +23416,1784 @@ symptom accurately measured is not a diagnosis, and a chain of them is not a
 better one. The 16-channel sweep that would have shown the real shape took
 thirty seconds and I ran it only after two hours of assuming the channels Jan
 had named were the channels responding.
+
+## §MATRIXKEYS — five keys, and why the aggregation rule had to change with them
+
+**Status:** implemented 2026-09-04, tolerances provisional.
+
+Until tonight every matrix record was **one key (60) at nine velocities**. Jan
+asked how many keys we were capturing and proposed four to five octaves; he was
+right, and the reason is sharper than "more coverage is better": a single key
+measures the **velocity law** and says nothing whatever about the **keymap**.
+Zone mapping, root-key handling, key-follow and the up-pitch ceiling all live
+in the dimension we were not sampling.
+
+The grid is now **keys 36/48/60/72/84 x velocities 1/16/32/48/64/80/96/112/127**,
+45 notes per preset, captured **one file per key** — a 45-note capture is 90 s
+for the comb anchor to fit at once, and a bad capture then costs one key rather
+than a whole preset. The drum probe instead runs **keys 36-51 at 1/32/64/96/127**
+(the kit has no velocity layers, so that grid maps it completely).
+
+**The aggregation rule is the actual content of this note.**
+
+> A mapping fault is LOCAL. A character fault is GLOBAL.
+
+Fold local measures with **worst-case** and global ones with a **median**. Fold
+everything with a median and five keys are close to worthless for the local
+kind: one bad key in five does not move a median at all. Verified rather than
+asserted — a synthetic hole-fill on key 84 alone:
+
+    worst-case aggregation   confidence 0.0    (critical)
+    median-only aggregation  confidence 0.733  (identical to a PERFECT row)
+
+This is the drum-probe mistake repeating at a larger scale. That probe was
+first scored on its median, and one substituted drum at 8.1 dB came back 0.83
+"looks faithful" — a substituted drum being the whole reason the probe exists.
+Adding keys to the pitched rows re-opens that hole unless the folding rule
+changes at the same time, so it changed in the same commit.
+
+**`e4b->krz` is the case this exists for.** All 10 zones sit above
+`_KRZ_RATE_FLOOR = 24000`, and above a zone's ceiling the writer's hole-fill
+plays a **neighbouring sample**, not silence. That is inaudible as a fault at
+key 60, and should be loud at 72 and 84.
+
+**New measures.** `worst_key_cents` / `worst_key_octave` / `worst_key_shape_db`
+(local); `velocity_key_spread_db` — whether the velocity law is *key-dependent*,
+which is the per-voice fault the mixed-swing source is in the matrix to expose;
+`keyfollow_rms_db` — the level-vs-key profile with overall gain removed, so a
+constant offset is not counted twice against the velocity measures.
+
+**One tolerance deliberately NOT applied.** Median spectral `shape` stays a
+diagnostic on pitched rows and is kept out of confidence. `TOL_SHAPE_DB = 3 dB`
+was set for the drum probe, where a substituted drum is a huge distance; on
+pitched material a legitimate E4XT-filter-vs-K2000-filter difference is a
+couple of dB and is not a conversion fault. At a plausible 0.8 dB it dragged a
+perfect row to 0.73 "worth a listen". Scoring an uncalibrated constant as a
+penalty is the alarming-wording-at-benign-values trap; tonight's run is what
+produces the distribution to fit a pitched tolerance against.
+
+**Old single-key records rescore unchanged** (0.94 for the v4 reference row,
+None for unmeasurable) — absent fields score nothing, so the rebuilt table can
+be read beside the 2026-08-30 one without pretending the grids were the same.
+
+## §MATRIXALIGN — the conversion bank was built from the wrong source list
+
+**Status:** worked around 2026-09-04 by matching on name; the build script
+still needs fixing.
+
+`MX_mpc_to_e4b.E4B` was built from **our own v4 corpus selection**, while the
+MPC holds **Jan's 11-track project**. The two overlap heavily — both descend
+from the same selection — and diverge from slot 5 up:
+
+    P005 = ch7 (not ch6)      P007 = LD Tube Pipe -> no MPC counterpart
+    P006 = ch8 (not ch7)      ch6  = the ch6 keys program -> not in the bank
+
+Three of eleven rows would have compared a **conversion of one program against
+a source recording of a different program**. Nothing about the result would
+have looked wrong: the captures are clean, the measures all compute, and the
+numbers would have been confidently reported. This is the §GATESUBJECT class —
+a check satisfied by the wrong subject — and it is roughly the eighth instance
+in one day.
+
+**It was not caught by our own build.** eosed caught the smoke, by identifying
+the pinned presets **by cord signature rather than by name** on the grounds
+that "a name can be stale and a routing cannot". That instinct is the general
+lesson: when a check can be satisfied by the wrong subject, verify by a
+property that is intrinsic to the subject rather than by its label.
+
+**Workaround, not a rebuild.** Ten of eleven presets do have MPC counterparts,
+so the run matches **by name**, skips the two orphans and takes 10 rows.
+A rebuild would buy one row and cost a card crossing, which is the expensive
+step Jan's bench economics say to batch. Map in `matrix_v4/SLOTMAP_e4b.json`.
+
+**The AKAI volume refines the diagnosis and refutes my first reading of it.**
+I initially called the E4B bank a stale build, on the timestamps. It is not:
+
+    target  built     has KEYS-VP RICO   has LD TUBE PIPE   usable rows
+    e4b     21:10:29        no                yes               10
+    krz     21:13:44        no                yes               10
+    akai    21:13           YES               no                11 of 11
+
+The AKAI volume and the KRZ bank were built within the same minute from
+**different source lists**, so this is not a clock problem — one build run
+emitted two different program sets, and only the AKAI path used Jan's project.
+`ch6` will therefore appear in the AKAI column of the final table and nowhere
+else. Whatever selects the source list is not shared across the three target
+paths, and that is the actual defect.
+
+**Still open:** `build_matrix_v4.py` should take the project's track order as
+its input rather than re-deriving a selection, and all three target paths must
+read the SAME list, so bank slot N is channel N+1 by construction instead of by
+a JSON file that has to be kept in step.
+
+**Separately, a source-vs-stored slip of mine.** I briefed eosed that a preset
+carried **11,409 cents** of velocity->filter. The bank's true maximum is 5329,
+and 11,409 cents is ~9.5 octaves against a cutoff range of ~7.5, so the machine
+cannot hold it. That is a **source-domain** figure quoted as if it were stored
+— the identical error to this afternoon's 17.2/19.0 swings, twice in one day.
+Whether `e4b_writer` saturates the velocity->filter cord silently (it has
+`e4xt_cord_saturates`, used for the filter *envelope* at :1215) is a real open
+question raised by this and is NOT yet answered.
+
+## §E4XTCORDSAT — the velocity→filter saturation guard is unreachable
+
+**Status:** diagnosed 2026-09-04, fix proposed, NOT applied.
+
+Found by pulling on a flag from eosed: they read the bank's maximum
+velocity→filter depth as **5329 cents** where I had briefed them **11,409**,
+and asked whether the writer was "silently saturating rather than reporting".
+The 11,409 was my own source-vs-stored slip (§MATRIXALIGN), but the question
+underneath it was a good one and the answer is a real bug.
+
+**The measurement.** `e4b_writer._cord()` guards both the filter-envelope and
+the velocity→filter cord with `e4xt_cord_saturates()`. Requested depth against
+written amount, for a velocity cord:
+
+    base byte 92:   736 c -> 6.01     5054 c -> 29.69    11409 c -> 31.27
+    base byte 193:  736 c -> 3.74     5054 c -> 11.89    11409 c -> 11.89
+
+Doubling the request past 5 kc adds 4 % at base 92 and *nothing at all* at base
+193 — and `e4xt_cord_saturates()` returns `False` at every one of those points.
+
+**Why.** The signature is `(base_byte, amount, level_percent)`. There is no
+`source_units`. A velocity source delivers `E4XT_VEL_SOURCE_UNITS = 2.08` units
+at full velocity, so the detector under-estimates a velocity cord's reach by
+2.08x:
+
+    detector:  92 + 2.506·31.27         = 170.4  <  250   -> "not saturated"
+    truth:     92 + 2.506·31.27·2.08    = 255.0  >  250   -> saturated
+
+And it is unreachable rather than merely wrong: the detector cannot fire below
+amount **63.0**, while `e4xt_cents_to_cord_amount` asymptotes at **31.3** from
+that base. No input can make it fire. It is dead code shaped like a guard —
+the same shape as the §GATESUBJECT family, one level down: a check that runs,
+returns cleanly, and was never able to answer the question it names.
+
+**Consequence.** The re-saturation at `e4b_writer.py:1215` never applies to
+velocity→filter cords. That guard exists because re-deriving the *smallest*
+amount that saturates shrinks a third-party full-amount cord on every round
+trip, and 36.5 % of nonzero filter depths in 60 real banks saturate. Velocity
+cords have been outside it the whole time.
+
+**Proposed fix.** Give `e4xt_cord_saturates()` a `source_units=1.0` parameter
+and pass `E4XT_VEL_SOURCE_UNITS` from `_cord()`'s velocity call, mirroring how
+`e4xt_cents_to_cord_amount` already takes it. One-line change on each side.
+Do **not** widen `E4XT_FENV_SATURATION_BYTE` to paper over it — that constant
+is measured (every saturated point in eosed's sweep predicts >=250.3, every
+unsaturated one <=238.1) and is not the thing that is wrong.
+
+**Open question that arithmetic cannot close.** Whether an amount of ~31 is
+*audibly* right. The byte arithmetic says it reaches the ceiling and therefore
+the same cutoff, which would make this a fidelity-of-representation bug rather
+than an audible one — the sweep would be correct and only the stored number
+misleading. Distinguishing those needs an E4XT measurement: write the same
+requested depth as amount 31 and as amount 100 into two presets of one bank and
+listen for a difference. That is a cheap addition to the next bank that crosses
+to the machine, and it must not be guessed at from the model.
+
+## §NOISEFLOOR — the pre-roll is not a noise floor
+
+**Status:** fixed 2026-09-04 in `tools/matrix_measure.py::_robust_floor_db`.
+
+Every SNR, every silent/dropped-note gate and therefore every "is this row
+measurable" decision hangs off one number: the capture's noise floor. It was
+estimated as the RMS of the pre-roll before the first note, `[:anchor-0.2]`,
+and that estimator fails in two ways that both occurred in one evening.
+
+**1. The window can be too short to estimate anything.** Its length comes from
+the comb anchor. `src_ch05_k060` anchored at 0.16 s, so the pre-roll was
+**50 ms**, and it read **−43.1 dB** against a true floor near −96.
+
+**2. The window can contain the previous note.** On the drum sweeps the notes
+are 0.7 s apart and the preceding hit is still decaying — the same decay-tail
+contamination that made a silent drum key read −25.5 dBFS earlier the same day.
+
+Both inflate the floor, and **an inflated floor deflates every SNR measured
+against it**, so a capture reads worse than it is for a reason that has nothing
+to do with the conversion.
+
+**What it cost.** `the ch5 slow-attack pad` was reported to two peer sessions as "at the
+noise floor at source, unmeasurable, mark the row dead in both columns" on a
+measured SNR of 6.5 dB. With a robust floor the same captures give **23-64 dB**
+and 96 % of cells clearing. The program is ~18 dB quieter than its neighbours —
+quiet, not silent — and the E4XT reading it at *its* floor is then explained by
+an 18 dB deficit meeting a capture gain with 19.6 dB of unused headroom. The
+conversion is faithful and the row is recoverable with gain. The original
+conclusion would have deleted a row from the matrix and recorded a fidelity
+fault where there is none.
+
+**The fix.** Floor = 5th percentile of 200 ms windowed RMS across the whole
+capture. The quiet stretches between notes dominate a low percentile wherever
+they fall, and no single contaminated window can drag it. Across the 66 source
+captures this moved cells-clearing-floor+15 dB from 89 % to **96 %**.
+
+**Two floors that are lies in the other direction**, both flagged rather than
+silently repaired (a repaired number is indistinguishable from a real one three
+days later):
+
+* **−240 dB** — the pre-roll is exact zeros. Digital silence is not a
+  measurement; SNR against it is arithmetically enormous and physically
+  meaningless. ch6/ch9/ch10 were reporting 220-231 dB "SNR" and would sort to
+  the top of any SNR-ranked view for a non-physical reason. Now flagged
+  `floor_synthetic` and pinned to −96 dB.
+* **Too high** — contamination, as above. Flagged when far off the set median.
+
+**General form, and it is the lesson rather than the code:** a derived quantity
+inherits the failure modes of the instrument that produced it. The SNR was not
+wrong about the program, it was right about the window — and it does not fail
+loudly, it just quietly describes something else. Both peers reasoned correctly
+from a number that was measured correctly and meant something other than its
+name. Related: §GATESUBJECT, §MATRIXKEYS.
+
+## §ANCHOR — the offset is a property of the rig, not of the capture
+
+**Status:** fixed 2026-09-04 across three rigs (mpc2emu, eosed, k2kremote).
+
+The comb anchor converts MIDI clock to audio clock. Everything windowed depends
+on it, and on 2026-09-04 it was wrong in three independent ways at once.
+
+### 1. It scored the HOLD, so percussive material anchored on noise
+
+The window was `[t_on+0.3, t_off-0.1]` — about a second of sustain. For a
+sustained note that is sharply peaked at the true offset; for a percussive one,
+whose energy is all in the first 100 ms, the window does not even open until
+the note is over, the sum is nearly identical wherever it sits, and the maximum
+is chosen by noise. Measured on our own source captures, **19 of 66 anchors
+were wrong**, the whole drum probe scattering **0.000–3.925 s** against a true
+1.53. eosed found the same on the E4XT independently.
+
+**Fix:** score the attack, `[t_on+0.02, t_on+0.15]`. A short window is sharply
+peaked for percussive *and* sustained material; the long one was only ever
+right for half of it.
+
+### 2. It was systematically 0.3 s early on EVERY capture, including healthy ones
+
+Maximising a window that opens at `t_on+0.3` aligns the *window* with the
+sound, so the returned offset is 0.3 s early — on the well-behaved captures
+too. The median moved **1.235 → 1.540 s** when scoring switched to the attack.
+
+The symptom was an attack window reading **−72 to −121 dB**: it was landing
+*before the note*. That was reported to two peer sessions as "slow attacks in
+the material — some programs are still rising at 0.4–0.85 s". It was not
+material, it was arithmetic, and it is withdrawn. With the anchor corrected
+every program decays monotonically:
+
+    ch10 key 84  attack BEFORE -121.03 dB   AFTER -23.05 dB
+
+### 3. MARGIN DOES NOT DETECT THE FAILURE THAT MATTERS
+
+Both rigs reported a lock margin on the principle that a weak lock should be a
+visible number. It does not discriminate:
+
+    ours:   worst anchor margin 15.3   healthy captures down to 1.5
+    eosed:  7 of 12 bad anchors carry margins ABOVE a healthy capture's 42
+
+Margin detects **"nothing to lock onto"** — it correctly flagged all five
+floored P004 captures at 1.1 — and is **blind to "locked hard onto the wrong
+offset"**, which is the failure that produces confident wrong numbers. A margin
+gate passes exactly the captures you need it to catch.
+
+### The fix that works: use the rig as a prior on the material
+
+The MIDI-to-audio offset is JACK period plus interface plus MIDI transport. It
+is a property of the **rig**, constant within a session, and nothing about the
+material should move it:
+
+    ours:   1.535 s  sd 68 ms over 52 clustered captures
+    eosed:  1.200 s  sd 42 ms over 49 of 61
+
+So: fit every capture freely, take the robust median of those that agree, then
+**re-fit each capture constrained to ±0.15 s around it**. That rescued **14**
+captures here and **11** on the E4XT, including one nine-tooth comb with a
+strong margin that was confidently wrong. The prior is far stronger than any
+single capture's comb and it is physically justified, not a smoothing trick.
+
+### What the error did and did not corrupt (eosed's separation, and it is the useful one)
+
+**A uniform anchor error shifts every cell in a capture equally, so the SLOPE
+survives it.** Zero of 61 E4XT captures moved by more than 1 dB in velocity
+swing after refitting. The error corrupted **every claim about when energy
+arrives** and **no claim about how level tracks velocity**. Keep those classes
+separate when auditing a result against a suspect anchor.
+
+### Why printing the intermediate was necessary and not sufficient
+
+The rule from Monday — the quantity a function invents must be visible or its
+failure looks like a result — is what surfaced this. But eosed'a kit sample's samples against the MPC project's own folder
+scored **1 of 16** and looked like proof that the machine was playing a
+different kit variant than the one we converted — a wrong-subject conclusion
+that would have invalidated the whole drum column. It is right by luck in this
+kit, because these names differ in their tails; two names sharing a 16-char
+tail and differing at the front would collide silently.
+
+**Check before fixing:** whether the tail is deliberate somewhere downstream
+(a `[-16:]` chosen because MPC names are prefixed by category, so the tail is
+the distinctive half) or an accident. If deliberate it needs a comment saying
+so; if accidental it needs to be `[:16]` and a collision test.
+
+## §WINDOWCONF — confidence is window-dependent, and the spread is itself a measure
+
+**Status:** measured 2026-09-04. Changes what the confidence table can claim.
+
+Scoring the same E4XT captures against the same MPC sources through each of the
+five windows gives materially different confidences for six of ten rows:
+
+    slot  program                peak  attack   early     mid    full   spread
+    P000  the ch1 lead program       0.813   0.939   0.932   0.914   0.927   0.126
+    P001  the ch2 lead program        0.918   0.934   0.926   0.348   0.844   0.586
+    P002  the ch3 lead program       0.846   0.786   0.767   0.338   0.754   0.508
+    P006  the ch8 lead program        0.863   0.769   0.742   0.602   0.767   0.261
+    P009  the ch10 lead program    0.739   0.803   0.593   0.093   0.806   0.713
+    P008  the ch9 bass program  0.917   0.925   0.961   0.941   0.961   0.044
+
+**A single scalar "confidence per conversion" is under-determined.** P009 is
+either 0.09 or 0.81 depending on a choice nobody had justified — and the first
+version of this pipeline would have printed one of those numbers with no
+indication that the other existed. Had the window been chosen at capture time,
+as originally planned, the table would have carried a hidden constant.
+
+**But the spread is not noise, it is signal.** The windows sample the note at
+increasing ages, so a row that scores well at `attack` and badly at `mid` has a
+conversion that starts right and **diverges as the envelope runs** — which is
+exactly what an envelope-conversion fault looks like, and this project has a
+known one on the K2000 (§K2000ENVLOOP: an envelope held past its own
+Att+Dec+Rel re-triggers instead of holding silent). `mid` is the most punishing
+window on five of six sensitive rows, and that is the age at which decay-rate
+differences have had time to accumulate.
+
+**Consequences for the table:**
+
+1. Report confidence **per window**, not as one number, or name the window in
+   the column header. A table headed "confidence" with no window is a claim the
+   data does not support.
+2. Treat **window spread as an envelope-fidelity measure** in its own right.
+   `the ch9 bass program` at 0.044 spread is level-accurate *and*
+   envelope-accurate; `the ch10 lead program` at 0.713 is one or the other
+   depending on when you look, which is a real and reportable difference
+   between two conversions that a single scalar hides.
+3. Do **not** pick the flattering window. The instinct to report `full` for
+   P009 (0.806) over `mid` (0.093) is exactly the trap; if a window is chosen
+   it must be chosen once, for a stated reason, and applied to every row.
+
+**Still open:** the choice itself. `peak` is the most anchor-tolerant and the
+least averaged; `mid` is the most sensitive to envelope faults and the most
+exposed to anchor error. That trade needs deciding on the full three-machine
+data, not on the E4XT column alone.
+
+## §DRUMKEYFOLLOW — a confident 0.000 that the files refute
+
+**Status:** finding WITHDRAWN 2026-09-04. Guard added; re-measurement needed.
+
+The drum probe scored **confidence 0.000, "critical"** in the first E4XT
+column. It was wrong, and the way it was wrong is the point.
+
+**What the score said.** Confidence is `1 - max(penalty)`, and exactly one
+penalty saturated: `keyfollow` = **15.93 dB** against a 9 dB tolerance. Every
+other measure on the row was healthy — velocity RMS 0.78 dB, penalty 0.065. So
+the score's claim was specifically *"the relative level balance between the 16
+drums is not preserved by the conversion."*
+
+**What the files say.** Both sides are perfectly uniform:
+
+    all 16 zones, XPM source      zone.volume =   0.0        spread 0.00
+    all 16 zones, converted E4B   zone.volume = -13.732056   spread 0.00
+
+One identical offset on every zone (the velocity-pivot preset shift), and
+`keyfollow` subtracts the median precisely so that a constant contributes
+nothing. All 16 source samples are also already normalised to 0 dBFS. **There
+is no per-drum balance for the conversion to get wrong**, so a 15.93 dB balance
+error cannot be a conversion fault. This was checkable statically, in seconds,
+and it settles the question that thirteen keys of hardware measurement did not.
+
+**Mechanism: unknown, and the obvious guess is refuted.** Fast-decaying drums
+should amplify any anchor misalignment between two independently-anchored rigs.
+Correlation of |per-key deviation| against source decay rate: **r = -0.05**,
+n = 13. No relationship. Not recorded as the cause.
+
+**What is known about the input.** 34 % of the drum probe's source cells are
+physically impossible — attack quieter than the same note 100 ms later, which a
+decaying note cannot be — with apparent "decay rates" of 198-213 dB that are
+all-zero attack windows. The keyfollow figure was computed from those cells.
+
+**The guard.** `impossible_fraction()` measures the share of cells violating
+that invariant; above `MAX_IMPOSSIBLE_FRAC = 0.20` the record sets
+`level_unreliable` and **`keyfollow` is suppressed** rather than scored.
+Keyfollow is a level measure and a misplaced anchor corrupts levels directly.
+
+**The lesson, which is the §NOISEFLOOR/§ANCHOR lesson one level up.** Every
+prior instance was a number that meant something other than its name. This one
+is worse: the input was *impossible* and the measure returned a plausible,
+confident, specific, and completely wrong conclusion about a converter. A
+measure with no guard on its own inputs will always prefer to answer. The
+invariant that caught it came from k2kremote — *"the old numbers were not
+noisy, they were impossible"* — and it is cheap enough to run on every record.
+
+**Re-measure** with per-note onset detection rather than a per-capture anchor.
+The lag varies with velocity (a quiet note crosses any threshold later than a
+loud one, 24-118 ms measured on the K2000 rig), so one anchor per capture
+cannot represent it.
+
+## §PEAKFORPERC — windowed RMS is not a level statistic on percussive material
+
+**Status:** established 2026-09-04 with both sides through one pipeline.
+
+§DRUMKEYFOLLOW recorded a 63 dB swing in the drum probe's `keyfollow` (9.5 dB
+against 72.5 dB) produced by changing only our own analysis, and attributed it
+to comparing OUR analysis of the source against EOSED'S analysis of the
+conversion — two pipelines placing windows independently.
+
+**That attribution was wrong, and running both sides through one pipeline is
+what showed it.** With identical onset detection, floor estimator, windows and
+anchor prior on both sides, the swing is undiminished:
+
+    drum probe keyfollow   window = peak    9.47 dB
+                           window = early  72.62 dB
+
+**So the variable is the WINDOW, not the pipeline.** `early` is 0.10-0.40 s
+after onset. On a fast transient most of the energy is gone before it opens, so
+what it measures is dominated by exactly where the window landed — and the
+onset placement legitimately differs between a source sample and its conversion
+because their attacks differ. `peak` over the whole note has no such
+dependence: it finds the maximum wherever it falls.
+
+**Rule: on percussive material, score levels on `peak`.** The windows remain
+valuable as ENVELOPE diagnostics — the shape across attack/early/mid/full is
+real information about decay fidelity — but they are not level statistics
+there. On sustained material either works and the windows are more sensitive.
+
+**With `peak`, the drum probe becomes measurable**: confidence **0.751**
+("warn"), dominated by `vel_key_spread` at 0.248 rather than by anything
+saturating. The `keyfollow` suppression for kits (§DRUMKEYFOLLOW) is doing its
+job — 9.47 dB of apparent key-follow on 16 unrelated sounds is measurement
+scatter, not a converter fault, and the converter provably writes an identical
+level to all 16 zones.
+
+**Also settled, and it removes a phantom constant.** Our fitted "rig offset" of
+1.535 s is not a latency: `hw.LEAD_IN` is **1.500 s**, so the real
+MIDI-to-audio lag is **35 ms**. eosed's is **10 ms** measured through our
+pipeline against their 1.20 s commanded lead-in. Both of us had fitted a
+constant we already knew and read the good agreement as confirmation of the
+method. Where the schedule is known, the prior is a commanded number and the
+fit only checks arithmetic — it says nothing new about the machine.
+
+**And k2kremote's 24-118 ms velocity-dependent lag is a property of THRESHOLD
+DETECTION, not of any rig** (eosed's measurement: an energy-maximising comb
+gives +0.0160 ms per velocity unit, i.e. 2.0 ms across v1..v127, against an
+80 ms window). A threshold detector fires later for a quiet note by
+construction, because the note takes longer to cross a fixed line. A comb has
+no line to cross. The fix is the estimator, not a per-velocity calibration.
+
+## §KRZBANK100 — a K2000 bank holds 100 objects per type, not 800
+
+**Status:** cause identified 2026-09-04 (k2kremote's hypothesis, confirmed
+against the file here). Fix designed, NOT applied. One hardware check pending.
+
+`MX_mpc_to_krz.KRZ` carries **149 samples** and the K2000 loaded **100**. The
+other 49 are silently absent, taking the top of the keyboard with them —
+k2kremote measured program 905 at v127 as fine to key 72, **-31 dB at 84 and
+silent at 96**.
+
+**The writer's guard has the wrong model.** `krz_writer.py:2359`:
+
+    _MAX_OBJ_ID = 999
+    if base_id + len(samples) - 1 > _MAX_OBJ_ID:  raise
+
+With `base_id = 200` that permits **800 samples**, and 149 passes it happily.
+But 999 is the ceiling of the **file's** id space, while the constraint that
+actually bites is the **destination bank's**. Loading into bank 900 maps file
+id 200 -> 900, so:
+
+    file ids 200..299  ->  900..999   100 slots, full
+    file ids 300..348  ->  1000..1048  DO NOT EXIST -> 49 samples dropped
+
+k2kremote's listing after the load: *Soundblock, bank 9: **exactly 100**
+objects, none zero-size.* 149 - 100 = **49**, which is the count the id
+arithmetic predicts, reached independently from the panel.
+
+**It also explains the thing that made this look like an offset bug.** The load
+stopped with **21,661K of sample RAM still free** — it ended with more room
+than it had used, because free memory was never the constraint. My own first
+reading was "a limit that bites with a third of memory free smells like an
+offset or count field"; it is a count field, just not one in the PCM.
+
+**THE FIX IS NOT SETTLED, AND THE OBVIOUS TEST HAS NOT BEEN RUN (Jan, 23:07).**
+
+Our file uses ids **200..348**, which spans **two** banks by construction:
+200-299 is bank 2 and 300-348 is bank 3. A KRZ file is permitted to do that,
+and the writer's `_MAX_OBJ_ID = 999` model assumes exactly it — ids 200..999,
+banks 2 through 9, 800 slots. **Loading at bank 900 is what compresses a
+two-bank span into one 100-slot bank** and pushes 49 objects off the end.
+
+So there are two live hypotheses and they call for opposite fixes:
+
+    A. The K2000 offsets objects to the chosen destination bank.
+       Loading at bank 2 preserves ids 200..348 across banks 2 and 3 and
+       ALL 149 SAMPLES LOAD.  The writer is correct; the load destination
+       was wrong; nothing needs splitting.
+
+    B. The K2000 packs everything into the chosen bank regardless.
+       No bank can hold more than 100 whatever the destination, the writer's
+       800-sample model is wrong, and banks must be capped at 100 and split.
+
+**The test that separates them: reload the same file at a LOW bank (2) and
+re-measure program 905's top keys.** If keys 84/96 come back, it is A. If they
+are still silent, it is B. This is the same file, no rebuild, one load.
+
+**Do not describe this as a writer bug until that test has run.** The earlier
+draft of this note asserted B outright — "we have been writing banks that
+silently discard everything past the hundredth sample" — on evidence that does
+not distinguish the two, because everything observed so far came from a single
+load into bank 900.
+
+**The rule, under hypothesis B only.** A KRZ bank destined for a single K2000
+bank holds at most **100 objects of each type**. Our matrix bank is fine on
+programs (11) and keymaps (22) and violates it only on samples.
+
+**Fix (structural, not a tuning change).** Cap samples per bank at 100 at build
+time and split beyond that — `bank_splitter.py` already does exactly this for
+E4B via `_MAX_SAMPLES_PER_BANK`. The guard should also stop describing 999 as
+the limit: 999 bounds the file, 100 bounds what will actually load. Both are
+real and only the smaller one is useful.
+
+**Caveats, all k2kremote's and all fair:**
+
+1. **Spill is not excluded.** If Fill wraps to bank 0 on overflow, the missing
+   49 may be resident at ids 0-48 and the fault is dangling references rather
+   than absent data — a different bug with a different fix.
+2. The 100 figure is one listing from ~22:29 and has not been re-taken.
+3. Which samples died is inferred from file order; the count is solid.
+
+**Outstanding check** (k2kremote, after their grid run): Soundblock counts
+across every bank 0-9 so a spill would show, plus the specific high-key
+soundblocks behind 905's top keymap ranges.
+
+**Does NOT explain program 909's total silence** — those samples are ids
+269-276, inside the surviving 200..299 range, with real non-zero PCM. Separate
+open item.
+
+### §KRZBANK100 addendum — the K2vx manual names the mechanism (k2kremote, 23:15)
+
+Kurzweil K2vx manual, Disk Mode / Load Function Dialog, verbatim:
+
+> "Note that when loading into a specific bank (as opposed to loading as
+> 'Everything'), the object ID's in the file are used as follows: The 'bank'
+> digit is ignored, and the remainder of the number is used when the K2vx
+> re-banks the object ID into the bank that you specify."
+
+> "For loading as 'Everything', the ID number for an object stored in a file is
+> taken literally, and not re-banked (except if Fill or OvFill mode is chosen,
+> in which case the K2vx will use ID numbers starting from 200.)"
+
+> "Overwrt and OvFill operate in different ways after a selected bank has been
+> filled up for a given object type (for example, after you have loaded in more
+> than 100 programs into a bank). Overwrt will continue to preserve the
+> objectIDs stored in the file, and will individually overwrite objects in the
+> bank following the just filled bank. OvFill will not overwrite any further
+> objects past the end of the selected bank; it instead skips over object IDs
+> that are in use."
+
+**This is hypothesis A with a named mechanism, and it narrows the fault a long
+way.** The K2000 has documented behaviour for a bank load exceeding 100, and
+**Fill is the one mode that simply stops**. So the claim is not "a K2000 cannot
+hold 149 samples" — it is "Fill *into a specific bank* cannot".
+
+It also means the bank-900 load could never have worked in **any** mode: Overwrt
+continues into "the bank following the just filled bank", and there is no bank
+after 9.
+
+**Still an experiment, not a conclusion.** This file's standing note is that the
+manual is authoritative on structure and not on labels, and four confident
+inferences failed on 2026-09-04 alone. The manual says which experiment to run.
+
+**Test (agreed with k2kremote, requires a RAM wipe Jan authorised):**
+
+    1. read-only FIRST -- soundblock counts across banks 0-9 (the spill check)
+       and the 905/909 keymap range walks.  THE WIPE DESTROYS THIS EVIDENCE:
+       if the 49 spilled to bank 0 that fact lives in RAM and nowhere else,
+       and afterwards "A" and "A plus a spill" are indistinguishable forever.
+    2. confirm mxgrid.json is complete and parses
+    3. Master -> Delete -> Everything
+    4. load MXMPCTOK.KRZ, destination **Everything**, mode **Fill**
+    5. expect 149 soundblocks spanning banks 2 and 3
+    6. re-measure 905 at keys 84 and 96
+
+**Why a full wipe rather than deleting bank 9 (Jan asked whether RAM forces
+it — it does not).** Freeing MXMPCTOK returns ~41,705K, well over the 24.8 MB
+needed, so memory is not the binding constraint. The reason is **id collision**:
+Fill numbers from 200, LISTEN3 is resident at unenumerated ids, and anything of
+it inside 200..348 makes Fill skip those ids — yielding a third outcome that is
+neither A nor B.
+
+**If A: the deliverable is documentation, not a writer change.** Our KRZ banks
+must be loaded as **Everything/Fill**, or into a low bank with **Overwrt**.
+Loading a >100-sample bank into a high bank with Fill truncates silently. That
+belongs in `docs/KRZ_FORMAT.md` and in the loading instructions for these discs
+— better than splitting banks that never needed splitting.
+
+## §AKAIFILTSWEEP — the four AKAI zeros are NOT faithful (conclusion WITHDRAWN)
+
+**Status:** resolved 2026-09-05 by SysEx intervention on hardware. **No writer
+change indicated.** The score needs a flag, not a fix.
+
+Four AKAI rows scored 0.000-0.215 on `vel_key_spread` — the velocity law
+varying across the keyboard. They separate perfectly on one parameter:
+
+    ch  conf    vel->filt depth   FILFRQ
+     2  0.000         9             49
+     3  0.215         9             49
+     8  0.000         9             49
+    10  0.000         8             42
+     7  0.712         1             65
+     5  0.852         9             78
+     4  0.830        10             99
+     9  0.923        21             99      <- LARGEST depth, best score
+     6  0.940         0             99
+    11  0.756         0             99
+
+Every failure at FILFRQ <= 49, every pass >= 65 — and ch9 carries the deepest
+velocity->filter in the set while scoring 0.923, so depth alone is harmless.
+
+**Everything the writer emits is faithful to the source:**
+
+* **Cutoff** — source 58 Hz -> FILFRQ 49; 2626 Hz -> 99; 1359 -> 99; 41 -> 42.
+* **Key tracking** — we write `filter_keyfollow = 0` and the MPC source's own
+  `filter_keytrack` is **0.0**. There is none to carry.
+* **Routing** — `mod_source_filt1 = 5`, `mod_src_amp = 6` on all ten programs,
+  clean rows included, so nothing discriminates at program level.
+* **And the representation loss runs BACKWARDS for a bug.** The failing rows
+  reproduce their requested sweep to within **1.7 % and 4.8 %**; the passing
+  rows lose **49 % and 52 %** to saturation. The clean scores belong to
+  programs whose velocity->filter we largely threw away because their corner
+  was already wide open.
+
+**Confirmed on hardware by a NEGATIVE CONTROL, not by ablation** (s3ked,
+RAM-only SysEx, programs restored and read back). Statistic: RMS of
+conversion-minus-source over v32..127, mean removed; spread = |k84 - k36|.
+
+    ch2 baseline       spread 4.01
+    B  ch2 FILFRQ->99  spread 0.36    predicted collapse   HELD
+    ch9 baseline       spread 0.47
+    C  ch9 FILFRQ->49  spread 9.47    predicted RISE       HELD
+
+**C is the load-bearing result.** Closing a healthy row's corner — one byte in
+RAM, depth untouched at 21, identical conversion output — drove it from 0.47 to
+9.47 dB. Removing a fault proves little, since anything that quiets a signal
+does that; **predicting a new failure in a healthy row is falsifiable and it
+fired.**
+
+**Mechanism.** At ~58 Hz with ~5081 cents, the corner sweeps 58 Hz to ~1100 Hz —
+across the fundamentals of keys 36-84 (65-1046 Hz). Where it crosses each note
+decides that note's level, so any difference between the MPC's filter and the
+AKAI's lands differently at every key. At that corner **the sweep is the only
+reason the upper keys sound at all**, which is why it carries the key
+dependence.
+
+**Ablation A (depth -> 0) looked like a partial failure and was not.** It
+silenced key 84 outright — `peak@v127 -61.27`, margin 11.79, **0 of 9 cells
+clearing the floor** — so its apparent 5.56 dB residual was noise-floor
+arithmetic. A hypothesised second modulation path (`V_ENV2` via `MODVFILT3`)
+was proposed to explain that residual and is **not needed**; there is no
+residual. Check that an ablation left signal to measure before explaining what
+survived it.
+
+**Consequence for the matrix.** These four rows should carry a flag —
+*faithful conversion of a design two filters cannot render identically* — not a
+0.000 that reads as a converter defect. The score is measuring a real
+divergence and attributing it to the wrong cause.
+
+**Process note.** My "<1.5 dB" prediction for A and B was framed on a five-key
+spread of conversion-minus-source and tested against a two-key span difference
+on the conversion alone — different quantities, so the threshold was not fairly
+testable as written. Recomputing from the peer's raw per-note peaks fixed it in
+one pass, which is the argument for sending raw measurements rather than only
+summary statistics.
+
+### §AKAIFILTSWEEP addendum — the calibration was measured and CONFIRMS the writer
+
+**Status:** measured 2026-09-05 (s3ked sweep, FILFRQ 0..44, noise source).
+**Negative result: no writer change indicated.**
+
+The sweep was commissioned because `akai_filter_byte`'s measured curve covered
+only FILFRQ 40..84 and every failing AKAI row sweeps below it. Two independent
+analyses of the same 46 captures — s3ked's fit and ours, sharing no code:
+
+    byte    ours      s3ked    pre-existing curve
+     44   184.6 Hz   182 Hz          --
+     40   136.2 Hz   135 Hz        138 Hz
+     36    93.8 Hz   ~95 Hz           --
+
+**Agreement to ~2 % at the join**, which is what the deliberate 40..44 overlap
+was for.
+
+**And the practical answer is that it changes nothing:**
+
+    program     source Hz   byte TODAY   byte from the sweep   change
+    ch2/3/8         58.4        28             28.8            +0.8
+    ch10            41.0        23             24.1            +1.1
+    ch7  (0.712)   703.0        62             61.8            -0.2
+
+Under one byte everywhere. **The corner was never mis-mapped**, so the four
+failing rows are not a calibration fault, and Test C's explanation stands: two
+different filters render the same deep sweep differently.
+
+**Reliable floor.** Ours is byte **32 (~81 Hz)**, one notch more conservative
+than s3ked's 28. Below that the low-frequency plateau itself falls (+0.8 dB at
+byte 40, -2.9 at 28, -12.7 at 20, -36.4 at 0), so once the corner descends past
+the 45-75 Hz reference window a "-3 dB corner" has nothing to be relative to.
+s3ked reached the same conclusion from the skirt slope degrading (-12.2 dB/oct
+at byte 44 falling to -2.8 at byte 8) and refused bytes 0-7 outright on the
+floor gate.
+
+**Slope disagreement, resolved by a third source.** s3ked fitted 7.03
+bytes/octave, we fitted 9.20 over bytes 32..44. The **pre-existing table** runs
+138 Hz->40, 80->32, 58->28, 41->23, i.e. **~9.7 bytes/octave** — so the old
+curve and the new captures agree and 7.03 is the outlier, most likely from
+including the degraded low points in the fit.
+
+**A stale docstring that was quoted as fact.** `akai_filter_byte` documents
+"below 147 Hz -> 44, the measured floor". **The code does no such thing** — it
+extrapolates smoothly to byte 13 at 20 Hz. That comment was cited as the reason
+dark programs were being clamped, and the claim came from reading the comment
+rather than running the function. Fix the docstring.
+
+**s3ked's §17 is disproved and they are recording the disproof.** That note
+held `FILFRQ` to have *no effect at all* — "ratio 1.00 over the whole range",
+corner stable at 14.1 kHz across bytes 0..85 — against 182 Hz -> 52 Hz and
+27.6 dB of level change measured here. The likely cause fits the week's
+pattern: an unneutralised route holding the filter open, i.e. **a check that
+ran cleanly and measured nothing.**
+
+**Outstanding:** the curve is one key, one velocity, one source, FILQ 0. Not
+urgent while it merely confirms the existing table, but it should be checked at
+a second key before anyone leans on the low end.
+
+### §AKAIFILTSWEEP CONCLUSION WITHDRAWN — the filter ENVELOPE was dropped
+
+**Status:** the writer bug is found and fixed 2026-09-05
+(`_akai_env2_depth`). **Everything above concluding "faithful, not a writer
+defect" is wrong**, and the reasoning failure is worth more than the retraction.
+
+**Jan's question is what broke it: "our conversion is faithful, but creates a
+non-sounding result from a sounding source?"** Those cannot both be true, and
+the contradiction was in the evidence the whole time.
+
+**The measurement that settles it.** MPC source, ch2 `the ch2 lead program`, key 84,
+v127 — spectrum relative to its own peak:
+
+    50-100 Hz   -94.8 dB      1-2 kHz    -69.3 dB
+    100-200     -93.2         2-5 kHz      0.0     <- the peak is HERE
+    200-500     -85.7         5-10 kHz   -30.8
+
+**A 58 Hz lowpass cannot produce a spectrum peaking at 2-5 kHz.** The MPC is
+not sitting at its resting corner, because the source carries
+`filter_env_cents = 6418` — a filter envelope lifting the corner **5.35
+octaves to about 2.4 kHz on every note-on**, decaying back to a sustain of 0.
+
+**And we wrote that envelope's depth as ZERO.**
+
+    ch   source filter_env_cents   AKAI env2_depth written
+     2         6418                      0
+     3         6418                      0
+     5         6418                      0
+     8         6418                      0
+     4        11409                      0
+     6        11409                      0
+
+**The cause, one line in `_akai_env2_depth`:**
+
+    if not cents or sustn2 <= 0:
+        return 0
+
+The same function's own comment records that dividing the depth by `SUSTN2`
+was a bug, fixed on 2026-08-25 (§AKAIENV2PEAK), because "that double
+application is what silenced the attack transient: on a percussive envelope
+(SUSTN2 15) it made the written sweep fifteen times too small". **The division
+was removed and the guard was left behind.** At SUSTN2 = 0 it does not make the
+sweep fifteen times too small — it removes it. Depth is the sweep at FULL
+envelope level, divided by `AKAI_ENV2_FULL_LEVEL`, so it must not depend on
+sustain at all; the guard contradicted the design it was sitting in.
+
+**Every plucky or percussive filter sound decays to zero sustain**, so every one
+of them converted to the AKAI with no filter sweep. Six of nine programs here.
+Where the resting corner is also dark (FILFRQ 49) the result is an instrument
+that never opens: bright source, near-silent conversion at the top of the
+keyboard.
+
+**Fix:** guard on `cents` only. Depth becomes 19 for ch2/3/8, 7 for ch5, and
+correctly stays 0 for ch4/ch6 whose corner is already wide open. 570 tests pass.
+**Not hardware-confirmed yet.**
+
+**How the wrong conclusion survived so long.** Every parameter we compared
+matched — cutoff, key tracking, routing, velocity->filter depth, and the
+FILFRQ calibration curve, which a dedicated hardware sweep confirmed to within
+one byte. Five checks agreed, and the conclusion "faithful" followed from all
+five. **The parameter we had dropped was not among the ones we were comparing**,
+and no amount of agreement between the others could reveal it. A negative
+control (Test C) reproduced the *symptom* by closing a healthy program's filter
+and was read as confirming the mechanism — it confirmed that a dark corner
+causes the symptom, which is true and was not the question.
+
+**What would have caught it earlier: comparing the OUTPUT, not the parameters.**
+One spectrum of the source, showing energy at 2-5 kHz where a 58 Hz corner
+allows none, refutes "faithful" immediately and needed no hardware at all. It
+was available from the first source capture, hours before the E4XT and K2000
+columns were even built. Related: §GATESUBJECT, §NOISEFLOOR, §ANCHOR.
+
+### §AKAIENV2GATE — the env2 depth is multiplied by SUSTN2, and our fix was inert
+
+**Status:** 2026-09-05. The one-line "fix" recorded above is **REVERTED**. The
+underlying fault is real but larger, and the representational choice is open.
+
+The fix — removing the `sustn2 <= 0` guard so a depth is written — **does
+nothing on the machine.** s3ked measured it on ch2 before applying the patch to
+the other rows:
+
+    baseline                          k84 peak@v127  -41.03   3/9 cells clear
+    MODVFILT3 -> 19                   k84 peak@v127  -40.99   3/9    +0.01 dB
+    MODVFILT3 -> 19, SUSTN2 -> 50     k84 peak@v127  -22.17   5/9   +18.86 dB
+
+**One hundredth of a decibel.** The third line is the positive control and is
+the only reason the second means anything: it shows the route is live and
+identifies what blocks it. A null without that control would have read as "the
+envelope theory is wrong".
+
+**Why: s3ked's §156 gives `octaves = 0.002612 * SUSTN2 * depth`.** At `SUSTN2`
+0 the depth is multiplied by zero. **And the coefficient is already in our own
+constants:**
+
+    ours:  AKAI_ENV2_OCT_PER_UNIT = 0.002612    AKAI_ENV2_FULL_LEVEL = 99
+    §156:  octaves = 0.002612 * SUSTN2 * depth
+
+Same coefficient; we multiply by a constant 99 where the machine multiplies by
+`SUSTN2`. **So our depth is too small by 99/SUSTN2 for every source whose
+filter envelope does not sustain at full level** — not only the four at zero.
+
+**The guard was not a fossil contradicting its function; it was the last piece
+of the older model that still accounted for the hardware.** The note above
+called it "a leftover contradicting the design it sits in". That is backwards:
+the design changed on 2026-08-25 and the guard is what survived. Removing it
+deleted the only remaining term that knew about `SUSTN2`.
+
+**Open, and it decides the policy:** whether `SUSTN2` gates the whole envelope
+or only where it settles. With `ATTAK2` 0 / `DECAY2` 57 / `SUSTN2` 0 the
+envelope still rises and decays, so a depth scaling with the *instantaneous*
+level would give a bright transient that a 0.9 s peak window could not miss.
+None appeared. But that is one point in the parameter space, and it is exactly
+where the two models differ most. **Test D**: `SUSTN2` 0, depth 19, `DECAY2` as
+slow as it goes — a long decay makes any transient unmissable.
+
+**If Test D is null the choice is forced**, because faithfulness to `SUSTN2` and
+carrying the sweep become mutually exclusive. From §156 with depth clamped at
+50, reaching the source's 5.35 octaves needs `SUSTN2 * depth = 2048`:
+
+    SUSTN2 41, depth 50  -> 5.35 octaves SUSTAINED -- the filter never closes
+    SUSTN2 25, depth 50  -> 3.26 octaves sustained
+    SUSTN2 10, depth 50  -> 1.31 octaves sustained
+    SUSTN2  1            -> needs depth 2048, far past the +/-50 clamp
+
+A straight choice between a note that never opens and one that never closes.
+**Test E** picks the point on that continuum by measurement rather than taste:
+ch2 at `SUSTN2` 0/10/25/50 with depth 50, capturing the spectrum **over time**
+and scoring which trajectory best tracks the MPC source, which sweeps bright at
+onset and dark by ~0.66 s. Loudest is not the criterion.
+
+**Note ch10 fails at 0.000 while already carrying `SUSTN2` 23 / depth 22**, so
+it has a working sweep and a different fault. Two problems were stacked here.
+
+## §AKAICORNER — the filter corner must clear the played fundamentals
+
+**Status:** implemented and HARDWARE-VERIFIED 2026-09-05 across four keygroup
+layouts. Not pushed; awaits a card rebuild as end-to-end confirmation.
+
+**The fault.** `akai_velocity_filter` placed FILFRQ where the source sits at the
+velocity PIVOT. The velocity sweep then swings BELOW that at low velocity, and
+where it crosses the fundamental of the notes a keygroup plays, quiet notes are
+filtered into near-silence and loud ones are not — a velocity response the
+source does not have, different at every key.
+
+**The rule.** The corner must clear the highest played fundamental across the
+WHOLE sweep, not merely at the pivot:
+
+    filfrq >= akai_filter_byte( f0(hi_key) * 2^(depth * 4.368 * 64.56 / 1200) )
+
+**RAISE ONLY.** As a target rather than a floor it would have LOWERED two
+programs that already convert well (99 -> 90 and 99 -> 68, scoring 0.830 and
+0.940), trading a fixed fault for a new one.
+
+**Verified on hardware by s3ked, RAM-only SysEx, four layouts:**
+
+    program   kgs   change      result
+    ch8        1    49 -> 99    |diff| 16.99 -> 0.31, key 84 +7.18 dB
+    ch2        5    49 -> 99    confidence 0.000 -> 0.922
+    ch7       11    65 -> 89    |diff|  2.57 -> 0.36, -2 dB level
+    ch10      16    42 -> 86    |diff|  4.54 -> 1.19, key 84 +8.3 dB
+    ch5        5    78 -> 99    |diff|  3.89 -> 0.45
+
+**ch8 is the case that settles it**: one keygroup spanning 24-127 with
+`K_FREQ` 0, so both keys read identical parameters and one absolute corner.
+No layout, no per-keygroup difference and no key scaling is available as an
+alternative explanation.
+
+**The layout is the variable, not the depth or the content.** ch2's five
+keygroups stretch one sample from 78 to 127 and need 99; ch10's sixteen narrow
+ones need 86. That falls out of the formula with no special case — and it is
+why an earlier check of the rule "failed": it passed `hi_key = 84` for every
+program instead of each keygroup's own, producing a value (88) the writer never
+generates.
+
+**The boundary, in s3ked's words and recorded rather than filed away:** the rule
+optimises across-key CONSISTENCY, not spectral FIDELITY, and on a program whose
+filter is doing audible work those two come apart. ch7 is that program — its
+source corner is ~977 Hz and the rule puts the AKAI at ~5 kHz, so the improved
+across-key match is bought by making it brighter than the source. Its 2 dB cost
+is a real resonance loss (source `Resonance` 0.51, the highest in the set), not
+an artifact. **A converter needing spectral fidelity needs a different rule, not
+a tuned constant in this one.**
+
+**A near-miss worth keeping.** Four programs receive `FILQ 3` from an XPM whose
+`<Resonance>` reads `0.000000`, which looks exactly like invented resonance. It
+is not: the model's resonance is a measured PEAK HEIGHT rather than a dial
+fraction, and is filter-type dependent — type 29 at resonance zero models
+0.0843 where types 2/3/4 model 0.0059. Not recoverable from the XPM alone.
+
+## §GAINVSFILTER — quiet is not the same as over-filtered
+
+**Status:** fixed 2026-09-05. Found by s3ked from the other side of the same
+data.
+
+A `gain_limited` guard was added to stop a peer's low capture gain being scored
+as a converter defect. It fired when a key's lost cells lay below its surviving
+ones — **which is equally true of an over-filtered key.** Tested against ch8:
+
+    over-filtered baseline (key 84, 3 of 9 cells)   confidence 0.933
+    the same program fixed (9 of 9)                 confidence 0.933
+
+Identical. The guard built to prevent one false conclusion was manufacturing
+another. s3ked hit the same fault through their own statistic: ch8's key 84
+showed a **36.64 dB velocity span** that was six cells of noise floor, which
+reads as an exceptionally expressive program rather than a broken one.
+
+**FIRST ATTEMPT, REFUTED.** The discriminator proposed was: *a capture that is
+merely quiet loses its globally quietest cells, so one absolute threshold
+accounts for every loss; over-filtering loses cells at one key while a quieter
+cell at another key survives.* **That is backwards** and s3ked refuted it
+against the real ch8 capture within the hour:
+
+    k36  floor -72.3   keeps 9/9, quietest kept -38.4
+    k84  floor -72.6   keeps 6/9, losses -62.6 -60.3 -58.9, quietest kept -56.3
+
+Every lost cell is quieter than every kept cell — one threshold near -57.5
+explains all three losses — so the test reads the worst row in the set as a
+gain-limited capture and excuses it.
+
+**Why it fails structurally, which is worse than a bad example.**
+Over-filtering attenuates the WHOLE key, so the filtered key's surviving cells
+are dragged toward the floor along with the lost ones and the losses stay
+globally quietest. The "quieter cell surviving elsewhere" signature only
+appears when the two keys' ranges overlap near the floor — that is, when the
+attenuation is MILD. **It disappears precisely as the fault gets worse.**
+
+**And it had been "verified" against a fabricated case.** The test that passed
+used a RECONSTRUCTED ch8 with key 84 at 3 of 9 cells rather than the 6 of 9 the
+machine gave, with the ranges built to overlap. Real data was available and was
+not used. Two of s3ked's eleven retro-audited conditions were decided by 0.2 dB
+margins, which is noise.
+
+**THE TEST THAT WORKS, and it does not involve the floor at all.** Capture gain
+is **common-mode** across keys — lowering it moves every key equally.
+Over-filtering is **differential**. So compare the keys at their LOUDEST
+surviving cell, where nothing is lost and every reading is ~40 dB clear of the
+floor, measured against the SOURCE per key so a legitimately quiet key is not
+blamed:
+
+    ch8 base ff49   k36 @v127 -18.7   k84 @v127 -26.0   ->  7.3 dB apart
+    ch8 rule ff99   k36 @v127 -19.8   k84 @v127 -18.8   ->  1.0 dB apart
+
+With one keygroup and identical parameters, 7.3 dB of top-end difference cannot
+be capture gain. `TOL_LOUD_END_DB = 3.0` sits comfortably between the two.
+
+> **If the keys disagree where nothing is lost, the disagreement is in the
+> instrument under test; the floor can only ever hide that, never create it.**
+
+**It immediately re-graded a row**: ch5 scored 0.852 under the original guard
+and 0.000 under a corrected one, because its dropped cells were never
+gain-limited either. The hardware evidence (|diff| 3.89 -> 0.45 on raising its
+corner) had been in hand for an hour and had not been connected to the score
+still excusing that row.
+
+**The boundary, and it is the same bug one level up.** The test needs **at least
+two keys in the record** — with one there is nothing to compare against. The
+one-key case returns `gain_limited_undetermined` explicitly and **fails towards
+penalising**: a visible false alarm is recoverable by looking, a silently
+excused fault is not. **A guard that returns its default when it cannot decide
+is not a guard.**
+
+**The lesson that outlasts the fix.** Three successive guards were written here
+in one morning, each to correct the last, and the first two were validated
+against cases their author constructed. **The captures were on disk throughout.**
+A discriminator tested only against its author's mental model of the fault will
+encode that model's blind spot exactly.
+
+### §GAINVSFILTER addendum — pair on the thing under test (s3ked, 2026-09-05)
+
+The across-key form needs a per-key SOURCE reference, because two keys play
+different material and the difference between them is mostly real. Our own
+figures show how much correction that term is carrying:
+
+    ch10   source spread between keys 36 and 84   +7.79 dB
+    ch8    source spread                          +0.23 dB
+    ch2    source spread                          -0.14 dB
+
+ch10's whole apparent anomaly — a raw loud-end spread of 8.41 dB at the corner
+we verified as correct — **is the material.** Normalised it reads 0.6 against
+ch8's 7.0, so the distribution is bimodal with a gap rather than ambiguous.
+
+**But a different pairing needs no reference at all: the SAME key, two
+conditions, loudest cell.** Same key means same material, so there is nothing
+to subtract; hold the capture gain fixed and gain is common-mode again, and the
+only thing differing between the two sides is the byte written.
+
+    condition change          k36 delta   k84 delta
+    ch2  mv9 -> mv0             -0.04      +16.66    corner throttling k84
+    ch8  ff49 -> ff99           -1.07       +7.17    corner throttling k84
+    ch5  ff78 -> ff99           -0.01       -0.32    loud end already correct
+    ch7  ff65 -> ff89 (Q0)      -0.37       +0.38    loud end already correct
+
+Separation 0.38 to 7.17 — wider than the across-key form achieves *after*
+normalisation.
+
+**The general form, which outlives both statistics:**
+
+> Prefer a comparison whose two sides differ only in the thing under test.
+> When a measure needs a correction term, check whether a different pairing
+> removes the need for one.
+
+**Where each applies here.** The matrix score sees ONE converted state against
+the source, so the across-key form is the only one it can compute and its
+normalisation is doing necessary work rather than covering for a bad pairing.
+**The card rebuild is different**: it produces a second converted state of the
+same programs at the same keys, so the same-key pairing IS available there and
+is the right way to verify the writer fix — old volume against new, no source
+term, nothing differing but the bytes the writer emitted.
+
+**Four corrections in one morning, two on each side, every one caught by running
+a proposed test against captures that already existed** — none by reasoning
+harder about the fault. The corner-placement result itself never moved through
+any of it, because it rests on the measurements rather than on the statistic
+used to summarise them.
+
+### §AKAICORNER caveat — every reading was patched RAM, not written output
+
+**s3ked, 2026-09-05.** Every condition behind this note, and every reading in
+their §171-§178, set parameters by SysEx on a program already resident in RAM.
+**None exercised the writer.** The rule is verified as a rule — those corner
+values do what the measurements say on that machine — but nothing here tests
+that `akai_s3000_writer` actually emits them.
+
+That is precisely the gap `env2_depth` fell through this morning
+(§AKAIENV2GATE): a value can be right in RAM, and the code that generates it
+wrong, and no amount of RAM-side measurement will show it. **The card rebuild is
+the only test that closes it**, and its procedure is in TODO.md.
+
+A test that never runs the code under test is measuring the machine, not the
+converter. Both are worth measuring; they are not the same measurement.
+
+
+## §KRZDRUMCHAN — a drum program is silent unless the channel matches DrumChan
+
+**Status:** measured on a K2000R 2026-09-05 (k2kremote), with the control.
+
+A K2000 program with more than three SPLIT layers is a drum program and sounds
+**only when the played MIDI channel matches `DrumChan` on the Master page.**
+
+    the ch10 lead program (8 layers) on ch 9                 0/45 audible, -76 dBFS
+    the same program on ch 10 with DrumChan moved to 10   -14.4 to -9.0 dBFS
+
+**And the drum channel is NOT otherwise special**, which is the half that would
+have been guessed wrong:
+
+    the ch1 lead program (1 layer) on ch10 with DrumChan = 10   -13.57 dBFS
+    the same program on ch10 as an ordinary channel        -13.56 dBFS
+
+So `DrumChan` explains a drum program's silence **and nothing else**. The
+tempting inference — "the drum channel is reserved, so normal programs are
+silent there" — is false, and it was stated as a mechanism before the control
+was run. It also means that a *separate* dead channel on this rig (channel 8
+reaches the instrument neither through mididings nor direct at the ESI port,
+for normal and drum programs alike) is unrelated and still unexplained.
+
+**What this cost.** `convert.py` printed
+`[layers] 'the ch10 lead program': 8 split layers → DRUM PROGRAM (play on a drum
+channel)` in the build log. Three sessions then spent most of a day on the
+silence — reverse-engineering bank bytes, measuring the instrument, excluding
+truncation and the object-id ceiling — and it was carried into the confidence
+table twice as "KRZ: program silent, cause unknown". **The answer was in the
+tool's own output the entire time**, four lines from a warning that HAD been
+read and quoted the same morning.
+
+**Consequence:** a drum program is now opt-in (§KRZDRUMOPTIN / `--krz-drum-program`,
+Jan 2026-09-05). The default reduces such a preset to three layers so it plays
+on any channel and reports which velocity bands it dropped.
+
+---
+
+## §ATTACKSHAPE — "attack time" means different things on the MPC and the E4XT
+
+**Measured 2026-09-05, both ends on hardware.** This started as a scoring
+artifact and turned into a real converter finding, so read the second half even
+if the first half is all you came for.
+
+### The scoring artifact (not a bug)
+
+Channel 5 scored `UNMEAS` on E4XT and AKAI. The program's amp attack is
+**5.58 s** and the measurement note is **1.2 s**, so every machine was being
+judged on the first ~2 % of a ramp. Nothing was wrong with the conversion; the
+note was shorter than the envelope. **A program whose attack exceeds the
+measurement note cannot be scored by that note** — the fix is a longer note,
+not a writer change.
+
+### The real finding
+
+With 14-second notes, both ramps normalised by their **own** nominal attack
+time (MPC measured here; E4XT measured by the `eosed` session at rate 89 and
+rate 94, whose curves collapse onto each other and thereby confirm the
+rate→seconds mapping):
+
+    t / T_nominal    MPC raw   MPC smoothed      E4XT
+        0.10          21.6 %       15.1 %          1.67 %
+        0.25          31.9 %       28.5 %          1.97 %
+        0.50          59.0 %       55.8 %          6.67 %
+        0.75          69.3 %       70.1 %         17.97 %
+        1.00          90.4 %       73.8 %         28.08 %
+
+**TREAT THESE AS ORDER-OF-MAGNITUDE ONLY — see the contamination note below.**
+
+**The same nominal attack value does not produce the same ramp.** At its own
+attack time the MPC has delivered 89 % of amplitude; the E4XT has delivered
+28 %. The E4XT curve is strongly convex, the MPC curve is closer to linear —
+at 1.25 s the MPC sits at 32.9 % against a linear prediction of 22.4 %, while
+the E4XT sits at 2.0 %.
+
+So **copying the attack time across is not a faithful conversion.** It is
+faithful to the number and not to the sound, and the error grows with the
+attack length: negligible on a 20 ms attack, ~24 dB on a 5.58 s one.
+
+### Budget for the ch5 deficit (~35 dB in a 1.25 s window)
+
+    shape difference at 1.25 s      24.4 dB   measured, both ends
+    asymptote difference             2.9 dB   eosed, held to completion
+    ---------------------------------------
+    accounted                       27.3 dB
+    residual                        ~8   dB   NOT yet explained
+
+**The residual is real and open.** Do not describe this item as closed.
+
+### What is NOT yet known — required before any writer change
+
+The E4XT table above stops at `t/T = 1.0` because that is what was reported,
+not because the data stops: those captures are 14 s ≈ 2.5 T. **Ask `eosed` for
+the same normalised table out to t/T = 2.5.** Without it there is no measured
+crossing point and therefore no defensible correction factor — the natural fix
+(scale the E4XT attack down so the two curves meet at, say, 50 % amplitude)
+needs to know where the E4XT actually reaches 50 %, and it is somewhere past
+1.0 T where we currently have no points.
+
+**Do not implement a correction factor from the five points above.** They
+constrain the shape only over the first attack period, and the whole question
+is what happens after it.
+
+### Trap this cost, again
+
+The first run of this measurement used `sched['t_on']`, which was `0.000`,
+while the audio started at **1.55 s**. Every number came out wrong in a way
+that looked physically interesting (a ramp that appeared to start with two
+digitally-silent seconds). See §ANCHOR: the MIDI-to-audio offset is a property
+of the rig, and it must be taken from the audio, never from the schedule.
+
+
+---
+
+## §RAMPSUBJECT — the ch5 ramp numbers are contaminated; measure on a sine
+
+**Correction to §ATTACKSHAPE, same day (2026-09-05), before anything was built
+on it.** The ramp comparison in §ATTACKSHAPE was measured on `the ch5 slow-attack pad`,
+which is **amplitude-modulated material**, and that invalidates the precise
+numbers on both ends.
+
+`eosed` found it first on the E4XT: past `t/T` ≈ 1 the bin level is set by the
+program's own modulation (period 0.70 s) and not by the attack, so there is no
+stable asymptote to normalise against. Their two capture rates, which collapse
+onto one curve below `t/T` 0.75, **diverge exactly where the answer was
+wanted** — the 50 % crossing reads `t/T` 1.129 at rate 89 and 0.879 at rate 94,
+28 % apart on the same envelope and the same material.
+
+**Checked here on the MPC side rather than assumed, and the same fault is
+present.** The sustained section autocorrelates at lag 0.17 s with 11.7 dB
+peak-to-trough. Re-reading each point with ±0.35 s smoothing moves them:
+
+    t/T 0.10   -6.5 points      t/T 0.75   +0.8
+    t/T 0.25   -3.4             t/T 1.00  -16.7   <-- worst
+    t/T 0.50   -3.2
+
+**So the MPC `t/T` 1.00 point is not trustworthy either**, and the 24.4 dB
+shape gap quoted in §ATTACKSHAPE inherits that uncertainty.
+
+### What survives
+
+The **direction and rough size** survive: 15 % against 1.67 % at `t/T` 0.10 is
+an order of magnitude, far larger than a 17-point contamination. The MPC ramp
+really is much faster than the E4XT's for the same nominal attack value, and
+§ATTACKSHAPE is still a real finding.
+
+**What does NOT survive is any number precise enough to build a correction
+factor from.** The TODO gate stays closed.
+
+### The fix, and why it is the right subject
+
+Measure the ramp on **a single steady sine sample**, one preset per attack rate
+(0/40/70/89/94/110). No modulation to contaminate the bins, no asymptote
+ambiguity, readable to any `t/T`. `eosed`'s point, and it is the correct one:
+*`the ch5 slow-attack pad` was never the subject this measurement wanted* — it was only
+the preset under investigation for a different reason.
+
+### §ANCHOR, in both directions on one afternoon
+
+- **Mine:** took the anchor from the schedule, which said `0.000` while the
+  audio started at 1.55 s.
+- **Theirs, nearly:** onset detection on the *subject* returns 4.36 s at rate
+  89 and 5.62 s at rate 94 — because on a slow-attack sound the first audible
+  energy is not the note-on, it is where the ramp crosses the threshold. That
+  would have put the anchor 2.7 s late and produced a beautifully wrong ramp.
+
+**So "take the anchor from the audio" needs its qualifier: from a fast-attack
+reference captured in the same geometry, never from the note being measured.**
+
+
+---
+
+## §KRZUPPITCH — the up-pitch ceiling is an octave higher than we clamp to
+
+**Hardware-confirmed 2026-09-05 by `k2kremote` via SysEx, RAM only, restored.**
+
+`_compute_max_pitch()` (`writers/krz_writer.py:221`) clamps a zone at
+
+    maxPitch = 100*root + 1200*log2(48000 / sample_rate)
+
+For the measured zone (root 71, stored 24000 Hz) that is **+12 semitones**, and
+the writer ended the layer at key 83. Raising the layer `HiKey` to 127 on the
+instrument and sweeping the result:
+
+    key  +st  lowest partial     key  +st  lowest partial
+     83   12     492.2            90   19     369.1 (=738.2/2)
+     84   13     521.5            91   20     389.6
+     85   14     550.8            92   21     413.1
+     86   15     585.9            93   22     436.5
+     87   16     621.1            94   23     928.7
+     88   17     659.2            95   24     984.4
+     89   18     697.3            96   25     984.4   <-- capped
+
+**A clean semitone ladder from +12 to +24, then it stops.** Key 96 returns
+key 95's partials exactly. **So the hardware ceiling is +24, not +12: we
+discard twelve semitones of usable range and leave keys 84-95 silent for no
+reason.**
+
+### The inconsistency this exposes in our own file
+
+`_compute_base_pitch()` twenty lines below already uses **96000**, while
+`_compute_max_pitch()` uses **48000**. For the measured sample +24 semitones is
+a playback rate of 96 kHz and +25 is 101.7 kHz, so the hardware limit is an
+absolute playback-rate ceiling near 96 kHz — i.e. the 96000 constant, matching
+`_compute_base_pitch`.
+
+### Why the corpus said 48000, and why that is not a contradiction
+
+The comment cites real soundsets: sr=30k → +814, sr=15k → +2014, both of which
+fit the 48000 form and not the 96000 one. Those are the values authors **stored
+in the maxPitch field**, which correspond to a 48 kHz playback rate. **The
+stored field is an authoring/fidelity convention; the machine plays an octave
+past it.** Both observations are correct and they are about different things.
+
+### FIXED 2026-09-05 — the ceiling is 96 kHz, confirmed on two samples
+
+`k2kremote` measured a second sample in the same bank, **and then corrected an
+off-by-one in their own first reading of it.** The corrected data is clean and
+was re-derived here from periods read out of the file rather than taken on
+trust:
+
+    smp 321  root 71  23999.808 Hz   +24 plays (95 999.2 Hz)   +25 caps (101 707.6 Hz)
+    smp 320  root 66  42762.455 Hz   +14 plays (95 998.5 Hz)   +15 caps (101 706.8 Hz)
+
+**Both last-playing rates are ~95 999 Hz; both first-capped rates are
+~101 707 Hz.** The ceiling therefore lies strictly inside
+**(95 999, 101 707) Hz**. 96000 is in that interval; 48000 is nowhere near it.
+
+**PINNED 2026-09-05 — the ceiling is measured, not bracketed: 96 044 Hz,
+0.8 cents from 96 000.** See "the third sample" below; the earlier
+"confirmed, not pinned" caveat is withdrawn.
+
+**WHY two samples could not narrow it, which is not obvious and is the reason
+a third would help.** The two rates are 23999.808 and 42762.455 Hz — a ratio of
+**9.98 semitones**. They sit on the *same semitone grid*, so their transposition
+ladders land in the same places and bracket the ceiling identically. The
+agreement between them was real but carried **no positional information**; that
+is why four measured points yield a one-semitone bracket rather than four
+constraints. `k2kremote`'s point, 2026-09-05.
+
+**Narrowing needs a rate that is NOT a semitone multiple of 24 kHz**, because
+an off-grid rate lands inside the interval for exactly one transposition. Every
+stored rate in the measured bank, checked here:
+
+    23999.808   14 smp   -0.0001 st from 24k    on-grid
+    32035.880    7 smp   +4.9999 st             on-grid
+    35959.581   16 smp   +7.0001 st             on-grid
+    38096.689   90 smp   +7.9996 st             on-grid
+    42762.455    9 smp   +9.9997 st             on-grid
+    44099.488   16 smp  +10.5327 st             OFF-GRID
+
+**Five of six are on-grid to within 0.0004 of a semitone.** Only the 44.1 kHz
+group can move the answer:
+
+    +13 ->  93 444 Hz  below the interval   plays under both hypotheses
+    +14 ->  99 000 Hz  INSIDE               the discriminator
+    +15 -> 104 887 Hz  above                caps under both hypotheses
+
+**Result: +14 CAPS.** 99 000 Hz does not play, so the ceiling is below it and
+96000 stands.
+
+### The third sample did better than answer the question
+
+Above the limit every key plays at the **same frozen rate**, so the plateau's
+pitch *is* the ceiling — the capped notes measure it directly instead of
+bracketing it. Using sample 220 (`Syn4`, root 51, pitched):
+
+    key  +st     f0 Hz   note
+     63   12    368.51
+     64   13    196.32   last playing, commanded 93 443.6 Hz
+     65   14    201.87   CAPPED, already on the plateau
+     66   15    201.50
+     ...        plateau 201.78 +- 0.37 Hz through key 72
+
+Key 64 plays a known 93 443.6 Hz and the plateau sits **+0.475 semitones**
+above it:
+
+    ceiling = 93 443.6 x 2^(0.475/12) = 96 044 Hz     (plateau mean)
+            = 93 443.6 x 2^(0.483/12) = 96 085 Hz     (key 65 alone)
+
+**0.8 cents from 96 000, or +0.05 %.** All six observations across three
+samples fit it.
+
+### Caveats on that number, from the session that measured it
+
+1. **The f0 estimator jumps harmonic rank across the sweep** — apparent steps
+   of +4.00, −1.95 and −10.90 semitones appear between rows that are one
+   semitone apart. The requested control (clean steps at +11/+12/+13) only
+   partly passed. **The boundary rows are still trustworthy** because key 64,
+   key 65 and the whole plateau sit in the same rank (196-202 Hz), so the
+   *ratio* between them is sound whatever the rank is, and the plateau is flat
+   to 6.3 cents over seven keys. **Do not read the low rows as pitch.**
+2. **The first attempt clipped at 0.00 dBFS on every note.** This program has
+   almost no velocity response, so a lower velocity does not help; it was
+   attenuated with CC7=40 and restored afterwards. The clipped run put the
+   boundary in the same place, but **a clipped capture is exactly the input
+   that makes a harmonic estimator confident and wrong.**
+3. The 96 044 figure rests on key 64 and the plateau being the same harmonic
+   rank. Their proximity supports that; nothing else does.
+
+**Use a PITCHED sample for this.** Twelve of the sixteen at that rate are a
+drum kit; a kick or a snare has no partial ladder, and the method reads
+lowest partials. Ids 216/217/219/220 (roots 47-51) are pitched. Note also that
+the test then sits at keys 60-66, well below the key-78-and-up region where the
+partial picker was validated — verify the picker gives clean semitone steps
+there before trusting the boundary.
+
+### The fix: one function became two
+
+The 48000 was not simply wrong — it was **the right constant for the wrong
+job**. `_compute_max_pitch()` had two callers doing different things:
+
+    line 340   the STORED maxPitch field    -> keep 48000 (authoring convention,
+                                               matches every real soundset)
+    lines 574, 2288  how far a zone may extend -> now _compute_playback_ceiling(),
+                                               96000 (the machine's real limit)
+
+**The stored field does not gate playback** — a sample whose maxPitch says
+key 83 tracks cleanly to key 95 once the layer's `HiKey` allows it. That is why
+both the corpus evidence and the hardware evidence are correct and why this
+survived so long.
+
+### What it is worth, measured over the local corpus
+
+69 banks, 2160 zones:
+
+                             OLD (48000)      NEW (96000)
+    zones entirely lost       78  (3.6%)       0  (0.0%)
+    zones clipped at top     899 (41.6%)     380 (17.6%)
+
+**78 zones that were dropped entirely now place, and 519 more stop being
+clipped.** A dropped zone is not silence — the hole-filling extends a neighbour
+over those keys, so they sounded the WRONG sample.
+
+### The failure mode, for whoever measures this next
+
+**Above the ceiling a note does not go silent. It plays at full level, cleanly,
+at a frozen wrong pitch** — seventeen consecutive keys of it in the sweep. Any
+peak or RMS check calls every one of them a success; **only the partials show
+it.** The cap was originally reported a semitone low precisely because the last
+tracking key's partials happen to equal the frozen value, and the column was
+read rather than the ratios computed.
+
+**Also withdrawn:** an earlier draft of this section reported that the two
+samples disagreed by a semitone and hypothesised a 12-semitone keymap-entry /
+played-key frame offset. **That analysis was built on the uncorrected number and
+is void** — there is no discrepancy, no frame offset involved, and nothing left
+over. (The entry-offset-by-12 convention is real and is documented in
+`_build_keymap_entries`; it simply had nothing to do with this.)
+
+
+## §KRZWRONGSAMPLE — a keymap run points at the wrong sample object
+
+**Hardware-confirmed 2026-09-05 by `k2kremote` via SysEx, RAM only, restored.**
+
+In a bank written by our KRZ writer, keymaps 215/216/217 of program 206 carry a
+five-entry run pointing at sample **311** (a noise sample) where sample **319**
+(the `-061 Db3` member of the multisample sequence) belongs. The run sits
+exactly between 318 (`-056 Ab2`) and 320 (`-066 Gb3`), so the sequence has one
+member replaced by an unrelated sample.
+
+Repointing those five entries on the instrument:
+
+    k 48    -3.75 ->  -4.22    -0.47 dB   (control)
+    k 60   -32.58 ->  -2.62   +29.96 dB   <-- target
+    k 72    -7.09 ->  -4.39    +2.70 dB   (control)
+
+**+29.96 dB**, and key 60 now sits with its neighbours instead of 28 dB below
+them. The wrong sample was also the bank's **one unreferenced sample**, which is
+the same bug seen from the other side.
+
+Keymap entries are 6 bytes; the sample id is a big-endian word at offset
+`31 + 6i`. Only the low byte differed, so the corruption is confined to one byte
+per entry.
+
+**Root cause in `krz_writer` is NOT yet found — this records the confirmed
+symptom, not the fix.** Look at the sample-id assignment where a multisample
+keymap is built: an off-by-one or a stale index into the sample table would
+produce exactly this, one wrong id in an otherwise correct ascending run.
+
+**Control-move honesty note from k2kremote, worth keeping:** k72's +2.70 dB
+looks like an effect and is not — that key has read between -4.4 and -7.8 dBFS
+across six runs, so both control moves are inside their own spread.
+
+
+---
+
+## §ANCHORCHECK — a flat signal cannot catch a late anchor
+
+**Demonstrated on hardware by `eosed`, 2026-09-05, on a control capture rather
+than argued from theory.** This is a companion to §ANCHOR: that section says
+where to take the anchor from, this one says how to know you got it right.
+
+The obvious sanity check on an attack measurement is *"the instant-attack
+preset must come out instant; if it does not, the anchor is wrong."* **That
+check is one-sided, and it is blind in the direction that does damage.**
+
+Moving the anchor deliberately on an instant-attack capture, and asking that
+question at each offset (first 100 ms bins relative to the note's asymptote):
+
+    offset error    bin1    bin2    bin3    verdict
+      -0.30 s      -39.2   -38.6   -38.7    caught
+      -0.10 s      -38.7     0.0    -0.1    caught
+       0.00          0.0    -0.1    -0.4    "instant"
+      +0.10         -0.1    -0.4    -1.0    "instant"   <-- missed
+      +0.30         -1.0    -1.3    -1.8    "instant"   <-- missed
+      +0.60         -2.0    -2.3    -2.7    "instant"   <-- missed
+      +1.00         -3.5    -4.1    -4.3    caught
+
+**An early anchor is caught at 0.10 s; a late one passes to about 0.60 s.**
+This is by construction and not bad luck: *after an instant onset the signal is
+flat, so starting the window late simply lands on more of the same.* A
+featureless signal cannot report that you began looking at it too late.
+
+### Why late is the direction that hurts
+
+A late anchor skips the first Δ of every ramp, so **every attack measures
+FASTER than it is** — you start partway up. And the error scales inversely with
+the preset's own attack time: 0.3 s is 1.7 % of an 18 s attack and ~100 % of a
+0.308 s one. **The blind spot is worst exactly where the material is most
+sensitive to it**, while the instant-attack control goes on looking perfect.
+
+### The three rules that replace it
+
+1. **Validate on a moderate KNOWN attack, not on the instant one.** A preset
+   with a known T gives a prediction to falsify, and the offset error is a
+   large fraction of T rather than a small one. The instant preset can only
+   ever catch the early direction.
+
+2. **Use BOTH edges of the reference.** Note-off is a sharp falling edge and an
+   independent time reference that owes nothing to the attack:
+   `last_energy − first_energy` must equal the commanded hold (measured
+   14.00 s against a commanded 14.0). If the edges do not bracket the hold, one
+   detection is biased **and you know it before you have a curve.**
+
+3. **Carry the reference in EVERY capture, not once for the set.** The rig
+   offset was stable at 1.200 s with **40 ms sd across 52 captures** — small,
+   not zero, and a single reference capture does not validate the others.
+   `tests/re_banks/gen_e4xt_atkshape_bank.py` puts a fast-attack anchor zone in
+   every preset on a key no subject uses, so each capture carries its own
+   offset.
+
+**And resolution: bins must be finer than the error you want to catch.** At
+250 ms bins a 100 ms late anchor is invisible even on the sensitive preset.
+
+
+---
+
+## §XPMLANEMIX — a sparse layer shifts every later layer into the wrong voice
+
+**ROOT CAUSE of §KRZWRONGSAMPLE, found 2026-09-05. It is in the XPM PARSER, not
+in the KRZ writer, and it therefore affects E4B and AKAI output too.**
+
+### What the source actually contains
+
+In the affected program each `<Instrument>` is a key range holding
+**Layer 1 = the pitched multisample member** and **Layer 2 = a noise texture**.
+Except the first:
+
+    Instrument 1  keys 16-23   Layer 2 only   'Oscillator-Noise White'
+    Instrument 2  keys  0-28   Layer 1 '...bass-026 D0'  + Layer 2 noise
+    Instrument 3  keys 29-33   Layer 1 '...bass-031 G0'  + Layer 2 noise
+    ...
+
+**Instrument 1 has no Layer 1.** That single omission is the trigger.
+
+### What the parser does with it
+
+`parsers/xpm_parser.py:2085` allocates zones to voices by **first fit**: a zone
+goes into the first lane whose parameter signature matches and whose existing
+zones it does not overlap in key. Layer NUMBER is not part of the decision.
+
+Walking the real file:
+
+    noise@16-23   -> lane 0 is empty                        -> lane 0
+    026@0-28      -> overlaps lane 0's noise@16-23          -> lane 1
+    noise@0-28    -> overlaps lane 0 and lane 1             -> lane 2
+    031@29-33     -> no overlap with lane 0                 -> lane 0
+    noise@29-33   -> overlaps lane 0; clear of lane 1       -> lane 1
+    036@34-38     -> lane 0 ... and so on
+
+Producing exactly what the model holds:
+
+    voice 0:  noise@16-23, 031, 036, 041, 046, 051, 056, 061, 066, 071
+    voice 1:  026@0-28, noise, noise, noise, ... (nine of them)
+    voice 2:  noise@0-28
+
+**The pitched ladder is missing its lowest member, which has been exiled to
+voice 1, and a noise sample is sitting in the ladder in its place.** The KRZ
+writer's `_coverage_remap_voices` then faithfully lays voice 0's zones out by
+root — noise included — which is how a noise sample reaches the middle of a
+bass multisample and plays 30 dB down (§KRZWRONGSAMPLE, +29.96 dB recovered on
+hardware by repointing it).
+
+### This is not an off-by-one; the allocator is doing what it was written to do
+
+First-fit lane packing is correct for its original purpose — stacked MPC layers
+that must become parallel voices. **What it lacks is any notion that Layer 1 and
+Layer 2 are different ROLES.** With every instrument carrying both layers, first
+fit happens to put all Layer 1s in lane 0 and all Layer 2s in lane 1, and the
+bug is invisible. **One instrument missing Layer 1 breaks the coincidence, and
+everything after it is off by one lane.**
+
+### Consequences beyond the K2000
+
+**The defect is in the parsed model, so every writer inherits it.** Channel 7
+scored 0.814 on E4XT and 0.776 on AKAI — the lowest of the melodic set on both —
+which is consistent with the same mixed ladder, though **that link is not yet
+verified**: check the E4B and AKAI output for this program before claiming it.
+
+### The fix, and the corpus run that corrected it
+
+**Implemented as a PREFERENCE, not as lane identity — and the difference was
+found by the corpus, not by reasoning.**
+
+**First attempt: make the source layer number part of the lane key.** It fixed
+the target file. Measured against 1124 MPC XPMs it also broke two:
+
+    a string program    4 -> 7 voices
+    the ch10 lead program     2 -> 8 voices
+
+Both are programs whose zones form a proper **root x velocity map inside ONE
+voice** — velocity bands do not overlap, so first fit had packed them together,
+**correctly**. Hard-splitting by layer turned one voice into four parallel ones:
+quadruple polyphony on the E4XT, and past the K2000's 3-layer limit, where it
+would have been thinned and lost content. **A fix for a rare bug would have
+degraded common material.**
+
+**Second attempt, shipped: two-pass lane selection.** Prefer a lane of the same
+source layer; if none fits, fall back to any compatible lane exactly as before;
+only then open a new lane. The preference alone is enough — a zone joins its own
+layer's lane when one exists, so a sparse layer no longer displaces later
+layers, while zones that legitimately share a lane still do.
+
+### Corpus result (1124 MPC XPMs, XML-verified — 16 of 1140 `.xpm` files on
+this disk are X11 pixmaps and were excluded)
+
+    parse errors        373 -> 373      no new failures
+    total voices       1805 -> 1805     +0
+    zone SET changed              0     nothing gained or lost, anywhere
+    voice COUNT changed           0
+    presets regrouped             2
+
+**Only two presets change, and both improve:**
+
+    the ch7 bass program   noise and pitched ladder separated (the bug)
+    a vintage drum kit      117 kick zones into one coherent voice, instead of
+                          113 mixed with cymbals/snares plus 5 stranded
+
+**Four of 1124 files contain the trigger** (an instrument whose layer 1 is empty
+while a higher layer is filled): `another lead program`, `a bells program`,
+`a vintage drum kit`, `the ch7 bass program`. **Two of the four are
+unaffected** — first fit happened to place them correctly anyway, because their
+sparse layer did not overlap anything that mattered. The trigger is necessary,
+not sufficient.
+
+### End-to-end verification through the shipping CLI
+
+`Vintage-Kit-PSC` converted to KRZ with `convert.py` under both parsers (the
+target file's own samples are no longer on this disk, so the trigger file used
+for this was the other one that changes):
+
+    OLD  v0 112 zones (101 kick + 11 other)   v1   5 kick   v2 4 other
+    NEW  v0  12 zones (  1 kick + 11 other)   v1 105 kick   v2 4 other
+
+Same preset count, same voice count, **same 121 zones total** — the grouping
+changed and nothing was lost. The two banks are byte-different and the same
+size.
+
+### Still not verified
+
+**That E4B and AKAI output for the affected program improves.** The claim that
+channel 7's 0.814 (E4XT) and 0.776 (AKAI) share this cause remains
+unconfirmed — those samples are no longer on disk, so it needs the source
+material back before it can be checked.
+
+Do not fix this in `krz_writer`: the writer is correct on the data it is
+handed.
+
+
+---
+
+## §DIAGIFACE — the structured diagnostics interface, and the hole a consumer found
+
+**`models/diagnostics.py`.** Writers and parsers `emit()` structured records
+that a caller reads with `collect()`; existing stdout is preserved byte for
+byte via `echo=`. Built because VinSamLib's conversion wrapper reads captured
+stdout **only on an exception**, so every warning from a *successful*
+conversion was discarded — which cost three sessions a day on a silent K2000
+program whose cause was printed in the build log the whole time.
+
+### 16 codes across six formats
+
+    KRZ    KRZ_LAYERS_THINNED  KRZ_DRUM_PROGRAM  KRZ_COVERAGE_REMAP
+           KRZ_ROM_ONLY  KRZ_ZONES_DROPPED
+    AKAI   AKAI_KEYGROUPS_DROPPED  AKAI_LAYERS_SPILLED  AKAI_NAMES_SHORTENED
+    E4B    E4B_ZONE_SAMPLE_MISSING  E4B_VELOCITY_SPLIT
+    EIII   EIII_SAMPLE_LIMIT  EIII_PRESET_LIMIT  EIII_KEY_OVERLAP_SPLIT
+    SF2    SF2_PRESETS_TRUNCATED  SF2_ENTRIES_DROPPED
+
+### Two conventions, both learned the hard way
+
+**1. `remedy` never names a CLI flag.** The consumer's GUI has no command line
+and was rewriting our flag names by hand. Flags live in `detail['cli_flag']`.
+Enforced by a test that walks the **AST** — a first version grepped the source
+and was correctly rejected by our own consistency law, since a grep matches the
+word in a comment that says "never do this".
+
+**2. `content_lost` is a REQUIRED field on `Diagnostic`, not a `detail` key.**
+
+This is the one worth reading. It began as `detail['content_lost']` with a test
+asserting every **new** code carried it. VinSamLib read it as a consumer and
+found the hole: they filter with `d.detail.get('content_lost')`, which returns
+`None` for the five codes written before the convention — **and `None` is
+falsy**. So `KRZ_DRUM_PROGRAM`, the silent instrument this entire interface
+exists because of, filtered as *"nothing lost"*. So did `KRZ_ZONES_DROPPED`,
+whose name is the loss.
+
+**The test passed the whole time, because it was scoped to new codes. Review
+passed too, because no single emit site looked wrong.** The defect was in the
+gap between the rule and its coverage, which is exactly where a rule written as
+a test rather than as a constraint tends to fail.
+
+Their fix, taken as offered: **a required constructor argument**. Omitting it is
+now a `TypeError` at the emit site rather than a `None` at the consumer's, every
+existing code had to be answered to keep the module importable, and the property
+holds for every future code with no test to maintain. *A detail key can always
+be forgotten; a required argument cannot.*
+
+### Why a bool and not an enum
+
+Considered `lost / restructured / metadata`. Rejected on the consumer's
+argument: an enum gives "restructured" as a comfortable resting place for a case
+nobody thought hard about, and any consumer switching on three values breaks the
+day a fourth appears. **The bool forces a yes/no at emit time and its meaning is
+stable forever.**
+
+Where the bool underserves, the answer is a NUMBER in `detail`, not a category.
+`AKAI_LAYERS_SPILLED` is honestly `content_lost=False` — no audio is lost — but
+an S3000XL counts programs, **keygroups** and samples against one pool of ~1006
+resident objects, so a faithful restructure can still be what stops a volume
+loading. It therefore carries `detail['keygroups_added']`, a number that can be
+added to a budget. Same shape for `E4B_VELOCITY_SPLIT` (`voices_added`) and
+`EIII_KEY_OVERLAP_SPLIT` (`layers_added`).
+
+`KRZ_DRUM_PROGRAM` keeps every layer, so its bool is False unless the layer
+clamp bites — but it is silent on every normal channel, so it carries
+`detail['silent_on_normal_channel']` and a test pins that both of its paths do.
+
+### The import codes, and a default worth questioning
+
+`SF2_ENTRIES_DROPPED` is the important one. A preset entry that yields no zones
+is dropped, **which renumbers every later entry** — worse than a shortfall at
+the end, because a caller asking for "the 4th preset" silently gets the 5th.
+VinSamLib wrote a whole alignment routine (`resolve_ordinal`) to survive it,
+which refuses rather than guesses when alignment is ambiguous — one corpus
+SoundFont carries the same name at nine positions. The code publishes
+`detail['dropped_indices']`, replacing that with a lookup.
+
+**Measured over the full local library, 504 readable SoundFonts:**
+
+    SF2_PRESETS_TRUNCATED   12 files   largest 444 listed -> 64 imported
+    SF2_ENTRIES_DROPPED      2 files   4 entries total
+
+    444 -> 64   the largest SoundFont here
+    219 -> 64   a large SoundFont
+    204 -> 64   another large SoundFont
+    200 -> 64   another large SoundFont
+     ... 8 more, down to 66
+
+**Both figures were independently reproduced by VinSamLib** over their own
+446-file scan: the same 2 files and the same 4 dropped entries.
+
+### Two corrections worth keeping, because both are the same mistake
+
+**Theirs:** their original report of "27 dropped entries across a 25-file
+sample" was **truncation counted as drops**. Re-running their scan with the
+default `max_presets` shows `one SoundFont` at 91 listed -> 64 parsed —
+a delta of exactly **27**. One file's truncation, recorded as a corpus-wide drop
+figure. **The conflation of the two mechanisms in their own documentation is
+also why they ranked import diagnostics fourth**, which is a good argument for
+the `SF2_PRESETS_TRUNCATED` / `SF2_ENTRIES_DROPPED` split existing at all.
+
+**Mine:** I reported "largest 219 listed" and that was wrong. My scan collected
+examples with `if len(examples) < 6` and I described **the first six encountered
+as if they were the largest** — the list was never sorted and the maximum was
+never computed. The true maximum is **444**, in a 1.6 MB file that was in my
+scan the whole time, and it is precisely the number they had given me and I
+implicitly doubted.
+
+**This is the failure mode `k2kremote` had named the same afternoon** — a
+correct number read wrong off its own output, where the defence is to *compute*
+the quantity rather than look at the column and decide. I wrote that lesson into
+this file and then made the same mistake in the next hour.
+
+**Do not re-derive the drop figure by sampling.** Drops are concentrated in two
+files out of ~500, so a random 25-file sample reports either zero or nonsense.
+That is what produced the bad number in the first place.

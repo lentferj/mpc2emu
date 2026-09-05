@@ -3686,3 +3686,466 @@ convention rather than waste. Raised 2026-08-14.
 - **"Doesn't extrapolate past T=1.0s" -- RETRACTED.** 7 onsets, evenly spaced at ~1040ms (std 4ms) = 0.96Hz, running continuously from t=1.519s to t=7.761s -- the entire hold, not stopping. Matches `period=T+41.7ms`'s 0.96Hz prediction almost exactly. **The formula is now confirmed at FOUR points spanning a 25x range in T, stronger than before, not weaker.**
 - **"Sustain doesn't hold" -- CONFIRMED, cleanly, on the same wall-clock-verified capture.** Trough 0.8-0.9%% of peak during an unambiguously-held note. **This part of the finding stands** -- a real, separate problem independent of the re-cycle bug, potentially affecting every sustaining K2000 patch this project has converted. Not yet scoped or chased further -- past the Layer-1-vibrato scope this investigation started from, needs Jan's priority call on whether/how to pursue it.
 | **`--resample` (vintage profiles) chained into an AKAI target: not yet checked whether it respects the AKAI's rate/bit limits** | *(2026-08-30, Jan, recorded for later -- not investigated yet, no repro run)* `--resample emulator2`/`emax1` (`processors/resampler.py::resample_vintage`) stores its output at the profile's own rate -- **27.5 kHz for both current profiles** -- and keeps `bit_depth=16` regardless of the profile's nominal 8-/12-bit character, since "quantization noise is baked in as signal" rather than the container shrinking (see that function's docstring). Neither 27500 is an AKAI-legal rate, so any `--resample`'d sample bound for `--format akai` necessarily takes a SECOND hop through the `[[step_n]] AKAI playback-rate snap` in `convert.py` (`akai_target_rate(27500) == 44100`, an upsample via `resample_to_rate`) before it ever reaches `build_sample`. Two things nobody has checked: (1) whether that second, clean sinc upsample preserves the vintage profile's deliberately-introduced quantization/aliasing character, or smooths it -- band-limiting theory says a proper upsample from a signal already limited to the profile's own bandwidth should be transparent, but that has not been verified against real output, and the `--no-bandpass`/bandpass-coloring stage sits in the middle of the chain and its interaction with a later resample is unexamined; (2) whether **bit rate** in Jan's sense (not `bit_depth`, which stays 16 throughout by design) means something else worth checking here -- e.g. whether the AKAI writer's own bit-depth field/flags read correctly off a vintage-resampled-then-snapped sample, given the sample never actually changes container width. **Blocked on:** nobody has run `convert.py --resample emulator2/emax1 --format akai` end to end and listened to or measured the result; do that first, on a source sample the vintage profile visibly colors, before assuming either the chaining or the character survives it. |
+
+## E4XT velocity→filter cord: the saturation detector never fires
+
+**Status:** open, found 2026-09-04, not yet fixed.
+**Blocked on:** nothing — needs a decision on which limit is authoritative.
+
+`e4xt_cord_saturates()` takes `(base_byte, amount, level_percent)` and has **no
+`source_units` parameter**, so for a velocity cord it under-estimates the reach
+by `E4XT_VEL_SOURCE_UNITS` = 2.08x. From base byte 92 with amount 31.27 it
+computes a reach of 170.4 against a ceiling of 250 and returns `False` — while
+the true reach at full velocity is 92 + 2.506·31.27·2.08 = **255.0**, past the
+ceiling. The cord saturates and the detector says it does not.
+
+It is not a near miss. The detector cannot fire below amount 63.0, and
+`e4xt_cents_to_cord_amount` asymptotes at ~31.3 for that base, so for velocity
+cords **it is unreachable by construction** — dead code that reads like a guard.
+
+**Consequence:** the `_cord()` re-saturation in `e4b_writer.py:1215` never
+applies to velocity→filter. That guard exists to stop a third-party bank's
+full-amount cord being rewritten smaller on every round trip (36.5 % of nonzero
+filter depths in 60 real banks saturate), and velocity cords are unprotected by
+it. Round-tripping a saturating velocity→filter cord of 100 rewrites it near
+31: sounds identical, reads different, shrinks again next time.
+
+**Not yet established:** whether a written amount of ~31 is *audibly* correct.
+The arithmetic says it reaches the byte ceiling and therefore the same cutoff,
+which would make this a fidelity-of-representation bug rather than a sound bug.
+That needs an E4XT measurement, not more arithmetic.
+
+See `docs/RESOLUTION_NOTES.md` §E4XTCORDSAT.
+
+## hw_measure leaked ALSA sequencer clients (FIXED)
+
+**Status:** fixed 2026-09-04 in `tests/re_banks/hw_measure.py`.
+
+`_midi_out()` created an `rtmidi.MidiOut()` per call with no cache and no
+`delete()`. A matrix run accumulated 22 clients and exhausted the ALSA
+sequencer **machine-wide**, breaking a sibling session's K2000 autodetect with
+`Cannot allocate memory` / `no K2000 answered on any of 38 output ports` — a
+failure indistinguishable from the instrument being switched off. Same bug this
+project recorded on 2026-07-12: `close_port()` does not free the backend client,
+`delete()` must be called. Now one cached MidiOut per port match plus an atexit
+release. See §E4XTCORDSAT's neighbour note in RESOLUTION_NOTES.
+
+## build_matrix_v4: the three target paths use different source lists
+
+**Status:** open, found 2026-09-04. Worked around for tonight by matching on
+program name; the build is still wrong.
+
+One build run emitted two different program sets:
+
+    target  built     KEYS-VP RICO   LD TUBE PIPE   rows usable vs the MPC
+    e4b     21:10:29      no             yes              10
+    krz     21:13:44      no             yes              10
+    akai    21:13         YES            no               11 of 11
+
+`ch6` (`the ch6 keys program`) exists on the MPC and in the AKAI volume only, so
+it can never appear in the E4B or KRZ columns of the matrix. `LD Tube Pipe` is
+in two targets and on no MPC track, so it is unmeasurable in every column.
+
+Not a staleness/clock problem — the KRZ and AKAI were built inside the same
+minute. Whatever chooses the source list is not shared between the three target
+paths. The fix is for the builder to take the project'a kit sample's own `[ProjectData]` folder. The E4B
+conversion sounds on all 16 keys. **So the conversion is faithful to the file
+and the MPC is not playing what the file contains.**
+
+Key 39 (`crash`) **sounded earlier the same evening** — it was captured as a
+2.25 s crash for the velocity ladder — so this is a change in machine state
+during the session, not a permanent property of the program.
+
+**Consequence for the matrix:** those three keys are UNMEASURABLE, not faults.
+Scoring them as "conversion sounds where source is silent" would record a
+converter defect that does not exist. Ask Jan to check pad state / mute / track
+state on track 11 before the next drum run.
+
+## KRZ loading procedure (RESOLVED — documentation, not a writer bug)
+
+**Status:** resolved 2026-09-04 by hardware control experiment. Needs writing up
+in `docs/KRZ_FORMAT.md` and in the disc loading instructions.
+
+Loading `MX_mpc_to_krz.KRZ` (149 samples, ids 200..348) into **bank 900** with
+mode **Fill** silently dropped 49 samples: ids 200-299 filled 900-999 and the
+rest had nowhere to go. Reloading the SAME FILE with destination **Everything**,
+mode **Fill** on an empty machine:
+
+    Program     bank 2:  11   ids 200..210
+    Keymap      bank 2:  22   ids 200..221
+    Soundblock  bank 2: 100   ids 200..299
+    Soundblock  bank 3:  49   ids 300..348
+    RAM 65536K -> 39983K = 25,553K consumed, against 24.8 MB of PCM in the file
+
+**All 149 loaded, ids exactly as the file specifies.** So `_MAX_OBJ_ID = 999` in
+`krz_writer` is correct as written and nothing needs splitting or capping.
+
+**The rule for users:** load as **Everything/Fill**, or into a low bank with
+**Overwrt**. Loading a bank with >100 objects of a type into a *specific* bank
+with **Fill** truncates silently, and into bank 9 it cannot work in any mode —
+Overwrt spills into "the bank following the just filled bank" and there is no
+bank 10.
+
+**Consequence for the night's data:** the first KRZ grid was measured on the
+truncated load and is invalid — not only missing its top keys but playing wrong
+samples in the middle (k36 -9.87 -> -3.92 and k60 -14.86 -> -30.54 between the
+two loads, same program, same notes). Re-run in progress; the old grid is kept
+at `~/temp/k2k_mxgrid/` as evidence about the truncation failure mode.
+
+## KRZ writer loses 56 of 128 keys: outer zones are not extended
+
+**Status:** open, confirmed 2026-09-05 from the file and on hardware.
+**Supersedes an earlier, wrong diagnosis — see the correction note below.**
+
+`the ch7 bass program`:
+
+    MPC source covers keys   0-127
+    KRZ conversion covers    12-83
+    LOST: 56 keys  (0-11 at the bottom, 84-127 at the top)
+
+The writer applies a per-zone pitch-stretch window — the lowest sample (root 26)
+starts its zone at key 12, i.e. -14 semitones; the highest (root 71) ends at 83,
+i.e. +12 — and then **does not extend the outermost zones to the keyboard
+edges**, so everything past them is uncovered and silent. Most samplers stretch
+the edge zones to 0 and 127.
+
+k2kremote measured the consequence on a correctly-loaded bank: keys 84 and 96
+silent, key 72 fine, unchanged across two different load methods.
+
+**CORRECTION — the earlier entry here claimed the top zone ran to key 127 and
+was silenced by `_KRZ_RATE_FLOOR` stretching it past the hardware's playback
+ceiling.** That was wrong. It came from reading raw keymap objects and indexing
+`entries[key]` directly, which ignores that each VOICE has its own key range
+selecting the portion of a full-128-key table that applies. The rate floor is
+still involved — it is plausibly what sets the +12 limit — but the fault is the
+missing edge extension, not a stretched zone failing to play.
+
+## WITHDRAWN: "KRZ writer collapses a drum kit's key map"
+
+**Status:** withdrawn 2026-09-05. **The finding was wrong.** Kept as a record
+because the reasoning failure is worth more than the claim was.
+
+Claimed: the KRZ drum keymap assigned 16 keys to only 6 distinct samples, where
+the E4B used 16. Checked with the top-level parser instead of raw keymap
+objects:
+
+    KRZ 'DRUM PROBE'   keys 36-51 -> 16 DISTINCT SAMPLES   correct
+    E4B 'DRUM PROBE'   keys 36-51 -> 16 distinct samples   correct
+
+**Both writers are correct and there was never a collapse.**
+
+**Why it looked real.** Raw keymap objects hold a full 128-key table, and the
+drum program has three voices. Each voice's own key range selects which part of
+its table applies. Indexing `entries[key]` across the whole table therefore
+reports one sample spanning the keyboard for every layer, which is exactly what
+a collapse would look like.
+
+**And it had corroboration that was itself an artifact.** k2kremote measured a
+smooth 0.02 dB/key ramp across nine keys — the signature of one sample
+transposed — and that agreement was treated as confirmation. On a correctly
+loaded bank the same keys measure scattered (-2.65 to -17.66 dB), as a kit
+should. Their ramp was the truncated bank playing clamped references. **Two
+independent lines of evidence agreed and both were wrong**, which is a sharper
+lesson than either being wrong alone: agreement between two measurements is not
+evidence when both inherit the same broken input.
+
+The one guard that held was the E4B control, and it is what should have been
+believed when it disagreed — it said 16, and it was right.
+## KRZ program 909 `the ch10 lead program` is silent on the K2000 — cause unknown
+
+**Status:** open, 2026-09-04. Several causes ruled out from the file.
+
+k2kremote: no sound on any key 0-96 at v127 (all readings -75.8 to -76.9
+against a -90.7 silent floor). They ruled out key range (layers cover 0-35 and
+36-127), velocity range, `Enable:ON` on all eight layers, amp settings
+(identical `Adjust 6dB` to program 900 which sounds), and confirmed the
+keymaps and soundblocks are present at normal size.
+
+**Ruled out from the bank file here:**
+
+- Sample data is REAL. Ids 269-276; id 269 has 28,341 non-zero words, peak
+  13,660/32,767 (about -7.6 dBFS).
+- Extents are sane (start/end contiguous, 32k-35k words each).
+- **Not truncation** — they start at 9.19M words, inside the loaded region.
+- **`flags` is a red herring.** These carry 240 (0xF0) against 112 (0x70) on
+  the Acid samples, but 138 of 165 samples in the bank carry 240 including
+  ones confirmed to play.
+
+Distinguishing feature not yet explained: `looped=False` with
+`loop_start_w == end_w`, and `max_pitch` 3500/4000 against 4100-6500 on the
+working Acid samples.
+
+## KRZ writer collapses a drum kit's key map: 16 keys -> 6 samples
+
+**Status:** open, found 2026-09-04. **Independent of the bank-load question.**
+Verified from the file and corroborated on hardware.
+
+The same source kit, converted in the same run by two writers:
+
+    E4B  keys 36-51 -> 16 distinct samples   correct
+    KRZ  keys 36-51 ->  6 distinct samples   collapsed
+
+The KRZ drum keymaps assign one sample across long key runs:
+
+    keymap 219   key 36 -> 342 'Snare Snr3';  keys 37-51 -> 346 'Clap Clp2'
+    keymap 220   keys 36-51 -> 340 'Melodic Fx2'   (all sixteen)
+    keymap 221   36-37 -> 345; 38 -> 347; keys 39-51 -> 348 'Melodic Syn4'
+
+**Corroborated on hardware before it was found in the file.** k2kremote measured
+the drum probe across keys 36-51 and reported nine keys marching in a smooth
+0.02 dB/key ramp — the signature of ONE sample transposed, where a kit should
+give scattered levels because every key is a different instrument. Their
+measurement and this file reading were produced independently and agree, which
+is also what makes both parser readings trustworthy here.
+
+**Not the truncation, and not the id ceiling.** Those concern which objects
+reach the machine. This is what our own file says before anything is loaded:
+the key-to-sample assignment is wrong on disk. The 12 kit samples that survive
+in the bank (ids 333-343, 346) are simply not referenced by the keymap.
+
+**Not `_KRZ_RATE_FLOOR` hole-fill either**, which was the first guess on both
+sides. Hole-fill substitutes a neighbour above a zone's up-pitch ceiling; this
+collapses the map across the whole range including the root keys.
+
+**Next step:** find where `krz_writer` builds keymap entry runs — `_entry_runs`
+and the keymap emit path — and determine whether a run is being extended past
+its intended end, or whether zones are being merged before the keymap is built.
+A 16-zone unpitched program is the test case; the E4B path handles it correctly,
+so the model carries the right data and only the KRZ writer loses it.
+
+## KRZ writer orphans a zone's sample in a PITCHED program
+
+**Status:** open, found 2026-09-04. Confirmed from the file.
+
+Exactly **one sample of 149** in `MX_mpc_to_krz.KRZ` is never referenced by any
+keymap: id **244 `bass-061 Db3`** (root 61) in `the ch7 bass program`. It is
+written into the bank, occupies space, and can never sound. Its key range was
+absorbed by its neighbour:
+
+    keymap 205   keys 55-56 -> 245 (root 66)
+                 keys 57-66 -> 246 (root 71)      <- 244 skipped entirely
+
+k2kremote spotted its absence from the K2000's panel — "the `-061` that belongs
+in that sequence is not there" — before it was found in the file.
+
+**This is a PITCHED program**, so it refutes the earlier claim that only the
+many-zone unpitched drum program is affected by keymap construction faults.
+Likely the same root cause as the drum collapse (a key run extended past its
+intended end, swallowing the following zone), which would make the drum case
+the extreme of a general defect rather than a separate one — but that is a
+hypothesis and the two should be confirmed to share a cause, not assumed to.
+
+## KRZ writer assigns the WRONG SAMPLE to a zone (noise into a bass keymap)
+
+**Status:** open, confirmed from the file 2026-09-04. **Resolved: this and the
+"orphan" below are ONE bug.**
+
+`the ch7 bass program`, keymap 205, full run structure:
+
+    keys   0- 16   237  bass-026 D0    root 26
+    keys  17- 21   238  bass-031 G0    root 31
+    keys  22- 26   239  bass-036 C1    root 36
+    keys  27- 31   240  bass-041 F1    root 41
+    keys  32- 36   241  bass-046 Bb1    root 46
+    keys  37- 41   242  bass-051 Eb2    root 51
+    keys  42- 46   243  bass-056 Ab2    root 56
+    keys  47- 51   236  a noise sample    <-- WRONG SAMPLE
+    keys  52- 56   245  bass-066 Gb3    root 66
+    keys  57-127   246  bass-071 B3    root 71
+
+The sequence should read 243(56) -> **244(61)** -> 245(66). Sample **244
+`bass-061 Db3` was replaced by 236 `Generator-Noise White`**, a sample from
+an entirely different program. That one wrong assignment explains both symptoms:
+it orphans 244 (the only unreferenced sample of 149) **and** puts white noise
+five keys wide into a bass program.
+
+k2kremote measured the audible consequence independently — `Bass-Dark` at key 60
+reads peak -24.05..-14.86 where keys 48 and 72 read -8.61..-3.03 and
+-7.30..-4.96 — and read the wrong reference off the K2000's panel before it was
+found in the file.
+
+**Note ranges differ by 12 semitones** between our parser's numbering and the
+K2000 display (their `B 3-D#4` against our keys 47-51). A naming convention
+offset, not a content disagreement.
+
+**This is a PITCHED program.** Together with the drum keymap collapse it means
+keymap construction is unreliable in general, not only for many-zone unpitched
+programs. Whether the two share a root cause is still a hypothesis.
+
+**Process note.** This was first reported here as "the file does NOT reference
+the noise sample", because only keys 55-66 were inspected — the range the peer
+named — and a partial view was stated with the confidence of a complete one.
+The peer then went looking for faults in their own instrument on the strength of
+that error. **Dump the whole structure before characterising it.**
+
+## AKAI cutoff curve is unmeasured below FILFRQ 44 — dark programs land there
+
+**Status:** open, 2026-09-05. **This is the actionable half of §AKAIFILTSWEEP.**
+Blocked on: a hardware calibration sweep (s3ked has the kit).
+
+`akai_filter_byte`'s measured S3000XL curve covers **FILFRQ 40..84 = 138 Hz to
+3.3 kHz**. Below 147 Hz the writer returns the floor byte, because 0..43 has
+never been measured and the E4B precedent says an unsampled extrapolation can
+be wrong by 5x.
+
+**Every AKAI row that scores 0.000 sweeps below that floor; every row that
+scores well strays only above the ceiling:**
+
+    program        corner@v1   corner@v127   FILFRQ    outside band
+    ch2/3/8 FAIL       58 Hz       1099 Hz   28..69    bottom below 138 Hz
+    ch10    FAIL       41 Hz        606 Hz   23..60    bottom below 138 Hz
+    ch7    0.712      703 Hz       1065 Hz   62..68    inside
+    ch5    0.852      473 Hz       8902 Hz   57..99    top above 3.3 kHz
+    ch4    0.830     2626 Hz      65550 Hz   81..99    top above 3.3 kHz
+    ch9    0.923     1359 Hz     989150 Hz   72..99    top above 3.3 kHz
+
+**The asymmetry is the finding.** Extrapolating UP is benign — past ~3.3 kHz a
+filter is open and stays open, so the error lands where nothing is attenuated.
+Extrapolating DOWN is not: the gap between a 58 Hz source corner and the 138 Hz
+floor we substitute is the difference between a note sounding and not. Test A
+demonstrated exactly that by silencing key 84 outright.
+
+**The fix is a measurement, not a heuristic:** sweep FILFRQ 0..44 and record the
+corner per byte, as the 40..84 curve was taken. Two cautions the upper band did
+not face — the corner may stop moving before byte 0 (if so, clamp deliberately
+rather than interpolate), and the measurement gets hard as it gets dark, so
+each point needs its noise floor stated and points without margin refused.
+
+**Interim trade, untested:** Test B showed opening the corner to FILFRQ 99
+collapsed the source mismatch from 4.01 to 0.36 — the conversion matched
+BETTER by being LESS faithful to the parameter. 99 discards the filter
+character entirely. Whether lifting only into the measured band (FILFRQ 40)
+recovers most of that gain while staying dark is an open question and a
+one-test experiment.
+
+## AKAI card rebuild — verification procedure (needs Jan; peers may not write disks)
+
+**Status:** designed and ready 2026-09-05. **Blocked on Jan** — the rebuild
+writes a disk image, which is outside the peer sessions' standing grant (RAM
+loads, CLR and program deletes only; not image writes, volume renames/deletes
+or formats). s3ked declined it correctly and it must not be asked of them.
+
+**ALL of today's AKAI verification patched RAM over the wire.** Every reading in
+s3ked's §171-§178, and every condition behind §AKAICORNER, set parameters by
+SysEx on a resident program. **Not one exercised the path that generates those
+values.** So the whole body of work is structurally blind to the class of fault
+that cost this morning: a value that is correct in RAM and wrong in the writer
+(`env2_depth`, §AKAIENV2GATE). The rebuild is the only test that closes it.
+
+**Method — compare the two CONVERTED states, not each against the source.**
+Same programs, same keys, same rig: the only thing differing is the bytes the
+writer emitted, so no source term and no per-key normalisation is needed. Same-
+key deltas between the patched-RAM condition and the rebuilt volume should be
+**≈0 on every program**; any program where they are not has a value that is
+right in RAM and wrong on the path that generates it.
+
+**Three conditions the pairing depends on (s3ked):**
+
+1. **Confirm program identity after the load.** A volume load APPENDS rather
+   than replaces (§94) and CLR leaves one program behind (§152), so indices can
+   shift. Capture the RAM condition, do the load, then **re-read the same
+   programs by index and confirm they are the ones measured** before trusting
+   any delta. Otherwise the two sides differ in more than the writer's bytes.
+2. **Fix capture gain explicitly across both sides**, rather than assuming it
+   held. Common-mode gain is the one term the pairing still relies on.
+3. **Two keys minimum**, as everywhere else in this work.
+
+**Expected values from the fixed writer** (`akai_velocity_filter` corner floor):
+ch2/3/5/8 -> FILFRQ 99, ch7 -> 89, ch10 -> 86, ch4/6/9 unchanged at 99. These
+match what was patched by hand and verified on hardware, so a non-zero delta
+anywhere is a writer-path fault rather than a new question about the rule.
+
+## WITHDRAWN: "E4XT samples under ~80 ms do not sound"
+
+**Status:** withdrawn 2026-09-05, within the hour it was filed. **There is no
+such effect.** Kept because how it was reached is worth more than the claim.
+
+**The claim.** The drum kit's samples separated perfectly by duration against a
+peer's list of silent keys — everything under 80 ms silent, everything from
+234 ms up sounding, nothing in the gap. Filed as a writer-or-machine fault.
+
+**The refutation, from the peer who supplied the silent list.** Those keys are
+not silent; they sit 42-46 dB over the floor in the ATTACK window with peaks at
+-24 to -28 dBFS. They vanish only from an `early` window that opens at **100 ms**
+— after a 55-80 ms sample has already finished. **The 80-234 ms gap that made
+the separation look so clean contains 100 ms, which is that window's opening
+time.** The boundary was an analysis window, not a property of anything.
+
+**AND OUR OWN DATA SAID SO BEFORE THE ENTRY WAS WRITTEN.** The matrix scores on
+PEAK (§PEAKFORPERC), which is immune to this. Our scoring of the same captures
+reports **all sixteen keys at 5/5 cells, 50-64 dB SNR** — no silence anywhere,
+zero dropped notes, and the drum row scored 0.751 on that basis. Those numbers
+were computed, printed and in hand before the finding was filed.
+
+**So the failure was not believing a peer. It was believing a peer's SUMMARY
+over our own MEASUREMENT of the same captures without checking whether the two
+disagreed** — and then finding a mechanism that fitted the summary. A clean
+pattern is not evidence of a cause; "perfect separation" made it more
+persuasive, not more true.
+
+**What survives:** MPC keys 39, 41 and 50 are dead at SOURCE. Measured on our
+own captures, unrelated to any of the above, still open.
+
+**Why the drum row was never affected:** it scores on peak, so it never saw the
+artifact. That choice was made for an unrelated reason (§PEAKFORPERC) and is
+what kept the column correct while the prose around it was wrong.
+
+## Attack time is copied verbatim between machines with different ramp shapes
+
+**Status:** open, measured both ends, NOT ready to fix.
+**Blocked on:** the E4XT normalised ramp out to t/T = 2.5 (request with `eosed`;
+their existing 14 s captures already contain it). Without that there is no
+measured crossing point and any correction factor would be invented.
+
+At its own nominal attack time the MPC has delivered 89 % of amplitude and the
+E4XT 28 %. We copy the number across, which is faithful to the parameter and
+not to the sound. Error is negligible for short attacks and ~24 dB for a 5.58 s
+one. ~8 dB of the channel-5 deficit remains unexplained even after shape and
+asymptote are accounted for.
+
+See `docs/RESOLUTION_NOTES.md` §ATTACKSHAPE. Related: §ANCHOR.
+
+## XPM: a sparse layer shifts every later layer into the wrong voice
+
+**Status:** open. Symptom hardware-confirmed (+29.96 dB); ROOT CAUSE FOUND
+2026-09-05 in `parsers/xpm_parser.py:2085`, not in the KRZ writer.
+**Blocked on:** Jan's sign-off — the fix changes voice allocation for every
+format and every XPM, so it needs its own regression pass.
+
+Zones are allocated to voices by first fit on key overlap, with no notion that
+XPM Layer 1 and Layer 2 are different roles. When one instrument omits Layer 1,
+every later layer lands one lane off and a noise texture ends up inside a
+pitched multisample ladder. Affects E4B and AKAI as well as KRZ.
+
+See `docs/RESOLUTION_NOTES.md` §XPMLANEMIX and §KRZWRONGSAMPLE.
+
+## The attack-shape ramp numbers need re-measuring on unmodulated material
+
+**Status:** open. §ATTACKSHAPE stands in direction; its numbers do not.
+**Blocked on:** a small calibration bank — one steady sine sample, one preset
+per attack rate (0/40/70/89/94/110). `eosed` will capture it once it exists.
+
+`the ch5 slow-attack pad` is amplitude-modulated (0.70 s on the E4XT, 0.17 s lag and
+11.7 dB peak-to-trough on the MPC), which sets the bin level past t/T ~ 1
+instead of the attack. No correction factor may be derived until this is
+re-measured.
+
+See `docs/RESOLUTION_NOTES.md` §RAMPSUBJECT.
+
+## SF2/GIG import silently truncates at the default preset limit
+
+**Status:** now WARNED (`SF2_PRESETS_TRUNCATED`), not yet fixed.
+**Blocked on:** a decision — should `--max-presets` default to "all", with the
+limit only as an opt-in guard?
+
+`convert.py --max-presets` defaults to **64** (`convert.py:700`) and GIG to 32
+(`parsers/registry.py:71`). Measured over the local library: **12 of 504
+SoundFonts hold more than 64 presets, the largest listing 444** — converting it
+through the shipping command silently discarded 380 of them, with no message at
+all until today. Four files list 200 or more.
+
+The diagnostic makes it visible. Whether the DEFAULT is right is a separate
+question and Jan's call — a limit that silently discards three quarters of a
+file is a poor default even when it is documented.
+
+See `docs/RESOLUTION_NOTES.md` §DIAGIFACE.
