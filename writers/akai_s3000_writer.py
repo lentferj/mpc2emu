@@ -486,7 +486,7 @@ _AKAI_VELFILT_FILFRQ_PER_UNIT = 2.22
 
 
 def akai_velocity_filter(cutoff_hz: float, vel_min_ct: float,
-                         vel_max_ct: float):
+                         vel_max_ct: float, hi_key=None):
     """(resting corner in Hz, MinDpt and MaxDpt in CENTS)
        -> (FILFRQ, MODVFILT1, lost_ct).
 
@@ -532,6 +532,33 @@ def akai_velocity_filter(cutoff_hz: float, vel_min_ct: float,
     f_byte = akai_filter_byte(cutoff_hz * 2.0 ** (pivot_ct / 1200.0))
 
     d_byte = _clamp(int(round(depth)), -50, 50)
+
+    # THE CORNER MUST CLEAR THE HIGHEST PLAYED FUNDAMENTAL ACROSS THE WHOLE
+    # SWEEP, NOT MERELY AT THE PIVOT (2026-09-05, hardware).
+    #
+    # `f_byte` above places the corner where the source sits at the velocity
+    # pivot. The sweep then swings BELOW that at low velocity, and if it
+    # crosses the fundamental of the notes the keygroup plays, those notes are
+    # filtered into near-silence at the quiet end and not at the loud end --
+    # a velocity response the source does not have, and a different one at
+    # every key.
+    #
+    # Measured on an S3000XL, the ch2 lead program, keys 36 and 84 against the
+    # MPC source (confidence = 1 - worst penalty, our matrix statistic):
+    #
+    #     FILFRQ 49 (as shipped)  0.000   key 84: 3 of 9 velocities audible
+    #     FILFRQ 79               0.350   the corner at the pivot only
+    #     FILFRQ 99               0.922   whole sweep above the fundamentals
+    #
+    # The floor is raised to the corner the sweep's LOW end needs, so a
+    # program keeps its filter character wherever that is already satisfied.
+    # RAISE ONLY: computing this as a target rather than a floor would have
+    # LOWERED two programs that currently convert well (99 -> 90 and 99 -> 68,
+    # scoring 0.830 and 0.940), trading a fixed fault for a new one.
+    if hi_key is not None and d_byte > 0:
+        top_hz = 440.0 * 2.0 ** ((min(hi_key, 108) - 69) / 12.0)
+        down_ct = d_byte * _AKAI_VELFILT_CENTS * _AKAI_VELFILT_PIVOT
+        f_byte = max(f_byte, akai_filter_byte(top_hz * 2.0 ** (down_ct / 1200.0)))
 
     # TWO SEPARATE LIMITS, AND ONLY ONE OF THEM IS THE FIELD'S RANGE.
     #
@@ -2094,7 +2121,10 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
     else:
         _vmin = getattr(voice, 'velocity_to_filter_min_cents', 0.0) or 0.0
         _vmax = getattr(voice, 'velocity_to_filter_cents', 0.0) or 0.0
-        k[0x07], _vf_byte, _vf_lost = akai_velocity_filter(_cut, _vmin, _vmax)
+        # `hi_key` so the corner can clear the fundamentals this keygroup
+        # actually plays -- see the floor in akai_velocity_filter().
+        k[0x07], _vf_byte, _vf_lost = akai_velocity_filter(_cut, _vmin, _vmax,
+                                                           hi_key=hi_key)
         # K_FREQ (0x08): key follow of filter frequency, SIGNED semitones,
         # oct/oct = K_FREQ / 12, pivot note 64. Never written before
         # 2026-08-24, so an AKAI -> AKAI round trip silently zeroed whatever
