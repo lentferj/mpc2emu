@@ -25533,87 +25533,79 @@ It explains the attack-to-mid *fall difference*, not the level at attack. **And
 the gap at attack is 37 dB, before any decay matters, with both sources peaking
 at 0 dBFS.**
 
-### The candidate that "exhausted" missed: the FILTER envelope
+### RESOLVED as far as either side can take it: no candidate remains
 
-**`eosed` named a seventh candidate after this side declared the list complete,
-and it is the mechanism.** Both presets sit at cutoff byte 0 — **133 Hz** — with
-`FEnv+ → FilFreq +100`. With a lowpass parked that low, the filter envelope is
-not a tone control, **it is the gate**: everything either preset emits depends
-on how far and how long its envelope opens that corner. A drawbar organ has
-enormous energy at and below its fundamental and survives a nearly-closed
-lowpass; a 12-string's character is body and shimmer from 200 Hz to 3 kHz and
-does not.
+**The filter is exonerated by ablation.** Cutoff → 255 and the slot-5 FEnv cord
+→ 0 on every voice of both presets changed the gap by **−0.33 dB** (40.16 →
+40.49). Both filter envelopes attack instantly to 100 % open, so the filter was
+already open in every window measured — forcing it open changed nothing because
+there was nothing to force.
 
-**And the deciding parameter is faithful to the source:**
+**The trim and cord are confirmed in both directions**, re-tested with every
+zone selected after realising the level id is a SAMPLE_ZONE parameter and the
+first pass may have written to a non-sounding zone:
 
-    Fat Prot. B3 Org   source FEnv sustain 0.606, decay 0.0    -> 0.606, 0.0
-    Oct.Prot. 12Str.   source FEnv sustain 0.0,   decay 9.4 s  -> 0.0,   9.654 s
+    A  as shipped              zones -39, cord +31   v127  -56.43
+    B  trim removed, cord kept zones   0, cord +31   v127  -26.98   +29.44 dB
+    C  trim and cord removed   zones   0, cord   0   v127  -56.49
 
-The organ holds its filter open at 0.606 of depth indefinitely; the 12-string's
-decays to the base cutoff and stays there. **Sustain for sustain, carried from
-the KRZ.**
+A and C agree to **0.06 dB**, and B shows the cord delivering **+29.44 dB**
+against a written base of −29.55. **The mechanism is measured in both
+directions, not inferred from a cancellation.**
 
-**Prediction on record: forcing cutoff 255 and zeroing the slot-5 cord on both
-should collapse the 37 dB.** If it survives, the filter is exonerated and this
-reading is wrong.
+### Every candidate excluded, at the point where the gap exists
 
-### Two apparent deviations found while looking — BOTH are hardware limits
+    measured gap, attack window (20-100 ms)              ~37-40 dB
+    filter                    0.0   ablation -0.33, both FENVs at 100 % here
+    amp envelope              0.0   both VENVs at 100 % here
+    velocity trim + cord      0.0   A/C agree to 0.06 dB
+    loop points               0.0   loop is 1.1 s in; not reached at 20 ms
+    sample content        -1.4..+3.5 measured PER KEY on the sounding sample
+    ---------------------------------------------------------------------
+    unexplained                                            ~37 dB
 
-    filter_cutoff      source 20.7 Hz (organ) / 23.2 Hz (12str)  ->  133.0 BOTH
-    filter_env_cents   source 10800 cents BOTH                   ->  8315.8 BOTH
+**Per key, in the same window, from our own E4B:**
 
-**Both are correct, and this side initially filed the second as a fidelity loss.
-It is not.** Measured from the E4XT's own cutoff table:
+    key   pluck            dB      organ          dB    delta
+     36   A13 12STR1     -7.4      A11 B3 1     -8.7    -1.4
+     48   A13 12STR1     -7.4      A11 B3 1     -8.7    -1.4
+     60   A14 12STR2    -12.1      A11 B3 1     -8.7    +3.4
+     72   A15 12STR3    -11.3      A12 B3 2     -9.8    +1.6
+     84   A16 12STR4    -13.3      A12 B3 2     -9.8    +3.5
 
-    cutoff byte   0  ->    133.0 Hz
-    cutoff byte 250  ->  14284.1 Hz      (E4XT_FENV_SATURATION_BYTE)
-    cutoff byte 255  ->  24163.0 Hz
+**At k36 and k48 the pluck is LOUDER in the file than the organ**, and the
+machine renders it 40 dB quieter. **No file-side candidate remains.** The next
+evidence is the K2000 playing the same preset pair from the KRZ original,
+staged as `MXKRSRC.KRZ`.
 
-    the machine's ENTIRE sweep from byte 0   =  9006 cents
-    its usable sweep to saturation           =  8096 cents
-    we write                                 =  8316 cents
-    the source asks for                      = 10800 cents
+### The loop pattern, which is real and explains the DECAY
 
-**The source asks for more filter-envelope depth than the E4XT possesses.**
-10800 cents exceeds the machine's whole 9006-cent range, so it cannot be
-represented and clamping to the reachable maximum is the only honest write. The
-cutoff floor is the same story: byte 0 IS 133 Hz, so a source asking for 21 Hz
-is asking for something that does not exist on this machine.
+    A13 12STR1   48132 frames   loop 47723..48131   len   408   99% in
+    A14 12STR2   61093          loop 60684..61092   len   408   99% in
+    A15 12STR3   48679          loop 48577..48678   len   101  100% in
+    A16 12STR4   48750          loop 48699..48749   len    50  100% in
+    A11 B3 1     85569          loop 27502..85568   len 58066   32% in
 
-**Record both as hardware limits so nobody later "fixes" them.** A TODO filed
-here claiming two octaves of lost sweep was withdrawn within the hour — it
-described the machine's range as our defect.
+**Every 12-string sample loops 1-9 ms at the very end of itself; the organ loops
+1.3 s from a third of the way in.** So the sustained portion of every pluck zone
+is the noise floor of its own tail — that is the −85 dB floor and the gap
+*growing* from 37.5 to 66 dB over six seconds. Faithful to the source, and it
+explains the decay but not the level at attack.
 
-### The methodological point
+### The wrong-subject error, and it is the one we have a section about
 
-This side listed six candidates, found nothing in any of them, and concluded
-"the file side is exhausted". **What had actually been established is that the
-candidates this side thought of were clear** — which is a different and much
-weaker statement. The seventh arrived from someone who knew what the cutoff
-byte was set to on the machine. The question is
-whether a 12-string rendering 40 dB below a B3 organ is correct — and the
-reference is the KRZ original on the K2000. **If that machine renders the pair
-~8.5 dB apart while our E4B renders them 40 apart, it is a ~31 dB conversion
-finding; if it renders them 40 apart too, the material is simply like that.**
-That single preset pair is the open item.
+Three of this side's file-side numbers — 8.5 dB whole-sample, 1.9 dB in-window,
+and the first loop analysis — were computed on **`A13 12STR1`, which covers keys
+12-56 and is silent at key 60 where the gap is measured.** `A14 12STR2` sounds
+there.
 
-### The lesson, and it is worse than the drum-program one
+**§84 exactly: a check satisfied by the wrong subject.** The zone table was in
+the same file being read; the sample was opened because it was zone 0 and no one
+asked which zone covers the measured key. **The numbers looked entirely
+reasonable, because a 12-string sample is a 12-string sample.** Redone per key
+against the sounding sample, the conclusion is unchanged — but until it was
+redone, the two sides were not discussing the same object.
 
-The converter's build log named **exactly the three presets that measure low**,
-in correct and specific words, warning they were written below the measured
-volume floor. **It was true, and it was not the cause.**
-
-It named them because the trim correlates with plucked sources, and plucked
-sources are what measure low here — **the warning and the symptom share a cause
-without either being the other.**
-
-In the drum-program episode, reading the log would have been enough. **Here,
-reading the log was what misled**: a diagnostic that matched the symptom exactly
-was found and the search stopped. Only a hardware calibration could separate
-correlation from cause.
-
-**A warning can be correct, specific, and about the wrong thing** — and it is
-more persuasive precisely when it names the right subjects.
 
 ---
 
