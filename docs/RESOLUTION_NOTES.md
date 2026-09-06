@@ -26016,6 +26016,28 @@ Emitted with the `:955` write removed and `:637` untouched:
 trimmed presets return ~29 dB louder and keep their velocity ramp. **If they are
 unchanged, `vpar[54]` is inert and this section is dead.**
 
+**THE TWO FILES ABOVE ARE NOW BYTE-IDENTICAL (2026-09-06, same md5).** The row
+build was regenerated at 15:36 after the writer fix landed, so it emits exactly
+what the hand-edited 15:25 test emitted. The nine-byte difference recorded above
+was true of the build it was measured on and is false of the files now on disk.
+**Do not run this as an A/B on the next disc: it would read as identical and
+meet the falsifier above spuriously.** The pre-fix control survives only on the
+resident `CD2-MATRIX6.iso` and in the kept captures — which is a reason to take
+what can be taken from the resident bank before it is overwritten.
+
+**Per-preset trim, read from the file** (E4P1 walk, voice record 284 fixed +
+n_zones x 22, trim at zone offset 15). It is not one constant but two, so no
+single-figure correction is right for every preset:
+
+    E4B slot   1   2   3   4   5   6   7   8   9  10  11  12
+    zone b15 217 213 217   0   0   0   0   0   0 213 213 213
+    trim dB  -29.55 / -32.54 on the nine trimmed voices, 2.99 dB apart
+
+**These are slots in the E4B file, not source positions** — the trimmed six are
+slots 1,2,3,10,11,12 while the six string/pad source programs are at positions
+2,3,9,10,11,12. Concrete confirmation of eosed's rule that bank slot N is not
+source position N.
+
 ## §AKAIENV2SUSTAIN — a filter envelope with sustain 0 is written as no envelope
 
 **Status: real, found by static reading, NOT hardware-confirmed.**
@@ -26063,8 +26085,11 @@ exactly, two clusters with no overlap (ramp 2.81–2.85 for the six at corner 14
                   strings-28.50  -38.89  -44.14  -47.39  -57.02   -18.89    -9.63
 
 The second is the load-bearing one. The organs stay flat across three octaves
-and then fall in the last step, exactly where 1046 Hz crosses their 756 Hz
-sustained corner, while the strings slope from the bottom — the shape a corner
+and then fall in the last step, which BRACKETS the crossing of their 756 Hz
+sustained corner to somewhere between k72 and k84 — a five-point octave grid
+cannot place it more finely than that, and the word "exactly" (written here
+first, then restated by s3ked) is not supportable at this resolution. The
+strings slope from the bottom — the shape a corner
 below every fundamental produces. "Strings are darker than organs" does not
 predict a flat-then-drop knee at k72→k84.
 
