@@ -908,3 +908,26 @@ the source table's page-wrap is ambiguous). This project calibrated it
 empirically instead, from the E4XT's own rate menu — byte 0 = 0.08 Hz,
 64 = 4.12 Hz, 127 = 18.01 Hz, fitted log-quadratically in `models/common.py`.
 That is usable by them directly.
+
+
+### Mod-cord amounts: the file is ±127, the parameter interface is ±100
+
+**Measured 2026-09-07 across three cords on two presets, exact in all three.**
+A cord amount stored in the `.E4B` file as a signed byte in ±127 is reported by
+the E4XT's parameter interface (SysEx dump / editor) in **±100**, i.e. as a
+percentage. Full scale maps to full scale and the conversion is exact:
+
+    preset                 file byte    interface    file x 100/127
+    Lollipop  static            92          72             72
+    Biting    static           -12          -9             -9
+    Antimatter gate             67          53             53
+
+`100/127 = 0.7874`; small magnitudes round to apparent ratios of 0.75-0.79,
+which is why it first looked like a variable discrepancy rather than a constant.
+
+**Practical consequence:** an oracle or test fixture captured from the machine is
+in interface units. Comparing it against file bytes without the `x127/100`
+conversion makes every cord look 27% wrong. State the unit wherever such a
+fixture is stored — this cost an evening's confusion on the day it was found,
+and it was misdiagnosed twice before being measured (once as a writer defect,
+once as an unexplained "0.77 of prediction").

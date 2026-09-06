@@ -2082,6 +2082,39 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
                     _wr = sample_wav_root.get(cache_key)
                     if _wr is not None:
                         non_transpose = False
+                    else:
+                        # NO `smpl` UNITY NOTE -- STILL DO NOT FREEZE THE PITCH.
+                        #
+                        # `RootNote 0` means UNSPECIFIED in MPC, not "fixed pitch":
+                        # measured over 900 XPMs sampled from a 6082-file library,
+                        # 78.1% carry a RootNote 0 somewhere and 70.5% have one on a
+                        # FULL-RANGE keygroup, i.e. hit this trigger. They convert
+                        # correctly only because a WAV `smpl` chunk happens to rescue
+                        # them, so correctness was resting on a chunk the XPM does not
+                        # control. Of the trigger-hitting programs whose sample could
+                        # be located, 5.6% have no `smpl` and shipped FIXED PITCH --
+                        # 'LD Trombone', 'LD Casiopaya 2' among them.
+                        #
+                        # HARDWARE-PROVEN, not inferred (eosed 2026-09-07): on the
+                        # E4XT, voice 0 of such a program carries NON_TRANSPOSE = 1
+                        # and plays 262.6 Hz at EVERY key across four octaves;
+                        # setting parameter id 57 to 0 makes the same program track
+                        # to within 0.4% (65.2 / 262.6 / 1050.3 at k36/60/84), and
+                        # restoring it brings the fault back. One byte, one voice.
+                        #
+                        # A pitched instrument frozen on one note is wrong at every
+                        # key; a texture that tracks is wrong only if someone plays
+                        # it across the keyboard. So the safe default is to track.
+                        # The explicit `IgnoreBaseNote` flag still freezes, which is
+                        # the case that was actually asking for it.
+                        #
+                        # Root 60 rather than the keygroup low note: this branch is
+                        # full-range by construction, so LowNote is 0 and rooting
+                        # there would play everything five octaves up. 60 is MPC's
+                        # own default root and puts the sample at its recorded pitch
+                        # near middle C.
+                        non_transpose = False
+                        raw_root = 61        # -> root 60 below, key-tracking
                 if non_transpose:
                     root = 60
                 elif raw_root > 0:

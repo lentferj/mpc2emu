@@ -4238,6 +4238,50 @@ is rewritten there is no route back to the pre-fix state.
 
 See `docs/RESOLUTION_NOTES.md` §E4BDOUBLETRIM.
 
+## FIXED: `RootNote 0` no longer freezes pitch — 70.5% of the library was resting on a WAV chunk
+
+**Status: FIXED 2026-09-07 in `parsers/xpm_parser.py`. Not yet hardware-tested on
+a rebuilt bank (needs a card write).** §XPMNOROOTFIXED, escalated from one preset
+to most of the library.
+
+`non_transpose = ignore_base or (raw_root == 0 and full_range)` treated MPC's
+"unspecified root" as "fixed pitch". Measured over the 6082-XPM backup:
+
+    RootNote 0 anywhere:                     78.1%   (900 sampled)
+    RootNote 0 AND full range 0-127:         70.5%   <- hits the trigger
+    of trigger-hitting, no WAV `smpl` chunk:  5.6%   (54 checkable)
+
+Seven in ten programs hit it — 'Organ-TS Piped Organ', 'Pad-PRO5 Placebo',
+'Inst-Bass-F9 Jun Drone'. They converted correctly **only** because a WAV `smpl`
+unity note rescued them, so correctness rested on a chunk the XPM does not
+control. The 5.6% with no `smpl` shipped playing ONE PITCH across the keyboard —
+'LD Trombone', 'LD Casiopaya 2' among them.
+
+**Hardware-proven before the fix, not inferred (eosed):** on the E4XT, voice 0 of
+such a program carries `NON_TRANSPOSE = 1` and plays 262.6 Hz at every key across
+four octaves; setting parameter id 57 to 0 makes it track to within 0.4%
+(65.2 / 262.6 / 1050.3 at k36/60/84); restoring brings the fault back. One byte,
+one voice. That also confirms `E4_VOICE_NON_TRANSPOSE = 57` on hardware, which was
+a spec transcription until then.
+
+**The fix:** when the `smpl` rescue cannot fire, still do not freeze — track with
+root 60 (MPC's own default; the keygroup low note is 0 here by construction, so
+rooting there would play everything five octaves up). `IgnoreBaseNote` still
+freezes, which is the case that actually asked for it. *A pitched instrument
+frozen on one note is wrong at every key; a texture that tracks is wrong only if
+someone plays it across the keyboard.*
+
+**Verified end to end:** shipped bank P010 `vpar[38] = 1`; rebuilt with the fix,
+`vpar[38] = 0`. It was the only preset in that bank carrying the flag.
+
+**Only P010 was flat on the shipped bank** (eosed measured every preset's
+fundamental across k36-k84) — so the diagnosis is complete rather than partial.
+
+**A detector trap worth keeping:** P000 reads a constant 93.8 Hz at every key,
+ratio 1.00, the identical signature to P010 — at **-86 dBFS**. That is the
+estimator's noise-floor constant, not a fixed-pitch program. **Constant frequency
+across keys is necessary and not sufficient; it needs the level check beside it.**
+
 ## GRATER carries NO pan modulation on ANY of the three cards — all three volumes are pre-pan-writer builds
 
 **Status: CAUSE ESTABLISHED 2026-09-07, needs a rebuild + card write (Jan's).**
