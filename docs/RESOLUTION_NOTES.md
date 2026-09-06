@@ -276,6 +276,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§E4BNULL — the E4XT half of MX9 is a confirmed null, and the near-miss inside it](#e4bnull-the-e4xt-half-of-mx9-is-a-confirmed-null-and-the-near-miss-inside-it)
 - [§KR2E4LEVEL — the KRZ→E4B row is 20 dB down; NOT the trim, cause still open](#kr2e4level-the-krze4b-row-is-20-db-down-not-the-trim-cause-still-open)
 - [§KRZV9RUN — the K2000 verification of MX9, and what each fix did](#krzv9run-the-k2000-verification-of-mx9-and-what-each-fix-did)
+- [§E4BDOUBLETRIM — the velocity-pivot trim is written TWICE (STRONG, unconfirmed)](#e4bdoubletrim-the-velocity-pivot-trim-is-written-twice-strong-unconfirmed)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -25755,3 +25756,76 @@ of measurements behind them, and mark anything resting on one capture as such.
     headroom fix       NO measurable effect    level or spectrum
     wrong sample       moved, now fixed 1e5e338 (needs a card write to verify)
     key 85             invisible to this rig by construction
+
+
+---
+
+## §E4BDOUBLETRIM — the velocity-pivot trim is written TWICE (STRONG, unconfirmed)
+
+**Found 2026-09-06 by byte-diffing two voice blocks, after every named field on
+both sides had been excluded. Awaiting one hardware test.**
+
+### How it was found
+
+`eosed` localised the ~37 dB KRZ→E4B attenuation by swapping sample assignments
+between a loud preset and a quiet one:
+
+    organ preset + organ sample   -16.57      pluck preset + pluck sample  -56.46
+    organ preset + PLUCK sample   -28.31      pluck preset + ORGAN sample  -51.60
+
+**The attenuation travels with the PRESET, not the sample** — 35 dB decided by
+which preset a sample sits in. Every named field had been read on both sides and
+matched. Their suggestion, and it was the right one: **diff the raw voice blocks
+rather than comparing fields either of us knows how to name.**
+
+### What the diff shows
+
+Two voice blocks, 29 differing bytes of 352:
+
+    offset  54   pluck 213   organ 0     vpar[54], the VOICE volume
+    offset 299   pluck 213   organ 0     zone entry 1, byte 15
+    offset 321   pluck 213   organ 0     zone entry 2, byte 15
+    offset 343   pluck 213   organ 0     zone entry 3, byte 15
+
+**213 signed is −43, and `e4xt_volume_byte(-32.25)` is −43.** The trim is written
+to the voice volume **and** to every zone volume:
+
+    e4b_writer.py:637   entry[15] = e4xt_volume_byte(_offset_level_db(zone.volume, level_offset_db))
+    e4b_writer.py:955   vpar[54]  = e4xt_volume_byte(_offset_level_db(_vol,        level_offset_db))
+
+### Why it was believed harmless, and why that belief is now suspect
+
+The comment at `:953` records a hardware test concluding *"the multi-zone case
+simply doesn't use these bytes"* — i.e. a multi-zone voice uses the zone bytes
+and `vpar[54]` is inert, so writing both is redundant but safe.
+
+**`eosed`'s test C contradicts that.** Setting every ZONE volume to 0 and the
+cord to 0 gave **−56.49 against a shipped −56.43 — 0.06 dB.** If the zone bytes
+were the attenuator, that should have moved ~32 dB. **It moved nothing, which
+says the zone bytes are inert and `vpar[54]` is live** — the reverse of the
+recorded conclusion. And `vpar[54]` is VOICE scope, which their id-39
+(SAMPLE_ZONE) manipulation never touched.
+
+### The arithmetic, and the prediction
+
+    written:   -32.25 dB at vpar[54]  AND  -32.25 dB per zone
+    restored:  +32.0 dB by the Vel+ -> AmpVol cord, ONCE
+    net if both apply:  about -32 dB extra
+
+**~32 dB is the residual**, to within the ±3.5 dB per-key sample difference.
+
+> **Test: set the VOICE-scope volume to 0 on a trimmed preset, leaving zones and
+> cord as shipped. The level should rise ~32 dB.**
+> If it does not move, `vpar[54]` is inert too and this line collapses.
+
+### Scope
+
+In `MXKR.KRZ`: **9 of 18 voices carry a trim, all of them multi-zone**, so all
+receive both copies. Trim range −29.23 to −32.25 dB. Any source whose velocity
+swing triggers the pivot trim is affected on the E4B path.
+
+### Caveat
+
+Offsets are read out of an emitted voice block and named from the writer's own
+indexing — **"offset 54 is vpar[54]" is inference, not a machine read.** If the
+voice-scope volume already reads 0 on the machine, the mapping is wrong.
