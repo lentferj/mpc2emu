@@ -27215,7 +27215,9 @@ differ in exactly the quantity the trim is sensitive to.
 
 ## §K2ALGWALK — mapping every K2000 algorithm's blocks and function codes
 
-**Status: SPECIFIED, not started. RAM-only. Wants a long uninterrupted run.**
+**Status: SPECIFIED and PARKED (Jan, 2026-09-06). RAM-only. Wants a long
+uninterrupted run — deferred for that reason, not because anything is missing.
+Do not start it without Jan's word.**
 
 ### Why
 

@@ -4506,8 +4506,13 @@ class as the unrepresentable filter envelope in §AKAIENV2SUSTAIN.
 
 ## K2000: map every algorithm's blocks and function codes (long overnight run)
 
-**Status:** specified, not started. **Blocked on:** nothing but machine time and
-Jan's word to start — it is RAM-only throughout.
+**Status: PARKED 2026-09-06 by Jan — specified, deliberately not started.**
+Nothing is blocking it: it is RAM-only, the procedure is complete, and the three
+cross-checking sources are identified. It is deferred because it wants a long
+uninterrupted run, not because anything is missing.
+
+**Do not start this without Jan saying so.** No peer session has been asked for
+it and none should pick it up from this file.
 **Scale:** 31 algorithms x up to 4 blocks x up to ~17 functions. Hours, hence
 overnight.
 
