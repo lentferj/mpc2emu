@@ -26850,8 +26850,28 @@ outstanding. Nothing implemented.**
 **Located without hardware:** the K2000 `Adjust` field, F3 segment offset +2,
 signed percent — 6/6 against a panel read, 0/200 false positives on a null test.
 
-**NOT located:** the K2000 `KeyTrk`, `VelTrk`, `Src1`, `Depth`, `Src2`,
-`MinDpt`, `MaxDpt`, `Pad` fields. The six programs with panel data split into
+**LOCATED 2026-09-06 (k2kremote, RAM-only SysEx diff):** `Adjust` 242 at
+1 %/unit, `KeyTrk` 244 at 0.2 %/key, `VelTrk` 245, `Depth` 247, `MinDpt` 249 and
+`MaxDpt` 250 all at 2 %/unit, `Pad` 252 as the 0/6/12/18 dB ladder. Full table in
+`KRZ_FORMAT.md §4.x`. **Still NOT located:** `Src1`, `Src2`, `DptCtl` — wheel
+enumerations that a digit-entry pass does not touch.
+
+**THE AKAI ROUTE IS ALIVE AND §52 IS OVERTURNED (s3ked, 2026-09-06).** With
+source, `PANDEP` and `PANRAT` held identical and only the matrix amount moved,
+balance swing went **0.47 dB → 29.75 dB**, against `PANPOS` controls putting
+60 dB through the same detector in the same run. So LFO2 → pan carries about
+30 dB at `MODVPAN1` = 50, which is the field's **maximum** — the range is ±50,
+and that limit was not recorded anywhere in our notes. Roughly half the static
+`PANPOS` span, consistent with bipolar modulation about centre.
+
+**That makes three instances in one day, in three sessions, of the same fault:**
+an ENV2 depth multiplied by `SUSTN2` 0; an A/B/A on `MODVFILT1` where the route
+is `MODVFILT3`; and a "dead" pan route measured by sweeping the LFO's own depth
+while the matrix amount stayed zero. **The route was wired and the volume was
+down**, three times, each time producing a confident and wrong negative.
+
+**Superseded — what was NOT located before that work:** the K2000 `KeyTrk`,
+`VelTrk`, `Src1`, `Depth`, `Src2`, `MinDpt`, `MaxDpt`, `Pad` fields. The six programs with panel data split into
 exactly two groups, so all four varying fields partition the set identically and
 six candidate offsets match all of them. **More programs of the same shape will
 not help** — the values must vary independently, which needs a write-and-diff on

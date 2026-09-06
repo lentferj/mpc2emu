@@ -643,6 +643,49 @@ the reverse-engineered `Src` bytes.
 
 ---
 
+### 4.x The PANNER block (F3 POS) — hardware-mapped 2026-09-06
+
+Present only in **algorithms 2, 13, 24 and 26** (K2000 manual Ch.14), always in
+the block before the final AMP, so it is always the `F3` slot. It is the K2000's
+**dynamic panner**: the layer is split across two wires panned hard left and hard
+right, and these fields sweep the balance between them.
+
+Program-object offsets, from a RAM-only SysEx diff (dump, panel edit, dump, exit
+discarding) on a program whose panner was entirely zero, with every field set to
+a distinct non-zero value of mixed sign so no byte could hold still by accident:
+
+| Field | Offset | Encoding | Range |
+|---|---|---|---|
+| `Adjust` | **242** | signed byte, **1 %/unit** | ±100 % |
+| `KeyTrk` | **244** | signed byte, **0.2 %/key per unit** | ±16 %/key |
+| `VelTrk` | **245** | signed byte, **2 %/unit** | ±200 % |
+| `Depth` (Src1) | **247** | signed byte, **2 %/unit** | ±200 % |
+| `MinDpt` (Src2) | **249** | signed byte, **2 %/unit** | ±200 % |
+| `MaxDpt` (Src2) | **250** | signed byte, **2 %/unit** | ±200 % |
+| `Pad` | **252** | 0/1/2/3 | 0, 6, 12, 18 dB |
+
+**The scales are self-consistent and were confirmed by quantisation, not
+assumed.** Every ±200 % field is 2 %/unit, which is exactly what fits ±200 into
+a signed byte — and typing 115, 21, −73 and −137 returned 114, 20, −72 and −136
+on the panel, every odd value snapping to the nearest even one. Each field has
+two points, `(0, 0)` from the untouched baseline and `(typed, byte)`.
+
+`Adjust` at offset 242 is the same field reachable as **F3 segment offset +2**,
+which was located independently from six panel readings across six programs
+(6/6, with 0/200 false positives on a null test) before any machine work. The two
+routes agree on 1 %/unit.
+
+**NOT located, and they are enumerations rather than numbers:** `Src1`, `Src2`
+and `DptCtl`. They are selected with the data wheel, so a digit-entry pass does
+not touch them and no source byte appears in this diff. Locating them needs a
+separate pass stepping the wheel and reading the name back.
+
+**One byte unexplained:** offset **268** also changed 0 → 2 in the same diff. It
+lies outside the panner block, inside the F4 AMP region (261/262/263 are AMP
+VelTrk/Src1/Depth), and nothing on that page was edited. It took the same value
+as `Pad`, which may be meaningful or may be coincidence. **No meaning is assigned
+to it from this run.**
+
 ## 5. Media formats
 
 A raw `.KRZ` file must be presented to the K2000 on a medium its OS can mount.
