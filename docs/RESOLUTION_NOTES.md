@@ -274,7 +274,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAILEADSPACE — a sample whose name begins with a space will not load](#akaileadspace-a-sample-whose-name-begins-with-a-space-will-not-load)
 - [§STALEBUILD — rebuilding into the same directory leaves the old files](#stalebuild-rebuilding-into-the-same-directory-leaves-the-old-files)
 - [§E4BNULL — the E4XT half of MX9 is a confirmed null, and the near-miss inside it](#e4bnull-the-e4xt-half-of-mx9-is-a-confirmed-null-and-the-near-miss-inside-it)
-- [§KR2E4LEVEL — the KRZ→E4B row is ~20 dB down, and it is the velocity-pivot trim](#kr2e4level-the-krze4b-row-is-20-db-down-and-it-is-the-velocity-pivot-trim)
+- [§KR2E4LEVEL — the KRZ→E4B row is 20 dB down; NOT the trim, cause still open](#kr2e4level-the-krze4b-row-is-20-db-down-not-the-trim-cause-still-open)
 - [§KRZV9RUN — the K2000 verification of MX9, and what each fix did](#krzv9run-the-k2000-verification-of-mx9-and-what-each-fix-did)
 <!-- INDEX:END -->
 
@@ -25450,142 +25450,88 @@ difference does not.
 
 ---
 
-## §KR2E4LEVEL — the KRZ→E4B row is ~20 dB down, and it is the velocity-pivot trim
+## §KR2E4LEVEL — the KRZ→E4B row is 20 dB down; NOT the trim, cause still open
 
-**Found 2026-09-06 while the E4XT column of the 3×3 was running.** `eosed`
-flagged it 12 captures in: `MX9 KR-E4` tops out at **−53 to −58 dBFS at v127**
-where the MPC row's presets reach −35 to −50, leaving the low-velocity end
-buried in the floor (2/9 to 8/9 cells clearing, against 9/9 on the MPC row).
-The swing itself is healthy at ~25-27 dB — it is the LEVEL that is low.
+**Two explanations were proposed and hardware refuted both. The velocity-pivot
+trim is correct and must not be changed.**
 
-### It is not the source, and that was settled from the files
+### What was measured
 
-Ten samples compared, KRZ source against the E4B we wrote:
+`MX9 KR-E4` tops out at −53 to −58 dBFS at v127 where the MPC row reaches −35
+to −50, so its low-velocity end is buried (2/9 to 8/9 cells clearing against
+9/9). The swing itself is healthy at ~25-27 dB — it is the LEVEL that is low.
 
-    mean level change through the conversion: -0.02 dB, peaks still 0 dBFS
+Level tracks the writer's per-preset base offset exactly:
 
-**The PCM is level-faithful.** The attenuation is entirely in the parameters:
-source zones carry `volume 0.0 dB`, our output carries
+    preset               base offset   measured v127
+    Oct.Prot. 12Str.       -29.55         -57.0
+    Proteus 12String       -32.54         -63.9
+    Prot. 12Str. Lyr       -29.55         -61.0
+    Fat Prot. B3 Org        +0.00         -18.4
 
-    Oct.Prot. 12Str.   -29.55      Fat Prot. B3 Org   +0.00
-    Proteus 12String   -32.54      Oct.Prot. B3 Org   +0.00
-    Prot. 12Str. Lyr   -29.55
+### Refuted explanation 1 (eosed): wrong cord destination or unapplied slot
 
-**Note it is PER PRESET, not uniform.** That is the shape that identifies the
-cause.
+The machine read matches the file exactly — `slot 0, Vel+ → AmpVol, +31/+34`,
+`GEN_VOL −39/−43`. Routing is correct.
 
-### Cause
+### Refuted explanation 2 (this side): an extrapolated base cancelling a measured cord
 
-`e4b_writer.py:1487`, the velocity-pivot trim. The E4XT's `Vel+` cord only ADDS
-with velocity, so to reproduce a source swing the writer drops the base level by
-roughly the swing and relies on the cord to restore it at v127. The 12-string
-presets need ~30 dB of swing and receive a ~30 dB base cut; the organ presets
-need little and receive none.
+The claim was that the base is written past `E4XT_VOL_MEASURED_FLOOR_DB = -22.9`
+by extrapolation, so a measured cord could not cancel it. **Calibrated on
+hardware, the extrapolation is accurate:**
 
-**So the design is deliberate. What is in question is whether the cord actually
-gets the level back at the top** — and `eosed`'s v127 numbers say it does not.
+    byte    measured Δ    curve says    error
+     -30       -22.58       -22.80      +0.22
+     -39       -29.64       -29.55      -0.09
+     -43       -32.23       -32.54      +0.31
+     -60       -45.00       -45.15      +0.15
 
-### This is the missing hardware symptom for §E4XTCORDSAT
+**−22.9 is a conservative label, not a boundary; the quadratic holds to byte
+−60 at ±0.5 dB.** And the trim cancels on hardware, P000 against itself:
 
-`e4xt_cord_saturates()` being unreachable for velocity cords has been open with
-no measured consequence attached to it. **A base lowered by 30 dB that the cord
-does not restore is exactly that consequence**, and it would explain the whole
-row sitting 20 dB down while its swing measures correctly.
+    as shipped   base -39, cord +31   v127 -59.26
+    trim removed base   0, cord   0   v127 -58.93   difference -0.33 dB
 
-### CONFIRMED, and the writer is NOT at fault
+**The mechanism does exactly what it is designed to do. Nothing to recalibrate,
+nothing to refuse.**
 
-`eosed`'s captures, 19 in, v127 early-window level against the base offset this
-side predicted:
+### What is actually left
 
-    preset               our base   measured v127
-    Oct.Prot. 12Str.      -29.55       -57.0
-    Proteus 12String      -32.54       -63.9    <- worst, as predicted
-    Prot. 12Str. Lyr      -29.55       -61.0
-    Fat Prot. B3 Org       +0.00       -18.4    <- untrimmed, normal level
+P000 with the trim entirely removed still sits at −58.9 where P003 sits at
+−18.8 — **40 dB apart with every readable level parameter identical.** Partial
+account:
 
-**P003 sits ~45 dB above P001.** The bank is not uniformly quiet; level tracks
-the base offset preset by preset. The trim is the cause.
+    source material    12-string -19.7 dB rms vs B3 organ -11.2   =  8.5 dB
+                       (peaks identical at -0.0, so not gain staging)
+    amp envelope       P000 decays to zero, P003 sustains at 100  = ~7 dB
+    -----------------------------------------------------------------
+    accounted                                                      ~15 dB
+    residual                                                       ~25 dB
 
-**But the cord that should restore it is written correctly.** Instrumented the
-real write path and read the EMITTED voice bytes:
+**Unattributed, and neither side can attribute it alone.** The question is
+whether a 12-string rendering 40 dB below a B3 organ is correct — and the
+reference is the KRZ original on the K2000. **If that machine renders the pair
+~8.5 dB apart while our E4B renders them 40 apart, it is a ~31 dB conversion
+finding; if it renders them 40 apart too, the material is simply like that.**
+That single preset pair is the open item.
 
-    v1  base -32.25 dB   swing 32.0 dB   emitted amount 43 = 33.9% = 32.0 dB
-                                          net at v127: -0.2 dB
+### The lesson, and it is worse than the drum-program one
 
-**So the writer's model says v127 lands at source level, and the machine says
-−57 to −64.** That gap is the finding, and it is not saturation: 34 % is
-nowhere near the 100 % ceiling, so `e4xt_cord_saturates()` is NOT the mechanism.
-This is a *different* fault from §E4XTCORDSAT, not an instance of it.
+The converter's build log named **exactly the three presets that measure low**,
+in correct and specific words, warning they were written below the measured
+volume floor. **It was true, and it was not the cause.**
 
-### CAUSE FOUND — and the converter printed it in the same run's log
+It named them because the trim correlates with plucked sources, and plucked
+sources are what measure low here — **the warning and the symptom share a cause
+without either being the other.**
 
-    E4XT_VOL_MEASURED_FLOOR_DB = -22.9
+In the drum-program episode, reading the log would have been enough. **Here,
+reading the log was what misled**: a diagnostic that matched the symptom exactly
+was found and the search stopped. Only a hardware calibration could separate
+correlation from cause.
 
-    [INFO] 'Oct.Prot. 12Str.': the velocity-pivot trim puts 10 level(s) up to
-           8.3 dB below the measured volume floor (-22.9 dB). Written by
-           extrapolation -- monotonic, but not a measured dB.
-    [INFO] 'Proteus 12String': ... up to 11.4 dB below ...
-    [INFO] 'Prot. 12Str. Lyr': ... up to  8.3 dB below ...
-
-**Those are exactly the three floored presets, and the one flagged worst
-(11.4 dB below floor) is the one measured worst (−63.9).**
-
-**The two halves of the cancellation are not the same currency.** The trim
-writes a base of −32.25 dB — **9.35 dB past where the volume law was ever
-measured** — so the emitted byte (−43) is an extrapolation, monotonic but not a
-calibrated dB. The cord then adds back **+32.0 dB of measured, interpolated
-Vel+** (fitted at 23.62/50.39/100.00 %, flat to ±0.07 %, so 33.86 % is
-interpolation). **A measured quantity is being used to cancel an extrapolated
-one, and they do not meet.**
-
-### The candidates that were ruled out, and how
-
-- **`Vel+` not following 0.9462 dB/% at 34 %** — ruled out by `eosed`: 33.86 %
-  lies *between* two fitted points, so it is interpolation, not extrapolation.
-- **Wrong destination or unapplied slot** — ruled out from the file: template
-  cord slot 0 carries `dst 0x40`, the writer overwrites only src and amount, and
-  `docs/E4B_FORMAT.md` confirms `0x0A` = Vel+ and `0x40` = AmpVol. The emitted
-  cord is a clean `Vel+ → AmpVol @43, slot 0`.
-- **Saturation (§E4XTCORDSAT)** — ruled out by arithmetic: 34 % cannot saturate.
-
-### Fix direction
-
-Either **measure the volume law below −22.9 dB** (a calibration: a few points at
-−25/−30/−35/−40 turns the extrapolation into a law), or **refuse to trim below
-the floor** and accept a smaller swing. The second is available today; the first
-is better and needs bench time.
-
-### The lesson, one format over from where we learned it
-
-**The converter printed the cause, in the correct words, with the exact presets
-named, in the log of the run that produced the bank** — and an hour of captures
-and byte-reads went into rediscovering it. This side read that same log in the
-morning for the layer warnings and did not read down to the INFO lines. It is
-the drum-program episode again (§DIAGIFACE), in E4B rather than KRZ.
-
-**Caveat on our own number:** the cord is located by scanning the emitted voice
-for the `Vel+` source byte and taking the amount two bytes later. It agrees with
-the value the writer's formula computes — two routes, one answer — but it is a
-heuristic scan. Treat 43 as strongly indicated, not proven; the authoritative
-read is cord 0 source/destination/amount off the machine.
-
-### The discriminator, runnable on captures already taken
-
-**The floored presets should be exactly the ones carrying a large base offset**,
-and the two organ presets at +0.00 dB should sit at normal level. **If instead
-every preset in the bank is uniformly quiet, this explanation is wrong** and
-something else attenuates the whole bank.
-
-### Why the measurement was not "rescued"
-
-`eosed` could have lifted every preset with `E4_PRESET_VOLUME` — §83's addendum
-establishes a static offset does not change a swing — and recovered the floored
-cells. They declined, because the matrix wants ABSOLUTE per-program numbers and
-a preset-volume offset changes exactly those. **It turned out to matter more
-than that: a uniform lift would have hidden the per-preset pattern, which is the
-evidence that distinguishes "quiet bank" from "the trim is not restored".**
-Rescuing the measurement would have destroyed the finding.
-
+**A warning can be correct, specific, and about the wrong thing** — and it is
+more persuasive precisely when it names the right subjects.
 
 ---
 

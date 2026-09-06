@@ -4178,29 +4178,22 @@ The ALSA seq table is the shared resource with a body count here — not JACK
 client concurrency. JACK's own recorded failure is *client churn* wedging a
 Berkeley DB mutex region in `/dev/shm` that survives a jackd restart.
 
-## KRZ→E4B output sits ~20 dB low; the velocity-pivot trim is not restored
+## KRZ→E4B: a 12-string renders 40 dB below a B3 organ — correct or ours?
 
-**Status:** open. Cause identified from the files, hardware discriminator
-pending.
-**Blocked on:** `eosed` confirming the per-preset split — floored presets should
-be exactly those with a large base offset, organ presets at +0.00 dB should be
-normal level.
+**Status:** open. Both proposed causes REFUTED on hardware. ~25 dB unattributed.
+**Blocked on:** one preset pair measured on the K2000 (the KRZ original).
 
-The PCM is level-faithful (−0.02 dB mean). The attenuation is a per-preset base
-cut of up to −32.5 dB applied by the velocity-pivot trim, which expects the
-`Vel+` cord to restore it at v127. Measured v127 tops out 20 dB low, so it does
-not appear to be restored.
+The velocity-pivot trim is NOT the cause and must not be changed: it cancels to
+−0.33 dB on hardware, and the volume-law extrapolation it relies on is accurate
+to ±0.5 dB well past the −22.9 dB label. Cord routing is correct
+(`slot 0, Vel+ → AmpVol`), confirmed against the machine.
 
-**CAUSE FOUND.** The trim writes a base 9.35 dB BELOW the measured volume
-floor (`E4XT_VOL_MEASURED_FLOOR_DB = -22.9`), so that byte is an extrapolation,
-while the cord that cancels it is a measured, interpolated quantity. They do not
-meet. The converter prints this in the build log, naming the exact presets.
+With the trim removed, P000 still sits 40 dB below P003. Source material
+accounts for 8.5 dB (12-string −19.7 vs organ −11.2 rms, peaks identical) and
+the amp envelope for ~7 dB. **~25 dB unexplained.**
 
-NOT §E4XTCORDSAT (34% cannot saturate), not a routing fault (emitted cord is a
-clean Vel+ -> AmpVol @43 slot 0, confirmed against E4B_FORMAT.md).
-
-**Fix:** either measure the volume law below -22.9 dB (a few points at
--25/-30/-35/-40), or refuse to trim below the floor and accept a smaller swing.
-The second is available today.
+**The test:** if the K2000 renders that preset pair ~8.5 dB apart while our E4B
+renders them 40 apart, it is a ~31 dB conversion finding. If the K2000 also
+renders them 40 apart, the material is simply like that.
 
 See `docs/RESOLUTION_NOTES.md` §KR2E4LEVEL.
