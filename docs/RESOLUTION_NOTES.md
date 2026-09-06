@@ -27255,6 +27255,45 @@ exactly that request earlier the same day.
             record the panel's own name and the byte at the block's offset
             dump the object and diff after EACH step, not once at the end
 
+### SIGNAL FLOW: readable from the manual's graphics, and that gives the walk a control
+
+**Jan's objection is the right one: the topology is drawn, not written.** Which
+block feeds which — and where a signal splits or two signals merge — exists only
+as boxes and arrows, in the manual and on the panel. `pdftotext` cannot see it,
+and it is the part that actually decides whether an algorithm suits a source.
+
+**It IS recoverable from the PDF.** Rendering the page and reading the image
+works: at 450 dpi, cropped to the diagram, the boxes, the arrows and the
+junctions are legible. Algorithm 22 reads as a branch — the second block's output
+splits, one path running over the top of the third block and one through it,
+recombining at the fourth, with a second return path along the bottom, and
+**stacked double-arrowheads marking where two signals enter one block**. Its
+function list ends in `x AMP / + AMP / ! AMP`, the multi-input amp variants,
+which corroborates the two-wire reading from the text side.
+
+**All 31 algorithms sit on thirteen pages, 421-433**, two per page except 421
+(1-4), 422 (5-8) and 433 (29-31). Rendering and reading them is hours of careful
+work, not days.
+
+    pdftoppm -f <page> -l <page> -r 450 -png -x .. -y .. -W .. -H .. <manual.pdf>
+
+**Why this matters for the walk: it is a SECOND INDEPENDENT SOURCE.** The panel
+walk gives byte codes and function names; the rendered diagram gives topology.
+Neither alone is checkable, and today's lesson is that a source which cannot be
+contradicted is worth little — three successive detectors in one topic each
+returned the only answer they were capable of, and an automated chart parse
+passed every positive check while placing a PANNER in algorithm 1.
+
+**So run them against each other.** The diagram says how many blocks an algorithm
+has and how they connect; the walk says what each block can hold. **Where they
+disagree, neither is right until the disagreement is resolved** — and a
+disagreement is the most valuable thing either can produce, because agreement
+between a drawing and a byte dump is very hard to arrange by accident.
+
+**The panel is a third source** if wanted: k2kremote can dump the K2000's
+graphics plane, which renders the same diagram the manual prints. Worth using
+only where the manual and the walk conflict, since it costs machine time.
+
 ### Validation rules, each one paid for
 
 1. **Re-prove the anchor in the same session.** Set one known field to a known
