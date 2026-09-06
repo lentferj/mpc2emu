@@ -4238,6 +4238,53 @@ is rewritten there is no route back to the pre-fix state.
 
 See `docs/RESOLUTION_NOTES.md` §E4BDOUBLETRIM.
 
+## E4XT pan modulation CONFIRMED WORKING — and a zero-depth cord that is faithful, not broken
+
+**Status: CONFIRMED 2026-09-06 (eosed, 66 captures, 10 ms frames).** The E4B
+writer's LFO->AmpPan path works on hardware. Audio and parameters agree exactly:
+
+    preset            median swing   AmpPan cord   amount
+    P001 Lollipop        ~100 dB     src 96          72
+    P005 Biting Edge     12.39 dB    src 96          -9
+    P008 Antimatter       0.02 dB    src 96           0     <- wired, zero depth
+    (5 presets with no cord)  0.01-0.08 dB, i.e. the +0.42 dB interface trim
+
+**P008's zero is CORRECT and traced to source.** Its XPM carries
+`lfo1_to_pan 0.5276` **and `wheel_to_lfo 1.0`** — the whole depth is mod-wheel
+gated. Our writer splits every LFO depth into a static part `D*(1-Kw)` plus a
+ModWheel->CordN-Amount cord of `D*Kw`; at Kw=1.0 the static part is exactly zero.
+So with the wheel down there is no pan, faithfully to the MPC. The other two
+confirm the mechanism rather than merely fitting it:
+
+    Lollipop   0.7244  wheel 0.0  -> static 0.7244 x127 = 92    measured 92
+    Biting     0.1890  wheel 0.5  -> static 0.0945, triangle    measured -9
+    Antimatter 0.5276  wheel 1.0  -> static 0                   measured 0
+
+**Open, one capture:** P008 at CC1=127 should pan. That also tests the
+ModWheel->cord-amount gate, which has never been checked on hardware. If it does
+NOT pan with the wheel up, the gate cord is broken.
+
+**A THIRD FAILURE CATEGORY, and a warning about our own diagnostic (eosed).**
+The K2000 work offered two branches for a stationary image — modulation not
+arriving, or the block not reaching the outputs. This is a third: **correctly
+wired, zero depth.** And the static-offset test proposed for telling the first
+two apart would have MISLED here — a static offset moves the image, which reads
+as "block fine, modulation missing", sending someone after an LFO fault that
+does not exist. **Reading the cord amount cost one round trip and separated a
+case no capture could.** Read the parameter before designing the experiment.
+
+**Two caveats kept rather than quoted past:** P001's ~100 dB rests on 8-19 frames
+surviving the level gate and is NOT a magnitude — record "modulates, magnitude
+not established", with amount 72 as independent support. And no cord COUNT is
+available: reads past a preset's real voice count return plausible values rather
+than failing, so P005 and P008 return identical contents for voices 1-7 and the
+read cannot say whether that is true or an echo. Presence/absence rests on voice
+0 and is safe.
+
+**Three interfaces in one night where the read never fails cleanly:** this one,
+the K2000's refused function codes returning another legal function, and the
+AKAI returning 19 volumes of non-printable garbage past the last partition.
+
 ## The E4B reader never reads AmpPan cords back, so E4B-sourced pan modulation is lost silently
 
 **Status: OPEN, found 2026-09-06 while auditing.** `parsers/e4b_parser.py`
