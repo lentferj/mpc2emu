@@ -4448,10 +4448,12 @@ every velocity ramp, so its low-velocity numbers are floor-limited.
 
 See `docs/RESOLUTION_NOTES.md` §KRZPANNIBBLE.
 
-## KRZ: the PANNER's dynamic panning is dropped entirely
+## Dynamic panning: the K2000 has it, and so do both targets
 
-**Status:** open, identified 2026-09-06 from the manual and a panel read.
-**Blocked on:** a decision about which targets can represent it at all.
+**Status:** open, scoped 2026-09-06. **All three machines can carry it** — the
+"which targets can represent it" question is answered and the answer is
+favourable.
+**Blocked on:** the K2000 being free, for the source-side field RE.
 
 The K2000's PANNER (algorithms 2, 13, 24, 26) is a DYNAMIC panner: it splits a
 layer across two wires panned hard left and hard right, and sweeps the balance
@@ -4464,6 +4466,40 @@ position, but **the movement is dropped entirely** — key-tracked pan, velocity
 pan and LFO auto-pan all convert to a stationary centre image. No target is
 given any of it.
 
-Wants a diagnostic carrying `content_lost`, same class as the unrepresentable
-filter envelope in §AKAIENV2SUSTAIN. Whether any target can carry the modulation
-is a separate question per format.
+**TARGET SUPPORT, established from the manuals rather than assumed:**
+
+    E4XT   "Amplifier Volume, Amp Pan" is in the EOS 4.0 modulation-destination
+           list, so a PatchCord can drive pan. The destination ID is NOT in
+           E4B_FORMAT.md and needs one RE step (set the cord on the panel, dump
+           over SysEx, read the byte).
+
+    AKAI   S3000XL Operator's Manual p.75, EDIT PROGRAM / PAN PAGE: "the
+           characteristics of the AUTO PANNING functions", three modulation
+           inputs, each +/-50 --
+             Lfo2 > pan   "the classic auto panner effect ... moving between
+                          left and right at a rate set by LFO 2"
+             Key  > pan   "+50 the sound will pan from left to right across the
+                          keyboard", -50 the reverse
+             Bend > pan   via the modulation wheel
+           and "any combination of controllers can be mixed together", with
+           Bend, Pressure, External, Velocity and LFO1 all named as sources.
+
+**The AKAI is arguably the closest match of the three to the K2000's panner:**
+`Key > pan` is the K2000's `KeyTrk`, `Lfo2 > pan` is `Src2 = LFO2`, and velocity
+is available as a source where the K2000 has `VelTrk`.
+
+**This also makes the "route is dead" finding suspect.** §52 measured LFO→pan as
+dead. The panel has a `Lfo2 > pan` DEPTH field separate from `PANRAT` (the LFO's
+rate), and Jan's photograph shows it at **+00** on a resident program. Driving
+the rate while the depth is zero produces exactly a dead route — the same shape
+as §AKAIENV2SUSTAIN (patch inert because the machine gates elsewhere) and
+§AKAILFODEP (we write the gate and never the depth). **Re-measurement with the
+depth explicitly non-zero is queued with s3ked.**
+
+**A hardware caveat to carry into any implementation**, from the same page:
+"Due to limitations with the panning hardware, whilst slow sweeps work well,
+fast sweeps may, on some sounds, introduce some 'zipper noise'." So a fast K2000
+auto-pan may not translate cleanly even when the routing does.
+
+Wants a diagnostic carrying `content_lost` for whatever cannot be carried, same
+class as the unrepresentable filter envelope in §AKAIENV2SUSTAIN.
