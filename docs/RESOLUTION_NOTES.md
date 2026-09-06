@@ -25936,6 +25936,34 @@ file-side proof the conditional is right:
 That test can fail in two directions; KR-E4's uniform rise only checks that the
 fix does something.
 
+**An extra observable from the diff, independently found by `eosed`: every
+changed byte goes TO zero and none lands on a non-zero value, in any of the four
+rows.**
+
+    MX9 S3-E4     6 changed   -29 x1, -20 x3, -16 x2   all -> 0
+    MX9 S1-E4     6 changed   -16 x6                   all -> 0
+    MX9 MPC-E4   12 changed   -18 x7,  -7 x5           all -> 0
+
+**So the fix only ever REMOVES a trim.** A bug that *added* one somewhere is
+ruled out by the diff alone, without the machine — which is the other direction
+an unconditional edit could have gone wrong.
+
+### The general form, worth more than this bug
+
+**After a fix, do not measure the subject with the biggest expected effect.
+Measure the one where the plausible wrong answers fall on OPPOSITE SIDES of the
+right one, and prefer material that exercises the branch the fix added.**
+
+`KR-E4` asks only whether the fix did something. `S3-E4` asks whether it did the
+right thing to the right voices, and can fail as an overshoot (30 voices too
+loud) or as a no-op.
+
+**Three times in this investigation the material at hand could not separate two
+hypotheses:** a three-point model against its rival, the conditional fix against
+the unconditional on `KR-E4`, and the trim ablations that were all zeroing the
+same reachable copy. **Each time the answer was a different SUBJECT — never a
+better fit or a tighter argument.**
+
 ### The file/machine asymmetry, which will recur
 
 **Nine bytes in the file correspond to four on the machine.** The E4B stores the
