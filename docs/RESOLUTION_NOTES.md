@@ -27041,6 +27041,53 @@ is what the MPC's own GUI displays for that program (11.51), and what the audio
 measures (11.46 by balance oscillation in 10 ms frames). Three routes, one
 number.
 
+**IT IS A FORMAT VERSION BOUNDARY, NOT A QUIRK** (Jan's hypothesis, confirmed
+2026-09-06). The layout is predicted perfectly by the MPC application version:
+
+    Application_Version   layout    files
+      1.8 .. 2.9           flat      335    no exceptions
+      2.10, 2.12         nested       46    no exceptions
+
+The split is exactly at **2.10**, which follows 2.9 in MPC's numbering. `2.10`
+files also carry `<ProgramPads-v2.10>` where earlier ones carry `<ProgramPads>`,
+so the version is visible in two independent places. **`File_Version` does NOT
+distinguish them** — it is 2.1 for everything from 2.2 upward — and neither does
+`<Application>`, which is `MPC-V` throughout.
+
+**The `LfoNum="0"` attribute is the point.** Indexing an LFO is what you do when
+a second one becomes possible. Every 2.10 file in this corpus carries only
+`LfoNum="0"`, so nothing here uses a second LFO — **but the parser takes
+`instrument.find('LFO')`, which is the FIRST block, and would silently ignore a
+second if one appeared.** Recorded as a forward-looking gap rather than a present
+defect.
+
+**2.10 ALSO ADDS 29 FIELDS WE DO NOT READ.** Comparing the tag sets of 40
+programs of each version:
+
+    a whole PITCH ENVELOPE   PitchADEnvelope, PitchAttack/Decay/Hold/Sustain/
+                             Release, PitchEnvAmount, and their curves
+    ENVELOPE CURVES          Volume{Attack,Decay,Release}Curve,
+                             Filter{Attack,Decay,Release}Curve
+    PER-PARAMETER RANDOM     Pitch/Volume/Pan/Cutoff/Resonance/Attack/Decay/
+                             Offset Random, plus RandomizationScale
+    also                     TriggerMode, SliceTailLength, SliceTailPosition
+
+None of it is read today. A 2.10 program with a pitch envelope or a randomised
+pan converts as one with neither.
+
+**AND TWO TAGS DISAPPEAR IN 2.10: `Loop` and `OneShot`.** `xpm_parser.py:1985`
+reads `_get_text(layer, 'Loop', 'True')` — **defaulting to True when the tag is
+absent** — so every 2.10 layer is treated as looped whatever it is, and
+`TriggerMode` looks like its replacement. **Flagged, not traced:** the loop
+points may still come from the WAV's own `smpl` chunk, so the audible impact is
+unknown and no claim is made here beyond the default being wrong for this format.
+
+**One tag in that comparison was a false result and is worth naming.** `<LFO>`
+appeared as "present only in ≤2.9" because the scan matched `<(\w+)>` and 2.10
+writes `<LFO LfoNum="0">`. That is the SAME regex limitation that made the first
+prevalence count come out as 0%. Twice in one investigation, from a pattern that
+cannot see an attribute.
+
 **Prevalence: 12.3%, about one MPC program in eight.** Over 500 randomly
 sampled library XPMs, 478 carry `LfoPitch`: **419 flat, 59 nested**. So the
 nested layout is a minority but not a curiosity, and every one of those 59 lost
