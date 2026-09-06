@@ -276,7 +276,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§E4BNULL — the E4XT half of MX9 is a confirmed null, and the near-miss inside it](#e4bnull-the-e4xt-half-of-mx9-is-a-confirmed-null-and-the-near-miss-inside-it)
 - [§KR2E4LEVEL — the KRZ→E4B row is 20 dB down; NOT the trim, cause still open](#kr2e4level-the-krze4b-row-is-20-db-down-not-the-trim-cause-still-open)
 - [§KRZV9RUN — the K2000 verification of MX9, and what each fix did](#krzv9run-the-k2000-verification-of-mx9-and-what-each-fix-did)
-- [§E4BDOUBLETRIM — the velocity-pivot trim is written TWICE (STRONG, unconfirmed)](#e4bdoubletrim-the-velocity-pivot-trim-is-written-twice-strong-unconfirmed)
+- [§E4BDOUBLETRIM — the velocity-pivot trim is written TWICE (CONFIRMED, FIXED)](#e4bdoubletrim-the-velocity-pivot-trim-is-written-twice-confirmed-fixed)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -25760,7 +25760,7 @@ of measurements behind them, and mark anything resting on one capture as such.
 
 ---
 
-## §E4BDOUBLETRIM — the velocity-pivot trim is written TWICE (STRONG, unconfirmed)
+## §E4BDOUBLETRIM — the velocity-pivot trim is written TWICE (CONFIRMED, FIXED)
 
 **Found 2026-09-06 by byte-diffing two voice blocks, after every named field on
 both sides had been excluded. Awaiting one hardware test.**
@@ -25855,7 +25855,73 @@ the double-write is real for the preset actually measured. **That is the
 wrong-subject error twice in one hour from this side** — first `A13` for a key
 it does not cover, then v1 for a preset nobody measured.
 
-### The decisive test, built
+### CONFIRMED ON HARDWARE, and fixed
+
+`eosed` zeroed `vpar[54]` alone on the resident preset — four bytes changed,
+everything else identical, the original re-sent and verified byte-identical
+afterwards:
+
+    A  as dumped         v1 -82.81   v64 -70.92   v127 -56.55
+    B  vpar[54] zeroed   v1 -56.31   v64 -41.54   v127 -27.04
+
+    +29.50 dB at v127; velocity ramp 26.26 -> 29.27 dB, preserved and FULLER
+    because A's v1 had been sitting on the floor
+
+**So the E4XT applies `vpar[54]` in addition to the per-zone byte 15.** The trim
+lands twice, the `Vel+` cord restores it once, and every trimmed multi-zone
+preset shipped about 29 dB quiet. The comment at `:953` claiming the multi-zone
+case "simply doesn't use these bytes" was wrong and has been replaced by this
+measurement.
+
+**Accounting closes:** 37 dB measured, 29.50 dB this, the remainder sample and
+pitch difference.
+
+### How the field was located, which is the reusable part
+
+Three separate ablations had already "cleared" the trim, because **id 39 is
+SAMPLE_ZONE scope** — every route through the parameter interface zeroes only
+the copy the cord already cancels. The voice copy is unreachable from that
+interface (selecting past the last zone is a no-op, 0.02 dB).
+
+**So the scope limit became the instrument:** zero everything id 39 *can* reach,
+dump, diff, and whatever still decodes to the trim value is what it cannot.
+Offsets 70 and 468, differing by exactly the voice-block stride (760 − 362 =
+398). **That identification rests on the dump's own structure, not on any
+writer's indexing** — which is why it succeeded where this side's byte diff
+named a byte from our own layout and picked the wrong voice.
+
+### The fix, and why it is conditional
+
+    vpar[54] = e4xt_volume_byte(_vol if _multi else _offset_level_db(_vol, level_offset_db))
+
+`_vol` is already pre-set to 0.0 for a multi-zone voice, so the fix is to stop
+re-adding the offset there. **A SINGLE-zone voice has no zone byte in play and
+must keep the trim** — an unconditional removal is wrong in general, and was
+only harmless on this bank because every trimmed voice is multi-zone.
+
+Regression test added, confirmed to fail with the fix reverted. The fixture
+needed a *pivot mismatch* (source rotating about 127 against `Vel+` anchored at
+0) before it produced a trim at all — the trim exists only because of that
+mismatch.
+
+### Scope: the entire E4B column was affected
+
+Rebuilt through the fixed writer, trim bytes zeroed per row:
+
+    MX9 KR-E4     9 voices
+    MX9 S3-E4     6
+    MX9 S1-E4     6
+    MX9 MPC-E4   12
+    ------------------
+                 33 voices shipping ~29 dB quiet
+
+**Any source whose velocity swing triggers the pivot trim is affected on the E4B
+path**, so this is a shipping-path defect and not a matrix artefact. The
+`CD2-MATRIX6.iso` currently on the E4XT card predates the fix.
+
+### The earlier test bank
+
+
 
     /home/lentferj/temp/matrix_v7/rows/MX9 KR-E4 NOV54/KRE4NOV54_01.E4B
 
