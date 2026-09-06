@@ -25557,22 +25557,32 @@ the KRZ.**
 should collapse the 37 dB.** If it survives, the filter is exonerated and this
 reading is wrong.
 
-### Two real deviations found while looking — equal on both presets
+### Two apparent deviations found while looking — BOTH are hardware limits
 
     filter_cutoff      source 20.7 Hz (organ) / 23.2 Hz (12str)  ->  133.0 BOTH
     filter_env_cents   source 10800 cents BOTH                   ->  8315.8 BOTH
 
-The first is the E4XT's floor: byte 0 IS 133 Hz, so a source asking for 21 Hz
-cannot be represented and clamping is correct. The second costs **2484 cents,
-just over two octaves of envelope depth** — and net, our peak opening for the
-12-string is ~15.7 kHz against the source's ~11.9 kHz, so we open *brighter*,
-not darker.
+**Both are correct, and this side initially filed the second as a fidelity loss.
+It is not.** Measured from the E4XT's own cutoff table:
 
-**Neither makes our output quieter and both hit the organ identically, so
-neither can produce a differential 37 dB.** But **the depth clamp deserves its
-own investigation**: losing two octaves of filter-envelope range is a real
-fidelity loss on any preset whose character lives in that sweep. It is invisible
-on these two only because they sit at the extremes.
+    cutoff byte   0  ->    133.0 Hz
+    cutoff byte 250  ->  14284.1 Hz      (E4XT_FENV_SATURATION_BYTE)
+    cutoff byte 255  ->  24163.0 Hz
+
+    the machine's ENTIRE sweep from byte 0   =  9006 cents
+    its usable sweep to saturation           =  8096 cents
+    we write                                 =  8316 cents
+    the source asks for                      = 10800 cents
+
+**The source asks for more filter-envelope depth than the E4XT possesses.**
+10800 cents exceeds the machine's whole 9006-cent range, so it cannot be
+represented and clamping to the reachable maximum is the only honest write. The
+cutoff floor is the same story: byte 0 IS 133 Hz, so a source asking for 21 Hz
+is asking for something that does not exist on this machine.
+
+**Record both as hardware limits so nobody later "fixes" them.** A TODO filed
+here claiming two octaves of lost sweep was withdrawn within the hour — it
+described the machine's range as our defect.
 
 ### The methodological point
 

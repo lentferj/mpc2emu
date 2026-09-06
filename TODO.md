@@ -4197,19 +4197,3 @@ renders them 40 apart, it is a ~31 dB conversion finding. If the K2000 also
 renders them 40 apart, the material is simply like that.
 
 See `docs/RESOLUTION_NOTES.md` §KR2E4LEVEL.
-
-## E4B filter-envelope depth is clamped from 10800 to 8315.8 cents
-
-**Status:** open, found 2026-09-06 while chasing an unrelated level question.
-**Blocked on:** nothing — needs someone to check whether 8315.8 is the E4XT's
-real maximum or our own conversion limit.
-
-A KRZ source asking for 10800 cents of filter-envelope depth is written as
-**8315.8 cents — 2484 cents, just over two octaves, lost.** Measured on two
-presets whose sources both ask for 10800.
-
-Invisible on those two because they sit at the extremes of the sweep (one
-sustains the filter open, the other closes it), but **a real fidelity loss on
-any preset whose character lives in the filter sweep.**
-
-See `docs/RESOLUTION_NOTES.md` §KR2E4LEVEL.
