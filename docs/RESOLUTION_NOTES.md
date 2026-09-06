@@ -26099,6 +26099,41 @@ matters — three of their six strings slope 6.0–7.2 against organs at 3.4–4
 so family-linked slope difference reaches about 3.5 dB on half the group. Read
 as 22.45 observed against a ~3.5 bound, leaving roughly 19 dB target-side.
 
+**THE STRING GROUP IS TWO POPULATIONS AND THE CAUSE IS NOT KNOWN.**
+s3ked found their string slopes bimodal by 15 dB (-36.77/-36.38/-35.28 against
+-21.12/-21.10/-20.44) on exactly the 4-keygroup / 3-keygroup division, which the
+depth path cannot explain since depth is uniformly 0 across all six.
+
+**The mapping is settled from the source.** Keygroup counts and ranges come
+straight from the zone structure, so the sub-groups are identified:
+
+    preset  2, 9, 10   4 keygroups   12-56  57-69  70-79  80-127   roots 50/62/74/86
+    preset  3, 11, 12  3 keygroups   12-79  80-91  92-127          roots 60/60/60
+    organs (6)         3 keygroups   12-66  67-91  92-108          roots 48/72(/60/84)
+
+**A RETRACTED CLAIM, RECORDED BECAUSE IT WAS ACTED ON.** This section first said
+presets 3, 11 and 12 were one sample stretched across the keyboard. They are
+not — they carry THREE distinct samples each; all twelve programs are
+multisampled. The error was reading a shared `root_key` of 60 across their zones
+as a shared SAMPLE, without checking the sample names, which are different. The
+correct statement is narrower: across the MEASURED GRID, presets 3, 11 and 12
+play keys 36/48/60/72 from a single keygroup (12-79, shifts -24/-12/0/+12) while
+2, 9 and 10 change keygroup at every grid step and stay within 2 semitones of
+native.
+
+**The directional argument built on it is refuted.** Extra stretch predicts the
+3-keygroup group slopes MORE; it slopes 15 dB LESS. No mechanism is offered here
+in its place. Two spectral arguments from layout have now been wrong in this
+investigation (this one and the 12 dB/octave prediction), and the common factor
+is inferring where energy sits from the zone map instead of measuring it.
+
+**A measurement artefact worth carrying forward.** For presets 3, 11 and 12 the
+k72->k84 step crosses a keygroup boundary at key 80 and changes sample, while
+keys 36-72 are all within one keygroup. For 2, 9 and 10 every grid step crosses
+a boundary. So k72->k84 is not comparable between the sub-groups the way the
+other steps are, and that is in the material -- no writer fix moves it.
+
+
 **Still not isolation.** DEPTH remains collinear with family in every one of
 these numbers, and this is pass 1, single capture. The A/B/A byte change is what
 separates a writer effect from a material one; it now has a shape target rather
