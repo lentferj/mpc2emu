@@ -4238,6 +4238,48 @@ is rewritten there is no route back to the pre-fix state.
 
 See `docs/RESOLUTION_NOTES.md` §E4BDOUBLETRIM.
 
+## GRATER on CD3-MATRIX9 is a PRE-PAN-WRITER build — the row's "total pan loss" is a stale bank
+
+**Status: CAUSE ESTABLISHED 2026-09-07, needs a rebuild + card write (Jan's).**
+eosed measured GRATER->E4XT as a total pan loss: R-L +0.42 dB (the interface
+trim) at every key and both wheel positions, swing 0.01-0.04 dB. They then read
+the cords before concluding and found **no AmpPan cord at all** — LFO1 exists and
+is routed to *Pitch*.
+
+**It is not a writer defect. The bank on the card predates the writer's pan
+support.** Rebuilt from the same source with the current writer:
+
+    REBUILT now    E4P1 720 bytes -> AmpPan cord at offset 304, amount 24
+    ON THE CARD    E4P1 720 bytes -> no AmpPan cord
+
+24 is exactly right: `lfo1_to_pan 0.370079 x (1 - wheel_to_lfo 0.5) x 127 = 23.5`.
+The parser reads the source correctly (Application_Version 2.10.1.85, nested
+`<LFO LfoNum="0">` layout, `LfoPan 0.370079`, `VelocityToPan 0.055118`).
+
+**How it happened, and it is a process fault worth naming.** `MX9 GRATER_01` was
+built at 20:22 for CD3-MATRIX8b, *before* the AmpPan cords existed in the writer.
+When CD3-MATRIX9 was assembled the MPC row was rebuilt and GRATER was **carried
+over unchanged** — correctly for the three rows verified byte-identical on
+purpose, wrongly for this one, because nobody asked whether it predated the fix.
+**Carrying a bank forward is only safe if you know what changed since it was
+built.**
+
+**Fix:** rebuild GRATER and write it. Needs a card write, so it waits for Jan.
+
+**The null is attributable, and only because four alternatives were excluded
+first** (eosed) — worth recording with the entry rather than logging a bare zero:
+
+    chain sums, no pan can appear       excluded by the id1/id3 gate (-59.48 vs +0.41)
+    envelope aliased the modulation     excluded by 10 ms frames (Nyquist 50 Hz)
+    balance measured in silence         excluded by the 20 dB level gate
+    the pan path does not work          excluded by three programs panning on this bank
+
+Three hours earlier the same table would have been uninterpretable.
+
+**Incidental confirmation:** CC1 = 0 and 127 agree to 0.01 dB at every key, so the
+`ModWl -> C02Amt` cord gates the pitch LFO and does not touch pan — consistent
+with the cord table read.
+
 ## E4XT pan modulation CONFIRMED WORKING — and a zero-depth cord that is faithful, not broken
 
 **Status: CONFIRMED 2026-09-06 (eosed, 66 captures, 10 ms frames).** The E4B
