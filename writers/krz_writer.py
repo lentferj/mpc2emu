@@ -1761,6 +1761,63 @@ def _filter_env_depth_byte(cents: float) -> int:
 #   All share an IDENTICAL program layout; the slope is selected by a handful of
 #   bytes — HOB0[0] (filter), HOB1[0] (F2 block), HOB2[0] (F3 block), CAL[29]
 #   (algorithm) — so no separate template is needed.
+#: ---- K2000 FILTER FUNCTION TABLE ----------------------------------------
+#: The K2000's own filter functions, and which algorithms carry them.
+#: Transcribed from the manual Ch.14 "DSP Functions / Filters" -- the
+#: seventeen-entry list plus the per-filter section headings -- and the
+#: algorithm chart. Recorded because the writer's algorithm choice depends on
+#: all three columns, and until now those lived only in `_k2_filter_plan`'s prose.
+#:
+#:   name                 poles  slope   resonance                   separation
+#:   LOPASS                 1     6 dB   fixed                        no
+#:   2POLE LOWPASS          2    12 dB   CONTROLLABLE (F2 RES page)   no
+#:   LOPAS2                 2    12 dB   fixed  -6 dB (in the name)   no
+#:   LP2RES                 2    12 dB   fixed +12 dB (in the name)   no
+#:   4POLE LOPASS W/SEP     4    24 dB   controllable                 YES
+#:   LPGATE                 -     -      gated lowpass                no
+#:   HIPASS                 1     6 dB   fixed                        no
+#:   HIPAS2                 2    12 dB   -                            no
+#:   4POLE HIPASS W/SEP     4    24 dB   -                            YES
+#:   ALPASS                 1     -      phase only                   no
+#:   2POLE ALLPASS          2     -      phase only                   no
+#:   NOTCH FILTER           2     -      width controllable           no
+#:   NOTCH2                 2     -      FIXED WIDTH (in the name)    no
+#:   BANDPASS FILTER        2     -      width controllable           no
+#:   BAND2                  2     -      FIXED WIDTH (in the name)    no
+#:   DOUBLE NOTCH W/SEP     -     -      -                            YES
+#:   TWIN PEAKS BANDPASS    -     -      -                            YES
+#:
+#: **How to read the resonance column** (the manual's own rule): "Resonance on
+#: the K2vx is implemented in one of two ways. On some filters, the resonance is
+#: fixed... On other filters, you can control the amount... In the case of these
+#: filters, there will always be a SEPARATE CONTROL PAGE for the resonance." So
+#: an F2 RES page means controllable and its absence means fixed -- which is
+#: exactly why `_k2_filter_plan` returns `_K2_F2_RES` for some filters and not
+#: others.
+#:
+#: **Separation**: the two four-pole filters, the double notch and twin peaks are
+#: "actually two filters combined into one DSP function", with a Separation page
+#: shifting the second filter's cutoff. At separation 0 a four-pole gives a clean
+#: 24 dB/octave.
+#:
+#: ALGORITHM COVERAGE for the four algorithms this writer emits:
+#:   alg  1   4POLE LOPASS W/SEP, 4POLE HIPASS W/SEP, TWIN PEAKS, DOUBLE NOTCH
+#:   alg  2   2POLE LOWPASS, BANDPASS FILT, NOTCH FILTER, 2POLE ALLPASS,
+#:            PARA BASS / TREBLE / MID        -- **and the PANNER**
+#:   alg  5   2POLE LOWPASS, BANDPASS FILT, NOTCH FILTER, NOTCH2, HIPAS2,
+#:            2POLE ALLPASS, LPGATE, PARA family
+#:   alg 16   LOPASS, HIPASS, ALPASS, PARA BASS / TREBLE
+#:
+#: **The PANNER exists only in algorithms 2, 13, 24 and 26.** Of those, only
+#: algorithm 2 also offers 2POLE LOWPASS with its resonance page -- which is what
+#: makes moving a 12 dB source there free rather than a trade, and is the basis
+#: of the pan write below.
+#:
+#: **Transcribed by hand, deliberately.** Parsing the algorithm chart
+#: programmatically passed every positive check and still put a PANNER in
+#: algorithm 1, which the manual forbids; only a negative check exposed it. The
+#: rows above claim the four algorithms this writer uses and not the other 27.
+#: ---- end table ----------------------------------------------------------
 _K2_FILTER_NONE = 62
 _K2_FILTER_LP = 50           # Alg1 4POLE LOPASS W/SEP  (24 dB/oct)
 _K2_FILTER_HP = 54           # Alg1 4POLE HIPASS W/SEP
