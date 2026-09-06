@@ -26041,8 +26041,52 @@ source position N.
 
 ## §AKAIENV2SUSTAIN — a filter envelope with sustain 0 is written as no envelope
 
-**Status: FIX APPLIED, NOT HARDWARE-CONFIRMED. The A/B/A below tested a
-DIFFERENT BYTE and does not speak to this fix.**
+**Status: NOT A BUG IN THE WRITER. The fix was applied and REVERTED the same
+hour — measured inert. The underlying fidelity loss is real and is a
+LIMITATION, not a patch.**
+
+**THE MACHINE GATES THE SAME WAY THE WRITER DID, and its gate is the one that
+matters.** §156 gives the shift as `octaves = 0.002612 * SUSTN2 * depth` — a
+PRODUCT — so a zero sustain yields zero sweep at any depth. §177, written the
+day before: *"SUSTN2 0 mutes its filter route entirely."* Both were already in
+this file when the gate was removed.
+
+Measured by s3ked, writing the exact byte the fix wrote, to the exact value, on
+the exact programs it targeted, with byte-identical restores:
+
+    PRG 0   k36->k72   A -22.87   B -22.90   A2 -22.91
+    PRG 9   k36->k72   A -13.65   B -13.73   A2 -13.59
+
+0.03 and 0.08 dB on a rig that reproduces to 0.02. **Writing a depth where the
+sustain is 0 changes bytes and no sound.** Every program the change targeted has
+SUSTN2 = 0 — that is the same condition that selected them.
+
+**This is a RECURRENCE.** s3ked stopped an identical patch two days ago, having
+measured it inert at +0.01 dB then. It came back and reached a shipped build
+this time, because the reasoning was rebuilt from scratch instead of the notes
+being read.
+
+**What is actually lost, and it is real.** A K2000 program with a 10800-cent
+filter envelope, sustain 0 and a 9-35 second decay cannot be represented on an
+S3000XL: the machine's ENV2 filter route does not exist at sustain 0. That is a
+fidelity LIMITATION and wants a DIAGNOSTIC — `content_lost=True` — rather than a
+byte. The two-byte alternative (depth 33 **and** SUSTN2 60, which puts the
+sustained corner at 812.9 Hz and is what the organs already ship) changes the
+envelope's SHAPE, not just its depth, so it is a fidelity DECISION to be taken
+deliberately, not a bug fix to apply.
+
+**A SEPARATE, OPPOSITE BUG THIS EXPOSED — the reader over-reads.**
+`parsers/akai_s3000_parser.py::_env2_amount` computes with
+`_lvl = AKAI_ENV2_FULL_LEVEL` and gates only on `if not depth`, ignoring
+`sustn2` entirely. So an AKAI source carrying a depth with SUSTN2 0 is read back
+as a large filter envelope that the machine mutes. The writer/reader asymmetry
+noted below is real, but it should be resolved on the READER side by honouring
+the machine's own gate — not, as was done here, by removing the writer's.
+
+---
+
+**Superseded status line, kept because it was acted on:** "FIX APPLIED, NOT
+HARDWARE-CONFIRMED. The A/B/A below tested a DIFFERENT BYTE.
 
 **THE CONFIRMATION WAS RETRACTED WITHIN THE HOUR (s3ked, 2026-09-06).** The
 A/B/A wrote **`MODVFILT1`, keygroup offset 151** — a velocity→filter modulation

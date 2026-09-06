@@ -4240,10 +4240,20 @@ See `docs/RESOLUTION_NOTES.md` §E4BDOUBLETRIM.
 
 ## AKAI: a filter envelope with sustain 0 converts as no envelope at all
 
-**Status: FIX APPLIED, NOT hardware-confirmed, NOT pushed.** The two A/B/A runs
-that appeared to confirm it wrote `MODVFILT1` (offset 151), a velocity→filter
-slot; this fix writes `MODVFILT3` (153), the Envelope2→filter depth. s3ked
-caught it against the signature table and is re-running on 153. Found by static reading 2026-09-06, confirmed same day.
+**Status: NOT A WRITER BUG. Patch applied and reverted the same hour, measured
+inert.** The machine gates on SUSTN2 exactly as the writer did — §156 makes the
+shift the product of SUSTN2 and depth, §177 says SUSTN2 0 mutes the route — so
+a depth written at sustain 0 changes bytes and no sound (0.03/0.08 dB on a rig
+reproducing to 0.02). A recurrence: s3ked stopped the same patch two days ago.
+
+**What remains open, restated:** an S3000XL cannot represent a filter envelope
+with sustain 0 and a long decay. That is a LIMITATION wanting a diagnostic
+(`content_lost=True`), not a byte. A two-byte alternative (depth + SUSTN2 60)
+would change the envelope's shape and is a fidelity decision, not a fix.
+
+**Separate bug found on the way:** `_env2_amount` in the AKAI reader ignores
+SUSTN2, so it over-reads a muted filter route as a large envelope. The
+writer/reader asymmetry should be fixed on the reader side. Found by static reading 2026-09-06, confirmed same day.
 **Blocked on:** one measurement — no new card crossing needed if the existing
 KR→AK captures can be split by program.
 
