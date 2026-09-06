@@ -26818,6 +26818,37 @@ that was already right. The test is the K2000's own PAN display for a layer of
 offset binary and **our decode is wrong by 8 steps on every KRZ bank ever read**,
 which is far larger than this bank.
 
+**CONFIRMED ON HARDWARE 2026-09-06 20:34 (s3ked, per-channel).** The file-side
+prediction — 58 of 58 zones written hard left — measured on the machine:
+
+    PRG      L dB      R dB      L-R      mean-of-pair vs louder
+      0    -28.70    -70.57    +41.87        -6.00 dB
+      3    -10.93    -59.23    +48.30        -6.02
+      5    -12.68    -67.84    +55.16        -6.01
+      8    -16.95    -66.05    +49.10        -6.02
+     11    -43.19    -71.40    +28.20        -5.86
+     32    -72.49    -72.46     -0.03        -1.00   <- CLR leftover, CENTRED
+
+**All twelve KRZ-sourced programs sit between +28 and +55 dB of L−R imbalance,
+and the non-KRZ leftover in the same load is centred to 0.03 dB.** That leftover
+is the control: it rules out the rig and puts the panning in the material, which
+is what the zone scan said.
+
+**The averaging error is a clean constant, −5.86 to −6.02 dB**, spread 0.16 dB
+across twelve programs. So:
+
+- **Within-row differences are untouched** — slopes, group differences and every
+  A/B/A subtract the constant away. The 17.29 dB key slope, the 22.45 dB group
+  difference and the two-byte diagnostic all stand.
+- **Cross-row absolutes were wrong by 6.0 dB.** The previously reported
+  "E4-AK −16.16 against KR-AK −24.34 at k36" is now measured rather than
+  suspected: **6.0 of that 8.2 dB gap was the averaging, and the real gap is
+  about 2.2 dB.**
+
+The row can now be quoted with a per-program correction applied, which is
+preferable to re-measuring given the constant is uniform to 0.16 dB and the
+per-program figures exist.
+
 **Consequences already established, whichever way it goes.** eosed's analysis
 averages the channel pair, so the KR row reads low: exactly −6.021 dB where R is
 silent, but **NOT a constant** where R is a noise floor — at v127 it is 6.006 dB
