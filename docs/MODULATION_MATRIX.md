@@ -377,7 +377,16 @@ envelope, filter mode, cutoff and resonance, and no modulation routings.
 [^akpanrat]: The AKAI's second LFO is `PANRAT`. The writer pins it to 1
     (`akai_s3000_writer.py:1799`) and the reader does not map it to `lfo2_*`.
     Its route to pan is dead on the machine, but the LFO itself works
-    (s3ked §51, retracting §39).
+    (s3ked §52, retracting §39 — **not §51**, which retracted §45 on the
+    per-zone `VLOUD1`/`VFREQ1`/`VTUNO1`/`VPANO1` fields and is a different
+    result). The finding carries its own positive control and is therefore not
+    affected by the channel-averaging bug found on 2026-09-06: the same detector
+    in the same session resolved **118 dB** of balance when `PANPOS` was driven
+    statically (−59.30 dB at −50, +58.93 dB at +50) while reading 0.71–0.84 dB
+    with the LFO routed. A detector that resolves 118 dB of pan is not blind to
+    pan, and §51 separately shows `VPANO1` spanning the same 118 dB — so the pan
+    DESTINATION is alive and it is specifically the LFO's route to it that is
+    dead.
 
 [^mpccurve]: The MPC is the one machine of the four whose velocity→volume
     response is **linear in amplitude**, not in dB
