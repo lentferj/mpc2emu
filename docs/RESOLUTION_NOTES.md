@@ -293,6 +293,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAISUSTSAT — the ENV2 product law is refuted: SUSTN2 saturates at or below 60 (2026-09-06)](#akaisustsat-the-env2-product-law-is-refuted-sustn2-saturates-at-or-below-60-2026-09-06)
 - [§K2PANWIRES — we write a PANNER and never spread its two wires, so it is silent (2026-09-06)](#k2panwires-we-write-a-panner-and-never-spread-its-two-wires-so-it-is-silent-2026-09-06)
 - [§AKAILFO2RATE — LFO2 does not run at twice LFO1; every AKAI pan program is at half rate (2026-09-06)](#akailfo2rate-lfo2-does-not-run-at-twice-lfo1-every-akai-pan-program-is-at-half-rate-2026-09-06)
+- [§READNEVERFAILS — four interfaces in one night where a bad read returns a well-formed answer (2026-09-06)](#readneverfails-four-interfaces-in-one-night-where-a-bad-read-returns-a-well-formed-answer-2026-09-06)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -27558,3 +27559,55 @@ the thing that is wrong. A check confirming that a mechanism ran rather than
 what it did, on the same day this project circulated that warning to two peers.
 The claim reached two peer messages and two files before it was caught, by
 s3ked, from the measurement side.
+
+
+## §READNEVERFAILS — four interfaces in one night where a bad read returns a well-formed answer (2026-09-06)
+
+Four independent interfaces, three machines, one evening. **None of them errors.
+All of them return something shaped like an answer.** Collected because the
+individual findings are each filed elsewhere and the pattern is worth more than
+any of them.
+
+| interface | bad read returns | filed |
+|---|---|---|
+| AKAI partition table past the last real partition | 19 "volumes" with non-printable names | TODO, partition-G |
+| E4XT voice index past a preset's real voice count | plausible key ranges and cord contents | §PANMOD / eosed |
+| K2000 refused DSP function code | **another legal function of that block** | §K2ALGWALK / k2kremote |
+| our own parsers, for a field they never populate | `0.0` | §K2PANWIRES, E4B AmpPan reader gap |
+
+### They are not all the same species (k2kremote's distinction)
+
+The first two, and our own unpopulated fields, return data that is **well-formed
+and wrong**. The K2000's refused code returns data that is well-formed, wrong,
+**and causally connected to what was asked** — the device really did respond to
+the input, just not with what was requested.
+
+**That third kind is the dangerous one**, because the standard defence against a
+bad read is to check that the thing you poked responded at all — and here it
+did. Liveness is not correctness. The only defence that worked was reading the
+value back from an independent place (the stored byte) rather than trusting the
+render.
+
+### What actually caught each one
+
+Not scepticism — a **second, independent** route to the same fact:
+
+- the partition garbage: **validating name bytes** (printable ASCII in a fixed
+  12-char field), not comparing listings
+- the voice-count echo: noticing two presets returned **identical** contents for
+  voices 1-7, and declining to give a count at all
+- the refused code: **pairing the typed code against the stored byte**, so a
+  refusal is visible as a repeated byte rather than as a plausible name
+- our unpopulated fields: checking the parser **mentions the field** before
+  believing a zero. Three separate nulls this evening measured nothing rather
+  than measuring zero (KRZ algorithm attr, E4B `lfo1_to_pan` twice)
+
+### The rule
+
+**A null is not evidence until the detector has been shown to be able to produce
+a non-null.** Every one of tonight's traps passes a positive check and fails
+only a negative one — which is also how the algorithm-chart auto-parse was
+caught earlier in the week, and why §K2PANWIRES needed the `Pad` probe pushed
+*upward* (the range floors at 0, so pressing down proved nothing).
+
+Related: [[feedback-check-the-check]], [[feedback-symptom-not-diagnosis]].
