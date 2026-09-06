@@ -4359,3 +4359,63 @@ pass (`_coverage_remap_voices`, called at :2670) extending zones after the clamp
 or `r_zone - zone.coarse_tune` differing from the zone root. Not yet checked.
 
 See `docs/RESOLUTION_NOTES.md` §KRZCEILINGUNCLAMPED.
+
+---
+
+## AKAI writer never writes `LFODEP` — converted vibrato is still silent (§AKAILFODEP)
+
+**Status:** open (2026-09-06), found by code inspection while building
+`docs/MODULATION_MATRIX.md`. **Not hardware-confirmed** — the claim below is an
+absence in our own source, and the silence it predicts has not been measured.
+**Blocked on:** an S3000XL A/B, and a decision on whether `LFO1WAVE` ships with
+it (see below).
+
+`writers/akai_s3000_writer.py:2118` writes the LFO→pitch **gate**:
+
+    k[_AKAI_LPTCH_OFFSET] = (AKAI_LFO_DEPTH_CAL_LPTCH if _vib > 0.0 else 0)
+
+but the **depth** byte `LFODEP` (program offset `0x22`) is written **nowhere**
+and is absent from `_PROGRAM_HW_DEFAULTS` (`:1798-1826`). Both verified by grep.
+
+The measured law is `rms_cents = 0.13127 · LFODEP · L_PTCH`
+(`models/common.py:1014`, s3ked §160), and `akai_lfo_depth_to_pitch`'s own
+docstring records the two-sided gate established in the same run: **`LFODEP=0`
+with `L_PTCH=50` produces no vibrato**, just as `L_PTCH=0` with `LFODEP=99`
+produces none.
+
+So the 2026-08-24 fix (§AKAILPTCH) restored the routing and left the depth at
+zero. It is the same defect one byte over, and the comment at `:2100-2116`
+describing the L_PTCH half reads as a complete account of a problem that is
+still half present.
+
+This is exactly the failure shape the writer's own `_PROGRAM_HW_DEFAULTS` note
+warns about at `:1511-1513` — "an amount without its matching source is silently
+inert" — inverted: here it is a source without its matching amount.
+
+Fix strategy: `docs/RESOLUTION_NOTES.md` §AKAILFODEP.
+
+---
+
+## KRZ writer drops a negative `LfoPitch` (§KRZLFOSIGN)
+
+**Status:** open (2026-09-06), found by code inspection while building
+`docs/MODULATION_MATRIX.md`. **Not hardware-confirmed.**
+**Blocked on:** nothing to diagnose; it wants a bench pass before pushing
+because it changes emitted bytes on real material.
+
+`writers/krz_writer.py:2222` gates the LFO→pitch cord on
+
+    if getattr(voice, 'lfo1_to_pitch', 0.0) > 0.0:
+
+— **strictly positive**. `parsers/xpm_parser.py:1798` clamps `LfoPitch` to
+−1..+1, and `parsers/akai_s3000_parser.py` and `parsers/e4b_parser.py` both
+produce signed depths (the E4B one deliberately, for the triangle-phase fix at
+`e4b_parser.py:571-580`). Any source asking for an inverted-phase vibrato
+therefore reaches the K2000 with **no vibrato at all**, rather than with the
+phase flipped.
+
+Inconsistent with its two neighbours in the same function, both of which were
+made explicitly signed on 2026-08-25: the filter-envelope depth
+(`krz_writer.py:2212`) and the velocity→filter depth (`:2143-2148`).
+
+Fix strategy: `docs/RESOLUTION_NOTES.md` §KRZLFOSIGN.

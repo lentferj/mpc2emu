@@ -281,6 +281,8 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIFLOORSPAN — the corner floor cannot be reached by a source without a velocity sweep](#akaifloorspan-the-corner-floor-cannot-be-reached-by-a-source-without-a-velocity-sweep)
 - [§XPMNOROOTFIXED — "no root + full range" is not the same as "fixed pitch"](#xpmnorootfixed-no-root-full-range-is-not-the-same-as-fixed-pitch)
 - [§KRZCEILINGUNCLAMPED — zones ship past the ceiling the writer computed](#krzceilingunclamped-zones-ship-past-the-ceiling-the-writer-computed)
+- [§AKAILFODEP — the AKAI LFO depth byte is never written (2026-09-06)](#akailfodep-the-akai-lfo-depth-byte-is-never-written-2026-09-06)
+- [§KRZLFOSIGN — a negative `LfoPitch` is discarded on the KRZ path (2026-09-06)](#krzlfosign-a-negative-lfopitch-is-discarded-on-the-krz-path-2026-09-06)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -26540,3 +26542,128 @@ computed limit: clamping (frozen pitch, full level) and stopping. The file does
 not distinguish the two samples at k78. Suggested discriminator: load `bass I`
 alone so it lands at a different RAM address and re-sweep — if the cliff moves it
 is address-dependent and not ours.
+
+---
+
+## §AKAILFODEP — the AKAI LFO depth byte is never written (2026-09-06)
+
+**Companion to `TODO.md` "AKAI writer never writes `LFODEP`".** Found by code
+inspection, not measured. Nothing here has been on hardware.
+
+### What is missing
+
+`LFODEP`, AKAI program offset `0x22`. The writer emits the gate `L_PTCH`
+(keygroup 150) at `writers/akai_s3000_writer.py:2118` and never the depth.
+`0x22` appears in no assignment and in no `_PROGRAM_HW_DEFAULTS` entry.
+
+### Why that means silence
+
+The pitch law measured by s3ked (§160) and encoded at `models/common.py:1014`:
+
+    rms_cents = 0.13127 · LFODEP · L_PTCH
+
+It is a **product**, and the same run established both gates: `LFODEP=99` with
+`L_PTCH=0` gives no vibrato, `L_PTCH=50` with `LFODEP=0` gives none either. We
+currently write the second of those.
+
+### The fix, and the reason it is not one line
+
+`akai_lfo_depth_to_pitch` (`models/common.py:1062`) already converts
+`LFODEP → lfo1_to_pitch`. Inverting it at the calibration routing:
+
+    one_sided_cents = lfo1_to_pitch · LFO_PITCH_FULL_CENTS
+    rms_cents       = one_sided_cents / AKAI_LFO_WAVE_RMS_TO_PEAK[wave]
+    LFODEP          = rms_cents / (AKAI_LFO_RMS_CENTS_PER_PRODUCT · L_PTCH)
+
+with `L_PTCH = AKAI_LFO_DEPTH_CAL_LPTCH` (50), the routing the law was itself
+measured at — which is what makes the depth we write mean what the law says.
+Clamp 0..99.
+
+**`LFO1WAVE` has to ship with it.** The RMS→peak factor is the waveform's
+(`AKAI_LFO_WAVE_RMS_TO_PEAK`, `models/common.py:1054`), and the writer emits no
+waveform byte today, so the machine uses its own default while we scale for a
+shape we did not write. Reading `lfo1_shape` (which the AKAI parser populates,
+`akai_s3000_parser.py:865`) and writing `LFO1WAVE` is part of this fix, not a
+separate one. Until 2026-08-24 every AKAI-sourced LFO was silently treated as a
+triangle for exactly this reason (§AKAILFO).
+
+### It costs the whole LFO1 block, not just the depth
+
+Measured on a round trip 2026-09-06 (write a voice with `lfo1_to_pitch=0.30`,
+`lfo1_rate=5.0`, `lfo1_shape='sine'`, `lfo1_delay=0.5` to an AKAI program, read
+it back): **`lfo1_to_pitch`, `lfo1_rate`, `lfo1_shape` and `lfo1_delay` all came
+back `None`/`0.0`.**
+
+The reason is the reader's gate at `parsers/akai_s3000_parser.py:856`:
+
+    if prog.get('lfo_depth') and kg.get('lfo_to_pitch'):
+
+— it requires **both** `LFODEP` and `L_PTCH` before it reads any of the LFO1
+fields. We write only the second, so the rate byte we do write (`p[0x21]`,
+`:1983`) is unreachable. Fixing `LFODEP` therefore recovers four fields, not
+one, and the `LFO1 rate` cell in `MODULATION_MATRIX.md` is marked `~` on the
+AKAI column for this reason rather than because the byte is missing.
+
+### How to check it, cheaply
+
+The S3000XL round-trip harness that caught §AKAILPTCH and the FILQ drop is the
+right instrument: convert, write, read back, and compare `lfo1_to_pitch` across
+the corpus. A pre-fix run should show it collapsing to zero on 100% of zones
+that had one — the same signature §AKAILPTCH showed, because it is the same
+routing still broken. The synthetic round trip above already shows exactly that
+on one voice.
+
+**The falsifier, pre-registered:** if a post-fix round trip restores
+`lfo1_to_pitch` but the machine still produces no audible vibrato, then
+`L_PTCH` and `LFODEP` do not compose the way the product law says and the law —
+not the writer — is what needs re-measuring. A RAM-only A/B/A with byte-identical
+restores is enough to settle it; s3ked's rig does this.
+
+**Do not push the fix on the round-trip alone.** A round trip proves our reader
+agrees with our writer, which is the one thing that was never in doubt.
+
+---
+
+## §KRZLFOSIGN — a negative `LfoPitch` is discarded on the KRZ path (2026-09-06)
+
+**Companion to `TODO.md` "KRZ writer drops a negative `LfoPitch`".** Found by
+code inspection, not measured.
+
+### The line
+
+`writers/krz_writer.py:2222`:
+
+    if getattr(voice, 'lfo1_to_pitch', 0.0) > 0.0:
+        cal[21] = _K2_CS_LFO1
+        cal[22] = _lfo_pitch_depth_byte(voice.lfo1_to_pitch)
+
+`> 0.0`, so a negative depth writes no source and no depth — silence rather than
+an inverted phase.
+
+### The fix
+
+Test `!= 0.0` and let the sign through. `_lfo_pitch_depth_byte`
+(`krz_writer.py:1673`) already produces a signed byte, and
+`krz_cents_to_lfo_pitch_byte` handles the sign, so the change is the comparison
+alone. Its two neighbours in the same function were given exactly this treatment
+on 2026-08-25 — the filter-envelope depth (`:2212`) and the velocity→filter
+depth (`:2143-2148`) — and this one was missed.
+
+### Confirmed on a round trip (our own code, not the machine)
+
+2026-09-06, one voice, everything else held constant:
+`lfo1_to_pitch = +0.30` reads back as `0.314`; `lfo1_to_pitch = −0.30` reads
+back as **`0.0`**. The vibrato is not inverted, it is absent.
+
+### What to check before it ships
+
+Cheap on paper, but it changes emitted bytes on any source with an inverted
+vibrato, so it belongs in the next K2000R bench pass rather than going out on
+inspection. The audible check is a one-cycle pitch trace: after the fix a
+negative depth must produce vibrato **in antiphase** to the same magnitude
+positive, not merely vibrato.
+
+**A negative result is informative here.** If the K2000 turns out to reject or
+fold a negative control-source depth, the correct fix is `abs()` plus a recorded
+note that the machine cannot express the phase — not the sign passthrough. Do
+not assume the sign is expressible because the byte is signed.

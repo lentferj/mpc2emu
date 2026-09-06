@@ -152,7 +152,10 @@ loops are translated onto each target's own synth engine — not left at default
 That mapping is reverse-engineered against real E4XT and K2000R hardware; the
 [E4B Voice Parameters](#e4b-voice-parameters) and
 [KRZ Program Parameters](#krz-program-parameters) sections below document exactly
-what transfers and how it was verified.
+what transfers and how it was verified, and
+[`docs/MODULATION_MATRIX.md`](docs/MODULATION_MATRIX.md) gives the parameter-by-
+parameter matrix across the MPC, AKAI, E4B and KRZ paths — including, explicitly,
+what does **not** transfer.
 
 **Vintage resampling** can optionally run every sample through a model of the
 EMU Emulator II (µ-law companded 8-bit, 27,777 Hz — quiet passages keep ~14-bit
@@ -897,8 +900,19 @@ LFO1 (vibrato) is mapped: rate plus all **26 LFO shapes**, which were decoded
 from a live K2000R SysEx probe (0 = Sine … 4 = Triangle … 6 = Rising Sawtooth …
 8 = Falling … 20 = 8 Step). Routed to pitch via the CAL control-source bytes.
 
-Not yet mapped (honest gaps): **LFO2**, **LFO → filter** (filter wobble),
-**LFO → amp** (tremolo), and LFO **delay / fade-in / tempo-sync**.
+**LFO → amp** (tremolo) **is** mapped — LFO1 or LFO2 drives the F4 AMP block,
+with the layer's static level trimmed by the depth so the modulation has
+headroom. It is reachable from AKAI, KRZ, SFZ and SF2 sources; the MPC's own
+`.xpm` carries no volume-LFO field, so an MPC conversion never uses it.
+
+Still not mapped (honest gaps): **LFO2 rate / shape** (LFO2 is written only as a
+tremolo *source*, never configured), **LFO → filter** (filter wobble — the MPC's
+`LfoCutoff` reaches the E4B and not the K2000), LFO **delay / fade-in /
+tempo-sync**, and the **mod wheel**.
+
+Per-parameter detail for every direction — what each parser reads, what each
+writer emits, and what survives end to end — is in
+[`docs/MODULATION_MATRIX.md`](docs/MODULATION_MATRIX.md).
 
 ### Loops
 
