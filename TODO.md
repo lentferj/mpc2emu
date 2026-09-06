@@ -4259,6 +4259,13 @@ of twelve programs have sustain 0 with decays of 9.4–35 seconds over a resting
 corner of 23.2 Hz, so the K2000 plays them open for the whole note and we write
 them shut. 52 of 97 keygroups get DEPTH 0.
 
+**Pass-1 evidence is in and both predictions held** (s3ked, correlational, not
+isolated): strings slope −28.52 dB against organs −6.07, and the organs stay
+flat across three octaves then drop 4.70 dB in the last step, exactly where the
+fundamental crosses their sustained corner. Roughly 19 dB of the tilt is
+target-side against a ~3.5 dB source-side bound. DEPTH is still collinear with
+instrument family, so the A/B/A byte change remains the isolating test.
+
 Candidate cause of the §178 KR→AK darkness (s3ked measured −17.29 dB across
 k36→k84). **The obvious check does not work:** the six sustain-0 programs are
 exactly the six string/pad programs and the six sustain-0.61 ones are exactly

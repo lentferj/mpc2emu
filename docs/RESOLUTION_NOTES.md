@@ -26046,6 +26046,44 @@ whatever its sustain. Something like `if not cents or (sustn2 <= 0 and decay
 <= 0): return 0`, so the genuinely inaudible case (no depth, or an envelope that
 collapses instantly) still degrades to the fixed defaults.
 
+**PASS-1 EVIDENCE, CORRELATIONAL, NOT ISOLATED (s3ked, 2026-09-06).** Two
+predictions from this hypothesis were tested against captures already on disk
+and both held. Programs were split by each one's own velocity ramp — a
+data-derived discriminator that needs no slot map, after eosed found the MPC
+row's asserted order scrambled — and the split reproduced the family split
+exactly, two clusters with no overlap (ramp 2.81–2.85 for the six at corner 14,
+26.27–27.43 for the six at corner 15).
+
+    prediction 1  strings slope steeper than organs
+                  organs  -6.07 dB   strings -28.52 dB   difference 22.45
+
+    prediction 2  the organs' slope concentrated at the top of the range
+                            k36     k48     k60     k72     k84   k36->k72  k72->k84
+                  organs -20.17  -20.41  -20.54  -21.54  -26.24    -1.37    -4.70
+                  strings-28.50  -38.89  -44.14  -47.39  -57.02   -18.89    -9.63
+
+The second is the load-bearing one. The organs stay flat across three octaves
+and then fall in the last step, exactly where 1046 Hz crosses their 756 Hz
+sustained corner, while the strings slope from the bottom — the shape a corner
+below every fundamental produces. "Strings are darker than organs" does not
+predict a flat-then-drop knee at k72→k84.
+
+**Source-side bound: ~3.5 dB, NOT 1.48.** The 1.48 dB figure first quoted here
+was the difference of the two group means on eosed's target; their spread
+matters — three of their six strings slope 6.0–7.2 against organs at 3.4–4.2 —
+so family-linked slope difference reaches about 3.5 dB on half the group. Read
+as 22.45 observed against a ~3.5 bound, leaving roughly 19 dB target-side.
+
+**Still not isolation.** DEPTH remains collinear with family in every one of
+these numbers, and this is pass 1, single capture. The A/B/A byte change is what
+separates a writer effect from a material one; it now has a shape target rather
+than a hunch — writing DEPTH 33 to a string keygroup should collapse its k36→k72
+slope from 18.89 dB toward the organs' 1.37 and move it to the flat-then-drop
+shape. The organs serve as an empirical answer key because at note-on both
+envelopes are at full level and the peak corners nearly coincide (7772 vs 7858
+Hz); the proxy degrades later in the window as the organ settles at 756 Hz and
+the depth-33 string heads back to 22.6.
+
 **LIFTING THE GATE IS NOT BY ITSELF THE FIX.** Added 2026-09-06. The AKAI
 scales the ENV2 corner by the envelope's LEVEL — `akai_env2_target_hz(base,
 sustn2, depth)` — so with SUSTN2 0 a written depth changes nothing about where
