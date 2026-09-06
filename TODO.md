@@ -4197,3 +4197,43 @@ renders them 40 apart, it is a ~31 dB conversion finding. If the K2000 also
 renders them 40 apart, the material is simply like that.
 
 See `docs/RESOLUTION_NOTES.md` §KR2E4LEVEL.
+
+## Capture the fixed E4B column — prediction PRE-REGISTERED before the run
+
+**Status:** blocked on a card crossing. Neither this session nor `eosed` has
+asked Jan for one; it can ride with `ATKSHAPE`, the corrected KRZ bank and
+`MXKRSRC.KRZ`.
+
+The whole E4B column was built with the double-written velocity trim
+(§E4BDOUBLETRIM) and rebuilt through the fixed writer. The rebuilt banks are in
+`~/temp/matrix_v7/rows/`, pre-fix banks kept alongside as `*_pre.E4B`.
+
+**CAPTURE `MX9 S3-E4` FIRST, and here is the prediction, recorded before the
+capture exists:**
+
+    S3-E4   30 of 36 trimmed voices UNCHANGED   (single-zone: no zone byte,
+                                                 so the trim MUST stay on
+                                                 vpar[54] and the fix must not
+                                                 touch it)
+             6 of 36 RISEN by ~29 dB            (multi-zone: the zone copy
+                                                 carries the trim, the voice
+                                                 copy was the duplicate)
+
+    IF 30 COME BACK RISEN, the single-zone classification is wrong and the
+    conditional is doing something other than what both projects believe.
+    That outcome falsifies this side's reading of the source, NOT the fix.
+
+**Why S3-E4 and not KR-E4.** KR-E4 asks only whether the fix did *something* —
+all nine of its trimmed voices are multi-zone, so the right fix and an
+unconditional one emit identical bytes there. **S3-E4 can fail in two
+directions**, as an overshoot (30 too loud) or as a no-op.
+
+**Already ruled out without hardware:** every changed byte across all four rows
+goes TO zero and none lands on a non-zero value, so the fix only ever REMOVES a
+trim — a bug that added one somewhere is excluded by the diff alone.
+
+**Requirements:** same grid and same session gain as the pre-fix sets, or the
+comparison is not one. Pre-fix captures are kept, not cleared — once the medium
+is rewritten there is no route back to the pre-fix state.
+
+See `docs/RESOLUTION_NOTES.md` §E4BDOUBLETRIM.
