@@ -4149,3 +4149,14 @@ question and Jan's call — a limit that silently discards three quarters of a
 file is a poor default even when it is documented.
 
 See `docs/RESOLUTION_NOTES.md` §DIAGIFACE.
+
+## E4XT drum key 42 shows a reproducible delay, unexplained
+
+**Status:** open. Measured by `eosed` across three consecutive builds
+(MATRIX4/5/6), reproducible, and not accounted for by any change we have made.
+**Blocked on:** nothing — it needs someone to look at that one key.
+
+Distinct from the `early`-window artefact on keys 37/45 in the same kit, which
+is a window landing on samples shorter than its own opening time (§E4BNULL).
+
+See `docs/RESOLUTION_NOTES.md` §E4BNULL.

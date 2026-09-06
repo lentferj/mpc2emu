@@ -273,6 +273,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§DIAGIFACE — the structured diagnostics interface, and the hole a consumer found](#diagiface-the-structured-diagnostics-interface-and-the-hole-a-consumer-found)
 - [§AKAILEADSPACE — a sample whose name begins with a space will not load](#akaileadspace-a-sample-whose-name-begins-with-a-space-will-not-load)
 - [§STALEBUILD — rebuilding into the same directory leaves the old files](#stalebuild-rebuilding-into-the-same-directory-leaves-the-old-files)
+- [§E4BNULL — the E4XT half of MX9 is a confirmed null, and the near-miss inside it](#e4bnull-the-e4xt-half-of-mx9-is-a-confirmed-null-and-the-near-miss-inside-it)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -25316,3 +25317,68 @@ correct to every check that asks "are the samples the program needs present?".
 **Delete the output directory before a rebuild whose purpose is to change
 names or counts, and verify the count afterwards.** The count is the cheap
 check: 176 expected, 181 found.
+
+
+---
+
+## §E4BNULL — the E4XT half of MX9 is a confirmed null, and the near-miss inside it
+
+**Measured by `eosed`, 2026-09-06.** MATRIX5 → MATRIX6, eleven programs, refit
+pipeline on both sides, matched by program name.
+
+    P001 Lead-PRO5       0.31      P007 LD Fluty Loops  0.01
+    P003 LD Retro Powder 0.92      P008 Bass-MS20       0.05
+    P004 LD Vintage Acid 0.02      P009 Keys-VP Rico    0.08
+    P005 Keys-MS20       0.03      P010 LD Casiopaya    0.11
+    P006 Bass-Dark       0.04      P000 PD Tapemaker    floored both
+
+**Nothing over 1 dB**, and the largest (0.92) is the row that moved 0.96 between
+MATRIX4 and MATRIX5 — a known-variable row, not a MATRIX6 effect. The drum kit
+is unchanged across all sixteen keys: **worst 0.05 dB, median 0.02.**
+
+**This was the predicted outcome and that is what makes it useful.** The E4B
+path was touched only by the XPM sparse-layer fix, whose effect on E4B/AKAI is
+audibly neutral — same samples on the same keys, only the voice assignment
+swapped, all voices carrying identical parameters. `Bass-Dark` at **0.04 dB**
+confirms by measurement what had been an argument.
+
+### The near-miss, which is the reusable part
+
+On the `early` window the same captures read:
+
+    drum key 37   -82.4 -> -50.9   +31.5 dB   0/5 -> 5/5 cells
+    drum key 45   -84.7 -> -68.1   +16.6 dB   0/5 -> 3/5
+
+**+31.5 dB, on short percussive samples, in the direction of a prediction this
+side had made and withdrawn.** It was written up as a finding before being
+caught.
+
+It is a window artefact. Same captures, other observables:
+
+    key 37   attack -39.4 -> -40.7    full -50.9 -> -50.8    peak -24.1 -> -24.3
+             early  -82.4 -> -50.9
+
+**Peak, attack and full identical; only `early` moves.** The samples are
+55-80 ms and the `early` window opens at 100 ms, so it contains only tail; the
+anchors differ by 50 ms between builds, which decides whether the window
+catches the last of a decay or none of it.
+
+**Same captures, two observables, 31.47 dB and 0.02 dB.** This is §88 recurring
+in the same drum kit on the same short samples one day later.
+
+### Why it was caught, and it was not vigilance
+
+`eosed`'s own account, and it is the right one: **peak and full were sitting in
+the same file, so the disagreement was visible.** Vigilance fails on the day the
+number is what you hoped for — and this number matched a withdrawn prediction,
+which is the hardest case, because both ends want it to be true. A second
+observable beside the first fails only if you delete it.
+
+**So: emit several windows even when one of them is "the" measurement.** That
+choice has now paid twice.
+
+### Still unexplained
+
+**Drum key 42 shows a genuine delay for the third build running**, reproducible
+across MATRIX4/5/6. Nothing in the ceiling, headroom, sparse-layer or
+leading-space fixes predicts or accounts for it.
