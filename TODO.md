@@ -4237,3 +4237,25 @@ comparison is not one. Pre-fix captures are kept, not cleared — once the mediu
 is rewritten there is no route back to the pre-fix state.
 
 See `docs/RESOLUTION_NOTES.md` §E4BDOUBLETRIM.
+
+## AKAI: a filter envelope with sustain 0 converts as no envelope at all
+
+**Status:** open, found by static reading 2026-09-06, not hardware-confirmed.
+**Blocked on:** one measurement — no new card crossing needed if the existing
+KR→AK captures can be split by program.
+
+`akai_filter_env_depth` returns depth 0 whenever the source's filter-envelope
+sustain is 0, on the grounds that a zero-depth envelope is inaudible. A sustain
+of 0 does not mean zero depth: it means percussive. On the KRZ matrix source six
+of twelve programs have sustain 0 with decays of 9.4–35 seconds over a resting
+corner of 23.2 Hz, so the K2000 plays them open for the whole note and we write
+them shut. 52 of 97 keygroups get DEPTH 0.
+
+Candidate cause of the §178 KR→AK darkness (s3ked measured −17.29 dB across
+k36→k84). **Separating check, no hardware needed:** if the darkness splits
+cleanly between the six sustain-0 programs and the six sustain-0.61 ones, this
+is the mechanism.
+
+Not the corner floor — that is reached correctly on every path that has a
+velocity sweep, and KRZ has none. See `docs/RESOLUTION_NOTES.md`
+§AKAIENV2SUSTAIN and §AKAIFLOORSPAN.

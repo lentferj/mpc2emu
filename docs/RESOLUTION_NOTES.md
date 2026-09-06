@@ -277,6 +277,8 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§KR2E4LEVEL — the KRZ→E4B row is 20 dB down; NOT the trim, cause still open](#kr2e4level-the-krze4b-row-is-20-db-down-not-the-trim-cause-still-open)
 - [§KRZV9RUN — the K2000 verification of MX9, and what each fix did](#krzv9run-the-k2000-verification-of-mx9-and-what-each-fix-did)
 - [§E4BDOUBLETRIM — the velocity-pivot trim is written TWICE (CONFIRMED, FIXED)](#e4bdoubletrim-the-velocity-pivot-trim-is-written-twice-confirmed-fixed)
+- [§AKAIENV2SUSTAIN — a filter envelope with sustain 0 is written as no envelope](#akaienv2sustain-a-filter-envelope-with-sustain-0-is-written-as-no-envelope)
+- [§AKAIFLOORSPAN — the corner floor cannot be reached by a source without a velocity sweep](#akaifloorspan-the-corner-floor-cannot-be-reached-by-a-source-without-a-velocity-sweep)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -26013,3 +26015,71 @@ Emitted with the `:955` write removed and `:637` untouched:
 **Only the voice-level copy is gone, on the nine trimmed voices.** Predict the
 trimmed presets return ~29 dB louder and keep their velocity ramp. **If they are
 unchanged, `vpar[54]` is inert and this section is dead.**
+
+## §AKAIENV2SUSTAIN — a filter envelope with sustain 0 is written as no envelope
+
+**Status: real, found by static reading, NOT hardware-confirmed.**
+
+`akai_filter_env_depth` (`writers/akai_s3000_writer.py`) opens with
+
+    if not cents or sustn2 <= 0:
+        return 0
+
+and the comment above the ENV2 block justifies it: *"an envelope with zero depth
+is inaudible, and writing one anyway would replace a fixed default with a fixed
+default that merely looks converted."* That reasoning is right about **depth**
+and wrong about **sustain**. A filter envelope whose sustain is 0 is not
+inaudible; it is percussive. Its whole contribution is the attack and the decay,
+and the sustain level says only where it ends up.
+
+Measured on the KRZ matrix source, all twelve programs carry
+`filter_env_cents = 10800` (nine octaves) over a resting corner of 20.67 or
+23.20 Hz — `filter_type` 2, a 2-pole lowpass, so that corner really is closed
+and the entire sound is the envelope. Six of the twelve have sustain 0.00 with a
+decay of **9.4, 22 and 35 seconds**. On a K2000 the corner is open for the whole
+audible life of those notes. We write ENV2 DEPTH 0 and the corner sits at 23.2 Hz
+throughout: 52 of 97 keygroups get DEPTH 0, the other 45 get DEPTH 33.
+
+**The fix is to gate on the envelope's reach, not on its sustain level** — an
+envelope with a non-zero `cents` and a non-instantaneous decay is audible
+whatever its sustain. Something like `if not cents or (sustn2 <= 0 and decay
+<= 0): return 0`, so the genuinely inaudible case (no depth, or an envelope that
+collapses instantly) still degrades to the fixed defaults.
+
+**Do not apply this without a measurement.** It changes half the keygroups on
+every KRZ- and SFZ-sourced conversion, in the loud direction, and the AKAI's
+own ENV2 decay law is what decides whether a 35-second K2000 decay is even
+representable. The check that separates it from §AKAIFLOORSPAN below needs no
+new hardware pass: if KR→AK darkness splits cleanly between the six sustain-0
+programs and the six sustain-0.61 ones, this is the mechanism.
+
+## §AKAIFLOORSPAN — the corner floor cannot be reached by a source without a velocity sweep
+
+Recorded so the next reader does not re-derive it. `akai_velocity_filter`
+returns early when the requested velocity→filter span is zero:
+
+    span_ct = vel_max_ct - vel_min_ct
+    if not span_ct:
+        return akai_filter_byte(cutoff_hz), 0, 0.0
+
+The §AKAICORNER floor lives *after* that return, so it applies only to sources
+that carry a velocity→filter routing. KRZ programs carry none — verified by
+instrumenting the writer: 97 calls, `vel_min_ct == vel_max_ct == 0.0` on every
+one — so KRZ→AKAI takes the early return and writes the raw resting corner.
+
+`hi_key` is NOT the problem and neither is the `d_byte > 0` guard: the call site
+passes `hi_key` correctly (values 56..127), and patching the guard out changes
+nothing because the early return fires first.
+
+**This is probably correct behaviour, not a bug.** The floor exists because a
+velocity sweep can drag the corner below a fundamental the source never crossed;
+with no sweep there is nothing to drag it, and a resting corner at 20.7 Hz is
+what the source actually specifies. Raising it there would invent brightness.
+The brightness those programs are missing belongs to §AKAIENV2SUSTAIN above.
+
+**Method note.** The first run of the guard-out test reported "no effect" from a
+stale import and was briefly read as "`hi_key` must be None" — the opposite of
+the truth. It was re-run with `__pycache__` cleared and the guard asserted in
+the *loaded* function via `inspect.getsource` before the result was believed.
+A patch that is not confirmed present in the running code is not a test of the
+patch.
