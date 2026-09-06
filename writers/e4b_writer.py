@@ -948,11 +948,23 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
     # Two independent parameters have now failed this way, so panel agreement
     # is recorded here as insufficient evidence for any LEVEL or AMOUNT law.
     # Only a measurement counts.
-    # ONLY meaningful for a single-zone voice (_vol/_pan are pre-set to 0.0
-    # above when the voice has 2+ zones — see the per-zone entries instead;
-    # a second hardware test showed this is NOT a voice-value + per-zone-
-    # delta composition, the multi-zone case simply doesn't use these bytes).
-    vpar[54] = e4xt_volume_byte(_offset_level_db(_vol, level_offset_db)) & 0xFF
+    # THE MULTI-ZONE CASE *DOES* USE THIS BYTE. Measured on hardware
+    # 2026-09-06 (eosed, §E4BDOUBLETRIM): zeroing vpar[54] alone on a
+    # resident multi-zone preset — four bytes changed, everything else
+    # identical — raised it +29.50 dB and left the velocity ramp intact.
+    #
+    # The comment previously here claimed a hardware test had shown the
+    # multi-zone case "simply doesn't use these bytes". It uses them, and
+    # IN ADDITION to the per-zone byte 15 — so the velocity-pivot trim
+    # landed twice while the Vel+ cord restores it ONCE, leaving every
+    # trimmed multi-zone preset ~29 dB quiet. That was the whole of the
+    # KRZ->E4B level gap.
+    #
+    # `_vol` is already pre-set to 0.0 for a multi-zone voice, so the trim
+    # must not be re-added here — the zone entries carry it. A SINGLE-zone
+    # voice has no zone byte in play and keeps the trim on this byte.
+    vpar[54] = e4xt_volume_byte(
+        _vol if _multi else _offset_level_db(_vol, level_offset_db)) & 0xFF
     vpar[55] = e4xt_pan_byte(_pan) & 0xFF
     vpar[58] = _XPM_FILTER_TYPE.get(voice.filter_type, 0x00)
     # The 0-1 `filter_cutoff` is the SHARED internal position, defined by the
