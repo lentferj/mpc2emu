@@ -1773,7 +1773,7 @@ def _filter_env_depth_byte(cents: float) -> int:
 #:   2POLE LOWPASS          2    12 dB   CONTROLLABLE (F2 RES page)   no
 #:   LOPAS2                 2    12 dB   fixed  -6 dB (in the name)   no
 #:   LP2RES                 2    12 dB   fixed +12 dB (in the name)   no
-#:   4POLE LOPASS W/SEP     4    24 dB   controllable                 YES
+#:   4POLE LOPASS W/SEP     4    24 dB   CONTROLLABLE (F2 RES page)   YES (F3 SEP)
 #:   LPGATE                 -     -      gated lowpass                no
 #:   HIPASS                 1     6 dB   fixed                        no
 #:   HIPAS2                 2    12 dB   -                            no
@@ -1812,6 +1812,15 @@ def _filter_env_depth_byte(cents: float) -> int:
 #: algorithm 2 also offers 2POLE LOWPASS with its resonance page -- which is what
 #: makes moving a 12 dB source there free rather than a trade, and is the basis
 #: of the pan write below.
+#:
+#: **AND THE F3 SLOT IS THE SECOND REASON A FOUR-POLE CANNOT TAKE A PANNER**
+#: (Jan, 2026-09-06). The four-pole lowpass has a controllable resonance on F2
+#: AND a separation page on **F3** -- which is exactly the block the panner
+#: occupies, since the manual places it "in the block before the final AMP".
+#: `_k2_filter_plan` already emits `_K2_F2_RES, _K2_F3_SEP` for it. So a 24 dB
+#: source is barred from carrying pan twice over: by the algorithm list, and by
+#: its own separation page holding the slot. That is an independent confirmation
+#: of the decision not to move those sources, rather than a restatement of it.
 #:
 #: **Transcribed by hand, deliberately.** Parsing the algorithm chart
 #: programmatically passed every positive check and still put a PANNER in
