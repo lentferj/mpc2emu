@@ -4191,10 +4191,16 @@ cut of up to −32.5 dB applied by the velocity-pivot trim, which expects the
 `Vel+` cord to restore it at v127. Measured v127 tops out 20 dB low, so it does
 not appear to be restored.
 
-**NOT §E4XTCORDSAT.** The cord is written at 33.9% (32.0 dB) against a
-−32.25 dB base — net −0.2 dB at v127 — so saturation cannot be the mechanism and
-the writer's arithmetic is correct. The failure is downstream of what we write:
-wrong destination, an unapplied slot, an overwriting cord, or the 0.9462 dB/%
-law of §83 not holding at 34%. Needs the cord read off the machine.
+**CAUSE FOUND.** The trim writes a base 9.35 dB BELOW the measured volume
+floor (`E4XT_VOL_MEASURED_FLOOR_DB = -22.9`), so that byte is an extrapolation,
+while the cord that cancels it is a measured, interpolated quantity. They do not
+meet. The converter prints this in the build log, naming the exact presets.
+
+NOT §E4XTCORDSAT (34% cannot saturate), not a routing fault (emitted cord is a
+clean Vel+ -> AmpVol @43 slot 0, confirmed against E4B_FORMAT.md).
+
+**Fix:** either measure the volume law below -22.9 dB (a few points at
+-25/-30/-35/-40), or refuse to trim below the floor and accept a smaller swing.
+The second is available today.
 
 See `docs/RESOLUTION_NOTES.md` §KR2E4LEVEL.

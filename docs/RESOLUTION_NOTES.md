@@ -25516,11 +25516,51 @@ real write path and read the EMITTED voice bytes:
 nowhere near the 100 % ceiling, so `e4xt_cord_saturates()` is NOT the mechanism.
 This is a *different* fault from §E4XTCORDSAT, not an instance of it.
 
-**What remains, none of it settleable from the file:** the destination id may not
-be amp volume; the cord may sit in a slot the E4XT does not apply, or be
-overwritten by a later cord; or `Vel+` may not follow the 0.9462 dB/% law of §83
-at 34 % — that law's fitted range matters, and extrapolating it would be our
-error rather than the machine's.
+### CAUSE FOUND — and the converter printed it in the same run's log
+
+    E4XT_VOL_MEASURED_FLOOR_DB = -22.9
+
+    [INFO] 'Oct.Prot. 12Str.': the velocity-pivot trim puts 10 level(s) up to
+           8.3 dB below the measured volume floor (-22.9 dB). Written by
+           extrapolation -- monotonic, but not a measured dB.
+    [INFO] 'Proteus 12String': ... up to 11.4 dB below ...
+    [INFO] 'Prot. 12Str. Lyr': ... up to  8.3 dB below ...
+
+**Those are exactly the three floored presets, and the one flagged worst
+(11.4 dB below floor) is the one measured worst (−63.9).**
+
+**The two halves of the cancellation are not the same currency.** The trim
+writes a base of −32.25 dB — **9.35 dB past where the volume law was ever
+measured** — so the emitted byte (−43) is an extrapolation, monotonic but not a
+calibrated dB. The cord then adds back **+32.0 dB of measured, interpolated
+Vel+** (fitted at 23.62/50.39/100.00 %, flat to ±0.07 %, so 33.86 % is
+interpolation). **A measured quantity is being used to cancel an extrapolated
+one, and they do not meet.**
+
+### The candidates that were ruled out, and how
+
+- **`Vel+` not following 0.9462 dB/% at 34 %** — ruled out by `eosed`: 33.86 %
+  lies *between* two fitted points, so it is interpolation, not extrapolation.
+- **Wrong destination or unapplied slot** — ruled out from the file: template
+  cord slot 0 carries `dst 0x40`, the writer overwrites only src and amount, and
+  `docs/E4B_FORMAT.md` confirms `0x0A` = Vel+ and `0x40` = AmpVol. The emitted
+  cord is a clean `Vel+ → AmpVol @43, slot 0`.
+- **Saturation (§E4XTCORDSAT)** — ruled out by arithmetic: 34 % cannot saturate.
+
+### Fix direction
+
+Either **measure the volume law below −22.9 dB** (a calibration: a few points at
+−25/−30/−35/−40 turns the extrapolation into a law), or **refuse to trim below
+the floor** and accept a smaller swing. The second is available today; the first
+is better and needs bench time.
+
+### The lesson, one format over from where we learned it
+
+**The converter printed the cause, in the correct words, with the exact presets
+named, in the log of the run that produced the bank** — and an hour of captures
+and byte-reads went into rediscovering it. This side read that same log in the
+morning for the layer warnings and did not read down to the INFO lines. It is
+the drum-program episode again (§DIAGIFACE), in E4B rather than KRZ.
 
 **Caveat on our own number:** the cord is located by scanning the emitted voice
 for the `Vel+` source byte and taking the amount two bytes later. It agrees with
