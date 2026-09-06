@@ -1217,6 +1217,25 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
         (0x68, 0x30, voice.lfo2_to_pitch    * _lfo2_sign),  # LFO2 → Pitch
         (0x68, 0x38, voice.lfo2_to_filter   * _lfo2_sign),  # LFO2 → Filter-Freq
         (0x68, 0x39, voice.lfo2_to_filter_q * _lfo2_sign),  # LFO2 → Filter-Q
+        # LFO → AmpPan (§PANMOD). Destination 0x41, HARDWARE-CONFIRMED
+        # 2026-09-06 rather than transcribed: driving it gave 122 dB of balance
+        # swing with level roughly preserved, against an AmpVol control that
+        # moved level 66 dB and left balance flat at +0.42. `Lfo1~` into it then
+        # swept the image at the LFO rate. See E4B_FORMAT.md.
+        #
+        # The triangle sign applies here as to every other destination: the
+        # E4XT's key-synced triangle rises first and the MPC's falls first, so a
+        # triangle LFO's cords are negated to keep them in phase. For pan that
+        # means the sweep starts toward the same side as the source.
+        (0x60, 0x41, voice.lfo1_to_pan * _lfo1_sign),       # LFO1 → AmpPan
+        (0x68, 0x41, voice.lfo2_to_pan * _lfo2_sign),       # LFO2 → AmpPan
+        # VELOCITY → PAN IS DELIBERATELY NOT WRITTEN YET. The model carries
+        # `velocity_to_pan` and the MPC supplies it, but the velocity SOURCE on
+        # the E4XT is a triad — `Vel+` 0x0A, `Vel~` 0x0B, `Vel<` 0x0C — differing
+        # by PIVOT, and choosing one changes what the depth means. That choice
+        # was taken deliberately for volume (Jan, 2026-09-04, §E4XTVELSRC) with
+        # the cost stated, and pan deserves the same treatment rather than
+        # inheriting it by accident.
     ]
     has_extra = any(abs(a) > 0.01 for _, _, a in _extra_cords)
     # FILTER DEPTHS CONVERT THROUGH THE CORNER, FROM THIS VOICE'S OWN BASE.
