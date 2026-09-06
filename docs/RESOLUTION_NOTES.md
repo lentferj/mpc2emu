@@ -25680,16 +25680,58 @@ passes it.** Catching it needs a timbre comparison against the source.
 **So "k85 clean" must never be quoted as evidence the zone-drop is harmless.**
 This is a limitation by construction, not a gap in one run.
 
-### Unexplained
+### RETRACTED: the three odd keys, and the repeatability bound behind them
 
-**Three single keys now behave unlike their neighbours inside the same zone**,
-across two programs, with no mechanism proposed:
+`Bass-Dark` k88, `LD Retro Powder` k36 and k84 were recorded here as an
+unexplained pattern. **All three fail to reproduce.** Re-measured with their
+neighbours, three repeats, under the same CC7=60 attenuation as the original
+pass:
 
-    Bass-Dark        k88   -30.22 dBFS against -21.32 and -23.24 either side
-    LD Retro Powder  k36   +21.86 dB band tilt against +0.02..+0.04 elsewhere
-    LD Retro Powder  k84   +13.75 dB          "
+    Bass-Dark        k86 -21.37  k87 -22.28  k88 -21.91  k89 -23.27  k90 -23.91
+      original pass:             k87 -21.32  k88 -30.22  k89 -23.24
 
-All have correct pitch, sit mid-zone rather than at a boundary, and are covered
-by one sample. **No file-side cause: the zone and the sample do not change at
-those keys.** Noted rather than guessed at — and a 36/48/60/72/84 grid samples
-k36 and k84 but would never have caught k88.
+    LD Retro Powder  k35 -35.80  k36 -36.00  k37 -35.90
+                     k83 -36.20  k84 -35.93  k85 -35.96
+
+**k88 reads −21.91 where it read −30.22. The 8 dB dip is gone.** The other two
+sit within 0.2 dB of their neighbours, sd 0.03-0.11 dB across three repeats.
+
+### The bound that was wrong, and it governs every single-cell claim
+
+§49 measured this rig's repeatability at **0.004 dB back-to-back — on a
+SUSTAINED SINE, one program.** On real multisampled material a single note
+occasionally deviates by several dB: k88 was **8 dB off in one capture and
+identical to its neighbours in the next three.** Typical repeatability is still
+good (sd 0.03-0.78 dB over fifteen re-measures) — **the excursions are rare and
+large, which is the worst possible combination for a grid that measures each
+cell once.**
+
+**So a single-cell difference on this material is not a finding until it
+repeats.** Retroactively that covers:
+
+* **k88, and `LD Retro Powder` k36 / k84** — one capture each, all retracted
+* the **+2.70 dB "control move"** on `Bass-Dark` k72 from 2026-09-05, already
+  described as inside that note's own spread across six runs — now with a
+  mechanism rather than an observation
+* **the whole +7.14 dB "HF gain"**: two outlier keys out of five, each measured
+  once. That retraction is now fully accounted for — not a bimodal program, just
+  two bad cells.
+
+### Consequence for how grids are run and reported
+
+**Measure each cell twice and keep both**, or at minimum re-measure any cell
+that stands out before reporting it. The cost is one extra pass. The cost of not
+doing it, on 2026-09-06, was an afternoon across two sessions and two flukes
+entering these notes as findings.
+
+**And for the confidence table: a per-cell number from a single capture must not
+be quoted as a per-cell result.** Report per-program aggregates with the number
+of measurements behind them, and mark anything resting on one capture as such.
+
+### What stands from the run
+
+    ceiling fix        WORKS, and correctly    k84 right pitch, right level
+    drum-program flag  WORKS                   Lead-PRO5 on ch9, 45/45
+    headroom fix       NO measurable effect    level or spectrum
+    wrong sample       moved, now fixed 1e5e338 (needs a card write to verify)
+    key 85             invisible to this rig by construction
