@@ -1512,8 +1512,24 @@ def _mixdown(pcm: bytes, channels: int) -> bytes:
 #: does nothing. We write no MODV* amounts at all today, so nothing here is
 #: inert -- but the moment one is carried over, its source must come with it.
 #:
-#: **RETRACTED 2026-08-12 (s3ked §51): LFO2 WORKS. Only its route to pan is
-#: dead.** Everything from here to the end of this block was written while §39
+#: **RETRACTED 2026-08-12 (s3ked §52 — NOT §51): LFO2 WORKS. Only its route to
+#: pan is dead.**
+#:
+#: The §51 citation here was wrong and stood for weeks; §51 retracted §45 on the
+#: per-zone `VLOUD1`/`VFREQ1`/`VTUNO1`/`VPANO1` fields and contains no mention of
+#: LFO2, pan, or a dead route. The two sections are adjacent, same date, both
+#: titled "RETRACTION", and §51 is the one that mentions `VPANO1` — so anything
+#: grepping for a pan-ish retraction lands on it first. The same slip had
+#: independently reached `docs/MODULATION_MATRIX.md`.
+#:
+#: **AND THE CLAIM ITSELF IS UNDER RE-MEASUREMENT (2026-09-06).** §39 swept
+#: `PANDEP`, LFO2's own output depth — not `MODVPAN1`, the pan matrix's AMOUNT.
+#: Those are different fields, and the matrix is a PRODUCT: §173 measured the
+#: amplitude twin as `swing = 0.010068 * LFODEP * MODVAMP1`, so a zero amount
+#: makes any LFO depth inert. Jan photographed a resident program's PAN page
+#: showing `Lfo2 > pan: +00`, `Key > pan: +00`, `!Bend > pan: +00`. If the route
+#: measures alive with the amount up, §52 is itself wrong and this whole block
+#: needs rewriting rather than annotating. Everything from here to the end of this block was written while §39
 #: stood, and the caution recorded in it turned out to be justified — so the
 #: history is kept rather than deleted, but read the correction first.
 #:
