@@ -26084,20 +26084,30 @@ exactly, two clusters with no overlap (ramp 2.81–2.85 for the six at corner 14
                   organs -20.17  -20.41  -20.54  -21.54  -26.24    -1.37    -4.70
                   strings-28.50  -38.89  -44.14  -47.39  -57.02   -18.89    -9.63
 
-The second is the load-bearing one. The organs stay flat across three octaves
-and then fall in the last step, which BRACKETS the crossing of their 756 Hz
-sustained corner to somewhere between k72 and k84 — a five-point octave grid
-cannot place it more finely than that, and the word "exactly" (written here
-first, then restated by s3ked) is not supportable at this resolution. The
-strings slope from the bottom — the shape a corner
+The second was read here as the load-bearing one and that reading does not
+hold. **The organ step at k72→k84 falls INSIDE a single keygroup** — the organs'
+middle keygroup spans 67-91 with root 72, so k72 and k84 are the same sample
+stretched +12. An octave of sample stretch explains the step as well as a corner
+crossing does, and this grid cannot separate them. Two things were wrong here in
+sequence: first "exactly where 1046 Hz crosses the 756 Hz corner", which a
+five-point octave grid cannot place at all; then the fallback that it at least
+BRACKETS a corner crossing, which assumes the step is a filter effect. **It is
+one of two candidates, not evidence for either.** The strings slope from the
+bottom — the shape a corner
 below every fundamental produces. "Strings are darker than organs" does not
 predict a flat-then-drop knee at k72→k84.
 
-**Source-side bound: ~3.5 dB, NOT 1.48.** The 1.48 dB figure first quoted here
-was the difference of the two group means on eosed's target; their spread
-matters — three of their six strings slope 6.0–7.2 against organs at 3.4–4.2 —
-so family-linked slope difference reaches about 3.5 dB on half the group. Read
-as 22.45 observed against a ~3.5 bound, leaving roughly 19 dB target-side.
+**NO TARGET-SIDE MAGNITUDE SHOULD BE QUOTED FROM THIS.** Three successive
+figures were derived here and each was withdrawn: ~21 dB, then ~19 dB against a
+corrected 3.5 dB bound, then 22.24 dB against eosed's re-corrected 0.21 dB. All
+of them rest on comparing one group's slope with another's, and the keygroup
+geometry says that comparison is not like-for-like — the 4-keygroup strings are
+measured across three sample changes at near-native pitch, the 3-keygroup
+strings through four octaves of stretch inside ONE keygroup, and the organs
+across a boundary at k72. **Three groups, three different mixes of filter
+response and sample stretch.** The residual may be real; it is not a number this
+data can produce. Also note eosed's own contribution to it was retracted
+separately as an anchor artefact.
 
 **THE STRING GROUP IS TWO POPULATIONS AND THE CAUSE IS NOT KNOWN.**
 s3ked found their string slopes bimodal by 15 dB (-36.77/-36.38/-35.28 against
