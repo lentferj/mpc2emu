@@ -4238,7 +4238,7 @@ is rewritten there is no route back to the pre-fix state.
 
 See `docs/RESOLUTION_NOTES.md` §E4BDOUBLETRIM.
 
-## GRATER on CD3-MATRIX9 is a PRE-PAN-WRITER build — the row's "total pan loss" is a stale bank
+## GRATER carries NO pan modulation on ANY of the three cards — all three volumes are pre-pan-writer builds
 
 **Status: CAUSE ESTABLISHED 2026-09-07, needs a rebuild + card write (Jan's).**
 eosed measured GRATER->E4XT as a total pan loss: R-L +0.42 dB (the interface
@@ -4264,7 +4264,26 @@ purpose, wrongly for this one, because nobody asked whether it predated the fix.
 **Carrying a bank forward is only safe if you know what changed since it was
 built.**
 
-**Fix:** rebuild GRATER and write it. Needs a card write, so it waits for Jan.
+**AND IT IS ALL THREE TARGETS, not just the E4XT.** Checked against the volumes
+actually on the cards tonight:
+
+    E4XT   MX9 GRATER_01   no AmpPan cord            (rebuild has one, amount 24)
+    K2000  MX9GRAT.KRZ     0 programs with a PANNER
+    AKAI   MX9 GRATER.P3   MODVPAN1 = 0, PANRAT = 1  (i.e. the hardware default)
+
+All three were built at 20:22, before their respective pan paths were finished.
+**The 12th input was added to the matrix specifically to carry pan modulation,
+and the pan modulation is absent from every copy of it we shipped.**
+
+**A stale claim of mine went round with them.** I told all three sessions to
+expect GRATER stationary "because no writer emits the depth". That was true when
+the banks were built and became false during the same evening as each writer was
+fixed. The prediction was right and the stated reason was wrong — which is worse
+than being wrong outright, because it would have been confirmed by the
+measurement and filed as understood.
+
+**Fix:** rebuild GRATER for all three targets and write all three cards. Needs
+card writes, so it waits for Jan.
 
 **The null is attributable, and only because four alternatives were excluded
 first** (eosed) — worth recording with the entry rather than logging a bare zero:
