@@ -284,6 +284,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAILFODEP — the AKAI LFO depth byte is never written (2026-09-06)](#akailfodep-the-akai-lfo-depth-byte-is-never-written-2026-09-06)
 - [§KRZLFOSIGN — a negative `LfoPitch` is discarded on the KRZ path (2026-09-06)](#krzlfosign-a-negative-lfopitch-is-discarded-on-the-krz-path-2026-09-06)
 - [§KRZPANNIBBLE — every KRZ zone read hard LEFT; it was a panner wire, not a pan](#krzpannibble-every-krz-zone-read-hard-left-it-was-a-panner-wire-not-a-pan)
+- [§PANMOD — carrying dynamic panning across all four formats: the plan](#panmod-carrying-dynamic-panning-across-all-four-formats-the-plan)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -26825,3 +26826,103 @@ the corded presets' v1 cells sit at 0.8–4.9 dB SNR either way.
 of its ~20 dB is the channel averaging, and the rest sits on top of a bank whose
 every zone is panned to one side. Fix the pan, rebuild, re-capture, then look at
 the residual.
+
+## §PANMOD — carrying dynamic panning across all four formats: the plan
+
+**Status: PLAN, 2026-09-06. Targets both hardware-confirmed; one source-side RE
+outstanding. Nothing implemented.**
+
+**Every format in the matrix has pan modulation and we carry none of it.**
+
+    K2000   PANNER block, algorithms 2/13/24/26 only. Adjust +/-100%,
+            KeyTrk +/-16%/key, VelTrk +/-200%, Src1+Depth, Src2+MinDpt/MaxDpt.
+            Two wires panned hard L and hard R with a modulated balance.
+    MPC     <LfoPan> and <VelocityToPan> per keygroup, alongside static <Pan>.
+    AKAI    PAN page: MODSPAN1/2/3 sources (0x4c-0x4e) + MODVPAN1/2/3 amounts
+            (0x59-0x5b). Panel shows `Lfo2 > pan`, `Key > pan`, `!Bend > pan`,
+            each +/-50, and the manual (p.75) names Bend, Pressure, External,
+            Velocity and LFO1 as further sources.
+    E4XT    PatchCord destination 0x41 `AmpPan`, hardware-confirmed 2026-09-06:
+            122 dB balance swing, and Lfo1~ into it sweeps at the LFO rate.
+
+### What is already known, and what is not
+
+**Located without hardware:** the K2000 `Adjust` field, F3 segment offset +2,
+signed percent — 6/6 against a panel read, 0/200 false positives on a null test.
+
+**NOT located:** the K2000 `KeyTrk`, `VelTrk`, `Src1`, `Depth`, `Src2`,
+`MinDpt`, `MaxDpt`, `Pad` fields. The six programs with panel data split into
+exactly two groups, so all four varying fields partition the set identically and
+six candidate offsets match all of them. **More programs of the same shape will
+not help** — the values must vary independently, which needs a write-and-diff on
+the machine.
+
+**The procedure is RAM-ONLY and must stay that way.** It was first proposed here
+as "set the fields, SAVE the bank, diff the file" — and saving writes to the
+K2000's disk, which is one of the three actions reserved to Jan (overwrite,
+delete, format). k2kremote refused it and was right to. The same diff is
+available over SysEx with nothing touching the disk: `read_object_bytes`, panel
+edits with the editor open, `read_object_bytes` again, diff. That is how Program
+offsets 213 and 261 and the layer `HiKey` at 53 were found.
+
+**Order matters:** a panel edit lives only while the editor is open, so the
+second dump must be taken BEFORE exiting — `leave_editor` answers the save
+prompt "No" and the edit is gone. Dump, edit, dump, then exit discarding.
+
+Subject: a program from the all-zero group, so every field moves from 0 to a
+distinct non-zero value and no byte can stay put by coincidence. `Adjust +37` is
+the built-in anchor check — if the +2 byte does not become 37, the anchor is
+wrong and nothing else in the diff is trustworthy.
+
+**MPC conventions, inferred not confirmed:** `LfoPitch` is read as bipolar
+clamped to ±1 with 0 = none (`xpm_parser.py:1798`), so `<LfoPan>` and
+`<VelocityToPan>` are presumed the same. Observed in the local corpus:
+`LfoPan` 0.0 on 907 keygroups and 0.188976 / 0.527559 / 0.724422 on 128 each —
+so **real material uses it and we drop it silently**. `VelocityToPan` is 0.0
+throughout the local set, so its scale is untested here.
+
+### The work, in dependency order
+
+1. **Model.** New fields on `VoiceLayer`. At minimum a pan-modulation list of
+   (source, depth) pairs rather than one scalar, because three of the four
+   formats carry several routes at once and a single `lfo_to_pan` would force a
+   lossy choice at read time rather than at write time.
+2. **XPM reader** — `<LfoPan>`, `<VelocityToPan>`. Cheapest of the four and
+   independent of the K2000 RE; can land first.
+3. **KRZ reader** — the panner block, once the disk diff returns. `Adjust` is
+   the static position and already decodable; the rest is the modulation.
+4. **AKAI writer** — `MODVPAN1/2/3` at 0x59-0x5b. **The sources are already
+   written**: `_PROGRAM_HW_DEFAULTS` sets `MODSPAN1` = 8 (LFO2), so our output
+   already carries the routing with the amount at zero. This is the smallest
+   change of the four and possibly a three-byte one.
+5. **E4B writer** — a PatchCord to destination `0x41`. The cord machinery
+   already exists for pitch and cutoff.
+
+### Traps to design against, all paid for already
+
+- **SIGNED FROM THE START.** §KRZLFOSIGN: the KRZ writer gates LFO→pitch on
+  `> 0.0` strictly, so a negative depth is silently dropped. Pan is inherently
+  bipolar — left and right — so an unsigned path would lose half the parameter
+  space in the one place it obviously matters.
+- **AN AMOUNT WITHOUT ITS SOURCE IS INERT, AND SO IS A SOURCE WITHOUT ITS
+  AMOUNT.** Three separate faults of this shape were found on 2026-09-06 alone:
+  an ENV2 depth the machine multiplies by `SUSTN2` 0; an A/B/A that wrote
+  `MODVFILT1` where the route is `MODVFILT3`; and a "dead" AKAI pan route
+  measured by sweeping the LFO's own depth against a matrix amount of zero.
+  **Write both halves or neither, and verify by effect rather than by readback.**
+- **VERIFY BY EFFECT, WITH A POSITIVE CONTROL.** eosed's `AmpPan` probe hit two
+  wrong-subject failures — editing a preset that was not sounding, then a voice
+  that was not the one at that key — and *every parameter read back exactly as
+  written* both times. Only a control cord on a destination known to work
+  exposed it.
+- **The AKAI's own caveat** (manual p.75): "whilst slow sweeps work well, fast
+  sweeps may, on some sounds, introduce some 'zipper noise'". A fast K2000
+  auto-pan may not translate cleanly even where the routing does.
+
+### What cannot be carried, and should be reported
+
+The K2000 offers `Src1` and `Src2` with independent min/max depth and a depth
+controller; the AKAI offers three fixed destinations; the MPC offers two. **Any
+source with more routes than the target can hold needs a `content_lost`
+diagnostic naming what was dropped**, in the same class as §AKAIENV2SUSTAIN's
+unrepresentable envelope — not a silent best-effort.
