@@ -4503,3 +4503,35 @@ auto-pan may not translate cleanly even when the routing does.
 
 Wants a diagnostic carrying `content_lost` for whatever cannot be carried, same
 class as the unrepresentable filter envelope in §AKAIENV2SUSTAIN.
+
+## K2000: map every algorithm's blocks and function codes (long overnight run)
+
+**Status:** specified, not started. **Blocked on:** nothing but machine time and
+Jan's word to start — it is RAM-only throughout.
+**Scale:** 31 algorithms x up to 4 blocks x up to ~17 functions. Hours, hence
+overnight.
+
+**What we have today is four algorithms out of thirty-one, hand-transcribed from
+the manual** (`krz_writer.py`, the filter-function table). It carries names, not
+byte codes, and only for algorithms 1, 2, 5 and 16 — the ones the writer already
+emits. Every algorithm choice the writer makes is therefore constrained by what
+was convenient to read rather than by what the machine offers.
+
+**Goal:** a byte-level lookup table — for each algorithm, which function each
+block can hold, and the code that selects it. That turns `_k2_filter_plan` from a
+hand-written mapping of four cases into a lookup over the real space, and it is
+the prerequisite for choosing an algorithm on the merits (slope, resonance,
+separation, panner, shaper) rather than from the handful we happen to know.
+
+**Method** (extends the panner diff that worked on 2026-09-06):
+
+    for each algorithm 1..31:
+        set CAL[29] = algorithm, confirm on the panel
+        for each block F1..F4:
+            walk the function list with the wheel
+            record the PANEL NAME and the byte at that block's offset
+            dump the object and diff after each step
+
+See `docs/RESOLUTION_NOTES.md` §K2ALGWALK for the full procedure, the validation
+rules and the traps — several of which cost real time on 2026-09-06 and are not
+obvious.

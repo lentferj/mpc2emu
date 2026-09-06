@@ -289,6 +289,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§NYQUISTNULL — an under-sampled envelope and a dead destination give the same null](#nyquistnull-an-under-sampled-envelope-and-a-dead-destination-give-the-same-null)
 - [§XPMLFONEST — two XPM layouts, and we only read one of them](#xpmlfonest-two-xpm-layouts-and-we-only-read-one-of-them)
 - [§WINDOWONSET — a 5 ms anchor shift can cost 1.8 dB at the start of a note](#windowonset-a-5-ms-anchor-shift-can-cost-18-db-at-the-start-of-a-note)
+- [§K2ALGWALK — mapping every K2000 algorithm's blocks and function codes](#k2algwalk-mapping-every-k2000-algorithms-blocks-and-function-codes)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -27211,3 +27212,95 @@ skip the note-on edge, and on percussive material the first 20 ms IS the sound.*
 survives it, because the same trim applies to both arms — the trim result moved
 only 12.06 → 12.00. A reproducibility bound does not, because the two sessions
 differ in exactly the quantity the trim is sensitive to.
+
+## §K2ALGWALK — mapping every K2000 algorithm's blocks and function codes
+
+**Status: SPECIFIED, not started. RAM-only. Wants a long uninterrupted run.**
+
+### Why
+
+`krz_writer.py` carries a filter-function table covering **four of thirty-one
+algorithms** — 1, 2, 5 and 16, the ones the writer already emits — transcribed by
+hand from the manual, in NAMES rather than byte codes. So the writer's algorithm
+choice is bounded by what was convenient to read, not by what the machine offers.
+
+A byte-level table turns `_k2_filter_plan` from four hand-written cases into a
+lookup over the real space, and makes it possible to choose an algorithm on the
+merits: slope, resonance, separation, and whether F3 is free for a PANNER. The
+pan work of 2026-09-06 needed exactly that and had to establish it one algorithm
+at a time.
+
+### What to produce
+
+For every algorithm 1..31, for every block F1..F4:
+
+    algorithm | block | function name as the PANEL reports it | selecting byte
+              |       | + which control pages it exposes (FRQ / RES / SEP / ...)
+
+Plus, derived: which algorithms leave **F3 free for a PANNER** (the manual says
+2, 13, 24, 26 — the walk should reproduce that independently, and if it does not,
+one of the two is wrong).
+
+### Method
+
+Extends the panner diff that worked on 2026-09-06. **Entirely RAM-only:** dump,
+edit with the editor open, dump, exit discarding. **No disk save at any point** —
+saving a bank is one of the actions reserved to Jan, and a peer correctly refused
+exactly that request earlier the same day.
+
+    for algorithm in 1..31:
+        set CAL[29], confirm the algorithm on the panel
+        for block in F1..F4:
+            step the function list with the wheel
+            record the panel's own name and the byte at the block's offset
+            dump the object and diff after EACH step, not once at the end
+
+### Validation rules, each one paid for
+
+1. **Re-prove the anchor in the same session.** Set one known field to a known
+   value and confirm the expected byte moves — the panner walk used `Adjust = 37`
+   at offset 242. **If the anchor byte does not move, send nothing from that run.**
+
+2. **Sample WELL-SEPARATED positions, never adjacent ones.** Stepping `Src1` to
+   positions 1, 8, 24 and 60 gave bytes 127, 7, 23, 91. **Positions 8 and 24 both
+   satisfy `byte = position − 1` exactly**, so any three consecutive points would
+   have confirmed a dense index with total confidence and been wrong. Position 60
+   breaking it is the only reason the real encoding was seen.
+
+3. **Use NEGATIVE checks, not only positive ones.** An automated parse of the
+   manual's algorithm chart passed every positive check — alg 2 has a PANNER,
+   alg 16 has LOPASS, alg 5 has 2POLE LOWPASS — and still placed a PANNER in
+   algorithm 1, which the manual forbids. **Only "algorithm 1 must NOT have a
+   panner" exposed it.** Every block of the walk needs at least one thing it must
+   NOT contain.
+
+4. **Confirm program identity before touching anything.** Program Mode draws the
+   program number in the graphics plane, so `ALLTEXT` cannot see which program is
+   selected; check the keymap id instead. This has caught a wrong subject twice.
+
+5. **A screen read can return something that is not a screen.** `get_screen_text()`
+   has returned a panel-event message (a physical button press) instead of a
+   string. Scripts that assume a string fail there — loudly, which is correct, but
+   the assumption should be explicit. **Do not run this while anyone is at the
+   panel.**
+
+### Traps specific to this walk
+
+- **Do not assume a code means the same thing in two different blocks.** The
+  panner's `Src1`/`Src2`/`DptCtl` share one control-source encoding, verified on
+  four common values — but that was *verified*, not assumed, and the same
+  question is open for every block pair here.
+- **A three-stage function occupies more than one block.** `4POLE LOPASS W/SEP`
+  is `2POLE LOWPASS` + `LOPAS2` sharing F1 FRQ, with F2 RES the resonance of the
+  first half and F3 SEP the offset of the second. So "which function is in F3"
+  can be answered by a filter rather than by a separate function, and the walk
+  must record that rather than reporting F3 as empty or as a panner slot.
+- **The manual's names and the panel's names may differ.** Record the PANEL's,
+  since that is what a user sees and what the code must match.
+
+### Output
+
+A machine-readable table (JSON) plus a generated summary for `KRZ_FORMAT.md`.
+The existing hand table stays until the walk reproduces it — **if the walk and
+the manual disagree on any of algorithms 1, 2, 5 or 16, that disagreement is the
+first thing to resolve**, because those four are what the shipping writer uses.
