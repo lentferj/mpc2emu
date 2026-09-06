@@ -920,8 +920,18 @@ def _safe_name(name: str, maxlen: int = 16, tail: bool = False) -> str:
     name = os.path.splitext(name)[0]  # strip extension
     name = ''.join(c if c.isalnum() or c in ' _-' else '_' for c in name)
     if len(name) <= maxlen:
-        return name
-    return name[len(name) - maxlen:] if tail else name[:maxlen]
+        return name.strip()
+    # STRIP AFTER SLICING. A tail cut lands wherever `maxlen` falls, which for
+    # 'LD Vintage Acid-000-036-c1' is mid-word and yields ' Acid-000-036-c1' --
+    # a LEADING SPACE. That survives into the AKAI 12-byte name field, and an
+    # S3000XL will not load a sample whose name begins with a space: five such
+    # samples were absent from a 176-sample volume on real hardware, which made
+    # the one program using them SILENT while every parameter in it was
+    # byte-identical to a program that sounded (s3ked, 2026-09-06).
+    #
+    # Genuine AKAI factory material settles the convention: across two library
+    # images, 20 short names are TRAILING-padded and 0 are leading-padded.
+    return (name[len(name) - maxlen:] if tail else name[:maxlen]).strip()
 
 
 # ---------------------------------------------------------------------------
