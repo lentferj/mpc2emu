@@ -1264,6 +1264,30 @@ _LFO_SHAPE = {
 _K2_CS_ENV2 = 121      # control-source code for ENV2
 _K2_CS_LFO1 = 114      # control-source code for LFO1
 
+#: THE PANNER, for carrying pan modulation (§PANMOD). Hardware-mapped
+#: 2026-09-06 by k2kremote from a RAM-only SysEx diff, then aligned against a
+#: real bank here.
+#:
+#: The F3 HOB segment (tag 0x52) holds it. `seg(0x52)[0]` is the block TYPE and
+#: **40 selects PANNER**; the fields follow at `seg` index = program offset − 241:
+#:
+#:     seg[1] Adjust  1 %/unit, ±100      seg[5] Src1    control-source code
+#:     seg[3] KeyTrk  0.2 %/key           seg[6] Depth   2 %/unit, ±200
+#:     seg[4] VelTrk  2 %/unit, ±200      seg[8] MinDpt  seg[9] MaxDpt
+#:     seg[10] Src2                       seg[11] Pad    0/6/12/18 dB
+#:
+#: Verified against a source layer whose panel reads Adjust −32 %: its F3
+#: segment is `[0x52, 40, -32, ...]`, i.e. type 40 then −32 at seg[1].
+#:
+#: **THE PANNER ONLY EXISTS IN ALGORITHMS 2, 13, 24 AND 26** (K2000 manual
+#: Ch.14). Algorithm 2 is `PITCH → [filter] → PANNER → AMP` and its filter slot
+#: offers 2POLE LOWPASS **with resonance** (Jan read that off the panel), which
+#: is what makes carrying pan free rather than a trade: a 12 dB lowpass source
+#: keeps its slope AND its resonance and gains the panner.
+_K2_F3_PANNER = 40
+_K2_ALG_PANNER = 2
+_K2_PAN_ADJUST, _K2_PAN_SRC1, _K2_PAN_DEPTH = 1, 5, 6
+
 
 def _env_steps(seconds: float) -> float:
     t = max(0.0, min(60.0, seconds))
@@ -2046,10 +2070,32 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
     hob_f2 = seg(0x51)
     if getattr(voice, 'filter_type', 0):
         algo, ftype_byte, f2_byte, f3_byte, has_res = _k2_filter_plan(voice.filter_type)
+        # PAN MODULATION NEEDS A PANNER ALGORITHM (§PANMOD). The panner exists
+        # only in 2/13/24/26, and the algorithm is otherwise chosen from the
+        # SOURCE's filter type so the slope matches and the cutoff transfers
+        # 1:1. Those two requirements compete for one byte.
+        #
+        # They do not compete for a 2-pole lowpass: algorithm 2's filter slot
+        # offers 2POLE LOWPASS with resonance, so such a source keeps everything
+        # it had and gains the panner. Only that case is moved.
+        #
+        # A 6 dB or 24 dB source is NOT moved -- switching it would trade a
+        # measured slope match for pan, which is a fidelity decision rather than
+        # a free one, and it is not taken here silently.
+        _pan_depth = (getattr(voice, 'lfo1_to_pan', 0.0) or 0.0)
+        _want_pan = bool(_pan_depth) and algo == 5 and ftype_byte == _K2_FILTER_2P_LP
+        if _want_pan:
+            algo, f3_byte = _K2_ALG_PANNER, _K2_F3_PANNER
         hob_f1[0] = ftype_byte                               # F1 DSP filter type
         hob_f2[0] = f2_byte                                  # F2 block: RES(16)/NONE(61)
         seg(0x52)[0] = f3_byte                               # F3 block: SEP(18)/NONE(60)
-        cal[_K2_CAL_ALGORITHM] = algo                        # algorithm number (1/5/16)
+        cal[_K2_CAL_ALGORITHM] = algo                        # algorithm number (1/2/5/16)
+        if _want_pan:
+            # Adjust stays 0 (centred) -- the LFO sweeps about centre, and a
+            # static offset is a different parameter the source does not state.
+            _f3 = seg(0x52)
+            _f3[_K2_PAN_SRC1]  = _K2_CS_LFO1
+            _f3[_K2_PAN_DEPTH] = max(-50, min(50, int(round(_pan_depth * 50)))) & 0xFF
         # VELOCITY -> FILTER IS WRITTEN AS THE MACHINE'S OWN VelTrk, and used
         # to be folded into the static cutoff instead (§KRZVELFOLD).
         #
