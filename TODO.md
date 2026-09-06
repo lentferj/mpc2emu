@@ -4419,3 +4419,30 @@ made explicitly signed on 2026-08-25: the filter-envelope depth
 (`krz_writer.py:2212`) and the velocity→filter depth (`:2143-2148`).
 
 Fix strategy: `docs/RESOLUTION_NOTES.md` §KRZLFOSIGN.
+
+## KRZ: every zone reads pan hard LEFT — encoding undecided, do not fix yet
+
+**Status:** symptom confirmed on hardware; cause undecided between two
+encodings. **Blocked on one reading from the K2000** — the PAN display for a
+layer of `MXKRSRC` (now on the card), or a per-channel capture of it.
+
+Every zone of `MXKR.KRZ` parses as pan −1.0, so KRZ→E4B writes zone pan −32 and
+KRZ→AKAI writes −50, on all 58 zones, while the S3-, S1- and E4B-sourced rows
+are centred. The E4XT captures of that row consequently have a dead right
+channel — found because Jan looked at his AD converter and said so twice while
+two sessions told him the rig was fine.
+
+The field is byte 14's high nibble of the F4 HOB segment; `MXKR` carries `0x94`
+throughout. Two's complement (0 = centre) makes that hard left; offset binary
+(8 = centre) makes it nearly centred. **Files cannot decide**: the reader and
+writer share the convention, so they round-trip perfectly either way.
+
+**Do not change the decode before the hardware reading** — if the bank really is
+hard-panned, the "fix" breaks every correct conversion. If it is offset binary,
+our decode is wrong by 8 steps on every KRZ bank ever read.
+
+Rebuild of the KRZ→E4B and KRZ→AKAI rows follows a fix, and eosed wants the E4B
+row re-captured regardless: the one-sided path costs ~6 dB at the quiet end of
+every velocity ramp, so its low-velocity numbers are floor-limited.
+
+See `docs/RESOLUTION_NOTES.md` §KRZPANNIBBLE.

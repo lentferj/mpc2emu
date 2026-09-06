@@ -283,6 +283,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§KRZCEILINGUNCLAMPED — zones ship past the ceiling the writer computed](#krzceilingunclamped-zones-ship-past-the-ceiling-the-writer-computed)
 - [§AKAILFODEP — the AKAI LFO depth byte is never written (2026-09-06)](#akailfodep-the-akai-lfo-depth-byte-is-never-written-2026-09-06)
 - [§KRZLFOSIGN — a negative `LfoPitch` is discarded on the KRZ path (2026-09-06)](#krzlfosign-a-negative-lfopitch-is-discarded-on-the-krz-path-2026-09-06)
+- [§KRZPANNIBBLE — every KRZ zone reads hard LEFT, and we cannot tell from files whether that is right](#krzpannibble-every-krz-zone-reads-hard-left-and-we-cannot-tell-from-files-whether-that-is-right)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -26667,3 +26668,66 @@ positive, not merely vibrato.
 fold a negative control-source depth, the correct fix is `abs()` plus a recorded
 note that the machine cannot express the phase — not the sign passthrough. Do
 not assume the sign is expressible because the byte is signed.
+
+## §KRZPANNIBBLE — every KRZ zone reads hard LEFT, and we cannot tell from files whether that is right
+
+**Status: the SYMPTOM is confirmed and reaches hardware. The CAUSE is undecided
+between two encodings, and one hardware reading settles it. NOT fixed.**
+
+**How it surfaced.** Jan said his AD converter was lighting only the left
+channel. Two sessions told him the rig was fine — eosed from a correlation test,
+me from the same test twenty minutes later. **Both of us compared the two
+channels without first checking that both carried signal**, and correlation
+against a dead channel is near zero, which we read as "decorrelated stereo,
+therefore the path is healthy". It is the same precondition failure as scoring
+SNR peak-against-RMS. He was right, twice, and it took a third look at levels:
+
+    krE4 / krE4_pre2   L -22 dBFS (peak 10560)   R -84 dBFS (peak 16)   DEAD
+    s3E4_post          L -26 dBFS (peak 21343)   R -26 dBFS (peak 22395) live
+
+**The chain, which is real regardless of which encoding is correct:**
+
+    MXKR.KRZ source          all 58 zones parse as pan -1.0
+      -> KR-E4 zone pan      -32 on all 58   (e4xt_byte_to_pan(-32) = -1.000)
+      -> KR-AK zone pan      -50 on all 58   (zone offset 18)
+         S3-E4 / S1-E4 / E4-AK   0 -- centred
+
+So the KRZ→E4B bank plays to one output. eosed's live/dead timeline localises it
+to that bank and not the interface: R alive at 13:13, dead at 13:57, alive at
+14:35 and 17:41, dead at 18:01 — the two dead sets are the two KR-E4 runs.
+
+**THE UNDECIDED PART.** The field is byte 14's high nibble of the F4/AMP HOB
+segment. `MXKR` carries `0x94` — nibble 9 — on all 22 layers:
+
+    our reading   two's complement, 0 = centre, -7..+7
+                  nibble 9 -> step -7 -> pan -1.0   HARD LEFT
+    alternative   offset binary, 8 = centre, 0..15
+                  nibble 9 -> one step right of centre   NEARLY CENTRED
+
+**Files cannot separate them.** A bank with varied pans shows high nibbles
+0,1,2,6,7,9,10,13,14,15 — a spread under either reading. And **our reader and
+writer share the convention** (`krz_writer` puts the same signed step into the
+same nibble), so they round-trip perfectly whether it is right or wrong. That
+circularity is why this survived a 40-bank sweep that reported 68% of layers
+carrying non-zero pan: every one of those numbers is equally consistent with
+both encodings.
+
+**Do not "fix" this before the hardware reading.** If the bank really is
+hard-panned, changing the decode breaks every correct conversion to repair one
+that was already right. The test is the K2000's own PAN display for a layer of
+`MXKRSRC` — now on the card — or a per-channel capture of it. Centre or +1 means
+offset binary and **our decode is wrong by 8 steps on every KRZ bank ever read**,
+which is far larger than this bank.
+
+**Consequences already established, whichever way it goes.** eosed's analysis
+averages the channel pair, so the KR row reads low: exactly −6.021 dB where R is
+silent, but **NOT a constant** where R is a noise floor — at v127 it is 6.006 dB
+(sd 0.035), at v1 it ranges 0.78 to 6.02, and a flat correction would err by more
+than 0.2 dB on 170 of 540 cells. Re-derive from L rather than adding a constant.
+**Every velocity swing quoted for this row is a lower bound**, not a measurement:
+the corded presets' v1 cells sit at 0.8–4.9 dB SNR either way.
+
+**§KR2E4LEVEL should not be treated as a level law until this is settled.** Six
+of its ~20 dB is the channel averaging, and the rest sits on top of a bank whose
+every zone is panned to one side. Fix the pan, rebuild, re-capture, then look at
+the residual.
