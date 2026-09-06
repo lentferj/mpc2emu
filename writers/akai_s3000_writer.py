@@ -1075,7 +1075,31 @@ def _akai_env2_depth(cents: float, sustn2: int, filfrq: int) -> int:
     """
     from models.common import (akai_filfrq_to_hz, AKAI_ENV2_OCT_PER_UNIT,
                                AKAI_ENV2_CEILING_HZ, AKAI_ENV2_FULL_LEVEL)
-    if not cents or sustn2 <= 0:
+    # GATE ON THE ENVELOPE'S REACH, NOT ITS SUSTAIN LEVEL (§AKAIENV2SUSTAIN,
+    # hardware-confirmed 2026-09-06). This used to read `or sustn2 <= 0`, on the
+    # reasoning that an envelope with zero depth is inaudible. That is true of
+    # DEPTH and false of SUSTAIN: a filter envelope whose sustain is 0 is not
+    # inaudible, it is PERCUSSIVE, and its whole contribution is the attack and
+    # the decay. Twelve KRZ programs carry a 10800-cent sweep over a 2-pole
+    # lowpass resting at 20.7/23.2 Hz -- the envelope IS the sound -- and six of
+    # them have sustain 0 with decays of 9.4 to 35 seconds.
+    #
+    # Measured by s3ked as an A/B/A on one program, one byte, restored
+    # byte-identical across all 192 bytes of every keygroup:
+    #
+    #     keys           36      48      60      72      78      84      90
+    #     DEPTH 0     -18.21  -27.29  -34.74  -40.96  -46.65  -55.65  -59.62
+    #     DEPTH 33     -8.04   -7.86  -10.03  -10.85  -11.20  -12.18  -13.77
+    #
+    # 45.85 dB at k90; the k36->k72 slope collapses from -22.75 to -2.81. On
+    # that program the old gate was the difference between the sound and near
+    # silence at the top of its range.
+    #
+    # This also RESTORES the inverse property the docstring requires rather than
+    # breaking it: the reader's `_env2_amount` converts the PEAK corner and uses
+    # `AKAI_ENV2_FULL_LEVEL`, not `sustn2`, gating only on `if not depth`. The
+    # two were asymmetric in exactly this case.
+    if not cents:
         return 0
     base_hz = akai_filfrq_to_hz(filfrq)
     if base_hz is None:

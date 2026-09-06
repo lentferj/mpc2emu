@@ -26041,7 +26041,107 @@ source position N.
 
 ## §AKAIENV2SUSTAIN — a filter envelope with sustain 0 is written as no envelope
 
-**Status: real, found by static reading, NOT hardware-confirmed.**
+**Status: FIX APPLIED, NOT HARDWARE-CONFIRMED. The A/B/A below tested a
+DIFFERENT BYTE and does not speak to this fix.**
+
+**THE CONFIRMATION WAS RETRACTED WITHIN THE HOUR (s3ked, 2026-09-06).** The
+A/B/A wrote **`MODVFILT1`, keygroup offset 151** — a velocity→filter modulation
+slot. This fix writes **`AKAI_ENV2_DEPTH_OFFSET` = 153, `MODVFILT3`**, which
+`models/common.py` documents as "Envelope2 -> Filter Frequency depth" and which
+§177 states in as many words. Read off the machine on the pre-fix volume:
+
+    PRG  FILFRQ   MODVFILT1(151)  MODVFILT2(152)  MODVFILT3(153)
+      0    15     [0,0,0,0]       [0,0,0,0]       [0,0,0,0]     string
+      3    14     [0,0,0]         [0,0,0]         [33,33,33]    organ
+      9    15     [0,0,0]         [0,0,0]         [0,0,0]       string
+
+So the measurement is real and is **not** about this path: it shows that *some*
+filter-modulation slot at amount 33 flattens the key response. The organs were
+never the "empirical answer key for depth 33" in the way this section claimed —
+they carry 33 in slot 153 while arm B wrote 33 into slot 151, which are
+different configurations, so the agreement was not the correspondence presented.
+
+**What this costs each claim below:** the A/B/A numbers stand as measurements of
+slot 151; the "80% of the bimodality" result is internally consistent because
+both arms were slot-151 edits, but it is about slot 151; and **"the shipped fix
+emits the measured byte" is false — it emits the right byte for the wrong
+measurement.** A re-run on `MODVFILT3` is in progress and will be recorded as a
+new result rather than a correction, since both are real measurements of
+different things.
+
+**The fix still stands on its static grounds**, which are unchanged: the source
+carries a 10800-cent envelope over a closed corner and we wrote depth 0, and
+removing the gate restores the writer/reader inverse (the reader's
+`_env2_amount` converts the peak corner using `AKAI_ENV2_FULL_LEVEL`, not
+`SUSTN2`, and gates only on `if not depth`). Those are arguments, not
+measurements.
+
+---
+
+**The A/B/A as measured — slot 151, NOT this fix's byte:** PRG 0, the 4-keygroup
+string, near native pitch across the grid — one byte changed in RAM, restored
+and re-measured:
+
+    keys            36      48      60      72      78      84      90
+    A  (DEPTH 0)  -18.21  -27.29  -34.74  -40.96  -46.65  -55.65  -59.62
+    B  (DEPTH 33)  -8.04   -7.86  -10.03  -10.85  -11.20  -12.18  -13.77
+    A2 (restored) -18.20  -27.36  -34.71  -41.14  -46.67  -55.63  -59.15
+
+    k36->k72:  A -22.75   B -2.81       A2 reproduces A to 0.19 dB
+    at k90  :  45.85 dB between the two arms
+    restore byte-identical across all 192 bytes of every keygroup
+
+Predicted here beforehand: the k36→k72 slope should collapse from ~18.9 toward
+the organs' 1.37, with the shape going flat. It went to −2.81 and the program is
+nearly flat across four and a half octaves. **Every geometric confound raised
+against the cross-program statistics appears identically in both arms and
+cancels** — same program, samples, keygroups and stretch.
+
+**So this is not a marginal loss.** On this program the `sustn2 <= 0` return is
+the difference between the sound and near-silence at the top of its range.
+
+**SECOND A/B/A, PRG 9, the 3-keygroup string with the awkward geometry** — the
+one whose k36-k72 all sit inside a single stretched keygroup:
+
+    A  (DEPTH 0)  -30.87 -40.29 -43.18 -44.53 -47.55 -51.82 -56.77   k36->k72 -13.66
+    B  (DEPTH 33)  -6.51  -6.14  -7.17  -7.56  -7.30  -7.32  -7.96   k36->k72  -1.05
+    A2 (restored) -30.88 -40.35 -43.11 -44.58 -47.58 -51.85 -56.47   k36->k72 -13.70
+
+A2 reproduces A to 0.02 dB on both programs; both restores byte-identical.
+
+**THIS SETTLES THE BIMODALITY, WHICH THIS SECTION TWICE SAID IT COULD NOT.**
+
+    k36->k84 slope       PRG 0 (4-kg)  PRG 9 (3-kg)  difference
+      DEPTH 0, shipped      -37.45        -20.95       16.50 dB
+      DEPTH 33, one byte     -4.15         -0.81        3.34 dB
+                                        removed:      13.16 dB  (80%)
+
+Geometry, stretch, sample layout and root spacing are identical between A and B
+by construction, so they cannot account for something a filter byte removes.
+**80% of the cross-group difference was the depth path.** The residual 3.34 dB
+is the right order for the layout difference. The caution recorded above — that
+no magnitude should be quoted from the group statistics — was correct as a
+statement about what THAT data could support, and is now superseded by a
+measurement that does not depend on it.
+
+With depth restored, PRG 0 spans 5.91 dB and PRG 9 **1.82 dB** across four and a
+half octaves. A program that ships falling 20.95 dB across its range plays
+essentially level with one byte changed.
+
+**THE SHIPPED FIX EMITS THE MEASURED BYTE.** Verified after applying it: the
+KRZ->AKAI build now writes DEPTH 33 on exactly the 52 keygroups that previously
+got 0, which is the value arm B was measured at. The code change reproduces the
+tested configuration rather than approximating it.
+
+**What is still NOT established.** Two programs, one per sub-group, so "80%" is
+a two-point estimate. And DEPTH 33 is the value the organs already carried,
+chosen as an empirical proxy — the fix restores the signal, but whether it
+restores the CORRECT AMOUNT is a separate question, and the 7858 Hz ceiling
+still binds below the source's 10800 cents.
+
+---
+
+**Original finding, recorded before the confirmation:**
 
 `akai_filter_env_depth` (`writers/akai_s3000_writer.py`) opens with
 
@@ -26253,13 +26353,35 @@ flag and is written `vpar[38] = 1` — pitch fixed across the whole keyboard.
 
 **How it surfaced.** eosed measured one MPC program moving between two build
 generations in four cells, up to +6.04 dB in the attack window, and asked for
-the file side. The preset chunk differs by exactly ONE byte across the two
-builds: `vpar[38]` 0 -> 1. The XPM is byte-identical between generations (same
-md5), so the WAV is the only differing input; the v7 copy carries only `fmt `
-and `data`. The v5-era WAV cannot be inspected — that working copy had lost its
-samples and v7's were re-copied — **so the provenance of the earlier audio is
-not established here; what is established is that the code path is deterministic
-and the `smpl` chunk is the only input controlling the flag.**
+the file side. The preset chunk differs by exactly ONE byte: `vpar[38]` 0 -> 1.
+They then confirmed it on the audio — the v7 build plays **262.6 Hz at every
+key** across four octaves, where the older build tracks to within 0.5%.
+
+**THE TRIGGER IS A SOURCE SWITCH, AND IT IS NOW ESTABLISHED RATHER THAN
+INFERRED.** The same sample exists twice in the backup, and the two builds used
+different copies:
+
+    EXPANSIONS/...  chunks fmt+data only, no smpl   sha1 ab32a34659
+    ProjectData/... chunks fmt,atem,smpl,meta,data  smpl unity = 60
+    MX5 build's sample  -> matches ProjectData   (rescue fires, flag clears)
+    v7  build's sample  -> matches EXPANSIONS    (rescue cannot fire, flag set)
+
+READY.md records the deliberate step: v7's sources were re-copied from the
+expansion packs because the v5 working copy had lost its samples. **The MPC's
+own project export carries `smpl`; the expansion pack ships without it.** So the
+regression was introduced by changing which copy of the audio was used, not by a
+code change — the XPM is byte-identical between generations.
+
+This also explains a second observation of eosed's: every sample in the row
+differs by a small number of bytes at identical length and unchanged RMS. Those
+are two copies of the same audio, not a processing change.
+
+**An earlier prevalence figure from this session was wrong and is withdrawn.** A
+sample of 400 library XPMs reported "0 of 168 at-risk programs have WAVs without
+`smpl`". That scan required ALL of the first four WAVs in a directory to lack
+the chunk, so a directory mixing both kinds counted as safe — and the expansion
+pack that actually triggers this is exactly such a directory. The real exposure
+is per-sample, not per-directory, and has not been measured.
 
 **Why it is a bug and not merely different input.** The heuristic reads "no root
 specified + full range" as "fixed-pitch one-shot". It can equally mean "a pitched

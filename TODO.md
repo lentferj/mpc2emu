@@ -4240,7 +4240,10 @@ See `docs/RESOLUTION_NOTES.md` §E4BDOUBLETRIM.
 
 ## AKAI: a filter envelope with sustain 0 converts as no envelope at all
 
-**Status:** open, found by static reading 2026-09-06, not hardware-confirmed.
+**Status: FIX APPLIED, NOT hardware-confirmed, NOT pushed.** The two A/B/A runs
+that appeared to confirm it wrote `MODVFILT1` (offset 151), a velocity→filter
+slot; this fix writes `MODVFILT3` (153), the Envelope2→filter depth. s3ked
+caught it against the signature table and is re-running on 153. Found by static reading 2026-09-06, confirmed same day.
 **Blocked on:** one measurement — no new card crossing needed if the existing
 KR→AK captures can be split by program.
 
