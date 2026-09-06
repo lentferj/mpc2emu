@@ -26905,6 +26905,38 @@ clamped to ±1 with 0 = none (`xpm_parser.py:1798`), so `<LfoPan>` and
 so **real material uses it and we drop it silently**. `VelocityToPan` is 0.0
 throughout the local set, so its scale is untested here.
 
+### The BEFORE state, measured 2026-09-06 — the baseline any fix is diffed against
+
+The 12th matrix input carries pan modulation on every keygroup. Converted to all
+three targets tonight, with the reader working and no writer yet:
+
+    SOURCE (read correctly since tonight)
+      lfo1_to_pan      0.3701      velocity_to_pan  0.0551
+      lfo1_to_pitch    0.0157      lfo1_rate  11.5015 Hz   shape sine
+
+    AKAI    MODVPAN1/2/3 = 0, 0, 0     <- the AMOUNTS, all zero
+            MODSPAN1/2/3 = 8, 6, 12    <- the SOURCES, already correct (8 = LFO2)
+            PANRAT       = 1           <- 0.08 Hz, the hardware default
+    KRZ     every zone pan 0.0, no panner block written at all
+    E4B     no cord to 0x41 -- by construction: no writer references that
+            destination anywhere
+
+**The AKAI line is the whole of §PANMOD in one row.** The route is wired and the
+volume is down — the same shape as the three separate failures of 2026-09-06 —
+except here it is our own output rather than a measurement. And the rate is at
+0.08 Hz where the source asks 11.5, so **two fields are needed, not one**:
+`MODVPAN1` and `PANRAT` (byte 93 of a 99 maximum).
+
+**The audible baseline is captured** at `~/temp/panmod/mpc_grater_k60.wav` and
+the 45-cell grid at `grater_grid.wav`: 3.65 dB of balance swing at 11.46 Hz on
+the source, against a stationary image on all three targets. That is the "before"
+for a before/after, taken while the loss is still total.
+
+**A worthless check, recorded so it is not repeated:** scanning the E4B for the
+byte `0x41` "finds" it in any bank, because sample data contains every byte
+value. Destination presence has to come from parsing the cord table or from the
+writer's own code, never from a byte count.
+
 ### The work, in dependency order
 
 1. **Model.** New fields on `VoiceLayer`. At minimum a pan-modulation list of
