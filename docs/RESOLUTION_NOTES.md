@@ -26710,11 +26710,34 @@ algorithms.
 needs `Adjust` located in the file — filed, not guessed. The measured spread is
 0 to −32%, so the residual error is bounded by about a third of full pan.
 
-**The old comment named the right exception and the wrong trigger.** It said the
-nibble is channel routing "for a STEREO layer". It is a wire pan whenever the
-ALGORITHM has a panner, which has nothing to do with the samples being stereo —
-this bank's ten samples are all mono, and that is precisely why the exception was
-dismissed when it should have been applied.
+**A CORRECTION TO THIS SECTION'S OWN FIRST VERSION.** It said the old comment
+"named the right exception and the wrong trigger" — that the stereo reading was
+simply mistaken. **That was wrong: there are TWO independent triggers and the
+stereo one is real.** Jan asked whether the keymap has a Stereo On/Off setting.
+It does, and the manual (Ch.6, "The Program Editor — Pages") says there are
+**four** OUTPUT page configurations, gated on two conditions:
+
+    stereo keymap   double-output alg   Pan parameters on OUTPUT
+        no                no             ONE   <- the nibble IS the pan
+        no               yes             two (upper/lower wire)
+       yes                no             two (Pan1 / Pan2, one per keymap)
+       yes               yes             four
+
+So the nibble is the FIRST of however many pans the layer has. The old comment
+described the stereo row; the algorithm row is the one that was missing.
+
+**And the stereo case was already handled, at a different level** — the zone
+build carries `pan=(0.0 if sd.channels >= 2 else layer.pan)`, testing the
+sample's own channel count. A keymap can only be Stereo:On with a stereo sample,
+so the two coincide. That guard is why the stereo trigger never showed up as a
+defect and why its absence here looked like the comment being wrong.
+
+**Residual, stated rather than guessed:** across 25 local banks, nine layers on
+NON-panner algorithms (1 and 16) with mono samples still read pan −1.00, while
+other layers on the same algorithms read varied values (+0.43, −0.57, +0.29).
+Those may be genuine hard pans or a third case not yet identified. **No third
+gate has been added on suspicion** — that is exactly how the first two versions
+of this section went wrong.
 
 ---
 
