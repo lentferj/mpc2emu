@@ -25491,6 +25491,43 @@ no measured consequence attached to it. **A base lowered by 30 dB that the cord
 does not restore is exactly that consequence**, and it would explain the whole
 row sitting 20 dB down while its swing measures correctly.
 
+### CONFIRMED, and the writer is NOT at fault
+
+`eosed`'s captures, 19 in, v127 early-window level against the base offset this
+side predicted:
+
+    preset               our base   measured v127
+    Oct.Prot. 12Str.      -29.55       -57.0
+    Proteus 12String      -32.54       -63.9    <- worst, as predicted
+    Prot. 12Str. Lyr      -29.55       -61.0
+    Fat Prot. B3 Org       +0.00       -18.4    <- untrimmed, normal level
+
+**P003 sits ~45 dB above P001.** The bank is not uniformly quiet; level tracks
+the base offset preset by preset. The trim is the cause.
+
+**But the cord that should restore it is written correctly.** Instrumented the
+real write path and read the EMITTED voice bytes:
+
+    v1  base -32.25 dB   swing 32.0 dB   emitted amount 43 = 33.9% = 32.0 dB
+                                          net at v127: -0.2 dB
+
+**So the writer's model says v127 lands at source level, and the machine says
+−57 to −64.** That gap is the finding, and it is not saturation: 34 % is
+nowhere near the 100 % ceiling, so `e4xt_cord_saturates()` is NOT the mechanism.
+This is a *different* fault from §E4XTCORDSAT, not an instance of it.
+
+**What remains, none of it settleable from the file:** the destination id may not
+be amp volume; the cord may sit in a slot the E4XT does not apply, or be
+overwritten by a later cord; or `Vel+` may not follow the 0.9462 dB/% law of §83
+at 34 % — that law's fitted range matters, and extrapolating it would be our
+error rather than the machine's.
+
+**Caveat on our own number:** the cord is located by scanning the emitted voice
+for the `Vel+` source byte and taking the amount two bytes later. It agrees with
+the value the writer's formula computes — two routes, one answer — but it is a
+heuristic scan. Treat 43 as strongly indicated, not proven; the authoritative
+read is cord 0 source/destination/amount off the machine.
+
 ### The discriminator, runnable on captures already taken
 
 **The floored presets should be exactly the ones carrying a large base offset**,

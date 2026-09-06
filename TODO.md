@@ -4191,6 +4191,10 @@ cut of up to −32.5 dB applied by the velocity-pivot trim, which expects the
 `Vel+` cord to restore it at v127. Measured v127 tops out 20 dB low, so it does
 not appear to be restored.
 
-**Likely the missing hardware symptom for §E4XTCORDSAT.**
+**NOT §E4XTCORDSAT.** The cord is written at 33.9% (32.0 dB) against a
+−32.25 dB base — net −0.2 dB at v127 — so saturation cannot be the mechanism and
+the writer's arithmetic is correct. The failure is downstream of what we write:
+wrong destination, an unapplied slot, an overwriting cord, or the 0.9462 dB/%
+law of §83 not holding at 34%. Needs the cord read off the machine.
 
 See `docs/RESOLUTION_NOTES.md` §KR2E4LEVEL.
