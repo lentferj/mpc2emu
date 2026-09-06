@@ -26706,9 +26706,34 @@ one wire and one pan, and the old decode was right there — so algorithms 2, 13
 round-trip pan test still passes, because our writer does not emit panner
 algorithms.
 
-**Still approximate:** centre is exact only for `Adjust` 0%. Carrying it properly
-needs `Adjust` located in the file — filed, not guessed. The measured spread is
-0 to −32%, so the residual error is bounded by about a third of full pan.
+**WHAT THE PANNER ACTUALLY IS: a DYNAMIC panner** (Jan, 2026-09-06). The manual
+is explicit — "By itself the PANNER doesn't change the pan position of the
+sound. It just defines what percentage of the currently selected layer's sound
+goes to each wire" — and its page carries `Adjust`, `KeyTrk` (±16%/key),
+`VelTrk` (±200%), `Src1`/`Depth` and `Src2` with `MinDpt`/`MaxDpt`. Two wires
+panned hard left and hard right, with a modulated balance between them, IS the
+K2000's auto-pan mechanism. k2kremote read exactly that off the panel: two of
+the six programs run `Src2 = LFO2`, `MinDpt 4%`, `MaxDpt 56%` on the mod wheel.
+
+**So the two hard-panned OUTPUT rows are the mechanism, not a setting**, and
+reading either one as "the pan" is a category error rather than an off-by-N.
+
+**This changes what the conversion loses, and it is not pan position.** For a
+panner layer the correct STATIC image is the `Adjust` balance — centre at 0%,
+which is what this fix now writes. What is lost is the MOVEMENT: key-tracked
+panning, velocity-panned position, and LFO auto-pan under a controller. **None of
+our targets is given any of it**, and no amount of getting `Adjust` right would
+recover it — it is a modulation route, not a value.
+
+Filed as a distinct fidelity gap rather than as an error in this fix: a program
+that sweeps across the stereo field converts to one that sits still in the
+middle. Reporting it wants a diagnostic carrying `content_lost`, in the same
+class as SS_AKAIENV2SUSTAIN's unrepresentable envelope.
+
+**Residual on the static position:** exact at `Adjust` 0%, and the measured
+spread across six programs is 0 to −32%, so a layer with a large static offset
+is placed centre when it should sit off-centre. Locating `Adjust` in the file
+would fix that half — filed, not guessed.
 
 **A CORRECTION TO THIS SECTION'S OWN FIRST VERSION.** It said the old comment
 "named the right exception and the wrong trigger" — that the stereo reading was

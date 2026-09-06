@@ -4447,3 +4447,23 @@ row re-captured regardless: the one-sided path costs ~6 dB at the quiet end of
 every velocity ramp, so its low-velocity numbers are floor-limited.
 
 See `docs/RESOLUTION_NOTES.md` §KRZPANNIBBLE.
+
+## KRZ: the PANNER's dynamic panning is dropped entirely
+
+**Status:** open, identified 2026-09-06 from the manual and a panel read.
+**Blocked on:** a decision about which targets can represent it at all.
+
+The K2000's PANNER (algorithms 2, 13, 24, 26) is a DYNAMIC panner: it splits a
+layer across two wires panned hard left and hard right, and sweeps the balance
+with `Adjust`, `KeyTrk` (±16%/key), `VelTrk` (±200%) and two modulation sources
+with min/max depth. Two of six programs measured on the panel run `Src2 = LFO2`
+with `MinDpt 4%` / `MaxDpt 56%` — auto-pan under the mod wheel.
+
+We now write those layers as centred (§KRZPANNIBBLE), which is the right static
+position, but **the movement is dropped entirely** — key-tracked pan, velocity
+pan and LFO auto-pan all convert to a stationary centre image. No target is
+given any of it.
+
+Wants a diagnostic carrying `content_lost`, same class as the unrepresentable
+filter envelope in §AKAIENV2SUSTAIN. Whether any target can carry the modulation
+is a separate question per format.
