@@ -4282,3 +4282,31 @@ program — s3ked has this staged and it needs no card crossing.
 Not the corner floor — that is reached correctly on every path that has a
 velocity sweep, and KRZ has none. See `docs/RESOLUTION_NOTES.md`
 §AKAIENV2SUSTAIN and §AKAIFLOORSPAN.
+
+## MPC: a pitched sample with no WAV `smpl` chunk converts as fixed-pitch
+
+**Status:** open, found 2026-09-06 from a two-generation file diff, not yet
+hardware-confirmed (but eosed measured the program moving, which is consistent).
+**Blocked on:** a decision on the fallback, not on hardware.
+
+`xpm_parser.py:1921` sets `non_transpose = ignore_base or (raw_root == 0 and
+full_range)`, and the rescue at `:2040` only clears it when the WAV carries a
+`smpl` unity note. A pitched sample whose root was never recorded and whose WAV
+has no `smpl` chunk therefore converts as **fixed pitch across the whole
+keyboard** — `vpar[38] = 1` on E4B. Whole-program fidelity loss, and silent.
+
+Found on the v7 MPC-E4 row: a single-zone lead is the only preset whose chunk
+differs from the v5 build, by exactly that one byte. The XPM is byte-identical
+between generations, so the WAV is the only differing input; the v7 copy has
+only `fmt ` and `data`.
+
+The `else` branch below already has the right fallback — WAV unity note, else
+the keygroup low note — but it is unreachable once the flag is set. The
+heuristic reads "no root + full range" as "fixed-pitch one-shot" when it can
+equally mean "pitched sample, root not recorded".
+
+Prevalence in the 11-program matrix set: 7 XPMs have `RootNote` 0 throughout
+with `IgnoreBaseNote` False, 7 of 152 WAVs lack `smpl`, and 1 program lands in
+the intersection.
+
+See `docs/RESOLUTION_NOTES.md` §XPMNOROOTFIXED.

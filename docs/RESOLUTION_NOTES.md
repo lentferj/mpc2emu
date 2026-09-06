@@ -279,6 +279,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§E4BDOUBLETRIM — the velocity-pivot trim is written TWICE (CONFIRMED, FIXED)](#e4bdoubletrim-the-velocity-pivot-trim-is-written-twice-confirmed-fixed)
 - [§AKAIENV2SUSTAIN — a filter envelope with sustain 0 is written as no envelope](#akaienv2sustain-a-filter-envelope-with-sustain-0-is-written-as-no-envelope)
 - [§AKAIFLOORSPAN — the corner floor cannot be reached by a source without a velocity sweep](#akaifloorspan-the-corner-floor-cannot-be-reached-by-a-source-without-a-velocity-sweep)
+- [§XPMNOROOTFIXED — "no root + full range" is not the same as "fixed pitch"](#xpmnorootfixed-no-root-full-range-is-not-the-same-as-fixed-pitch)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -26236,3 +26237,44 @@ the truth. It was re-run with `__pycache__` cleared and the guard asserted in
 the *loaded* function via `inspect.getsource` before the result was believed.
 A patch that is not confirmed present in the running code is not a test of the
 patch.
+
+## §XPMNOROOTFIXED — "no root + full range" is not the same as "fixed pitch"
+
+**Status: real, found by file diff 2026-09-06, fix NOT applied.**
+
+    non_transpose = ignore_base or (raw_root == 0 and full_range)   # xpm_parser:1921
+    if non_transpose and not ignore_base:                           # :2040
+        if sample_wav_root.get(cache_key) is not None:
+            non_transpose = False                                   # the rescue
+
+The rescue fires only when the WAV declares a `smpl` unity note. A pitched
+sample whose XPM `RootNote` is 0 and whose WAV has no `smpl` chunk keeps the
+flag and is written `vpar[38] = 1` — pitch fixed across the whole keyboard.
+
+**How it surfaced.** eosed measured one MPC program moving between two build
+generations in four cells, up to +6.04 dB in the attack window, and asked for
+the file side. The preset chunk differs by exactly ONE byte across the two
+builds: `vpar[38]` 0 -> 1. The XPM is byte-identical between generations (same
+md5), so the WAV is the only differing input; the v7 copy carries only `fmt `
+and `data`. The v5-era WAV cannot be inspected — that working copy had lost its
+samples and v7's were re-copied — **so the provenance of the earlier audio is
+not established here; what is established is that the code path is deterministic
+and the `smpl` chunk is the only input controlling the flag.**
+
+**Why it is a bug and not merely different input.** The heuristic reads "no root
+specified + full range" as "fixed-pitch one-shot". It can equally mean "a pitched
+sample whose root was not recorded", which is what a lead sound is. The `else`
+branch immediately below already encodes the right answer — WAV unity note, else
+the keygroup low note — but it is unreachable once the flag is set.
+
+**Suggested fix, not applied.** Require positive evidence for fixed pitch rather
+than treating it as the default for a missing root: keep `ignore_base` (an
+explicit user setting) as sufficient, and drop `raw_root == 0 and full_range`
+to a signal that must be corroborated — a one-shot-length sample, or a drum
+keygroup — otherwise fall through to the existing root fallback. **Measure
+before applying:** this flips pitch behaviour for a whole program, and the
+programs it would change are exactly the ones nobody noticed were wrong.
+
+**Prevalence, 11-program matrix set:** 7 XPMs have `RootNote` 0 throughout with
+`IgnoreBaseNote` False; 7 of 152 WAVs lack a `smpl` chunk; 1 program lands in
+the intersection. Any MPC library exported without `smpl` chunks is exposed.
