@@ -280,6 +280,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIENV2SUSTAIN — a filter envelope with sustain 0 is written as no envelope](#akaienv2sustain-a-filter-envelope-with-sustain-0-is-written-as-no-envelope)
 - [§AKAIFLOORSPAN — the corner floor cannot be reached by a source without a velocity sweep](#akaifloorspan-the-corner-floor-cannot-be-reached-by-a-source-without-a-velocity-sweep)
 - [§XPMNOROOTFIXED — "no root + full range" is not the same as "fixed pitch"](#xpmnorootfixed-no-root-full-range-is-not-the-same-as-fixed-pitch)
+- [§KRZCEILINGUNCLAMPED — zones ship past the ceiling the writer computed](#krzceilingunclamped-zones-ship-past-the-ceiling-the-writer-computed)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -26444,3 +26445,52 @@ programs it would change are exactly the ones nobody noticed were wrong.
 **Prevalence, 11-program matrix set:** 7 XPMs have `RootNote` 0 throughout with
 `IgnoreBaseNote` False; 7 of 152 WAVs lack a `smpl` chunk; 1 program lands in
 the intersection. Any MPC library exported without `smpl` chunks is exposed.
+
+## §KRZCEILINGUNCLAMPED — zones ship past the ceiling the writer computed
+
+**Status: symptom hardware-confirmed, cause NOT established.**
+
+The 96 kHz up-pitch ceiling (§KRZUPPITCH) is measured and
+`_compute_playback_ceiling()` returns the right key: 74 for a 24000 Hz sample at
+root 50, 72 at root 48, 79 for 26939 at root 57, 84 for 23939 at root 60. The
+writer applies it at `krz_writer.py:626-629`, dividing by 100 correctly.
+
+**And yet six of ten zones in a shipped bank exceed it**, all at `hi_key` 79.
+Predicted from the file and then measured by k2kremote on the K2000, agreeing
+key for key:
+
+    bass A     ceiling 74   tracks to k74, k75-79 FROZEN at 146.48 Hz
+    bass B   ceiling 74   identical
+    bass G       ceiling 79   clean through 79
+    bass J       ceiling 84   clean through 79, five keys lost
+
+**The failure is invisible to level checks.** The frozen keys play at −14.8
+dBFS, full level and clean, about 1.5 semitones flat by k79. k2kremote found
+them only by sweeping pitch; three earlier passes over the same bank had scored
+levels and seen nothing.
+
+**One constant cannot be right for all ten**, because the correct bound depends
+on the sample's own rate and root: it is simultaneously too high for six
+programs and too low for one.
+
+**What has NOT been established: why the clamp does not bind.** The code reads
+correctly in isolation. Candidates, none checked:
+
+  - the `if sample is not None` guard failing, so the clamp is skipped entirely
+  - a later pass extending zones after the clamp — `_coverage_remap_voices`
+    (:2670) exists to rebuild octave-slice stacks as coverage multisamples and
+    hole-filling is known to stretch neighbours
+  - `r_zone - zone.coarse_tune` not being the root the ceiling should use
+
+**Do not fix by lowering a constant.** There is no constant here to lower — the
+per-sample computation already exists and produces the right answer. The bug is
+that its result does not reach the written zone.
+
+**An unexplained neighbour, recorded so it is not conflated.** `bass I` shares
+rate, root, zone span, loop length and loop type with `bass G` to the frame,
+and both compute a ceiling of 79 — but it goes SILENT at k78 where `bass G`
+plays cleanly through 79. So the machine has two distinct behaviours at the same
+computed limit: clamping (frozen pitch, full level) and stopping. The file does
+not distinguish the two samples at k78. Suggested discriminator: load `bass I`
+alone so it lands at a different RAM address and re-sweep — if the cliff moves it
+is address-dependent and not ours.

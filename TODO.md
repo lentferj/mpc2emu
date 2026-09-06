@@ -4323,3 +4323,39 @@ with `IgnoreBaseNote` False, 7 of 152 WAVs lack `smpl`, and 1 program lands in
 the intersection.
 
 See `docs/RESOLUTION_NOTES.md` §XPMNOROOTFIXED.
+
+## KRZ: zones ship above their own computed up-pitch ceiling
+
+**Status:** open, hardware-confirmed 2026-09-06 (k2kremote). Symptom located
+precisely; the reason the clamp does not fire is NOT yet established.
+**Blocked on:** nothing — this is a code question, not a hardware one.
+
+`_compute_playback_ceiling()` is correct and `krz_writer.py:626-629` applies it
+as `hi_key = min(hi_key, ceiling)`. Yet six of the ten E4B-sourced programs in
+`MX9E4KR` ship with `hi_key` 79 against their own ceiling of 74 or 72:
+
+    preset          zone    root  rate     ceiling   shipped
+    bass A     21-79    50   24000       74        79    5 wrong keys
+    bass B   21-79    50   24000       74        79
+    bass C   21-79    50   24000       74        79
+    bass D   21-79    48   24000       72        79    7 wrong keys
+    bass E   21-79    48   24000       72        79
+    bass F   21-79    48   24000       72        79
+    bass G/2, JP4 21-79    57   26939       79        79    correct
+    bass J       21-79    60   23939       84        79    5 keys lost
+
+**Confirmed on hardware:** `bass A` tracks pitch through k74 and plays k75
+to k79 at a FROZEN wrong pitch — full level, clean, ~1.5 semitones flat by k79.
+`bass B` reproduces it exactly. `bass G` and `bass J` are clean
+through 79 as predicted. **A level check passes every frozen key** (−14.8 dBFS);
+only a pitch sweep finds them.
+
+Note the constant is wrong in BOTH directions: too high for six programs
+(frozen keys) and too low for `bass J` (five keys lost that would track).
+
+**Next step is to find why the clamp does not bind** — candidates: the sample
+lookup returning None so the `if sample is not None` branch is skipped; a later
+pass (`_coverage_remap_voices`, called at :2670) extending zones after the clamp;
+or `r_zone - zone.coarse_tune` differing from the zone root. Not yet checked.
+
+See `docs/RESOLUTION_NOTES.md` §KRZCEILINGUNCLAMPED.
