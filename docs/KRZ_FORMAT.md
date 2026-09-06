@@ -501,7 +501,7 @@ three HOB "block-type" bytes. The four HOB pages map to functions **F1 / F2 / F3
 | `HOB0(0x50)[6]` | F1 Src1 depth | filter-env depth `round(amt × 127)` (approx) |
 | `HOB1(0x51)[0]` | F2 block type | `16` = RES / AMP-gain, `61` = NONE |
 | `HOB1(0x51)[1]` | F2 value | resonance (`dB×2`), bandpass width, or PARA-MID gain |
-| `HOB2(0x52)[0]` | F3 block type | `18` = SEP (Alg 1/16), `60` = NONE (Alg 5), `40` = None (Alg 2) |
+| `HOB2(0x52)[0]` | F3 block type | `18` = SEP (Alg 1/16), `60` = NONE (Alg 5), **`40` = PANNER** — corrected 2026-09-06; this entry previously read "None (Alg 2)". Algorithm 2's chain is PITCH > 2PARAM SHAPER > PANNER > AMP (Reference Guide ch.26), so there is no "none" in that slot, and the panel renders 40 as "F3 POS(PANNER)". Band-boost sources routed to Alg 2 have therefore always carried an inert PANNER (Src1/Depth zero), which is harmless |
 
 **Filter type / algorithm plan** (`_k2_filter_plan()`, mapping the shared XPM
 `FilterType` enum → K2000; all HW-RE'd via Gotek disk-save + byte-diff, see

@@ -1861,7 +1861,16 @@ _K2_F2_AMP = 16              # HOB1[0]: Alg2 PARA MID F2-AMP block (gain in HOB1
 _K2_F2_NONE = 61             # HOB1[0]: F2 = NONE        (1-pole; fixed resonance)
 _K2_F3_SEP = 18              # HOB2[0]: F3 = separation  (Alg 1 / Alg 16)
 _K2_F3_NONE = 60             # HOB2[0]: F3 = NONE        (Alg 5, clean series path)
-_K2_F3_NONE_ALG2 = 40        # HOB2[0]: Alg2 F3 = None   (PARA MID; HW-RE'd 2026-06-25)
+#: MISNAMED SINCE 2026-06-25, CORRECTED 2026-09-06: **40 is PANNER, not None.**
+#: Algorithm 2's printed chain is PITCH > 2PARAM SHAPER > PANNER > AMP (K2000
+#: Reference Guide ch.26) -- there is no "none" available in that slot because
+#: the panner IS the slot, and the panel renders 40 as "F3 POS(PANNER)". The
+#: June RE saw the byte a program takes in algorithm 2 and named it after what
+#: it expected. Kept under the old name so the PARA MID path is untouched: those
+#: programs have always shipped with an inert PANNER (Src1 and Depth zero),
+#: exactly like the factory source-bank programs, which is harmless. Renaming it
+#: is a separate change from correcting the fact.
+_K2_F3_NONE_ALG2 = 40        # = _K2_F3_PANNER; see above
 _K2_CAL_ALGORITHM = 29       # CAL byte holding the algorithm number
 # PARA MID (Alg2) AMP gain = HOB1[1] as signed dB, 1:1 (HW: +24dB->24, +48dB->48,
 # 0->0, range +-48).  Band-boost depth from MPC resonance: +12 .. +24 dB.
