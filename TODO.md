@@ -4420,11 +4420,12 @@ made explicitly signed on 2026-08-25: the filter-envelope depth
 
 Fix strategy: `docs/RESOLUTION_NOTES.md` §KRZLFOSIGN.
 
-## KRZ: every zone reads pan hard LEFT — encoding undecided, do not fix yet
+## KRZ: pan read a panner WIRE, not the layer's pan — FIXED, rebuild pending
 
-**Status:** symptom confirmed on hardware; cause undecided between two
-encodings. **Blocked on one reading from the K2000** — the PAN display for a
-layer of `MXKRSRC` (now on the card), or a per-channel capture of it.
+**Status: cause identified and FIXED 2026-09-06** (algorithm gate in
+`krz_parser`, `_ALG_WITH_PANNER = {2, 13, 24, 26}` per the K2000 manual Ch.14,
+verified against the PDF by Jan and against the panel by k2kremote).
+**Remaining work: rebuild the KRZ→E4B and KRZ→AKAI rows and re-capture.**
 
 Every zone of `MXKR.KRZ` parses as pan −1.0, so KRZ→E4B writes zone pan −32 and
 KRZ→AKAI writes −50, on all 58 zones, while the S3-, S1- and E4B-sourced rows

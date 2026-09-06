@@ -416,6 +416,12 @@ HOB_F1_TAG, HOB_F2_TAG, HOB_F3_TAG = 0x50, 0x51, 0x52
 HOB_F4_TAG = 0x53
 _KRZ_PAN_STEPS = 7
 
+#: Algorithms whose F3 block is a PANNER, so the layer runs on two wires and the
+#: OUTPUT page carries a pan PER WIRE (K2000 manual Ch.14). Reading the F4 pan
+#: nibble on these returns one wire's setting, not the layer's image
+#: (SS_KRZPANNIBBLE).
+_ALG_WITH_PANNER = frozenset({2, 13, 24, 26})
+
 # HOW MANY DSP FUNCTIONS EACH ALGORITHM ACTUALLY HAS.
 #
 # Transcribed from the K2000 manual's algorithm chapter (31 algorithms, each
@@ -974,13 +980,70 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
             else:
                 cur.filter_type = 0
         elif tag == HOB_F4_TAG:
-            # Pan, from byte 14's high nibble (§KRZPANREAD). Skipped for a
-            # STEREO layer, where the same nibble is the writer's own channel
-            # routing rather than a musical pan -- reading it there would
-            # report every stereo layer as hard left.
-            _nib = (seg[14] >> 4) & 0x0F
-            _step = _nib - 16 if _nib > 7 else _nib
-            cur.pan = max(-1.0, min(1.0, _step / float(_KRZ_PAN_STEPS)))
+            # PAN IS NOT IN THIS NIBBLE. Do not put it back (§KRZPANNIBBLE).
+            #
+            # This read `(seg[14] >> 4)` as a signed -7..+7 pan until 2026-09-06.
+            # It is the PANNER block's OUTPUT ROUTING, and the actual pan is the
+            # panner's `Adjust` field, which this parser cannot yet locate.
+            #
+            # Read off a K2000's own `F3 POS (PANNER)` page by k2kremote, for
+            # six programs of the bank that exposed this -- all running
+            # algorithm 2, `PITCH 2POLE LOWPASS PANNER AMP`:
+            #
+            #     Adjust   0%, 0%, +7%, +7%, -11%, -32%      near centre, VARIED
+            #
+            # while every one of those layers carries `0x94` here, uniformly.
+            # A single byte value cannot encode six different pans, which is the
+            # cleanest possible proof that it is not the pan.
+            #
+            # What it is: on the OUTPUT page these programs show TWO rows,
+            # `U:A(FX) L*  R` and `L:A(FX) L  *R` -- the panner's two
+            # destinations, one per output. Read as a pan, the first row alone
+            # says HARD LEFT. A program whose algorithm has no PANNER shows one
+            # centred row instead.
+            #
+            # The cost of getting this wrong was not theoretical: every KRZ
+            # source zone came back pan -1.0, so KRZ->E4B wrote zone pan -32 and
+            # KRZ->AKAI wrote -50 across all 58 zones, collapsing a near-centred
+            # (and for two programs LFO2-auto-panned) bank to mono-left. It was
+            # found because Jan saw one channel on his AD converter and repeated
+            # it after two sessions told him the rig was fine.
+            #
+            # THE OLD COMMENT HERE NAMED THE RIGHT EXCEPTION AND THE WRONG
+            # TRIGGER: it said the nibble is channel routing for a STEREO layer.
+            # It is channel routing whenever the algorithm has a PANNER, which
+            # has nothing to do with the samples being stereo -- this bank's ten
+            # samples are all mono. That mistaken trigger is why the exception
+            # was dismissed here rather than applied.
+            #
+            # THE GATE IS THE ALGORITHM. The K2000 manual (Ch.14, "Pitch /
+            # Amplitude / Panner"): "The PANNER function is available only in
+            # algorithms 2, 13, 24, and 26, and always appears in the block
+            # before the final AMP."
+            #
+            # In those algorithms the layer runs on TWO wires and "the OUTPUT
+            # page for the layer changes to enable you to make pan settings for
+            # each wire independently" -- so there are two pans, and this byte
+            # carries one of them. The bank that exposed this has its upper wire
+            # hard LEFT and its lower wire hard RIGHT, which is why reading one
+            # of them reported pan -1.0 while the instrument imaged near centre.
+            # The layer's actual position is the panner's `Adjust`, blending
+            # between the two wires: 0% splits evenly and reads as centre.
+            #
+            # In every other algorithm there is ONE wire and one pan, and this
+            # nibble is that pan -- so the old decode was right there and is
+            # kept. That is why this is a gate and not a removal.
+            if cur.algorithm in _ALG_WITH_PANNER:
+                # Two wires, two pans, and `Adjust` decides the blend. We cannot
+                # locate `Adjust` yet, so centre it: correct for the common
+                # Adjust 0% case and within 32% of every program measured on the
+                # panel (0, 0, +7, +7, -11, -32 %). Reading one wire instead
+                # would be hard left, which is the defect this replaces.
+                cur.pan = 0.0
+            else:
+                _nib = (seg[14] >> 4) & 0x0F
+                _step = _nib - 16 if _nib > 7 else _nib
+                cur.pan = max(-1.0, min(1.0, _step / float(_KRZ_PAN_STEPS)))
             # Tremolo, from Src1/Depth at indices 5/6 of this same segment
             # (§KRZF4AMPDEPTH, k2kremote-measured 2026-09-01: 1.0 dB per unit,
             # bipolar about the un-modulated level, so Depth is the ONE-SIDED

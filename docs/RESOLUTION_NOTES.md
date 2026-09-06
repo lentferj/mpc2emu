@@ -283,7 +283,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§KRZCEILINGUNCLAMPED — zones ship past the ceiling the writer computed](#krzceilingunclamped-zones-ship-past-the-ceiling-the-writer-computed)
 - [§AKAILFODEP — the AKAI LFO depth byte is never written (2026-09-06)](#akailfodep-the-akai-lfo-depth-byte-is-never-written-2026-09-06)
 - [§KRZLFOSIGN — a negative `LfoPitch` is discarded on the KRZ path (2026-09-06)](#krzlfosign-a-negative-lfopitch-is-discarded-on-the-krz-path-2026-09-06)
-- [§KRZPANNIBBLE — every KRZ zone reads hard LEFT, and we cannot tell from files whether that is right](#krzpannibble-every-krz-zone-reads-hard-left-and-we-cannot-tell-from-files-whether-that-is-right)
+- [§KRZPANNIBBLE — every KRZ zone read hard LEFT; it was a panner wire, not a pan](#krzpannibble-every-krz-zone-read-hard-left-it-was-a-panner-wire-not-a-pan)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -26669,10 +26669,56 @@ fold a negative control-source depth, the correct fix is `abs()` plus a recorded
 note that the machine cannot express the phase — not the sign passthrough. Do
 not assume the sign is expressible because the byte is signed.
 
-## §KRZPANNIBBLE — every KRZ zone reads hard LEFT, and we cannot tell from files whether that is right
+## §KRZPANNIBBLE — every KRZ zone read hard LEFT; it was a panner wire, not a pan
 
-**Status: the SYMPTOM is confirmed and reaches hardware. The CAUSE is undecided
-between two encodings, and one hardware reading settles it. NOT fixed.**
+**Status: RESOLVED AND FIXED 2026-09-06. Cause identified from the K2000's own
+panel plus the manual; fix is an algorithm gate. Rebuild of the KRZ-sourced rows
+still pending.**
+
+**THE ANSWER WAS NEITHER HYPOTHESIS THIS SECTION FIRST OFFERED.** It is not a
+two's-complement/offset-binary question at all. The K2000 manual, Ch.14 "DSP
+Functions — Pitch / Amplitude / Panner" (p.14-31/32):
+
+> "The PANNER function is available only in algorithms 2, 13, 24, and 26, and
+> always appears in the block before the final AMP function."
+
+> "When you select one of these double-output algorithms, the OUTPUT page for
+> the layer changes to enable you to make pan settings for each wire
+> independently."
+
+**A panner layer runs on two wires and has TWO pans, one per wire.** Byte 14's
+high nibble carries one of them. The affected bank has its upper wire hard LEFT
+and its lower wire hard RIGHT, so reading one returned −1.0 while the instrument
+imaged near centre. The layer's actual position is the panner's `Adjust`, which
+blends the wires — 0% splits evenly.
+
+**Confirmed three ways, independently:** k2kremote read `F3 POS (PANNER)` off the
+panel for six programs (Adjust 0, 0, +7, +7, −11, −32 % — near centre and
+VARIED, which one uniform byte value cannot encode); the manual names the four
+algorithms; and a trace of the parse shows `alg=2` on all 22 layers of that bank,
+matching the panel's "Algorithm 2: PITCH 2POLE LOWPASS PANNER AMP". Jan verified
+the algorithm list against the PDF.
+
+**The fix is a GATE, not a removal.** In any algorithm without a panner there is
+one wire and one pan, and the old decode was right there — so algorithms 2, 13,
+24 and 26 read as centre and everything else is unchanged. `_ALG_WITH_PANNER` in
+`krz_parser`. Effect on the affected bank: 58 zones × −1.0 → 58 × 0.0. The KRZ
+round-trip pan test still passes, because our writer does not emit panner
+algorithms.
+
+**Still approximate:** centre is exact only for `Adjust` 0%. Carrying it properly
+needs `Adjust` located in the file — filed, not guessed. The measured spread is
+0 to −32%, so the residual error is bounded by about a third of full pan.
+
+**The old comment named the right exception and the wrong trigger.** It said the
+nibble is channel routing "for a STEREO layer". It is a wire pan whenever the
+ALGORITHM has a panner, which has nothing to do with the samples being stereo —
+this bank's ten samples are all mono, and that is precisely why the exception was
+dismissed when it should have been applied.
+
+---
+
+**How it was found, kept because the failure mode is general.**
 
 **How it surfaced.** Jan said his AD converter was lighting only the left
 channel. Two sessions told him the rig was fine — eosed from a correlation test,
