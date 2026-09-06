@@ -25533,9 +25533,54 @@ It explains the attack-to-mid *fall difference*, not the level at attack. **And
 the gap at attack is 37 dB, before any decay matters, with both sources peaking
 at 0 dBFS.**
 
-**~27 dB unaccounted, with no remaining file-side candidate.** The next evidence
-is the K2000 rendering the same two presets from the original — staged as
-`MXKRSRC.KRZ` for the next card crossing, three repeats. The question is
+### The candidate that "exhausted" missed: the FILTER envelope
+
+**`eosed` named a seventh candidate after this side declared the list complete,
+and it is the mechanism.** Both presets sit at cutoff byte 0 — **133 Hz** — with
+`FEnv+ → FilFreq +100`. With a lowpass parked that low, the filter envelope is
+not a tone control, **it is the gate**: everything either preset emits depends
+on how far and how long its envelope opens that corner. A drawbar organ has
+enormous energy at and below its fundamental and survives a nearly-closed
+lowpass; a 12-string's character is body and shimmer from 200 Hz to 3 kHz and
+does not.
+
+**And the deciding parameter is faithful to the source:**
+
+    Fat Prot. B3 Org   source FEnv sustain 0.606, decay 0.0    -> 0.606, 0.0
+    Oct.Prot. 12Str.   source FEnv sustain 0.0,   decay 9.4 s  -> 0.0,   9.654 s
+
+The organ holds its filter open at 0.606 of depth indefinitely; the 12-string's
+decays to the base cutoff and stays there. **Sustain for sustain, carried from
+the KRZ.**
+
+**Prediction on record: forcing cutoff 255 and zeroing the slot-5 cord on both
+should collapse the 37 dB.** If it survives, the filter is exonerated and this
+reading is wrong.
+
+### Two real deviations found while looking — equal on both presets
+
+    filter_cutoff      source 20.7 Hz (organ) / 23.2 Hz (12str)  ->  133.0 BOTH
+    filter_env_cents   source 10800 cents BOTH                   ->  8315.8 BOTH
+
+The first is the E4XT's floor: byte 0 IS 133 Hz, so a source asking for 21 Hz
+cannot be represented and clamping is correct. The second costs **2484 cents,
+just over two octaves of envelope depth** — and net, our peak opening for the
+12-string is ~15.7 kHz against the source's ~11.9 kHz, so we open *brighter*,
+not darker.
+
+**Neither makes our output quieter and both hit the organ identically, so
+neither can produce a differential 37 dB.** But **the depth clamp deserves its
+own investigation**: losing two octaves of filter-envelope range is a real
+fidelity loss on any preset whose character lives in that sweep. It is invisible
+on these two only because they sit at the extremes.
+
+### The methodological point
+
+This side listed six candidates, found nothing in any of them, and concluded
+"the file side is exhausted". **What had actually been established is that the
+candidates this side thought of were clear** — which is a different and much
+weaker statement. The seventh arrived from someone who knew what the cutoff
+byte was set to on the machine. The question is
 whether a 12-string rendering 40 dB below a B3 organ is correct — and the
 reference is the KRZ original on the K2000. **If that machine renders the pair
 ~8.5 dB apart while our E4B renders them 40 apart, it is a ~31 dB conversion
