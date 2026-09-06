@@ -275,6 +275,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§STALEBUILD — rebuilding into the same directory leaves the old files](#stalebuild-rebuilding-into-the-same-directory-leaves-the-old-files)
 - [§E4BNULL — the E4XT half of MX9 is a confirmed null, and the near-miss inside it](#e4bnull-the-e4xt-half-of-mx9-is-a-confirmed-null-and-the-near-miss-inside-it)
 - [§KR2E4LEVEL — the KRZ→E4B row is ~20 dB down, and it is the velocity-pivot trim](#kr2e4level-the-krze4b-row-is-20-db-down-and-it-is-the-velocity-pivot-trim)
+- [§KRZV9RUN — the K2000 verification of MX9, and what each fix did](#krzv9run-the-k2000-verification-of-mx9-and-what-each-fix-did)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -25584,3 +25585,88 @@ a preset-volume offset changes exactly those. **It turned out to matter more
 than that: a uniform lift would have hidden the per-preset pattern, which is the
 evidence that distinguishes "quiet bank" from "the trim is not restored".**
 Rescuing the measurement would have destroyed the finding.
+
+
+---
+
+## §KRZV9RUN — the K2000 verification of MX9, and what each fix did
+
+**Measured by `k2kremote`, 2026-09-06**, MX8V501 (MATRIX5) against MX9MPCKR
+(MATRIX6), eleven programs matched by name.
+
+    ceiling fix        WORKS, and CORRECTLY   k84 -75.74 -> -2.99 dBFS
+    drum-program flag  WORKS                  Lead-PRO5 plays on ch9, 45/45
+    headroom fix       not visible as LEVEL   +0.17 dB median = rig offset
+    wrong sample       NOT fixed, RELOCATED   keys 59-63 -> keys 70-74
+
+### The ceiling fix is confirmed as correct, not merely audible
+
+The partial ladder across keys 80-91 steps **+1.00 semitone** throughout (two
+apparent jumps at 82/83 are the estimator picking an octave-up partial; halved
+they give +1.00 and +0.94). k84 sits mid-ladder at the right pitch and a level
+in line with its neighbours. Layer `HiKey` moved **83 → 95**, exactly one
+octave.
+
+**Coverage stopping at 95 is physics, not a clamp.** The top sample is root 71
+at 24 kHz, and +24 semitones IS key 95 under the 96 kHz ceiling — the writer's
+bound and the measured ceiling meet exactly.
+
+### The headroom fix: right effect, wrong observable
+
+This side predicted "many programs should move slightly" from 11 % → 90 % at
+44.1 kHz. **Nothing moved: +0.17 dB median over 66 cells, which is the rig's own
+inter-session offset.** Retaining sample rate buys BANDWIDTH, not level, and a
+level grid cannot see it. **The prediction named the wrong observable and should
+have been caught before the sweep was spent.**
+
+A spectral re-analysis of the SAME grid (25 one-third-octave bands were already
+recorded) found it: two programs gained **~7 dB of high-frequency tilt** on every
+key, seven moved less than ±0.27 dB.
+
+**But the mechanism is not the rate change**, and two file-side checks say so:
+
+* ten of eleven programs were 100 % downsampled in MATRIX5, so "hardest
+  downsampled" separates nothing;
+* four programs shared the identical +0.29-octave change and two of them gained
+  7 dB while two gained nothing; the LARGEST bandwidth gain (+0.46 oct) measured
+  −0.18 dB.
+
+**And a file-side spectral tilt on the stored samples CONTRADICTS the hardware
+result** — the two gainers come out 2 dB *worse* in the file.
+
+**Best explanation, not yet confirmed: it is the machine's pitch interpolator,
+not the stored content.** 35960 → 44100 only adds content above ~18 kHz, which
+cannot yield 7 dB in a ≥5 kHz band. A K2000 pitching a 35960 Hz sample
+interpolates harder than one pitching 44100 Hz to the same note, and
+interpolation error is low-pass. **The hardware measured playback; the file
+measures storage; the difference between them is the interpolator.** That
+predicts the gain scales with distance from a sample's root, and it is absent
+where the rate did not change (Trap-Kit +0.27, Casiopaya −0.25) — both hold.
+
+**Caveat on the contradicting file numbers:** the two builds have different
+sample lengths after resampling, so the analysis windows differ, and the result
+is a median over a program's samples. That is enough slop to distrust 2 dB.
+
+### The aggregate that would have been wrong
+
+The set-wide mean tilt is **+1.33 dB, t = 2.5** — which reads as "the fix adds
+1.3 dB of HF across the set". **The median over the same 56 cells is +0.01 dB
+and only 28 of 56 are positive.** The mean is entirely the two programs. Caught
+by `k2kremote` in their own data before it was reported: *a plausible aggregate
+over a bimodal set, named after a property the set does not have.*
+
+### A permanent blind spot in a level-and-pitch rig
+
+Key 85 measures **right pitch, right level, wrong sample** — the hole-fill
+covers it with sample 321 where 319 belongs. **Every check that rig can make
+passes it.** Catching it needs a timbre comparison against the source.
+
+**So "k85 clean" must never be quoted as evidence the zone-drop is harmless.**
+This is a limitation by construction, not a gap in one run.
+
+### Unexplained
+
+**k88 reads −30.22 dBFS against −21.32 and −23.24 either side**, correct pitch,
+mid-zone, not a boundary. No file-side cause: keys 80-91 are all one zone and
+one sample. Noted rather than guessed at — and the standard 36/48/60/72/84 grid
+would never have sampled it.
