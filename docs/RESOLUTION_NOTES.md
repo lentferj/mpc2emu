@@ -25495,20 +25495,47 @@ hardware, the extrapolation is accurate:**
 **The mechanism does exactly what it is designed to do. Nothing to recalibrate,
 nothing to refuse.**
 
-### What is actually left
+### VERIFIED POSITIVE: the trim is applied to the right subjects
+
+The KR-E4 bank splits cleanly in two, and the split IS the velocity swing:
+
+    six presets   swing 0.00-0.07 dB   level -19 to -25   45/45 cells
+    six presets   swing 28-32 dB       level -55 to -64   20-31/45 cells
+
+**The writer applies the trim to exactly the six presets that have a velocity
+swing and leaves every drawbar organ alone** — an organ has no velocity response
+and the writer wrote none. With the −0.33 dB cancellation above, both halves of
+the mechanism now have hardware evidence: **right subjects, right amount.**
+
+**And the bench is excluded.** `S3-E4`, same session and same gain, gives 45/45
+on every preset with swings to **41.6 dB**. A chain that resolves 41.6 dB is not
+what limits the other bank to 20/45.
+
+### What is actually left — file side EXHAUSTED
 
 P000 with the trim entirely removed still sits at −58.9 where P003 sits at
-−18.8 — **40 dB apart with every readable level parameter identical.** Partial
-account:
+−18.8. Every file-side candidate has been checked and eliminated:
 
-    source material    12-string -19.7 dB rms vs B3 organ -11.2   =  8.5 dB
-                       (peaks identical at -0.0, so not gain staging)
-    amp envelope       P000 decays to zero, P003 sustains at 100  = ~7 dB
-    -----------------------------------------------------------------
-    accounted                                                      ~15 dB
-    residual                                                       ~25 dB
+    PCM sample level      -19.7 vs -11.2 dB rms, peaks IDENTICAL at -0.0   8.5 dB
+    per-entry vol_adj     -2.0..0.0 vs 0.0                                 ~1 dB
+    amp envelope          carried faithfully (18.0 -> 17.972 s decay,
+                          sustain 0 -> 0; organ sustain 1.0 -> 1.0)          --
+    zones sounding/key    2 for BOTH presets at every measured key         0 dB
+    velocity-pivot trim   cancels to -0.33 dB (measured)                   0 dB
+    cord routing          slot 0, Vel+ -> AmpVol (machine read = file)     0 dB
+    ------------------------------------------------------------------------
+    accounted                                                            ~9.5 dB
+    measured gap                                                          ~37 dB
 
-**Unattributed, and neither side can attribute it alone.** The question is
+**Correction to an earlier attribution here: the envelope cannot carry ~7 dB.**
+An 18-second decay to zero is SLOW — at the `attack` window it has barely moved.
+It explains the attack-to-mid *fall difference*, not the level at attack. **And
+the gap at attack is 37 dB, before any decay matters, with both sources peaking
+at 0 dBFS.**
+
+**~27 dB unaccounted, with no remaining file-side candidate.** The next evidence
+is the K2000 rendering the same two presets from the original — staged as
+`MXKRSRC.KRZ` for the next card crossing, three repeats. The question is
 whether a 12-string rendering 40 dB below a B3 organ is correct — and the
 reference is the KRZ original on the K2000. **If that machine renders the pair
 ~8.5 dB apart while our E4B renders them 40 apart, it is a ~31 dB conversion
