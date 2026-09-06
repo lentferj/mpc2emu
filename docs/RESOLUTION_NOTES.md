@@ -25904,6 +25904,47 @@ needed a *pivot mismatch* (source rotating about 127 against `Vel+` anchored at
 0) before it produced a trim at all — the trim exists only because of that
 mismatch.
 
+### Which material can and cannot check the fix
+
+**On the bank where the bug was found, the right fix and a wrong one emit
+identical bytes** — all nine trimmed voices there are multi-zone, so an
+unconditional removal passes every check that material can run. That is the
+second time in this investigation that the material at hand could not
+discriminate two candidates.
+
+**Material that CAN discriminate exists and is already in the column:**
+
+    source      voices   trimmed   trimmed AND single-zone
+    MXKR.KRZ        18         9          0     cannot discriminate
+    MXS1.hda         6         6          0     cannot
+    MXS3.hda        36        36         30     DISCRIMINATES
+    MXE4.E4B        10        10         10
+
+**30 of `MX9 S3-E4`'s 36 trimmed voices are single-zone.** Those have no zone
+byte, so `vpar[54]` is the only place their trim can live, and an unconditional
+removal would make all 30 about 29 dB too LOUD.
+
+**The rebuild's byte counts are exactly the multi-zone subsets**, which is the
+file-side proof the conditional is right:
+
+    MX9 KR-E4     9 zeroed of  9 trimmed   (9 multi-zone,  0 single)
+    MX9 S3-E4     6        of 36 trimmed   (6 multi-zone, 30 single)
+    MX9 S1-E4     6        of  6
+    MX9 MPC-E4   12
+
+**So capture `S3-E4` before `KR-E4`:** 30 voices must be UNCHANGED while 6 rise.
+That test can fail in two directions; KR-E4's uniform rise only checks that the
+fix does something.
+
+### The file/machine asymmetry, which will recur
+
+**Nine bytes in the file correspond to four on the machine.** The E4B stores the
+voice volume as one signed byte; the SysEx dump uses a two-byte pair. **Neither
+an offset nor a count survives the crossing between the two views** — only the
+structural relation does, which is why the voice-block stride identified the
+field and a file-derived offset did not. Do not quote byte positions across that
+boundary without saying which view they are in.
+
 ### Scope: the entire E4B column was affected
 
 Rebuilt through the fixed writer, trim bytes zeroed per row:
@@ -25918,6 +25959,15 @@ Rebuilt through the fixed writer, trim bytes zeroed per row:
 **Any source whose velocity swing triggers the pivot trim is affected on the E4B
 path**, so this is a shipping-path defect and not a matrix artefact. The
 `CD2-MATRIX6.iso` currently on the E4XT card predates the fix.
+
+**How to read the pre-fix captures** (`krE4/`, `s3E4/`, `s1E4/`, `matrix6/`):
+they are **not wrong as measurements** — they are a correct record of what that
+build produced. What they cannot be read as is conversion fidelity. **And
+because the split is per-preset rather than per-row, no constant repairs them**;
+the files have to be re-taken, not adjusted. Relative shape within a preset
+still reads; absolute level across presets does not. They are kept rather than
+cleared: once the medium is rewritten there is no route back to the pre-fix
+state and this is the only recording of it.
 
 ### The earlier test bank
 
