@@ -271,6 +271,8 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§ANCHORCHECK — a flat signal cannot catch a late anchor](#anchorcheck-a-flat-signal-cannot-catch-a-late-anchor)
 - [§XPMLANEMIX — a sparse layer shifts every later layer into the wrong voice](#xpmlanemix-a-sparse-layer-shifts-every-later-layer-into-the-wrong-voice)
 - [§DIAGIFACE — the structured diagnostics interface, and the hole a consumer found](#diagiface-the-structured-diagnostics-interface-and-the-hole-a-consumer-found)
+- [§AKAILEADSPACE — a sample whose name begins with a space will not load](#akaileadspace-a-sample-whose-name-begins-with-a-space-will-not-load)
+- [§STALEBUILD — rebuilding into the same directory leaves the old files](#stalebuild-rebuilding-into-the-same-directory-leaves-the-old-files)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -25220,3 +25222,97 @@ this file and then made the same mistake in the next hour.
 **Do not re-derive the drop figure by sampling.** Drops are concentrated in two
 files out of ~500, so a random 25-file sample reports either zero or nonsense.
 That is what produced the bad number in the first place.
+
+
+---
+
+## §AKAILEADSPACE — a sample whose name begins with a space will not load
+
+**FIXED 2026-09-06 (`9d2665f`). Found on hardware by `s3ked`, root-caused here.**
+
+### The symptom, and why nothing looked wrong
+
+Program `PC 4` in an AKAI volume was **silent — 45 of 45 cells at the noise
+floor**, across five keys and nine velocities. Everything checkable said it was
+fine:
+
+* its five samples were **present** in the volume
+* they were **loud**: rms −8.3 to −9.0 dBFS, peaks −0.0 to −1.3
+* its zones covered keys 24-127
+* the program was **byte-identical to one that sounds**, apart from ten name
+  bytes, the PRGNUM byte and five sample-name bytes
+
+### The chain that found it
+
+`s3ked` had the half we could not see: **171 samples resident of the 176 in the
+volume, and the five absent were exactly the five that program needs.** They
+also observed that every resident name is exactly 12 characters and that they
+are **tails** of longer names — the machine keeps the end and discards the
+front.
+
+From the file side: our XPM reader truncates a long sample name by keeping the
+**last 16 characters**, because a multisample set shares a long prefix and
+differs only in the suffix. **The cut lands wherever `maxlen` falls, which is
+often mid-word:**
+
+    'LD Vintage Acid-000-036-c1'  ->  ' Acid-000-036-c1'   <-- LEADING SPACE
+                                       -> AKAI field ' ACID-000-03'
+
+**Both the sample header and the program's zone reference carried the space
+identically**, so the volume was internally consistent and no cross-check
+inside it could reveal the fault.
+
+### The convention, measured rather than assumed
+
+Across two genuine AKAI library images: **20 short names are TRAILING-padded,
+0 are leading-padded.** `str_to_akai()` already pads right — the space arrived
+inside the name, not from the encoder.
+
+### Scale
+
+Over 1124 MPC XPMs: **99 files (8.8%) carry at least one affected name, 744
+names in total.** Roughly one MPC program in eleven had samples that could not
+load on an S3000XL.
+
+### Fix
+
+`parsers/xpm_parser.py::_safe_name` strips after slicing. One line.
+
+### Two method lessons, both from the same afternoon
+
+**A name that has been truncated cannot be matched from the end that was
+removed.** `s3ked`'s first residency test searched for names *beginning*
+"ACID" and found none — worthless, because the machine holds tails. Redone as a
+substring search it became decisive.
+
+**A comparison that discards a field cannot see a change in it.** My first
+zone-set comparison sorted the zones and dropped the velocity field, and
+printed "IDENTICAL" for a program whose keygroup assignments had in fact
+swapped. Three instances of this shape appeared in three different tools in one
+day.
+
+
+---
+
+## §STALEBUILD — rebuilding into the same directory leaves the old files
+
+**Caught 2026-09-06 before it reached a card, and it would have been worse than
+the bug it was fixing.**
+
+`convert.py --overwrite` replaces output files **by name**. It does not empty
+the directory. So a rebuild whose fix *changes a name* leaves the old file
+beside the new one:
+
+    before the fix   176 samples   ' ACID-000-03' …
+    naive rebuild    181 samples   ' ACID-000-03' AND 'ACID-000-036'
+    clean rebuild    176 samples   'ACID-000-036' …
+
+**The five orphans are not merely clutter.** That volume already sits at
+30.75 MB against the S3000XL's 32 MB ceiling and counts against a ~1006-object
+resident pool, so five unreferenced samples could have caused **new** load
+failures while appearing to fix the old one — and the volume would have looked
+correct to every check that asks "are the samples the program needs present?".
+
+**Delete the output directory before a rebuild whose purpose is to change
+names or counts, and verify the count afterwards.** The count is the cheap
+check: 176 expected, 181 found.
