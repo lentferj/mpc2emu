@@ -4238,6 +4238,151 @@ is rewritten there is no route back to the pre-fix state.
 
 See `docs/RESOLUTION_NOTES.md` §E4BDOUBLETRIM.
 
+## AKAI: `AKAI_LFO2_RATE_HZ_PER_UNIT` is a factor of two too large — every pan program runs at half rate
+
+**Status: REFUTED BY MEASUREMENT 2026-09-06 (s3ked, §AKAILFO2RATE). Do NOT refit
+yet — treat LFO2's rate as UNMEASURED.** `models/common.py` carries
+`AKAI_LFO2_RATE_HZ_PER_UNIT = 0.23708`, from §52's "LFO2 runs at exactly twice
+LFO1". Measured through PAN rather than through the filter, it does not:
+
+    PRG 5  amt  9  rat 18   swing 12.67 dB   peak 2.20 Hz
+    PRG 8  amt 26  rat 37   swing 28.80 dB   peak 4.70 Hz
+    NEG    amt  0           swing  0.28 dB   does not move
+    POS    amt 40  rat 25   swing 77.20 dB   peak 2.99 Hz     restore byte-identical
+
+Ratios to prediction: 0.515, 0.536, 0.504. **The falsification is the absence,
+not the peak:** §52 documents a half-rate FFT artefact, so s3ked looked for the
+fundamental — at PANRAT 37 the predicted 8.77 Hz is **40.7 dB below** the 4.67 Hz
+peak. A subharmonic artefact leaves the fundamental present; there is nothing
+there at all.
+
+**Likely mechanism, and it is the centroid trap's twin:** §52 measured LFO2
+**through the filter**, where a bipolar sweep presents *two* brightness
+excursions per cycle to a detector that responds to magnitude rather than sign.
+Measured through pan, where balance is signed, the rate is LFO1's.
+
+**Consequence, live on a card:** all three pan programs on `MX9 MPC8 01` run at
+half their intended rate. PRG 8 wants 8.7 Hz and gets ~4.4. Reaching 8.7 Hz
+needs PANRAT 73, not 37.
+
+**Why not to refit now:** 150 usable frames at 0.67 Hz resolution. The factor of
+two is unambiguous; the constant is not. §52's value has failed once already
+tonight — replacing it from coarse data would just be the next thing to fail.
+A proper sweep is running.
+
+**AND A CORRECTION OF THIS PROJECT'S OWN CLAIM.** Earlier the same evening this
+file's author asserted that s3ked's `PANRAT 37 -> 8.77 Hz` and our KRZ's parsed
+`lfo1_rate 8.7` were "the same number arriving by two routes that share nothing",
+and called §52 externally validated. **They are not independent.** Both descend
+from the same source program; what agreed was our conversion constant with
+itself. The *source* value 8.7 Hz was corroborated; the constant that turns it
+into a byte was never tested by that comparison and is the thing that is wrong.
+A check that confirms a mechanism ran rather than what it did — the same failure
+this project spent the day warning others about. See [[feedback-check-the-check]].
+
+## K2000: we write a PANNER and never spread its two wires, so it is silent
+
+**Status: ROOT-CAUSED AND HARDWARE-CONFIRMED 2026-09-06 (§K2PANWIRES). Writer
+fix not yet applied.** Our first PANNER emission produced a completely
+stationary image. Every byte was correct; the fault is a field we never write.
+
+**The manual says it outright** (K2000 Series Musician's Guide p284, PANNER):
+
+> By itself the PANNER doesn't change the pan position of the sound. It just
+> defines what percentage of the currently selected layer's sound goes to each
+> wire. ... So when you use the PANNER function, you'll also want to adjust the
+> Pan parameters on the OUTPUT page, setting the upper wire's pan fully right,
+> and the lower wire's pan fully left. This will enable you to hear the effect
+> of the PANNER function.
+
+PANNER is a **single wire in, DOUBLE wire out** — it splits the layer between an
+"upper" and a "lower" wire and does NOT itself position anything. The OUTPUT
+page then pans each wire. **If both wires sit centred, they sum and the panner
+is inaudible no matter how it is driven.** We wrote `Src1 = LFO1`, `Depth 26`
+(52 %) and left the OUTPUT page at its inherited default: both wires centred.
+
+**Measured, on program 263 (MX9MPC8's Antimatter) against 208 (pre-fix twin):**
+
+    Adjust +50%, wires centred        image moved  0.01 dB   <- static, still nothing
+    Src1 = LFO1 Depth 52%, centred    balance sd  0.015 dB
+    Src2 = RandV2 MaxDpt 100%, MW127  balance sd  0.045 dB
+    wires SPREAD                      balance sd 10.118 dB, peak 8.70 Hz / 13.29 dB
+
+8.70 Hz is LFO1's own rate, so the modulation we wrote was always there and
+never reached the outputs. The factory panner in the source bank (program 246,
+Src2 = GLFO2, DptCtl = MWheel) moves as expected — sd 1.94 at MWheel 0, 6.49 at
+MWheel 127 — and its OUTPUT page has the wires at hard left and hard right.
+**That contrast is the whole finding.**
+
+**Why every earlier check passed:** the panel renders algorithm 2, F3 block 40
+PANNER, Src1 LFO1, Depth 52 % — all correct, because they ARE correct. The
+missing setting lives on a different page, in a field whose default is benign
+for every algorithm that does not split the signal.
+
+**The subject check that made it interpretable.** Before believing the null I
+verified the edits were reaching the program being recorded, by pushing the
+panner's own `Pad` from 0 dB to 18 dB: level moved **-18.08 dB**. `Pad` is a
+PANNER field, so this simultaneously proved the block was in the audio path and
+that the panner's gain stage worked while its pan did nothing. An earlier
+attempt at the same check pressed `Pad` DOWNWARD, where its range floors at 0,
+so nothing moved and the reading was inconclusive rather than negative — worth
+remembering: **a control that cannot move is not evidence that nothing responds.**
+
+**THE FIX (corrected 2026-09-06 23:09, after the first attempt shipped wrong):**
+the two wire pans must carry OPPOSITE signs — `0x52[14] |= 0x70` (+7, right) and
+`0x53[14] |= 0x90` (-7, left), low nibbles preserved, byte 2 untouched. The first
+attempt reused the stereo path's `0x90`/`0x94`, which are **both -7**, putting
+both wires hard left — which sums exactly as centre does, so the bank shipped with
+the same symptom it was meant to fix (measured on the card: L-R +63.66 dB, nothing
+at the LFO rate). Both-left and both-centre are indistinguishable, so a test that
+asks only "did the bytes change" passes; it has to ask whether the two wires
+differ in SIGN.
+
+**THE FIX:** when the writer emits a PANNER it must also set the layer's OUTPUT
+page wire pans — upper fully right, lower fully left — not just Src1/Depth.
+Ranges from p284: Adjust ±100 %, KeyTrk ±16 %/key, VelTrk ±200 %, Pad 0/6/12/18
+dB, Src1/Src2 depths ±200 %. p284 also confirms independently that PANNER exists
+only in algorithms **2, 13, 24, 26**, which matches `_ALG_WITH_PANNER` in the
+KRZ parser — the two were derived separately and agree.
+
+**This is the fifth instance in one day of "the route is wired and something on
+it is at zero"** (s3ked's observation): MODVPAN1 zero with the source wired,
+MODVFILT3 against SUSTN2 zero, an envelope depth times zero sustain, and now
+two output wires summing at centre. The pattern is that our writers carry
+sources and primary depths across and leave secondary/destination fields at
+whatever the target block happened to hold. **An audit of every writer for
+unset secondary fields is now indicated, rather than five separate patches.**
+
+## AKAI: reading past the last partition returns plausible garbage, not an error
+
+**Status: MACHINE BEHAVIOUR, not our bug — but it defeats the freshness rule we
+had been using.** Found by s3ked 2026-09-06 on HD4-work-v12 (300 MB, five real
+partitions A–E).
+
+    partition F   echoes E                      (the known stale-echo case)
+    partition G   19 "volumes", names such as
+                  '??????X?K?J?'  '0???????????'  '??Y?????????'  'O?????U?????'
+
+Beyond the last real partition the S3000XL does **not** error and does **not**
+return empty: it reads past the partition table and returns plausible-SHAPED
+garbage. Our own image is not at fault — `read_akai_image` on the same file
+reports exactly A:20, B:5, C:1, D:1, E:1 — so this is the machine offering A–H
+regardless of how many exist.
+
+**Why it matters: our freshness rule is necessary but not sufficient.** We had
+been telling every session "a listing identical to the previous one means
+ABSENT, not present". G's listing is *not* identical to F's, so the rule passes
+it, and a checker that counts volumes would report "partition G holds 19
+volumes" and be entirely wrong.
+
+**The reliable tell is the NAMES, not the count** (s3ked). Real volume names are
+printable ASCII in a fixed 12-character field; these are mostly non-printable.
+**Validate name bytes rather than only comparing listings** — one check that
+catches both the echo and the garbage. Worth adding to any partition sweep.
+
+Same family as the echo itself: the machine's directory read never fails
+cleanly, it always returns *something shaped like an answer*.
+
 ## AKAI: a filter envelope with sustain 0 converts as no envelope at all
 
 **Status: NOT A WRITER BUG. Patch applied and reverted the same hour, measured
@@ -4256,6 +4401,43 @@ SUSTN2, so it over-reads a muted filter route as a large envelope. The
 writer/reader asymmetry should be fixed on the reader side. Found by static reading 2026-09-06, confirmed same day.
 **Blocked on:** one measurement — no new card crossing needed if the existing
 KR→AK captures can be split by program.
+
+**2026-09-06 — THE PRODUCT LAW IS REFUTED AT THESE VALUES (s3ked, §AKAISUSTSAT).**
+The ceiling run drove PRG 9 (found at SUSTN2 0 / MODVFILT3 0) through four
+states and back. **SUSTN2 60 and 99 are indistinguishable** — at both depths,
+on all three keys:
+
+    state          k36 centroid / peak      k60 cen   k84 cen
+    as found        217 Hz  -30.6            1019      2755
+    sus60 dep33     152 Hz  -21.6             875      2641
+    sus99 dep33     153 Hz  -21.6             871      2737
+    sus60 dep50     129 Hz  -16.7             757      2662
+    sus99 dep50     129 Hz  -16.7             758      2539
+    restored        219 Hz  -30.6             998      2744   (byte-identical)
+
+This project predicted **813 Hz against 7858 Hz** for the 60/99 pair — 3.3
+octaves apart. It is not there. **Depth does scale** (33→50 gives +4.9 dB and
+moves the centroid 152→129 Hz), so the depth term is live and the SUSTN2 term
+**saturates at or below 60**. Either §156's `octaves = 0.002612 x SUSTN2 x depth`
+does not hold at these values, or the resting corner is not the 22.55 Hz the
+arithmetic assumes.
+
+**The honest position is that we have no working model of this route**, not that
+we have one needing a constant refitted. Two predictions have now failed on it
+in one day: one withdrawn for being ~3x too steep, this one refuted outright.
+Do not fit to these five points either — they establish saturation, not a law.
+
+**One consequence worth keeping:** the two-byte alternative below wanted
+SUSTN2 60. These data say 60 and 99 buy the same thing, so if that route is ever
+taken, 60 is not a compromise value — it is already at the ceiling.
+
+**DETECTOR WARNING, and it generalises (s3ked).** On this material the
+**centroid FALLS as the filter opens** — 217 → 152 → 129 Hz while the level
+rises 13.9 dB. Opening a ~22 Hz corner on bass first admits the fundamental,
+which then dominates the spectrum and pulls the centroid down. **Centroid is
+close to a reverse indicator here; level is the better detector.** Same family
+as the day's other traps: a detector that looks right, moves plausibly, and is
+measuring something other than what its name says.
 
 **Lifting the gate is not by itself the fix.** The AKAI scales the ENV2 corner
 by the envelope's level, so writing a depth with SUSTN2 0 leaves the sustained

@@ -290,6 +290,9 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§XPMLFONEST — two XPM layouts, and we only read one of them](#xpmlfonest-two-xpm-layouts-and-we-only-read-one-of-them)
 - [§WINDOWONSET — a 5 ms anchor shift can cost 1.8 dB at the start of a note](#windowonset-a-5-ms-anchor-shift-can-cost-18-db-at-the-start-of-a-note)
 - [§K2ALGWALK — mapping every K2000 algorithm's blocks and function codes](#k2algwalk-mapping-every-k2000-algorithms-blocks-and-function-codes)
+- [§AKAISUSTSAT — the ENV2 product law is refuted: SUSTN2 saturates at or below 60 (2026-09-06)](#akaisustsat-the-env2-product-law-is-refuted-sustn2-saturates-at-or-below-60-2026-09-06)
+- [§K2PANWIRES — we write a PANNER and never spread its two wires, so it is silent (2026-09-06)](#k2panwires-we-write-a-panner-and-never-spread-its-two-wires-so-it-is-silent-2026-09-06)
+- [§AKAILFO2RATE — LFO2 does not run at twice LFO1; every AKAI pan program is at half rate (2026-09-06)](#akailfo2rate-lfo2-does-not-run-at-twice-lfo1-every-akai-pan-program-is-at-half-rate-2026-09-06)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -27345,3 +27348,213 @@ A machine-readable table (JSON) plus a generated summary for `KRZ_FORMAT.md`.
 The existing hand table stays until the walk reproduces it — **if the walk and
 the manual disagree on any of algorithms 1, 2, 5 or 16, that disagreement is the
 first thing to resolve**, because those four are what the shipping writer uses.
+
+
+## §AKAISUSTSAT — the ENV2 product law is refuted: SUSTN2 saturates at or below 60 (2026-09-06)
+
+**Measured by s3ked; this project's prediction was wrong.** §156's
+`octaves = 0.002612 x SUSTN2 x depth` predicts 813 Hz against 7858 Hz for the
+SUSTN2 60/99 pair — 3.3 octaves apart. The machine does not do it:
+
+    state          k36 centroid / peak      k60 cen   k84 cen
+    as found        217 Hz  -30.6            1019      2755      (SUSTN2 0, MODVFILT3 0)
+    sus60 dep33     152 Hz  -21.6             875      2641
+    sus99 dep33     153 Hz  -21.6             871      2737
+    sus60 dep50     129 Hz  -16.7             757      2662
+    sus99 dep50     129 Hz  -16.7             758      2539
+    restored        219 Hz  -30.6             998      2744   (restore byte-identical)
+
+60 and 99 are indistinguishable at both depths on all three keys. **Depth scales
+normally** (33→50 gives +4.9 dB), so the depth term is live and the SUSTN2 term
+saturates at or below 60.
+
+### What to do about it
+
+**Nothing yet, and specifically do not refit.** Two predictions have now failed
+on this route in one day — one withdrawn for being ~3x too steep, this one
+refuted outright — so the honest state is that **we have no working model of the
+AKAI ENV2 filter route**, not that a constant needs adjusting. These five points
+were chosen to falsify a prediction, not to span a range; they establish
+saturation and would make a bad calibration set for anyone coming to them cold.
+
+One decision does change: the two-byte alternative in §AKAIENV2SUSTAIN wanted
+`SUSTN2 60`. These data say 60 and 99 buy the same thing, so 60 is not a
+compromise value there — it is already at the ceiling.
+
+### Detector warning, and it generalises
+
+**Centroid FALLS as the filter opens on this material** — 217 → 152 → 129 Hz
+while the level RISES 13.9 dB. Opening a ~22 Hz corner on bass first admits the
+fundamental, which then dominates the spectrum and pulls the centroid down.
+**Level is the better detector; centroid is close to a reverse indicator here.**
+Same family as the day's other traps: a detector that looks right, moves
+plausibly, and measures something other than what its name says.
+
+The `restore byte-identical: True` step is what makes the run quotable rather
+than suggestive — without it, "as found" and "restored" landing at 219 vs 217 Hz
+is just a plausible-looking bracket instead of a demonstrated return.
+
+
+## §K2PANWIRES — we write a PANNER and never spread its two wires, so it is silent (2026-09-06)
+
+**ROOT-CAUSED AND HARDWARE-CONFIRMED. Writer fix applied.** Our first PANNER
+emission produced a completely stationary image with every byte correct.
+
+**K2000 Series Musician's Guide p284** (see [[reference-k2000-manual]]):
+
+> By itself the PANNER doesn't change the pan position of the sound. It just
+> defines what percentage of the currently selected layer's sound goes to each
+> wire. ... So when you use the PANNER function, you'll also want to adjust the
+> Pan parameters on the OUTPUT page, setting the upper wire's pan fully right,
+> and the lower wire's pan fully left.
+
+PANNER is **one wire in, two wires out** and positions nothing itself. Left at
+the inherited centre the two wires **sum** and the panner is inaudible however
+hard it is driven.
+
+### The measurement ladder, program 263 (MX9MPC8 Antimatter)
+
+    Adjust +50%, wires centred          image moved  0.01 dB   <- even STATIC pan is inaudible
+    Src1 = LFO1, Depth 52%, centred     balance sd  0.015 dB
+    Src2 = RandV2, MaxDpt 100%, MW 127  balance sd  0.045 dB
+    wires SPREAD (panel edit)           balance sd  4.462 dB at 8.97 Hz
+
+8.70 Hz is LFO1's own rate, so the modulation was present throughout and never
+reached the outputs. (That 4.462 dB figure came from a PANEL edit that spread the
+wires correctly; the first WRITER attempt did not — see the correction below.) Factory program 246 (source bank, Src2 = GLFO2, DptCtl =
+MWheel) moves as expected — sd 1.94 at MWheel 0, 6.49 at MWheel 127 — **and its
+OUTPUT page has the wires at hard left and hard right.** That contrast is the
+finding; the Src1-vs-Src2 route was never the variable.
+
+### The fix
+
+In `_patch_layer`'s `_want_pan` branch, reuse the stereo path's encoding —
+KRZ_FORMAT records that *"stereo placement is just pan at the extremes"* and is
+**not a separate routing mechanism**:
+
+    seg(0x52)[14] = (old & 0x0F) | 0x70     # upper wire hard RIGHT  (+7)
+    seg(0x53)[14] = (old & 0x0F) | 0x90     # lower wire hard LEFT   (-7)
+
+**THE FIRST ATTEMPT AT THIS WAS WRONG AND SHIPPED TO A CARD.** It copied the
+stereo path's literals verbatim — `0x52[14] = 0x90`, `0x53[14] = 0x94`, plus
+`byte 2 = 0x70` on both. **`0x90` and `0x94` are BOTH pan -7.** That puts both
+wires hard LEFT, which sums exactly as centre does, so the bank shipped with the
+identical symptom it was meant to cure. Caught by loading `MX9MPC9` from the card
+and reading the OUTPUT page, which showed `L*` on both rows:
+
+    both wires left (as shipped)   L-R +63.66 dB, nothing at the LFO rate
+    one wire panned right (panel)  L-R  +3.57 dB, sd 4.07 dB, peak 8.70 Hz
+
+**Why the stereo path gets away with those literals:** it also writes `byte 2`,
+which routes the *other* Soundfilehead. A mono panner layer has only one header,
+so byte 2 has nothing to route and the spread must come from the pan nibbles
+alone — which therefore have to carry OPPOSITE signs. The corrected writer does
+not touch byte 2 at all for the panner case.
+
+**The failure mode is worth naming:** both-left and both-centre are both "no
+spread", so a half-right fix reproduces the original symptom exactly. A test
+that only asks *"did the bytes change?"* passes; only *"do the two wires differ
+in sign?"* catches it.
+
+Verified in the emitted file (`walk_program`, not a byte scan):
+
+    original  0x52[14]=0x00 pan  0    0x53[14]=0x04 pan  0    Src1=114 Depth=26
+    v1 WRONG  0x52[14]=0x90 pan -7    0x53[14]=0x94 pan -7    (both left)
+    v2 FIXED  0x52[14]=0x70 pan +7    0x53[14]=0x94 pan -7    (opposite)
+
+**Pan MODE is deliberately not touched.** p64: Mode governs MIDI-pan and
+key-tracked pan only, and *"if you're using the PANNER DSP function ... that
+layer will respond to MIDI pan messages even if the Mode parameter is set to a
+value of Fixed."* Measured: flipping Fixed → +MIDI moved the image 0.00 dB.
+
+p284 independently confirms PANNER exists only in algorithms **2, 13, 24, 26**,
+matching `_ALG_WITH_PANNER` in the KRZ parser, derived separately.
+
+### Two method notes worth keeping
+
+**The subject check that made the null interpretable.** Before believing it, I
+verified edits were reaching the recorded program by pushing the panner's own
+`Pad` 0 → 18 dB: level moved **-18.08 dB**. `Pad` is a PANNER field, so this
+proved in one shot that the block was in the audio path AND that its gain stage
+worked while its pan did nothing. **The first attempt pressed `Pad` DOWNWARD,
+where the range floors at 0** — nothing moved, and an inconclusive result nearly
+got read as a negative one. *A control that cannot move is not evidence that
+nothing responds.*
+
+**RTFM earlier.** p284 and p64 between them answer everything above, and were
+read only after an hour of panel poking had already reached the same conclusion
+empirically. Jan's standing note: read the manual first, and the RE experiments
+that remain get more targeted.
+
+### The fifth instance of one pattern
+
+s3ked's observation, now with five members: `MODVPAN1` zero with the source
+wired; `MODVFILT3` against `SUSTN2` zero; an envelope depth times zero sustain;
+and now two output wires summing at centre. **Our writers carry sources and
+primary depths across and leave secondary/destination fields at whatever the
+target block happened to hold.** An audit of every writer for unset secondary
+fields is indicated, rather than five separate patches.
+
+
+## §AKAILFO2RATE — LFO2 does not run at twice LFO1; every AKAI pan program is at half rate (2026-09-06)
+
+**Measured by s3ked through PAN. §52's `LFO2 = 2 x LFO1` is refuted, and this is
+its second failure in one day.** `AKAI_LFO2_RATE_HZ_PER_UNIT = 0.23708` in
+`models/common.py` is a factor of two too large.
+
+    PRG 5  amt  9  rat 18   swing 12.67 dB   peak 2.20 Hz
+    PRG 8  amt 26  rat 37   swing 28.80 dB   peak 4.70 Hz
+    NEG    amt  0           swing  0.28 dB   does not move
+    POS    amt 40  rat 25   swing 77.20 dB   peak 2.99 Hz
+    restore byte-identical: True
+
+Ratios to prediction 0.515 / 0.536 / 0.504.
+
+### The falsification is an absence, and that is what makes it strong
+
+§52 documents a half-rate FFT artefact in its own analysis, so the obvious
+objection is that this is the same artefact. It is not: **a subharmonic artefact
+leaves the fundamental present.** At PANRAT 37 the predicted 8.77 Hz sits
+**40.7 dB below** the 4.67 Hz peak — there is no energy where the law says the
+LFO should be. Absence of predicted energy is much stronger evidence than
+presence of unexpected energy.
+
+### Likely mechanism — the centroid trap's twin
+
+§52 measured LFO2 **through the filter**. A bipolar sweep presents *two*
+brightness excursions per cycle to a detector responding to magnitude rather
+than sign, so a filter-side measurement reads double. Measured through pan,
+where balance is signed, the rate is LFO1's. Compare §AKAISUSTSAT's centroid
+warning: same family, a detector that moves plausibly and measures something
+other than what its name says.
+
+### Do NOT refit yet
+
+150 usable frames at 0.67 Hz resolution. **The factor of two is unambiguous; the
+constant is not.** §52's value has failed once already; a replacement resting on
+three coarse points would be the next thing to fail. LFO2's rate is recorded as
+**unmeasured**, the same status as the ENV2 filter route after §AKAISUSTSAT. A
+proper sweep — many PANRAT values, long gated captures, negative control
+repeated mid-sweep, and an explicit check for linearity **through the origin** —
+is what should replace it. If LFO2 has an offset rather than a slope error,
+§52's factor of two may be a fitted artefact of a wrong intercept.
+
+### Live consequence
+
+All three pan programs on `MX9 MPC8 01` run at half their intended rate. PRG 8
+wants 8.7 Hz and gets ~4.4. Reaching 8.7 Hz needs PANRAT 73, not 37. This is a
+fidelity defect in a bank on a card, awaiting the constant rather than a rebuild
+decision.
+
+### A correction of this project's own claim
+
+Earlier the same evening this project asserted that s3ked's `PANRAT 37 -> 8.77
+Hz` and our KRZ's parsed `lfo1_rate 8.7` were *"the same number arriving by two
+routes that share nothing"*, and called §52 externally validated. **They are not
+independent.** Both descend from the same source program; what agreed was our
+conversion constant with itself. The *source* value 8.7 Hz was corroborated; the
+constant that turns it into a byte was never tested by that comparison — and is
+the thing that is wrong. A check confirming that a mechanism ran rather than
+what it did, on the same day this project circulated that warning to two peers.
+The claim reached two peer messages and two files before it was caught, by
+s3ked, from the measurement side.

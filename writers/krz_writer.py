@@ -2193,6 +2193,56 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
             _f3 = seg(0x52)
             _f3[_K2_PAN_SRC1]  = _K2_CS_LFO1
             _f3[_K2_PAN_DEPTH] = max(-50, min(50, int(round(_pan_depth * 50)))) & 0xFF
+            # SPREAD THE TWO WIRES, or none of the above is audible (§K2PANWIRES).
+            # Musician's Guide p284: PANNER "converts a single wire at its input
+            # into a double wire at its output" and "by itself the PANNER doesn't
+            # change the pan position of the sound" -- the OUTPUT page pans each
+            # wire, and the manual instructs setting one fully right and the other
+            # fully left. Left at the inherited centre the two wires SUM and the
+            # panner is silent however hard it is driven.
+            #
+            # HW-CONFIRMED 2026-09-06 on program 263 (MX9MPC8's Antimatter),
+            # by panel edit + re-record, with every panner byte already correct:
+            #     wires centred                 balance sd 0.018 dB
+            #     wires spread                  balance sd 4.462 dB at 8.97 Hz
+            # 8.70 Hz is LFO1's own rate, so the modulation was always present
+            # and never reached the outputs. Adjust +50%% moved the image 0.01 dB
+            # while centred -- even the STATIC offset is inaudible unspread.
+            #
+            # This reuses the stereo path's encoding deliberately: KRZ_FORMAT
+            # §"Stereo placement is just pan at the extremes" records that byte 2
+            # = 0x70 (pan +7, hard right) and byte 14 = 0x90/0x94 (pan -7, hard
+            # left) is not a separate routing mechanism but the same wire pans.
+            # It runs AFTER the stereo/mono pan block above and overrides the
+            # mono per-zone pan, which is correct: a panner layer's placement is
+            # the panner's job, and a static zone pan would fight it.
+            #
+            # Pan MODE is deliberately NOT touched. p64: Mode governs MIDI-pan
+            # and key-tracked pan only, and a PANNER layer "will respond to MIDI
+            # pan messages even if the Mode parameter is set to a value of Fixed."
+            # Measured: flipping Fixed -> +MIDI changed the image by 0.00 dB.
+            # OPPOSITE SIGNS -- one wire hard RIGHT, one hard LEFT.
+            #
+            # The first attempt wrote the stereo path's literals 0x90 and 0x94
+            # verbatim. Both of those are pan **-7**: they put BOTH wires hard
+            # left, which sums exactly as centre does. Measured on the shipped
+            # bank (MX9MPC9 program 208, loaded from the card):
+            #     both wires left   L-R +63.66 dB, nothing at the LFO rate
+            #     one wire right    L-R  +3.57 dB, sd 4.07 dB, peak 8.70 Hz
+            # 8.70 Hz is LFO1's own rate. So the mechanism was right and only
+            # these two bytes were wrong -- and the failure LOOKED like the
+            # original bug, because both-left and both-centre are both "no
+            # spread". The stereo path gets away with 0x90/0x94 because it also
+            # writes byte 2, routing the OTHER Soundfilehead; a mono panner
+            # layer has only one header, so byte 2 has nothing to route and the
+            # spread has to come from the pan nibbles alone.
+            #
+            # High nibble is the 4-bit signed pan (-7..+7): 0x7. = +7 hard
+            # right, 0x9. = -7 hard left. The LOW nibble is unrelated and is
+            # preserved (KRZ_FORMAT: "centre 0x04, hard left 0x94, hard right
+            # 0x74" -- the 4 is not part of the pan).
+            seg(0x52)[14] = (seg(0x52)[14] & 0x0F) | 0x70     # upper wire RIGHT
+            seg(0x53)[14] = (seg(0x53)[14] & 0x0F) | 0x90     # lower wire LEFT
         # VELOCITY -> FILTER IS WRITTEN AS THE MACHINE'S OWN VelTrk, and used
         # to be folded into the static cutoff instead (§KRZVELFOLD).
         #

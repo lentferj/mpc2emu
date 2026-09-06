@@ -869,6 +869,20 @@ AKAI_LFO_RATE_HZ_OFFSET = -0.04
 #: 11.71 Hz where LFO2 reaches **23.47 Hz**, so a rate that looks marginal under
 #: LFO1's law is mid-range under LFO2's. An 11.5 Hz source pan LFO is `PANRAT`
 #: 49, not 97.
+#: !! REFUTED 2026-09-06 -- THIS VALUE IS A FACTOR OF TWO TOO LARGE (§AKAILFO2RATE).
+#: It comes from §52's "LFO2 runs at exactly twice LFO1". Measured through PAN
+#: (where balance is SIGNED) rather than through the filter (where brightness is
+#: not), LFO2 runs at LFO1's rate: three programs came back at 0.515 / 0.536 /
+#: 0.504 of prediction, and at PANRAT 37 the predicted 8.77 Hz is 40.7 dB BELOW
+#: the observed 4.67 Hz peak -- an absence, not a subharmonic artefact.
+#: Likely cause: a bipolar filter sweep shows two brightness excursions per cycle
+#: to a magnitude detector, so the filter-side measurement read double.
+#:
+#: NOT CORRECTED HERE ON PURPOSE. The factor of two is unambiguous; the constant
+#: is not (150 frames at 0.67 Hz resolution). §52's value has already failed once;
+#: replacing it from coarse data would be the next thing to fail. LFO2's rate is
+#: UNMEASURED pending a proper sweep -- do not substitute 0.11867 on this note
+#: alone. Every AKAI pan program currently ships at half its intended rate.
 AKAI_LFO2_RATE_HZ_PER_UNIT = 0.23708
 AKAI_LFO_DEPTH_CENTS_PP_PER_UNIT = 19.4932
 AKAI_LFO_DELAY_NUM = 0.06905
