@@ -675,16 +675,61 @@ which was located independently from six panel readings across six programs
 (6/6, with 0/200 false positives on a null test) before any machine work. The two
 routes agree on 1 %/unit.
 
-**NOT located, and they are enumerations rather than numbers:** `Src1`, `Src2`
-and `DptCtl`. They are selected with the data wheel, so a digit-entry pass does
-not touch them and no source byte appears in this diff. Locating them needs a
-separate pass stepping the wheel and reading the name back.
+**The three enumerations, located in a second pass (wheel-stepped, 2026-09-06):**
 
-**One byte unexplained:** offset **268** also changed 0 → 2 in the same diff. It
-lies outside the panner block, inside the F4 AMP region (261/262/263 are AMP
-VelTrk/Src1/Depth), and nothing on that page was edited. It took the same value
-as `Pad`, which may be meaningful or may be coincidence. **No meaning is assigned
-to it from this run.**
+| Field | Offset |
+|---|---|
+| `Src1` | **246** |
+| `DptCtl` | **248** |
+| `Src2` | **251** |
+
+All three share one encoding — the K2000's **control-source code** — verified by
+setting four common values at both `Src1` and `Src2` and getting identical bytes,
+and `DptCtl` cross-checked on four more.
+
+**For controller sources the code IS the MIDI CC number:**
+
+    OFF     0     MWheel  1 (CC1)   Breath  2 (CC2)   Foot     4
+    Volume  7     Balance 8         Pan    10 (CC10)  Express 11
+    Sustain 64    FX Depth 91       Ctl A-D 16-19     Ctl E-H 80-83
+    ON    127
+
+**Internal sources occupy a block from 96 up**, which is where auto-pan lives:
+
+    Note St  96   AttVel  100   VTRIG1 106   ASR1 110   LFO1   114
+    Key St   97   InvAVel 101   VTRIG2 107   ASR2 111   LFO1ph 115
+    KeyNum   98   PPress  102   RandV1 108   FUN1 112   **LFO2 116**
+    BKeyNum  99   BPPress 103   RandV2 109   FUN2 113
+
+A full 112-position walk (70-odd named sources) is in `lfo2_code.json`.
+
+**THE ENCODING IS NOT A DENSE INDEX, AND THREE ADJACENT SAMPLES WOULD HAVE SAID
+IT WAS.** Stepping `Src1` to positions 1, 8, 24 and 60 gave bytes 127, 7, 23, 91.
+Positions 8 and 24 both satisfy `byte = position − 1` exactly, so any three
+consecutive points in that stretch would have confirmed a dense index with total
+confidence. **Position 60 breaking it — byte 91, not 59 — is the only reason the
+real scheme was seen**, and it was in the set solely because the sampling design
+called for well-separated points rather than adjacent ones.
+
+**So a panner layer now reads completely.** The two auto-panning programs in the
+matrix source bank decode as:
+
+    Src2 = 116 (LFO2)   MinDpt 4 %   MaxDpt 56 %   DptCtl = 1 (MWheel)
+    Adjust +7 %         KeyTrk -1.0 %/key
+
+That is a routable description rather than a set of orphaned depths.
+
+**Stated limit:** the table was read from `Src2` on one program, with `Src1` and
+`DptCtl` cross-checked on four values each. The name-to-code mapping is the
+instrument's own display at each step, so it is as good as the panel — but it has
+NOT been verified that the same code means the same thing in a non-panner block.
+
+**One byte unexplained, now bounded:** offset **268** changed 0 → 2 in the
+digit-entry pass, alongside `Pad`. It lies outside the panner block, inside the
+F4 AMP region (261/262/263 are AMP VelTrk/Src1/Depth), and nothing on that page
+was edited. **It did NOT move in the wheel pass — not across 112 source
+positions — so it is not a panner source field.** Still unassigned; recorded
+rather than guessed at.
 
 ## 5. Media formats
 
