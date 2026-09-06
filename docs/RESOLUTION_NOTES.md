@@ -285,6 +285,8 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§KRZLFOSIGN — a negative `LfoPitch` is discarded on the KRZ path (2026-09-06)](#krzlfosign-a-negative-lfopitch-is-discarded-on-the-krz-path-2026-09-06)
 - [§KRZPANNIBBLE — every KRZ zone read hard LEFT; it was a panner wire, not a pan](#krzpannibble-every-krz-zone-read-hard-left-it-was-a-panner-wire-not-a-pan)
 - [§PANMOD — carrying dynamic panning across all four formats: the plan](#panmod-carrying-dynamic-panning-across-all-four-formats-the-plan)
+- [§E4XTVOLSLOPE — the volume law's linear term looks ~2.5% high (four points, NOT a refit)](#e4xtvolslope-the-volume-laws-linear-term-looks-25-high-four-points-not-a-refit)
+- [§NYQUISTNULL — an under-sampled envelope and a dead destination give the same null](#nyquistnull-an-under-sampled-envelope-and-a-dead-destination-give-the-same-null)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -26946,3 +26948,58 @@ controller; the AKAI offers three fixed destinations; the MPC offers two. **Any
 source with more routes than the target can hold needs a `content_lost`
 diagnostic naming what was dropped**, in the same class as §AKAIENV2SUSTAIN's
 unrepresentable envelope — not a silent best-effort.
+
+## §E4XTVOLSLOPE — the volume law's linear term looks ~2.5% high (four points, NOT a refit)
+
+**Status: an observation with a consistent sign, deliberately NOT acted on.**
+
+Measuring the double-trim fix pre/post gives, for each preset, the rise produced
+by removing one trim of a known byte value. Against `_E4XT_VOL_C1 = 0.76732`:
+
+    byte   predicted   observed   delta    implied linear coeff
+    -16      12.34      12.20     -0.14         0.7586
+    -20      15.44      14.87     -0.57         0.7386
+    -39      30.30      29.59     -0.71         0.7491
+    -43      33.45      32.60     -0.85         0.7476
+
+**Same sign at every value and the delta grows with the byte**, so it is a slope
+error rather than a constant offset. Backing out the linear coefficient with the
+quadratic term held fixed gives 0.739–0.759, mean ≈ 0.7485, against the law's
+0.76732 — about 2.5% high.
+
+**Why this is not a refit and must not be used as one** (eosed's own framing,
+recorded because it is the right one): the four values are **two clusters of
+two**, not four independent points; the −29 case is unobservable on that grid
+because the voice lies above key 84; and §83's law was fitted against a dedicated
+calibration sweep whose conditions this measurement does not reproduce. §83
+states ±0.46 dB to byte −60, and these sit just outside it.
+
+**What would settle it:** a re-derivation on calibration material with headroom,
+not an adjustment applied to the shipping law from matrix captures.
+
+**S1-E4 does not extend the range — all six of its trims are −16**, the same byte
+as two S3 presets. It is still worth running as an **independent replication of
+−16 on different source material**: if S1's presets land near 12.20 the deviation
+is a property of the LAW; if they land elsewhere it is a property of the
+MATERIAL, and the systematic dissolves. Four points from two rows cannot separate
+those, and that is the question S1 answers for free.
+
+## §NYQUISTNULL — an under-sampled envelope and a dead destination give the same null
+
+A pan or level measurement stepped at 50 ms samples at 20 Hz, so its Nyquist is
+10 Hz. **An 11.47 Hz LFO aliases to about 8.5 Hz and can read as a slow wander or
+as almost no swing at all** — which is indistinguishable from a modulation route
+that does not carry.
+
+This bit in both directions on 2026-09-06. The E4XT `AmpPan` probe resolved a
+~3 Hz LFO cleanly at 50 ms, which stands because it has margin rather than
+because 50 ms is a sane default; and the 12th matrix XPM runs its pan LFO at
+11.51 Hz, where the same stepping would have produced a confident null.
+
+**Rule: step at least 4x the modulation frequency, and state the frame rate
+beside any modulation result.** For 11.5 Hz that is ~10 ms frames; the MPC
+baseline was measured that way and returned 3.65 dB of swing at 11.47 Hz.
+
+**Same shape as the three amount-at-zero failures of the same day**: a null that
+the method could not have distinguished from a positive. The general form is
+*whether the measurement could have detected the thing it reports absent*.
