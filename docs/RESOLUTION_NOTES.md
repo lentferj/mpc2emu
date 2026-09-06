@@ -26046,6 +26046,30 @@ whatever its sustain. Something like `if not cents or (sustn2 <= 0 and decay
 <= 0): return 0`, so the genuinely inaudible case (no depth, or an envelope that
 collapses instantly) still degrades to the fixed defaults.
 
+**LIFTING THE GATE IS NOT BY ITSELF THE FIX.** Added 2026-09-06. The AKAI
+scales the ENV2 corner by the envelope's LEVEL — `akai_env2_target_hz(base,
+sustn2, depth)` — so with SUSTN2 0 a written depth changes nothing about where
+the note settles:
+
+    string/pad, as written              peak    22.6 Hz   sustain   22.6 Hz
+    string/pad + DEPTH 33 only          peak  7858.0 Hz   sustain   22.6 Hz
+    string/pad + DEPTH 33 + SUSTN2 60   peak  7858.0 Hz   sustain  812.9 Hz
+    organ, as written (FILFRQ 14)       peak  7772.3 Hz   sustain  756.1 Hz
+
+Lifting the `sustn2 <= 0` return therefore buys a bright transient that closes
+again, while the K2000 holds its corner open for the 9.4–35 second decay. A real
+fix needs the depth AND a DEC2 long enough to carry it. We already write DEC2 80
+on these keygroups, about 6.4 s for 60 dB on `_AK_DECAY1_RATE`, and that law
+tops out near 40 s at DEC2 99 — so the 35-second program sits at the edge of
+what the machine can express even with the gate lifted. **`_AK_DECAY1_RATE` was
+measured on the AMPLITUDE envelope; that ENV2 shares it is an assumption, not a
+measurement, and the fix should not be designed on it without a check.**
+
+Consequence for the isolating experiment: a sustained-RMS window cannot see this
+at all, since the sustained corner is identical with and without the depth. The
+delta lives in the attack and decay, which is also where the K2000's own filter
+decay lives.
+
 **THE SUSTAIN SPLIT IS FULLY CONFOUNDED — it cannot confirm this.** Added
 2026-09-06 after checking the twelve programs: the six with filter-env sustain 0
 are *exactly* the six string/pad programs, and the six with sustain 0.61 are

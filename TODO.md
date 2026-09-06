@@ -4244,6 +4244,14 @@ See `docs/RESOLUTION_NOTES.md` §E4BDOUBLETRIM.
 **Blocked on:** one measurement — no new card crossing needed if the existing
 KR→AK captures can be split by program.
 
+**Lifting the gate is not by itself the fix.** The AKAI scales the ENV2 corner
+by the envelope's level, so writing a depth with SUSTN2 0 leaves the sustained
+corner where it was (22.6 Hz) and buys only a transient. Matching a K2000
+program that holds its corner open for 9.4-35 s needs the depth AND a long
+enough DEC2, and the decay rate law tops out near 40 s — the 35 s program is at
+the machine's edge. That law was also measured on the amplitude envelope; that
+ENV2 shares it is unverified.
+
 `akai_filter_env_depth` returns depth 0 whenever the source's filter-envelope
 sustain is 0, on the grounds that a zero-depth envelope is inaudible. A sustain
 of 0 does not mean zero depth: it means percussive. On the KRZ matrix source six
