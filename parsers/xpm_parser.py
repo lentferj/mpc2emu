@@ -1795,10 +1795,44 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
             # LFO (MPC has a single per-keygroup LFO → maps to E4B LFO1).  Only
             # emit it when something is actually routed (LfoPitch / LfoCutoff),
             # otherwise leave the EOS default so the voice stays byte-clean.
-            lfo_pitch  = max(-1.0, min(1.0, float(_get_text(instrument, 'LfoPitch',  '0.0'))))
-            lfo_cutoff = max(-1.0, min(1.0, float(_get_text(instrument, 'LfoCutoff', '0.0'))))
-            lfo_block  = instrument.find('LFO')
-            lfo_active = (abs(lfo_pitch) > 0.001 or abs(lfo_cutoff) > 0.001) and lfo_block is not None
+            # TWO XPM LAYOUTS, BOTH `<Application>MPC-V</Application>`. The
+            # depth fields sit either directly under `<Instrument>` or nested
+            # inside the `<LFO>` block, and `_get_text` searches direct children
+            # only — so every program using the nested layout silently lost
+            # `LfoPitch`, `LfoCutoff`, `LfoVolume` and `LfoPan` (§XPMLFONEST,
+            # found 2026-09-06 while adding the pan read).
+            #
+            # Instrument level takes precedence, so nothing that parsed before
+            # parses differently; the nested block is a FALLBACK only.
+            _lfo_el = instrument.find('LFO')
+            def _lfo_depth(tag):
+                v = _get_text(instrument, tag, '')
+                if not v and _lfo_el is not None:
+                    v = _get_text(_lfo_el, tag, '')
+                try:
+                    return max(-1.0, min(1.0, float(v or '0.0')))
+                except ValueError:
+                    return 0.0
+            lfo_pitch  = _lfo_depth('LfoPitch')
+            lfo_cutoff = _lfo_depth('LfoCutoff')
+            # PAN MODULATION, read since 2026-09-06 (§PANMOD). Dropped silently
+            # before that, and real material uses it: `<LfoPan>` is non-zero on
+            # 384 keygroups of the 11-program matrix source set, and one library
+            # program carries it on all 128 with a depth of 0.370.
+            #
+            # SAME CONVENTION AS `LfoPitch` -- bipolar, clamped +/-1, 0 = none --
+            # inferred from that field rather than measured, and marked as such.
+            # SIGNED, deliberately: §KRZLFOSIGN is a `> 0.0` gate that silently
+            # dropped every negative depth, and pan is the parameter where losing
+            # the sign loses half the range.
+            lfo_pan    = _lfo_depth('LfoPan')
+            vel_pan    = max(-1.0, min(1.0, float(_get_text(instrument, 'VelocityToPan', '0.0') or '0.0')))
+            lfo_block  = _lfo_el
+            # `lfo_pan` joins the activation test: an LFO routed ONLY to pan is a
+            # real patch, and leaving it out would keep the EOS default and drop
+            # the rate and shape with it.
+            lfo_active = (abs(lfo_pitch) > 0.001 or abs(lfo_cutoff) > 0.001
+                          or abs(lfo_pan) > 0.001) and lfo_block is not None
             if lfo_active:
                 lfo_rate_hz = lfo_knob_to_hz(float(_get_text(lfo_block, 'Rate', '0.5')))
                 lfo_shape   = _xpm_lfo_shape(_get_text(lfo_block, 'Type', 'Sine'))
@@ -1875,8 +1909,15 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
                     lfo1_sync_division=lfo_sync_div,
                     lfo1_to_pitch=lfo_pitch,
                     lfo1_to_filter=lfo_cutoff,
+                    lfo1_to_pan=lfo_pan,
                     wheel_to_lfo=wheel_to_lfo,
                 )
+            # Velocity->pan needs no LFO block, so it is set unconditionally --
+            # gating it on `lfo_active` would drop it on any program that pans by
+            # velocity without an LFO, which is exactly the mistake the routing
+            # gate above already made once for pan itself.
+            if abs(vel_pan) > 0.001:
+                pdict.update(velocity_to_pan=vel_pan)
             iparam_tuple = tuple(sorted(
                 (k, round(v, 6) if isinstance(v, float) else v) for k, v in pdict.items()
             ))

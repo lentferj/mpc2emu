@@ -2656,6 +2656,22 @@ class VoiceLayer:
     lfo2_to_filter: float = 0.0      # LFO2 → Filter-Freq (0x68→0x38)
     lfo2_to_filter_q: float = 0.0    # LFO2 → Filter-Q    (0x68→0x39)
     lfo2_to_volume: float = 0.0      # LFO2 → Volume (tremolo); 0.0-1.0 depth
+    #: PAN MODULATION. Bipolar, -1.0..+1.0, 0.0 = no modulation. SIGNED
+    #: DELIBERATELY: pan is left-and-right, so an unsigned path would lose half
+    #: the parameter space in the one place it obviously matters -- and
+    #: §KRZLFOSIGN is the cautionary case, where a `> 0.0` gate silently dropped
+    #: every negative LFO→pitch depth.
+    #:
+    #: All four formats in the matrix carry pan modulation and NONE of it was
+    #: read or written before 2026-09-06 (§PANMOD):
+    #:   MPC   <LfoPan>, <VelocityToPan>            per keygroup
+    #:   AKAI  MODSPAN1/2/3 + MODVPAN1/2/3, ±50     LFO2 = source 8
+    #:   E4XT  PatchCord destination 0x41 AmpPan    hardware-confirmed
+    #:   K2000 PANNER Adjust/KeyTrk/VelTrk/Src1/Src2, algorithms 2/13/24/26
+    lfo1_to_pan: float = 0.0         # LFO1 → Pan
+    lfo2_to_pan: float = 0.0         # LFO2 → Pan
+    velocity_to_pan: float = 0.0     # Velocity → Pan
+    key_to_pan: float = 0.0          # Key position → Pan (K2000 KeyTrk, AKAI Key>pan)
     #: VELOCITY -> AMPLITUDE, as the full-scale swing in dB from velocity 1 to
     #: 127. Positive means harder is louder; 0.0 means no velocity dependence
     #: at all, which is a real neutral rather than a stand-in (measured).

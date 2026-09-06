@@ -287,6 +287,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§PANMOD — carrying dynamic panning across all four formats: the plan](#panmod-carrying-dynamic-panning-across-all-four-formats-the-plan)
 - [§E4XTVOLSLOPE — the volume law's linear term looks ~2.5% high (four points, NOT a refit)](#e4xtvolslope-the-volume-laws-linear-term-looks-25-high-four-points-not-a-refit)
 - [§NYQUISTNULL — an under-sampled envelope and a dead destination give the same null](#nyquistnull-an-under-sampled-envelope-and-a-dead-destination-give-the-same-null)
+- [§XPMLFONEST — two XPM layouts, and we only read one of them](#xpmlfonest-two-xpm-layouts-and-we-only-read-one-of-them)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -27003,3 +27004,52 @@ baseline was measured that way and returned 3.65 dB of swing at 11.47 Hz.
 **Same shape as the three amount-at-zero failures of the same day**: a null that
 the method could not have distinguished from a positive. The general form is
 *whether the measurement could have detected the thing it reports absent*.
+
+## §XPMLFONEST — two XPM layouts, and we only read one of them
+
+**Status: FIXED 2026-09-06. Found while adding the pan read, and it was costing
+more than pan.**
+
+`_get_text` uses `elem.find(tag)`, which searches **direct children only**. The
+XPM LFO depth fields sit in one of two places depending on the file:
+
+    flat    <Instrument> ... <LfoPitch>0.0787</LfoPitch> ... </Instrument>
+    nested  <Instrument> <LFO> <Rate/> <Sync/> <Reset/>
+                              <LfoPitch>0.0157</LfoPitch>
+                              <LfoPan>0.3701</LfoPan> </LFO> </Instrument>
+
+**Both carry `<Application>MPC-V</Application>`**, so the application tag does not
+distinguish them and neither does anything else we were checking.
+
+**Every program using the nested layout silently lost `LfoPitch`, `LfoCutoff`,
+`LfoVolume` and `LfoPan`** — and because `lfo_active` gates on those depths, it
+lost the LFO's rate, shape, sync and reset with them. A patch with vibrato
+converted as a patch with none, with no warning.
+
+**The fix is a fallback, not a change of source.** Instrument level is read
+first exactly as before; the `<LFO>` block is consulted only when the
+instrument-level tag is absent or empty. So nothing that parsed correctly before
+parses differently, which is what makes it safe to apply without a corpus sweep.
+
+**Verified on one file of each layout:**
+
+    Grater (nested)     lfo1_to_pan 0.3701  vel_to_pan 0.0551  lfo1_to_pitch 0.0157  rate 11.5015 Hz
+    Antimatter (flat)   lfo1_to_pan 0.5276  vel_to_pan 0.0     lfo1_to_pitch 0.0787  rate  8.7288 Hz
+
+**The rate is an independent check on the whole path:** 11.5015 Hz from the file
+is what the MPC's own GUI displays for that program (11.51), and what the audio
+measures (11.46 by balance oscillation in 10 ms frames). Three routes, one
+number.
+
+**Prevalence: 12.3%, about one MPC program in eight.** Over 500 randomly
+sampled library XPMs, 478 carry `LfoPitch`: **419 flat, 59 nested**. So the
+nested layout is a minority but not a curiosity, and every one of those 59 lost
+its entire LFO section.
+
+**The first prevalence number I computed was 0%, and it was wrong.** The detector
+searched for a literal `<LFO>` open tag; the real markup is `<LFO LfoNum="0">`,
+so it matched nothing and reported the layout did not exist. **It was caught by
+self-checking the detector against a file already known to be nested** before
+trusting its corpus number — the same discipline that has been the difference
+between a finding and a confident error repeatedly this week. A detector that
+cannot find the one case you already have is not measuring prevalence.
