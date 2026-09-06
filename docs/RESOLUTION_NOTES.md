@@ -25279,6 +25279,34 @@ load on an S3000XL.
 
 `parsers/xpm_parser.py::_safe_name` strips after slicing. One line.
 
+### CONFIRMED ON HARDWARE, one load (`s3ked`, 2026-09-06)
+
+    samples resident            176      predicted 176   (MX8 loaded 171)
+    names containing ACID         5      ACID-000-036/048/060/072/084
+    names with a leading space    0
+    PC 4  key 36 / 60 / 84       SOUNDS across all five velocities
+    loudest -21.87 against floor -73.81 -- 52 dB clear   (MX8: -70.54)
+
+**The mechanism was confirmed directly, not inferred from the consequence:**
+the leading-space check was run as a separate test, so a pass could not be
+read out of the sample count alone.
+
+**It also settles a figure this side had withdrawn.** PC 4 reads −21.87 against
+its two identically-built neighbours at −22.02 and −24.68 — **an ordinary
+program that had been entirely absent, not a quiet one.** The "~18 dB quieter
+at source" that had been offered as an explanation was describing a program
+with no audio at all; there was never a quiet source to reconcile.
+
+### What made it findable
+
+Neither side could see it alone: **the file side saw a correct volume** —
+samples present, loud, correctly referenced, program byte-identical to one that
+sounds — and **the machine side saw a correct program with no sound.** The
+number that broke it open was a sample count (171 against 176) that neither
+side was looking at, and the step that made it decisive was noticing that
+resident names are TAILS, which invalidated a prefix search that had returned a
+confident zero.
+
 ### Two method lessons, both from the same afternoon
 
 **A name that has been truncated cannot be matched from the end that was
