@@ -2168,6 +2168,17 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
         # A 6 dB or 24 dB source is NOT moved -- switching it would trade a
         # measured slope match for pan, which is a fidelity decision rather than
         # a free one, and it is not taken here silently.
+        #
+        # **JAN'S DECISION, 2026-09-06:** "for now, let's go with algo 2 for
+        # programs that need a 2Pole LP with a panner". So the narrow rule is
+        # the agreed one and not an inference — recorded here so it is not
+        # re-litigated by whoever next reads the algorithm choice and wonders
+        # why it is conditional.
+        #
+        # KNOWN GAP: a 6 dB or 24 dB source with pan modulation loses it
+        # SILENTLY. That wants a `content_lost` diagnostic naming what was
+        # dropped, in the same class as the unrepresentable filter envelope of
+        # §AKAIENV2SUSTAIN. Not written yet.
         _pan_depth = (getattr(voice, 'lfo1_to_pan', 0.0) or 0.0)
         _want_pan = bool(_pan_depth) and algo == 5 and ftype_byte == _K2_FILTER_2P_LP
         if _want_pan:
