@@ -1813,14 +1813,34 @@ def _filter_env_depth_byte(cents: float) -> int:
 #: makes moving a 12 dB source there free rather than a trade, and is the basis
 #: of the pan write below.
 #:
-#: **AND THE F3 SLOT IS THE SECOND REASON A FOUR-POLE CANNOT TAKE A PANNER**
-#: (Jan, 2026-09-06). The four-pole lowpass has a controllable resonance on F2
-#: AND a separation page on **F3** -- which is exactly the block the panner
-#: occupies, since the manual places it "in the block before the final AMP".
-#: `_k2_filter_plan` already emits `_K2_F2_RES, _K2_F3_SEP` for it. So a 24 dB
-#: source is barred from carrying pan twice over: by the algorithm list, and by
-#: its own separation page holding the slot. That is an independent confirmation
-#: of the decision not to move those sources, rather than a restatement of it.
+#: **THE FOUR-POLE IS NOT ONE FILTER — IT IS TWO IN SERIES** (Jan pointed at the
+#: description, manual Ch.14). Read in full it says:
+#:
+#:   "This combines 2POLE LOWPASS and LOPAS2 in one three-stage function. The
+#:    parameters on the F1 FRQ page affect the cutoff frequencies of BOTH
+#:    filters. The parameters on the F2 RES page affect the resonance of
+#:    2POLE LOWPASS. The parameters on the F3 SEP page shift the cutoff
+#:    frequency of LOPAS2... If no separation is applied, there's a 24 dB per
+#:    octave rolloff above the cutoff frequency."
+#:
+#: So `4POLE LOPASS W/SEP` = `2POLE LOWPASS` (controllable resonance) followed by
+#: `LOPAS2` (fixed −6 dB), sharing one cutoff, with F3 sliding the second one
+#: apart. Three pages, three stages, one DSP function.
+#:
+#:     F1 FRQ   cutoff of BOTH halves
+#:     F2 RES   resonance of the 2POLE half only, −12 .. +24 dB
+#:     F3 SEP   offset of the LOPAS2 half, ±2 octaves (coarse ±10800 cents)
+#:              separation 0 -> a clean 24 dB/octave
+#:
+#: **THIS IS THE SECOND, INDEPENDENT REASON A 24 dB SOURCE CANNOT CARRY PAN.**
+#: The panner lives "in the block before the final AMP" — F3 — and on a four-pole
+#: F3 is already the separation page. So the slot is occupied by the filter
+#: itself, quite apart from algorithm 1 having no panner in its list. Two
+#: unrelated constraints agreeing is why the decision not to move 24 dB sources
+#: is a structural fact rather than a preference.
+#:
+#: It also means a 24 dB lowpass is **structurally impossible** in algorithm 2,
+#: which offers a single filter block: there is nowhere for the second half to go.
 #:
 #: **Transcribed by hand, deliberately.** Parsing the algorithm chart
 #: programmatically passed every positive check and still put a PANNER in
