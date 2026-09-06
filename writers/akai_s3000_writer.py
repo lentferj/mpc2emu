@@ -46,7 +46,8 @@ from models.common import (
     KEY_FILTER_OCT_PER_OCT,
     AKAI_FILTER_LAW, AKAI_FILTER_OPEN, AKAI_FILTER_OPEN_HZ, akai_filfrq_to_hz,
     AKAI_ENV2_ATTACK, AKAI_ENV2_DECAY, AKAI_ENV2_RELEASE,
-    AKAI_ENV2_DEPTH_OFFSET, AKAI_ENV2_DEPTH_MAX,Bank, LoopType, SampleData, safe_filename,
+    AKAI_ENV2_DEPTH_OFFSET, AKAI_ENV2_DEPTH_MAX, akai_lfo2_rate_byte,
+    Bank, LoopType, SampleData, safe_filename,
                            E4B_CUTOFF_MIN_HZ, E4B_CUTOFF_MAX_HZ, hz_to_e4b_cutoff)
 from parsers.akai_s3000_parser import (
     AKAI_KGMUTE_OFFSET, AKAI_KGMUTE_OFF,
@@ -1543,10 +1544,19 @@ def _mixdown(pcm: bytes, channels: int) -> bytes:
 #: destination — the one broken component**. What is actually dead is a single
 #: DESTINATION, not the oscillator and not its four controls.
 #:
-#: **For this writer:** `PANRAT` and `PANDEP` are real, working controls worth
-#: writing for matrix use; auto-pan itself still will not sound. So the byte we
-#: emit was right all along, and the sentence beside it was wrong in a way that
-#: would have stopped someone carrying LFO2 across for any destination.
+#: **For this writer:** `PANRAT` and `PANDEP` are real, working controls.
+#: **AUTO-PAN SOUNDS once `MODVPAN1` is non-zero** — the AMOUNT was the field
+#: that was missing, not the route (s3ked §181, retracting §52's "route to pan
+#: is dead"). Holding source, `PANDEP` and `PANRAT` identical and moving only the
+#: matrix amount took the balance swing from 0.47 dB to 29.75 dB, against
+#: `PANPOS` controls putting 60 dB through the same detector in the same run.
+#:
+#: **The 29.75 dB is a LOWER BOUND, not a calibration** (s3ked's own caveat):
+#: it was sampled in 50 ms frames against a 7.11 Hz LFO — 2.8 frames per cycle,
+#: above Nyquist but too coarse to catch the extremes. **Do not derive a
+#: depth→swing mapping from it.** The `* 50` below is a RANGE mapping from the
+#: model's ±1 onto the field's ±50, not a calibrated depth, and the true
+#: amount→swing law is unmeasured.
 #:
 #: Their note on how it happened, which is the durable part: three detectors in
 #: one topic could only ever return one answer — a rate that read exactly half
@@ -1843,7 +1853,8 @@ _PROGRAM_HW_DEFAULTS = {
 
 def _program_common(name: str, n_keygroups: int, lo_key: int, hi_key: int,
                     lfo1_rate=None, prog_num: int = 0,
-                    midi_channel=None, vel_to_volume_db=None) -> bytearray:
+                    midi_channel=None, vel_to_volume_db=None,
+                    lfo_to_pan=None, pan_lfo_rate=None) -> bytearray:
     """The 192-byte program common block, filled with the format's own
     documented defaults rather than zeros."""
     p = bytearray(PROGRAM_COMMON_LEN)
@@ -2009,6 +2020,33 @@ def _program_common(name: str, n_keygroups: int, lo_key: int, hi_key: int,
     # _PROGRAM_HW_DEFAULTS above for why these are not zero.
     for _off, (_val, _what) in _PROGRAM_HW_DEFAULTS.items():
         p[_off] = _val
+
+    # AFTER THE DEFAULTS LOOP, DELIBERATELY. `_PROGRAM_HW_DEFAULTS` carries
+    # `0x1d: PANRAT = 1` and runs last, so writing the rate before it is silently
+    # undone -- which is what happened on the first attempt: the amount at 0x59
+    # survived (not a default) and the rate did not, giving a program modulated
+    # at 0.24 Hz instead of 11.5. A partial write is worse than none here,
+    # because the pan would move just slowly enough to look like it works.
+    # PAN MODULATION: the AMOUNT, and LFO2's own rate (§PANMOD).
+    #
+    # `MODSPAN1` at 0x4c is already 8 (= LFO2) from _PROGRAM_HW_DEFAULTS, so the
+    # ROUTE has always been wired in everything we emit — with the amount at
+    # zero. That is the "wired and the volume down" shape that produced three
+    # separate false negatives on 2026-09-06, and here it was our own output.
+    #
+    # Range is +/-50, NOT +/-99: s3ked wrote 99 and the machine read back 50.
+    # At amount 50 they measured ~30 dB of balance swing against a PANPOS
+    # control spanning 60 dB, so full scale is about half the static range --
+    # consistent with bipolar modulation about centre.
+    #
+    # THE RATE IS LFO2's LAW, NOT LFO1's. `PANRAT` is 0.23708 Hz/unit, twice
+    # LFO1's, reaching 23.47 Hz at 99. Using LFO1's law here puts the sweep at
+    # half speed and looks plausible while doing it -- which is exactly the
+    # mistake made while writing this, caught against the note at :1536.
+    if lfo_to_pan:
+        p[0x59] = _clamp(int(round(lfo_to_pan * 50)), -50, 50) & 0xFF
+        if pan_lfo_rate:
+            p[0x1d] = akai_lfo2_rate_byte(pan_lfo_rate)
 
     # TPNUM ("temporary program number, internal use"). Left at zero until
     # 2026-08-10 because one sample could not distinguish a constant from a
@@ -2859,7 +2897,13 @@ def build_program(preset, name: str, prog_num: int = 0,
     # It would come back the day a per-keygroup velocity->loudness cord is
     # written (the mod matrix has the slots), because then the offsets differ
     # between keygroups and the difference is audible balance.
+    # Pan modulation from the first voice that states one -- same rule as the
+    # LFO rate above, because the AKAI's pan matrix is per PROGRAM.
+    _pan = next((getattr(v, 'lfo1_to_pan', 0.0) or getattr(v, 'lfo2_to_pan', 0.0)
+                 for v in preset.voices
+                 if (getattr(v, 'lfo1_to_pan', 0.0) or getattr(v, 'lfo2_to_pan', 0.0))), None)
     out = _program_common(name, len(keygroups), lo, hi, lfo1_rate=_lfo,
+                          lfo_to_pan=_pan, pan_lfo_rate=_lfo,
                           prog_num=prog_num, midi_channel=midi_channel,
                           vel_to_volume_db=_vvol)
     dead: list = []

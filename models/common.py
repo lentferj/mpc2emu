@@ -859,6 +859,17 @@ AKAI_MUTE_CUT_SECONDS = 0.058
 #: Calling it LFODLY sends a grep to the wrong place in their tree.
 AKAI_LFO_RATE_HZ_PER_UNIT = 0.11867
 AKAI_LFO_RATE_HZ_OFFSET = -0.04
+
+#: LFO2 (`PANRAT`) is a DIFFERENT law from LFO1 and using LFO1's here is a real
+#: mistake that was made on 2026-09-06: `rate = 0.23708 * PANRAT Hz`, measured
+#: over PANRAT 5..80 at r² 0.999843, **exactly twice LFO1's rate for the same
+#: byte** (ratio 1.998) and forced through the origin — so no offset term.
+#:
+#: Consequence worth stating because the wrong law is plausible: LFO1 tops out at
+#: 11.71 Hz where LFO2 reaches **23.47 Hz**, so a rate that looks marginal under
+#: LFO1's law is mid-range under LFO2's. An 11.5 Hz source pan LFO is `PANRAT`
+#: 49, not 97.
+AKAI_LFO2_RATE_HZ_PER_UNIT = 0.23708
 AKAI_LFO_DEPTH_CENTS_PP_PER_UNIT = 19.4932
 AKAI_LFO_DELAY_NUM = 0.06905
 AKAI_LFO_DELAY_POLE = 103.41
@@ -868,6 +879,17 @@ def akai_lfo_rate_hz(byte: int) -> float:
     """LFORAT -> Hz."""
     return max(0.0, AKAI_LFO_RATE_HZ_PER_UNIT * max(0, min(99, byte))
                + AKAI_LFO_RATE_HZ_OFFSET)
+
+
+def akai_lfo2_rate_byte(hz: float) -> int:
+    """Desired LFO2 rate in Hz -> the `PANRAT` byte. Inverts the measured law.
+
+    Distinct from `akai_lfo_rate_byte`, which is LFO1's: LFO2 runs at twice the
+    rate for the same byte and has no offset term. Reaches 23.47 Hz at byte 99.
+    """
+    if not hz or hz <= 0:
+        return 0
+    return max(0, min(99, int(round(hz / AKAI_LFO2_RATE_HZ_PER_UNIT))))
 
 
 #: The E4XT resonance parameter, MEASURED by eosed 2026-08-24 (§E4XTQCAL):
