@@ -25793,18 +25793,35 @@ to the voice volume **and** to every zone volume:
     e4b_writer.py:637   entry[15] = e4xt_volume_byte(_offset_level_db(zone.volume, level_offset_db))
     e4b_writer.py:955   vpar[54]  = e4xt_volume_byte(_offset_level_db(_vol,        level_offset_db))
 
-### Why it was believed harmless, and why that belief is now suspect
+### The zone bytes ARE live — an argument this side got wrong
 
-The comment at `:953` records a hardware test concluding *"the multi-zone case
-simply doesn't use these bytes"* — i.e. a multi-zone voice uses the zone bytes
-and `vpar[54]` is inert, so writing both is redundant but safe.
+This side first claimed `eosed`'s A→C comparison showed the zone bytes inert.
+**That was wrong: A→C removes the cord as well, so it measures the cancellation,
+not the zones.** The correct isolations from the same three points:
 
-**`eosed`'s test C contradicts that.** Setting every ZONE volume to 0 and the
-cord to 0 gave **−56.49 against a shipped −56.43 — 0.06 dB.** If the zone bytes
-were the attenuator, that should have moved ~32 dB. **It moved nothing, which
-says the zone bytes are inert and `vpar[54]` is live** — the reverse of the
-recorded conclusion. And `vpar[54]` is VOICE scope, which their id-39
-(SAMPLE_ZONE) manipulation never touched.
+    A -> B   zones removed, cord HELD    +29.45 dB    the zone bytes ARE live
+    B -> C   cord removed, zones held    -29.51 dB    the cord is live
+    A -> C   both removed                 -0.06 dB    they cancel
+
+So the comment at `:953` may well be right about the zone bytes. **What remains
+open is whether `vpar[54]` ALSO attenuates**, which no reading on either side
+has settled: it is VOICE scope and `eosed` can find no editor-protocol route to
+it (`SAMPLE_ZONE_SELECT` set past the last zone is a no-op).
+
+### What supports the hypothesis, and what does not
+
+**Does not:** a three-point model of the double-write fitting to 0.10 dB. An
+equally good fit exists with **no `vpar[54]` term at all** — the two differ only
+in an "intrinsic level" that nothing independently measures. `eosed` caught that
+in their own work before sending it, with the confirming conclusion already
+written.
+
+**Does:** the swap test. The organ sample played through the *pluck* preset —
+whose trim and cord provably cancel — lands **35 dB below** the same sample in
+the organ preset. If the only attenuations were the zone trim and the cord, and
+they cancel, that swap should have landed near the organ's level. It did not.
+*Caveat: the two presets play that sample at different pitches (350 Hz against
+132 Hz), so some of the 35 dB is transposition — not all of it.*
 
 ### The arithmetic, and the prediction
 
@@ -25824,8 +25841,31 @@ In `MXKR.KRZ`: **9 of 18 voices carry a trim, all of them multi-zone**, so all
 receive both copies. Trim range −29.23 to −32.25 dB. Any source whose velocity
 swing triggers the pivot trim is affected on the E4B path.
 
-### Caveat
+### The byte discrepancy, resolved — and it was the wrong subject again
 
-Offsets are read out of an emitted voice block and named from the writer's own
-indexing — **"offset 54 is vpar[54]" is inference, not a machine read.** If the
-voice-scope volume already reads 0 on the machine, the mapping is wrong.
+`eosed`'s machine read gave P000's volume byte as **−39**; this side's first
+diff showed **−43**. The diff had picked **v1** (base −32.25) because it was the
+first voice whose zones matched "12STR", and several do. P000 is **v11**:
+
+    v11   base -29.23   vpar[54] = 217 (signed -39)
+          the same -39 at zone offsets 299, 321, 365
+
+**Machine read and file diff agree once they are about the same preset**, and
+the double-write is real for the preset actually measured. **That is the
+wrong-subject error twice in one hour from this side** — first `A13` for a key
+it does not cover, then v1 for a preset nobody measured.
+
+### The decisive test, built
+
+    /home/lentferj/temp/matrix_v7/rows/MX9 KR-E4 NOV54/KRE4NOV54_01.E4B
+
+Emitted with the `:955` write removed and `:637` untouched:
+
+    shipped vs test: 1027938 bytes each, NINE bytes differ
+        213 (signed -43) -> 0   x6
+        217 (signed -39) -> 0   x3
+    zone volume in both banks: -29.55 dB   (verified unchanged after the build)
+
+**Only the voice-level copy is gone, on the nine trimmed voices.** Predict the
+trimmed presets return ~29 dB louder and keep their velocity ramp. **If they are
+unchanged, `vpar[54]` is inert and this section is dead.**
