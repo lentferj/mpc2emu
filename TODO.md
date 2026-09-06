@@ -4260,9 +4260,31 @@ confirm the mechanism rather than merely fitting it:
     Biting     0.1890  wheel 0.5  -> static 0.0945, triangle    measured -9
     Antimatter 0.5276  wheel 1.0  -> static 0                   measured 0
 
-**Open, one capture:** P008 at CC1=127 should pan. That also tests the
-ModWheel->cord-amount gate, which has never been checked on hardware. If it does
-NOT pan with the wheel up, the gate cord is broken.
+**CONFIRMED 2026-09-06 23:55.** P008 pans with the wheel up, and the
+ModWheel->cord-amount gate is now hardware-tested for the first time:
+
+    CC1     level    R-L median   swing     dom Hz
+      0    -33.98        0.42      0.02      31.30
+     64    -33.92        0.87     39.67       6.92
+    127    -33.67       -1.17    131.70       6.61
+
+Stationary at the interface trim with the wheel down; sweeping at ~6.6-6.9 Hz
+with it up. The zero-amount cord is faithful and the gate works.
+
+**BUT THOSE SWING FIGURES ARE FLOOR-LIMITED, NOT DEPTHS** (eosed). At both wheel
+positions the pan reaches an extreme where one channel drops into the noise
+floor — 120/285 frames below -80 dBFS at CC1 64, 168/285 at 127 — so the number
+is bounded by the floor, not by the modulation. **39.67 -> 131.70 must NOT be
+read as "depth doubled with the wheel"**; it mostly reflects how many frames sit
+at the extremes and how deep into the floor they go. What is solid is the
+ordering: 0.02 dB at wheel 0, full-scale panning at 64 and 127.
+
+**RIG CEILING, applies to every pan number in the matrix:** on this chain, with a
+-33 dB signal and a -89 dB floor, **any swing much past ~60 dB is the noise floor
+talking rather than the pan.** A real depth metric has to exclude frames where
+either channel is at the floor — a different measurement, to be defined
+deliberately rather than derived from these captures. Same caveat class as
+P001's ~100 dB over 8-19 surviving frames.
 
 **A THIRD FAILURE CATEGORY, and a warning about our own diagnostic (eosed).**
 The K2000 work offered two branches for a stationary image — modulation not
