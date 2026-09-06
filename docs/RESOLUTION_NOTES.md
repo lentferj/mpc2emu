@@ -25766,6 +25766,52 @@ of measurements behind them, and mark anything resting on one capture as such.
 
 ## §E4BDOUBLETRIM — the velocity-pivot trim is written TWICE (CONFIRMED, FIXED)
 
+**CONFIRMED IN THE SHIPPING PATH 2026-09-06 18:00 (eosed, S3-E4 pre/post, one
+session, both discs resident).** The fix does what it should and overshoots
+nowhere.
+
+    preset  trim   predicted   largest observed   keys risen
+    P000    -16      12.34          1.64            1/5     <- unexplained
+    P001    -20      15.44         14.90            3/5
+    P002    -29      22.46          0.02            0/5     <- voice is out of grid range
+    P003    none      0.00          0.06            0/5     <- byte-identical control
+    P004    -16      12.34         12.20            5/5
+    P005    -20      15.44         14.84            4/5
+
+**Both directions of the falsifier pass.** The most negative change anywhere is
+−0.05 dB across all 30 cells, so nothing lost a trim it needed; and P003, which
+is byte-identical between the builds, moved 0.06 dB. Velocity swing is preserved
+within 0.12 dB on five presets.
+
+**"30 voices unchanged" was the wrong count — only SIX voices change.** The rest
+are single-zone and keep their trim by design. Of the six, one (P002 v10, keys
+88-127) is not reachable by a grid that stops at key 84, which is why that preset
+reads 0.02 dB. That is the grid's range, not the fix's effect.
+
+**P000 is open.** Its changed voice spans all five grid keys with the same
+−16 → 0 as P004, and P004 delivered 12.20 dB across all five while P000 gave
+1.64 dB at one. Same structure, different outcome; not explained.
+
+**A predicted magnitude was withdrawn here too.** "~29 dB" was recorded as the
+expected rise; that is KR-E4's trim size borrowed onto a row whose trims are
+−16, −20 and −29. Structure right, number imported from the wrong row.
+
+**A falsifier recorded here was also wrong.** "A static per-voice offset cannot
+change a preset's key-response shape" holds only when the voice spans the whole
+measured range. Most of these do not — P001's changed voices start at key 51,
+P005's at 45 — so the shape legitimately moves. The fix is not impugned; the
+test was.
+
+**CROSS-SESSION STABILITY IS NOW A NUMBER, NOT A CAUTION (§G0).** MATRIX6
+measured this morning against MATRIX6 measured tonight, same 30 cells, across a
+card removal, two re-seats, a bank reload and eight hours:
+
+    mean -0.009 dB   sd 0.034   max |diff| 0.12 dB   cells over 1 dB: 0
+
+This retroactively licenses cross-session comparison on this bench rather than
+undermining it, and it means a pre/post does not strictly require both discs
+resident — though having them resident is still cheaper than arguing about it.
+
 **Found 2026-09-06 by byte-diffing two voice blocks, after every named field on
 both sides had been excluded. Awaiting one hardware test.**
 
