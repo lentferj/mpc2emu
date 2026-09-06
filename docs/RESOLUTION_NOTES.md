@@ -27529,7 +27529,51 @@ where balance is signed, the rate is LFO1's. Compare §AKAISUSTSAT's centroid
 warning: same family, a detector that moves plausibly and measures something
 other than what its name says.
 
-### Do NOT refit yet
+### MEASURED 2026-09-06 23:45 — the constant is 0.11913
+
+The sweep landed and the law is quotable:
+
+    PANRAT   freq Hz   frames   resol   floor%   swing dB
+        10     1.209     1498    0.07      0%     102.59
+        20     2.378     1497    0.07      0%     102.06
+        30     3.544     1498    0.07      0%      48.34
+        40     4.762     1496    0.07      0%      30.22
+        50     5.950     1497    0.07      0%      23.17
+        60     7.147     1497    0.07      0%      19.33
+        75     8.940     1496    0.07      0%      15.35
+        90    10.741     1493    0.07      0%      13.16
+        99    11.785     1495    0.07      0%      11.96
+    NEG x3   0.66 / 1.11 dB -- no modulation
+    restore byte-identical: True
+
+    through origin   rate = 0.11913 * PANRAT
+    with intercept   rate = 0.11921 * PANRAT - 0.0055 Hz    r2 0.999984
+
+**The intercept worry is excluded rather than assumed away:** -0.0055 Hz, so the
+law passes through the origin and the old factor of two was not an artefact of a
+wrong intercept. Ratios: 1.990 against the refuted 0.23708, **1.004 against
+LFO1's own 0.11867**. LFO2 runs at LFO1's rate.
+
+`AKAI_LFO2_RATE_HZ_PER_UNIT = 0.11913` is now applied, with the provenance in the
+constant's own comment rather than as a bare number — given what happened to the
+last one. **Ceiling: 99 x 0.11913 = 11.79 Hz.** An 11.46 Hz source is still
+representable at byte 96, with far less headroom than either party assumed.
+
+**s3ked flagged an inconsistency in their own output and it should not be papered
+over:** the swing column reports 102 dB at low rates while floor occupancy reports
+0%, and those cannot both be true — a 102 dB balance ratio needs one channel far
+below the floor, which the occupancy check says never happened. **So no depth
+should be quoted from this run either.** The RATE is unaffected: frequency does
+not depend on amplitude calibration, the resolution is 0.07 Hz, and the negative
+controls sat at 0.66/1.11 dB. This is now the third independent reason
+(§AKAILFO2RATE's floor limit, eosed's, and this) that **a real depth metric has
+to be built deliberately rather than derived from captures taken for another
+purpose.**
+
+Also recorded: `LFO2TRIG` is 0 on the swept program — the LFO free-runs rather
+than locking to note-on, which is why 15 s captures give clean periodicity.
+
+### Superseded: why it was not refitted immediately
 
 150 usable frames at 0.67 Hz resolution. **The factor of two is unambiguous; the
 constant is not.** §52's value has failed once already; a replacement resting on
@@ -27602,12 +27646,55 @@ Not scepticism — a **second, independent** route to the same fact:
   believing a zero. Three separate nulls this evening measured nothing rather
   than measuring zero (KRZ algorithm attr, E4B `lfo1_to_pan` twice)
 
-### The rule
+### The rule — two forms, and the weak one is not enough
 
-**A null is not evidence until the detector has been shown to be able to produce
-a non-null.** Every one of tonight's traps passes a positive check and fails
-only a negative one — which is also how the algorithm-chart auto-parse was
-caught earlier in the week, and why §K2PANWIRES needed the `Pad` probe pushed
-*upward* (the range floors at 0, so pressing down proved nothing).
+The first form written here was:
+
+> A null is not evidence until the detector has been shown able to produce a
+> non-null.
+
+**That is the weak form, and k2kremote showed it does not cover their own case.**
+The refused codes were never nulls: every one returned a real function name,
+promptly, from a live device, different from the previous reading, and causally
+downstream of the exact key pressed. A liveness check passes trivially — the
+detector was emitting non-nulls all night, one per second, and every one was
+wrong.
+
+**The strong form, which swallows all five species (k2kremote's wording):**
+
+> **A measurement is not evidence until the apparatus has been shown able to
+> produce a reading that CONTRADICTS the one you got.**
+
+Liveness is the weak version of that; **distinguishability** is the strong one.
+Put practically: *ask what reading would have appeared if your hypothesis were
+false, then check the apparatus can produce it. If it cannot, you have built an
+instrument that only says yes.*
+
+**Both are worth keeping.** The weak form is operationally cheaper and catches
+the commonest case — a dead detector, which is four of the five rows above. The
+strong form catches a live detector answering a different question, and on
+tonight's evidence that is the one that actually cost hours: the June byte-40
+mislabel, the fallback generalisation, and a panner correctly wired into two
+wires that summed.
+
+Seen in that light, the successful probes tonight were all contradiction tests,
+not liveness tests:
+
+- **`Pad` pushed UPWARD** (§K2PANWIRES) did not merely show the level could move;
+  it showed it could move in a way incompatible with "the block is out of
+  circuit". Pressing it down against a floor of 0 was a liveness test and proved
+  nothing.
+- **The stored byte** read alongside the panel is a second channel that CAN
+  disagree with the first — and did, on the very first block.
+- **s3ked's absent fundamental**: the predicted 8.77 Hz sitting 40.7 dB below the
+  observed peak (§AKAILFO2RATE) is a reading the apparatus could have produced
+  and did not.
+- **eosed's negative control** at 0.28 dB against a positive at 77 dB.
+
+**Provenance note, for accuracy.** The refusals were not caught by reasoning
+about them: they surfaced because this project insisted on *measured pairs*
+rather than reconciling a 60-versus-61 discrepancy by argument, and the byte
+column then disagreed with the panel immediately. Had the inference been allowed,
+the table would have shipped wrong and self-consistent.
 
 Related: [[feedback-check-the-check]], [[feedback-symptom-not-diagnosis]].
