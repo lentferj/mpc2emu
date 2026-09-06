@@ -2329,6 +2329,73 @@ def _coverage_remap_voices(voices, samples_by_name):
             lk2, hk2, _, _ = rs[j]
             if not (lk1 <= hk2 and lk2 <= hk1):
                 return voices, False          # not a full stack — leave alone
+    # DO NOT MERGE ACROSS VOICES WHEN EACH VOICE IS ALREADY ITS OWN LADDER.
+    #
+    # This function was written for octave-slice stacks, where each VOICE is one
+    # slice (a single root stretched across the keyboard) and the slices must be
+    # gathered across voices to rebuild a multisample. Gathering by root over
+    # every voice is correct there.
+    #
+    # It is wrong once a preset's voices carry different ROLES. After the XPM
+    # sparse-layer fix (§XPMLANEMIX) a bass preset arrives as v0 = ten noise
+    # zones, v1 = ten pitched zones. Merging by root pulled the noise back into
+    # the pitched ladder and assigned it a slot -- so the fix that separated
+    # them in the parser was undone here, and hardware still played a noise
+    # sample inside a bass multisample (§KRZWRONGSAMPLE, measured +72.75 dB at
+    # k84 and a wrong sample at keys 70-74 on the SAME build that fixed the
+    # parser).
+    #
+    # The discriminator is whether a voice is a ladder in its own right: an
+    # octave-slice voice has ONE root, a multisample voice has many. So remap
+    # per voice when every voice spans its own >= 2 octaves, and only gather
+    # across voices when the voices are single-slice.
+    def _roots_of(vs):
+        out = {}
+        for v in vs:
+            for z in v.zones:
+                s = samples_by_name.get(z.sample_name)
+                if s is None:
+                    return None
+                r = z.root_key if z.root_key else s.root_note
+                out.setdefault(r, []).append(
+                    (_compute_playback_ceiling(s.sample_rate, r) // 100, z))
+        return out
+
+    _per_voice = [_roots_of([v]) for v in voices]
+    # ANY voice that is a ladder in its own right, not ALL of them. The first
+    # version required all, and a preset with v0/v1 as ten-zone ladders plus a
+    # v2 holding ONE catch-all zone failed the test on v2 and fell through to
+    # the cross-voice merge -- which is the exact preset this is for.
+    # A single-zone voice is not evidence of an octave-slice stack; it is just a
+    # voice with one zone, and it should be left alone rather than veto the
+    # per-voice path.
+    _is_ladder = [rv is not None and len(rv) >= 3 and (max(rv) - min(rv)) >= 24
+                  for rv in _per_voice]
+    if any(_is_ladder) and all(rv is not None for rv in _per_voice):
+        out_voices, applied = [], False
+        for v, rv, lad in zip(voices, _per_voice, _is_ladder):
+            if lad and any(
+                    z.hi_key > rv[(z.root_key if z.root_key
+                                   else samples_by_name[z.sample_name].root_note)][0][0] + 3
+                    for z in v.zones):
+                nv = copy.copy(v)
+                nv.zones = []
+                lo = 0
+                for r in sorted(rv):
+                    if lo > NUM_KEYS - 1:
+                        break
+                    ceil, z = rv[r][0]
+                    zz = copy.copy(z)
+                    zz.lo_key = lo
+                    zz.hi_key = min(NUM_KEYS - 1, max(lo, ceil))
+                    nv.zones.append(zz)
+                    lo = ceil + 1
+                out_voices.append(nv)
+                applied = True
+            else:
+                out_voices.append(v)
+        return (out_voices, True) if applied else (voices, False)
+
     by_root: dict = {}
     overflow = False
     for v in voices:
