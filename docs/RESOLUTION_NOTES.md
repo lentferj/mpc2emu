@@ -274,6 +274,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAILEADSPACE — a sample whose name begins with a space will not load](#akaileadspace-a-sample-whose-name-begins-with-a-space-will-not-load)
 - [§STALEBUILD — rebuilding into the same directory leaves the old files](#stalebuild-rebuilding-into-the-same-directory-leaves-the-old-files)
 - [§E4BNULL — the E4XT half of MX9 is a confirmed null, and the near-miss inside it](#e4bnull-the-e4xt-half-of-mx9-is-a-confirmed-null-and-the-near-miss-inside-it)
+- [§KR2E4LEVEL — the KRZ→E4B row is ~20 dB down, and it is the velocity-pivot trim](#kr2e4level-the-krze4b-row-is-20-db-down-and-it-is-the-velocity-pivot-trim)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -25444,3 +25445,65 @@ and one such boundary cost a withdrawn "+15 dB converter regression".
 CATEGORICAL results (a key going from absent to present) and distrust small
 level deltas. A categorical change survives a gain-generation boundary; a 1 dB
 difference does not.
+
+
+---
+
+## §KR2E4LEVEL — the KRZ→E4B row is ~20 dB down, and it is the velocity-pivot trim
+
+**Found 2026-09-06 while the E4XT column of the 3×3 was running.** `eosed`
+flagged it 12 captures in: `MX9 KR-E4` tops out at **−53 to −58 dBFS at v127**
+where the MPC row's presets reach −35 to −50, leaving the low-velocity end
+buried in the floor (2/9 to 8/9 cells clearing, against 9/9 on the MPC row).
+The swing itself is healthy at ~25-27 dB — it is the LEVEL that is low.
+
+### It is not the source, and that was settled from the files
+
+Ten samples compared, KRZ source against the E4B we wrote:
+
+    mean level change through the conversion: -0.02 dB, peaks still 0 dBFS
+
+**The PCM is level-faithful.** The attenuation is entirely in the parameters:
+source zones carry `volume 0.0 dB`, our output carries
+
+    Oct.Prot. 12Str.   -29.55      Fat Prot. B3 Org   +0.00
+    Proteus 12String   -32.54      Oct.Prot. B3 Org   +0.00
+    Prot. 12Str. Lyr   -29.55
+
+**Note it is PER PRESET, not uniform.** That is the shape that identifies the
+cause.
+
+### Cause
+
+`e4b_writer.py:1487`, the velocity-pivot trim. The E4XT's `Vel+` cord only ADDS
+with velocity, so to reproduce a source swing the writer drops the base level by
+roughly the swing and relies on the cord to restore it at v127. The 12-string
+presets need ~30 dB of swing and receive a ~30 dB base cut; the organ presets
+need little and receive none.
+
+**So the design is deliberate. What is in question is whether the cord actually
+gets the level back at the top** — and `eosed`'s v127 numbers say it does not.
+
+### This is the missing hardware symptom for §E4XTCORDSAT
+
+`e4xt_cord_saturates()` being unreachable for velocity cords has been open with
+no measured consequence attached to it. **A base lowered by 30 dB that the cord
+does not restore is exactly that consequence**, and it would explain the whole
+row sitting 20 dB down while its swing measures correctly.
+
+### The discriminator, runnable on captures already taken
+
+**The floored presets should be exactly the ones carrying a large base offset**,
+and the two organ presets at +0.00 dB should sit at normal level. **If instead
+every preset in the bank is uniformly quiet, this explanation is wrong** and
+something else attenuates the whole bank.
+
+### Why the measurement was not "rescued"
+
+`eosed` could have lifted every preset with `E4_PRESET_VOLUME` — §83's addendum
+establishes a static offset does not change a swing — and recovered the floored
+cells. They declined, because the matrix wants ABSOLUTE per-program numbers and
+a preset-volume offset changes exactly those. **It turned out to matter more
+than that: a uniform lift would have hidden the per-preset pattern, which is the
+evidence that distinguishes "quiet bank" from "the trim is not restored".**
+Rescuing the measurement would have destroyed the finding.

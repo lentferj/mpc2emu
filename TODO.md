@@ -4177,3 +4177,20 @@ run).
 The ALSA seq table is the shared resource with a body count here — not JACK
 client concurrency. JACK's own recorded failure is *client churn* wedging a
 Berkeley DB mutex region in `/dev/shm` that survives a jackd restart.
+
+## KRZ→E4B output sits ~20 dB low; the velocity-pivot trim is not restored
+
+**Status:** open. Cause identified from the files, hardware discriminator
+pending.
+**Blocked on:** `eosed` confirming the per-preset split — floored presets should
+be exactly those with a large base offset, organ presets at +0.00 dB should be
+normal level.
+
+The PCM is level-faithful (−0.02 dB mean). The attenuation is a per-preset base
+cut of up to −32.5 dB applied by the velocity-pivot trim, which expects the
+`Vel+` cord to restore it at v127. Measured v127 tops out 20 dB low, so it does
+not appear to be restored.
+
+**Likely the missing hardware symptom for §E4XTCORDSAT.**
+
+See `docs/RESOLUTION_NOTES.md` §KR2E4LEVEL.
