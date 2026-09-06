@@ -288,6 +288,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§E4XTVOLSLOPE — the volume law's linear term looks ~2.5% high (four points, NOT a refit)](#e4xtvolslope-the-volume-laws-linear-term-looks-25-high-four-points-not-a-refit)
 - [§NYQUISTNULL — an under-sampled envelope and a dead destination give the same null](#nyquistnull-an-under-sampled-envelope-and-a-dead-destination-give-the-same-null)
 - [§XPMLFONEST — two XPM layouts, and we only read one of them](#xpmlfonest-two-xpm-layouts-and-we-only-read-one-of-them)
+- [§WINDOWONSET — a 5 ms anchor shift can cost 1.8 dB at the start of a note](#windowonset-a-5-ms-anchor-shift-can-cost-18-db-at-the-start-of-a-note)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -26957,11 +26958,23 @@ unrepresentable envelope — not a silent best-effort.
 Measuring the double-trim fix pre/post gives, for each preset, the rise produced
 by removing one trim of a known byte value. Against `_E4XT_VOL_C1 = 0.76732`:
 
-    byte   predicted   observed   delta    implied linear coeff
-    -16      12.34      12.20     -0.14         0.7586
+    byte   predicted   observed   delta    implied linear coeff   row
+    -16      12.34      12.20     -0.14         0.7586             S3 P004
+    -16      12.34      12.00     -0.34         0.7461             S1, six presets
     -20      15.44      14.87     -0.57         0.7386
     -39      30.30      29.59     -0.71         0.7491
     -43      33.45      32.60     -0.85         0.7476
+
+**THE REPLICATION IS THE USEFUL PART, not the fifth point.** Byte −16 measured
+twice on different source material gives 12.20 and 12.00 — **0.20 dB apart and
+both below the law**. So there is material-dependent scatter of roughly ±1.3%
+sitting on top of a systematic of about −2.5% in the linear term, and the two are
+now separable where four points could not separate them. Five measurements, same
+sign every time, two of them independent at one byte value.
+
+**That is enough to justify a re-derivation on calibration material** — and still
+not enough for anyone to apply 0.748 as a correction, which would be taking a
+number from a by-product rather than from an experiment.
 
 **Same sign at every value and the delta grows with the byte**, so it is a slope
 error rather than a constant offset. Backing out the linear coefficient with the
@@ -27100,3 +27113,38 @@ self-checking the detector against a file already known to be nested** before
 trusting its corpus number — the same discipline that has been the difference
 between a finding and a confident error repeatedly this week. A detector that
 cannot find the one case you already have is not measuring prevalence.
+
+## §WINDOWONSET — a 5 ms anchor shift can cost 1.8 dB at the start of a note
+
+**Status: measured, and the cross-session bound is restored by removing the
+window trim.**
+
+A cross-session comparison showed one cell of thirty differing by **2.50 dB**
+while the other 29 agreed to 0.07. The first hypothesis was per-note randomness —
+round robin or a crossfade-random parameter. **A repeat-trigger test refuted it:
+ten identical notes in one capture gave a full-window level constant to 0.01 dB.**
+The instrument is deterministic; the measurement was not.
+
+    the same note, two sessions
+                      0-0.02 s              0.02-1.15 s     0-1.20 s
+        morning   rms -84.80  peak    8       -44.69          -44.95
+        tonight   rms -31.78  peak 2412       -47.19          -45.37
+
+**In one capture the attack falls inside the first 20 ms and in the other just
+after it.** A 5 ms difference in anchor walked a slap-bass transient across the
+opening edge of the analysis window. That transient carries most of the note —
+peak 2413 against 820 for the body — so excluding it costs 1.8 dB.
+
+Dropping the lead-in trim: **max |diff| 2.50 → 0.42 dB, sd 0.450 → 0.076, cells
+over 1 dB 1 → 0.** The cross-session bound then holds on all three banks with
+nothing over 1 dB.
+
+**This is §95 at the other end of the note.** There, a window edge inside a
+percussive DECAY manufactured 31 dB out of ±50 ms of anchor jitter. Here, a
+window edge at the ONSET costs 1.8 dB out of 5 ms. **The lead-in trim exists to
+skip the note-on edge, and on percussive material the first 20 ms IS the sound.**
+
+**What survives a window-edge error and what does not:** a two-arm comparison
+survives it, because the same trim applies to both arms — the trim result moved
+only 12.06 → 12.00. A reproducibility bound does not, because the two sessions
+differ in exactly the quantity the trim is sensitive to.
