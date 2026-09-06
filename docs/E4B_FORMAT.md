@@ -406,7 +406,35 @@ matrix 2026-06-10):
 | `0x68` / `0x69` | LFO2 ~ / + | | `0x39` | **Filter-Q (resonance)** |
 | `0x50` | Filter Envelope | | `0x4A` | **Vol-Env Decay (VEnvDcy)** |
 | `0x0A` / `0x0B` / `0x0C` | **Vel+ / Vel~ / Vel<** — see note below | | `0x40` | **AmpVol** (amplitude) |
-| `0x08` | Key (note)      | | `0x30` | Pitch |
+| `0x08` | Key (note)      | | `0x41` | **AmpPan** — hardware-confirmed, see below |
+| `0x60` (`Lfo1~` = 96 dec) | LFO1 bipolar | | `0x42` | AmpXfd (from the SysEx spec, not measured) |
+
+> **`0x41` = Amp Pan, MEASURED not transcribed** (eosed, 2026-09-06). The id was
+> already in the SysEx spec transcription between `AmpVol` (64) and `AmpXfd`
+> (66); transcription is not measurement, so it was driven on hardware with
+> `AmpVol` as a positive control:
+>
+> ```
+>   baseline                 L -32.46  R -32.04   R-L  +0.42
+>   CONTROL DC -> AmpVol +100  L -19.11  R -18.70   R-L  +0.42   level +13.35, balance flat
+>   CONTROL DC -> AmpVol -100  L -85.65  R -86.40   R-L  -0.75   level -53.2,  balance flat
+>   TEST    DC -> 0x41  +100  L -85.30  R -24.81   R-L +60.49   HARD RIGHT
+>   TEST    DC -> 0x41  -100  L -24.85  R -86.48   R-L -61.63   HARD LEFT
+> ```
+>
+> 122 dB of balance swing with level roughly preserved, against a control that
+> moves level 66 dB and leaves balance at +0.42 throughout. **The E4XT therefore
+> supports DYNAMIC panning**: `Lfo1~` (96) into `0x41` at amount 100 sweeps the
+> balance −56.7 → +57.5 dB, 22 sign changes over a 4-second note ≈ 3.06 Hz.
+>
+> **Two wrong-subject traps were hit and caught by that control**, both invisible
+> in readback — every parameter read back exactly as written: `PRESET_SELECT`
+> (223) chooses the preset for EDITING and does not change what the MIDI channel
+> plays, so the edits landed on a preset that was not sounding; and voice 0 is
+> not the voice that sounds at key 60 (voice 2 was, found by moving the control
+> cord voice by voice). Without a positive control on a destination already known
+> to work, the run would have reported "`0x41` does nothing" — the inverse of the
+> truth.
 
 > **The velocity SOURCE is a triad, not one id, and the difference is the
 > PIVOT** (eosed, 2026-09-01). `0x0A` `Vel+` is unipolar and anchored at
