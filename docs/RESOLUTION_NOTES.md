@@ -25377,8 +25377,42 @@ observable beside the first fails only if you delete it.
 **So: emit several windows even when one of them is "the" measurement.** That
 choice has now paid twice.
 
-### Still unexplained
+### Drum key 42 — RESOLVED, and it is not a defect
 
-**Drum key 42 shows a genuine delay for the third build running**, reproducible
-across MATRIX4/5/6. Nothing in the ceiling, headroom, sparse-layer or
-leading-space fixes predicts or accounts for it.
+Reproducible across MATRIX4/5/6, and `eosed` settled it in three minutes on an
+already-loaded machine. **The sample is a trap riser.**
+
+Voice parameters excluded first: key 42 shares voice 0 with eight keys that are
+NOT delayed, and that voice carries `E4_VOICE_DELAY` 0 ms, `START_OFFSET` 0 and
+an instant amp envelope — so no voice parameter can single it out. Its zone is
+the only SFX sample in the voice.
+
+Then measured, 6 s note, 50 ms bins, against two kicks in the same voice through
+the identical path:
+
+    key 42 (SFX)   -69 -69 -57 -55 -54 -49 -55 -48 -48 -48 -39 …  peak -33.3 @ 2.48 s
+    key 40 (kick)  -35 -52 -85 -84 -85 -84 -85 -77 -81 -85 -86 …  peak -32.6 @ 0.08 s
+    key 44 (kick)  -36 -36 -37 -38 -38 -38 -39 -40 -81 -84 -84 …  peak -35.7 @ 0.03 s
+
+**It is not silence-then-hit.** It is audible in the first 30 ms bin at −69 dB
+and climbs continuously for two and a half seconds. There is no leading silence
+to trim and nothing wrong at source: the energy arrives late because the sound
+arrives late.
+
+**So the `REALLY DELAYED` verdict was right for the right reason** — the
+discriminator (attack-minus-early below −6 dB means the sound is rising rather
+than the fit being wrong) did its job on the single instance out of thirty-three
+corrected anchors where the answer was "the material".
+
+### A regression pair must share a gain generation
+
+`eosed`'s caveat, and it is the one that actually bites: **capture the BEFORE
+immediately before the change, in the same session — never from an archive.**
+`CAPTURES.md` tracks three E4XT gain generations precisely because a bench
+change between two captures silently voids every level comparison across it,
+and one such boundary cost a withdrawn "+15 dB converter regression".
+
+**Corollary for cross-session comparisons that cannot be avoided:** trust
+CATEGORICAL results (a key going from absent to present) and distrust small
+level deltas. A categorical change survives a gain-generation boundary; a 1 dB
+difference does not.
