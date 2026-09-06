@@ -4238,6 +4238,46 @@ is rewritten there is no route back to the pre-fix state.
 
 See `docs/RESOLUTION_NOTES.md` §E4BDOUBLETRIM.
 
+## The E4B reader never reads AmpPan cords back, so E4B-sourced pan modulation is lost silently
+
+**Status: OPEN, found 2026-09-06 while auditing.** `parsers/e4b_parser.py`
+contains **zero** references to `lfo1_to_pan` / `lfo2_to_pan`. The writer emits
+LFO->AmpPan cords at destination `0x41` (hardware-confirmed, 122 dB of swing),
+but nothing reads them back.
+
+Consequences, in order of reach:
+
+- **An E4B source with pan modulation converts to anything else with the pan
+  modulation dropped**, silently. Same class as the KRZ reader gap, opposite
+  direction.
+- **A round-trip test cannot see it.** E4B -> model -> E4B preserves the cords
+  only because the writer re-derives them from a model field the reader never
+  filled — i.e. it preserves them by writing zero.
+- **It defeats verification of our own output.** Checking a built bank for
+  "does it carry pan?" by parsing it returns 0 whatever the file holds. This
+  bit the author of this note tonight: a headroom audit over the shipped
+  MPC->E4B row reported "0 voices with a pan LFO" and the correct reading was
+  "the reader does not populate the field". A third instance in one evening of
+  a null that measured nothing — see [[feedback-check-the-check]].
+
+**Fix:** read the mod-cord table for destination `0x41` and populate
+`lfo1_to_pan` / `lfo2_to_pan`, inverting the writer's `_lfo1_sign` /
+`_lfo2_sign` triangle negation. Mirror of the existing filter-cord reader.
+
+## Pan-modulation headroom against a hard base pan — AUDITED, currently clear
+
+**Status: NO DEFECT FOUND, recorded so it is not re-audited blind.** A pan LFO
+sweeping from a base pan already near a rail is clipped on one side: an analogue
+of the K2000 wire problem, where the modulation exists and cannot be heard.
+Checked over the 11 matrix sources: **4 voices carry a pan LFO and all 4 sit at
+base pan 0.000 with full headroom** (depths 0.528, 0.189, 0.724, 0.724). So
+nothing is clipped today.
+
+Worth a guard anyway, because the combination is legal and our own KRZ reader
+was until recently producing hard-panned zones (§KRZPANNIBBLE) — a hard-panned
+source plus a pan LFO is exactly the input that would have hit this. s3ked
+confirmed the AKAI side independently: `PANPOS` is 0 on all three pan programs.
+
 ## AKAI: `AKAI_LFO2_RATE_HZ_PER_UNIT` is a factor of two too large — every pan program runs at half rate
 
 **Status: REFUTED BY MEASUREMENT 2026-09-06 (s3ked, §AKAILFO2RATE). Do NOT refit
