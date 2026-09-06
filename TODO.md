@@ -4149,3 +4149,31 @@ question and Jan's call — a limit that silently discards three quarters of a
 file is a poor default even when it is documented.
 
 See `docs/RESOLUTION_NOTES.md` §DIAGIFACE.
+
+## Five RE scripts open a MIDI client per capture and survive only on refcounting
+
+**Status:** open, not urgent — measured NOT leaking today.
+**Blocked on:** nothing; it is a small edit to five files.
+
+`krz_audio_measure.py`, `verify_pitch.py`, `pitch_sweep.py`, `verify_programs.py`
+and `krz_sysex_live.py` all call a `_midi_out()` helper that constructs
+`rtmidi.MidiOut()` **inside a per-capture function**. That is the pattern that
+took the ALSA sequencer client table from 22 to 51 in `cap_full.py`, killing one
+run two captures short and blocking another session entirely — with an error
+(`no K2000 answered on any of 38 output ports`) that reads exactly like a dead
+instrument.
+
+**Measured 2026-09-06: seq clients stayed at 30 across 305+ notes**, so the
+ports are being released — CPython destroys the object at function exit and
+rtmidi closes the port. **It works because of prompt refcount collection, not
+because anything closes it.** One retained reference anywhere and it is
+yesterday's failure again.
+
+Fix is the one already applied to `hw_measure.py`: cache the client and release
+it at exit — **one client per RUN, not per capture** (k2kremote's rule, and the
+right one: serialising sessions does not protect against a leak inside a single
+run).
+
+The ALSA seq table is the shared resource with a body count here — not JACK
+client concurrency. JACK's own recorded failure is *client churn* wedging a
+Berkeley DB mutex region in `/dev/shm` that survives a jackd restart.
