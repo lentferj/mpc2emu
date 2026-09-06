@@ -4252,9 +4252,12 @@ corner of 23.2 Hz, so the K2000 plays them open for the whole note and we write
 them shut. 52 of 97 keygroups get DEPTH 0.
 
 Candidate cause of the §178 KR→AK darkness (s3ked measured −17.29 dB across
-k36→k84). **Separating check, no hardware needed:** if the darkness splits
-cleanly between the six sustain-0 programs and the six sustain-0.61 ones, this
-is the mechanism.
+k36→k84). **The obvious check does not work:** the six sustain-0 programs are
+exactly the six string/pad programs and the six sustain-0.61 ones are exactly
+the six organs, so splitting by depth is the same as splitting by instrument.
+That can falsify the hypothesis but cannot support it. The isolating test is to
+write a non-zero depth to one DEPTH-0 program in RAM and re-measure the same
+program — s3ked has this staged and it needs no card crossing.
 
 Not the corner floor — that is reached correctly on every path that has a
 velocity sweep, and KRZ has none. See `docs/RESOLUTION_NOTES.md`

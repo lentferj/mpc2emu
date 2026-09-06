@@ -26046,6 +26046,27 @@ whatever its sustain. Something like `if not cents or (sustn2 <= 0 and decay
 <= 0): return 0`, so the genuinely inaudible case (no depth, or an envelope that
 collapses instantly) still degrades to the fixed defaults.
 
+**THE SUSTAIN SPLIT IS FULLY CONFOUNDED — it cannot confirm this.** Added
+2026-09-06 after checking the twelve programs: the six with filter-env sustain 0
+are *exactly* the six string/pad programs, and the six with sustain 0.61 are
+*exactly* the six organs. The split by DEPTH is the same split as by instrument
+family, sample set, and resting corner (23.2 vs 20.7 Hz). It can FALSIFY — if
+the DEPTH-0 six come back no darker, the depth path is not doing much — but it
+cannot support the hypothesis, because "darker" is equally explained by them
+being different instruments. **The isolating test is to write a non-zero depth
+to one DEPTH-0 program in RAM and re-measure the same program**: same material,
+one byte different. Target DEPTH 33, the value the organs already get, which
+moves the corner from 22.6 Hz to 7858 Hz at the peak (the ceiling binds before
+the source's 10800 cents do).
+
+**No predicted magnitude is offered here, on purpose.** A first attempt modelled
+each note as a sine at its fundamental against a fixed 22.6 Hz 2-pole corner and
+produced 12 dB per octave of key — 48 dB across k36→k84, against the 17.29 dB
+actually measured. Three times too steep. These are broadband multisamples and
+their RMS through a fixed lowpass does not fall at the filter's slope, so the
+arithmetic does not transfer. Take the sign and the same-program pairing from
+the experiment and let it set the size.
+
 **Do not apply this without a measurement.** It changes half the keygroups on
 every KRZ- and SFZ-sourced conversion, in the loud direction, and the AKAI's
 own ENV2 decay law is what decides whether a 35-second K2000 decay is even
