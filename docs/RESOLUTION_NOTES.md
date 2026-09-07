@@ -29319,6 +29319,51 @@ does not consult the guard, so classification still reports what counting loses.
 That is the argument against resting any conclusion on a count alone, including
 the grid-free form "N events for N notes leaves no room for an N+1th".
 
+### The merge guard is the last absolute constant, and it suppresses real events
+
+Instrumenting the **shipped** path on `MPC_to_AKAI_009` — rather than a
+re-implementation of it — gives 8 raw triggers and 6 after the guard,
+reproducing s3ked's independent table to 0.01 dB:
+
+```
+   1.32  +9.76  commanded      12.52 +10.69  commanded
+   2.35  +8.82  mid-hold  MERGED   15.46  +9.31  §185 event
+   6.92  +9.62  commanded      18.12  +9.62  commanded
+   7.96  +8.66  mid-hold  MERGED   21.08  +9.17  §185 event
+```
+
+**Three limits, none previously stated.**
+
+**1. The threshold margin is +1.17 dB, thinner than either of us claimed.** The
+quietest surviving event rises 9.17 dB against an 8 dB threshold. Not the ~1.6 dB
+implied by centred-window figures, and **not negative, as my own −3 dB numbers
+implied** — those were measured against a *2 s lookback minimum* instead of the
+detector's `run_min`, so they described a model of the detector rather than the
+detector, and **they contradicted the result they were offered as support for**:
+a 6.1 dB rise cannot trip an 8 dB threshold, yet the events were being reported.
+An internal contradiction between a number and its own conclusion is the cheapest
+error signal available, and it took a peer to point at it.
+
+**2. A commanded note survives by 0.061 s.** Events at 15.46 and 18.12 are 2.66 s
+apart against a 2.60 s guard. A slightly longer `HOLD` merges a **commanded note**
+into the preceding re-articulation; the capture then reports a missing note, the
+spacing gate correctly calls it `mislocated`, and nobody ever finds the reason.
+
+**3. Two genuine mid-hold events are dropped by the guard alone** — +8.82 and
++8.66 dB, both ~1.03 s after their note-on, §187-class swells, well above the
+rise threshold and invisible purely because of merging.
+
+**The guard is now the only absolute-time constant left in a rule rebuilt to be
+relative**, and it is doing real suppression rather than de-duplication. Stated
+limit, not a proposed change — it genuinely stops a long attack re-firing:
+**events closer than `HOLD + 0.6` to a preceding event are silently dropped,
+whatever they are.**
+
+**Method note (s3ked's, and the reason this was findable): keep raw per-event
+measurements next to conclusions.** Their original per-event rises survived three
+detector rewrites and were the only fixed point available to check any of them
+against. Every derived figure moved; the measurements did not.
+
 ### PENDING RE-MEASUREMENT — every corpus figure below predates the clamp fix
 
 **All corpus numbers recorded in the §FAILOPENCHECK sections were measured with
