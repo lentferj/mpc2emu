@@ -29161,6 +29161,41 @@ threshold tried. The information is not in the envelope. This sits alongside the
 existing guard blind spot (a second articulation within 0.6 s of note-off is merged,
 not refuted).
 
+### Extra onsets are classified by POSITION, because amplitude cannot do it
+
+Shipping at 8 dB made a second class visible, and the first version of the call
+site reported it as contamination. **That is an overclaim, and s3ked caught it on
+their own material.**
+
+The two classes are the same size. The note-off re-articulations rise **+9.6 and
++9.1 dB** above their local floor; the mid-hold swells fall 10-11 dB and swell
+back by **~8 dB**. **Any threshold catching one catches the other — rise height is
+not a discriminator and no tuning makes it one.**
+
+**Position separates them cleanly.** The re-articulations are locked to note-off,
+one per note, 0.94-0.96 s after it. The swells recur *inside* a single held note
+(measured 11.57 s and 9.12 s into a 12.0 s hold).
+
+This matters because "extra onset" was printing SOMETHING SOUNDED THAT WAS NOT
+COMMANDED, which is a claim about **another program's audio** (§NOTESWAP). A
+swell inside a held note is no evidence for one. `_classify_onsets()` now splits
+onsets into expected / mid-hold / post-note-off / **unassigned**, and only an
+onset landing outside every commanded note window raises the §NOTESWAP warning;
+the rest report as extra articulation and say explicitly that it is not
+contamination.
+
+Worked through on the capture that triggered it: 6 onsets, classified
+expected=4, mid-hold=1, post-off=1, **unassigned=0** — reported as contamination
+by the first version, correctly not by this one.
+
+**A near-miss on the cause, recorded because it was caught before it was
+written down.** The obvious reading of the swell is tremolo, and its dominant
+modulation reads 0.25 Hz by FFT. The program's own LFO is at **5.89 Hz and zero
+depth** — 24x faster, and muted. The FFT peak came from two to three cycles in a
+12 s window, which cannot establish a rate. Cause undetermined; the untested
+candidates are the material's own content and beating between overlapping
+keygroups.
+
 ### The compounding, which neither side could see alone
 
 A long attack means the previous note's release still dominates at the next note-on.
