@@ -1,0 +1,217 @@
+{
+ "12:1": {
+  "slot": "F1",
+  "offset": 209,
+  "codes": {
+   "LOPASS": 15,
+   "HIPASS": 16,
+   "ALPASS": 17,
+   "GAIN": 18,
+   "SHAPER": 19,
+   "DIST": 20,
+   "PWM": 22,
+   "SINE": 23,
+   "LF SIN": 24,
+   "SW+SHP": 25,
+   "SAW+": 26,
+   "SAW": 27,
+   "LF SAW": 28,
+   "SQUARE": 29,
+   "LF SQR": 30,
+   "WRAP": 31,
+   "NONE": 60
+  }
+ },
+ "12:2": {
+  "slot": "F2",
+  "offset": 225,
+  "codes": {
+   "LOPASS": 15,
+   "HIPASS": 16,
+   "ALPASS": 17,
+   "GAIN": 18,
+   "SHAPER": 19,
+   "DIST": 20,
+   "PWM": 22,
+   "SINE": 23,
+   "LF SIN": 24,
+   "SW+SHP": 25,
+   "SAW+": 26,
+   "SAW": 27,
+   "LF SAW": 28,
+   "SQUARE": 29,
+   "LF SQR": 30,
+   "WRAP": 31,
+   "NONE": 60
+  }
+ },
+ "12:3": {
+  "slot": "F3",
+  "offset": 241,
+  "codes": {
+   "LOPASS": 15,
+   "HIPASS": 16,
+   "ALPASS": 17,
+   "GAIN": 18,
+   "SHAPER": 19,
+   "DIST": 20,
+   "SW+SHP": 25,
+   "SAW+": 26,
+   "SW+DST": 53,
+   "NONE": 60,
+   "LPCLIP": 70,
+   "SINE+": 71,
+   "NOISE+": 76
+  }
+ },
+ "12:4": {
+  "slot": "F4",
+  "offset": 257,
+  "codes": {
+   "x AMP": 48,
+   "+ AMP": 49,
+   "! AMP": 75
+  }
+ },
+ "5:1": {
+  "slot": "F1",
+  "offset": 209,
+  "codes": {
+   "2POLE LOWPASS": 2,
+   "BANDPASS FILT": 3,
+   "NOTCH FILTER": 4,
+   "2POLE ALLPASS": 5,
+   "PARA BASS": 8,
+   "PARA TREBLE": 9,
+   "PARA MID": 51,
+   "NONE": 61,
+   "2PARAM SHAPER": 64
+  }
+ },
+ "1:1": {
+  "slot": "F1",
+  "offset": 209,
+  "codes": {
+   "HIFREQ STIMULATOR": 12,
+   "PARAMETRIC EQ": 13,
+   "STEEP RESONANT BASS": 14,
+   "4POLE LOPASS W/SEP": 50,
+   "4POLE HIPASS W/SEP": 54,
+   "TWIN PEAKS BANDPASS": 55,
+   "DOUBLE NOTCH W/SEP": 56,
+   "NONE": 62
+  }
+ },
+ "2:1": {
+  "slot": "F1",
+  "offset": 209,
+  "codes": {
+   "2POLE LOWPASS": 2,
+   "BANDPASS FILT": 3,
+   "NOTCH FILTER": 4,
+   "2POLE ALLPASS": 5,
+   "PARA BASS": 8,
+   "PARA TREBLE": 9,
+   "PARA MID": 51,
+   "NONE": 61,
+   "2PARAM SHAPER": 64
+  }
+ },
+ "6:3": {
+  "slot": "F4",
+  "offset": 257,
+  "codes": {
+   "x AMP": 48,
+   "+ AMP": 49,
+   "! AMP": 75
+  }
+ },
+ "21:2": {
+  "slot": "F2",
+  "offset": 225,
+  "codes": {
+   "x GAIN": 41,
+   "+ GAIN": 42,
+   "XFADE": 43,
+   "AMPMOD": 44,
+   "NONE": 63
+  }
+ },
+ "17:2": {
+  "slot": "F2",
+  "offset": 225,
+  "codes": {
+   "NONE": 61,
+   "SHAPE MOD OSC": 68,
+   "AMP MOD OSC": 72
+  }
+ },
+ "18:2": {
+  "slot": "F2",
+  "offset": 225,
+  "codes": {
+   "NONE": 61,
+   "x SHAPEMOD OSC": 66,
+   "+ SHAPEMOD OSC": 67
+  }
+ },
+ "16:2": {
+  "slot": "F2",
+  "offset": 225,
+  "codes": {
+   "PARA BASS": 10,
+   "PARA TREBLE": 11,
+   "NONE": 61
+  }
+ },
+ "5:2": {
+  "slot": "F3",
+  "offset": 241,
+  "codes": {
+   "BAND2": 35,
+   "NOTCH2": 36,
+   "LOPAS2": 37,
+   "HIPAS2": 52,
+   "LPGATE": 57,
+   "NONE": 60,
+   "LP2RES": 73,
+   "SHAPE2": 74
+  }
+ },
+ "3:2": {
+  "slot": "F3",
+  "offset": 241,
+  "codes": {
+   "AMP U   AMP L": 38,
+   "BAL     AMP": 39
+  }
+ },
+ "26:3": {
+  "slot": "F3",
+  "offset": 241,
+  "codes": {
+   "PANNER": 40
+  }
+ },
+ "26:1": {
+  "slot": "F1",
+  "offset": 209,
+  "codes": {
+   "SYNC M": 33
+  }
+ },
+ "26:2": {
+  "slot": "F2",
+  "offset": 225,
+  "codes": {
+   "SYNC S": 34
+  }
+ },
+ "*:F4 AMP": {
+  "slot": "F4",
+  "offset": 257,
+  "codes": {
+   "AMP": 1
+  }
+ }
+}

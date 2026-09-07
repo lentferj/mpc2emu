@@ -1039,6 +1039,24 @@ objects, 6 of them picking up unprintable bytes — including the
 the field since `84c3213`.
 
 
+## Companion references
+
+- **`docs/K2000_ALGORITHMS.md`** — all 31 algorithms: block chains, the functions
+  each block offers, stage widths. From the Reference Guide ch.26, which is what
+  the Musician's Guide points at. Authoritative for *what exists*, not for bytes.
+- **`docs/K2000_FUNCTION_CODES.md`** — the stored byte for every function name,
+  measured on the device, per block.
+- Machine-readable copies in `docs/re_procedures/`: `k2000_algorithms.json`,
+  `k2000_function_codes_by_block.json`, `k2000_lfo1_rate_table.json` (185 rows),
+  and `e4xt_lfo_rate_table.json` (128 rows) for the E4XT equivalent.
+
+Two structural facts a reader needs before using them: **algorithms 26-31 have no
+PITCH stage** (four stages, not five), and **a block can span several stage
+slots** — algorithm 1's HIFREQ STIMULATOR occupies three of five. So "which block
+is in F3" is not the same question as "which stage is third", and an index-based
+parser mis-targets on algorithms 1, 2-7, 16-19 and 31. Our writer addresses blocks
+by segment TAG (0x50-0x53), never by stage index, so it is not exposed.
+
 ## DSP function codes are PER-BLOCK, not a global enumeration
 
 **Measured 2026-09-07 (k2kremote), all four block-type offsets and every function

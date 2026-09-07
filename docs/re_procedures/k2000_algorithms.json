@@ -1,0 +1,2061 @@
+{
+ "1": {
+  "chain": [
+   "PITCH",
+   "HIFREQ STIMULATOR",
+   "AMP"
+  ],
+  "stage_widths_consistent": true,
+  "functions": [
+   {
+    "block": "PITCH",
+    "choices": []
+   },
+   {
+    "block": "HIFREQ STIMULATOR",
+    "choices": [
+     "PARAMETRIC EQ",
+     "STEEP RESONANT BASS",
+     "4POLE LOPASS W/SEP",
+     "4POLE HIPASS W/SEP",
+     "TWIN PEAKS BANDPASS",
+     "DOUBLE NOTCH W/SEP",
+     "NONE"
+    ]
+   },
+   {
+    "block": "AMP",
+    "choices": []
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   3,
+   1
+  ],
+  "stage_separators": "trrtt",
+  "diagram": [
+   "|||||||||||||||||||||||||||||||||||||||||",
+   "errR\u00aerrterrR\u00aerrrrrrR\u00aerrrrrrR\u00aerrterrR\u00aerrt|",
+   "d||||||gk||||||||||||||||||||||gk||||||gh",
+   "cvvvvvvbcvvvvvvvvvvvvvvvvvvvvvvbcvvvvvvb|"
+  ]
+ },
+ "2": {
+  "chain": [
+   "PITCH",
+   "2PARAM SHAPER",
+   "PANNER",
+   "AMP"
+  ],
+  "stage_widths_consistent": true,
+  "functions": [
+   {
+    "block": "PITCH",
+    "choices": []
+   },
+   {
+    "block": "2PARAM SHAPER",
+    "choices": [
+     "2POLE LOWPASS",
+     "BANDPASS FILT",
+     "NOTCH FILTER",
+     "2POLE ALLPASS",
+     "PARA BASS",
+     "PARA TREBLE",
+     "PARA MID",
+     "NONE"
+    ]
+   },
+   {
+    "block": "PANNER",
+    "choices": []
+   },
+   {
+    "block": "AMP",
+    "choices": []
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   2,
+   1,
+   1
+  ],
+  "stage_separators": "trttt",
+  "diagram": [
+   "|||||||||||||||||||||||||||||||||||||||||",
+   "errR\u00aerrterrR\u00aerrrrrrR\u00aerrterrR\u00aerrtYrrR\u00aerrty",
+   "d||||||gk||||||||||||||gk||||||G;||||||GH",
+   "cvvvvvvbcvvvvvvvvvvvvvvbcvvvvvvbNvvvvvvbn"
+  ]
+ },
+ "3": {
+  "chain": [
+   "PITCH",
+   "2PARAM SHAPER",
+   "AMP U",
+   "AMP L"
+  ],
+  "stage_widths_consistent": false,
+  "functions": [
+   {
+    "block": "PITCH",
+    "choices": []
+   },
+   {
+    "block": "2PARAM SHAPER",
+    "choices": [
+     "2POLE LOWPASS",
+     "BANDPASS FILT",
+     "NOTCH FILTER",
+     "2POLE ALLPASS",
+     "NONE"
+    ]
+   },
+   {
+    "block": "AMP U",
+    "choices": [
+     "BAL"
+    ]
+   },
+   {
+    "block": "AMP L",
+    "choices": [
+     "AMP"
+    ]
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   2,
+   2
+  ],
+  "stage_separators": "trtrt",
+  "diagram": [
+   "|||||||||||||||||||||||||||||||||||||||||",
+   "errR\u00aerrterrR\u00aerrrrrrR\u00aerrtyrrR\u00aerrrrrrR\u00aerrty",
+   "d||||||jk||||||||||||||u:||||||||||||||GH",
+   "cvvvvvvm,..............M/vvvvvvvvvvvvvvbn"
+  ]
+ },
+ "4": {
+  "chain": [
+   "PITCH",
+   "2PARAM SHAPER",
+   "LPCLIP",
+   "AMP"
+  ],
+  "stage_widths_consistent": true,
+  "functions": [
+   {
+    "block": "PITCH",
+    "choices": []
+   },
+   {
+    "block": "2PARAM SHAPER",
+    "choices": [
+     "2POLE LOWPASS",
+     "BANDPASS FILT",
+     "NOTCH FILTER",
+     "2POLE ALLPASS",
+     "PARA BASS",
+     "PARA TREBLE",
+     "PARA MID",
+     "NONE"
+    ]
+   },
+   {
+    "block": "LPCLIP",
+    "choices": [
+     "SINE+",
+     "NOISE+",
+     "LOPASS",
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "SW+SHP",
+     "SAW+",
+     "SW+DST",
+     "NONE"
+    ]
+   },
+   {
+    "block": "AMP",
+    "choices": []
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   2,
+   1,
+   1
+  ],
+  "stage_separators": "trttt",
+  "diagram": [
+   "|||||||||||||||||||||||||||||||||||||||||",
+   "errR\u00aerrterrR\u00aerrrrrrR\u00aerrterrR\u00aerrterrR\u00aerrt|",
+   "d||||||gk||||||||||||||gk||||||gk||||||gh",
+   "cvvvvvvbcvvvvvvvvvvvvvvbcvvvvvvbcvvvvvvb|"
+  ]
+ },
+ "5": {
+  "chain": [
+   "PITCH",
+   "2PARAM SHAPER",
+   "LP2RES",
+   "AMP"
+  ],
+  "stage_widths_consistent": true,
+  "functions": [
+   {
+    "block": "PITCH",
+    "choices": []
+   },
+   {
+    "block": "2PARAM SHAPER",
+    "choices": [
+     "2POLE LOWPASS",
+     "BANDPASS FILT",
+     "NOTCH FILTER",
+     "2POLE ALLPASS",
+     "PARA BASS",
+     "PARA TREBLE",
+     "PARA MID",
+     "NONE"
+    ]
+   },
+   {
+    "block": "LP2RES",
+    "choices": [
+     "SHAPE2",
+     "BAND2",
+     "NOTCH2",
+     "LOPAS2",
+     "HIPAS2",
+     "LPGATE",
+     "NONE"
+    ]
+   },
+   {
+    "block": "AMP",
+    "choices": []
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   2,
+   1,
+   1
+  ],
+  "stage_separators": "trttt",
+  "diagram": [
+   "|||||||||||||||||||||||||||||||||||||||||",
+   "errR\u00aerrterrR\u00aerrrrrrR\u00aerrterrR\u00aerrterrR\u00aerrt|",
+   "d||||||gk||||||||||||||gk||||||gk||||||gh",
+   "cvvvvvvbcvvvvvvvvvvvvvvbcvvvvvvbcvvvvvvb|"
+  ]
+ },
+ "6": {
+  "chain": [
+   "PITCH",
+   "2PARAM SHAPER",
+   "LPCLIP",
+   "x AMP"
+  ],
+  "stage_widths_consistent": true,
+  "functions": [
+   {
+    "block": "PITCH",
+    "choices": []
+   },
+   {
+    "block": "2PARAM SHAPER",
+    "choices": [
+     "2POLE LOWPASS",
+     "BANDPASS FILT",
+     "NOTCH FILTER",
+     "2POLE ALLPASS",
+     "NONE"
+    ]
+   },
+   {
+    "block": "LPCLIP",
+    "choices": [
+     "SINE+",
+     "NOISE+",
+     "LOPASS",
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "SW+SHP"
+    ]
+   },
+   {
+    "block": "x AMP",
+    "choices": [
+     "+ AMP",
+     "! AMP"
+    ]
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   2,
+   1,
+   1
+  ],
+  "stage_separators": "trttt",
+  "diagram": [
+   "|||||||||||||||||||||||||||||||||||||||||",
+   "errR\u00aerrterrR\u00aerrrrrrR\u00aerrterrR\u00aerrtYrrR\u00aerrt|",
+   "d||||||jk||||||||||||||gk||||||u:||||||gh",
+   "cvvvvvvm,..............M,......M/vvvvvvb|"
+  ]
+ },
+ "7": {
+  "chain": [
+   "PITCH",
+   "2PARAM SHAPER",
+   "LPCLIP",
+   "x AMP"
+  ],
+  "stage_widths_consistent": true,
+  "functions": [
+   {
+    "block": "PITCH",
+    "choices": []
+   },
+   {
+    "block": "2PARAM SHAPER",
+    "choices": [
+     "2POLE LOWPASS",
+     "BANDPASS FILT",
+     "NOTCH FILTER",
+     "2POLE ALLPASS",
+     "NONE"
+    ]
+   },
+   {
+    "block": "LPCLIP",
+    "choices": [
+     "SINE+",
+     "NOISE+",
+     "LOPASS",
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "SINE",
+     "LF SIN",
+     "SW+SHP",
+     "SAW+",
+     "SW+DST",
+     "NONE"
+    ]
+   },
+   {
+    "block": "x AMP",
+    "choices": [
+     "+ AMP",
+     "! AMP"
+    ]
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   2,
+   1,
+   1
+  ],
+  "stage_separators": "trTtt",
+  "diagram": [
+   "|||||||||||||||||||||||5rrrrrrrr6||||||||",
+   "errR\u00aerrterrR\u00aerrrrrrR\u00aerrTerrR\u00aerrt7rrR\u00aerrt|",
+   "d||||||jk||||||||||||||u?||||||i;||||||gh",
+   "cvvvvvvm,..............M/vvvvvvbNvvvvvvb|"
+  ]
+ },
+ "8": {
+  "chain": [
+   "PITCH",
+   "LOPASS",
+   "LOPASS",
+   "LPCLIP",
+   "AMP"
+  ],
+  "stage_widths_consistent": true,
+  "functions": [
+   {
+    "block": "PITCH",
+    "choices": []
+   },
+   {
+    "block": "LOPASS",
+    "choices": [
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "PWM",
+     "SINE",
+     "LF SIN",
+     "SW+SHP",
+     "SAW+",
+     "SAW",
+     "LF SAW",
+     "SQUARE",
+     "LF SQR",
+     "WRAP",
+     "NONE"
+    ]
+   },
+   {
+    "block": "LOPASS",
+    "choices": [
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "SW+SHP",
+     "SAW+",
+     "WRAP",
+     "NONE"
+    ]
+   },
+   {
+    "block": "LPCLIP",
+    "choices": [
+     "SINE+",
+     "NOISE+",
+     "LOPASS",
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "SW+SHP",
+     "SAW+",
+     "SW+DST",
+     "NONE"
+    ]
+   },
+   {
+    "block": "AMP",
+    "choices": []
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   1,
+   1,
+   1,
+   1
+  ],
+  "stage_separators": "ttttt",
+  "diagram": [
+   "|||||||||||||||||||||||||||||||||||||||||",
+   "errR\u00aerrterrR\u00aerrterrR\u00aerrterrR\u00aerrterrR\u00aerrt|",
+   "d||||||gk||||||gk||||||gk||||||gk||||||gh",
+   "cvvvvvvbcvvvvvvbcvvvvvvbcvvvvvvbcvvvvvvb|"
+  ]
+ },
+ "9": {
+  "chain": [
+   "PITCH",
+   "LOPASS",
+   "LOPASS",
+   "LP2RES",
+   "AMP"
+  ],
+  "stage_widths_consistent": true,
+  "functions": [
+   {
+    "block": "PITCH",
+    "choices": []
+   },
+   {
+    "block": "LOPASS",
+    "choices": [
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "PWM",
+     "SINE",
+     "LF SIN",
+     "SW+SHP",
+     "SAW+",
+     "SAW",
+     "LF SAW",
+     "SQUARE",
+     "LF SQR",
+     "WRAP",
+     "NONE"
+    ]
+   },
+   {
+    "block": "LOPASS",
+    "choices": [
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "SW+SHP",
+     "SAW+",
+     "WRAP",
+     "NONE"
+    ]
+   },
+   {
+    "block": "LP2RES",
+    "choices": [
+     "SHAPE2",
+     "BAND2",
+     "NOTCH2",
+     "LOPAS2",
+     "HIPAS2",
+     "LPGATE",
+     "NONE"
+    ]
+   },
+   {
+    "block": "AMP",
+    "choices": []
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   1,
+   1,
+   1,
+   1
+  ],
+  "stage_separators": "ttttt",
+  "diagram": [
+   "|||||||||||||||||||||||||||||||||||||||||",
+   "errR\u00aerrterrR\u00aerrterrR\u00aerrterrR\u00aerrterrR\u00aerrt|",
+   "d||||||gk||||||gk||||||gk||||||gk||||||gh",
+   "cvvvvvvbcvvvvvvbcvvvvvvbcvvvvvvbcvvvvvvb|"
+  ]
+ },
+ "10": {
+  "chain": [
+   "PITCH",
+   "LOPASS",
+   "LOPASS",
+   "LPCLIP",
+   "x AMP"
+  ],
+  "stage_widths_consistent": true,
+  "functions": [
+   {
+    "block": "PITCH",
+    "choices": []
+   },
+   {
+    "block": "LOPASS",
+    "choices": [
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "PWM",
+     "SINE",
+     "LF SIN",
+     "SW+SHP",
+     "SAW+",
+     "SAW",
+     "LF SAW",
+     "SQUARE",
+     "LF SQR",
+     "WRAP",
+     "NONE"
+    ]
+   },
+   {
+    "block": "LOPASS",
+    "choices": [
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "SINE",
+     "LF SIN",
+     "SW+SHP",
+     "SAW+",
+     "SAW",
+     "LF SAW",
+     "SQUARE",
+     "LF SQR",
+     "WRAP",
+     "NONE"
+    ]
+   },
+   {
+    "block": "LPCLIP",
+    "choices": [
+     "SINE+",
+     "NOISE+",
+     "LOPASS",
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "SW+SHP",
+     "SAW+",
+     "SW+DST",
+     "NONE"
+    ]
+   },
+   {
+    "block": "x AMP",
+    "choices": [
+     "+ AMP",
+     "! AMP"
+    ]
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   1,
+   1,
+   1,
+   1
+  ],
+  "stage_separators": "tTttt",
+  "diagram": [
+   "|||||||||||||||5rrrrrrrr6||||||||||||||||",
+   "errR\u00aerrterrR\u00aerrTerrR\u00aerrt7rrR\u00aerrtYrrR\u00aerrt|",
+   "d||||||jk||||||u?||||||JU||||||u:||||||gh",
+   "cvvvvvvm,......M/vvvvvvm,......M/vvvvvvb|"
+  ]
+ },
+ "11": {
+  "chain": [
+   "PITCH",
+   "LOPASS",
+   "LOPASS",
+   "LPCLIP",
+   "x AMP"
+  ],
+  "stage_widths_consistent": true,
+  "functions": [
+   {
+    "block": "PITCH",
+    "choices": []
+   },
+   {
+    "block": "LOPASS",
+    "choices": [
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "PWM",
+     "SINE",
+     "LF SIN",
+     "SW+SHP",
+     "SAW+",
+     "SAW",
+     "LF SAW",
+     "SQUARE",
+     "LF SQR",
+     "WRAP",
+     "NONE"
+    ]
+   },
+   {
+    "block": "LOPASS",
+    "choices": [
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "SINE",
+     "LF SIN",
+     "SW+SHP",
+     "SAW+",
+     "SAW",
+     "LF SAW",
+     "SQUARE",
+     "LF SQR",
+     "WRAP",
+     "NONE"
+    ]
+   },
+   {
+    "block": "LPCLIP",
+    "choices": [
+     "SINE+",
+     "NOISE+",
+     "LOPASS",
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "SINE",
+     "LF SIN",
+     "SW+SHP",
+     "SAW+",
+     "SW+DST",
+     "NONE"
+    ]
+   },
+   {
+    "block": "x AMP",
+    "choices": [
+     "+ AMP",
+     "! AMP"
+    ]
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   1,
+   1,
+   1,
+   1
+  ],
+  "stage_separators": "tTttt",
+  "diagram": [
+   "|||||||||||||||5rrrrrrrr6||||||||||||||||",
+   "errR\u00aerrterrR\u00aerrTerrR\u00aerrt7rrR\u00aerrtYrrR\u00aerrt|",
+   "d||||||gk||||||fk||||||jU||||||u:||||||gh",
+   "cvvvvvvbcvvvvvvbcvvvvvvm,......M/vvvvvvb|"
+  ]
+ },
+ "12": {
+  "chain": [
+   "PITCH",
+   "LOPASS",
+   "LOPASS",
+   "LPCLIP",
+   "x AMP"
+  ],
+  "stage_widths_consistent": true,
+  "functions": [
+   {
+    "block": "PITCH",
+    "choices": []
+   },
+   {
+    "block": "LOPASS",
+    "choices": [
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "PWM",
+     "SINE",
+     "LF SIN",
+     "SW+SHP",
+     "SAW+",
+     "SAW",
+     "LF SAW",
+     "SQUARE",
+     "LF SQR",
+     "WRAP",
+     "NONE"
+    ]
+   },
+   {
+    "block": "LOPASS",
+    "choices": [
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "PWM",
+     "SINE",
+     "LF SIN",
+     "SW+SHP",
+     "SAW+",
+     "SAW",
+     "LF SAW",
+     "SQUARE",
+     "LF SQR",
+     "WRAP",
+     "NONE"
+    ]
+   },
+   {
+    "block": "LPCLIP",
+    "choices": [
+     "SINE+",
+     "NOISE+",
+     "LOPASS",
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "SW+SHP",
+     "SAW+",
+     "SW+DST",
+     "NONE"
+    ]
+   },
+   {
+    "block": "x AMP",
+    "choices": [
+     "+ AMP",
+     "! AMP"
+    ]
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   1,
+   1,
+   1,
+   1
+  ],
+  "stage_separators": "ttttt",
+  "diagram": [
+   "|||||||||||||||||||||||||||||||||||||||||",
+   "errR\u00aerrterrR\u00aerrterrR\u00aerrterrR\u00aerrtYrrR\u00aerrt|",
+   "d||||||gk||||||jk||||||gk||||||u:||||||gh",
+   "cvvvvvvbcvvvvvvm,......M,......M/vvvvvvb|"
+  ]
+ },
+ "13": {
+  "chain": [
+   "PITCH",
+   "LOPASS",
+   "LOPASS",
+   "PANNER",
+   "AMP"
+  ],
+  "stage_widths_consistent": true,
+  "functions": [
+   {
+    "block": "PITCH",
+    "choices": []
+   },
+   {
+    "block": "LOPASS",
+    "choices": [
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "PWM",
+     "SINE",
+     "LF SIN",
+     "SW+SHP",
+     "SAW+",
+     "SAW",
+     "LF SAW",
+     "SQUARE",
+     "LF SQR",
+     "WRAP",
+     "NONE"
+    ]
+   },
+   {
+    "block": "LOPASS",
+    "choices": [
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "SW+SHP",
+     "SAW+",
+     "WRAP",
+     "NONE"
+    ]
+   },
+   {
+    "block": "PANNER",
+    "choices": []
+   },
+   {
+    "block": "AMP",
+    "choices": []
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   1,
+   1,
+   1,
+   1
+  ],
+  "stage_separators": "ttttt",
+  "diagram": [
+   "|||||||||||||||||||||||||||||||||||||||||",
+   "errR\u00aerrterrR\u00aerrterrR\u00aerrterrR\u00aerrtYrrR\u00aerrty",
+   "d||||||gk||||||gk||||||gk||||||G;||||||GH",
+   "cvvvvvvbcvvvvvvbcvvvvvvbcvvvvvvbNvvvvvvbn"
+  ]
+ },
+ "14": {
+  "chain": [
+   "PITCH",
+   "LOPASS",
+   "LOPASS",
+   "AMP U",
+   "AMP L"
+  ],
+  "stage_widths_consistent": false,
+  "functions": [
+   {
+    "block": "PITCH",
+    "choices": []
+   },
+   {
+    "block": "LOPASS",
+    "choices": [
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "SINE",
+     "LF SIN",
+     "SW+SHP",
+     "SAW+",
+     "SAW",
+     "LF SAW",
+     "SQUARE",
+     "LF SQR",
+     "WRAP",
+     "NONE"
+    ]
+   },
+   {
+    "block": "LOPASS",
+    "choices": [
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "SINE",
+     "LF SIN",
+     "SW+SHP",
+     "SAW+",
+     "SAW",
+     "LF SAW",
+     "SQUARE",
+     "LF SQR",
+     "WRAP",
+     "NONE"
+    ]
+   },
+   {
+    "block": "AMP U",
+    "choices": [
+     "BAL"
+    ]
+   },
+   {
+    "block": "AMP L",
+    "choices": [
+     "AMP"
+    ]
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   1,
+   1,
+   2
+  ],
+  "stage_separators": "tTtrt",
+  "diagram": [
+   "|||||||||||||||5rrrrrrrr6||||||||||||||||",
+   "errR\u00aerrterrR\u00aerrTerrR\u00aerrt7rrR\u00aerrrrrrR\u00aerrty",
+   "d||||||jk||||||u?||||||i;||||||||||||||GH",
+   "cvvvvvvm,......M/vvvvvvbNvvvvvvvvvvvvvvbn"
+  ]
+ },
+ "15": {
+  "chain": [
+   "PITCH",
+   "LOPASS",
+   "LOPASS",
+   "AMP U",
+   "AMP L"
+  ],
+  "stage_widths_consistent": false,
+  "functions": [
+   {
+    "block": "PITCH",
+    "choices": []
+   },
+   {
+    "block": "LOPASS",
+    "choices": [
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "PWM",
+     "SINE",
+     "LF SIN",
+     "SW+SHP",
+     "SAW+",
+     "SAW",
+     "LF SAW",
+     "SQUARE",
+     "LF SQR",
+     "WRAP",
+     "NONE"
+    ]
+   },
+   {
+    "block": "LOPASS",
+    "choices": [
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "SINE",
+     "LF SIN",
+     "SW+SHP",
+     "SAW+",
+     "SAW",
+     "LF SAW",
+     "SQUARE",
+     "LF SQR",
+     "WRAP",
+     "NONE"
+    ]
+   },
+   {
+    "block": "AMP U",
+    "choices": [
+     "BAL"
+    ]
+   },
+   {
+    "block": "AMP L",
+    "choices": [
+     "AMP"
+    ]
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   1,
+   1,
+   2
+  ],
+  "stage_separators": "tttrt",
+  "diagram": [
+   "|||||||||||||||||||||||||||||||||||||||||",
+   "errR\u00aerrterrR\u00aerrterrR\u00aerrtYrrR\u00aerrrrrrR\u00aerrty",
+   "d||||||gk||||||jk||||||u:||||||||||||||GH",
+   "cvvvvvvbcvvvvvvm,......M/vvvvvvvvvvvvvvbn"
+  ]
+ },
+ "16": {
+  "chain": [
+   "PITCH",
+   "LOPASS",
+   "PARA BASS",
+   "AMP"
+  ],
+  "stage_widths_consistent": true,
+  "functions": [
+   {
+    "block": "PITCH",
+    "choices": []
+   },
+   {
+    "block": "LOPASS",
+    "choices": [
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "SINE",
+     "LF SIN",
+     "SW+SHP",
+     "SAW+",
+     "SAW",
+     "LF SAW",
+     "SQUARE",
+     "LF SQR",
+     "WRAP",
+     "NONE"
+    ]
+   },
+   {
+    "block": "PARA BASS",
+    "choices": [
+     "PARA TREBLE",
+     "NONE"
+    ]
+   },
+   {
+    "block": "AMP",
+    "choices": []
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   1,
+   2,
+   1
+  ],
+  "stage_separators": "ttrtt",
+  "diagram": [
+   "|||||||||||||||||||||||||||||||||||||||||",
+   "errR\u00aerrterrR\u00aerrterrR\u00aerrrrrrR\u00aerrterrR\u00aerrt|",
+   "d||||||gk||||||gk||||||||||||||gk||||||gh",
+   "cvvvvvvbcvvvvvvbcvvvvvvvvvvvvvvbcvvvvvvb|"
+  ]
+ },
+ "17": {
+  "chain": [
+   "PITCH",
+   "LOPASS",
+   "SHAPE MOD OSC",
+   "AMP"
+  ],
+  "stage_widths_consistent": true,
+  "functions": [
+   {
+    "block": "PITCH",
+    "choices": []
+   },
+   {
+    "block": "LOPASS",
+    "choices": [
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "PWM",
+     "SINE",
+     "LF SIN",
+     "SW+SHP",
+     "SAW+",
+     "SAW",
+     "LF SAW",
+     "SQUARE",
+     "LF SQR",
+     "WRAP",
+     "NONE"
+    ]
+   },
+   {
+    "block": "SHAPE MOD OSC",
+    "choices": [
+     "AMP MOD OSC",
+     "NONE"
+    ]
+   },
+   {
+    "block": "AMP",
+    "choices": []
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   1,
+   2,
+   1
+  ],
+  "stage_separators": "ttrtt",
+  "diagram": [
+   "|||||||||||||||||||||||||||||||||||||||||",
+   "errR\u00aerrterrR\u00aerrterrR\u00aerrrrrrR\u00aerrterrR\u00aerrt|",
+   "d||||||gk||||||gk||||||||||||||gk||||||gh",
+   "cvvvvvvbcvvvvvvbcvvvvvvvvvvvvvvbcvvvvvvb|"
+  ]
+ },
+ "18": {
+  "chain": [
+   "PITCH",
+   "LOPASS",
+   "x SHAPEMOD OSC",
+   "AMP"
+  ],
+  "stage_widths_consistent": true,
+  "functions": [
+   {
+    "block": "PITCH",
+    "choices": []
+   },
+   {
+    "block": "LOPASS",
+    "choices": [
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "SINE",
+     "LF SIN",
+     "SW+SHP",
+     "SAW+",
+     "SAW",
+     "LF SAW",
+     "SQUARE",
+     "LF SQR",
+     "WRAP",
+     "NONE"
+    ]
+   },
+   {
+    "block": "x SHAPEMOD OSC",
+    "choices": [
+     "+ SHAPEMOD OSC",
+     "NONE"
+    ]
+   },
+   {
+    "block": "AMP",
+    "choices": []
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   1,
+   2,
+   1
+  ],
+  "stage_separators": "ttrtt",
+  "diagram": [
+   "|||||||||||||||||||||||||||||||||||||||||",
+   "errR\u00aerrterrR\u00aerrtYrrR\u00aerrrrrrR\u00aerrterrR\u00aerrt|",
+   "d||||||jk||||||u:||||||||||||||gk||||||gh",
+   "cvvvvvvm,......M/vvvvvvvvvvvvvvbcvvvvvvb|"
+  ]
+ },
+ "19": {
+  "chain": [
+   "PITCH",
+   "LOPAS2",
+   "SHAPE MOD OSC",
+   "AMP"
+  ],
+  "stage_widths_consistent": true,
+  "functions": [
+   {
+    "block": "PITCH",
+    "choices": []
+   },
+   {
+    "block": "LOPAS2",
+    "choices": [
+     "NONE"
+    ]
+   },
+   {
+    "block": "SHAPE MOD OSC",
+    "choices": [
+     "NONE"
+    ]
+   },
+   {
+    "block": "AMP",
+    "choices": []
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   1,
+   2,
+   1
+  ],
+  "stage_separators": "ttrtt",
+  "diagram": [
+   "|||||||||||||||||||||||||||||||||||||||||",
+   "errR\u00aerrterrR\u00aerrterrR\u00aerrrrrrR\u00aerrterrR\u00aerrt|",
+   "d||||||gk||||||gk||||||||||||||gk||||||gh",
+   "cvvvvvvbcvvvvvvbcvvvvvvvvvvvvvvbcvvvvvvb|"
+  ]
+ },
+ "20": {
+  "chain": [
+   "PITCH",
+   "LOPASS",
+   "x GAIN",
+   "LPCLIP",
+   "AMP"
+  ],
+  "stage_widths_consistent": true,
+  "functions": [
+   {
+    "block": "PITCH",
+    "choices": []
+   },
+   {
+    "block": "LOPASS",
+    "choices": [
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "SINE",
+     "LF SIN",
+     "SW+SHP",
+     "SAW+",
+     "SAW",
+     "LF SAW",
+     "SQUARE",
+     "LF SQR",
+     "WRAP",
+     "NONE"
+    ]
+   },
+   {
+    "block": "x GAIN",
+    "choices": [
+     "+ GAIN",
+     "XFADE",
+     "AMPMOD",
+     "NONE"
+    ]
+   },
+   {
+    "block": "LPCLIP",
+    "choices": [
+     "SINE+",
+     "NOISE+",
+     "LOPASS",
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "SW+SHP",
+     "SAW+",
+     "SW+DST",
+     "NONE"
+    ]
+   },
+   {
+    "block": "AMP",
+    "choices": []
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   1,
+   1,
+   1,
+   1
+  ],
+  "stage_separators": "ttttt",
+  "diagram": [
+   "|||||||||||||||||||||||||||||||||||||||||",
+   "errR\u00aerrterrR\u00aerrtYrrR\u00aerrterrR\u00aerrterrR\u00aerrt|",
+   "d||||||jk||||||u:||||||gk||||||gk||||||gh",
+   "cvvvvvvm,......M/vvvvvvbcvvvvvvbcvvvvvvb|"
+  ]
+ },
+ "21": {
+  "chain": [
+   "PITCH",
+   "LOPASS",
+   "x GAIN",
+   "LP2RES",
+   "AMP"
+  ],
+  "stage_widths_consistent": true,
+  "functions": [
+   {
+    "block": "PITCH",
+    "choices": []
+   },
+   {
+    "block": "LOPASS",
+    "choices": [
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "SINE",
+     "LF SIN",
+     "SW+SHP",
+     "SAW+",
+     "SAW",
+     "LF SAW",
+     "SQUARE",
+     "LF SQR",
+     "WRAP",
+     "NONE"
+    ]
+   },
+   {
+    "block": "x GAIN",
+    "choices": [
+     "+ GAIN",
+     "XFADE",
+     "AMPMOD",
+     "NONE"
+    ]
+   },
+   {
+    "block": "LP2RES",
+    "choices": [
+     "SHAPE2",
+     "BAND2",
+     "NOTCH2",
+     "LOPAS2",
+     "HIPAS2",
+     "LPGATE",
+     "NONE"
+    ]
+   },
+   {
+    "block": "AMP",
+    "choices": []
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   1,
+   1,
+   1,
+   1
+  ],
+  "stage_separators": "ttttt",
+  "diagram": [
+   "|||||||||||||||||||||||||||||||||||||||||",
+   "errR\u00aerrterrR\u00aerrtYrrR\u00aerrterrR\u00aerrterrR\u00aerrt|",
+   "d||||||jk||||||u:||||||gk||||||gk||||||gh",
+   "cvvvvvvm,......M/vvvvvvbcvvvvvvbcvvvvvvb|"
+  ]
+ },
+ "22": {
+  "chain": [
+   "PITCH",
+   "LOPASS",
+   "x GAIN",
+   "LPCLIP",
+   "x AMP"
+  ],
+  "stage_widths_consistent": true,
+  "functions": [
+   {
+    "block": "PITCH",
+    "choices": []
+   },
+   {
+    "block": "LOPASS",
+    "choices": [
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "SINE",
+     "LF SIN",
+     "SW+SHP",
+     "SAW+",
+     "SAW",
+     "LF SAW",
+     "SQUARE",
+     "LF SQR",
+     "WRAP",
+     "NONE"
+    ]
+   },
+   {
+    "block": "x GAIN",
+    "choices": [
+     "+ GAIN",
+     "XFADE",
+     "AMPMOD",
+     "NONE"
+    ]
+   },
+   {
+    "block": "LPCLIP",
+    "choices": [
+     "SINE+",
+     "NOISE+",
+     "LOPASS",
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "SINE",
+     "LF SIN",
+     "SW+SHP",
+     "SAW+",
+     "SW+DST",
+     "NONE"
+    ]
+   },
+   {
+    "block": "x AMP",
+    "choices": [
+     "+ AMP",
+     "! AMP"
+    ]
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   1,
+   1,
+   1,
+   1
+  ],
+  "stage_separators": "tTttt",
+  "diagram": [
+   "|||||||||||||||5rrrrrrrr6||||||||||||||||",
+   "errR\u00aerrterrR\u00aerrTYrrR\u00aerrt7rrR\u00aerrtYrrR\u00aerrt|",
+   "d||||||jk||||||u:||||||JU||||||u:||||||gh",
+   "cvvvvvvm,......M/vvvvvvm,......M/vvvvvvb|"
+  ]
+ },
+ "23": {
+  "chain": [
+   "PITCH",
+   "LOPASS",
+   "x GAIN",
+   "LPCLIP",
+   "x AMP"
+  ],
+  "stage_widths_consistent": true,
+  "functions": [
+   {
+    "block": "PITCH",
+    "choices": []
+   },
+   {
+    "block": "LOPASS",
+    "choices": [
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "SINE",
+     "LF SIN",
+     "SW+SHP",
+     "SAW+",
+     "SAW",
+     "LF SAW",
+     "SQUARE",
+     "LF SQR",
+     "WRAP",
+     "NONE"
+    ]
+   },
+   {
+    "block": "x GAIN",
+    "choices": [
+     "+ GAIN",
+     "XFADE",
+     "AMPMOD",
+     "NONE"
+    ]
+   },
+   {
+    "block": "LPCLIP",
+    "choices": [
+     "SINE+",
+     "NOISE+",
+     "LOPASS",
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "SINE",
+     "LF SIN",
+     "SW+SHP",
+     "SAW+",
+     "SW+DST",
+     "NONE"
+    ]
+   },
+   {
+    "block": "x AMP",
+    "choices": [
+     "+ AMP",
+     "! AMP"
+    ]
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   1,
+   1,
+   1,
+   1
+  ],
+  "stage_separators": "ttttt",
+  "diagram": [
+   "|||||||||||||||||||||||||||||||||||||||||",
+   "errR\u00aerrterrR\u00aerrtYrrR\u00aerrterrR\u00aerrtYrrR\u00aerrt|",
+   "d||||||jk||||||u:||||||jk||||||u:||||||gh",
+   "cvvvvvvm,......M/vvvvvvm,......M/vvvvvvb|"
+  ]
+ },
+ "24": {
+  "chain": [
+   "PITCH",
+   "LOPASS",
+   "x GAIN",
+   "PANNER",
+   "AMP"
+  ],
+  "stage_widths_consistent": true,
+  "functions": [
+   {
+    "block": "PITCH",
+    "choices": []
+   },
+   {
+    "block": "LOPASS",
+    "choices": [
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "SINE",
+     "LF SIN",
+     "SW+SHP",
+     "SAW+",
+     "SAW",
+     "LF SAW",
+     "SQUARE",
+     "LF SQR",
+     "WRAP",
+     "NONE"
+    ]
+   },
+   {
+    "block": "x GAIN",
+    "choices": [
+     "+ GAIN",
+     "XFADE",
+     "AMPMOD",
+     "NONE"
+    ]
+   },
+   {
+    "block": "PANNER",
+    "choices": []
+   },
+   {
+    "block": "AMP",
+    "choices": []
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   1,
+   1,
+   1,
+   1
+  ],
+  "stage_separators": "ttttt",
+  "diagram": [
+   "|||||||||||||||||||||||||||||||||||||||||",
+   "errR\u00aerrterrR\u00aerrtYrrR\u00aerrterrR\u00aerrtYrrR\u00aerrty",
+   "d||||||jk||||||u:||||||gk||||||G;||||||GH",
+   "cvvvvvvm,......M/vvvvvvbcvvvvvvbNvvvvvvbn"
+  ]
+ },
+ "25": {
+  "chain": [
+   "PITCH",
+   "LOPASS",
+   "x GAIN",
+   "AMP U",
+   "AMP L"
+  ],
+  "stage_widths_consistent": false,
+  "functions": [
+   {
+    "block": "PITCH",
+    "choices": []
+   },
+   {
+    "block": "LOPASS",
+    "choices": [
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "SINE",
+     "LF SIN",
+     "SW+SHP",
+     "SAW+",
+     "SAW",
+     "LF SAW",
+     "SQUARE",
+     "LF SQR",
+     "WRAP",
+     "NONE"
+    ]
+   },
+   {
+    "block": "x GAIN",
+    "choices": [
+     "+ GAIN",
+     "XFADE",
+     "AMPMOD",
+     "NONE"
+    ]
+   },
+   {
+    "block": "AMP U",
+    "choices": [
+     "BAL"
+    ]
+   },
+   {
+    "block": "AMP L",
+    "choices": [
+     "AMP"
+    ]
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   1,
+   1,
+   2
+  ],
+  "stage_separators": "tTtrt",
+  "diagram": [
+   "|||||||||||||||5rrrrrrrr6||||||||||||||||",
+   "errR\u00aerrterrR\u00aerrTYrrR\u00aerrt7rrR\u00aerrrrrrR\u00aerrty",
+   "d||||||jk||||||u:||||||i;||||||||||||||GH",
+   "cvvvvvvm,......M/vvvvvvbNvvvvvvvvvvvvvvbn"
+  ]
+ },
+ "26": {
+  "chain": [
+   "SYNC M",
+   "SYNC S",
+   "PANNER",
+   "AMP"
+  ],
+  "stage_widths_consistent": true,
+  "functions": [
+   {
+    "block": "SYNC M",
+    "choices": []
+   },
+   {
+    "block": "SYNC S",
+    "choices": []
+   },
+   {
+    "block": "PANNER",
+    "choices": []
+   },
+   {
+    "block": "AMP",
+    "choices": []
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   1,
+   1,
+   1
+  ],
+  "stage_separators": "tttt",
+  "diagram": [
+   "|||||||||||||||||||||||||||||||||||||||||",
+   "||||||||errR\u00aerrterrR\u00aerrterrR\u00aerrtYrrR\u00aerrty",
+   "||||||||d||||||\u00a9d||||||gk||||||G;||||||GH",
+   "||||||||cvvvvvvbcvvvvvvbcvvvvvvbNvvvvvvbn"
+  ]
+ },
+ "27": {
+  "chain": [
+   "SYNC M",
+   "SYNC S",
+   "LPCLIP",
+   "AMP"
+  ],
+  "stage_widths_consistent": true,
+  "functions": [
+   {
+    "block": "SYNC M",
+    "choices": []
+   },
+   {
+    "block": "SYNC S",
+    "choices": []
+   },
+   {
+    "block": "LPCLIP",
+    "choices": [
+     "SINE+",
+     "NOISE+",
+     "LOPASS",
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "SINE",
+     "LF SIN",
+     "SW+SHP",
+     "SAW+",
+     "SW+DST",
+     "NONE"
+    ]
+   },
+   {
+    "block": "AMP",
+    "choices": []
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   1,
+   1,
+   1
+  ],
+  "stage_separators": "tttt",
+  "diagram": [
+   "|||||||||||||||||||||||||||||||||||||||||",
+   "||||||||errR\u00aerrterrR\u00aerrterrR\u00aerrterrR\u00aerrt|",
+   "||||||||d||||||\u00a9d||||||gk||||||gk||||||gh",
+   "||||||||cvvvvvvbcvvvvvvbcvvvvvvbcvvvvvvb|"
+  ]
+ },
+ "28": {
+  "chain": [
+   "SYNC M",
+   "SYNC S",
+   "LP2RES",
+   "AMP"
+  ],
+  "stage_widths_consistent": true,
+  "functions": [
+   {
+    "block": "SYNC M",
+    "choices": []
+   },
+   {
+    "block": "SYNC S",
+    "choices": []
+   },
+   {
+    "block": "LP2RES",
+    "choices": [
+     "SHAPE2",
+     "BAND2",
+     "NOTCH2",
+     "LOPAS2",
+     "HIPAS2",
+     "LPGATE",
+     "NONE"
+    ]
+   },
+   {
+    "block": "AMP",
+    "choices": []
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   1,
+   1,
+   1
+  ],
+  "stage_separators": "tttt",
+  "diagram": [
+   "|||||||||||||||||||||||||||||||||||||||||",
+   "||||||||errR\u00aerrterrR\u00aerrterrR\u00aerrterrR\u00aerrt|",
+   "||||||||d||||||\u00a9d||||||gk||||||gk||||||gh",
+   "||||||||cvvvvvvbcvvvvvvbcvvvvvvbcvvvvvvb|"
+  ]
+ },
+ "29": {
+  "chain": [
+   "SYNC M",
+   "SYNC S",
+   "LPCLIP",
+   "x AMP"
+  ],
+  "stage_widths_consistent": true,
+  "functions": [
+   {
+    "block": "SYNC M",
+    "choices": []
+   },
+   {
+    "block": "SYNC S",
+    "choices": []
+   },
+   {
+    "block": "LPCLIP",
+    "choices": [
+     "SINE+",
+     "NOISE+",
+     "LOPASS",
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "SINE",
+     "LF SIN",
+     "SW+SHP",
+     "SAW+",
+     "SW+DST",
+     "NONE"
+    ]
+   },
+   {
+    "block": "x AMP",
+    "choices": [
+     "+ AMP",
+     "! AMP"
+    ]
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   1,
+   1,
+   1
+  ],
+  "stage_separators": "tTtt",
+  "diagram": [
+   "|||||||||||||||||||||||5rrrrrrrr6||||||||",
+   "||||||||errR\u00aerrterrR\u00aerrTerrR\u00aerrt7rrR\u00aerrt|",
+   "||||||||d||||||jd||||||u?||||||i;||||||gh",
+   "||||||||cvvvvvvm,......M/vvvvvvbNvvvvvvb|"
+  ]
+ },
+ "30": {
+  "chain": [
+   "SYNC M",
+   "SYNC S",
+   "LPCLIP",
+   "x AMP"
+  ],
+  "stage_widths_consistent": true,
+  "functions": [
+   {
+    "block": "SYNC M",
+    "choices": []
+   },
+   {
+    "block": "SYNC S",
+    "choices": []
+   },
+   {
+    "block": "LPCLIP",
+    "choices": [
+     "SINE+",
+     "NOISE+",
+     "LOPASS",
+     "HIPASS",
+     "ALPASS",
+     "GAIN",
+     "SHAPER",
+     "DIST",
+     "SINE",
+     "LF SIN",
+     "SW+SHP",
+     "SAW+",
+     "SW+DST",
+     "NONE"
+    ]
+   },
+   {
+    "block": "x AMP",
+    "choices": [
+     "+ AMP",
+     "! AMP"
+    ]
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   1,
+   1,
+   1
+  ],
+  "stage_separators": "tttt",
+  "diagram": [
+   "|||||||||||||||||||||||||||||||||||||||||",
+   "||||||||errR\u00aerrterrR\u00aerrtYrrR\u00aerrtYrrR\u00aerrt|",
+   "||||||||d||||||jd||||||G;||||||u:||||||gh",
+   "||||||||cvvvvvvm,......ML......M/vvvvvvb|"
+  ]
+ },
+ "31": {
+  "chain": [
+   "SYNC M",
+   "SYNC S",
+   "AMP U",
+   "AMP L"
+  ],
+  "stage_widths_consistent": false,
+  "functions": [
+   {
+    "block": "SYNC M",
+    "choices": []
+   },
+   {
+    "block": "SYNC S",
+    "choices": []
+   },
+   {
+    "block": "AMP U",
+    "choices": [
+     "BAL"
+    ]
+   },
+   {
+    "block": "AMP L",
+    "choices": [
+     "AMP"
+    ]
+   }
+  ],
+  "stage_widths_derived": [
+   1,
+   1,
+   2
+  ],
+  "stage_separators": "ttrt",
+  "diagram": [
+   "|||||||||||||||||||||||||||||||||||||||||",
+   "||||||||errR\u00aerrterrR\u00aerrtYrrR\u00aerrrrrrR\u00aerrty",
+   "||||||||d||||||jd||||||u:||||||||||||||GH",
+   "||||||||cvvvvvvm,......M/vvvvvvvvvvvvvvbn"
+  ]
+ }
+}
