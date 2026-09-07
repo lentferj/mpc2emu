@@ -29216,12 +29216,33 @@ count is NOT evidence of contamination and must not be cited as such**; it needs
 the real `marks` from a run. Measuring the fix against a reconstructed grid is
 the same error the fix was for, one level up.
 
-**The tolerance opens a blind spot of its own, and the old rule did not have it.**
-The strict rule over-reported and hid nothing — every unmatched onset was raised.
-The tolerance absorbs a genuine uncommanded onset landing in the 0.10 s before a
-note-on: ~**1.8 % of a 22.4 s capture**, and precisely the part where a previous
-note's tail or a swapped program's attack would sit. Unavoidable while the
-envelope is centred, but it is a trade, not a free fix.
+**The tolerance was the wrong shape, and the second fix removes the cause.**
+A leading-edge tolerance works, but it opens a window ahead of each note-on in
+which a genuine uncommanded onset is absorbed as the expected note. s3ked's
+framing is the one to keep: **that is not 1.8 % of arbitrary time, it is 100 % of
+the moment the failure being hunted would occur** — exactly where a swapped
+program's attack or a previous note's tail lands. Position is the risk, not
+duration.
+
+**Making the envelope CAUSAL removes it instead of compensating for it** (also
+s3ked's suggestion). A trailing window cannot report an edge before it happens.
+Measured over the same corpus:
+
+| | centred | causal |
+|---|---|---|
+| onsets landing before their note-on | **812 / 1340** | **0 / 1339** |
+| onset-minus-note_on, median | −3 ms | +21 ms (max +295 ms, slow attacks) |
+| onset counts, 358 captures | `{0:2, 1:7, 3:4, 4:322, 5:6, 6:12, 7:5}` | **identical, bin for bin** |
+| unassigned with ZERO tolerance | 245 | **19** |
+
+So the causal envelope alone achieves what the tolerance achieved (245 → 19)
+**with no blind window**, and changes no count. `_ONSET_LEAD_TOL` is now 0.0;
+`lead_tol` survives as a parameter only for a caller supplying times from some
+other, centred envelope.
+
+The 19 that remain are the same group throughout: first onset at ~0.46 s against
+a reconstructed 1.30. Almost certainly a different real schedule, **not**
+evidence of contamination.
 
 **s3ked's one-line synthesis, which covers all three defects and the botched
 verification of the fix:** *a real component checked against a model of its
