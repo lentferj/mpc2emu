@@ -294,6 +294,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§K2PANWIRES — we write a PANNER and never spread its two wires, so it is silent (2026-09-06)](#k2panwires-we-write-a-panner-and-never-spread-its-two-wires-so-it-is-silent-2026-09-06)
 - [§AKAILFO2RATE — LFO2 does not run at twice LFO1; every AKAI pan program is at half rate (2026-09-06)](#akailfo2rate-lfo2-does-not-run-at-twice-lfo1-every-akai-pan-program-is-at-half-rate-2026-09-06)
 - [§READNEVERFAILS — four interfaces in one night where a bad read returns a well-formed answer (2026-09-06)](#readneverfails-four-interfaces-in-one-night-where-a-bad-read-returns-a-well-formed-answer-2026-09-06)
+- [§SELFMATCH — five ways a process/liveness check answers about itself (2026-09-07)](#selfmatch-five-ways-a-processliveness-check-answers-about-itself-2026-09-07)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -27698,3 +27699,52 @@ column then disagreed with the panel immediately. Had the inference been allowed
 the table would have shipped wrong and self-consistent.
 
 Related: [[feedback-check-the-check]], [[feedback-symptom-not-diagnosis]].
+
+
+## §SELFMATCH — five ways a process/liveness check answers about itself (2026-09-07)
+
+s3ked collected four variants of one failure in this project, having written the
+warning themselves and still walked into three more since. A fifth from this
+session is added. **Every one returns a confident, plausible, well-formed answer.**
+
+    pgrep -f PATTERN                matches its OWN command line -> "running"
+    waiter keyed to a completion    the producing process died first, so the
+      string in a log                string never appears -> "LOADER_EXITED"
+    grep -v grep                    deletes the target, because the target's
+                                     command line contains "grep"
+    nohup inside a foreground       the foreground command's timeout kills the
+      command with a timeout         whole process group, child included
+    find -newermt '-25 minutes'     `find` here is bfs, which rejects the
+      with stderr to /dev/null       relative form; the error was suppressed and
+                                     the empty result read as "nothing changed"
+
+The last one is this session's, and it nearly produced a report that all three
+hardware sessions were dead — including one that was writing a file every few
+seconds.
+
+### The fix that holds
+
+**Capture the PID at launch, or select by executable. Hold it as a literal
+integer. Detach with `setsid` so the child is in its own session and cannot be
+reached by the parent's timeout or process-group kill.** No pattern anywhere in
+the waiting command, so there is nothing for it to match against itself.
+
+And for shell probes generally: **never send stderr to `/dev/null` on a command
+whose empty output you intend to treat as evidence.** An invalid predicate and a
+true negative are indistinguishable once the error is discarded.
+
+### Why this is the same family as §READNEVERFAILS
+
+Both are cases where **the apparatus answers a question other than the one asked,
+in the right shape**. §READNEVERFAILS covers device reads; this covers the shell
+and process layer. The remedy is the same one k2kremote formulated:
+
+> A measurement is not evidence until the apparatus has been shown able to
+> produce a reading that CONTRADICTS the one you got.
+
+A `pgrep` that can match itself cannot produce "not running" for a running
+process — it is an instrument that only says yes. Verifying against a second,
+independent channel (`stat`/`ls -t` against `find`; a captured PID against a
+pattern) is what caught every one of these.
+
+Related: [[feedback-check-the-check]].
