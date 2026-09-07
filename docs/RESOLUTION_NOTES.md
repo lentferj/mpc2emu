@@ -28909,13 +28909,34 @@ Against the source's real **11.40 s** full rise: MX11 was **-11%**, MX14 is
 **within a few percent**. The error shrank about sixfold and changed sign, which
 is what a corrected scalar should do.
 
-**The intermediate check decomposes it.** MX14 prog 0 reads `Atk1 rate = 91`
-off the machine -- exactly the byte derived from the ladder (11.40 / 1.838 ->
-91), so the writer's half is confirmed **independently of any audio**. And byte
-91 interpolates to 11.6 s between the ladder's measured 87 (8.85 s) and 96
-(15.10 s); the machine played it at 11.6 s. **One session measured byte->time,
-the other fixed seconds->byte, and the composition predicted a hardware result
-neither half could have predicted alone.**
+**THE "COMPOSITION PREDICTED IT" CLAIM WAS CIRCULAR AND IS WITHDRAWN.** It read:
+*one session measured byte->time, the other fixed seconds->byte, and the
+composition predicted a hardware result neither half could have predicted alone.*
+**The byte was CHOSEN from that ladder** (11.40 / 1.838 -> 91), so the ladder
+agreeing with the outcome is one law inverted and checked against itself, not
+two independent halves meeting. Raised by eosed on review of their own notes;
+both of us had let it stand.
+
+**Two related overstatements, also withdrawn:**
+
+  * *byte 91 interpolates to 11.6 s and the machine played 11.6* -- the
+    interpolation RULE was never stated, and it decides the answer. Byte 91 sits
+    in the ladder's widest gap: linear gives 11.63 s, log-linear 11.22 s, and the
+    ladder is near log-linear (ln(t) slope 0.0525-0.0656 per byte across all
+    seven intervals). Both fall inside the measured 11.10-11.95 s spread, so
+    **this capture cannot discriminate between them** and no few-percent
+    agreement is supportable.
+  * *the readback confirms the writer's half independently of any audio* -- it
+    confirms the intended byte reached the instrument. **Implementation against
+    intent, not intent against the machine**, because the expected 91 was
+    computed from the same ladder.
+
+**WHAT SURVIVES IS STILL AN END-TO-END CHECK, and it is the part that matters.**
+The **11.40 s** target is an MPC-side measurement of the source and owes nothing
+to the ladder. The machine played the rebuilt bank at **11.1-11.95 s** where the
+previous build sat at 10.1 s. **Source asks 11.40, hardware delivers within the
+window spread of it, and the two measurements are independent.** That is the
+claim; the ladder's agreement with itself is not, and the two were conflated.
 
 **t_peak is the statistic that survived; 10-90% is not usable here.** MX11's
 10-90% ranges 5.75-7.25 s across smoothing windows and MX14's 7.00-7.50 -- they
