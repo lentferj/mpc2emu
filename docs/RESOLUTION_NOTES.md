@@ -309,6 +309,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§E4BATKRATE — the E4XT attack byte runs 1.84x slow, measured and corrected (2026-09-07)](#e4batkrate-the-e4xt-attack-byte-runs-184x-slow-measured-and-corrected-2026-09-07)
 - [§WRITETWICEREADONCE — a field written in two places and read in one (2026-09-07)](#writetwicereadonce-a-field-written-in-two-places-and-read-in-one-2026-09-07)
 - [§SAMEDETECTOR — a quantity is comparable because of how it was produced, not what it is called (2026-09-07)](#samedetector-a-quantity-is-comparable-because-of-how-it-was-produced-not-what-it-is-called-2026-09-07)
+- [§FAILOPENCHECK — the onset check under-counted, and that direction reads as clean (2026-09-07)](#failopencheck-the-onset-check-under-counted-and-that-direction-reads-as-clean-2026-09-07)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -29068,3 +29069,104 @@ to be two different programs.
 worth more than one that needed them right: the KRZ family separation was
 computed under three pairings, giving +10.4, +19.4 and +18.7 dB, and never once
 overlapped -- while the row's own sd was meaningless all three times.
+
+## §FAILOPENCHECK — the onset check under-counted, and that direction reads as clean (2026-09-07)
+
+**Status: FIXED in the shared harness (`~/temp/matrix/measure.py`), regression-tested
+over 560 real captures. Not repo code — recorded here because §NOTESWAP cites this
+check by name and every conclusion drawn from it before today inherits the defect.**
+
+The overrun check counted note onsets and warned when a capture held more than were
+played. It found onsets by absolute hysteresis: trigger at peak−40 dB, re-arm only
+below peak−46 dB. **Those are fixed levels, so a capture whose envelope never falls
+that far never re-arms, and every note after the first is merged into it.**
+
+**Measured, not argued: on 560 real captures the old rule returned "1 onset" for 44
+of them, and 43 of those hold the full four notes.** s3ked found the same failure
+independently on an AKAI `ATTAK1` sweep whose level never drops below −66.5 dB
+against a −75.3 dB re-arm level — one file, 63.6 s, four notes, three merged away.
+
+### Why this outranked the over-count bug it replaced
+
+The same function was fixed a few hours earlier for the opposite failure — a merge
+guard shorter than the hold, which made it cry wolf on clean captures. **That
+direction is loud. This one is silent, and it fails open.** The check exists to
+report sound that was not commanded; a detector that merges events can return
+*exactly the commanded count* on a contaminated capture and read CLEAN.
+
+s3ked quantified the exposure by measuring, per capture, the share of the take
+sitting above the old re-arm level — where the detector can say nothing:
+
+- median capture **36 % blind** (inherent: a note is sounding for much of a take)
+- two captures **100 % blind** → 1 onset → discarded as obviously broken
+- one capture **86 % blind** → **4 onsets for 4 notes → recorded as clean**
+
+**The failure is worst just short of the point where it becomes visible.** Total
+blindness produces a nonsense count that gets thrown out; near-total blindness
+produces a confident, wrong, plausible one. That is the general shape of fail-open,
+and it is an argument for instrumenting the blindness rather than caveating it.
+
+### The fix
+
+Trigger on a **rise above the running minimum**; re-arm on a **fall below the running
+maximum**. Both are differences, so the rule is invariant under absolute level and
+cannot be defeated by an envelope that stays high — the same construction that makes
+s3ked's `R = (t90−t50)/(t50−t10)` origin-free (§SAMEDETECTOR).
+
+**A rise-above-minimum rule alone is NOT sufficient**, which only showed up in test:
+a 10 s attack spans more than any sane rise threshold by itself and re-fires part-way
+up, and no merge guard tied to HOLD can cover an attack longer than HOLD. Tracking
+both extremes yields one onset per rise-then-fall cycle at any level.
+
+### Threshold: the tuning question was not real
+
+Swept 5–12 dB over the 560 captures the correct-count column is **flat** — 399, 402,
+405, 406, 410, 412, 412 — and the synthetic long-attack case returns 4 at every one.
+So the threshold was **not** chosen by maximising that column; +13 captures across a
+flat sweep is fitting to this corpus.
+
+It rests on measured signal levels instead (s3ked): a real note-to-note transition
+rises **~37 dB**, a genuine re-articulation **~9.1–9.6 dB** above its local floor.
+An event rising R dB is detected only if R > threshold. **Shipped at 8 dB**, below
+the re-articulations so they are reported, far above the 2–5 dB wobble inside a
+sustained note.
+
+**A correction worth keeping: 10 dB was chosen first, with the rationale "low edge,
+maximises sensitivity to extra articulations".** That has the comparison backwards —
+10 dB *excludes* a 9.6 dB rise, i.e. it suppresses exactly the events the argument
+claimed to protect, while citing the measurement that refutes it. Caught by re-reading
+s3ked's numbers against the claim, before shipping.
+
+The residual error is deliberately biased toward **over**-counting (>4 results: 138 at
+8 dB vs 132 at 10 dB). The two directions are not symmetric in consequence, so the
+threshold errs toward the loud one.
+
+### Reporting
+
+`_onset_report()` returns **(count, blind fraction)** and the count-only entry point is
+documented as not-for-use. Three outcomes at the call site, because "not 4" needed
+splitting:
+
+- **over** — something uncommanded sounded (§NOTESWAP), features unsafe;
+- **under** — **UNINFORMATIVE, not clean**: a detector that cannot separate the
+  commanded notes cannot report an uncommanded one either;
+- **equal but >80 % blind** — correct count, weak evidence; do not record as clean
+  without a second signal.
+
+### Stated limit, not a defect to tune away
+
+Notes whose envelope dips less than the threshold between them cannot be separated by
+**any** envelope rule. A synthetic with 2–5 dB dips returns 1 under every method and
+threshold tried. The information is not in the envelope. This sits alongside the
+existing guard blind spot (a second articulation within 0.6 s of note-off is merged,
+not refuted).
+
+### The compounding, which neither side could see alone
+
+A long attack means the previous note's release still dominates at the next note-on.
+That **moved s3ked's measurement origin late** (biasing `t50/t90` toward the
+exponential they were rejecting) and **held our envelope above the re-arm level**
+(merging their notes away). One cause, two instruments, both failing quietly. The
+design rule that follows is s3ked's and is tighter than ours was: **the hold must be
+long enough that the notes separate**, which strictly implies — and is not implied by
+— long enough to reach the plateau.
