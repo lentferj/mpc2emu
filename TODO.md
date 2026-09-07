@@ -4238,6 +4238,31 @@ is rewritten there is no route back to the pre-fix state.
 
 See `docs/RESOLUTION_NOTES.md` §E4BDOUBLETRIM.
 
+## ISO bank ORDER is not stable across builds — selecting by index loads a different bank
+
+**Found 2026-09-07 (eosed) on the first load of CD3-MATRIX10.iso.** The builder
+writes banks in `sorted()` order; the previous disc was written in the order the
+banks were added. Same five names, same disc id, different indices:
+
+    MATRIX9   B000 KR-E4   B001 S3-E4   B002 S1-E4   B003 MPC-E4B  B004 GRATER
+    MATRIX10  B000 GRATER  B001 KR-E4   B002 MPC-E4B B003 S1-E4    B004 S3-E4
+
+**Selecting B003 today loads S1-E4 where yesterday it loaded MPC-E4B**, with no
+indication — the names are unchanged, so nothing looks wrong. Any harness or
+person selecting by remembered index gets a different bank silently.
+
+Two consequences:
+
+- **Any driver that addresses banks by index must be re-pointed per disc**, or
+  better, select by name and verify by bytes.
+- **It is also an unfakeable freshness proof**: a cached directory cannot show a
+  reordering, so "the order changed" is positive evidence of a live read in a way
+  that matching names are not.
+
+Worth deciding whether `build_iso` should preserve insertion order rather than
+sorting — stable indices across generations are what make an A/B addressable —
+but the safer habit either way is name-plus-bytes, never index.
+
 ## FIXED: `RootNote 0` no longer freezes pitch — 70.5% of the library was resting on a WAV chunk
 
 **Status: FIXED 2026-09-07 in `parsers/xpm_parser.py`. Not yet hardware-tested on
@@ -4273,6 +4298,21 @@ someone plays it across the keyboard.*
 
 **Verified end to end:** shipped bank P010 `vpar[38] = 1`; rebuilt with the fix,
 `vpar[38] = 0`. It was the only preset in that bank carrying the flag.
+
+**HARDWARE-CONFIRMED 2026-09-07 on the rebuilt disc (eosed).** `NON_TRANSPOSE`
+(id 57) reads 0 on all 11 presets across voices 0-3, and the audio agrees —
+fundamental at k36 / k60 / k84, where a perfect tracker over that span gives 16:
+
+    P010    65.2  262.6  1050.3   ratio 16.11   TRACKS  (was 262.6/262.6/262.6, 1.00)
+    P007   130.7  524.4  2102.8   ratio 16.08   tracks
+    P004    49.1  130.7   522.9   ratio 10.66   tracks
+    P001   131.1  265.5  1041.5   ratio  7.94   tracks
+
+**The fix did not over-reach:** every neighbour reads the same as before it to
+within estimator jitter, so the only material change in the bank is P010. And
+P000 still reads a constant 93.8 Hz at -86 dBFS *identically before and after* —
+which is what an estimator noise-floor artefact does and what a fixed-pitch
+program would not.
 
 **Only P010 was flat on the shipped bank** (eosed measured every preset's
 fundamental across k36-k84) — so the diagnosis is complete rather than partial.
