@@ -29319,6 +29319,25 @@ does not consult the guard, so classification still reports what counting loses.
 That is the argument against resting any conclusion on a count alone, including
 the grid-free form "N events for N notes leaves no room for an N+1th".
 
+### PENDING RE-MEASUREMENT — every corpus figure below predates the clamp fix
+
+**All corpus numbers recorded in the §FAILOPENCHECK sections were measured with
+the clamped detector**, which could not see a quiet event whose local floor sat
+under `peak − 40 dB`. Each therefore **under-counts by construction**:
+
+- the **245 → 19** blast radius of the classifier defect,
+- the **two-population** lag split (route elevation vs single outliers),
+- the lag distribution (median +0.019 s, p90 +0.186 s, ~2 % above 0.35 s).
+
+The two-population *structure* is expected to survive — it concerns lags on
+captures that track the grid, which the clamp does not touch — but **expected is
+not measured**, and it is recorded here as pending rather than quietly re-run.
+
+**Why flag rather than re-run and compare:** a fail-open defect makes every
+number look better, so agreement after a re-run is not evidence of anything. A
+peer recounted 45 captures on the clamped build, got `over = 0`, and nearly
+recorded it as an improvement. The same trap applies to every figure above.
+
 ### The absolute floor survived inside the relative check, as a clamp on the minimum
 
 **A fail-open regression I introduced with the relative rewrite, found by s3ked
