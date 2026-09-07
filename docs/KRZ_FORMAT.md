@@ -1037,3 +1037,56 @@ than stopping at the 16-byte field yields a longer name for 486 of 64 471
 objects, 6 of them picking up unprintable bytes — including the
 `'General MIDI kit\x9d\xdb'` this document cites. Our reader has capped at
 the field since `84c3213`.
+
+
+## DSP function codes are PER-BLOCK, not a global enumeration
+
+**Measured 2026-09-07 (k2kremote), all four block-type offsets and every function
+name in the Reference Guide's table.** Artefact:
+`~/temp/k2k_algs/function_codes_by_block.json`.
+
+**Block-type offsets, all measured, none inferred:**
+
+    F1 = 209    F2 = 225    F3 = 241    F4 = 257
+
+The 32-byte spacing is real, but it was *measured* rather than extrapolated from
+F1/F3 — an assumed F2/F4 would have put two blocks' worth of codes at wrong
+offsets with every value still looking legal.
+
+**A byte only means something together with the block it sits in.** The same
+function has different codes in different blocks:
+
+    NONE          60  in the LOPASS-family blocks and alg 5's F3
+                  61  in alg 5 F1, alg 2 F1, alg 16/17/18 F2
+                  62  in alg 1 F1
+                  63  in alg 21 F2
+    PARA BASS      8  in alg 2/5 F1   but  10 in alg 16 F2
+    PARA TREBLE    9  in alg 2/5 F1   but  11 in alg 16 F2
+
+A single global `NONE = 60` would have been wrong for five of the eleven blocks
+walked. **This validates the writer's constant naming**, which already carries the
+block and algorithm in the name (`_K2_F2_NONE = 61`, `_K2_F3_NONE = 60`,
+`_K2_FILTER_NONE = 62`) rather than one shared `NONE`.
+
+**Cross-check of every block/function constant in `krz_writer.py` against the
+measured table — all confirmed:**
+
+    _K2_FILTER_2P_LP     2   alg 2/5 F1  2POLE LOWPASS
+    _K2_FILTER_2P_BP     3   alg 2/5 F1  BANDPASS FILT
+    _K2_FILTER_PARA_MID 51   alg 2/5 F1  PARA MID
+    _K2_FILTER_1P_LP    15   alg 12 F1   LOPASS
+    _K2_FILTER_LP       50   alg 1 F1    4POLE LOPASS W/SEP
+    _K2_FILTER_HP       54   alg 1 F1    4POLE HIPASS W/SEP
+    _K2_FILTER_BP       55   alg 1 F1    TWIN PEAKS BANDPASS
+    _K2_FILTER_NOTCH    56   alg 1 F1    DOUBLE NOTCH W/SEP
+    _K2_FILTER_NONE     62   alg 1 F1    NONE
+    _K2_F2_NONE         61   alg 16/17/18 F2  NONE
+    _K2_F3_NONE         60   alg 5 F3    NONE
+    _K2_F3_PANNER       40   alg 26 F3   PANNER
+
+**NOT yet covered by the table: `_K2_F2_RES = 16` / `_K2_F2_AMP = 16`.** The walk
+has no entry for algorithm 5's F2, and in the blocks it did walk, 16 is `HIPASS`.
+Algorithm 5's printed chain is `PITCH > 2PARAM SHAPER > LP2RES > AMP` — four names
+across five stages, so one block spans two slots and it is not established that
+alg 5 has a separate F2 at offset 225 at all. **Our writer writes 16 there for
+resonance. That byte is unverified.** Open item.
