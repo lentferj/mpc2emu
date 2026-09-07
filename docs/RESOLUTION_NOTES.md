@@ -29319,6 +29319,45 @@ does not consult the guard, so classification still reports what counting loses.
 That is the argument against resting any conclusion on a count alone, including
 the grid-free form "N events for N notes leaves no room for an N+1th".
 
+### The spacings gate every onset verdict, and need no schedule at all
+
+**The cheapest and strongest check in the harness, available to both sides all
+night and taken by neither** (s3ked, 2026-09-08). The commanded spacing is
+`PRE + HOLD + GAP` — known exactly, constant, identical for every note — so the
+differences between consecutive onsets must equal it. **Three subtractions, no
+`t_on`, no `marks`, no schedule reconstruction.** That is what makes it stronger
+than everything else here: it cannot be defeated by a wrong grid, because it
+never consults one.
+
+```
+  typical capture     5.60  5.60  5.60
+  merging capture A   5.49  5.45  5.92
+  merging capture B   5.46  5.82  3.77     <- one onset arrives 0.65 s EARLY
+```
+
+**A delay cannot make a note early.** On quiet, erratic material the detector
+triggers wherever the signal swells 8 dB above its running minimum, and that is
+simply not the note-on.
+
+**Consequence, and it demotes the previous section.** A capture failing this
+supports **no** onset-derived quantity — not a count, not a position class, and
+not the lag `_guard_margin` is computed from. So the margin warning was firing
+hardest on exactly the captures where **its stated reason was wrong**. The
+warning stays correct ("do not read this as clean"); the reason moves.
+
+**Two failure kinds, separated for one extra line:**
+
+| spacings | kind | where the fault is |
+|---|---|---|
+| `[3.40, 3.40, 3.40]` | `grid_mismatch` | **the caller's constant** — the detector tracks a grid perfectly, just not this one |
+| `[5.46, 5.82, 3.77]` | `mislocated` | the detector — it is not finding the notes |
+
+Reporting both as "does not track" would send someone hunting a detector fault
+that is really a wrong constant.
+
+**Strictly more sensitive than the margin:** `krorig_600` passes the margin at
++0.185 and fails the spacing gate. Checked first at the call site, and pinned.
+
 ### The margin is per-capture, so the harness now measures it instead of quoting one
 
 Both sides published a corpus bound for the guard margin and both were corrected:
