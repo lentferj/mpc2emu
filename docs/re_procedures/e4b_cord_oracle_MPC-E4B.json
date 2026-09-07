@@ -1,0 +1,6699 @@
+{
+ "bank": "MPC-E4B",
+ "read": "E4XT via editor SysEx",
+ "presets": 11,
+ "voices_scanned": 4,
+ "rows": [
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 0,
+   "src": 10,
+   "dst": 64,
+   "amt": 16
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 1,
+   "src": 16,
+   "dst": 48,
+   "amt": 6
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 2,
+   "src": 96,
+   "dst": 48,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 3,
+   "src": 17,
+   "dst": 170,
+   "amt": 13
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 4,
+   "src": 10,
+   "dst": 56,
+   "amt": 30
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 5,
+   "src": 80,
+   "dst": 56,
+   "amt": 100
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 6,
+   "src": 8,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 7,
+   "src": 22,
+   "dst": 8,
+   "amt": 100
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "key_low": 0,
+   "key_high": 127,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 0,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 1,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 2,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 3,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 4,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 5,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 6,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 7,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "key_low": 0,
+   "key_high": 62,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 0,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 1,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 2,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 3,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 4,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 5,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 6,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 7,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "key_low": 0,
+   "key_high": 62,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 0,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 1,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 2,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 3,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 4,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 5,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 6,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 7,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "key_low": 0,
+   "key_high": 62,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 1,
+   "voice": 0,
+   "cord": 0,
+   "src": 10,
+   "dst": 64,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 0,
+   "cord": 1,
+   "src": 16,
+   "dst": 48,
+   "amt": 6
+  },
+  {
+   "preset": 1,
+   "voice": 0,
+   "cord": 2,
+   "src": 96,
+   "dst": 48,
+   "amt": 2
+  },
+  {
+   "preset": 1,
+   "voice": 0,
+   "cord": 3,
+   "src": 17,
+   "dst": 170,
+   "amt": 13
+  },
+  {
+   "preset": 1,
+   "voice": 0,
+   "cord": 4,
+   "src": 10,
+   "dst": 56,
+   "amt": 39
+  },
+  {
+   "preset": 1,
+   "voice": 0,
+   "cord": 5,
+   "src": 80,
+   "dst": 56,
+   "amt": 100
+  },
+  {
+   "preset": 1,
+   "voice": 0,
+   "cord": 6,
+   "src": 8,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 0,
+   "cord": 7,
+   "src": 22,
+   "dst": 8,
+   "amt": 100
+  },
+  {
+   "preset": 1,
+   "voice": 0,
+   "cord": 8,
+   "src": 96,
+   "dst": 65,
+   "amt": 72
+  },
+  {
+   "preset": 1,
+   "voice": 0,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 0,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 0,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 0,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 0,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 0,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 0,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 0,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 0,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 0,
+   "key_low": 0,
+   "key_high": 35,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 1,
+   "voice": 1,
+   "cord": 0,
+   "src": 10,
+   "dst": 64,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 1,
+   "cord": 1,
+   "src": 16,
+   "dst": 48,
+   "amt": 6
+  },
+  {
+   "preset": 1,
+   "voice": 1,
+   "cord": 2,
+   "src": 96,
+   "dst": 48,
+   "amt": 2
+  },
+  {
+   "preset": 1,
+   "voice": 1,
+   "cord": 3,
+   "src": 17,
+   "dst": 170,
+   "amt": 13
+  },
+  {
+   "preset": 1,
+   "voice": 1,
+   "cord": 4,
+   "src": 10,
+   "dst": 56,
+   "amt": 39
+  },
+  {
+   "preset": 1,
+   "voice": 1,
+   "cord": 5,
+   "src": 80,
+   "dst": 56,
+   "amt": 100
+  },
+  {
+   "preset": 1,
+   "voice": 1,
+   "cord": 6,
+   "src": 8,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 1,
+   "cord": 7,
+   "src": 22,
+   "dst": 8,
+   "amt": 100
+  },
+  {
+   "preset": 1,
+   "voice": 1,
+   "cord": 8,
+   "src": 96,
+   "dst": 65,
+   "amt": 72
+  },
+  {
+   "preset": 1,
+   "voice": 1,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 1,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 1,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 1,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 1,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 1,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 1,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 1,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 1,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 1,
+   "key_low": 0,
+   "key_high": 35,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 1,
+   "voice": 2,
+   "cord": 0,
+   "src": 10,
+   "dst": 64,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 2,
+   "cord": 1,
+   "src": 16,
+   "dst": 48,
+   "amt": 6
+  },
+  {
+   "preset": 1,
+   "voice": 2,
+   "cord": 2,
+   "src": 96,
+   "dst": 48,
+   "amt": 2
+  },
+  {
+   "preset": 1,
+   "voice": 2,
+   "cord": 3,
+   "src": 17,
+   "dst": 170,
+   "amt": 13
+  },
+  {
+   "preset": 1,
+   "voice": 2,
+   "cord": 4,
+   "src": 10,
+   "dst": 56,
+   "amt": 39
+  },
+  {
+   "preset": 1,
+   "voice": 2,
+   "cord": 5,
+   "src": 80,
+   "dst": 56,
+   "amt": 100
+  },
+  {
+   "preset": 1,
+   "voice": 2,
+   "cord": 6,
+   "src": 8,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 2,
+   "cord": 7,
+   "src": 22,
+   "dst": 8,
+   "amt": 100
+  },
+  {
+   "preset": 1,
+   "voice": 2,
+   "cord": 8,
+   "src": 96,
+   "dst": 65,
+   "amt": 72
+  },
+  {
+   "preset": 1,
+   "voice": 2,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 2,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 2,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 2,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 2,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 2,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 2,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 2,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 2,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 2,
+   "key_low": 0,
+   "key_high": 35,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 1,
+   "voice": 3,
+   "cord": 0,
+   "src": 10,
+   "dst": 64,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 3,
+   "cord": 1,
+   "src": 16,
+   "dst": 48,
+   "amt": 6
+  },
+  {
+   "preset": 1,
+   "voice": 3,
+   "cord": 2,
+   "src": 96,
+   "dst": 48,
+   "amt": 2
+  },
+  {
+   "preset": 1,
+   "voice": 3,
+   "cord": 3,
+   "src": 17,
+   "dst": 170,
+   "amt": 13
+  },
+  {
+   "preset": 1,
+   "voice": 3,
+   "cord": 4,
+   "src": 10,
+   "dst": 56,
+   "amt": 39
+  },
+  {
+   "preset": 1,
+   "voice": 3,
+   "cord": 5,
+   "src": 80,
+   "dst": 56,
+   "amt": 100
+  },
+  {
+   "preset": 1,
+   "voice": 3,
+   "cord": 6,
+   "src": 8,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 3,
+   "cord": 7,
+   "src": 22,
+   "dst": 8,
+   "amt": 100
+  },
+  {
+   "preset": 1,
+   "voice": 3,
+   "cord": 8,
+   "src": 96,
+   "dst": 65,
+   "amt": 72
+  },
+  {
+   "preset": 1,
+   "voice": 3,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 3,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 3,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 3,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 3,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 3,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 3,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 3,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 3,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 1,
+   "voice": 3,
+   "key_low": 0,
+   "key_high": 35,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 2,
+   "voice": 0,
+   "cord": 0,
+   "src": 10,
+   "dst": 64,
+   "amt": 16
+  },
+  {
+   "preset": 2,
+   "voice": 0,
+   "cord": 1,
+   "src": 16,
+   "dst": 48,
+   "amt": 6
+  },
+  {
+   "preset": 2,
+   "voice": 0,
+   "cord": 2,
+   "src": 96,
+   "dst": 48,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 0,
+   "cord": 3,
+   "src": 17,
+   "dst": 170,
+   "amt": 13
+  },
+  {
+   "preset": 2,
+   "voice": 0,
+   "cord": 4,
+   "src": 12,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 0,
+   "cord": 5,
+   "src": 80,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 0,
+   "cord": 6,
+   "src": 8,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 0,
+   "cord": 7,
+   "src": 22,
+   "dst": 8,
+   "amt": 100
+  },
+  {
+   "preset": 2,
+   "voice": 0,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 0,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 0,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 0,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 0,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 0,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 0,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 0,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 0,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 0,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 0,
+   "key_low": 36,
+   "key_high": 49,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 2,
+   "voice": 1,
+   "cord": 0,
+   "src": 10,
+   "dst": 64,
+   "amt": 16
+  },
+  {
+   "preset": 2,
+   "voice": 1,
+   "cord": 1,
+   "src": 16,
+   "dst": 48,
+   "amt": 6
+  },
+  {
+   "preset": 2,
+   "voice": 1,
+   "cord": 2,
+   "src": 96,
+   "dst": 48,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 1,
+   "cord": 3,
+   "src": 17,
+   "dst": 170,
+   "amt": 13
+  },
+  {
+   "preset": 2,
+   "voice": 1,
+   "cord": 4,
+   "src": 12,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 1,
+   "cord": 5,
+   "src": 80,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 1,
+   "cord": 6,
+   "src": 8,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 1,
+   "cord": 7,
+   "src": 22,
+   "dst": 8,
+   "amt": 100
+  },
+  {
+   "preset": 2,
+   "voice": 1,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 1,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 1,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 1,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 1,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 1,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 1,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 1,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 1,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 1,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 1,
+   "key_low": 43,
+   "key_high": 43,
+   "non_transpose": 0,
+   "volume": -18
+  },
+  {
+   "preset": 2,
+   "voice": 2,
+   "cord": 0,
+   "src": 10,
+   "dst": 64,
+   "amt": 16
+  },
+  {
+   "preset": 2,
+   "voice": 2,
+   "cord": 1,
+   "src": 16,
+   "dst": 48,
+   "amt": 6
+  },
+  {
+   "preset": 2,
+   "voice": 2,
+   "cord": 2,
+   "src": 96,
+   "dst": 48,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 2,
+   "cord": 3,
+   "src": 17,
+   "dst": 170,
+   "amt": 13
+  },
+  {
+   "preset": 2,
+   "voice": 2,
+   "cord": 4,
+   "src": 12,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 2,
+   "cord": 5,
+   "src": 80,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 2,
+   "cord": 6,
+   "src": 8,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 2,
+   "cord": 7,
+   "src": 22,
+   "dst": 8,
+   "amt": 100
+  },
+  {
+   "preset": 2,
+   "voice": 2,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 2,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 2,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 2,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 2,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 2,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 2,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 2,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 2,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 2,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 2,
+   "key_low": 46,
+   "key_high": 51,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 2,
+   "voice": 3,
+   "cord": 0,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 3,
+   "cord": 1,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 3,
+   "cord": 2,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 3,
+   "cord": 3,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 3,
+   "cord": 4,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 3,
+   "cord": 5,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 3,
+   "cord": 6,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 3,
+   "cord": 7,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 3,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 3,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 3,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 3,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 3,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 3,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 3,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 3,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 3,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 3,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 2,
+   "voice": 3,
+   "key_low": 0,
+   "key_high": 62,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 3,
+   "voice": 0,
+   "cord": 0,
+   "src": 10,
+   "dst": 64,
+   "amt": 16
+  },
+  {
+   "preset": 3,
+   "voice": 0,
+   "cord": 1,
+   "src": 16,
+   "dst": 48,
+   "amt": 6
+  },
+  {
+   "preset": 3,
+   "voice": 0,
+   "cord": 2,
+   "src": 96,
+   "dst": 48,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 0,
+   "cord": 3,
+   "src": 17,
+   "dst": 170,
+   "amt": 13
+  },
+  {
+   "preset": 3,
+   "voice": 0,
+   "cord": 4,
+   "src": 10,
+   "dst": 56,
+   "amt": 41
+  },
+  {
+   "preset": 3,
+   "voice": 0,
+   "cord": 5,
+   "src": 80,
+   "dst": 56,
+   "amt": 96
+  },
+  {
+   "preset": 3,
+   "voice": 0,
+   "cord": 6,
+   "src": 8,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 0,
+   "cord": 7,
+   "src": 22,
+   "dst": 8,
+   "amt": 100
+  },
+  {
+   "preset": 3,
+   "voice": 0,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 0,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 0,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 0,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 0,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 0,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 0,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 0,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 0,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 0,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 0,
+   "key_low": 0,
+   "key_high": 127,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 3,
+   "voice": 1,
+   "cord": 0,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 1,
+   "cord": 1,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 1,
+   "cord": 2,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 1,
+   "cord": 3,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 1,
+   "cord": 4,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 1,
+   "cord": 5,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 1,
+   "cord": 6,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 1,
+   "cord": 7,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 1,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 1,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 1,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 1,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 1,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 1,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 1,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 1,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 1,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 1,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 1,
+   "key_low": 0,
+   "key_high": 62,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 3,
+   "voice": 2,
+   "cord": 0,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 2,
+   "cord": 1,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 2,
+   "cord": 2,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 2,
+   "cord": 3,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 2,
+   "cord": 4,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 2,
+   "cord": 5,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 2,
+   "cord": 6,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 2,
+   "cord": 7,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 2,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 2,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 2,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 2,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 2,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 2,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 2,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 2,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 2,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 2,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 2,
+   "key_low": 0,
+   "key_high": 62,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 3,
+   "voice": 3,
+   "cord": 0,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 3,
+   "cord": 1,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 3,
+   "cord": 2,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 3,
+   "cord": 3,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 3,
+   "cord": 4,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 3,
+   "cord": 5,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 3,
+   "cord": 6,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 3,
+   "cord": 7,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 3,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 3,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 3,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 3,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 3,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 3,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 3,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 3,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 3,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 3,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 3,
+   "voice": 3,
+   "key_low": 0,
+   "key_high": 62,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 4,
+   "voice": 0,
+   "cord": 0,
+   "src": 10,
+   "dst": 64,
+   "amt": 16
+  },
+  {
+   "preset": 4,
+   "voice": 0,
+   "cord": 1,
+   "src": 16,
+   "dst": 48,
+   "amt": 6
+  },
+  {
+   "preset": 4,
+   "voice": 0,
+   "cord": 2,
+   "src": 96,
+   "dst": 48,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 0,
+   "cord": 3,
+   "src": 17,
+   "dst": 170,
+   "amt": 13
+  },
+  {
+   "preset": 4,
+   "voice": 0,
+   "cord": 4,
+   "src": 10,
+   "dst": 56,
+   "amt": 41
+  },
+  {
+   "preset": 4,
+   "voice": 0,
+   "cord": 5,
+   "src": 80,
+   "dst": 56,
+   "amt": 96
+  },
+  {
+   "preset": 4,
+   "voice": 0,
+   "cord": 6,
+   "src": 8,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 0,
+   "cord": 7,
+   "src": 22,
+   "dst": 8,
+   "amt": 100
+  },
+  {
+   "preset": 4,
+   "voice": 0,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 0,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 0,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 0,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 0,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 0,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 0,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 0,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 0,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 0,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 0,
+   "key_low": 0,
+   "key_high": 127,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 4,
+   "voice": 1,
+   "cord": 0,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 1,
+   "cord": 1,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 1,
+   "cord": 2,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 1,
+   "cord": 3,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 1,
+   "cord": 4,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 1,
+   "cord": 5,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 1,
+   "cord": 6,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 1,
+   "cord": 7,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 1,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 1,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 1,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 1,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 1,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 1,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 1,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 1,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 1,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 1,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 1,
+   "key_low": 0,
+   "key_high": 62,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 4,
+   "voice": 2,
+   "cord": 0,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 2,
+   "cord": 1,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 2,
+   "cord": 2,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 2,
+   "cord": 3,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 2,
+   "cord": 4,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 2,
+   "cord": 5,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 2,
+   "cord": 6,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 2,
+   "cord": 7,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 2,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 2,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 2,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 2,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 2,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 2,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 2,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 2,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 2,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 2,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 2,
+   "key_low": 0,
+   "key_high": 62,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 4,
+   "voice": 3,
+   "cord": 0,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 3,
+   "cord": 1,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 3,
+   "cord": 2,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 3,
+   "cord": 3,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 3,
+   "cord": 4,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 3,
+   "cord": 5,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 3,
+   "cord": 6,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 3,
+   "cord": 7,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 3,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 3,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 3,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 3,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 3,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 3,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 3,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 3,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 3,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 3,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 4,
+   "voice": 3,
+   "key_low": 0,
+   "key_high": 62,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 5,
+   "voice": 0,
+   "cord": 0,
+   "src": 10,
+   "dst": 64,
+   "amt": 6
+  },
+  {
+   "preset": 5,
+   "voice": 0,
+   "cord": 1,
+   "src": 16,
+   "dst": 48,
+   "amt": 6
+  },
+  {
+   "preset": 5,
+   "voice": 0,
+   "cord": 2,
+   "src": 96,
+   "dst": 48,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 0,
+   "cord": 3,
+   "src": 17,
+   "dst": 170,
+   "amt": 13
+  },
+  {
+   "preset": 5,
+   "voice": 0,
+   "cord": 4,
+   "src": 10,
+   "dst": 56,
+   "amt": 8
+  },
+  {
+   "preset": 5,
+   "voice": 0,
+   "cord": 5,
+   "src": 80,
+   "dst": 56,
+   "amt": 100
+  },
+  {
+   "preset": 5,
+   "voice": 0,
+   "cord": 6,
+   "src": 8,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 0,
+   "cord": 7,
+   "src": 22,
+   "dst": 8,
+   "amt": 100
+  },
+  {
+   "preset": 5,
+   "voice": 0,
+   "cord": 8,
+   "src": 96,
+   "dst": 65,
+   "amt": -9
+  },
+  {
+   "preset": 5,
+   "voice": 0,
+   "cord": 9,
+   "src": 17,
+   "dst": 176,
+   "amt": -9
+  },
+  {
+   "preset": 5,
+   "voice": 0,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 0,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 0,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 0,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 0,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 0,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 0,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 0,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 0,
+   "key_low": 0,
+   "key_high": 127,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 5,
+   "voice": 1,
+   "cord": 0,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 1,
+   "cord": 1,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 1,
+   "cord": 2,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 1,
+   "cord": 3,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 1,
+   "cord": 4,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 1,
+   "cord": 5,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 1,
+   "cord": 6,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 1,
+   "cord": 7,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 1,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 1,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 1,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 1,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 1,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 1,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 1,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 1,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 1,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 1,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 1,
+   "key_low": 0,
+   "key_high": 62,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 5,
+   "voice": 2,
+   "cord": 0,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 2,
+   "cord": 1,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 2,
+   "cord": 2,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 2,
+   "cord": 3,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 2,
+   "cord": 4,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 2,
+   "cord": 5,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 2,
+   "cord": 6,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 2,
+   "cord": 7,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 2,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 2,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 2,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 2,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 2,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 2,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 2,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 2,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 2,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 2,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 2,
+   "key_low": 0,
+   "key_high": 62,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 5,
+   "voice": 3,
+   "cord": 0,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 3,
+   "cord": 1,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 3,
+   "cord": 2,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 3,
+   "cord": 3,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 3,
+   "cord": 4,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 3,
+   "cord": 5,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 3,
+   "cord": 6,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 3,
+   "cord": 7,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 3,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 3,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 3,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 3,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 3,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 3,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 3,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 3,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 3,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 3,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 5,
+   "voice": 3,
+   "key_low": 0,
+   "key_high": 62,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 6,
+   "voice": 0,
+   "cord": 0,
+   "src": 10,
+   "dst": 64,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 0,
+   "cord": 1,
+   "src": 16,
+   "dst": 48,
+   "amt": 6
+  },
+  {
+   "preset": 6,
+   "voice": 0,
+   "cord": 2,
+   "src": 96,
+   "dst": 48,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 0,
+   "cord": 3,
+   "src": 17,
+   "dst": 170,
+   "amt": 13
+  },
+  {
+   "preset": 6,
+   "voice": 0,
+   "cord": 4,
+   "src": 10,
+   "dst": 56,
+   "amt": 6
+  },
+  {
+   "preset": 6,
+   "voice": 0,
+   "cord": 5,
+   "src": 80,
+   "dst": 56,
+   "amt": 9
+  },
+  {
+   "preset": 6,
+   "voice": 0,
+   "cord": 6,
+   "src": 8,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 0,
+   "cord": 7,
+   "src": 22,
+   "dst": 8,
+   "amt": 100
+  },
+  {
+   "preset": 6,
+   "voice": 0,
+   "cord": 8,
+   "src": 96,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 0,
+   "cord": 9,
+   "src": 17,
+   "dst": 176,
+   "amt": 6
+  },
+  {
+   "preset": 6,
+   "voice": 0,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 0,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 0,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 0,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 0,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 0,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 0,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 0,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 0,
+   "key_low": 16,
+   "key_high": 127,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 6,
+   "voice": 1,
+   "cord": 0,
+   "src": 10,
+   "dst": 64,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 1,
+   "cord": 1,
+   "src": 16,
+   "dst": 48,
+   "amt": 6
+  },
+  {
+   "preset": 6,
+   "voice": 1,
+   "cord": 2,
+   "src": 96,
+   "dst": 48,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 1,
+   "cord": 3,
+   "src": 17,
+   "dst": 170,
+   "amt": 13
+  },
+  {
+   "preset": 6,
+   "voice": 1,
+   "cord": 4,
+   "src": 10,
+   "dst": 56,
+   "amt": 6
+  },
+  {
+   "preset": 6,
+   "voice": 1,
+   "cord": 5,
+   "src": 80,
+   "dst": 56,
+   "amt": 9
+  },
+  {
+   "preset": 6,
+   "voice": 1,
+   "cord": 6,
+   "src": 8,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 1,
+   "cord": 7,
+   "src": 22,
+   "dst": 8,
+   "amt": 100
+  },
+  {
+   "preset": 6,
+   "voice": 1,
+   "cord": 8,
+   "src": 96,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 1,
+   "cord": 9,
+   "src": 17,
+   "dst": 176,
+   "amt": 6
+  },
+  {
+   "preset": 6,
+   "voice": 1,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 1,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 1,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 1,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 1,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 1,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 1,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 1,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 1,
+   "key_low": 0,
+   "key_high": 127,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 6,
+   "voice": 2,
+   "cord": 0,
+   "src": 10,
+   "dst": 64,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 2,
+   "cord": 1,
+   "src": 16,
+   "dst": 48,
+   "amt": 6
+  },
+  {
+   "preset": 6,
+   "voice": 2,
+   "cord": 2,
+   "src": 96,
+   "dst": 48,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 2,
+   "cord": 3,
+   "src": 17,
+   "dst": 170,
+   "amt": 13
+  },
+  {
+   "preset": 6,
+   "voice": 2,
+   "cord": 4,
+   "src": 10,
+   "dst": 56,
+   "amt": 6
+  },
+  {
+   "preset": 6,
+   "voice": 2,
+   "cord": 5,
+   "src": 80,
+   "dst": 56,
+   "amt": 9
+  },
+  {
+   "preset": 6,
+   "voice": 2,
+   "cord": 6,
+   "src": 8,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 2,
+   "cord": 7,
+   "src": 22,
+   "dst": 8,
+   "amt": 100
+  },
+  {
+   "preset": 6,
+   "voice": 2,
+   "cord": 8,
+   "src": 96,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 2,
+   "cord": 9,
+   "src": 17,
+   "dst": 176,
+   "amt": 6
+  },
+  {
+   "preset": 6,
+   "voice": 2,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 2,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 2,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 2,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 2,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 2,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 2,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 2,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 2,
+   "key_low": 0,
+   "key_high": 28,
+   "non_transpose": 0,
+   "volume": -27
+  },
+  {
+   "preset": 6,
+   "voice": 3,
+   "cord": 0,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 3,
+   "cord": 1,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 3,
+   "cord": 2,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 3,
+   "cord": 3,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 3,
+   "cord": 4,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 3,
+   "cord": 5,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 3,
+   "cord": 6,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 3,
+   "cord": 7,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 3,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 3,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 3,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 3,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 3,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 3,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 3,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 3,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 3,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 3,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 6,
+   "voice": 3,
+   "key_low": 0,
+   "key_high": 62,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 7,
+   "voice": 0,
+   "cord": 0,
+   "src": 10,
+   "dst": 64,
+   "amt": 16
+  },
+  {
+   "preset": 7,
+   "voice": 0,
+   "cord": 1,
+   "src": 16,
+   "dst": 48,
+   "amt": 6
+  },
+  {
+   "preset": 7,
+   "voice": 0,
+   "cord": 2,
+   "src": 96,
+   "dst": 48,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 0,
+   "cord": 3,
+   "src": 17,
+   "dst": 170,
+   "amt": 13
+  },
+  {
+   "preset": 7,
+   "voice": 0,
+   "cord": 4,
+   "src": 10,
+   "dst": 56,
+   "amt": 41
+  },
+  {
+   "preset": 7,
+   "voice": 0,
+   "cord": 5,
+   "src": 80,
+   "dst": 56,
+   "amt": 96
+  },
+  {
+   "preset": 7,
+   "voice": 0,
+   "cord": 6,
+   "src": 8,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 0,
+   "cord": 7,
+   "src": 22,
+   "dst": 8,
+   "amt": 100
+  },
+  {
+   "preset": 7,
+   "voice": 0,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 0,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 0,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 0,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 0,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 0,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 0,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 0,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 0,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 0,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 0,
+   "key_low": 0,
+   "key_high": 127,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 7,
+   "voice": 1,
+   "cord": 0,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 1,
+   "cord": 1,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 1,
+   "cord": 2,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 1,
+   "cord": 3,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 1,
+   "cord": 4,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 1,
+   "cord": 5,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 1,
+   "cord": 6,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 1,
+   "cord": 7,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 1,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 1,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 1,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 1,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 1,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 1,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 1,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 1,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 1,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 1,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 1,
+   "key_low": 0,
+   "key_high": 62,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 7,
+   "voice": 2,
+   "cord": 0,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 2,
+   "cord": 1,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 2,
+   "cord": 2,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 2,
+   "cord": 3,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 2,
+   "cord": 4,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 2,
+   "cord": 5,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 2,
+   "cord": 6,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 2,
+   "cord": 7,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 2,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 2,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 2,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 2,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 2,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 2,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 2,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 2,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 2,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 2,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 2,
+   "key_low": 0,
+   "key_high": 62,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 7,
+   "voice": 3,
+   "cord": 0,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 3,
+   "cord": 1,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 3,
+   "cord": 2,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 3,
+   "cord": 3,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 3,
+   "cord": 4,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 3,
+   "cord": 5,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 3,
+   "cord": 6,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 3,
+   "cord": 7,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 3,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 3,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 3,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 3,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 3,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 3,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 3,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 3,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 3,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 3,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 7,
+   "voice": 3,
+   "key_low": 0,
+   "key_high": 62,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 8,
+   "voice": 0,
+   "cord": 0,
+   "src": 10,
+   "dst": 64,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 0,
+   "cord": 1,
+   "src": 16,
+   "dst": 48,
+   "amt": 6
+  },
+  {
+   "preset": 8,
+   "voice": 0,
+   "cord": 2,
+   "src": 96,
+   "dst": 48,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 0,
+   "cord": 3,
+   "src": 17,
+   "dst": 170,
+   "amt": 8
+  },
+  {
+   "preset": 8,
+   "voice": 0,
+   "cord": 4,
+   "src": 10,
+   "dst": 56,
+   "amt": 13
+  },
+  {
+   "preset": 8,
+   "voice": 0,
+   "cord": 5,
+   "src": 80,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 0,
+   "cord": 6,
+   "src": 8,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 0,
+   "cord": 7,
+   "src": 22,
+   "dst": 8,
+   "amt": 100
+  },
+  {
+   "preset": 8,
+   "voice": 0,
+   "cord": 8,
+   "src": 96,
+   "dst": 65,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 0,
+   "cord": 9,
+   "src": 17,
+   "dst": 176,
+   "amt": 53
+  },
+  {
+   "preset": 8,
+   "voice": 0,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 0,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 0,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 0,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 0,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 0,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 0,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 0,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 0,
+   "key_low": 0,
+   "key_high": 127,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 8,
+   "voice": 1,
+   "cord": 0,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 1,
+   "cord": 1,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 1,
+   "cord": 2,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 1,
+   "cord": 3,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 1,
+   "cord": 4,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 1,
+   "cord": 5,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 1,
+   "cord": 6,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 1,
+   "cord": 7,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 1,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 1,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 1,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 1,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 1,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 1,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 1,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 1,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 1,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 1,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 1,
+   "key_low": 0,
+   "key_high": 62,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 8,
+   "voice": 2,
+   "cord": 0,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 2,
+   "cord": 1,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 2,
+   "cord": 2,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 2,
+   "cord": 3,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 2,
+   "cord": 4,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 2,
+   "cord": 5,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 2,
+   "cord": 6,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 2,
+   "cord": 7,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 2,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 2,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 2,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 2,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 2,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 2,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 2,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 2,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 2,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 2,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 2,
+   "key_low": 0,
+   "key_high": 62,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 8,
+   "voice": 3,
+   "cord": 0,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 3,
+   "cord": 1,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 3,
+   "cord": 2,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 3,
+   "cord": 3,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 3,
+   "cord": 4,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 3,
+   "cord": 5,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 3,
+   "cord": 6,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 3,
+   "cord": 7,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 3,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 3,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 3,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 3,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 3,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 3,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 3,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 3,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 3,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 3,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 8,
+   "voice": 3,
+   "key_low": 0,
+   "key_high": 62,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 9,
+   "voice": 0,
+   "cord": 0,
+   "src": 10,
+   "dst": 64,
+   "amt": 16
+  },
+  {
+   "preset": 9,
+   "voice": 0,
+   "cord": 1,
+   "src": 16,
+   "dst": 48,
+   "amt": 6
+  },
+  {
+   "preset": 9,
+   "voice": 0,
+   "cord": 2,
+   "src": 96,
+   "dst": 48,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 0,
+   "cord": 3,
+   "src": 17,
+   "dst": 170,
+   "amt": 49
+  },
+  {
+   "preset": 9,
+   "voice": 0,
+   "cord": 4,
+   "src": 12,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 0,
+   "cord": 5,
+   "src": 80,
+   "dst": 56,
+   "amt": 100
+  },
+  {
+   "preset": 9,
+   "voice": 0,
+   "cord": 6,
+   "src": 8,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 0,
+   "cord": 7,
+   "src": 22,
+   "dst": 8,
+   "amt": 100
+  },
+  {
+   "preset": 9,
+   "voice": 0,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 0,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 0,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 0,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 0,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 0,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 0,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 0,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 0,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 0,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 0,
+   "key_low": 0,
+   "key_high": 127,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 9,
+   "voice": 1,
+   "cord": 0,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 1,
+   "cord": 1,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 1,
+   "cord": 2,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 1,
+   "cord": 3,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 1,
+   "cord": 4,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 1,
+   "cord": 5,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 1,
+   "cord": 6,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 1,
+   "cord": 7,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 1,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 1,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 1,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 1,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 1,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 1,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 1,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 1,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 1,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 1,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 1,
+   "key_low": 0,
+   "key_high": 62,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 9,
+   "voice": 2,
+   "cord": 0,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 2,
+   "cord": 1,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 2,
+   "cord": 2,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 2,
+   "cord": 3,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 2,
+   "cord": 4,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 2,
+   "cord": 5,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 2,
+   "cord": 6,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 2,
+   "cord": 7,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 2,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 2,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 2,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 2,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 2,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 2,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 2,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 2,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 2,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 2,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 2,
+   "key_low": 0,
+   "key_high": 62,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 9,
+   "voice": 3,
+   "cord": 0,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 3,
+   "cord": 1,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 3,
+   "cord": 2,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 3,
+   "cord": 3,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 3,
+   "cord": 4,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 3,
+   "cord": 5,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 3,
+   "cord": 6,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 3,
+   "cord": 7,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 3,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 3,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 3,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 3,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 3,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 3,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 3,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 3,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 3,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 3,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 9,
+   "voice": 3,
+   "key_low": 0,
+   "key_high": 62,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 10,
+   "voice": 0,
+   "cord": 0,
+   "src": 10,
+   "dst": 64,
+   "amt": 16
+  },
+  {
+   "preset": 10,
+   "voice": 0,
+   "cord": 1,
+   "src": 16,
+   "dst": 48,
+   "amt": 6
+  },
+  {
+   "preset": 10,
+   "voice": 0,
+   "cord": 2,
+   "src": 96,
+   "dst": 48,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 0,
+   "cord": 3,
+   "src": 17,
+   "dst": 170,
+   "amt": 13
+  },
+  {
+   "preset": 10,
+   "voice": 0,
+   "cord": 4,
+   "src": 10,
+   "dst": 56,
+   "amt": 41
+  },
+  {
+   "preset": 10,
+   "voice": 0,
+   "cord": 5,
+   "src": 80,
+   "dst": 56,
+   "amt": 96
+  },
+  {
+   "preset": 10,
+   "voice": 0,
+   "cord": 6,
+   "src": 8,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 0,
+   "cord": 7,
+   "src": 22,
+   "dst": 8,
+   "amt": 100
+  },
+  {
+   "preset": 10,
+   "voice": 0,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 0,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 0,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 0,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 0,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 0,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 0,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 0,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 0,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 0,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 0,
+   "key_low": 0,
+   "key_high": 127,
+   "non_transpose": 1,
+   "volume": -27
+  },
+  {
+   "preset": 10,
+   "voice": 1,
+   "cord": 0,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 1,
+   "cord": 1,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 1,
+   "cord": 2,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 1,
+   "cord": 3,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 1,
+   "cord": 4,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 1,
+   "cord": 5,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 1,
+   "cord": 6,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 1,
+   "cord": 7,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 1,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 1,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 1,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 1,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 1,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 1,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 1,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 1,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 1,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 1,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 1,
+   "key_low": 0,
+   "key_high": 62,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 10,
+   "voice": 2,
+   "cord": 0,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 2,
+   "cord": 1,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 2,
+   "cord": 2,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 2,
+   "cord": 3,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 2,
+   "cord": 4,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 2,
+   "cord": 5,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 2,
+   "cord": 6,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 2,
+   "cord": 7,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 2,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 2,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 2,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 2,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 2,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 2,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 2,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 2,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 2,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 2,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 2,
+   "key_low": 0,
+   "key_high": 62,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 10,
+   "voice": 3,
+   "cord": 0,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 3,
+   "cord": 1,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 3,
+   "cord": 2,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 3,
+   "cord": 3,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 3,
+   "cord": 4,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 3,
+   "cord": 5,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 3,
+   "cord": 6,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 3,
+   "cord": 7,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 3,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 3,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 3,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 3,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 3,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 3,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 3,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 3,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 3,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 3,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 10,
+   "voice": 3,
+   "key_low": 0,
+   "key_high": 62,
+   "non_transpose": 0,
+   "volume": 0
+  }
+ ],
+ "units": "cord AMOUNTS are INTERFACE units (+-100), as returned by the editor SysEx parameter interface. E4B FILE bytes are +-127. To compare a file byte against these: interface = round(file * 100/127). Verified on three cords: file 92 -> 72, file -12 -> -9, file 67 -> 53, all exact.",
+ "sign_convention": "the sign is preserved but its meaning is UNMEASURED -- +72 and -9 pan in opposite senses, but which sign is which side has not been determined on hardware. Do not assume.",
+ "voice_caveat": "voice indices past a preset's real voice count return plausible values rather than failing; treat high-index rows as unverified"
+}

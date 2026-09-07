@@ -1,0 +1,620 @@
+{
+ "bank": "GRATER",
+ "read": "E4XT via editor SysEx",
+ "presets": 1,
+ "voices_scanned": 4,
+ "rows": [
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 0,
+   "src": 10,
+   "dst": 64,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 1,
+   "src": 16,
+   "dst": 48,
+   "amt": 6
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 2,
+   "src": 96,
+   "dst": 48,
+   "amt": 1
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 3,
+   "src": 17,
+   "dst": 170,
+   "amt": 1
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 4,
+   "src": 10,
+   "dst": 56,
+   "amt": 49
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 5,
+   "src": 80,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 6,
+   "src": 8,
+   "dst": 56,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 7,
+   "src": 22,
+   "dst": 8,
+   "amt": 100
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 0,
+   "key_low": 0,
+   "key_high": 127,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 0,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 1,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 2,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 3,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 4,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 5,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 6,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 7,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 1,
+   "key_low": 0,
+   "key_high": 62,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 0,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 1,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 2,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 3,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 4,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 5,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 6,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 7,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 2,
+   "key_low": 0,
+   "key_high": 62,
+   "non_transpose": 0,
+   "volume": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 0,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 1,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 2,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 3,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 4,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 5,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 6,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 7,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 8,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 9,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 10,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 11,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 12,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 13,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 14,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 15,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 16,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "cord": 17,
+   "src": 0,
+   "dst": 0,
+   "amt": 0
+  },
+  {
+   "preset": 0,
+   "voice": 3,
+   "key_low": 0,
+   "key_high": 62,
+   "non_transpose": 0,
+   "volume": 0
+  }
+ ],
+ "units": "cord AMOUNTS are INTERFACE units (+-100); E4B FILE bytes are +-127. interface = round(file * 100/127). Verified exact on three cords.",
+ "sign_convention": "sign preserved, meaning UNMEASURED.",
+ "voice_caveat": "voice indices past a preset's real voice count return plausible values rather than failing; treat high-index rows as unverified",
+ "why_this_bank_matters": "eight cords on voice 0, NONE to AmpPan (dst 65), LFO1 routed to Pitch. A reader that reports any pan for this bank is broken in the direction that would have hidden the finding of 2026-09-06."
+}
