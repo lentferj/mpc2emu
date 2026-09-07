@@ -4238,6 +4238,53 @@ is rewritten there is no route back to the pre-fix state.
 
 See `docs/RESOLUTION_NOTES.md` §E4BDOUBLETRIM.
 
+## The E4B LFO rate map is wrong between its anchors — every LFO rate we write is off
+
+**Status: OPEN, measured 2026-09-07 (eosed). Do NOT refit yet.** `cnv_lfo_rate`
+in `models/common.py` was calibrated 2026-06-10 from the E4XT rate MENU at three
+points (byte 0 = 0.08 Hz, 64 = 4.12 Hz, 127 = 18.01 Hz) and fitted as a
+log-quadratic **exact at those three by construction**. Its own comment says it
+is "refineable with intermediate readouts". There has never been an intermediate
+readout.
+
+Measured by sweeping the rate byte in RAM and reading the actual modulation:
+
+    byte    our map   measured   ratio    note
+      40      1.25      1.98      0.63
+      60      3.46      3.74      0.93    near the 64 anchor
+      75      6.33      5.49      1.15
+      85      8.78      7.02      1.25
+      95     11.47      8.85      1.30    midpoint of the 64-127 gap
+     105     14.11     11.14      1.27
+     115     16.34     14.04      1.16    near the 127 anchor
+
+**Not a constant offset — the shape is wrong**, and the agreement is best beside
+the anchors and worst between them. That is the signature of a bad interpolation
+through correct anchors rather than a lying display. The measured points fit
+`exp(-0.000074821*b^2 + 0.0373635*b - 0.679590)` to 2.6%, and above byte 85 a
+pure exponential `exp(0.023096*b - 0.0142)` with residuals +-0.004 Hz.
+
+**Concretely: GRATER shipped at byte 95 and modulates at 8.85 Hz where the source
+asks 11.46. For 11.46 the byte is 105.**
+
+**REACH IS WIDER THAN THE WRITER.** That map is used by the E4B writer *and the
+parser*, so it also mis-READS the rate of every E4B SOURCE — the error propagates
+into KRZ and AKAI conversions built from E4B material, not just into E4B output.
+It applies to pitch and filter LFOs as well as pan. The K2000 and AKAI have their
+own rate laws and are not affected directly.
+
+**The open question, and why it is not yet ours to fix blind:** the map reproduces
+the panel by construction, and eosed measured the modulation. Either the panel
+display is not the modulation rate, or the three-point fit is simply wrong in the
+middle. **Reading the panel at bytes 95 and 40 separates them** — 40 is where the
+disagreement runs the other way (0.63), so it discriminates hardest. Prediction on
+file: the panel will track the measurement, making the fit ours to correct.
+
+**Do not adopt eosed's curve yet** (their caveats, kept): one preset, one voice,
+one key; balance frequency assumed equal to LFO frequency 1:1; seven points from a
+single sweep. Wanted before refitting: panel readings at the same bytes, and a
+second preset to show the rate does not depend on the program.
+
 ## ISO bank ORDER is not stable across builds — selecting by index loads a different bank
 
 **Found 2026-09-07 (eosed) on the first load of CD3-MATRIX10.iso.** The builder
