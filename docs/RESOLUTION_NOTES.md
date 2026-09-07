@@ -295,6 +295,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAILFO2RATE — LFO2 does not run at twice LFO1; every AKAI pan program is at half rate (2026-09-06)](#akailfo2rate-lfo2-does-not-run-at-twice-lfo1-every-akai-pan-program-is-at-half-rate-2026-09-06)
 - [§READNEVERFAILS — four interfaces in one night where a bad read returns a well-formed answer (2026-09-06)](#readneverfails-four-interfaces-in-one-night-where-a-bad-read-returns-a-well-formed-answer-2026-09-06)
 - [§SELFMATCH — five ways a process/liveness check answers about itself (2026-09-07)](#selfmatch-five-ways-a-processliveness-check-answers-about-itself-2026-09-07)
+- [§BALANCEUNDEF — a balance ratio is undefined when one channel is at the floor (2026-09-07)](#balanceundef-a-balance-ratio-is-undefined-when-one-channel-is-at-the-floor-2026-09-07)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -27748,3 +27749,53 @@ independent channel (`stat`/`ls -t` against `find`; a captured PID against a
 pattern) is what caught every one of these.
 
 Related: [[feedback-check-the-check]].
+
+
+## §BALANCEUNDEF — a balance ratio is undefined when one channel is at the floor (2026-09-07)
+
+**k2kremote, on the MX9MPC9 control arm — a false positive caught before it was
+reported as a result.** The control came back with
+
+    balance sd 13.4 dB   peak-to-peak 71 dB
+
+which read naively says the CONTROL moves more than the treatment. It does not.
+
+    rep 1   L -19.7 dBFS   R -79.3 dBFS   gap 59.7 dB
+    rep 2   L -19.6 dBFS   R -79.1 dBFS   gap 59.6 dB
+
+`20*log10(L/R)` with R sixty decibels down is **measuring noise in a silent
+channel**. The statistic is real arithmetic on real samples and says nothing
+about panning; its spectral peak sits in the lowest bin (0.56 Hz), i.e. drift.
+
+**The rule:** when either channel is at the noise floor, the balance ratio is not
+interpretable and must not be quoted — not even as "the control was noisy". Report
+the **per-channel levels** instead, which are interpretable at any ratio.
+
+**And state the physical fact, not the metric's shape.** The right description of
+that arm is *"everything is in the left channel"* — **not** "the image sits still
+in the centre". With both panner wires hard left and summing, there is no centre
+and no image to sit still. This corrects a prediction issued from this project:
+the card record and three peer briefings said MX9MPC9's program "should sit
+still", which is true about modulation and wrong about where the sound is.
+
+Companion to the ceiling case (eosed, same week): past roughly 60 dB on that
+chain, a large swing is the noise floor rather than the pan. **Both ends of the
+balance metric fail, and they fail by producing numbers rather than errors.**
+
+### Two method rules from the same run
+
+**An A/B measured with two different instruments is not an A/B.** MX10MPC was
+captured before per-channel levels were added to the analyser, so one arm had
+channel levels and the other only balance statistics. k2kremote reloaded and
+re-measured the first arm rather than quote a pair whose halves were instrumented
+differently — six minutes against a comparison that "survives review and then
+turns out to have been an artefact".
+
+**Verify the subject by a field that DIFFERS between the candidates.** The panner
+bytes are byte-identical in both banks — F3 40, Src1 114, Depth 26, Adjust 0 in
+each — so the panner cannot tell them apart and could not confirm which was
+loaded. Only the OUTPUT page distinguishes them: both pan markers on `L` is the
+MX9MPC9 signature. **A subject check on a field common to both candidates
+confirms nothing**, however carefully it is read.
+
+Related: [[feedback-check-the-check]], §READNEVERFAILS.
