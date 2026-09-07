@@ -1985,9 +1985,48 @@ def cord_byte_to_amount(b: int) -> float:
 # ln(Hz)=A·b²+B·b+C passes through all three anchors and inverts cleanly.
 # 3-point fit (exact at min/default/max), refineable with intermediate readouts.
 # Shared by the E4B writer/parser and every source-format parser.
-_LFO_RATE_A = -0.000300578
-_LFO_RATE_B =  0.0808242
-_LFO_RATE_C = -2.52573
+#: !! THE THREE-POINT FIT BELOW IS DEAD -- SUPERSEDED BY THE MEASURED TABLE.
+#: Kept only so its failure is legible. It was exact at bytes 0/64/127 by
+#: construction and wrong by a MEAN of 28.4% across the range, worst -61.3% at
+#: byte 15. Neither this project nor eosed noticed for three months because each
+#: validated the curve at the same three anchors it was fitted to -- a check the
+#: instrument could not fail. A fitted law must be validated somewhere it was NOT
+#: fitted: with N free parameters and N anchors, N agreements prove nothing.
+_LFO_RATE_A = -0.000300578      # DEAD -- see _LFO_RATE_TABLE
+_LFO_RATE_B =  0.0808242        # DEAD
+_LFO_RATE_C = -2.52573          # DEAD
+
+#: E4XT LFO rate byte -> Hz, MEASURED 2026-09-07 (eosed), one row per byte, read
+#: off the machine's own LFO Rate field by exact-glyph LCD OCR -- no interpolation
+#: and no curve. An unrecognised glyph was reported rather than guessed.
+#: Validated three ways: the three June anchors land exactly (0.08 / 4.12 / 18.01),
+#: five independent AUDIO measurements match to 0.00 Hz (bytes 40, 60, 95, 105,
+#: 115), and the table is monotonic non-decreasing across the whole range, which a
+#: mis-read digit would almost certainly break.
+#: The steps are IRREGULAR by design -- 0.38, 0.42, 0.48, 0.50, then 0.65 with no
+#: 0.6x before it. That is what a real lookup table looks like and it is why no
+#: curve reproduces it.
+#: Source: ~/temp/e4xt_ref/lfotable/lfo_rate_table.json (raw bitmaps beside it).
+#: OPEN: measured on one preset/one voice. A second-preset spot check is running;
+#: if the rate proves per-voice this becomes a family of tables, not one.
+_LFO_RATE_TABLE = (
+     0.08,  0.11,  0.15,  0.17,  0.21,  0.25,  0.28,  0.32,   #   0-7
+     0.36,  0.38,  0.42,  0.48,  0.50,  0.53,  0.56,  0.65,   #   8-15
+     0.69,  0.72,  0.76,  0.80,  0.84,  0.92,  0.95,  0.99,   #  16-23
+     1.03,  1.11,  1.13,  1.22,  1.26,  1.30,  1.37,  1.41,   #  24-31
+     1.49,  1.56,  1.60,  1.68,  1.72,  1.79,  1.87,  1.95,   #  32-39
+     1.98,  2.06,  2.14,  2.21,  2.29,  2.37,  2.44,  2.52,   #  40-47
+     2.59,  2.67,  2.75,  2.82,  2.98,  3.05,  3.13,  3.20,   #  48-55
+     3.28,  3.43,  3.51,  3.59,  3.74,  3.81,  3.89,  4.04,   #  56-63
+     4.12,  4.26,  4.34,  4.50,  4.58,  4.73,  4.88,  4.96,   #  64-71
+     5.11,  5.26,  5.34,  5.49,  5.65,  5.80,  5.95,  6.10,   #  72-79
+     6.26,  6.41,  6.56,  6.71,  6.87,  7.02,  7.17,  7.32,   #  80-87
+     7.63,  7.78,  7.93,  8.09,  8.39,  8.53,  8.69,  8.85,   #  88-95
+     9.16,  9.31,  9.61,  9.77, 10.07, 10.22, 10.53, 10.68,   #  96-103
+    10.99, 11.14, 11.44, 11.75, 12.05, 12.21, 12.51, 12.82,   # 104-111
+    13.12, 13.43, 13.73, 14.04, 14.34, 14.65, 14.95, 15.26,   # 112-119
+    15.56, 15.87, 16.17, 16.78, 17.09, 17.39, 17.70, 18.01,   # 120-127
+)
 LFO_RATE_HZ_MIN = 0.08
 LFO_RATE_HZ_MAX = 18.01
 
@@ -2096,20 +2135,31 @@ E4B_LFO_VOLUME_FULL_DB = 24.0
 
 
 def lfo_rate_byte_to_hz(byte: int) -> float:
-    """E4B LFO rate byte 0-127 -> frequency in Hz (forward log-quadratic fit)."""
-    return math.exp(_LFO_RATE_A * byte * byte + _LFO_RATE_B * byte + _LFO_RATE_C)
+    """E4B LFO rate byte 0-127 -> Hz, by table lookup (see _LFO_RATE_TABLE)."""
+    return _LFO_RATE_TABLE[max(0, min(127, int(byte)))]
 
 
 def lfo_rate_hz_to_byte(hz: float) -> int:
-    """LFO frequency in Hz -> E4B rate byte 0-127 (inverse of the fit)."""
-    hz = max(LFO_RATE_HZ_MIN, min(LFO_RATE_HZ_MAX, hz))
-    c = _LFO_RATE_C - math.log(hz)
-    disc = _LFO_RATE_B * _LFO_RATE_B - 4.0 * _LFO_RATE_A * c
-    if disc < 0:
-        return 64
-    # vertex is at byte≈134 (>127); the in-range root is the one nearer 0.
-    b = (-_LFO_RATE_B + math.sqrt(disc)) / (2.0 * _LFO_RATE_A)
-    return max(0, min(127, round(b)))
+    """LFO frequency in Hz -> the E4B rate byte whose rate is CLOSEST.
+
+    The table is not dense enough to hit an arbitrary target: the low end steps
+    by ~0.03 Hz and the top by ~0.31 Hz, so a request always lands on a
+    neighbour. Use `lfo_rate_hz_to_byte_actual` when the caller needs to know
+    what it actually got -- silently accepting the error is how a 28% mis-rate
+    survived three months here.
+    """
+    return lfo_rate_hz_to_byte_actual(hz)[0]
+
+
+def lfo_rate_hz_to_byte_actual(hz: float):
+    """As `lfo_rate_hz_to_byte`, but returns ``(byte, achieved_hz)``.
+
+    e.g. 11.46 Hz -> (106, 11.44). The caller can then report or record the
+    rounding rather than assume it got what it asked for.
+    """
+    hz = max(LFO_RATE_HZ_MIN, min(LFO_RATE_HZ_MAX, float(hz)))
+    best = min(range(128), key=lambda b: abs(_LFO_RATE_TABLE[b] - hz))
+    return best, _LFO_RATE_TABLE[best]
 
 
 def lfo_knob_to_hz(knob01: float) -> float:
