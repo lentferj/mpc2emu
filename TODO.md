@@ -4305,6 +4305,37 @@ inverse, and mark the constants dead rather than tuned.
 the same wrong curve to the same three anchors** (0 = 0.08, 64 = 4.12,
 127 = 18.01 Hz, 2026-06-10).
 
+### Why neither project noticed for three months
+
+**Each validated the fit against the same three anchors it was fitted to.** A
+log-quadratic forced through 0/64/127 reproduces 0/64/127 exactly, by
+construction, forever. Every check either project ran was a check the instrument
+could not fail — the residual at a calibration point of an exactly-determined fit
+is identically zero whatever the true curve does in between.
+
+That is k2kremote's rule in a different costume: *a measurement is not evidence
+until the apparatus has been shown able to produce a reading that CONTRADICTS the
+one you got.* A three-point fit checked at its three points is an instrument that
+only says yes. **The first reading ever taken between the anchors disagreed by
+30%.**
+
+Generalisation worth carrying: **a fitted law must be validated somewhere it was
+not fitted.** If a calibration has N free parameters and N anchors, then N
+agreements prove nothing at all; the (N+1)th point is the entire test. Both
+projects shipped for three months on N.
+
+### Scope of the swap, when the table arrives
+
+Small and data-only:
+
+    models/common.py    _LFO_RATE_A/B/C, lfo_rate_byte_to_hz, lfo_rate_hz_to_byte
+    parsers/e4b_parser.py   pzt[42] -> lfo1_rate, pzt[50] -> lfo2_rate
+    writers/e4b_writer.py   pzt[base] = lfo_rate_hz_to_byte(rate)
+    tests/test_law_consistency.py   asserts the byte<->Hz round-trip
+
+Two functions replaced by a lookup plus an explicit inverse; every call site keeps
+its signature.
+
 **Blocked on:** eosed's dense sweep — byte -> Hz for the full range, one row per
 byte, with the METHOD recorded per row (audio-measured or panel-read; the very low
 bytes want the panel rather than long captures), plus the bytes measured both ways
