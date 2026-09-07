@@ -29244,6 +29244,38 @@ The 19 that remain are the same group throughout: first onset at ~0.46 s against
 a reconstructed 1.30. Almost certainly a different real schedule, **not**
 evidence of contamination.
 
+### The harness now has a test file, and its negative control found the argument
+
+`~/temp/matrix/test_onsets.py` — 12 checks. Two rules, both chosen because their
+absence is what let three defects through:
+
+1. **At least one case passes REAL DETECTOR OUTPUT from a REAL CAPTURE.** The
+   classifier's defect survived five hand-written cases because every onset time
+   in them was typed by hand and sat comfortably inside a note window. Testing
+   the logic and not the interface is the same shape as verifying a write by
+   reading back the field you wrote.
+2. **At least one case is a negative control that makes the check FIRE.** A suite
+   of clean cases cannot tell a working check from a dead one.
+
+The stale centred-envelope times are **kept, relabelled** (s3ked): "times from a
+centred envelope, must not be silently accepted". They are the only case
+exercising a non-zero `lead_tol`, so rewriting them to causal values would delete
+that coverage.
+
+**The negative control failed on its first run and the TEST was wrong** — the
+burst was placed at 4.2 s, inside note 0's `post_off` window (note-off 3.30 plus
+1.5 s), so it is a re-articulation by the classifier's own definition.
+
+**Corrected to 5.3 s, it produced the demonstration this whole section had been
+asserting.** 5.3 s falls within the 2.6 s merge guard of note 1 at 6.91, so note
+1 merges into the burst. The capture then reports **four onsets for four notes**
+— and classifies **(3 expected, 0 mid-hold, 0 post-off, 1 unassigned)**.
+
+**A count-only check reads that capture as clean: contaminated, right count, no
+warning.** That is the fail-open case, reproduced deliberately in a fixture
+rather than discovered after the fact, and it is caught only because position is
+checked and not just arithmetic. Both assertions are pinned.
+
 **s3ked's one-line synthesis, which covers all three defects and the botched
 verification of the fix:** *a real component checked against a model of its
 neighbour instead of against the neighbour.* Their measurement origin, their note
