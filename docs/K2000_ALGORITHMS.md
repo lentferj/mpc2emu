@@ -10,6 +10,12 @@ per-code walk and the parser, are in ~/temp/k2k_algs/.
 
 # K2000 algorithm / DSP-function lookup table
 
+> **Regenerating this table:** `docs/re_procedures/parse_k2000_algorithms.py`
+> parses chapter 26 of the Reference Guide and emits
+> `docs/re_procedures/k2000_algorithms.json`, from which this document is
+> written. The parser is kept beside the data so the table can be rebuilt rather
+> than trusted.
+
 Source: Kurzweil K2000 Series **Reference Guide, chapter 26 'DSP Algs'**
 (`26 DSP Algs.pdf`), extracted with `pdftotext -layout` and parsed by
 `parse_algs.py`. This is the table the Musician's Guide points at when it
