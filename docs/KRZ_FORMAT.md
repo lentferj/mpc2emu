@@ -1102,6 +1102,27 @@ measured table — all confirmed:**
     _K2_F3_NONE         60   alg 5 F3    NONE
     _K2_F3_PANNER       40   alg 26 F3   PANNER
 
+### Scope boundary on the LFO rate ladder
+
+The 185-row ladder was measured on **LFO1 `MnRate`, on a Program object**. It has
+**not** been checked against `GLFO2`, `LFO2`, or the `MxRate` field — they may
+well share it, but that is untested (k2kremote's own boundary on their result).
+
+**This project is inside that boundary, and it was checked rather than assumed.**
+`krz_writer` has exactly one call site for the rate conversion —
+`lfo[2] = krz_lfo_rate_hz_to_byte(voice.lfo1_rate)` — and emits no `MxRate` and
+no second-LFO rate at all. The corpus figure quoted elsewhere (303 of 391 rates
+written wrong, 77.5%) is therefore entirely LFO1 `MnRate` and inherits nothing
+from a law measured somewhere else.
+
+If a second-LFO rate is ever written, its law is **unmeasured** and must not be
+assumed to be this one.
+
+**Signed fields, so nothing here records them as unsigned:** the panner `Adjust`
+(242) and `VelTrk` (245) are two's complement, and so is `F4 AMP VelTrk` — a
+decoder elsewhere rendered `-32 dB` as "224 dB" by reading it unsigned. `Adjust`
+additionally **clamps at ±100 %**, so bytes 101-155 are unreachable.
+
 ### RESOLVED 2026-09-07: the F2 segment splits — type byte dead, resonance live
 
 **`seg(0x51)[0]` (offset 225) is DEAD on algorithm 5; `seg(0x51)[1]` (offset 226)

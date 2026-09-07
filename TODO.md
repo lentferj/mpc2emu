@@ -4273,6 +4273,13 @@ panel cannot reach and nobody has tested.
 
 **303 of 391 rates — 77.5% — were written wrong by more than 0.05 Hz.**
 
+**Scope, checked rather than assumed (k2kremote's boundary on their own result):**
+the ladder was measured on **LFO1 `MnRate`** and has not been checked against
+`GLFO2`, `LFO2` or `MxRate`. `krz_writer` has exactly one rate call site —
+`lfo[2] = krz_lfo_rate_hz_to_byte(voice.lfo1_rate)` — and emits no second-LFO
+rate and no `MxRate`, so every one of the 391 sampled rates is LFO1 `MnRate` and
+none inherits a law measured elsewhere.
+
 Two distinct failures, and the smaller band is the worse one:
 
 - **Above 10 Hz (73% of all rates):** the machine spends one byte per 0.2 Hz where
