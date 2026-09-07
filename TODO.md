@@ -4273,12 +4273,42 @@ into KRZ and AKAI conversions built from E4B material, not just into E4B output.
 It applies to pitch and filter LFOs as well as pan. The K2000 and AKAI have their
 own rate laws and are not affected directly.
 
-**The open question, and why it is not yet ours to fix blind:** the map reproduces
-the panel by construction, and eosed measured the modulation. Either the panel
-display is not the modulation rate, or the three-point fit is simply wrong in the
-middle. **Reading the panel at bytes 95 and 40 separates them** — 40 is where the
-disagreement runs the other way (0.63), so it discriminates hardest. Prediction on
-file: the panel will track the measurement, making the fit ours to correct.
+**RESOLVED 2026-09-07: the panel is honest and the fit is wrong.** Panel display
+read against the audio measurement at five bytes, including byte 40 where the
+disagreement runs the other way — the chosen discriminator:
+
+    byte    panel   measured   our map   map error
+      40     1.98     1.98       1.25      -36.9%
+      60     3.74     3.74       3.46       -7.5%
+      95     8.85     8.85      11.47      +29.6%
+     105    11.14    11.14      14.11      +26.7%
+     115    14.04    14.04      16.34      +16.4%
+
+Panel equals measured to two decimal places at every point. So the display is not
+lying; the three-point interpolation is simply the wrong shape through the middle.
+
+**That also discharges two caveats by measurement rather than argument:** the
+balance frequency IS the LFO rate 1:1 (panel and audio agree to three significant
+figures), and it holds across five bytes rather than one. The remaining caveat is
+one preset / one voice, and three or four spot bytes on a second preset settles
+it — a full second sweep is not needed.
+
+**THE FIX IS A TABLE, NOT A BETTER CURVE.** The curve exists because in June a
+129-entry display table looked untranscribable, so a log-quadratic through three
+readings was the affordable approximation. The panel is readable at every byte and
+the audio measurement is now proven equal to it, **so the constraint that
+justified the fit is gone**. A refitted curve would still approximate something
+exactly enumerable. Replace `_LFO_RATE_A/B/C` with a lookup plus an explicit
+inverse, and mark the constants dead rather than tuned.
+
+**This is not a defect received from eosed — both projects independently fitted
+the same wrong curve to the same three anchors** (0 = 0.08, 64 = 4.12,
+127 = 18.01 Hz, 2026-06-10).
+
+**Blocked on:** eosed's dense sweep — byte -> Hz for the full range, one row per
+byte, with the METHOD recorded per row (audio-measured or panel-read; the very low
+bytes want the panel rather than long captures), plus the bytes measured both ways
+as an ongoing cross-check.
 
 **Do not adopt eosed's curve yet** (their caveats, kept): one preset, one voice,
 one key; balance frequency assumed equal to LFO frequency 1:1; seven points from a
