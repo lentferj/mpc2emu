@@ -1662,6 +1662,10 @@ true onset sits inside the coarse window and can be localized with a short
 against a real slow-attack capture or an Audacity-measured target.
 
 **ROOT-CAUSED 2026-07-31 — reproduced in software, fix NOT yet found.**
+*(SUPERSEDED — this paragraph and the two below it are the investigation
+trail. The fix was found and validated; see "FIXED + VALIDATED" below and
+the heading of this section. Marked because a grep landing here reads as a
+live open item, which has already cost one session's time.)*
 
 The blocker is gone: slow-attack material now exists (synthesised — a 6 s tone
 with a 3 s linear swell), and the hardware session produced a numeric
