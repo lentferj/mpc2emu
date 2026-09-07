@@ -29319,6 +29319,51 @@ does not consult the guard, so classification still reports what counting loses.
 That is the argument against resting any conclusion on a count alone, including
 the grid-free form "N events for N notes leaves no room for an N+1th".
 
+### The absolute floor survived inside the relative check, as a clamp on the minimum
+
+**A fail-open regression I introduced with the relative rewrite, found by s3ked
+2026-09-08.** The floor did two jobs, and only one was intended: it withheld
+triggering in silence (right), and it also **reset `run_min` whenever the
+minimum had fallen below `peak − 40 dB`** (wrong). So a quiet event whose local
+floor sits *under* the absolute floor had its rise measured from a truncated
+baseline:
+
+```
+  MPC_to_AKAI_009, the capture a live finding rests on
+    event 15.44 s   real rise +6.1 dB   ->  seen as  -3.2 dB   MISSED
+    event 21.06 s   real rise +7.7 dB   ->  seen as  -1.5 dB   MISSED
+```
+
+**Same failure class as the absolute-hysteresis bug this replaced, arriving by
+the opposite door.** There, a capture whose envelope never fell far enough never
+re-armed. Here, one that falls *too* far has its minimum truncated. Both are an
+absolute level defeating a check that is supposed to be relative — and this one
+**fails open**: the capture returned four onsets for four notes and read clean.
+A peer recount of 45 captures returned `over = 0` and was nearly recorded as an
+improvement.
+
+Fixed by tracking the running minimum over **every** sample and using the floor
+only to withhold a trigger. The capture now reports 6 onsets, classified
+`(4 expected, 0 mid-hold, 2 post-note-off, 0 unassigned)`.
+
+**Fixing it exposed a second defect, in the spacing gate written an hour
+earlier.** A genuine extra event *subdivides* the spacings, so a contaminated
+capture read as `mislocated` — and would have been dismissed as supporting
+nothing, **suppressing exactly what the harness exists to report**. Testing
+consecutive differences was the wrong test. The gate now looks for a
+**subsequence on the grid covering all commanded notes**, which is still
+grid-free (it uses the spacing constant, never `t_on`), and distinguishes:
+
+| onsets | verdict |
+|---|---|
+| 4 notes + a genuine extra | `ok` — classify the extra, do not dismiss the capture |
+| 3 of 4 notes on the grid | `mislocated` — one note unlocated, per-note quantities unsupported |
+| a constant grid that isn't the commanded one | `grid_mismatch` — suspect the caller's constant |
+
+**The lesson both defects share:** a rule written to be relative is only relative
+where no absolute constant touches it. The floor was three characters of
+`continue` and it reintroduced the whole failure class.
+
 ### The spacings gate every onset verdict, and need no schedule at all
 
 **The cheapest and strongest check in the harness, available to both sides all
