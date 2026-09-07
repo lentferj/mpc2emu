@@ -2134,6 +2134,70 @@ LFO_VOLUME_MODEL_FULL_DB = 96.0
 E4B_LFO_VOLUME_FULL_DB = 24.0
 
 
+# ── K2000 LFO1 rate byte <-> Hz ────────────────────────────────────────────
+#
+# MEASURED 2026-09-07 (k2kremote): 185 rows, one per byte, read off the K2000's
+# own LFO1 MnRate field. NOT a fit -- the five segments below reproduce all 185
+# measured rows EXACTLY (verified here before adoption), so this is a lossless
+# encoding of the table rather than an approximation of it.
+#
+#     byte   0..20    0.01 Hz/byte     0.00 ..  0.20 Hz
+#     byte  20..36    0.05 Hz/byte     0.20 ..  1.00 Hz
+#     byte  36..126   0.10 Hz/byte     1.00 .. 10.00 Hz
+#     byte 126..176   0.20 Hz/byte    10.00 .. 20.00 Hz
+#     byte 176..184   0.50 Hz/byte    20.00 .. 24.00 Hz
+#
+# BYTE 184 IS THE CEILING -- wheeling past it does not move the value, so the
+# reachable range is 0..184 and NOT 0..255. The old writer clamped to 255; what
+# the engine does with 185-255 is unknown and untested.
+#
+# WHY THE OLD LAW LOOKED RIGHT. `byte = 26 + 10*Hz` is segment 3 exactly:
+# 36 + (Hz - 1.00)/0.10 == 26 + 10*Hz, character for character. It is the
+# CORRECT law for 1.00-10.00 Hz and wrong everywhere else -- which is why it was
+# exact at 8.70 Hz (byte 113) and put 11.50 Hz at byte 141, a byte that really
+# is 13.00 Hz. The entire discrepancy was one segment boundary at 10 Hz.
+#
+# GRID COARSENESS IS REAL AND WORTH REPORTING TO CALLERS: above 10 Hz the step
+# is 0.2 Hz and above 20 Hz it is 0.5 Hz, so e.g. 11.50 Hz is NOT reachable --
+# byte 133 gives 11.40 and 134 gives 11.60.
+#
+# Source table: ~/temp/k2k_algs/lfo1_rate_table.json
+_KRZ_LFO_RATE_SEGMENTS = ((0, 20, 0.01), (20, 36, 0.05), (36, 126, 0.10),
+                          (126, 176, 0.20), (176, 184, 0.50))
+KRZ_LFO_RATE_BYTE_MAX = 184
+KRZ_LFO_RATE_HZ_MAX = 24.00
+
+
+def krz_lfo_rate_byte_to_hz(byte: int) -> float:
+    """K2000 LFO1 MnRate byte -> Hz, via the measured five-segment ladder."""
+    b = max(0, min(KRZ_LFO_RATE_BYTE_MAX, int(byte)))
+    hz = 0.0
+    for lo, hi, step in _KRZ_LFO_RATE_SEGMENTS:
+        if b > lo:
+            hz += (min(b, hi) - lo) * step
+    return round(hz, 2)
+
+
+def krz_lfo_rate_hz_to_byte_actual(hz: float):
+    """Hz -> (byte, achieved_hz) for the K2000 LFO1 rate.
+
+    Returns the CLOSEST reachable byte and what it actually gives, because the
+    grid is coarse above 10 Hz: 11.50 Hz is not reachable at all (133 -> 11.40,
+    134 -> 11.60). A caller that needs to report or record the rounding can;
+    silently assuming the request was honoured is how `26 + 10*Hz` shipped a
+    13.00 Hz LFO for an 11.50 Hz source.
+    """
+    want = max(0.0, min(KRZ_LFO_RATE_HZ_MAX, float(hz)))
+    best = min(range(KRZ_LFO_RATE_BYTE_MAX + 1),
+               key=lambda b: abs(krz_lfo_rate_byte_to_hz(b) - want))
+    return best, krz_lfo_rate_byte_to_hz(best)
+
+
+def krz_lfo_rate_hz_to_byte(hz: float) -> int:
+    """Hz -> the closest reachable K2000 LFO1 rate byte (0..184)."""
+    return krz_lfo_rate_hz_to_byte_actual(hz)[0]
+
+
 def lfo_rate_byte_to_hz(byte: int) -> float:
     """E4B LFO rate byte 0-127 -> Hz, by table lookup (see _LFO_RATE_TABLE)."""
     return _LFO_RATE_TABLE[max(0, min(127, int(byte)))]

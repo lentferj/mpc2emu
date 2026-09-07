@@ -87,6 +87,7 @@ from typing import List, Tuple
 
 from models.common import (
     Bank, Preset, SampleData, VoiceLayer, LoopType,
+    krz_lfo_rate_hz_to_byte,
     KRZ_ENV_TIME_GRID, KRZ_RELEASE_FACTOR, KRZ_RELEASE_SPAN_DB,
     E4B_CUTOFF_MAX_HZ,
     KEY_FILTER_OCT_PER_OCT,
@@ -2466,7 +2467,7 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
         # was not fitted"). A panel sweep -- set the byte, read the rate the
         # machine shows, one row per byte -- is running, and this becomes a
         # lookup table when it lands, as the E4XT one now is.
-        lfo[2] = max(0, min(255, round(26 + 10 * voice.lfo1_rate)))
+        lfo[2] = krz_lfo_rate_hz_to_byte(voice.lfo1_rate)
     if voice.lfo1_shape:
         lfo[4] = _LFO_SHAPE.get(voice.lfo1_shape.lower(), 0)  # fallback: Sine
     if getattr(voice, 'lfo1_to_pitch', 0.0) > 0.0:
