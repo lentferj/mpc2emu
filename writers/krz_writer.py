@@ -1691,6 +1691,26 @@ def _reson_keytrack_fit(voice):
 
 
 def _reson_byte(reson01: float) -> int:
+    """Resonance 0..1 -> the K2000's F2 RES `Adjust` byte, dB x 2.
+
+    HARDWARE-MEASURED 2026-09-07 (k2kremote), by changing only this field on an
+    algorithm-5 program and diffing the object -- exactly one byte moved:
+
+        typed 120 -> panel 12.0dB -> offset 226 = 24
+        typed  60 -> panel  6.0dB -> offset 226 = 12
+        typed   0 -> panel  0.0dB -> offset 226 =  0
+
+    So the encoding is dB x 2, confirmed, and this write LANDS on algorithm 5
+    even though the block-type byte beside it does not (see `hob_f2[0]`). The
+    page is `EditProg:F2 RES(2P LOPASS)` -- "F2 RES" is the resonance control
+    page belonging to the 2-pole filter in F1, not a second DSP block, which is
+    why algorithm 2 offers it too despite having no F2 in its chain.
+
+    KNOWN LIMIT: the field is SIGNED and spans negative values -- the measured
+    baseline was 238, i.e. -18 = -9.0 dB on the panel. We clamp to 0..48
+    (0..+24 dB) because our sources state resonance as 0..1 with no attenuation
+    case. A source wanting resonance BELOW unity cannot be expressed here.
+    """
     return max(0, min(48, round(reson01 * 48)))             # dB*2, max 24 dB
 
 
@@ -2193,6 +2213,13 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
         if _want_pan:
             algo, f3_byte = _K2_ALG_PANNER, _K2_F3_PANNER
         hob_f1[0] = ftype_byte                               # F1 DSP filter type
+        # F2 BLOCK TYPE. **DEAD ON ALGORITHM 5** (measured 2026-09-07): that
+        # algorithm has no F2 DSP block -- its first block spans two stage slots
+        # and stores in offset 209 only, the ALG page has four cursor stops, and
+        # offset 225 held a stale 43 (XFADE, left by the program's previous
+        # algorithm) through eight F1 changes. The editor neither writes nor
+        # clears it. Harmless, but this byte is not doing what its name suggests
+        # on that path. The RESONANCE VALUE at hob_f2[1] IS live -- see below.
         hob_f2[0] = f2_byte                                  # F2 block: RES(16)/NONE(61)
         seg(0x52)[0] = f3_byte                               # F3 block: SEP(18)/NONE(60)
         cal[_K2_CAL_ALGORITHM] = algo                        # algorithm number (1/2/5/16)

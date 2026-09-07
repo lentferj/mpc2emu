@@ -1084,9 +1084,40 @@ measured table — all confirmed:**
     _K2_F3_NONE         60   alg 5 F3    NONE
     _K2_F3_PANNER       40   alg 26 F3   PANNER
 
-**NOT yet covered by the table: `_K2_F2_RES = 16` / `_K2_F2_AMP = 16`.** The walk
-has no entry for algorithm 5's F2, and in the blocks it did walk, 16 is `HIPASS`.
-Algorithm 5's printed chain is `PITCH > 2PARAM SHAPER > LP2RES > AMP` — four names
-across five stages, so one block spans two slots and it is not established that
-alg 5 has a separate F2 at offset 225 at all. **Our writer writes 16 there for
-resonance. That byte is unverified.** Open item.
+### RESOLVED 2026-09-07: the F2 segment splits — type byte dead, resonance live
+
+**`seg(0x51)[0]` (offset 225) is DEAD on algorithm 5; `seg(0x51)[1]` (offset 226)
+is LIVE and carries resonance.** Both measured.
+
+Algorithm 5 has **no F2 DSP block**: its first block spans two stage slots and
+stores in offset 209 only, the ALG page's cursor ring has four stops, and 225
+held a stale `43` (`XFADE`, left behind by the program's previous algorithm 21)
+through eight consecutive F1 changes. The editor neither writes nor clears it —
+so if the engine read it, every K2000-authored algorithm-5 program would depend
+on whatever its previous algorithm happened to leave there.
+
+Resonance, by contrast, lands. Changing only the F2 RES `Adjust` field moved
+exactly one byte in the whole object:
+
+    typed 120  ->  panel 12.0dB  ->  offset 226 = 24
+    typed  60  ->  panel  6.0dB  ->  offset 226 = 12
+    typed   0  ->  panel  0.0dB  ->  offset 226 =  0
+
+**dB x 2, and SIGNED** — the measured baseline 238 is −18, i.e. the −9.0 dB the
+page showed on arrival. Our `_reson_byte` clamps 0..48 (0..+24 dB), so
+attenuation below unity is not expressible; our sources never ask for it.
+
+**Why "F2" is two different things.** The page header reads
+`EditProg:F2 RES(2P LOPASS)` — **"F2 RES" is the resonance control page belonging
+to the 2-pole filter sitting in F1**, not a second DSP block. That is why
+algorithm 2 offers an `F2 RES` soft button despite having no F2 in its printed
+chain, and why the ALG page has four cursor stops while the soft-button row has
+five pages. Two navigations over the same slots; only one tracks DSP blocks.
+
+**A page named for a parameter does not contain a field of that name.** The
+control pages are all `Adjust / Src1 / Depth / Src2 / KeyTrk / DptCtl / VelTrk /
+MinDpt / MaxDpt`, identical in shape to the PANNER page; *which* parameter they
+adjust is in the page header, in parentheses. A first pass searching the field
+names for "Res" found none and nearly concluded that algorithm 5 has no
+resonance at all — the expensive wrong answer. (k2kremote, who reported the near
+miss rather than only the result.)
