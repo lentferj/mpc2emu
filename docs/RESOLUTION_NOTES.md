@@ -27809,6 +27809,44 @@ something else.
 and it lands on the preset page from anywhere. Softkeys are page-dependent; the
 guard makes the page an established fact rather than an assumption.
 
+### A claim that supports what you are already doing gets less scrutiny, not more
+
+**Named by eosed, 2026-09-07, about themselves — and it describes both of us in
+the same exchange.** This project asserted that two routes in the confidence
+table were mono when scored: an inference from a known bug, never checked against
+the captures, stated as measured. eosed did not merely accept it — they wrote
+back that *"your reason is stronger than you put it"* and restated it with added
+confidence, **while proposing to build the very tool that would have tested it.**
+
+    the claim made their post-pass more obviously worth building
+    which is exactly when it should have been tested
+
+It was wrong. The captures were on disk the whole time; the two routes read
+0.42 dB and 0.89 dB of channel gap — interface trim, not panning.
+
+**This is the second instance in two days between the same two parties.** The
+first was §102: this project quoted eosed's measurement back as 92 when their own
+record said 72, and eosed echoed the 92 without checking it. Both times the
+agreeable number travelled further than the recorded one.
+
+The generalisation is not "be sceptical of peers" — it is narrower and more
+useful: **scrutiny should rise with how well a claim fits the plan, not fall.** A
+claim that makes the current task more obviously worthwhile is the one carrying
+the least independent support, precisely because nobody is motivated to look.
+
+### Two instruments measuring one thing is a third instrument
+
+Two channel post-passes were written independently for the same campaign — one
+per-file, one per-note, differing in what they refuse to report and how they
+window. Three columns measured through two passes is the failure `measure.py`'s
+own docstring warns about one layer up: *if each machine is measured through a
+different path, the measurement itself lands in the result.*
+
+Resolved by naming one shared instrument and keeping the other as an explicitly
+labelled supplement answering a different question — per-file says a row is
+suspect, per-note says which cell. **The supplement is worth keeping; what is not
+survivable is two instruments both claiming to be the metric.**
+
 ### When a safety property earns its keep
 
 eosed's LCD reader was built to report `?` for any glyph it did not recognise
