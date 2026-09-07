@@ -805,6 +805,45 @@ def _set_cord(mod: bytearray, slot: int, src: int, dst: int,
     mod[o + 3] = flag & 0xFF
 
 
+#: The E4XT reaches full level 1.84x LATER than `env_seconds_to_rate` intends.
+#:
+#: MEASURED BY eosed 2026-09-07: an eight-point ladder over the Atk1 rate byte
+#: on a resident preset, rise taken from audio with the hold and RMS window
+#: scaled per point (hold ~6x the intended time, window ~5% of the expected
+#: rise). Sweeping the byte rather than building a disc is what made this
+#: separable at all -- an end-to-end bank yields one number in which the
+#: reader's and writer's errors stay entangled, which is exactly how this and
+#: the MPC envelope-law error hid each other by partly cancelling.
+#:
+#:     byte   intends   t_peak    ratio
+#:       72      2.00     3.60     1.80
+#:       79      3.00     5.70     1.90
+#:       87      5.00     8.85     1.77
+#:       96      8.00    15.10     1.89
+#:      102     11.62    21.30     1.83
+#:
+#:     t_peak / intended = 1.838, sd 0.050 above 2 s  (1.869, sd 0.082 overall)
+#:
+#: A CONSTANT, not a curve: sd 0.05 across a 116x range of intended times. The
+#: three sub-second points drift (1.00, 1.28, 1.68) and are excluded -- at byte
+#: 48 the analysis window is ~3.5% of the rise, so quantisation is a real
+#: fraction of the reading. Do not read this law below ~2 s without re-measuring.
+#:
+#: WHY A SCALAR IS LEGITIMATE HERE AND NOWHERE ELSE IN THIS ENVELOPE. The byte
+#: is a slew RATE (§ENVSPAN, hardware), so a stage's time is its span over that
+#: rate -- and correcting a rate with one constant is only valid where the span
+#: is constant. **Attack alone has a fixed span**: it always travels 0 -> 100.
+#: Decay travels 100 -> sustain and release travels sustain -> 0, both variable,
+#: and both remain BLOCKED on the sustain-level sweep §ENVSPAN calls for. Do not
+#: generalise this constant to pzt[4] or pzt[8].
+#:
+#: `voice.env_attack` denotes TIME TO FULL LEVEL, which is what the MPC's own
+#: envelope law denotes (§MPCENV, and the 2026-09-07 sweep: measured 10-90% is
+#: 0.704x the law value, consistent with a roughly amplitude-linear ramp rather
+#: than with the law being a 10-90% figure).
+_E4XT_ATK_SLOWDOWN = 1.838
+
+
 def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
                  level_offset_db: float = 0.0,
                  vel_swing_db=None) -> bytes:
@@ -1079,7 +1118,9 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
     # obeys the same law from a floor, and that floor is simply unmeasured. The
     # fix is one measurement, not a new model.
     decay_span = _env_level_db(sus)
-    pzt[0] = min(127, _fenv_rate(voice.env_attack)); pzt[1] = _fenv_level(100.0)  # Atk1 → full
+    # ATTACK RATE IS SCALED BY A MEASURED CONSTANT. See _E4XT_ATK_SLOWDOWN.
+    pzt[0] = min(127, _fenv_rate(voice.env_attack / _E4XT_ATK_SLOWDOWN))
+    pzt[1] = _fenv_level(100.0)                                                  # Atk1 → full
     pzt[2] = 0;                                      pzt[3] = _fenv_level(100.0)  # Atk2 hold full
     # A DECAY TO SILENCE MUST NOT ENCODE TO A RATE THAT IS SILENT.
     # `_env_span_rate` clamps a too-fast request to 0, and rate 0 with a zero

@@ -52,6 +52,7 @@ from models.common import (
                            e4xt_cutoff_byte_to_position,
                            e4b_cutoff_position_to_hz, e4xt_byte_to_volume_db,
                            e4xt_byte_to_pan)
+from writers.e4b_writer import _E4XT_ATK_SLOWDOWN
 
 
 # ---------------------------------------------------------------------------
@@ -656,7 +657,17 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     # the two already agree there.
     _decay_span = env_level_byte_to_db(pzt[7])
     _rel_span   = max(0.0, ENV_FULL_SPAN_DB - _decay_span)
-    env_attack  = _fenv_rate_inv(pzt[0]) + _stage2_seconds(pzt[2])
+    # INVERSE OF THE WRITER, INCLUDING ITS ATTACK CORRECTION. The writer divides
+    # the requested time by _E4XT_ATK_SLOWDOWN before encoding, because the
+    # machine reaches full level 1.84x later than `env_seconds_to_rate` intends
+    # (measured 2026-09-07, eight-point rate-byte ladder). Reading back without
+    # the same factor makes parser and writer non-inverses, and an E4B->E4B
+    # round trip would then shrink every attack by 1.84x PER PASS -- silently,
+    # since each individual file still looks well-formed. That is TODO item (1)
+    # in its purest form, so it is fixed here at the same time rather than left
+    # to be discovered as a drift.
+    env_attack  = (_fenv_rate_inv(pzt[0]) * _E4XT_ATK_SLOWDOWN
+                   + _stage2_seconds(pzt[2]))
     env_decay   = (env_rate_to_span_seconds(_decay_span, pzt[4])
                    + _stage2_seconds(pzt[6]))
     env_release = (env_rate_to_span_seconds(_rel_span, pzt[8])
