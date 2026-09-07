@@ -30,7 +30,7 @@ procedures: `docs/re_procedures/re_suite.md`):
 
 ---
 
-## Bass-MS20-Patch  — `FEATUREDEMO_02.E4B [03]`  (src: `Bass-MS20-Patch 2c.xpm`)
+## patch I-Patch  — `FEATUREDEMO_02.E4B [03]`  (src: `patch I-Patch 2c.xpm`)
 
 ### A. Multisample doesn't fill its claimed key range
 **Jan:** V1 multisample claims to span the whole C-2 ↔ G8 range, but the lowest
@@ -82,7 +82,7 @@ Tri, S&H, Saw, SawD, Sqr, Noise.
 **Jan:** MPC rate is 2.00 Hz at this patch; E4XT comes out at 4.12 Hz.
 
 **RESOLVED:** `lfo_knob_to_hz` now uses the measured MPC law `Hz = 0.0202·e^(9.195·knob)`
-(`models/common.py`).  Verified: Bass-MS20 2c now converts to **2.005 Hz** (was
+(`models/common.py`).  Verified: patch I 2c now converts to **2.005 Hz** (was
 4.12); all 6 calibration points reproduce within rounding; pipeline smoke test
 passes.  Residual hardware limits (not bugs): E4XT LFO floor 0.08 Hz (knob 0 wants
 0.02) and ceiling 18.01 Hz (knob ≳0.74 wants >18) — both clamp.  **Feature-demo
@@ -105,7 +105,7 @@ free-run / Sync=None except where noted, so the on-screen value is the knob's Hz
 | 0.000 | 0.08 | **0.02**  | Bass-Pulse-Bass 2c.xpm (Triangle) |
 | 0.200 | ~0.6 | **0.13**  | Bass-Squelch-Windy City.xpm (Sine) |
 | 0.350 | ~1.7 | **0.50**  | Bass-Twisted-Harmonical.xpm (Sine) |
-| 0.500 | 4.12 | **2.00**  | 11 OB Thick Pad.xpm (Sine) — matches Bass-MS20-Patch 2c (sync'd) |
+| 0.500 | 4.12 | **2.00**  | 11 OB Thick Pad.xpm (Sine) — matches patch I  -Patch 2c (sync'd) |
 | 0.650 | ~8   | **7.96**  | Bass-DP Trimmer.xpm (SawDown) |
 | 0.760 | ~13  | **21.93** | Lead-TS Hiss Sub.xpm (SawUp) |
 

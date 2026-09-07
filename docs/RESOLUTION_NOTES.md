@@ -219,7 +219,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAILFOWAVE — LFO1WAVE was never read, every AKAI conversion assumed triangle (2026-08-31)](#akailfowave-lfo1wave-was-never-read-every-akai-conversion-assumed-triangle-2026-08-31)
 - [§AKAIPRGNUM0 — fallback-numbering-starts-at-1 proposed and REVERTED same night: it fixes an operating-procedure question, not our output (2026-08-31)](#akaiprgnum0-fallback-numbering-starts-at-1-proposed-and-reverted-same-night-it-fixes-an-operating-procedure-question-not-our-output-2026-08-31)
 - [§AKAICARDTRANSFER — an AKAI append wrote source rates instead of resampled ones, off the media path not the converter (2026-08-30)](#akaicardtransfer-an-akai-append-wrote-source-rates-instead-of-resampled-ones-off-the-media-path-not-the-converter-2026-08-30)
-- [§KRZsplit patch 1 — a pure velocity split has nothing for disjoint-fuse to fuse (2026-08-30)](#krzvelstack-a-pure-velocity-split-has-nothing-for-disjoint-fuse-to-fuse-2026-08-30)
+- [§KRZVELSPLIT — a pure velocity split has nothing for disjoint-fuse to fuse (2026-08-30)](#krzvelsplit-a-pure-velocity-split-has-nothing-for-disjoint-fuse-to-fuse-2026-08-30)
 - [§KRZVELBOUND — a K2000 dynamic-mark boundary cannot resolve a note landing exactly on it (2026-08-30, HW-confirmed)](#krzvelbound-a-k2000-dynamic-mark-boundary-cannot-resolve-a-note-landing-exactly-on-it-2026-08-30-hw-confirmed)
 - [§KRZCOARSETUNE — `zone.coarse_tune` reached the E4B and AKAI writers but never the K2000 one (2026-08-31)](#krzcoarsetune-zonecoarse_tune-reached-the-e4b-and-akai-writers-but-never-the-k2000-one-2026-08-31)
 - [§KRZROOTLFO — K2000 LFO1->pitch "root-vs-transposed" depth distortion -- WITHDRAWN, and the reference preset's separate note-30 refusal fully explained as a second, unrelated sideband-tool ceiling, not a hardware or content effect (2026-08-31)](#krzrootlfo-k2000-lfo1-pitch-root-vs-transposed-depth-distortion----withdrawn-and-the-reference-presets-separate-note-30-refusal-fully-explained-as-a-second-unrelated-sideband-tool-ceiling-not-a-hardware-or-content-effect-2026-08-31)
@@ -297,6 +297,18 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§SELFMATCH — five ways a process/liveness check answers about itself (2026-09-07)](#selfmatch-five-ways-a-processliveness-check-answers-about-itself-2026-09-07)
 - [§BALANCEUNDEF — a balance ratio is undefined when one channel is at the floor (2026-09-07)](#balanceundef-a-balance-ratio-is-undefined-when-one-channel-is-at-the-floor-2026-09-07)
 - [§SAMPLINGSCHEME — a synthetic validates the estimator, not the sampling scheme (2026-09-07)](#samplingscheme-a-synthetic-validates-the-estimator-not-the-sampling-scheme-2026-09-07)
+- [§MEASCONCURRENT — two captures on one rig produce a file that passes every check (2026-09-07)](#measconcurrent-two-captures-on-one-rig-produce-a-file-that-passes-every-check-2026-09-07)
+- [§TAGKEYEDMAP — per-route capture files broke the rig→program map (2026-09-07)](#tagkeyedmap-per-route-capture-files-broke-the-rigprogram-map-2026-09-07)
+- [§SOURCELEVELPROXY — sample level does not stand in for a missing source column (2026-09-07)](#sourcelevelproxy-sample-level-does-not-stand-in-for-a-missing-source-column-2026-09-07)
+- [§KRZFAMILYTRIM — a ~30 dB trim on one sample family only, seen on two targets (2026-09-07)](#krzfamilytrim-a-30-db-trim-on-one-sample-family-only-seen-on-two-targets-2026-09-07)
+- [§ATTACKTRUNCATION — a patch whose attack outlasts the probe is scored on its ramp (2026-09-07)](#attacktruncation-a-patch-whose-attack-outlasts-the-probe-is-scored-on-its-ramp-2026-09-07)
+- [§NOTESWAP — a capture reproducing another program’s audio, proven by correlation (2026-09-07)](#noteswap-a-capture-reproducing-another-programs-audio-proven-by-correlation-2026-09-07)
+- [§RIGNOISEFLOOR — the measured run-to-run floor, and what sits above it (2026-09-07)](#rignoisefloor-the-measured-run-to-run-floor-and-what-sits-above-it-2026-09-07)
+- [§STALEDIR — an absent medium serves a cached directory that passes every validity check (2026-09-07)](#staledir-an-absent-medium-serves-a-cached-directory-that-passes-every-validity-check-2026-09-07)
+- [§CROSSROUTEINFER — agreement on one route is not evidence for another (2026-09-07)](#crossrouteinfer-agreement-on-one-route-is-not-evidence-for-another-2026-09-07)
+- [§E4BATKRATE — the E4XT attack byte runs 1.84x slow, measured and corrected (2026-09-07)](#e4batkrate-the-e4xt-attack-byte-runs-184x-slow-measured-and-corrected-2026-09-07)
+- [§WRITETWICEREADONCE — a field written in two places and read in one (2026-09-07)](#writetwicereadonce-a-field-written-in-two-places-and-read-in-one-2026-09-07)
+- [§SAMEDETECTOR — a quantity is comparable because of how it was produced, not what it is called (2026-09-07)](#samedetector-a-quantity-is-comparable-because-of-how-it-was-produced-not-what-it-is-called-2026-09-07)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -2575,7 +2587,7 @@ Validate on `the detuned-stack split preset`: 12 samples should keep distinct, r
 wheel scales the LFO's modulation amount. At 100% the LFO is fully wheel-gated
 (no modulation at rest). `xpm_parser` never reads it; `e4b_writer` writes
 LFO→Pitch/Filter/Vol cords at their full static amount → the E4XT applies the LFO
-continuously at full depth (Jan: "too much LFO→Pitch" on `Bass-MS20 Acoustik`,
+continuously at full depth (Jan: "too much LFO→Pitch" on `patch I Acoustik`,
 which has `KeygroupWheelToLfo=1.0`).
 
 ### EOS mechanism — cord-amount modulation
@@ -2714,7 +2726,7 @@ Re-run the MS20 patch: expect 1 voice with 15 zones at kg36-38…kg78-84, roots
 
 ### Validation
 
-- `Bass-MS20-Patch 2c.xpm` → tuned chromatically, no aliasing.
+- `patch I-Patch 2c.xpm` → tuned chromatically, no aliasing.
 - F9 Disco Rhds / DX7 Advent → non-transpose layers unchanged (diff the voice
   `non_transpose` flags before/after).
 - Spot-check a few of the 168 flagged files by ear on hardware.
@@ -2908,7 +2920,7 @@ only approximate the massed-unison character. Worth a note to Jan when fixing.
 
 ## Fixed (un-gated) LFO→Filter on MS-20 patches — pending aural check
 
-`Bass-MS20-Patch 2c` (FEATUREDEMO_02 P003) plays LFO1→Filter at a fixed +42
+`patch I-Patch 2c` (FEATUREDEMO_02 P003) plays LFO1→Filter at a fixed +42
 (33%).  **Verified faithful:** source `KeygroupWheelToLfo=0.0`, `LfoCutoff=0.33`,
 `LfoPitch=0`.  No code change unless Jan's by-ears check picks one of:
 
@@ -3097,7 +3109,7 @@ measurements in `docs/re_procedures/xpm_envelope.md` alongside the decay data.
 MPC FilterType **19–22 = Band Boost** (parametric peak: full signal + a boosted
 band).  Both writers send it to a **bandpass**, which removes the out-of-band signal
 instead of boosting in-band → thin/hollow.  See TODO "Band-Boost (BB) filters map to
-BANDPASS".  Symptom source: `K2KFEATDEMO` #204 **Bass-MS20-Patch 2c** (FilterType=19,
+BANDPASS".  Symptom source: `K2KFEATDEMO` #204 **patch I-Patch 2c** (FilterType=19,
 Cutoff=0.27, Reson=0.65).
 
 ### E4B — ready patch (no HW needed)
@@ -3141,7 +3153,7 @@ BB 19–22 now map to **Algorithm 2 PARA MID** (parametric band boost), RE'd via
 
 Wired in `_k2_filter_plan` (BB → `(2, 51, 16, 40)`) and `_patch_layer`
 (HOB0[1]=`_cutoff_byte(cutoff)`, HOB1[1]=`+12..+24 dB` from resonance).  Verified
-end-to-end on #204 Bass-MS20-Patch (FilterType=19 → ALG2/51/AMP+20 dB).  Full
+end-to-end on #204 patch I-Patch (FilterType=19 → ALG2/51/AMP+20 dB).  Full
 procedure + capture table: `docs/re_procedures/krz_paramid.md`.  Later refinement:
 measure the MPC's actual BB gain law to calibrate the dB depth (FRQ already exact).
 
@@ -20166,7 +20178,7 @@ rounds the semitone byte up by exactly one — `493.88 Hz -> 523.25 Hz`.
 
 **The fold is correct for the case it was written for.** The comment at the
 site records it, and it is hardware-checked: on an MPC source a high
-VelocityToFilter means the cutoff opens at playing velocity (Jan, on Bass-MS20:
+VelocityToFilter means the cutoff opens at playing velocity (Jan, on patch I:
 VelToFilter 127 → filter ~open), and rendering that as a K2000 VelTrk sweep
 starting from the K2000's 16 Hz floor would **mute softly-played notes the MPC
 keeps audible**. Baking it into a static cutoff is the right trade for a source
@@ -20968,7 +20980,7 @@ later step's own logic are BOTH independently verified correct, the defect
 must be off that path entirely — worth checking both ends before assuming
 either one lied.
 
-## §KRZsplit patch 1 — a pure velocity split has nothing for disjoint-fuse to fuse (2026-08-30)
+## §KRZVELSPLIT — a pure velocity split has nothing for disjoint-fuse to fuse (2026-08-30)
 
 Full writeup in `TODO.md` under the same tag.
 
@@ -21466,7 +21478,7 @@ v1's *absolute* level moved **+10.94 dB** when AMP VelTrk went 35 → 24, agains
 
 **Cause.** `parsers/akai_s3000_parser.build_preset_from_program` built the preset as `Preset(name=_safe_name(prog['name'] or fallback_name))`. `_safe_name` is an **XPM filename helper**: it calls `os.path.splitext` and maps every non-alphanumeric character to `_`. Both behaviours are correct for a file on disk and wrong for a sampler-side name field. `.P` is read as an extension and stripped.
 
-**`.P` is name content, not an extension.** The AKAI's own charset is `0123456789 A-Z#+-.` — the dot is a legal character in it, and library programs conventionally end in `.P`. The parser reads the field correctly (`akai_to_str(raw[0x03:0x0f])` → `'the reference preset.P'`); the name was intact right up to the line that sanitised it. Note the second, quieter half: even without `splitext`, the `isalnum()` filter would have turned the dot into `_`, giving `split patch 2_P`. Two independent filename behaviours, both firing on something that is not a filename.
+**`.P` is name content, not an extension.** The AKAI's own charset is `0123456789 A-Z#+-.` — the dot is a legal character in it, and library programs conventionally end in `.P`. The parser reads the field correctly (`akai_to_str(raw[0x03:0x0f])` → `'the reference preset.P'`); the name was intact right up to the line that sanitised it. Note the second, quieter half: even without `splitext`, the `isalnum()` filter would have turned the dot into `_`, giving `<name>_P`. Two independent filename behaviours, both firing on something that is not a filename.
 
 **This reader was the only one doing it.** Every other parser passes the preset name through with at most a length cap (`krz_parser` `name[:MAX_NAME]`, `mpc60_parser` `name[:16]`, `e4b_parser`/`eiii_parser`/`exs24_parser`/`gig_parser` unmodified). And the codebase already carried the warning: `models.common.safe_filename`'s own docstring opens **"NOT FOR SAMPLER-SIDE NAME FIELDS — host filesystems only"**, written after a related incident where filename sanitising an AKAI directory entry turned `#` into `_`, which is absent from the AKAI charset, so the encoder wrote a space and fifteen samples failed to load. The rule existed; this call site predated or ignored it.
 
@@ -23535,7 +23547,7 @@ step Jan's bench economics say to batch. Map in `matrix_v4/SLOTMAP_e4b.json`.
 **The AKAI volume refines the diagnosis and refutes my first reading of it.**
 I initially called the E4B bank a stale build, on the timestamps. It is not:
 
-    target  built     has KEYS-VP RICO   has LD TUBE PIPE   usable rows
+    target  built     has patch J        has patch L        usable rows
     e4b     21:10:29        no                yes               10
     krz     21:13:44        no                yes               10
     akai    21:13           YES               no                11 of 11
@@ -25279,7 +25291,7 @@ From the file side: our XPM reader truncates a long sample name by keeping the
 differs only in the suffix. **The cut lands wherever `maxlen` falls, which is
 often mid-word:**
 
-    'LD Vintage Acid-000-036-c1'  ->  ' Acid-000-036-c1'   <-- LEADING SPACE
+    'patch E        -000-036-c1'  ->  ' Acid-000-036-c1'   <-- LEADING SPACE
                                        -> AKAI field ' ACID-000-03'
 
 **Both the sample header and the program's zone reference carried the space
@@ -25377,11 +25389,11 @@ check: 176 expected, 181 found.
 **Measured by `eosed`, 2026-09-06.** MATRIX5 → MATRIX6, eleven programs, refit
 pipeline on both sides, matched by program name.
 
-    P001 Lead-PRO5       0.31      P007 LD Fluty Loops  0.01
-    P003 LD Retro Powder 0.92      P008 Bass-MS20       0.05
-    P004 LD Vintage Acid 0.02      P009 Keys-VP Rico    0.08
-    P005 Keys-MS20       0.03      P010 LD Casiopaya    0.11
-    P006 Bass-Dark       0.04      P000 PD Tapemaker    floored both
+    P001 patch B         0.31      P007 patch H         0.01
+    P003 patch D         0.92      P008 patch I         0.05
+    P004 patch E         0.02      P009 patch J         0.08
+    P005 patch F         0.03      P010 patch K         0.11
+    P006 patch G         0.04      P000 patch A         floored both
 
 **Nothing over 1 dB**, and the largest (0.92) is the row that moved 0.96 between
 MATRIX4 and MATRIX5 — a known-variable row, not a MATRIX6 effect. The drum kit
@@ -25390,7 +25402,7 @@ is unchanged across all sixteen keys: **worst 0.05 dB, median 0.02.**
 **This was the predicted outcome and that is what makes it useful.** The E4B
 path was touched only by the XPM sparse-layer fix, whose effect on E4B/AKAI is
 audibly neutral — same samples on the same keys, only the voice assignment
-swapped, all voices carrying identical parameters. `Bass-Dark` at **0.04 dB**
+swapped, all voices carrying identical parameters. `patch G` at **0.04 dB**
 confirms by measurement what had been an argument.
 
 ### The near-miss, which is the reusable part
@@ -25485,10 +25497,10 @@ to −50, so its low-velocity end is buried (2/9 to 8/9 cells clearing against
 Level tracks the writer's per-preset base offset exactly:
 
     preset               base offset   measured v127
-    Oct.Prot. 12Str.       -29.55         -57.0
-    Proteus 12String       -32.54         -63.9
-    Prot. 12Str. Lyr       -29.55         -61.0
-    Fat Prot. B3 Org        +0.00         -18.4
+    organ/12-string patch 3       -29.55         -57.0
+    organ/12-string patch 1       -32.54         -63.9
+    organ/12-string patch 2       -29.55         -61.0
+    organ/12-string patch 5        +0.00         -18.4
 
 ### Refuted explanation 1 (eosed): wrong cord destination or unapplied slot
 
@@ -25636,7 +25648,7 @@ redone, the two sides were not discussing the same object.
 (MATRIX6), eleven programs matched by name.
 
     ceiling fix        WORKS, and CORRECTLY   k84 -75.74 -> -2.99 dBFS
-    drum-program flag  WORKS                  Lead-PRO5 plays on ch9, 45/45
+    drum-program flag  WORKS                  patch B   plays on ch9, 45/45
     headroom fix       not visible as LEVEL   +0.17 dB median = rig offset
     wrong sample       NOT fixed, RELOCATED   keys 59-63 -> keys 70-74
 
@@ -25664,11 +25676,11 @@ recorded) at first appeared to find it: two programs gaining **~7 dB** of
 high-frequency tilt, seven flat. **That result is RETRACTED.** Broken down per
 key it evaporates:
 
-    LD Retro Powder   k36 +21.86  k48 +0.04  k60 +0.03  k72 +0.02  k84 +13.75
-    PD Tapemaker      k36  +1.08  k48 +6.80  k60 +10.77 k72 +9.45  k84  +8.20
+    patch D           k36 +21.86  k48 +0.04  k60 +0.03  k72 +0.02  k84 +13.75
+    patch A           k36  +1.08  k48 +6.80  k60 +10.77 k72 +9.45  k84  +8.20
 
-`LD Retro Powder` is **+0.02 to +0.04 dB on three of five keys** — its +7.14 is
-two outlier keys averaged with three nulls. `PD Tapemaker` is the quiet program:
+`patch D` is **+0.02 to +0.04 dB on three of five keys** — its +7.14 is
+two outlier keys averaged with three nulls. `patch A` is the quiet program:
 its raw band deltas at k60 run −52.9, +33.2, −24.6, +32.1, +16.1, −16.4 dB,
 which is not spectrum but noise realisation near the floor.
 
@@ -25723,15 +25735,15 @@ This is a limitation by construction, not a gap in one run.
 
 ### RETRACTED: the three odd keys, and the repeatability bound behind them
 
-`Bass-Dark` k88, `LD Retro Powder` k36 and k84 were recorded here as an
+`patch G` k88, `patch D` k36 and k84 were recorded here as an
 unexplained pattern. **All three fail to reproduce.** Re-measured with their
 neighbours, three repeats, under the same CC7=60 attenuation as the original
 pass:
 
-    Bass-Dark        k86 -21.37  k87 -22.28  k88 -21.91  k89 -23.27  k90 -23.91
+    patch G          k86 -21.37  k87 -22.28  k88 -21.91  k89 -23.27  k90 -23.91
       original pass:             k87 -21.32  k88 -30.22  k89 -23.24
 
-    LD Retro Powder  k35 -35.80  k36 -36.00  k37 -35.90
+    patch D          k35 -35.80  k36 -36.00  k37 -35.90
                      k83 -36.20  k84 -35.93  k85 -35.96
 
 **k88 reads −21.91 where it read −30.22. The 8 dB dip is gone.** The other two
@@ -25750,8 +25762,8 @@ cell once.**
 **So a single-cell difference on this material is not a finding until it
 repeats.** Retroactively that covers:
 
-* **k88, and `LD Retro Powder` k36 / k84** — one capture each, all retracted
-* the **+2.70 dB "control move"** on `Bass-Dark` k72 from 2026-09-05, already
+* **k88, and `patch D` k36 / k84** — one capture each, all retracted
+* the **+2.70 dB "control move"** on `patch G` k72 from 2026-09-05, already
   described as inside that note's own spread across six runs — now with a
   mechanism rather than an observation
 * **the whole +7.14 dB "HF gain"**: two outlier keys out of five, each measured
@@ -25772,7 +25784,7 @@ of measurements behind them, and mark anything resting on one capture as such.
 ### What stands from the run
 
     ceiling fix        WORKS, and correctly    k84 right pitch, right level
-    drum-program flag  WORKS                   Lead-PRO5 on ch9, 45/45
+    drum-program flag  WORKS                   patch B   on ch9, 45/45
     headroom fix       NO measurable effect    level or spectrum
     wrong sample       moved, now fixed 1e5e338 (needs a card write to verify)
     key 85             invisible to this rig by construction
@@ -26521,10 +26533,10 @@ writer applies it at `krz_writer.py:626-629`, dividing by 100 correctly.
 Predicted from the file and then measured by k2kremote on the K2000, agreeing
 key for key:
 
-    bass A     ceiling 74   tracks to k74, k75-79 FROZEN at 146.48 Hz
-    bass B   ceiling 74   identical
-    bass G       ceiling 79   clean through 79
-    bass J       ceiling 84   clean through 79, five keys lost
+    bass A          ceiling 74   tracks to k74, k75-79 FROZEN at 146.48 Hz
+    bass B          ceiling 74   identical
+    bass G          ceiling 79   clean through 79
+    bass J          ceiling 84   clean through 79, five keys lost
 
 **The failure is invisible to level checks.** The frozen keys play at −14.8
 dBFS, full level and clean, about 1.5 semitones flat by k79. k2kremote found
@@ -27949,3 +27961,1089 @@ the two disagreed. Without that overlap the method would have shipped.
 header; whether the LFO reaches pan on it is open. Better an open row than 6.66.
 
 Related: [[feedback-check-the-check]], §READNEVERFAILS, §BALANCEUNDEF.
+
+## §MEASCONCURRENT — two captures on one rig produce a file that passes every check (2026-09-07)
+
+Two measurement runs launched against the same rig share one MIDI port and one
+capture pair, so the second run's notes play into the first run's audio. This
+happened during the re-measurement campaign and the resulting file was
+**indistinguishable from a good one**: 12 programs, 48 note records, zero
+silent notes, plausible peaks, plausible spread.
+
+Re-running the route cleanly and diffing quantified it. Five of twelve programs
+were wrong — not the three the overlap arithmetic predicted — and two rows had
+stopped describing their own program altogether:
+
+    prog    contaminated    clean     error
+      10        -21.5      -35.9     +14.4     (-21.5 is prog 3's peak)
+      11        -23.1      -42.0     +18.9     (-23.1 is prog 4's peak)
+
+The intruding run's notes were louder than the resident run's quiet tail, so
+they **won the peak outright**. The corruption therefore biases toward *healthy*
+readings, not toward obviously broken ones: those two rows would have entered
+the confidence table as good mid-level patches.
+
+**No downstream check can detect this.** Floor occupancy, silent-note counts,
+per-channel peaks, `channel_pass.py`, contamination flags — every one of them
+is satisfied by a capture containing the wrong program played correctly. The
+only place it is catchable is before the first note.
+
+**Fix (in place).** `measure.py` refuses to start when another `measure.py` is
+already driving the same rig, reading `/proc/<pid>/cmdline` and matching argv
+elements. `--force` exists for a run confirmed dead. Two details make the
+implementation non-obvious:
+
+- **A pid captured at launch is not a handle on the run.** `setsid nohup python
+  ...` returns a *wrapper* that exits within seconds while the real interpreter
+  continues, usually reparented to init. Waiting on the wrapper and seeing it
+  vanish looks exactly like a failed run — that is how the duplicate got
+  launched. The interpreter's own cmdline is the only reliable identity.
+- **`setsid` does not always create a session leader.** One launch produced
+  `pid == sid` and survived; a textually similar one produced `pid != sid` and
+  died with its shell partway through. Verify `sid == pid`, do not trust the
+  flag.
+
+Matching argv *elements* rather than substring-searching the command line is
+required: a `bash -c '... measure.py e4xt ...'` wrapper carries the script name
+inside a single argv element, and a `ps | grep` implementation false-positives
+on every one of them.
+
+Same family as §READNEVERFAILS: the broken path produced a well-formed answer.
+
+## §TAGKEYEDMAP — per-route capture files broke the rig→program map (2026-09-07)
+
+`tests/`-side measurement metadata mapped **rig → program → (role, name)**,
+which worked while each machine wrote one features file covering every role it
+played. The re-measurement writes **one file per route**, and each restarts its
+program numbering, so on one rig a conversion's program 0 and the source
+bank's program 0 are different patches. The old keying cannot express both, and
+a scorer joining on program number pairs unrelated patches silently.
+
+Program numbers also do not agree across machines: one box loads a route at
+ids 200+ where the map recorded 700+, because the bank on that card is not the
+bank the map describes. **Join on (role, normalised name); treat the program
+number as local to a run.**
+
+Fixed by adding a tag-keyed map plus a `lookup(tag, prog, rig=None)` that falls
+back to the old structure, so pre-2026-09-07 captures keep resolving.
+
+**A name-join bug found while doing it, and the reason to keep the two maps
+separate.** The old map's names were transcribed from device read-backs — what
+each machine's display reported — and one machine truncates. It records a patch
+as `<name>` (truncated) where the bank file holds `split patch 2`. The report's name
+normaliser strips non-alphanumerics, giving `spacee` and `spaceep`, which **do
+not join**. The failure is an empty row, not an error. Both records are accurate
+about different things, so they must not be merged without deciding which
+source wins.
+
+## §SOURCELEVELPROXY — sample level does not stand in for a missing source column (2026-09-07)
+
+A conversion measured ~8 dB below its bank peers, uniformly across all probe
+notes — key-independent, so a static gain difference rather than a mapping or
+keygroup effect. Its trim and its velocity→amplitude cord both matched
+programs that were *not* quiet, so neither distinguished it, and the remaining
+hypothesis was inherited source level.
+
+**That hypothesis could not be tested, because the source column does not
+exist.** The source instrument for that route has never been on the measurement
+rig — no source role and no rig entry for it anywhere in the campaign's
+metadata.
+
+The available proxy — median RMS of the samples embedded in the built bank,
+plus the voice trim — **is too weak to substitute**. Against measured output
+peaks on two machines it gives r = +0.44 and +0.58 with residual sd 8–9 dB. RMS
+is the wrong predictor for a peak measurement, and the envelope and filter sit
+between them.
+
+What the proxy *can* support is narrower and still worth having: the program in
+question is **not among the largest residuals** on either machine, so it is not
+anomalous relative to that bank's material — the peer-mean comparison had
+assumed peers were comparable material, and three programs sharing its trim and
+cutoff have samples running 2–14 dB hotter.
+
+**The proxy contradicts a note we had been re-using as settled, and the
+contradiction STANDS — but read the whole sequence below before citing it,
+because it was retracted and then un-retracted within the hour.**
+
+A program in the same bank is recorded as inherently quiet at source. Its
+material is **+3.2 dB above the bank median inside the built bank and +4.6 dB
+above it in the original source WAVs** — measured twice from independent
+artifacts. Its output is the quietest in its route on **all three targets**.
+Loud material, quiet everywhere. That is the contradiction and it is unresolved.
+
+**THE SEQUENCE, because it is the more useful finding:**
+
+1. The contradiction was reported and filed.
+2. It was retracted: a re-run of "the same bank" gave a reading **38 dB**
+   louder, so the original row looked like a bad capture. This note was edited
+   to say the contradiction had evaporated.
+3. The retraction was itself withdrawn. **The re-run had loaded a DIFFERENT
+   BANK.** Bank index 2 was the intended bank on one disc build and a different
+   bank on the next. Nothing was ever re-measured; two captures of two
+   different programs differ by 38 dB because they are two different programs.
+
+**So the "silently bad capture" never happened, and neither did the anomaly it
+was invented to explain.** Both the alarming measurement and its reassuring
+refutation were the same error wearing opposite signs.
+
+**The operative rule, and it was stated by the session that then broke it, hours
+earlier, in writing: BANK INDEX ORDER IS NOT STABLE ACROSS BUILDS. SELECT BY
+NAME AND VERIFY THE CONFIRMATION.** A screenshot of the load confirmation was
+deliberately taken and never read, because the reader already knew what it would
+say. Knowing the rule is not the safeguard; performing the check is.
+
+**A corollary that cost real time here:** a cross-bank comparison does not
+announce itself as one. Machine parameters read from bank A were compared
+against file values from bank B and disagreed in three places — which read as a
+substantive finding about parameter/file divergence, and was simply two
+different banks. **When a comparison disagrees in several independent ways at
+once, check that both sides are the same object before explaining the
+disagreement.**
+
+**Rule.** When the missing measurement is a source column, a file-side proxy
+bounds the question, it does not answer it. Say which one you did.
+
+
+## §KRZFAMILYTRIM — a ~30 dB trim on one sample family only, seen on two targets (2026-09-07)
+
+Re-measuring a 12-preset KRZ source through both writers, the per-patch level
+deviation (conversion minus source, minus the route's median rig offset) splits
+cleanly by sample family:
+
+    KRZ -> E4XT     organ-type   n=6  mean  +9.15 dB   range  +5.5 .. +11.8
+                    other family n=6  mean  -7.65 dB   range -10.3 ..  -5.5
+                    separation  +16.8 dB, NO OVERLAP
+
+    KRZ -> AKAI     organ-type   n=6  mean  +2.58 dB
+                    other family n=5  mean  -7.80 dB
+                    separation  +10.4 dB
+
+**Two independent target machines, same direction.** A fault in either writer
+alone cannot produce that, so the cause is upstream of both — the KRZ read path
+or the model it populates.
+
+The written bytes show it directly. In the converted bank, **every** organ-type
+preset carries voice volume `0.0 dB`; **every** preset of the other family
+carries `-29.6` or `-32.5 dB`:
+
+    organ-type      0.0    0.0    0.0    0.0    0.0    0.0
+    other family  -29.6  -32.5  -29.6  -32.5  -32.5  -32.5
+
+**ROOT-CAUSED THE SAME DAY. It is ours, and it is the velocity-pivot trim
+extrapolating below its own calibrated floor.** The build log names it without
+being asked:
+
+    preset '<12-string A>': the velocity-pivot trim puts 8 level(s) up to
+    8.3 dB below the measured volume floor (-22.9 dB). Written by
+    extrapolation -- monotonic, but not a measured dB.
+
+Six such lines, one for each preset of the affected family, and **not one for
+any organ preset**. -22.9 dB floor less 8.3 to 11.4 dB of extrapolation lands
+at -31.2 to -34.3, which is the -29.6 / -32.5 actually written.
+
+**So the split is not by family at all — it is by whether a preset has velocity
+layers.** In this bank the patches of the second family carry them and the organs
+do not, so the two happen to coincide. Any organ patch with velocity layers
+would get the same treatment.
+
+**The source was read off the K2000's panel and carries no such cut — it has
+the opposite intent.** Every organ: OUTPUT Gain 0 dB, F4 AMP Adjust -4 to -7.
+Every patch of the second family: OUTPUT Gain **12 dB**, Adjust -2 to +6. No overlap in
+either field, both agreeing in sign. The source deliberately favours that family
+by roughly +22 dB; we write it down by ~30.
+
+**And that resolves the loose end about the magnitude.** A faithful trim should
+appear near its full value on at least one target and only about half did. What
+a target actually renders is a boost that was dropped plus a cut that was
+invented -- neither number, which is why it matched nothing.
+
+**RETRACTED THE SAME DAY: THERE IS ONLY ONE DEFECT, AND THE TRIM IS NOT IT.**
+
+This note first recorded two defects, the first being "the velocity-pivot trim
+extrapolates past the floor it was calibrated against and writes dB that were
+never measured". **That was already refuted on hardware before it was written
+here**, in the open TODO row *"KRZ->E4B: a 12-string renders 40 dB below a B3
+organ"*, which states plainly: *the velocity-pivot trim is NOT the cause and
+must not be changed.* Both halves of it are measured:
+
+    the quadratic past its label     byte -30 -> -22.58 measured, -22.80 curve
+                                     byte -60 -> -45.00 measured, -45.15 curve
+                                     holds to byte -60 at +/-0.5 dB
+    the trim, P000 against itself    as shipped   base -39 cord +31  -59.26
+                                     trim removed base 0  cord  0    -58.93
+                                     cancels to -0.33 dB
+
+**-22.9 dB is a conservative LABEL, not a boundary**, and the trim cancels
+against its own cord. The writer applies it to exactly the six presets with a
+velocity swing and leaves every drawbar organ alone -- right subjects, right
+amount, both with hardware evidence.
+
+**How the wrong cause got filed:** the build log emits an INFO line whenever a
+level lands past that label, six times, once per affected preset -- and the six
+matched the affected family exactly. **A log line naming a mechanism at the
+moment it fires is evidence that the mechanism RAN, never that it caused the
+outcome.** The same §CHECKTHECHECK error the file already records, reached
+through a diagnostic rather than through code. The clean 6/6 correspondence made
+it persuasive; it is also exactly what a correctly-applied trim looks like.
+
+**The single real defect is the reader.** It takes zone volume from
+`Soundfilehead.volumeAdjust` (the SAMPLE's own gain) and **never reads the
+program's OUTPUT Gain or AMP Adjust at all**, so a deliberate program-level
+boost is silently dropped.
+
+### FIXED 2026-09-07 — both fields located, both encodings measured
+
+    AMP Adjust    seg 0x53 offset 1     signed byte, 1 dB/unit
+    OUTPUT Gain   seg 0x53 offset 13    byte = 5 - dB/6, six steps 0..30 dB
+                  seg 0x52 offset 13    the second wire, same encoding
+
+`Adjust` was found by searching 204 comparable byte positions for a peer's
+twelve panel readings: **one hit, exact on all twelve**, and those readings span
+five distinct values so the vector cannot match by chance. `Gain`'s encoding was
+swept on hardware -- it **counts DOWN**, so a converter writing dB straight in,
+or reading 0 as "no gain", gets the loudest setting for the quietest request.
+
+**My first Gain candidate was wrong and the corpus refuted it.** It held literal
+dB and matched only because the peer's readings took two values whose split
+coincided with the family split -- any family-correlated byte matched. Across
+1303 programs it was **93% a single value**, with outliers no enum could hold.
+The real field is `[13]`, immediately beside the two wires' pan at `[14]`, which
+is the structural argument rather than the numeric one.
+
+### A THIRD BUG THE FIX EXPOSED, and what the corpus decided
+
+With the reader reading those fields, a KRZ->KRZ round trip drifted: the writer
+emits a program-scope baseline from its template, and the reader now sees it.
+**A writer that always emits a baseline the reader reads back is not an inverse,
+and the drift compounds once per pass** with every intermediate file well-formed
+-- the same failure the E4B attack correction had to avoid the same day.
+
+Neutralising the baseline was the first instinct and **the corpus refuted it**.
+Across **13419 real programs from seven independent sources** (201 hardware
+soundsets, six commercial CD-ROM images):
+
+    Gain   18 dB   9.2%       Adjust  +6 is the modal value in five
+           12 dB  44.6%               of the seven sources
+            6 dB  36.2%
+            0 dB   2.8%   <- writing this puts us in the RAREST bucket
+
+6 and 12 dB together are 80.8% of real programs. **The count moved after the
+decision and the decision did not.** An earlier sweep over six sources had 6 and
+12 dB near-tied at 37.9/42.3; the seventh source -- a BIN/CUE image that had to
+be de-sectored from 2352-byte raw CD sectors before it would parse at all --
+put 12 dB clearly ahead at 44.6%. The choice rests on headroom, not on
+popularity, so it survives the shift; recording both counts is the point. **Jan chose the conservative half of that near-tie: +6 dB Adjust plus
+6 dB Gain.** Our own KRZ output measures -27.7..-33.0 dBFS against a ~-91 dBFS
+floor, so 6 dB of gain we are not using buys margin against the velocity-swing
+and tremolo peaks the headroom trim exists to protect.
+
+**The baseline is subtracted from the per-sample gain**, so the level is written
+once and the round trip is stable (verified: no drift, residual 0.5 dB = the
+sample-gain step). Subtracting a CONSTANT is safe for samples shared between
+programs; the tremolo trim lowers `Adjust` further per layer and is deliberately
+not compensated, because a tremolo voice is meant to arrive quieter.
+
+**One image in the corpus sweep is NOT included and that is deliberate:** it is
+BIN/CUE, raw 2352-byte CD sectors, so object data is interleaved with sector
+headers and parses as nothing -- 1 signature in 4 MB against hundreds in the
+ISOs. Reported unscanned rather than folded in as a zero.
+
+**What was checked and is NOT the cause:** the KRZ reader is not inventing the
+attenuation. Parsing the source bank gives zone volumes of 0.0 (a few -0.5 and
+-2.0), not -30. The first hypothesis in this note -- that the cause sat in the
+read path because two independent writers showed it -- was wrong in its
+location: both writers show it because both are fed by the same conversion
+stage, which is downstream of the reader, not upstream of the writers.
+If those K2000 programs genuinely have ~30 dB of voice trim, the conversion is
+faithful and the measured separation is a rendering difference between machines.
+If they do not, we are inventing a 30 dB attenuation across half a bank. A panel
+read of two source programs' voice volumes decides it, and it is one of the
+cheapest outstanding questions.
+
+**What already argues against a clean pass-through:** the measured separation
+(16.8 / 10.4 dB) is roughly HALF the written trim difference (~30 dB). A faithful
+trim reproduced on the target would show up at close to its full value on at
+least one of them. So either the trim is being applied twice somewhere and
+partially cancelled, or it is being derived from something that is not the
+source's own volume.
+
+Related but distinct from the open envelope/sustain item on this route, which is
+a shape measurement, not a level one. Do not merge them until both have causes.
+
+
+## §ATTACKTRUNCATION — a patch whose attack outlasts the probe is scored on its ramp (2026-09-07)
+
+The matrix harness holds every probe note for **HOLD = 2.0 s** and analyses the
+note plus 0.4 s. A patch whose amplitude attack is longer than that is released
+before the envelope has climbed, so the peak-finder reports whatever level the
+ramp had reached — **not the patch's level**.
+
+One preset in the re-measurement hit this:
+
+    harness                HOLD = 2.0 s
+    the affected preset    env_attack = 5.46 s   <- released at 36% of its attack
+    every other preset     env_attack = 0.00 s
+
+It measured **-61 dB against peers at about -33**, reproducibly (-61.0 and -61.3
+on two runs), and it is the loudest-third material in the bank at source (+3.2 dB
+above the bank median in the built bank, +4.6 dB in the original WAVs).
+
+**CORRECTED THE SAME DAY, ONCE A SOURCE COLUMN EXISTED. The conversion is NOT
+faithful, and this note originally said it was.** The reasoning was: the source
+XPM asks for a long attack, we wrote a long attack, the probe is shorter than
+the sound, nothing is broken. Every step was checkable except the first — and
+the first was an inference from a parameter, not a measurement of the source.
+
+When the source instrument was finally captured, it sounded well inside the
+probe, and so did two of the three conversions:
+
+    MPC SOURCE          attack ~1.0-1.8 s   peaks -35..-39 dB   SOUNDS
+    K2000 conversion    attack ~0.8-2.1 s   peaks -51..-55 dB   SOUNDS
+    AKAI  conversion    attack ~0.8-1.7 s   peaks -43..-51 dB   SOUNDS
+    E4B   conversion         --             peaks -61..-68 dB   SILENT x4
+
+**The written E4B carries `env_attack = 5.458 s` against a source that reaches
+level in about 1.5 s.**
+
+**FIRST LOCALISATION WAS WRONG, corrected an hour later.** It read: "the XPM
+parser is shared, so a read-side error would appear in all three conversions;
+it appears in one, therefore the E4B writer is the defect." The premise held and
+the conclusion did not. The model carries **5.5826 s** straight out of the XPM
+parser, and all three writers receive it — the E4B writer encodes it faithfully
+(the E4XT's peak arrives near 6 s, exactly as written). **The other two writers
+under-encode**, so their errors cancel the law's and they land near the truth by
+accident. Only the faithful path exposes the fault.
+
+**The defect is the attack law itself.** `VolumeAttack 0.906250` maps to 5.58 s
+under the 2.x constants this file selects, or 11.4 s under 3.x. The instrument
+reaches level in ~1.5 s. **§MPCENV's curve was fitted from DECAY values read off
+the firmware's display, and confirmed acoustically on a decay; the note records
+attack as "read at 32 clicks" — one knob position, from the display.** The
+attack segment has never been measured as audio, and this is the first point on
+it.
+
+**Settled on hardware the same day, and the direction REVERSED.** Rather than
+guess a scale factor from one point -- which would have been the velocity-pivot
+error (§KRZFAMILYTRIM) committed knowingly -- `gen_xpm_envelope_test.py` gained
+`XPM_VOL_ATTACK.xpm`: nine keygroups sweeping `VolumeAttack` 0..1, sustain full
+and release short so only the rise is audible. Captured at a **35 s hold** and
+measured from audio:
+
+    value   measured 10-90%   /0.704 = full   3.x law    err
+    0.625        0.448             0.636        0.629    +1.2%
+    0.750        1.598             2.270        2.279    -0.4%
+    0.875        5.797             8.234        8.262    -0.3%
+    1.000       21.017            29.854       29.947    -0.3%
+
+**measured/law = 0.704, sd 0.005 across four decades** -- a constant ratio, i.e.
+the law gives the full rise and 10-90% is a fixed fraction of it. **The 3.x law
+is correct, and this is the first ACOUSTIC confirmation of its ATTACK segment.**
+
+**THE PREMISE OF THIS NOTE WAS WRONG.** It said the instrument "reaches level in
+about 1.5 s". That number came from a source capture taken at the **2.0 s hold**
+-- truncated by the very effect this note describes, applied to the source
+instead of the conversion. The real rise at that value is ~8 s (10-90%). So the
+E4B attack was **too SHORT, not too long**, and the earlier entry claiming a
+3.5x inflation had the sign backwards.
+
+**The defect is the law SELECTION, and it is fixed.** `is_mpc3_xpm()` picks the
+curve by container format -- gzip+JSON means 3.x, XML means 2.x. But the timing
+belongs to the **firmware that plays the file**: 3.x firmware loads XML programs
+and times them with its own curve. The program that exposed this is XML,
+declares `Application_Version 2.8.0.39`, and is played on 3.9.1.2. The
+calibration sweep proves it independently -- our generator writes XML, and it
+followed the 3.x law exactly. Selection now follows `MPC_ENV_FIRMWARE`
+(default 3); a file destined for a genuine 2.x machine sets it to 2. Regression
+test fails with the default reverted.
+
+**What the whole sequence cost, and what would have prevented it:** a
+display-derived law, never checked against audio on the segment that mattered,
+plus a probe shorter than the thing being probed -- on BOTH sides of the
+comparison. Every number involved was well-formed at every step.
+
+The measurement mechanism in this note is still exactly right — a patch whose
+attack outlasts the probe is scored on its ramp, and the hold-8 s control proves
+it. What was wrong was the *cause*: not a faithful long attack meeting a short
+probe, but an attack we lengthened by a factor of three.
+
+**The general lesson is sharper than the specific bug.** A conversion was
+declared faithful by comparing our output against our own reading of the source
+file. Both sides of that comparison came from the same parser, so it could not
+fail — the same shape as §READNEVERFAILS, reached through a parameter rather
+than an interface. **"Faithful" is a claim about the instrument, and only a
+capture of the instrument can support it.** Three sessions accepted this for an
+afternoon because the story explained every observation available at the time.
+
+**Why it resisted diagnosis for most of a day.** It presents as a level fault, so
+everyone looked for an attenuator: trim, cord, envelope sustain, sample gain.
+There is no attenuator. It also reads quiet on **every** target, which looks like
+a shared upstream cause and is instead every writer faithfully carrying the same
+long attack into the same too-short probe. And it is perfectly reproducible, so
+the usual tell of a measurement artefact — instability — is absent.
+
+**CONFIRMED ON HARDWARE with a control, 2026-09-07.** Same program, same note,
+two holds — and a second program with a 0.000 s attack as the control:
+
+    prog   attack   hold 2.0 s   hold 8.0 s   change
+      0    5.458 s    -60.85       -37.47     +23.4 dB
+      3    0.000 s    -35.50       -35.44      +0.06 dB   <- CONTROL
+
+The control is what makes it conclusive rather than suggestive: a longer window
+does not inflate the peak, so the swing is specific to the long-attack program.
+The measured ramp climbs -79 / -64 / -53 / -42 dB at 1 / 2 / 4 / 6 s and then
+falls, i.e. an attack completing near the file's 5.458 s followed by decay. The
+2.0 s hold catches it **22 dB below its own peak**.
+
+**Not fully explained: the 8 s reading lands ~2 dB below its control** (-37.47
+against -35.44). The ramp samples show the true peak before 6 s, so the peak is
+probably landing between samples and the window already catching decay — but
+that is a hypothesis. The mechanism accounts for **~23 of 25 dB**; the residual
+is unestablished and should not be written up as closed.
+
+**Scanned the whole campaign: 1 preset out of 37, across 6 banks.** The
+distribution has no boundary cases to argue about — one preset at 273% of the
+hold, and every other preset at **exactly 0.000 s**. Nothing sits near 1.5 s. So
+no other row is affected, and since attack comes from the source model, the same
+scan covers what the other targets inherit.
+
+The check has to be run per campaign, not once, and the threshold must be well
+below HOLD — a patch does not need to exceed the hold to be measured mid-ramp:
+
+    for every voice:  env_attack > HOLD/2  ->  suspect
+                      env_attack > HOLD    ->  the row is a ramp reading
+
+**Rule.** Before explaining a quiet outlier with a parameter, check that the
+patch had time to sound. A level measurement is only a level measurement if the
+note reached its level. Sits beside §BALANCEUNDEF: both are cases where the
+number is well-formed, stable and meaningless because the measurement's
+precondition was not met.
+
+**The reproducibility figure is what made this arguable.** Two runs of one route
+45 minutes apart gave 44 cells, mean -0.002 dB, sd **0.010 dB**, max |diff|
+0.05 dB. At hundredths of a dB, a reproducible -61 cannot be a flaky capture, so
+it had to be a real property of the setup. Without that figure the same
+observation is equally consistent with a bad capture, and most of a day was lost
+to exactly that ambiguity.
+
+
+## §NOTESWAP — a capture reproducing another program’s audio, proven by correlation (2026-09-07)
+
+Re-running one route hours later to obtain a run-to-run variance figure exposed
+a defect that variance cannot explain. Across 10 programs:
+
+    note 36   mean |d| 0.050 dB    note 48   mean |d| 0.027 dB
+    note 43   mean |d| 0.023 dB    note 55   mean |d| 2.959 dB   max 6.314
+
+**The last note's features do not wander, they SWAP BETWEEN PROGRAMS.** An
+identical `attack 262.1 ms` — to the tenth of a millisecond — appeared in two
+different programs in two different runs.
+
+**THE FIRST CORRELATION FIGURE WAS RETRACTED. Read why before trusting any
+correlation on this bench.** The original evidence was a zero-lag correlation of
+0.9982 between time-domain windows reconstructed from nominal timing. On
+periodic material a few milliseconds of drift flips the sign entirely: the same
+measure applied to a note whose peaks reproduce to **0.03 dB** gave run-to-run
+correlations of **-0.19, -0.66, +0.58, +0.96** across four programs. It could not
+distinguish "different sound" from "same sound, window moved 8 ms", so it was
+evidence of nothing.
+
+**Redone lag-tolerantly (best correlation over ±200 ms), the rig is
+deterministic and the anomaly is real:**
+
+    control note, same program, run1 vs run2:   0.995  0.994  0.999  1.000
+    affected note, same program, run1 vs run2:  0.673  0.666  0.304  0.498
+
+**And on a spectral measure the swap is exact.** Cosine of magnitude spectra:
+
+    prog N   run1  vs  prog N-1  run2     1.000
+    prog N+1 run1  vs  prog N    run2     1.000
+    prog N+1 run1  vs  prog N+1  run2     0.358
+
+**Run 1's program N is spectrally identical to run 2's program N-1** — 1.000 to
+three decimals, across different files — while notes elsewhere in those same
+files reproduce at 0.994-1.000 for their own program. A consistent **one-program
+offset on the affected note only**. Which run carries the correct sound is not
+determined; only that they differ by exactly one program slot.
+
+**The methodological point outlives the defect: zero-lag correlation is not a
+similarity measure on periodic audio.** Establish it on a control that is known
+to reproduce before using it as evidence — here that control was available in
+the same files and would have exposed the measure immediately.
+
+**Ruled out, each with evidence:** run-to-run noise (0.033 dB over 30 pairs on
+the same rig); key range (panel reads `Layer:1/1`, `LoKey A 0`, `HiKey G 5`, and
+the note sits inside); contamination (zero flagged notes, pre-rolls at the
+floor); the sidecar's analysis windows (the swapped values are the harness's own
+`attack_ms` and `centroid`). **And a program-change race:** `record_program`
+sends the PC **0.45 s before the FIRST note**, and the last note is followed by
+GAP + 0.5 s + the file write before the next PC. The affected note is the
+furthest point in a capture from any program change in either direction.
+
+### 2026-09-07: the overrun mechanism was WRONG. Withdrawn, with the record.
+
+**This section briefly asserted that the affected recordings spanned two program
+cycles. The file lengths refute it**, and a peer caught it by measuring what had
+been reasoned about:
+
+    affected file    43.75 s
+    predicted, ONE 4-note cycle at GAP=8:
+        0.95 + 4*2.6 + 4*8.0 + 0.5  =  43.85 s
+
+**One cycle, to 0.1 s.** The clean files are 23.75 s against a predicted 23.85.
+No recording overruns anything, and the gap override reached BOTH the note
+timing and the recording length. The wrong conclusion came from anchoring on an
+observed ~5 s event spacing and never checking the duration against the
+harness's own constants -- a one-line refutation that was never run.
+
+**A counting caveat that applies to the original numbers.** Merging onsets with
+a guard SHORTER than the note length lets one note register twice. The guard
+used was 1.5 s against a 2.0 s note; a clean file still returned 4, so the count
+was not pure artefact, but the margin was luck. At a 2.6 s guard the counts are:
+
+    E4  -> KRZ, gap 8    8 events    real onsets + one extra after each
+    E4  -> KRZ, gap 3    4 events
+    MPC -> KRZ, gap 8    4 events
+    S3  -> KRZ, gap 8    4 events
+
+**So it is route-specific, not gap-specific** -- same override, same code path,
+same duration, and two of three routes are clean.
+
+### The candidate that fits, stated as a candidate
+
+    E4  -> KRZ  (8 events)   Att+Dec+Rel = 0.12 s on EVERY preset
+    MPC -> KRZ  (4 events)   median 1.74 s, max 11.35
+    S3  -> KRZ  (4 events)   median 7.92 s
+                             HOLD = 2.0 s
+
+**The only route with extra events is the only one whose envelopes are ~16x
+shorter than the hold.** That is the shape of the already-confirmed K2000
+envelope re-cycle behaviour: *held past its own Att+Dec+Rel total, a KRZ
+envelope re-triggers instead of holding silent.* If so this is the instrument
+doing a documented thing under a probe long enough to trigger it -- **not a
+capture defect at all**, which is where two wrong mechanisms in a row had put it.
+
+**Recorded as UNEXPLAINED:** each real note is followed by one extra event at
+**+3.12 s** for the first two notes and **+5.08 s** for the last two, identical
+to two decimals across programs, and note-off is at +2.0 s. Neither the interval
+nor its change halfway through the capture is accounted for.
+
+### What the extra event actually is, and a structural discriminator
+
+Rendered as 50 ms RMS bins, the extra event is **a complete re-articulation** --
+same attack, same ~2.1 s duration, same decay -- beginning about **1.15 s after
+note-off**. Not a fast train, which is what a re-cycle on a 0.12 s envelope
+total should look like. So the re-cycle candidate survives but its timing does
+not fit.
+
+**A structural difference the audio cannot see.** The written ENV (0x21) segment,
+as (rate, level) pairs:
+
+    E4  (re-articulates)   [0,100, 3,100, 3,100, 3,100, 3,33, 12,0, 5,0, 3]
+    MPC (clean)            [0,100, 3,100, 3,100, 3,  0, 74, 0, 3,0, 3,0, 3]
+    S3  (clean)            [0,100, 3,100, 3,100, 3,  0,205, 0,17, 0,6, 0, 3]
+
+**The affected route holds 100 through a fourth segment and lands on a NON-ZERO
+level of 33; both clean routes reach 0.** All ten affected programs are
+identical; the clean routes carry nine and six distinct shapes. An amp envelope
+that never reaches zero leaves the voice alive after note-off, which is at least
+the same territory as the documented re-cycle behaviour.
+
+**Testable in one SysEx edit:** set that late level to 0 on a resident program
+and re-capture. Disappears -> the non-terminating envelope is the gate. Persists
+-> the envelope is not it.
+
+**THE CANDIDATE IS INCOMPLETE EVEN IF THAT TEST PASSES**, and this is recorded
+before the test rather than after: the same programs held for the same 2.0 s do
+NOT re-articulate in the 3 s run, and a non-terminating envelope should misbehave
+in both. **Whatever gates it is downstream of the hold length**, which is
+identical across the two runs.
+
+**A CONFOUND OF MY OWN, recorded because it nearly produced a false finding.**
+The two builds compared here were scored with DIFFERENT silence rules -- the
+earlier with the absolute -60 dBFS cut, the later with the floor-relative one --
+so a program flipping silent -> not-silent between them is **the flag changing,
+not the level**. Those runs are comparable on `silent_abs` only. Changing a
+scoring rule between two builds meant to isolate one variable is exactly what
+this file records refusing to do earlier the same day, for exactly this reason.
+
+### RESOLVED IN LOCATION: the extra events are not the instrument
+
+Comparing the two runs of the SAME program bin by bin settles where this lives:
+
+        t      gap3     gap8
+     1.50    -32.9    -32.9      identical
+     3.50    -39.7    -38.2      identical
+     3.75    -77.2    -77.1      identical  (note has died)
+     4.25    -92.6    -92.0      identical  (silence)
+     4.50    -78.5    -34.3      <- 44 dB APART
+     5.00    -92.6    -36.6      one run continues a full note-shaped event
+
+**The two captures agree to within 0.1 dB for four and a quarter seconds and
+then diverge completely.** Both carry a tiny -78 dB blip at 4.50; only one
+carries a **full-level, full-shape, ~2 s event** there, at the same level as the
+commanded note.
+
+**That is the signature of a note-on, not of material.** No envelope behaviour --
+re-cycle, non-terminating release, re-articulation -- produces a fresh event at
+the original note's level out of measured silence, and none explains the
+identical bank at the identical hold producing only a blip in the run beside it.
+**The material is demonstrably doing the same thing in both runs up to the
+moment of divergence**, so the difference is upstream of the instrument.
+
+**THE ENVELOPE CANDIDATE IS RETIRED ON THIS EVIDENCE.** The structural
+difference it rested on is real -- the affected route does write a non-zero late
+level where the clean routes write 0 -- but it cannot explain a full-level event
+present in one run and absent in another on the same file. **A difference that
+is real is not thereby the cause**, which is §KRZFAMILYTRIM's lesson arriving a
+second time in one day: there, six INFO lines matched the affected family 6/6
+and were still not the cause.
+
+**FOUR MECHANISMS PROPOSED, FOUR REFUTED. What survives is a CONDITION.**
+
+    recording overran into the next program
+        refuted: files are exactly one cycle, to 0.1 s
+    a gap-override reached one thing and not another
+        refuted: two other routes are clean through the identical code path
+    a non-terminating amplitude envelope
+        refuted twice: the bin comparison above, and a panel read showing the
+        envelope DOES reach zero (Rel1 33% -> Rel2 0%). The premise was wrong.
+    the driving script sent extra note-ons
+        refuted: the SAME script at the SAME gap on a DIFFERENT bank is clean
+
+**The condition, stated without a mechanism:** the phenomenon needs the OLD
+BANK **and** the LONG GAP. Neither alone produces it. Rebuilding the same route
+at the corrected level and wire values makes it disappear entirely -- three
+independent clean captures now, including one through the suspect script at the
+suspect gap.
+
+**And the gap is part of the condition, not merely what reveals it.** At the
+short gap the +3.15 s event would fall 2.45 s BEFORE the next commanded note --
+inside the capture, in silence, and detectable. It is not there; only a -78 dB
+blip is. So "the long gap merely exposes an event that always happens" is also
+refuted.
+
+**Two observations that pull in opposite directions and both need explaining.**
+The extra event's offset is repeatable to two decimals across DIFFERENT programs
+in one run, which is what a timing constant looks like and not what material
+does. But it CHANGES halfway through the capture, from +3.12 s to +5.08 s, and a
+timing constant that changes mid-capture is not much of a constant. Only one of
+those halves fits any sender-side explanation.
+
+**Left open deliberately -- but the scope claim below was too strong and is
+corrected.** It was filed as "a property of a superseded build". That was
+inferred from it not reproducing on the rebuilt bank, which is true and is NOT
+the same claim. **The honest version: the K2000 instance did not reproduce on
+the rebuilt bank; the phenomenon is not thereby confined to it.**
+
+**A structurally similar event has since appeared on a DIFFERENT MACHINE** --
+an AKAI target, material from the same source family, a full re-articulation
+**0.95 s after note-off** (against the K2000's 1.15 s), rising 9 dB from the
+floor after decaying 9 dB BELOW the detector's re-arm point. A release grazing a
+threshold cannot do that: the sound goes away and comes back.
+
+**And it is a KEYGROUP-level property, located.** Two probe notes re-articulate
+and two do not, and the split is exactly a keygroup boundary in the written
+program:
+
+    kg0  keys 24-43     MIDI 36 and 43 -- both silent after note-off
+    kg1  keys 44-51     MIDI 48        -- re-articulates
+    kg2  keys 52-59     MIDI 55        -- re-articulates
+
+The two unaffected notes are the only two probe notes sharing a keygroup. **The
+two delays agree to 0.02 s across notes an octave apart** -- clocked, not
+incidental.
+
+So the next person starts with a program, a PRGNUM, a boundary, two affected
+notes and two controls inside one capture, rather than with four refuted
+mechanisms. Investigating it needs
+one bank rebuilt at the old level with the old wire values -- which would also
+separate level from wires in a single load, if anyone wants it later.
+
+**THE CHECK ADDED TO CATCH IT HAD THE BUG IT WAS DESIGNED TO DETECT.** Its merge
+guard was 1.5 s against a 2.0 s hold, so ONE note could register twice and the
+check reported 5 onsets for 4 notes on a capture a longer guard counts as clean
+-- crying wolf on exactly the captures it exists to protect. The same artefact
+had been pointed out in a manual count hours earlier: **the lesson was taken and
+then not applied to the code it was about.** The guard is now derived from HOLD.
+
+### It is NOT confined to one instrument, and two checks are not one check
+
+The onset check fired on a **second machine and a different target format**
+within an hour of being added: two programs of an AKAI-target route carried 5
+and 6 onsets for 4 notes. So this is not a K2000 phenomenon.
+
+**A WARNING THAT ASSERTED A REFUTED MECHANISM.** The check's message told the
+operator the recording had "overrun its program" -- a mechanism withdrawn two
+hours earlier. The note was corrected and the CODE WAS NOT, so the check fired
+on another session's run and handed them a story known to be false. **A
+diagnostic is a claim like any other, and retracting it in prose while leaving
+it in the tool retracts nothing.** It now reports only what is observed:
+something sounded that was not commanded, cause not established, with both
+refuted mechanisms named in the docstring so nobody re-derives them.
+
+**PRE-ROLL CLEANLINESS IS NOT CAPTURE CLEANLINESS** (s3ked's distinction, and
+the more useful half of that exchange):
+
+    floor-relative pre-roll   is the PREVIOUS note still sounding at the
+                              START of this window?
+    onset count               did anything extra sound ANYWHERE in the capture?
+
+**A run can pass the first and fail the second, and one did** -- the programs
+that tripped the onset check had pre-rolls sitting on the floor. Neither check
+substitutes for the other, and the pre-roll result had been treated as a general
+cleanliness signal by both of us.
+
+**One structural fact narrows it without needing a capture.** After the last
+note the loop sleeps GAP then 0.5 s, then writes; the next program's notes only
+begin after the next `arm()`, which follows the write. **So a file cannot
+contain the next program's notes** -- whatever sounds is that program's own
+material. This is checkable on files already on disk: if every extra onset falls
+inside the program's own timespan it is the material re-articulating; if any
+falls beyond it, the structural argument is wrong and the harness needs a real
+look.
+
+**What holds regardless:** eight events in a four-note capture makes that file
+unusable for anything per-note, and `measure.py` now counts onsets after each
+capture and warns on a mismatch. **Pair it with a duration check against the
+predicted cycle length** -- that check alone would have refuted the wrong
+mechanism immediately, and it costs one line.
+
+**THE TWO HYPOTHESES WERE PERFECTLY CONFOUNDED IN ALL EXISTING DATA.** The
+affected note is both the HIGHEST note and the LAST note in every capture this
+campaign has taken. No amount of additional routes separates them. One run with
+`--notes` reordered does:
+
+    anomaly follows the NOTE  -> pitch / keygroup / sample-boundary effect
+    anomaly follows the SLOT  -> positional, something about a capture's end
+
+**Direction is the other free constraint:** the bad audio matched the PREVIOUS
+program, not the next. Whether that holds across instances is a much stronger
+clue than how many programs are affected.
+
+**Impact on scoring: none, and this was measured rather than assumed.** Re-scoring
+every route with the affected note excluded moved the published sds by at most
+0.41 dB and by **0.00** on the route where the defect was found — the scorer
+takes a max of peaks and that note is rarely the max. **This is specific to a
+max-of-peaks metric.** Any per-note measure — attack, centroid, octave error —
+would be corrupted outright.
+
+**Why this matters beyond the defect.** It is the failure that an earlier scare
+this same day was mistaken for, arriving for real on a different rig, and the
+only reason it is visible is that a second sample of the same material was
+taken. The re-run was requested on a justification that had to be withdrawn an
+hour later; it found something real regardless. **A repeat measurement is worth
+taking even when the stated reason for it turns out to be wrong.**
+
+
+## §RIGNOISEFLOOR — the measured run-to-run floor, and what sits above it (2026-09-07)
+
+Every confidence number produced before today assumed run-to-run variance was
+small without a single measurement supporting it. Four routes re-run hours apart,
+across bank reloads and a RAM clear each time, on two rigs:
+
+    route   n     mean |d|   p95     max     what is above the floor
+    E4     40     0.033 dB*  0.04*   0.26*   * excluding the affected note
+    MPC    43     0.095      0.47    1.43    one note, bleed the longer gap removed
+    S3     24     0.254      1.50    2.04    five of six known-unstable patches
+    S1     24     0.049      0.05    0.84    one note
+
+The second rig gave 44 cells at mean -0.002 dB, **sd 0.010**, max 0.05.
+
+**Use 0.05 dB as the floor and 0.3 dB as the threshold.** Roughly 50 note-pairs
+sit at or under 0.05 dB, and **nothing benign in 131 note-pairs exceeded 0.3 dB**
+— everything above it had an identified cause. Any spread in the confidence table
+is therefore two orders of magnitude above the noise: the sds are signal.
+
+**The floor also bounds which explanations are available**, which is worth more
+than the quality figure. At hundredths of a dB a large discrepancy cannot be a
+flaky capture, so it must be a real property of the setup or a wrong subject. That
+reasoning resolved this day's largest false alarm faster than the direct check
+did, and it is the argument for measuring a noise floor early rather than as a
+final polish.
+
+**An old finding reproduced by an unrelated method.** §55 recorded a repeatability
+check in which five of six patches of one source family were unstable and one was
+clean. Today's diff, with nothing about its method chosen to look for that:
+
+    the clean one   max |d| 0.024 dB     <- clean again
+    the other five          0.076 .. 2.039
+
+Same five, same odd one out, months apart, different instrument and different
+question. **A confirmation nobody was aiming at is stronger than the original
+measurement.** It also means that route's spread partly reflects unstable source
+material rather than conversion inconsistency — bounded at about 2 dB, so it does
+not account for a 4-6 dB sd, but it is not zero either.
+
+**And it is NOT the §NOTESWAP defect.** That route's largest differences spread
+across notes rather than concentrating on the last one, and it shows no one-slot
+spectral pairing. The positional offset is specific to one route, not a property
+of the last note or of the rig.
+
+
+## §STALEDIR — an absent medium serves a cached directory that passes every validity check (2026-09-07)
+
+With the card physically removed, the sampler answered a directory sweep from a
+**cached listing of the last partition read**, serving it for every partition:
+
+    card present   A: 20 vols   B: 5   C: 1   D: 4 (the most recent set)   E: 0
+    card absent    A: 4 vols = that same set    B..H: echoes of A
+
+**The sweep reported the wanted volume as PRESENT.** The names are printable,
+well-formed and are genuinely real volume names — they were read from the card
+minutes earlier. **Name-byte validation passes them.** A load would have gated
+fine, cleared RAM, and then found nothing: §170's failure exactly, reached
+through a check that was working as designed.
+
+**Two existing guards both miss this:**
+
+- name-byte validation catches *garbage*, and this is not garbage;
+- echo-detection as previously stated catches an *empty* partition, and this
+  partition is not empty.
+
+**Neither catches a stale directory whose cached content is itself valid.**
+
+**The third clause, and it is a cross-partition test rather than a per-listing
+one:** *if every partition beyond the first echoes the first, the medium is
+absent, however well-formed the names are.* A real multi-partition card has
+different content per partition — that is what a partition is — so an all-echo
+sweep is only producible from a single cached read. **A manifest count on one
+known partition settles it outright**: partition A holding 4 volumes where the
+manifest says 20 is decisive on its own.
+
+**The general form:** a validity check answers "is this well-formed", never "is
+this current". Freshness needs its own evidence, and the cheapest source of it
+is a cross-check the cache cannot fabricate — two partitions that must differ,
+or a count known in advance.
+
+## §CROSSROUTEINFER — agreement on one route is not evidence for another (2026-09-07)
+
+A program-number ordering was read off the machine for one conversion route and
+found to match the source instrument's own program order. That mapping was then
+applied **by analogy** to a second route on the same card. It was **wrong at 7 of
+12 positions**, and every row still joined by name — silently, against the wrong
+patch.
+
+Three orders exist on that medium and they disagree: the directory order on
+disk (alphabetical), the source instrument's program order, and `PRGNUM`, which
+is the only one the machine answers program changes on. The first route's
+`PRGNUM` happened to coincide with source order; the second's does not.
+
+**The coincidence is what made the analogy tempting**, and it is the same shape
+as validating an estimator on synthetics: the agreement was real, and it was
+evidence about the case it was measured on and nothing else. **Read the field on
+each route; do not infer it from a route where you read it.**
+
+**A finding that survives its own inputs being wrong is worth more than one that
+needed them right.** The same route's family-separation result was computed under
+three different pairings — two of them provably wrong — giving +10.4, +19.4 and
++18.7 dB and **never once overlapping**, while the row's own sd was meaningless
+all three times. A group-level effect that holds regardless of which patch maps
+to which is far harder to explain away than one that depends on the mapping.
+
+
+## §E4BATKRATE — the E4XT attack byte runs 1.84x slow, measured and corrected (2026-09-07)
+
+`env_seconds_to_rate()` asks for an attack time; the E4XT reaches full level
+**1.838x later**. Measured by eosed with an eight-point ladder over the Atk1
+rate byte on a resident preset, rise taken from audio, hold and RMS window
+scaled per point (hold ~6x the intended time, window ~5% of the expected rise):
+
+    byte   intends   t_peak   ratio        byte   intends   t_peak   ratio
+      72      2.00     3.60    1.80          96      8.00    15.10    1.89
+      79      3.00     5.70    1.90         102     11.62    21.30    1.83
+      87      5.00     8.85    1.77
+
+    t_peak / intended = 1.838, sd 0.050 above 2 s
+
+**A constant, not a curve** — sd 0.05 across a 116x range of intended times.
+
+**WHY A SCALAR IS LEGITIMATE HERE AND NOWHERE ELSE IN THIS ENVELOPE.** The byte
+is a slew RATE (§ENVSPAN), so a stage's time is its span over that rate, and one
+constant corrects a rate only where the span is constant. **Attack alone has a
+fixed span: it always travels 0 -> 100.** Decay travels 100 -> sustain and
+release travels sustain -> 0, both variable, and both remain **blocked** on the
+sustain-level sweep §ENVSPAN calls for. Do not generalise this constant.
+
+**The reader was corrected in the same change, deliberately.** Correcting only
+the writer makes parser and writer non-inverses, and an E4B->E4B round trip then
+shrinks every attack by 1.84x **per pass** — silently, since each file remains
+well-formed. That is TODO item (1) in its purest form. Verified: a bank
+round-tripped through parse and write returns 11.268 s both times.
+
+**Two existing tests changed contract and that is the substantive part.**
+`voice.amp_env.attack` used to mean "the time our rate law nominally asks for";
+it now means "the time the machine takes to reach full level". Under the old
+contract every E4B-sourced attack was 1.84x short of reality, so **E4B->AKAI and
+E4B->KRZ inherited the error too** — it was never only an E4B-target problem.
+
+**THE GENERAL RULE, worth more than this instance (eosed's formulation):**
+
+> **A reader defect propagates to every target; a writer defect only to one.**
+
+The instinct is to scope a conversion bug to the format it was noticed in. This
+one was found on the E4B target and was two-thirds a reader problem, silently
+degrading two other output formats that nobody was looking at. When a defect is
+localised, the first question is which side of the model it sits on, because
+that decides its blast radius before any measurement does.
+
+**And correcting only the writer would have been WORSE than the original bug.**
+Non-inverse parser and writer make an E4B->E4B round trip shrink the attack
+1.84x **per pass**, with every intermediate file perfectly well-formed — a
+silent, compounding, format-preserving corruption. The original bug at least
+produced a consistent wrongness that one comparison could expose. Verifying the
+round trip (11.268 s both ways) is the check that distinguishes the two.
+
+### CONFIRMED END TO END ON HARDWARE, 2026-09-07
+
+A bank built with the corrected `seconds -> byte` direction, played on the E4XT,
+both generations analysed identically:
+
+    window        MX11 (byte 89)              MX14 (byte 91)
+                peak   t_peak  10-90%      peak   t_peak  10-90%
+      50ms    -38.49   10.05    7.25     -38.04   11.95    7.05
+     250ms    -39.31   10.10    5.75     -38.62   11.85    7.25
+     500ms    -39.48   10.10    6.00     -38.67   11.60    7.50
+    1000ms    -40.47   10.10    6.00     -38.92   11.10    7.00
+
+Against the source's real **11.40 s** full rise: MX11 was **-11%**, MX14 is
+**within a few percent**. The error shrank about sixfold and changed sign, which
+is what a corrected scalar should do.
+
+**The intermediate check decomposes it.** MX14 prog 0 reads `Atk1 rate = 91`
+off the machine -- exactly the byte derived from the ladder (11.40 / 1.838 ->
+91), so the writer's half is confirmed **independently of any audio**. And byte
+91 interpolates to 11.6 s between the ladder's measured 87 (8.85 s) and 96
+(15.10 s); the machine played it at 11.6 s. **One session measured byte->time,
+the other fixed seconds->byte, and the composition predicted a hardware result
+neither half could have predicted alone.**
+
+**t_peak is the statistic that survived; 10-90% is not usable here.** MX11's
+10-90% ranges 5.75-7.25 s across smoothing windows and MX14's 7.00-7.50 -- they
+overlap, so the difference between builds is not resolvable in that statistic.
+t_peak is stable to 0.05 s on MX11 and 0.85 s on MX14 and separates them
+cleanly. **MX14's is the less stable of the two**: the material wobbles about
++/-5 dB near the peak, and a flatter, later peak is more easily moved by
+smoothing. So the result is "within a few percent", NOT "+1.8%" -- quoting the
+point estimate would claim a precision the window spread does not support.
+
+### The measurement method is the transferable part
+
+Sweeping the rate byte on a resident preset, rather than building a calibration
+disc, is what made this separable. An end-to-end bank yields ONE number in which
+the reader's law and the writer's law stay entangled — and entangled is exactly
+how these two hid: the MPC envelope law read attacks ~2x short while this wrote
+them 1.84x long, so the shipped result landed ~30% short instead of wildly
+wrong. **Two errors that nearly cancel are harder to find than one that does
+not, and fixing either alone makes the output worse.** Third instance today,
+after §KRZFAMILYTRIM and the AKAI LFO1 default.
+
+**A ladder that needs one analysis window is not a ladder.** The three
+sub-second points drift (ratios 1.00, 1.28, 1.68 against 1.05-1.25 above 2 s)
+because at byte 48 the window is ~3.5% of the rise. Window must scale with the
+value being measured; excluding those three tightens every statistic, which is
+itself the evidence that they are the weak ones. Do not read this law below ~2 s.
+
+**And the E4XT's own curve shape is now measured**: 10-90% / t_peak = **0.619**,
+sd 0.041, against the MPC's 0.704. Close, but different machines with different
+ramp shapes — using one machine's ratio on the other propagates directly into
+any converted time. That assumption had been doing real work in this session's
+arithmetic before it was measured.
+
+
+## §WRITETWICEREADONCE — a field written in two places and read in one (2026-09-07)
+
+Two defects shipped in one build, both caught by a peer reading the machine
+rather than by any check inside the loop.
+
+**1. A field written in two places and read in one cannot be caught by a round
+trip.** The KRZ writer emits OUTPUT Gain on BOTH wires -- `0x53[13]` (upper) and
+`0x52[13]` (lower). A baseline change moved `0x53[13]` to 6 dB and left
+`0x52[13]` at 12 dB, so **every program shipped with mismatched wire gains**.
+The reader reads only `0x53[13]`, so reader and writer agreed with each other
+perfectly, the round trip was stable, and the machine had one wire 6 dB louder
+than the other. **Self-consistency cannot detect an asymmetry it only sees one
+side of.** It needed an instrument outside the loop -- a panel read of both
+offsets, which cost seconds only because earlier RE had made reading both cheap.
+
+**2. A prediction wrong by 12 dB, and why the precision made it recoverable.**
+The writer's program-scope baseline is now SUBTRACTED from the per-sample gain,
+because the level was previously written twice and every KRZ ran 18 dB hot. The
+change was announced as **-6 dB**, from comparing the two baselines (18 -> 12)
+and forgetting that the subtraction itself was new. The real change is the whole
+**18 dB**, and a control route measured -17.88 dB.
+
+    MX11: program scope +18 dB, sample gain   0  ->  machine level T + 18
+    MX14: program scope +12 dB, sample gain -12  ->  machine level T
+
+**A wrong prediction that is precise is worth more than a right one that is
+vague.** "Expect it to be a bit quieter" would have absorbed 18 dB without
+anyone noticing; "-6 dB" was falsifiable and was falsified within the hour, by a
+route that no fix should have touched.
+
+**3. A threshold calibrated against a level is not a threshold.** `measure.py`
+flagged a note silent below an absolute **-60 dBFS**. When the column's level
+moved 18 dB, programs sitting **28 dB clear of the run's own noise floor** --
+plainly audible -- fell under the cut and would have been reported ABSENT. Now
+floor-relative: silent means under 12 dB above the measured pre-roll floor, with
+the old reading kept as `silent_abs` so earlier captures stay comparable. Same
+species as the contamination flag that fires on quiet material and stays silent
+on loud material that really is bleeding (§RIGNOISEFLOOR): **both tested a signal
+against a fixed margin instead of against the noise it must be distinguished
+from.**
+
+**4. A relative quantity stated as an absolute one.** The reader fix was
+predicted to add "+22 dB"; that was the source's family SEPARATION, not a gain
+any program receives. Each program gets its own Adjust plus its own Gain and the
+two families move in OPPOSITE directions, so the separation shifts ~20 dB while
+no single program moves near that. Measured on the AKAI target: organs -6.87 dB,
+others +3.54 dB, no overlap -- **a prediction wrong on magnitude but right that
+the effect would be family-differentiated, which is a different kind of wrong
+from one that simply failed.**
+
+**And a hold generalised past its own justification.** The KRZ-writer defects
+were used to hold four captures, two of which are E4B- and MPC-sourced and
+cannot touch the KRZ writer at all. The peer checked the reasoning against the
+routes instead of accepting the instruction, and was right to.
+
+
+## §SAMEDETECTOR — a quantity is comparable because of how it was produced, not what it is called (2026-09-07)
+
+Every cross-session number that turned out to be false today shared one shape:
+two things measured differently, compared because they had the same name.
+
+    octave error        one side scored against the note played, the other
+                        against the source -- opposite verdicts, same field
+    "silent"            two builds scored under an absolute and a
+                        floor-relative threshold, so a program "became"
+                        audible when only the rule had changed
+    family separation   computed under three different patch pairings, two of
+                        them provably wrong, all reported as the same quantity
+    onset count         counts compared across sessions whose merge guards
+                        differed; one guard was shorter than the note and
+                        double-counted
+    the note grid       audio compared against a PREDICTED grid whose period
+                        was wrong (PRE+HOLD+GAP, not HOLD+GAP), turning
+                        commanded notes into "extra events"
+
+**s3ked's formulation, which is the one to keep: assuming two things are
+measured the same way because they are named the same way.** It is expensive
+rather than merely wrong because both sides look right independently -- the
+disagreement appears as a finding about the subject rather than about the
+instruments.
+
+**The working rule: same detector or no comparison.** Before comparing two
+numbers across sessions, runs or builds, establish that the thing producing them
+was identical -- the threshold, the window, the guard, the reference, the
+pairing. Where it was not, either re-derive both with one instrument or do not
+compare.
+
+**A corollary that cost real time here.** When a comparison disagrees in several
+independent ways at once, that is far better explained by the two sides being
+different objects than by a real divergence. A three-way parameter-versus-file
+contradiction turned out to be two different banks; a 38 dB level gap turned out
+to be two different programs.
+
+**And the reverse also holds.** A result that survives its inputs being wrong is
+worth more than one that needed them right: the KRZ family separation was
+computed under three pairings, giving +10.4, +19.4 and +18.7 dB, and never once
+overlapped -- while the row's own sd was meaningless all three times.
