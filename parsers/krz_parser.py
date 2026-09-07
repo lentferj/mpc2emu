@@ -720,6 +720,12 @@ class _KrzLayer:
         #: the VoiceLayer construction becomes a stray attribute nobody reads,
         #: silently, which this class's own comment already records happening.
         self.pan: float = 0.0
+        #: Program-scope level, dB, from two fields this parser never read
+        #: before 2026-09-07 (§KRZFAMILYTRIM): the F4-AMP block's `Adjust`
+        #: and the OUTPUT page's per-wire `Gain`. Declared here for the reason
+        #: the comment above gives -- a field assigned during the walk and
+        #: missing from __init__ is a stray attribute that reads 0.0 forever.
+        self.program_gain_db: float = 0.0
         self.amp_env: Optional[Envelope] = None     # None = leave model default (Natural)
         self.filter_env: Optional[Envelope] = None
 
@@ -980,6 +986,46 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
             else:
                 cur.filter_type = 0
         elif tag == HOB_F4_TAG:
+            # PROGRAM-SCOPE LEVEL: `Adjust` at [1] and the wire `Gain` at [13].
+            #
+            # Neither was read before 2026-09-07. Zone volume came only from
+            # `Soundfilehead.volumeAdjust` -- the SAMPLE's own gain -- so a
+            # deliberate program-level boost was dropped entirely. On the bank
+            # that exposed this, one sample family carries +12 dB of Gain and
+            # about +10 dB of Adjust that we discarded, ~22 dB of the ~25 dB
+            # that §KRZFAMILYTRIM's predecessor row lists as unattributed.
+            #
+            # BOTH ENCODINGS ARE MEASURED, NOT ASSUMED.
+            #   [1]  signed byte, 1 dB per unit. Located by searching 204
+            #        comparable byte positions for k2kremote's twelve panel
+            #        readings: ONE hit, exact on all twelve, and their values
+            #        span five distinct levels so the vector cannot match by
+            #        chance.
+            #   [13] a DESCENDING SIX-STEP ENUM, `dB = (5 - byte) * 6`, giving
+            #        0/6/12/18/24/30 dB. Swept on hardware by k2kremote. A
+            #        converter writing dB straight in, or reading 0 as "no
+            #        gain", gets the LOUDEST setting for the quietest request.
+            #        My first candidate for this field was refuted by the
+            #        corpus: it held literal dB, was 93% a single value, and
+            #        only looked right because 0 is common and 0 is a legal
+            #        enum value.
+            #
+            # The two wires (0x52[13] upper, 0x53[13] lower) are read as one
+            # layer gain from the F4-AMP block. Every program measured so far
+            # carries the same value on both; a layer that differs is not
+            # modelled, because our zone volume is one number and inventing a
+            # combination rule would be a number nobody measured.
+            _adj = seg[1] - 256 if seg[1] > 127 else seg[1]
+            _gain_byte = seg[13]
+            if 0 <= _gain_byte <= 5:
+                cur.program_gain_db = _adj + (5 - _gain_byte) * 6.0
+            else:
+                # ~1% of a 1303-program corpus holds an out-of-range value here,
+                # and they are the SAME block type as the rest, so block type
+                # does not separate them. Whatever they are, decoding one as
+                # gain could invent up to 30 dB -- so take the Adjust alone and
+                # leave the unidentified byte out.
+                cur.program_gain_db = float(_adj)
             # PAN IS NOT IN THIS NIBBLE. Do not put it back (§KRZPANNIBBLE).
             #
             # This read `(seg[14] >> 4)` as a signed -7..+7 pan until 2026-09-06.
@@ -1367,7 +1413,10 @@ def parse_krz(path: str) -> Bank:
                 z = sd.root_note - t_total / 100.0
                 root_key = round(z)
                 fine = round((root_key - z) * 100)
-                zone_volume = sample_gain_db.get(sd.name, 0.0)
+                # SAMPLE gain + PROGRAM gain. The program half was missing
+                # entirely until 2026-09-07 -- see the F4 handler above.
+                zone_volume = (sample_gain_db.get(sd.name, 0.0)
+                               + layer.program_gain_db)
                 if entry.vol_adj:
                     v = entry.vol_adj - 256 if entry.vol_adj >= 128 else entry.vol_adj
                     zone_volume += v / 2.0   # unit unverified, see docs/KRZ_FORMAT.md §3.2

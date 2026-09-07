@@ -367,6 +367,11 @@ class _BlockWriter:
 # Sample object  (KSample + Soundfilehead + Envelopes)
 # ---------------------------------------------------------------------------
 
+#: Program-scope level this writer always emits: `Adjust` +6 dB plus `Gain`
+#: 6 dB. Subtracted from the per-sample gain so the total is written once.
+KRZ_PROGRAM_BASELINE_DB = 12.0
+
+
 def _vol_adjust_byte(volume_db: float) -> int:
     """Soundfilehead.volumeAdjust encoding: a signed i8 in 0.5 dB steps
     (the "Volume Adjust" MISC-page parameter, K2600 manual range −64.0..+63.5 dB).
@@ -448,7 +453,21 @@ def _write_sample_object(f, sample: SampleData, obj_id: int,
     # and passes it here.  0 dB → 0, so unity samples are unchanged (pending HW).
     # Real stereo samples carry the same value on both channels (533/533), so
     # the shared `va` is right rather than a simplification.
-    va = _vol_adjust_byte(volume_db) & 0xFF
+    # SUBTRACT THE PROGRAM-SCOPE BASELINE. The model carries a voice's level
+    # ONCE, and this writer emits it in two places: here, per sample, and in
+    # the F4-AMP program fields above. Since 2026-09-07 the READER reads those
+    # program fields (§KRZFAMILYTRIM), so writing the full level here as well
+    # makes reader and writer non-inverses -- a KRZ->KRZ round trip would gain
+    # the baseline once PER PASS, silently, with every intermediate file
+    # well-formed. Exactly the drift the E4B attack correction had to avoid on
+    # the same day.
+    #
+    # The baseline is a CONSTANT, so subtracting it here is safe for samples
+    # SHARED between programs (§KRZSHAREDGAIN): every program contributes the
+    # same +12 dB. The tremolo headroom trim further lowers `Adjust` per layer
+    # and is deliberately NOT compensated -- a tremolo voice is meant to arrive
+    # quieter.
+    va = _vol_adjust_byte(volume_db - KRZ_PROGRAM_BASELINE_DB) & 0xFF
     for ch in range(channels):
         shift = ch * num_words
         # offsetToEnvelope points past the REMAINING headers at the shared
@@ -916,8 +935,9 @@ def _thin_velocity_voices(voices, limit):
 
     # VERIFY NOTHING WAS SILENTLY DROPPED. `_thin_and_redistribute` widens
     # survivors to absorb a gap only when the whole set forms one contiguous
-    # non-overlapping chain; when it does not (found 2026-08-30 on split patch 1
-    # E: after `_fit_layers`'s disjoint pass, one surviving "voice" carries
+    # non-overlapping chain; when it does not (found 2026-08-30 on a
+    # velocity-split patch: after `_fit_layers`'s disjoint pass, one
+    # surviving "voice" carries
     # BOTH a full-range zone and a hard-hit-only zone -- min/max over its
     # zones makes it look like one wide band to `voice_lo`/`voice_hi`, which
     # is not what any of its individual zones actually cover) it falls back
@@ -1240,8 +1260,46 @@ _TPL_LAYER = [
             0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0]),            # CAL
     (0x50, [62, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]),         # HOB F1 (filter)
     (0x51, [16, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]),         # HOB F2 (resonance)
-    (0x52, [18, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 3, 0]),         # HOB F3 (SEP)
-    (0x53, [1, 6, 0, 0, 35, 0, 0, 1, 0, 0, 0, 0, 0, 3, 4]),         # HOB F4/AMP
+    (0x52, [18, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 4, 0]),         # HOB F3 (SEP)
+    # ^^ offset 13 is the LOWER wire's OUTPUT Gain and must match 0x53[13],
+    # the upper wire's. It was left at byte 3 (12 dB) when 0x53[13] moved to
+    # byte 4 (6 dB) on 2026-09-07, so every program shipped with MISMATCHED
+    # WIRE GAINS -- read off the machine by k2kremote: offset 270 (U) = 6 dB,
+    # offset 254 (L) = 12 dB, on all six programs of the bank.
+    #
+    # THE READER CANNOT SEE THIS. It reads only 0x53[13], so it computed a
+    # 12 dB baseline while the machine had one wire 6 dB louder. A field
+    # written in two places and read in one is a defect no round trip can
+    # catch, which is why it took a panel read to find.
+    (0x53, [1, 6, 0, 0, 35, 0, 0, 1, 0, 0, 0, 0, 0, 4, 4])
+    # ^^ F4-AMP. Offsets 1 and 13 are the program-scope LEVEL fields:
+    # `Adjust` +6 dB and `Gain` byte 4, which is 6 dB on the descending
+    # six-step enum `dB = (5 - byte) * 6`. Baseline total +12 dB.
+    #
+    # CHOSEN FROM THE CORPUS, 13419 real programs across SEVEN independent
+    # sources (201 hardware soundsets and six commercial CD-ROM images):
+    #
+    #     Gain   18 dB   9.2%      Adjust  +6 is the modal value in
+    #            12 dB  44.6%              five of the seven sources
+    #             6 dB  36.2%
+    #             0 dB   2.8%
+    #
+    # 6 and 12 dB together are 80.8% of all real programs. **12 dB is the
+    # plurality at 44.6% against 36.2%** -- an earlier count over six sources
+    # had them near-tied at 42.3/37.9, and the seventh source (a BIN/CUE image
+    # that needed de-sectoring before it would parse) moved 12 dB ahead.
+    #
+    # **6 dB is chosen anyway, as the conservative option** (Jan's call), and
+    # the argument does not rest on which is more common: our own KRZ output
+    # measures -27.7..-33.0 dBFS against a ~-91 dBFS floor, so we sit ~28 dB
+    # below full scale and the 6 dB we give up is headroom we were never using.
+    # It buys margin against the velocity-swing and tremolo peaks that the
+    # headroom trim exists to protect. Recorded this way because the count that
+    # motivated the choice later shifted and the choice did not.
+    #
+    # WRITING 0 dB WOULD BE THE WRONG KIND OF NEUTRAL: only 3.0% of real
+    # programs sit there, so it is the rarest bucket on the field, and it
+    # leaves the machine's headroom unused rather than unspent.
 ]
 
 # K2000 envelope-time display grid (s per editor step); env time byte = steps+3.
@@ -2289,7 +2347,7 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
         # UNIPOLAR FROM THE RESTING CORNER -- the parser records it as
         # (0, VelTrk) -- so soft notes sit at the voice's own cutoff and hard
         # notes at cutoff + depth. That is exactly the MPC semantics Jan
-        # checked on hardware (Bass-MS20: VelToFilter 127 -> filter ~open,
+        # checked on hardware (a bass patch: VelToFilter 127 -> filter ~open,
         # 0 -> static Cutoff engages), so writing the cord serves the source
         # the fold was designed for AND stops destroying a K2000's own.
         #
