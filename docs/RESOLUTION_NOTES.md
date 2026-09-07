@@ -29207,6 +29207,27 @@ Fixed with a leading-edge tolerance **derived from the smoothing window**
 (`_ONSET_LEAD_TOL = 2 * _RMS_WIN_S`) rather than tuned, so the two cannot drift
 apart.
 
+**Blast radius, measured: 245 of 357 default-schedule captures would have raised
+a false §NOTESWAP; the fix drops that to 18.** Of the two numbers only the
+*differential* is trustworthy — 227 are the centring bug proper, and the 18
+remaining have a first onset at 0.42–0.63 s against a reconstructed 1.30, i.e.
+their real schedule is almost certainly not the one reconstructed. **That absolute
+count is NOT evidence of contamination and must not be cited as such**; it needs
+the real `marks` from a run. Measuring the fix against a reconstructed grid is
+the same error the fix was for, one level up.
+
+**The tolerance opens a blind spot of its own, and the old rule did not have it.**
+The strict rule over-reported and hid nothing — every unmatched onset was raised.
+The tolerance absorbs a genuine uncommanded onset landing in the 0.10 s before a
+note-on: ~**1.8 % of a 22.4 s capture**, and precisely the part where a previous
+note's tail or a swapped program's attack would sit. Unavoidable while the
+envelope is centred, but it is a trade, not a free fix.
+
+**s3ked's one-line synthesis, which covers all three defects and the botched
+verification of the fix:** *a real component checked against a model of its
+neighbour instead of against the neighbour.* Their measurement origin, their note
+grid, this classifier, and this classifier's own blast-radius check.
+
 **How it was introduced, which is the transferable part.** The classifier was
 tested on five hand-written cases including a deliberate contamination case, and
 all five passed — every onset time typed by hand, sitting comfortably inside the
