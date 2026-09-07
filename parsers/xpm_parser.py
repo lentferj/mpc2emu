@@ -133,6 +133,34 @@ _XPM_ENV_K = 9.78
 _XPM3_ENV_A = 0.001005
 _XPM3_ENV_K = 10.3022
 
+# WHICH CURVE APPLIES IS A PROPERTY OF THE FIRMWARE THAT PLAYS THE FILE, NOT OF
+# THE FILE'S CONTAINER FORMAT. This was wrong here until 2026-09-07: the law was
+# selected by `is_mpc3_xpm()`, which tests whether the .xpm is gzip+JSON (3.x)
+# or XML (2.x). But 3.x firmware loads and plays XML programs, and it times them
+# with ITS curve -- so every XML program authored on 2.x and played on 3.x was
+# converted with envelope times roughly HALF what the instrument produces.
+#
+# MEASURED, 2026-09-07, on an MPC One running 3.9.1.2 playing an XML (2.x
+# format) program -- `tests/re_banks/gen_xpm_envelope_test.py` XPM_VOL_ATTACK,
+# nine keygroups sweeping VolumeAttack 0..1, captured at a 35 s hold and the
+# rise measured from audio:
+#
+#   value   measured 10-90%   /0.704 = full   3.x law    err
+#   0.625        0.448             0.636        0.629    +1.2%
+#   0.750        1.598             2.270        2.279    -0.4%
+#   0.875        5.797             8.234        8.262    -0.3%
+#   1.000       21.017            29.854       29.947    -0.3%
+#
+# The ratio measured/law is 0.704 with sd 0.005 across four decades, i.e. the
+# law gives the full rise and 10-90% is a fixed fraction of it. **This is also
+# the first ACOUSTIC confirmation of the curve's ATTACK segment** -- §MPCENV
+# fitted it from decay values read off the firmware's display and verified it
+# acoustically on a decay only, recording attack as "read at 32 clicks".
+#
+# Default to 3.x, which is current firmware. A file destined for a 2.x machine
+# needs the old curve: set this to 2.
+MPC_ENV_FIRMWARE = 3
+
 
 def _xpm_env_to_seconds(value: float, mpc3: bool = False) -> float:
     """MPC normalised envelope value (0.0–1.0) → time in seconds."""
@@ -606,7 +634,7 @@ def _is_full_sample_loop(loop_start: int, loop_end: int, n_frames: int) -> bool:
     very beginning AND loop_end at the very end.  These are placeholder/default
     loops (common in auto-converted packs); the MPC IGNORES them and plays the
     sample one-shot (e.g. Annenberg: loop 29..end of a 269k-frame sample).  A
-    genuine sustain loop (loop_start well into the sample, e.g. Bass-MS20: loop
+    genuine sustain loop (loop_start well into the sample, e.g. a bass patch: loop
     304175 of 308306) is NOT full-sample and the MPC plays it as a forward loop."""
     if n_frames <= 0:
         return False
@@ -630,7 +658,7 @@ def _apply_slice(sd: SampleData, slice_start: int, slice_end: int,
     `smpl` loop directly and plays it as a forward loop, EXCEPT a full-sample
     placeholder loop (`_is_full_sample_loop`), which it drops to a one-shot — so we
     only discard the embedded loop when it is full-sample (and <Loop> off), keeping
-    genuine tail/sustain loops (Annenberg one-shot vs Bass-MS20's tail loop).
+    genuine tail/sustain loops (Annenberg one-shot vs a bass patch's tail loop).
     Units are FRAMES here.  Verified against the MPC 3.7 manual + measured
     WAV frame counts — see docs/RESOLUTION_NOTES.md."""
     # 2 bytes per channel per frame: load_wav preserves the source's channel
@@ -657,7 +685,7 @@ def _apply_slice(sd: SampleData, slice_start: int, slice_end: int,
             sd.loop_start = 0
             sd.loop_end   = 0
         # else: keep the WAV smpl loop as-is — a genuine forward sustain loop
-        # (Bass-MS20 tail loop) or an explicit <Loop>True.
+        # (a bass patch's tail loop) or an explicit <Loop>True.
         return
 
     trim_start = slice_start
@@ -922,7 +950,8 @@ def _safe_name(name: str, maxlen: int = 16, tail: bool = False) -> str:
     if len(name) <= maxlen:
         return name.strip()
     # STRIP AFTER SLICING. A tail cut lands wherever `maxlen` falls, which for
-    # 'LD Vintage Acid-000-036-c1' is mid-word and yields ' Acid-000-036-c1' --
+    # a name like 'Long Patch Name-000-036-c1' is mid-word and yields
+    # ' Name-000-036-c1' --
     # a LEADING SPACE. That survives into the AKAI 12-byte name field, and an
     # S3000XL will not load a sample whose name begins with a space: five such
     # samples were absent from a 176-sample volume on real hardware, which made
@@ -1704,8 +1733,11 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
             # Envelope *times* are normalised 0–1 controls, not seconds — convert
             # via the hardware-measured MPC curve (sustain values are levels: kept).
             # 2.x and 3.x use different constants; see §MPCENV.
+            # Envelope curve follows the PLAYING firmware, not the container
+            # format -- a 3.x machine times an XML program with the 3.x curve.
+            _env_mpc3 = is_mpc3 or MPC_ENV_FIRMWARE >= 3
             _env = lambda tag, dflt='0.0': _xpm_env_to_seconds(
-                float(_get_text(instrument, tag, dflt)), mpc3=is_mpc3)
+                float(_get_text(instrument, tag, dflt)), mpc3=_env_mpc3)
             env_attack  = _env('VolumeAttack')
             env_decay   = _env('VolumeDecay')
             env_sustain = float(_get_text(instrument, 'VolumeSustain', '1.0'))
@@ -2203,7 +2235,7 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
         # Hard-splitting by layer turned it into FOUR parallel voices --
         # quadruple polyphony on the E4XT, and past the K2000's 3-layer limit,
         # so it would have been thinned and lost content. Two of 1124 corpus
-        # files regressed that way (String-DX7 4->7, Lead-PRO5 2->8).
+        # files regressed that way (two lead/string patches, 4->7 and 2->8).
         #
         # The preference alone is enough: a zone joins its own layer's lane
         # when one fits, so a sparse layer no longer shifts later layers into
