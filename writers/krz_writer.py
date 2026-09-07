@@ -2445,6 +2445,27 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
     # --- LFO1 + vibrato (LFO1 -> Pitch) ---
     lfo = seg(0x14)
     if voice.lfo1_rate is not None:
+        # !! THIS LAW IS WRONG AND HAS NO PROVENANCE. `byte = 26 + 10*Hz` is
+        # asserted by this line and by nothing else -- no comment, no anchors, no
+        # calibration record anywhere in the repository. Where the E4XT curve at
+        # least documented its three readings and asked for more, this one just
+        # states a slope.
+        #
+        # MEASURED DISAGREEMENT 2026-09-07 (k2kremote, panel + audio):
+        #     Antimatter  byte 113   machine  8.70 Hz   this law  8.70   ( 0.0%)
+        #     Grater      byte 141   machine 13.00 Hz   this law 11.50   (-11.5%)
+        # A line through both points is Hz = 0.1536*byte - 8.654; our slope is
+        # 0.1000, off by 35%. **The shape is wrong, not the scale** -- exact where
+        # it was presumably set and diverging everywhere else, which is what a
+        # single-anchor guess looks like. To reach 11.5 Hz this writes byte 141
+        # where the two-point line wants 131.
+        #
+        # NOT CORRECTED HERE: two points is not a law, and fitting a line to two
+        # readings would repeat exactly the mistake that put the E4XT map 28.4%
+        # out for three months (§ "a fitted law must be validated somewhere it
+        # was not fitted"). A panel sweep -- set the byte, read the rate the
+        # machine shows, one row per byte -- is running, and this becomes a
+        # lookup table when it lands, as the E4XT one now is.
         lfo[2] = max(0, min(255, round(26 + 10 * voice.lfo1_rate)))
     if voice.lfo1_shape:
         lfo[4] = _LFO_SHAPE.get(voice.lfo1_shape.lower(), 0)  # fallback: Sine
