@@ -27783,6 +27783,45 @@ Companion to the ceiling case (eosed, same week): past roughly 60 dB on that
 chain, a large swing is the noise floor rather than the pan. **Both ends of the
 balance metric fail, and they fail by producing numbers rather than errors.**
 
+### The write-side version: a wrong context EDITS instead of misreading
+
+**eosed, 2026-09-07, self-reported.** A bank-listing helper opened the LOAD
+dialog by pressing F4 from the preset page. The machine was not on the preset
+page — it was still in voice edit, where **F4 is "Lfo/Aux", not "Load..."**. The
+script then ran its navigation sequence (cursor moves, twelve DECs, several INCs)
+against *parameter fields* instead of a drive list, walking the resident preset's
+LFO **Rate from byte 95 to 77 and Delay from 0 to 9**. Restored and verified
+against the pre-sweep values; RAM only, nothing on the medium touched.
+
+**This is the class above the read failures.** Everything else collected here is
+a bad *read* returning a well-formed answer. This is a bad *write*, caused by the
+same root — acting on an assumed context — and it is worse in kind:
+
+> An index that is merely wrong loads the wrong bank. **A softkey that is wrong
+> silently edits the instrument.**
+
+A wrong read produces a number you might catch downstream. A wrong write changes
+the subject you were about to measure, and every measurement after it is of
+something else.
+
+**The fix is structural, not vigilance.** Both helpers now call
+`to_preset_page()` first, which presses PAGE_EXIT four times — inert, idempotent,
+and it lands on the preset page from anywhere. Softkeys are page-dependent; the
+guard makes the page an established fact rather than an assumption.
+
+### Written-down rules are not installed rules
+
+eosed had hit this exact class earlier the same session — pressing F1 expecting
+"Cancel" and landing in the Sequence Manager — and had said at the time they
+would confirm the page before any softkey. **They did not install it; they
+intended it.** Same session, same person, same failure twice.
+
+That is §87's point restated by a fresh instance: a rule that lives in a message
+or a note is not a rule that runs. The version that holds is a guard in the code
+path — `to_preset_page()` — not a resolution to be careful. Worth applying to
+every "worth remembering" in this file: if it matters, it should be a test, an
+assertion, or an idempotent preamble, not a sentence.
+
 ### Two method rules from the same run
 
 **An A/B measured with two different instruments is not an A/B.** MX10MPC was
