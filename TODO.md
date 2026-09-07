@@ -4238,6 +4238,44 @@ is rewritten there is no route back to the pre-fix state.
 
 See `docs/RESOLUTION_NOTES.md` §E4BDOUBLETRIM.
 
+## CONFIRMED IN THE SHIPPING PATH: the K2000 panner wire fix (2026-09-07)
+
+Controlled A/B, both arms on the same instrument, same key and velocity, same
+analyser, RAM cleared to zero between banks, audio path proven immediately before
+each capture (floor -90.7 dBFS, note -8.2):
+
+    MX10MPC  wires U->left, L->right      MX9MPC9  wires both left
+    L -25.2  R -29.0   gap  3.8 dB        L -19.7  R -79.3   gap 59.7 dB
+    balance sd 5.05 / 5.17 / 4.94 dB      balance sd UNINTERPRETABLE
+    peak-to-peak 17.8 / 15.7 / 17.7 dB      (right channel at the floor)
+    peak 8.89 Hz at x107 / x113 / x106     peak 0.56 Hz = drift, lowest bin
+
+8.89 Hz is one FFT bin from LFO1's 8.70 at that window — **LFO1's rate, not a
+discrepancy**, and it should be written that way so nobody later treats 0.19 Hz
+as a finding.
+
+**The two arms differ in KIND, not degree, and the claim must say so.** The
+treatment is a stereo signal whose balance swings ~17 dB peak-to-peak at the LFO
+rate, both channels live. The control is a MONO signal in the left channel with
+60 dB of nothing in the right. So the correct statement is **not** "the panner
+moves in one and not the other" but *"one has a stereo image to modulate and the
+other has no image at all"* — which is exactly the p284 mechanism and exactly what
+the four-byte wire change does.
+
+**Subject verified on both arms, and it had to be by the OUTPUT page:** the panner
+bytes are byte-identical between the banks (F3 40, Src1 114, Depth 26, Adjust 0 in
+each), so nothing in the panner block could say which file was in RAM. Only the
+wire pan markers differ — both on `L` in the control, opposite in the treatment.
+
+**What it closes:** the file path end to end — XPM, parser, `krz_writer`, card,
+load, audio — with four bytes as the only difference, verified as the only
+difference from the build side before the disc was made. The writer produces the
+sweep.
+
+**What it does NOT close:** `MX10GRAT`, which carries a panner for the first time
+at a different depth (19 rather than 26). That wants its own measurement rather
+than an assumption.
+
 ## CONFIRMED IN THE SHIPPING PATH: the AKAI rate fix (2026-09-07)
 
 `AKAI_LFO2_RATE_HZ_PER_UNIT = 0.11913` verified by a **fourth** route, and the
