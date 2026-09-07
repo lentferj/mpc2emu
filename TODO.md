@@ -4238,6 +4238,54 @@ is rewritten there is no route back to the pre-fix state.
 
 See `docs/RESOLUTION_NOTES.md` §E4BDOUBLETRIM.
 
+## FIXED: the K2000 LFO rate law was one segment of five — 77.5% of corpus rates were wrong
+
+**Status: FIXED 2026-09-07, measured table adopted. Needs a rebuild to reach the
+media.** `krz_writer` asserted `byte = 26 + 10*Hz` in one undocumented line. It
+turns out to be **segment 3 of a five-segment ladder, character for character** —
+`36 + (Hz-1.00)/0.10` is identical to it — so it was the CORRECT law for
+1.00-10.00 Hz and wrong everywhere else.
+
+Measured by k2kremote off the K2000's own LFO1 MnRate field, 185 rows, one per
+byte, and the segments reproduce every row exactly (verified here before adopting,
+so it is a lossless encoding rather than a fit):
+
+    byte   0..20    0.01 Hz/byte     0.00 ..  0.20 Hz
+    byte  20..36    0.05 Hz/byte     0.20 ..  1.00 Hz
+    byte  36..126   0.10 Hz/byte     1.00 .. 10.00 Hz     <- the old law
+    byte 126..176   0.20 Hz/byte    10.00 .. 20.00 Hz
+    byte 176..184   0.50 Hz/byte    20.00 .. 24.00 Hz
+
+**Audio corroborates the panel at four bytes across three segments** (5.00, 10.00,
+16.00, 22.00 Hz, two reps each). The 0.11 and 0.22 residuals at the top are FFT
+bin quantisation at 0.556 Hz spacing — k2kremote's instrument, not the machine's.
+**Do not read a trend into them.**
+
+**Byte 184 is the ceiling.** The old writer clamped to 255, permitting bytes the
+panel cannot reach and nobody has tested.
+
+### Corpus damage, measured over 320 sampled XPMs (391 LFO rates)
+
+    band          n    median wanted   median got   median ratio
+    below 1 Hz    17          0.14         0.55           3.88
+    1-10 Hz       88          5.51         5.50           1.00
+    above 10 Hz  286         12.61        15.20           1.21
+
+**303 of 391 rates — 77.5% — were written wrong by more than 0.05 Hz.**
+
+Two distinct failures, and the smaller band is the worse one:
+
+- **Above 10 Hz (73% of all rates):** the machine spends one byte per 0.2 Hz where
+  the old law spent one per 0.1, so the offset from 10 Hz was roughly doubled.
+  Median 12.61 Hz written as 15.20.
+- **Below 1 Hz (4.3%): proportionally catastrophic.** The old law's intercept puts
+  0.042 Hz at byte 26, which is 0.50 Hz — **11.9x too fast**. 0.088 -> 0.55 Hz,
+  0.142 -> 0.55 Hz. **Slow LFOs are what a listener notices**: "that should be a
+  slow sweep and it is warbling."
+
+Only the 1-10 Hz band came through correct, which is exactly the band the law was
+silently calibrated for and the only band anyone had checked.
+
 ## CONFIRMED IN THE SHIPPING PATH: the K2000 panner wire fix (2026-09-07)
 
 Controlled A/B, both arms on the same instrument, same key and velocity, same
