@@ -4238,6 +4238,26 @@ is rewritten there is no route back to the pre-fix state.
 
 See `docs/RESOLUTION_NOTES.md` §E4BDOUBLETRIM.
 
+## CONFIRMED IN THE SHIPPING PATH: the AKAI rate fix (2026-09-07)
+
+`AKAI_LFO2_RATE_HZ_PER_UNIT = 0.11913` verified by a **fourth** route, and the
+one that matters — the writer chose the byte, not a hand-set parameter:
+
+    PRG  amt  PANRAT   predicted   measured   frames   resol   floor%
+      8   26      73        8.70       8.63      163    0.61      0%
+      5    9      35        4.17       4.33       97    1.03      0%
+      1   36      61        7.27          -       34       -      0%
+
+**PRG 8 has both arms and doubles cleanly:** PANRAT 37 -> 4.35 Hz on MX9 MPC8 01,
+PANRAT 73 -> 8.63 Hz on MX10 MPC 01. Ratio 1.98 against the source's 8.7. PRG 5
+lands inside its own 1.03 Hz resolution. Byte check passed too: amounts unchanged
+at 36/9/26, rates exactly doubled, 176 samples, `ACID` names intact.
+
+**PRG 1 is UNMEASURED, not passed** — it sustains ~0.35 s, too short to resolve
+7.27 Hz. A cross-note workaround produced a confident 6.66 Hz and was discarded as
+an artefact; see §SAMPLINGSCHEME. Its rate byte is verifiably correct in the
+header; whether the LFO reaches pan on it is open.
+
 ## The E4B LFO rate map is wrong between its anchors — every LFO rate we write is off
 
 **Status: OPEN, measured 2026-09-07 (eosed). Do NOT refit yet.** `cnv_lfo_rate`

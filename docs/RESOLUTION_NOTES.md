@@ -296,6 +296,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§READNEVERFAILS — four interfaces in one night where a bad read returns a well-formed answer (2026-09-06)](#readneverfails-four-interfaces-in-one-night-where-a-bad-read-returns-a-well-formed-answer-2026-09-06)
 - [§SELFMATCH — five ways a process/liveness check answers about itself (2026-09-07)](#selfmatch-five-ways-a-processliveness-check-answers-about-itself-2026-09-07)
 - [§BALANCEUNDEF — a balance ratio is undefined when one channel is at the floor (2026-09-07)](#balanceundef-a-balance-ratio-is-undefined-when-one-channel-is-at-the-floor-2026-09-07)
+- [§SAMPLINGSCHEME — a synthetic validates the estimator, not the sampling scheme (2026-09-07)](#samplingscheme-a-synthetic-validates-the-estimator-not-the-sampling-scheme-2026-09-07)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -27799,3 +27800,52 @@ MX9MPC9 signature. **A subject check on a field common to both candidates
 confirms nothing**, however carefully it is read.
 
 Related: [[feedback-check-the-check]], §READNEVERFAILS.
+
+
+## §SAMPLINGSCHEME — a synthetic validates the estimator, not the sampling scheme (2026-09-07)
+
+**s3ked, on a result they discarded rather than reported.** Confirming the AKAI
+rate fix needed PRG 1's modulation frequency, but that program sustains ~0.35 s —
+34-38 usable frames, far too few to resolve 7.27 Hz from a held note.
+
+Workaround: `LFO2TRIG` is 0 on all three programs, so the LFO free-runs and does
+not reset phase on retrigger. That licenses sampling the modulation **across
+notes** and recovering the frequency from unevenly-spaced samples with a
+Lomb-Scargle periodogram. **Validated to better than 0.002 Hz on synthetics built
+with exactly that gap structure.** It returned PRG 1 = 6.66 Hz at a significance
+of x21822.
+
+**It is an artefact. Every value it produced is an exact multiple of the 2.222 Hz
+retrigger rate:**
+
+    PRG 8   8.88 = 3.996x        PRG 5   4.44 = 1.998x
+    PRG 1   6.66 = 2.997x        PRG 3   8.82 = 3.969x   <- CONTROL, MODVPAN1 = 0
+
+**Four for four within 0.01 of an integer, including a program with no pan
+modulation at all.** The held-note measurements of the same programs are *not*
+multiples (3.887, 1.950), so they are independent of the retrigger and the
+artefact is in the sampling, not the instrument.
+
+### The two lessons, and the second is the new one
+
+**1. A control that returns a strong measurement when the thing being measured is
+switched off is the whole diagnosis.** PRG 3 has `MODVPAN1 = 0`. It produced
+8.82 Hz at high significance. That single row invalidates the method regardless of
+how good the other three look — and significance measured *within* the method
+cannot see it, because the artefact is real periodicity, just not the signal's.
+
+**2. THE SYNTHETIC VALIDATED THE ESTIMATOR AND SAID NOTHING ABOUT THE SAMPLING
+SCHEME.** The model reproduced the gap structure and came back clean at both
+regular and jittered spacing, so the Lomb-Scargle implementation was correct —
+and correctness of the estimator was never the question. What was wrong was that
+the act of sampling imposed its own periodicity on the data. **A synthetic built
+from your own model of the situation cannot expose an effect your model omits**;
+it tests the code against the assumption, not the assumption against the world.
+
+The escape was a program measurable BOTH ways — held-note and cross-note — where
+the two disagreed. Without that overlap the method would have shipped.
+
+**Outcome:** PRG 1 stays unmeasured. Its rate byte is verifiably correct in the
+header; whether the LFO reaches pan on it is open. Better an open row than 6.66.
+
+Related: [[feedback-check-the-check]], §READNEVERFAILS, §BALANCEUNDEF.
