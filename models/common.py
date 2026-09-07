@@ -2007,8 +2007,17 @@ _LFO_RATE_C = -2.52573          # DEAD
 #: 0.6x before it. That is what a real lookup table looks like and it is why no
 #: curve reproduces it.
 #: Source: ~/temp/e4xt_ref/lfotable/lfo_rate_table.json (raw bitmaps beside it).
-#: OPEN: measured on one preset/one voice. A second-preset spot check is running;
-#: if the rate proves per-voice this becomes a family of tables, not one.
+#: CONFIRMED IN THE SHIPPING PATH 2026-09-07, and the last caveat is discharged.
+#: A/B on one disc, one byte apart, so no cross-card drift:
+#:     byte  95  table  8.85  measured  8.85 Hz   (at CC1 = 0 and 127)
+#:     byte 106  table 11.44  measured 11.44 Hz   (at CC1 = 0 and 127)
+#: 750 frames each at 0.27 Hz resolution, and the balance SWINGS are unchanged
+#: across the pair (27.05 -> 26.74 dB, 66.19 -> 65.21) -- so only the rate moved.
+#:
+#: NOT per-voice and NOT shape-dependent: a different bank, preset, voice and LFO
+#: shape (triangle, where the A/B was sine) matched the table at bytes 30, 70,
+#: 100 and 120 exactly, plus byte 64 read incidentally at the June anchor. The
+#: mapping is a global property of the LFO.
 _LFO_RATE_TABLE = (
      0.08,  0.11,  0.15,  0.17,  0.21,  0.25,  0.28,  0.32,   #   0-7
      0.36,  0.38,  0.42,  0.48,  0.50,  0.53,  0.56,  0.65,   #   8-15

@@ -27809,6 +27809,29 @@ something else.
 and it lands on the preset page from anywhere. Softkeys are page-dependent; the
 guard makes the page an established fact rather than an assumption.
 
+### When a safety property earns its keep
+
+eosed's LCD reader was built to report `?` for any glyph it did not recognise
+rather than guess — the argument being that a digit read wrongly and silently is
+the failure this whole week has been about. **It fired on its first real
+opportunity.**
+
+The second-preset spot check's first run returned `??.??????..?.???.???.??` and
+reported MISMATCH on all four bytes. Cause: the page remembers its cursor field,
+and an earlier mis-navigation had left the cursor on **Delay**. The reader was
+reading whichever field carried the cursor — the wrong field entirely — met
+glyphs it had no template for, and said so.
+
+**Had it guessed, it would have returned four plausible numbers from the wrong
+field, and four plausible numbers disagreeing with the table would have read as
+the caveat failing** — i.e. as evidence that the rate map is per-voice after all.
+A design choice made on principle prevented a wrong conclusion about a different
+question entirely.
+
+Worth stating as the general form: **a component that refuses to answer when it
+cannot is worth more than one that is usually right**, because the cost of a
+confident wrong answer is not bounded by the component's own scope.
+
 ### Written-down rules are not installed rules
 
 eosed had hit this exact class earlier the same session — pressing F1 expecting

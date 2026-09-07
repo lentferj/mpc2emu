@@ -4442,10 +4442,25 @@ Small and data-only:
 Two functions replaced by a lookup plus an explicit inverse; every call site keeps
 its signature.
 
-**Blocked on:** eosed's dense sweep — byte -> Hz for the full range, one row per
-byte, with the METHOD recorded per row (audio-measured or panel-read; the very low
-bytes want the panel rather than long captures), plus the bytes measured both ways
-as an ongoing cross-check.
+**CLOSED 2026-09-07 — confirmed in the shipping path, caveat discharged.**
+
+    MX10 GRATER  byte  95   table  8.85   measured  8.85 Hz
+    MX11 GRATER  byte 106   table 11.44   measured 11.44 Hz
+
+Both arms on one disc, one byte apart, measured at CC1 = 0 and 127, 750 frames
+each at 0.27 Hz resolution. **The balance swings are unchanged across the pair**
+(27.05 → 26.74 dB and 66.19 → 65.21), so only the rate moved — asserted when the
+disc was built, measured now.
+
+**The one-preset caveat is discharged rather than argued away:** a different bank,
+preset, voice and LFO *shape* (triangle against the A/B's sine) matched the table
+at bytes 30, 70, 100 and 120 exactly. The mapping is a global property of the LFO,
+not per-voice and not shape-dependent. Four points, not a second sweep.
+
+**11.44 against a 11.50 request is honest quantisation, not error** — the grid
+cannot express 11.50, and the writer now reports what it achieved. That is only
+legible *because* it reports it: under the old behaviour this would have shown as
+a 0.06 Hz mystery sitting on top of a 2.6 Hz one.
 
 **Do not adopt eosed's curve yet** (their caveats, kept): one preset, one voice,
 one key; balance frequency assumed equal to LFO frequency 1:1; seven points from a
