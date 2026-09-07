@@ -29255,15 +29255,43 @@ onset**. Two consequences, one good and one not:
 - **L comes straight off the margin, and the causal envelope deliberately trades
   lead for lag.** Measured here: median L = +21 ms, max +295 ms on slow attacks.
 
-For the ~0.95 s re-articulation class that is `+0.33 s` typically and `+0.055 s`
-at the measured worst — **6× smaller than the bare 0.35 s**. At `L ≥ 0.35 s` the
-event merges and **the count does not move at all**.
+**CORRECTED — the `+295 ms` worst case above was an artifact of my own
+measurement.** That script collected onsets with `abs(t − t_on) < 0.5`, so it
+reported the edge of its own collection window as a maximum. The instrument's
+bound became the finding, which is the same error as reading a threshold off a
+flat sweep. Re-measured over 1375 onset/note pairs:
 
-**Where this bites is slow-attack material**, where the rise cannot clear
-threshold until seconds in, so L is not small and must be *measured on that
-material* rather than assumed. This is the fix for one defect creating exposure
-in a neighbouring one: removing the leading edge was right, and it moved cost
-onto the guard.
+| | |
+|---|---|
+| median L | **+0.019 s** → margin +0.331 s |
+| p90 | +0.186 s → margin +0.164 s |
+| **above 0.35 s — the event MERGES** | **~2 % of pairs (≈29–33 of 1375)** |
+
+So the exposure is real and I under-reported it while arguing it mattered.
+
+**But "slow attack" is NOT the mechanism, and that correction is s3ked's.** The
+detector triggers on an **8 dB rise above a running minimum**, and 8 dB is a
+small fraction of any attack's total travel — so L is set by how fast a signal
+clears its *first 8 dB*, not by attack length. Measured on their bench, an
+`ATTAK1` sweep from 20 to 99 moves L only 0.020 s → 0.152 s across a 7.3 s
+climb: **2 %**. A slow attack delays the peak enormously and delays the 8 dB
+crossing barely at all.
+
+**This is the third time in one session that "slow attack" was offered as a
+mechanism and was wrong.** It genuinely explained the false silence, the false
+contamination flag and the 15 dB level error; it did not explain the mid-hold
+swells (`LFODEP` = 0 refuted that) and it does not explain detection lag. **A
+mechanism with a good track record is the one that gets applied past its
+range** — and here the falsifying structure was in my own hands, since I wrote
+the trigger.
+
+What the tail actually is: the largest genuine lags are `s3_to_krz_mx14_*`,
+`mpc_to_krz_*`, `cd3krz2_*` — conversions **into KRZ**. A slow first 8 dB is a
+different property from a slow attack. Not identified; recorded as a lead rather
+than guessed at.
+
+This remains a case of fixing one defect creating exposure in its neighbour:
+removing the leading edge was right, and it moved cost onto the guard.
 
 **The mitigation is already in place and is the reason position beats counting.**
 A merged event is merged, not refuted — but `post_off` is a positional test that
