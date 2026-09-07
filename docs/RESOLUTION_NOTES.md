@@ -29285,10 +29285,30 @@ mechanism with a good track record is the one that gets applied past its
 range** — and here the falsifying structure was in my own hands, since I wrote
 the trigger.
 
-What the tail actually is: the largest genuine lags are `s3_to_krz_mx14_*`,
-`mpc_to_krz_*`, `cd3krz2_*` — conversions **into KRZ**. A slow first 8 dB is a
-different property from a slow attack. Not identified; recorded as a lead rather
-than guessed at.
+**What the tail actually is — TWO populations, and only one of them matters.**
+Grouping L by route (medians, not maxima) across 358 captures separates effects
+that the earlier "conversions into KRZ" note ran together:
+
+| population | routes | median L | max L |
+|---|---|---|---|
+| **genuinely elevated group** | `krorig`, `k2000v2`, `akai2krz`, `mpc_to_krz`, `s3_to_krz_mx14`, `velfix_*` | **0.17–0.20 s** | ~0.21 s |
+| **MPC baseline** | `mpc_orig`, `MX14_MPC_to_AKAI`, `mx11_mpc_to_e4b`, `mx2_*`, `cd3krz2` | **~0.019 s** | ~0.02 s |
+| **single outliers** | one file inside each baseline route | — | **1.10–1.32 s**, 40–70× its own route median |
+
+**The KRZ-ish elevation is real, ~10×, and benign** — at L ≈ 0.19 s the margin is
+still +0.16 s, so nothing merges. **Everything that actually crosses the merge
+threshold is a single program** appearing under many route names (its `program 0`
+captures: `mpc_prog0_recheck`, `v127chk`, and one file in each of `mx2_fixed`,
+`cd3krz2`, `mx2_krz_v2`, `mx11_mpc_to_e4b`, `mpc_orig`).
+
+So the earlier lead was half right, and **the half that mattered was wrong**: the
+route effect exists but never merges anything; the merging is one envelope. It is
+the same program s3ked traced to the false silence, the false contamination flag
+and the 15 dB level error — five distinct false signals from one envelope.
+
+**The method point: group by MEDIAN, not by max.** A max attributes one file's
+property to its whole group, which is exactly how "a route effect" was manufactured
+here — by me, from a sorted list of worst cases.
 
 This remains a case of fixing one defect creating exposure in its neighbour:
 removing the leading edge was right, and it moved cost onto the guard.
