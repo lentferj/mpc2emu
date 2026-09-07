@@ -1121,3 +1121,43 @@ adjust is in the page header, in parentheses. A first pass searching the field
 names for "Res" found none and nearly concluded that algorithm 5 has no
 resonance at all — the expensive wrong answer. (k2kremote, who reported the near
 miss rather than only the result.)
+
+
+### Offset 225 in factory material: a definite 0, not litter
+
+**Read from `MXKRSRC`, twelve programs, none authored by this project** — the one
+source on the card that can say anything about the machine rather than about our
+own writer.
+
+    all 12   algorithm 2, F1 = 2 (2POLE LOWPASS), F3 = 40 (PANNER)
+    225 = 0  on every one
+    226 = 0  on every one
+
+**What it settles:** "225 is unmaintained junk left by the previous algorithm" is
+**refuted**. The hypothesis predicted scatter and there is none — somebody writes
+a definite 0. (That was k2kremote's reading, and they retracted it on their own
+measurement.)
+
+**What it does NOT settle:** whether the engine reads the byte. Our 16 and
+Kurzweil's 0 are both stable, both banks play correctly, and nothing here
+distinguishes them. It is not evidence that 16 breaks anything.
+
+**The one practical conclusion, offered as conservatism and not as evidence:**
+0 is what the machine's own content carries in that slot. To have our output
+resemble factory material rather than merely work, write 0 rather than 16.
+Deferred to the next rebuild rather than churned now — the panner A/B was just
+confirmed with 16 in place, and changing a byte to match a convention would
+invalidate a controlled result for no measured gain.
+
+**A real gap, flagged rather than papered over:** these are **algorithm 2**, not
+algorithm 5. The two share an F1 filter family and both lack an F2 stage, so the
+finding transfers to the algorithm-5 path *by analogy only*, and this card carries
+no factory algorithm-5 material to test directly.
+
+**226 = 0 corroborates the resonance encoding from the one direction that counts.**
+The F2 RES page on those programs reads `Adjust: 0.0dB`, exactly what byte 0
+renders as under the dB x 2 law — on twelve factory programs authored by someone
+who never saw our converter. The `MX10MPC` table could not give this: there,
+every row was our own constant read back. Zero resonance on twelve organ and
+12-string patches is also musically unremarkable, so the value is consistent
+rather than suspicious.
