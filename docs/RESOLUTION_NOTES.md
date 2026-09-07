@@ -29244,6 +29244,33 @@ The 19 that remain are the same group throughout: first onset at ~0.46 s against
 a reconstructed 1.30. Almost certainly a different real schedule, **not**
 evidence of contamination.
 
+### The merge guard's margin is `D − 0.6 − L`, and the causal fix grew L
+
+A post-note-off event at note-off + `D` survives the merge guard only while
+`D − 0.6 − L > 0`, where **L is how late the detector places the note's own
+onset**. Two consequences, one good and one not:
+
+- **HOLD cancels exactly.** The margin does not depend on note length — 2 s hold
+  or 12 s hold, same number. That is a stronger result than it first appears.
+- **L comes straight off the margin, and the causal envelope deliberately trades
+  lead for lag.** Measured here: median L = +21 ms, max +295 ms on slow attacks.
+
+For the ~0.95 s re-articulation class that is `+0.33 s` typically and `+0.055 s`
+at the measured worst — **6× smaller than the bare 0.35 s**. At `L ≥ 0.35 s` the
+event merges and **the count does not move at all**.
+
+**Where this bites is slow-attack material**, where the rise cannot clear
+threshold until seconds in, so L is not small and must be *measured on that
+material* rather than assumed. This is the fix for one defect creating exposure
+in a neighbouring one: removing the leading edge was right, and it moved cost
+onto the guard.
+
+**The mitigation is already in place and is the reason position beats counting.**
+A merged event is merged, not refuted — but `post_off` is a positional test that
+does not consult the guard, so classification still reports what counting loses.
+That is the argument against resting any conclusion on a count alone, including
+the grid-free form "N events for N notes leaves no room for an N+1th".
+
 ### The harness now has a test file, and its negative control found the argument
 
 `~/temp/matrix/test_onsets.py` — 12 checks. Two rules, both chosen because their
