@@ -29299,6 +29299,38 @@ does not consult the guard, so classification still reports what counting loses.
 That is the argument against resting any conclusion on a count alone, including
 the grid-free form "N events for N notes leaves no room for an N+1th".
 
+### The margin is per-capture, so the harness now measures it instead of quoting one
+
+Both sides published a corpus bound for the guard margin and both were corrected:
+mine was the edge of a `abs(t − t_on) < 0.5` collection window read as a maximum;
+s3ked's `0.198 s` was eight captures on two programs. Re-measured, **both corpora
+carry lags past 0.35 s** — ~2.2 % here, 0.8 % there — and one offender is a file
+a live finding rests on.
+
+**The rule that came out of it (s3ked's): a corpus bound is the wrong SHAPE of
+claim.** However carefully measured, it says nothing about the capture in front
+of you. The margin is a property of one capture and must be measured there.
+
+`_guard_margin()` now returns `(worst detection lag, margin)` for the capture
+being analysed, and the call site **warns when the margin is ≤ 0**: that capture
+cannot report a post-note-off event at all, because the note's own onset was
+placed late enough that such an event falls inside the merge guard and moves no
+count. Reading its count as clean is reading the method's blind spot as a result.
+
+Real captures that fail it: `mpc_prog0_recheck_000` (L = 1.184 s, margin
+−0.834), `mx11_mpc_to_e4b_000` (L = 1.102 s, margin −0.752).
+
+**And L cannot be predicted from a patch parameter.** It is set by how fast the
+signal clears its *first 8 dB* — two programs at the same nominal `ATTAK1` 99
+measure 0.152 s and 0.488 s. A slow first 8 dB is a different property from a
+slow attack, and **only the second is visible in an envelope field**, which is
+why this has to be measured per capture rather than inferred.
+
+**The shared tell, worth carrying:** both bad numbers *stopped exactly where the
+method stopped* — a maximum sitting suspiciously at a collection window's edge,
+a sweep whose headroom collapsed at its last point. A statistic that terminates
+at the instrument's bound is reporting the instrument.
+
 ### The harness now has a test file, and its negative control found the argument
 
 `~/temp/matrix/test_onsets.py` — 12 checks. Two rules, both chosen because their
