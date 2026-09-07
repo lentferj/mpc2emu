@@ -29184,9 +29184,43 @@ onset landing outside every commanded note window raises the §NOTESWAP warning;
 the rest report as extra articulation and say explicitly that it is not
 contamination.
 
-Worked through on the capture that triggered it: 6 onsets, classified
-expected=4, mid-hold=1, post-off=1, **unassigned=0** — reported as contamination
-by the first version, correctly not by this one.
+**A third defect, and the worst of the three (s3ked, 2026-09-07).** The first
+version of this classifier gated on `t_on <= t`, and `_onset_report` smooths
+with `np.convolve(..., 'same')`, which **centres** the window — so a rising edge
+is reported up to **half a window early**, 25 ms at the 50 ms window. Every
+onset that led its own note-on fell through every branch into `unassigned`,
+which is the branch that raises the §NOTESWAP claim.
+
+It fired on **all four notes of a clean capture**: onsets at
+1.29/6.89/12.49/18.09 against a schedule of 1.30/6.90/12.50/18.10. The two
+clocks agreed to 10 ms and the comparison was off by less than the smoothing
+lead. **The bug is in the RMS, not the timing** — the obvious suspect, the
+note-on arithmetic, is correct.
+
+Rank the three failures of this one function by cost: the over-count cried wolf
+on a plausible signal; the under-count failed silent; **this one fired the
+strongest claim the harness makes — that another program's audio is present —
+on a maximally clean capture.** Loudest and most wrong simultaneously. Anyone
+acting on it hunts a program swap that never happened.
+
+Fixed with a leading-edge tolerance **derived from the smoothing window**
+(`_ONSET_LEAD_TOL = 2 * _RMS_WIN_S`) rather than tuned, so the two cannot drift
+apart.
+
+**How it was introduced, which is the transferable part.** The classifier was
+tested on five hand-written cases including a deliberate contamination case, and
+all five passed — every onset time typed by hand, sitting comfortably inside the
+windows. **It was never once fed the output of the detector it exists to
+consume.** That is the same shape as verifying a write by reading back the field
+you wrote: the logic was tested, the interface was not.
+
+**Retracted, for the same reason:** an earlier version of this section reported
+"worked through on the capture that triggered it — 6 onsets, expected=4,
+mid-hold=1, post-off=1, unassigned=0". That used a **reconstructed schedule**,
+not the capture's real `marks`, so it was hand-made input wearing a real
+capture's name. The real schedule is `0.25 + 0.45 + PRE` then `PRE+HOLD+GAP`
+per note. Any position-based verdict recorded before the tolerance fix should be
+re-derived, not cited.
 
 **A near-miss on the cause, recorded because it was caught before it was
 written down.** The obvious reading of the swell is tremolo, and its dominant
