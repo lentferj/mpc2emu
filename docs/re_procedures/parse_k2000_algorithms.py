@@ -14,7 +14,7 @@ page, so the split column is taken from the second "Algorithm|N" header.
 """
 import json, re, sys
 
-lines = open('26_dsp_algs.txt').read().split('\n')
+lines = open('26_dsp_algs.txt', encoding='utf-8').read().split('\n')
 hdr = re.compile(r'Algorithm\|(\d+)')
 
 blocks = []          # (algno, col_start, col_end, first_line, last_line)
@@ -88,4 +88,5 @@ for no, c0, c1, i, end in blocks:
                'diagram': glyphs}
 
 print(f'parsed {len(out)} algorithms: {sorted(out)}', file=sys.stderr)
-json.dump(out, open('k2000_algorithms.json', 'w'), indent=1)
+with open('k2000_algorithms.json', 'w', encoding='utf-8') as _fh:
+    json.dump(out, _fh, indent=1)
