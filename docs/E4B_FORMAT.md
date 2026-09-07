@@ -918,9 +918,9 @@ the E4XT's parameter interface (SysEx dump / editor) in **±100**, i.e. as a
 percentage. Full scale maps to full scale and the conversion is exact:
 
     preset                 file byte    interface    file x 100/127
-    Lollipop  static            92          72             72
-    Biting    static           -12          -9             -9
-    Antimatter gate             67          53             53
+    P001 static             92          72             72
+    P005 static            -12          -9             -9
+    P008 gate               67          53             53
 
 `100/127 = 0.7874`; small magnitudes round to apparent ratios of 0.75-0.79,
 which is why it first looked like a variable discrepancy rather than a constant.

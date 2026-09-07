@@ -4490,11 +4490,11 @@ to most of the library.
     RootNote 0 AND full range 0-127:         70.5%   <- hits the trigger
     of trigger-hitting, no WAV `smpl` chunk:  5.6%   (54 checkable)
 
-Seven in ten programs hit it — 'Organ-TS Piped Organ', 'Pad-PRO5 Placebo',
-'Inst-Bass-F9 Jun Drone'. They converted correctly **only** because a WAV `smpl`
+Seven in ten programs hit it — organ, pad and bass multisamples across several
+libraries. They converted correctly **only** because a WAV `smpl`
 unity note rescued them, so correctness rested on a chunk the XPM does not
 control. The 5.6% with no `smpl` shipped playing ONE PITCH across the keyboard —
-'LD Trombone', 'LD Casiopaya 2' among them.
+a solo brass patch and a keys patch among them.
 
 **Hardware-proven before the fix, not inferred (eosed):** on the E4XT, voice 0 of
 such a program carries `NON_TRANSPOSE = 1` and plays 262.6 Hz at every key across
@@ -4603,9 +4603,9 @@ with the cord table read.
 writer's LFO->AmpPan path works on hardware. Audio and parameters agree exactly:
 
     preset            median swing   AmpPan cord   amount
-    P001 Lollipop        ~100 dB     src 96          72
-    P005 Biting Edge     12.39 dB    src 96          -9
-    P008 Antimatter       0.02 dB    src 96           0     <- wired, zero depth
+    P001 (wheel 0.0)     ~100 dB     src 96          72
+    P005 (wheel 0.5)     12.39 dB    src 96          -9
+    P008 (wheel 1.0)      0.02 dB    src 96           0     <- wired, zero depth
     (5 presets with no cord)  0.01-0.08 dB, i.e. the +0.42 dB interface trim
 
 **P008's zero is CORRECT and traced to source.** Its XPM carries
@@ -4615,9 +4615,9 @@ ModWheel->CordN-Amount cord of `D*Kw`; at Kw=1.0 the static part is exactly zero
 So with the wheel down there is no pan, faithfully to the MPC. The other two
 confirm the mechanism rather than merely fitting it:
 
-    Lollipop   0.7244  wheel 0.0  -> static 0.7244 x127 = 92    measured 92
-    Biting     0.1890  wheel 0.5  -> static 0.0945, triangle    measured -9
-    Antimatter 0.5276  wheel 1.0  -> static 0                   measured 0
+    P001  0.7244  wheel 0.0  -> static 0.7244 x127 = 92    measured 92
+    P005  0.1890  wheel 0.5  -> static 0.0945, triangle    measured -9
+    P008  0.5276  wheel 1.0  -> static 0                   measured 0
 
 **CONFIRMED 2026-09-06 23:55.** P008 pans with the wheel up, and the
 ModWheel->cord-amount gate is now hardware-tested for the first time:
@@ -4769,7 +4769,7 @@ page then pans each wire. **If both wires sit centred, they sum and the panner
 is inaudible no matter how it is driven.** We wrote `Src1 = LFO1`, `Depth 26`
 (52 %) and left the OUTPUT page at its inherited default: both wires centred.
 
-**Measured, on program 263 (MX9MPC8's Antimatter) against 208 (pre-fix twin):**
+**Measured, on program 263 (MX9MPC8's 2-pole bass source) against 208 (pre-fix twin):**
 
     Adjust +50%, wires centred        image moved  0.01 dB   <- static, still nothing
     Src1 = LFO1 Depth 52%, centred    balance sd  0.015 dB

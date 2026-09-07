@@ -27118,7 +27118,7 @@ parses differently, which is what makes it safe to apply without a corpus sweep.
 **Verified on one file of each layout:**
 
     Grater (nested)     lfo1_to_pan 0.3701  vel_to_pan 0.0551  lfo1_to_pitch 0.0157  rate 11.5015 Hz
-    Antimatter (flat)   lfo1_to_pan 0.5276  vel_to_pan 0.0     lfo1_to_pitch 0.0787  rate  8.7288 Hz
+    P008 (flat layout)  lfo1_to_pan 0.5276  vel_to_pan 0.0     lfo1_to_pitch 0.0787  rate  8.7288 Hz
 
 **The rate is an independent check on the whole path:** 11.5015 Hz from the file
 is what the MPC's own GUI displays for that program (11.51), and what the audio
@@ -27416,7 +27416,7 @@ PANNER is **one wire in, two wires out** and positions nothing itself. Left at
 the inherited centre the two wires **sum** and the panner is inaudible however
 hard it is driven.
 
-### The measurement ladder, program 263 (MX9MPC8 Antimatter)
+### The measurement ladder, program 263 (MX9MPC8's 2-pole bass source)
 
     Adjust +50%, wires centred          image moved  0.01 dB   <- even STATIC pan is inaudible
     Src1 = LFO1, Depth 52%, centred     balance sd  0.015 dB

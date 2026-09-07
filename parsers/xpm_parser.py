@@ -2093,7 +2093,7 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
                         # them, so correctness was resting on a chunk the XPM does not
                         # control. Of the trigger-hitting programs whose sample could
                         # be located, 5.6% have no `smpl` and shipped FIXED PITCH --
-                        # 'LD Trombone', 'LD Casiopaya 2' among them.
+                        # a solo brass patch and a keys patch among them.
                         #
                         # HARDWARE-PROVEN, not inferred (eosed 2026-09-07): on the
                         # E4XT, voice 0 of such a program carries NON_TRANSPOSE = 1
