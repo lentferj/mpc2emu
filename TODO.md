@@ -1911,6 +1911,12 @@ table, with the board-requirement split — and corpus-validated:
 - The 983 active keygroups are deliberately configured — most with three to six
   non-default parameters — and cluster in **EQ (469) and HP (374)**, the modes
   audible regardless of corner frequency.
+
+**The halving does not lower the priority, and arguably raises it** (s3ked's
+framing): the half that vanished was the *inert* half, so what remains is
+material somebody sat down and configured three-to-six parameters at a time.
+One library program in thirteen, and they are the ones whose author cared most.
+The claim got smaller and the case got better.
 - Where enabled, `FLT2MODE` spreads **LP 64.0 %, EQ 19.1 %, HP 15.2 %,
   BP 1.6 %**; where disabled it is 0 in 99.5 %. That correlation is what proves
   the read is aligned.
