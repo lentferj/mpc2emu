@@ -1719,6 +1719,38 @@ Validated in both directions, which is what the earlier attempt failed:
 `tests/test_trim_slow_attack.py` pins both directions; reverting the fix fails
 two of its three tests.
 
+## A third-party two-stage E4B attack is decoded by a law fitted to neither stage (OPEN 2026-09-08)
+
+`parsers/e4b_parser.py` decodes the attack as
+`_fenv_rate_inv(pzt[0]) * _E4XT_ATK_SLOWDOWN + _stage2_seconds(pzt[2])` —
+stage 1 carries the measured 1.838x correction and stage 2 does not.
+
+**The magnitude is real:** with both stage bytes equal the total reads **22.8 %
+short**, rising to **41.5 %** when stage 2 dominates, and it propagates into
+every KRZ/AKAI/EIII conversion of that bank.
+
+**But applying the scalar to stage 2 is NOT the fix, and was tried and
+reverted.** `_E4XT_ATK_SLOWDOWN` corrects a **rate**, and a stage's time is
+span/rate, so one constant corrects a rate only where the **span is fixed**.
+Atk1 always travels 0 → 100, which is why a scalar works there. **Atk2 travels
+from `pzt[1]`'s level to `pzt[3]`'s — a variable span** — so a scalar is the
+wrong shape of correction. `tests/test_e4b_parser.py::test_two_stage_envelope_combines`
+pins the current behaviour and rejected the change, correctly.
+
+**Not reachable from our own output:** `e4b_writer` emits `pzt[2] = 0` always
+(Atk2 holds full), so our files have no second attack stage and reader and
+writer remain inverses. The exposed case is a bank written by an E4XT or
+another tool.
+
+**What would settle it:** a rate sweep on Atk2 with a KNOWN, non-trivial stage
+split — set `pzt[1]` to a mid level so Atk2 has a real span, sweep its rate
+byte, and measure time-to-full. That gives the span/rate law for a partial
+stage, which is the missing piece for decay and release stage 2 as well (both
+take the same time-alone path today).
+
+**Status:** open. **Blocked on:** an E4XT rate sweep. Note `eosed` can send
+whole presets over SysEx, so this needs no card crossing.
+
 ## AKAI ENV2 downward-sweep floor is an unmeasured bound (OPEN 2026-09-08)
 
 `AKAI_ENV2_SWEEP_FLOOR_HZ = 100.0` bounds how far down a negative ENV2 depth is
