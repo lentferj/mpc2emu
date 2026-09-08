@@ -1934,7 +1934,17 @@ level and brightness, against 38 dB with it on. Our zero-filled programs are
 unaffected, everything on the test card still means what it meant, and prior
 baselines stand.
 
-**The WRITE path still needs the laws**, and two sweeps now gate it:
+**THE EQ MODE IS CLOSED (2026-09-08).** Eleven captures, all restored and
+verified: the mode enum measured from response shape, the sign crossing at
+`FLT2Q` ≈ 23.1 (not the manual's 16), depths across every populated value,
+`FLT2Q` 16 confirmed a singular notch from both neighbours, `FLT2GAIN` a
+level-neutral switch, headroom +22 dB above bypass, and the arm-dependent
+centre-frequency caveat. See `docs/AKAI_S3000_FORMAT.md`.
+
+**Two open items, neither blocking:** a `FIL2FR`-at-fixed-`FLT2Q` sweep to
+separate the cut/boost topologies, and `FLT2Q` 22/23 for the last 14 keygroups.
+
+**The WRITE path still needs the remaining laws**, and two sweeps gate it:
 
 1. **`FLT2GAIN` — the more valuable one.** Enabling filter 2 costs **6.04 dB
    even fully open** (`FIL2FR` 99, `FLT2GAIN` 0 which the panel shows as
