@@ -316,6 +316,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§CWMPR400403 — checking two ConvertWithMoss PRs for derivation, and what they showed us (2026-09-08)](#cwmpr400403-checking-two-convertwithmoss-prs-for-derivation-and-what-they-showed-us-2026-09-08)
 - [§AKAIPROGSCOPE — three program-scope fields we drop, and what it would take to apply them (2026-09-08)](#akaiprogscope-three-program-scope-fields-we-drop-and-what-it-would-take-to-apply-them-2026-09-08)
 - [§BOARDFITTED — the IB-304F went in, and every audio measurement became undated (2026-09-08)](#boardfitted-the-ib-304f-went-in-and-every-audio-measurement-became-undated-2026-09-08)
+- [§AKAIFIL2FR — the filter-2 corner law, and a premise that was two quantities (2026-09-09)](#akaifil2fr-the-filter-2-corner-law-and-a-premise-that-was-two-quantities-2026-09-09)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -29936,3 +29937,49 @@ through one filter or two.
 Mode enum order is **LP, BP, HP, EQ**. Note `attenuator`, which the operator's
 manual's FILTER 2 section never mentions, and that `Lfo2>freq` and `Env3>freq`
 are **separate** modulation routings.
+
+## §AKAIFIL2FR — the filter-2 corner law, and a premise that was two quantities (2026-09-09)
+
+**Status: OPEN, sweep designed, awaiting bench time.** Procedure:
+`docs/re_procedures/akai_fil2fr_corner_law.md`.
+
+`FIL2FR` → Hz gates **both directions** of the AKAI filter-2 work: the mode
+enum, sign rule, depths, gain switch and headroom are all settled and none of
+them is usable without knowing where the filter sits.
+
+**The premise the sweep was first justified on was wrong, and the way it was
+wrong is this project's recurring failure.** I wrote that filter 2 does not
+share filter 1's law, because our `FILFRQ` law gives **2503 Hz at byte 80**
+where filter 2 measured **~2200**. Both numbers are correct. They name
+different quantities:
+
+| | at byte 80 |
+|---|---|
+| §54 law, fitted to the **resonance peak** | 1892.4 Hz |
+| our shipping law (§139, **corner** measured directly) | 2502.7 Hz |
+| ratio | **1.323×** |
+
+**Our own writer already documents that gap** — *"§54 fitted this to the
+RESONANCE PEAK as an indicator of the corner; their §139 measured the corner
+directly and the two disagree by a constant 1.29×, which is open on their
+side."* I compared an EQ extremum against a corner law and attributed the
+mismatch to filter 2.
+
+**Filter 2's EQ boost extremum matches the resonance-peak law to 1.1 %**
+(1872 against 1892) — like for like, since an EQ boost peak *is* a resonance
+peak. **Filter 2 may share filter 1's frequency control exactly.**
+
+**And the ~17 % "arm step" is suspect for the same reason.** It was checked
+robustly against the width artefact, but that check compared the sharpest point
+on each arm — a **notch minimum** against a **peak maximum**. On an asymmetric
+response those are not the same quantity either. **The step may be the same
+error one level down.**
+
+**So the sweep is now mode 0's −3 dB corner**: unambiguous, directly comparable
+to the shipping law, free of both the width dependence and the peak/notch
+mismatch — and having no sign, it has no arms, so one ladder replaces two.
+
+**The general form, third instance this session:** two correct numbers, each
+right for what it measures, compared as though they measured the same thing.
+Re-running either computation confirms it. Only asking *what quantity is this*
+separates them.
