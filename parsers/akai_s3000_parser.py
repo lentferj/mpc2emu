@@ -839,6 +839,21 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
     #
     # Applied to every zone because it is PROGRAM-scope: the manual calls it
     # "the equivalent of a mixer's fader" for the whole program.
+    # THE LAW IS ESTABLISHED ON 60..99 ONLY. s3ked's sweep stopped at 60 on a
+    # stated guard -- level 0 looks exactly like a broken rig -- so there is no
+    # point below it and the curve must not be read as unbounded.
+    #
+    # 1.76% of library programs (90 of 5,124) sit below 60, down to 10, where
+    # the law extrapolates to -19.91 dB against -4.35 dB at the fitted floor:
+    # a 15.6 dB extrapolation.
+    #
+    # EXTRAPOLATED RATHER THAN CLAMPED, deliberately, and for this project's
+    # own reason (see `_rate_law_value` in the AKAI writer): clamping maps every
+    # value outside the window onto one number, which produces a PLATEAU, and a
+    # quieter program converting to the same level as a louder one destroys
+    # ordering -- the one thing a converter must not lose. The extrapolation is
+    # reported instead.
+    #
     # LEVEL 0 IS NOT "40 dB DOWN", IT IS "NOT IN THE STEREO MIX". The manual:
     # "by mixing them out of the stereo outputs by setting this parameter to
     # 00, you remove them from the main mix" -- the program is then heard on an
@@ -1192,7 +1207,17 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
                   f"needed",
                   subject=prog['name'], content_lost=False,
                   detail={'octave_shift': _oct})
-        if prog.get('stereo_level', 99) == 0:
+        _sl = prog.get('stereo_level', 99)
+        if 0 < _sl < 60:
+            _diag(_I, 'AKAI_STEREO_LEVEL_EXTRAPOLATED',
+                  f"stereo level {_sl} is below the range the amplitude law "
+                  f"was measured over (60..99); its {_stereo_level_db:.1f} dB "
+                  f"is extrapolated, not measured",
+                  subject=prog['name'], content_lost=False,
+                  detail={'stereo_level': _sl,
+                          'fitted_range': '60..99',
+                          'applied_db': round(_stereo_level_db, 2)})
+        if _sl == 0:
             _diag(_W, 'AKAI_STEREO_LEVEL_ZERO',
                   "program is set to stereo level 0, which takes it OUT of the "
                   "stereo mix and onto an individual output -- a routing "
