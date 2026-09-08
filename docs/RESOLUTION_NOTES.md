@@ -29943,6 +29943,30 @@ are **separate** modulation routings.
 **Status: OPEN, sweep designed, awaiting bench time.** Procedure:
 `docs/re_procedures/akai_fil2fr_corner_law.md`.
 
+**The redesigned ladder then had the same fault in it, one step downstream.**
+s3ked warned that mode 0's corner must be compared against §139's *corner*, not
+§54's *resonance peak*, or the documented 1.29x gap re-surfaces as a finding.
+Checking our shipping law against the ladder showed a second instance of it that
+neither of us had named: **`FIL2FR` 95 is above `AKAI_FILTER_LAW_TRUSTED_TO`
+(80), so `akai_filfrq_to_hz` answers it from `AKAI_FILTER_MEASURED`, not from
+the exponential** — §146 having found filter 1's corner runs 7-23% above its own
+law from 84 up. A 95 capture checked against "the law" recovers that filter-1
+gap and reads as filter 2 differing. It is also very likely unmeasurable: §146
+marks 90-94 marginal and `AKAI_FILTER_SATURATED` is 96.
+
+Dropped 95; ladder is now **30 / 45 / 64 / 72 / 80**, every point inside the
+law's trusted range and therefore against one reference. Corners above 80 are a
+separate measured table for filter 2, as §146 built for filter 1 — not a law
+check.
+
+**Three instances in one evening of one error**, each caught by the session that
+was not holding the number: s3ked caught our 2503, we caught their arm step,
+and the 95 point was only visible by printing which branch of our own function
+each ladder value lands in. The generalisation is stronger than any of them:
+**a number carries no record of what it measures, and the session currently
+reasoning with it is the one least able to see that.** The cheap defence is
+mechanical — before comparing two figures, print where each came from.
+
 `FIL2FR` → Hz gates **both directions** of the AKAI filter-2 work: the mode
 enum, sign rule, depths, gain switch and headroom are all settled and none of
 them is usable without knowing where the filter sits.

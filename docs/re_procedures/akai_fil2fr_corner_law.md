@@ -73,8 +73,45 @@ artefacts the EQ arms carry — the width dependence and the peak/notch quantity
 mismatch. Mode 0 has no sign and therefore no arms.
 
 ```
-  FLT2MODE 0 (LP), FLT2Q 0     FIL2FR  30  45  64  80  95
+  FLT2MODE 0 (LP), FLT2Q 0     FIL2FR  30  45  64  72  80
 ```
+
+**`FIL2FR` 95 was in the first version of this ladder and is now out.** It fails
+for two independent reasons, and the first is the same trap one step further
+downstream (found here, 2026-09-09):
+
+```
+  FIL2FR   §54 peak   §139 corner    ours   ours/§139   where ours comes from
+      30       54.4         70.0     66.9       0.955   LAW
+      45      157.7        203.2    198.2       0.976   LAW
+      64      607.6        783.0    785.2       1.003   LAW
+      80     1892.4       2438.5   2502.7       1.026   LAW
+      95     5489.4       7073.7   8481.0       1.199   MEASURED TABLE
+```
+
+1. **95 is not on the law at all.** `AKAI_FILTER_LAW_TRUSTED_TO` is **80**;
+   above it `akai_filfrq_to_hz` reads `AKAI_FILTER_MEASURED`, because §146 found
+   filter 1's real corner runs **7–23 % above** its own exponential from 84 up.
+   A `FIL2FR` 95 capture compared against "the law" would recover that
+   filter-1 gap and **read as filter 2 differing from filter 1**. Same shape as
+   comparing an EQ peak against a corner law: a documented discrepancy
+   re-surfacing as a finding.
+2. **95 is very likely unmeasurable.** `AKAI_FILTER_SATURATED` is **96** —
+   at and above it filter 1 is indistinguishable from wide open — and §146
+   already marks its own 90–94 points **marginal**. 95 sits past the last
+   marginal point, one rung below the value where the machine stops
+   distinguishing. It is the `FIL2FR` 20 failure at the other end of the range.
+
+**All five points now sit inside 0–80, so all five compare against one
+reference: the law.** The `ours/§139` column above says a constant-ratio §139
+and our shipping law agree to 4.5 % across exactly that band, so either is a
+valid comparand there — but not above it.
+
+**The top of the range is a separate sweep, not part of this one.** If filter 2
+needs corners at 84–94, they have to be *measured* into a filter-2 table the way
+§146 measured filter 1's; no law check can supply them. Worth doing — p90 of the
+corpus is 88 — but it answers a different question and is analysed against
+`AKAI_FILTER_MEASURED`, never against the exponential.
 
 Express the EQ centres as offsets from this afterwards, if they are still
 wanted. The two-arm requirement was a consequence of the step, and the step is
@@ -87,9 +124,9 @@ unmeasurable in the first sweep. §RIGNOISEFLOOR says the rig is flat to 11 Hz
 with 60–80 dB of headroom below 44 Hz, so it should be reachable, but that is a
 prediction to check rather than assume.
 
-**Order so that stopping early still yields something:** 64 on both arms first
-(anchors against the existing `FIL2FR` 80 point), then 30 and 95 (the ends fix
-the shape), then 45 and 80.
+**Order so that stopping early still yields something:** 64 first (it anchors
+against the existing `FIL2FR` 80 point), then 30 and 80 (the ends fix the
+shape), then 45 and 72. "Both arms" is gone with the arms — mode 0 has none.
 
 **Two spot checks, if cheap:** `FIL2FR` 64 at `FLT2Q` **20** (cut) and **27**
 (boost). If the centre matches its arm's law there, one law per arm covers
