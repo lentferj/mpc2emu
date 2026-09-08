@@ -1771,9 +1771,10 @@ reaches on the S3000XL. The obvious candidate is the corner law's own bottom
 behaviour change across a large share of the corpus, so it needs measuring
 rather than assuming.
 
-**Status:** open. **Blocked on:** an S3000XL sweep — set a low FILFRQ, a full
-negative ENV2 depth, and find where the corner actually lands. `s3ked`'s
-calibration kit already drives this parameter.
+**Status:** open, **material ready**. **Blocked on:** bench time only — no card
+crossing needed. Procedure: `docs/re_procedures/akai_env2_downward_floor.md`.
+Volume: `~/temp/HWCHK_ENV2/` (generator `tests/re_banks/build_hwcheck_akai_env2.py`).
+Primary route is SysEx via `s3ked`'s probes; the volume is the fallback.
 
 ## Input-parser feature-parity gaps found via ConvertWithMoss 19.1.0 (ENHANCEMENT, OPEN 2026-07-25)
 
