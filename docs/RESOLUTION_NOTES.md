@@ -29372,7 +29372,25 @@ under `peak − 40 dB`. Each therefore **under-counts by construction**:
 
 - the **245 → 19** blast radius of the classifier defect,
 - the **two-population** lag split (route elevation vs single outliers),
-- the lag distribution (median +0.019 s, p90 +0.186 s, ~2 % above 0.35 s).
+- the lag distribution (median +0.019 s, p90 +0.186 s, ~2 % above 0.35 s),
+- **"43 of those 44 hold the full four notes"** — the *44* is the old rule's own
+  output and stands, but the corroboration that they hold exactly four came from
+  the clamped build and may under-count,
+- the **812 / 1340 → 0 / 1339** early-onset counts: the *conclusion* is
+  structural and safe (a causal window cannot report an edge before it happens,
+  whatever the counts), but the tallies themselves are from the clamped build.
+
+**Not everything is invalidated, and the distinction is the point.** A figure
+describing the **old rule's own output** is a property of that algorithm and
+survives. A figure the **new detector was used to establish** does not. Blanket-
+flagging would have thrown away the founding measurement along with the stale
+corroboration of it.
+
+**Record the instrument version beside every measurement** (s3ked). Tonight one
+capture legitimately yielded **1, 4 and 6** onsets — absolute rule, clamped
+relative rule, fixed relative rule — and nothing but a timestamp distinguishes
+which build a recorded number came from. A count without its instrument is not a
+measurement.
 
 The two-population *structure* is expected to survive — it concerns lags on
 captures that track the grid, which the clamp does not touch — but **expected is
