@@ -54,6 +54,7 @@ from typing import Dict, Iterator, List, Optional, Tuple
 from models.common import (Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            LoopType, Envelope, krz_cutoff_byte_to_hz,
                            krz_reson_byte_to_01, krz_env_byte_to_seconds,
+                           krz_lfo_rate_byte_to_hz,
                            KRZ_RELEASE_FACTOR, krz_level_pct_to_db,
                            hz_to_e4b_cutoff,
                            key_track_to_filter_amount,
@@ -1162,8 +1163,18 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
                     # every writer would then have to honour.
                     cur.filter_resonance = krz_reson_byte_to_01(seg[1])
         elif tag == LFO1_TAG:
-            rate_byte = seg[2]
-            cur.lfo1_rate = max(0.0, (rate_byte - 26) / 10.0)
+            # THE MEASURED LADDER, NOT THE SLOPE IT DISPROVED. `(byte-26)/10`
+            # is the old linear fit, and it is exact only between bytes 36 and
+            # 126 -- the range it was fitted in. Outside that it fails at both
+            # ends: byte 184 reads 15.8 Hz against a measured 24.0, and every
+            # byte at or below 26 reads 0.0 Hz, so a slow LFO is read as
+            # STOPPED and rewritten as byte 0. Byte 5 is 0.05 Hz on the
+            # machine and 0.00 Hz to this reader.
+            #
+            # The ladder went into the writer when it was measured and the
+            # reader was left behind, so a KRZ round trip silently flattened
+            # its own slow LFOs. Same law, both directions, from one place.
+            cur.lfo1_rate = krz_lfo_rate_byte_to_hz(seg[2])
             cur.lfo1_shape = _LFO_SHAPE_FROM_BYTE.get(seg[4])
 
     # amp_env sentinel cleanup: False (Natural, no ENV seen yet) or unresolved -> None
