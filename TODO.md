@@ -1779,11 +1779,34 @@ ours.
 All three are **program-scope**, so each lands on every voice — the same shape
 as `vel_loudness`, which sat unread until §KRZAMPVEL for the same reason.
 
-**Status:** open, no hardware needed to implement; the read path is the whole
-job and the fields are already located. **Worth doing with a corpus scan
-first**, as with the mute group: how many library programs actually set a
-non-default octave shift or stereo level decides whether this is a footnote or
-a systematic level error across every AKAI-sourced conversion.
+**Semantics are settled by the manual, not assumed** (S3000XL Operator's
+Manual, SINGLE page): `LEVEL` is *"the level of the program as it appears at
+the left/right stereo outputs ... the equivalent of a mixer's fader"*, and
+`PAN` runs *"L50 through MID (00) to R50"*. Note also that these are **MULTI
+parameters**: a part's own values override in MULTI mode, so the program's
+stored values apply in SINGLE — which is how a converted program is normally
+auditioned, so they are audible, not vestigial.
+
+**What still needs the bench, and it is small.** Decoding costs nothing; three
+*laws* are currently assumptions and each is one measurement:
+
+1. **Octave shift sign.** "Key ranges move against the shift and the tuning
+   with it" is CWM's description, not ours. Getting it backwards transposes the
+   wrong way, which is worse than dropping it. Set `OCTAVE` +1, play, check.
+2. **Does stereo level reuse the measured loudness law?**
+   (`dB = 0.642719 x PRLOUD - 87.63`, r2 0.9933.) CWM assumes it does. Two
+   settings and a level reading either confirm it or produce a second law.
+3. **Does program pan reuse the constant-power zone-pan law?** Same shape of
+   check.
+
+None needs a card swap — s3ked's probes set program parameters over SysEx —
+and all three fit in one short session. **Do not apply any of the three until
+its law is checked**; a wrong sign or a borrowed law is worse than the current
+honest drop.
+
+**Worth a corpus scan first**, as with the mute group: how many library
+programs set a non-default octave shift or stereo level decides whether this is
+a footnote or a systematic level error across every AKAI-sourced conversion.
 
 ## EIII per-zone LFO, tremolo and velocity-to-cutoff are not decoded (OPEN 2026-09-08)
 
@@ -1811,8 +1834,26 @@ adopt a constant because it is written down somewhere.
 PR. Emax is a *resampling model* here (`--vintage emax1`), not an input format,
 and there is no EII writer — nothing to be missing.
 
-**Status:** open. **Blocked on:** nothing for the read path; the write path
-wants an EIII calibration that does not exist yet.
+**Hardware answer, and it is the opposite of the AKAI case: there is none to
+be had.** This project has **no EIII or ESI machine**, which is precisely why
+`eiii_writer.py` leaves key-tracking and velocity-to-cutoff neutral rather than
+converting them. So:
+
+- **Read path: no hardware needed.** Decoding zones 37 and 38 into the model is
+  free, and the model already carries LFO fields the other writers use. An
+  EIII source's tremolo and filter LFO would then survive into E4B and KRZ,
+  which is where they can actually be rendered.
+- **Write path: cannot be confirmed at all.** Any depth we write to an EIII
+  bank is unverifiable with the hardware we have.
+
+The E4XT loads EIII banks through its own backward-compatibility loader, so it
+is a tempting proxy — **it is not one.** It would measure the E4XT's
+interpretation of an EIII bank, not an EIII's, and this project has already
+been caught once treating one machine's rendering as another's.
+
+**Status:** open. **Blocked on:** nothing for the read path. The write path is
+blocked on hardware that does not exist here, so it should stay neutral rather
+than adopt someone else's constants.
 
 ## AKAI IB-304F second filter board not supported (OPEN 2026-09-08)
 
