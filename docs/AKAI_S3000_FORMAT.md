@@ -725,9 +725,37 @@ minority case.
 | `FLT2Q` < 16 → cut | 100 |
 | `FLT2Q` = 16 → flat | 2 |
 
-Commonest values are 20, 25, 27 — all boosts. **So `FLT2MODE = 3` decodes to
-band-stop or band-boost depending on `FLT2Q − 16`, never to one of them
-unconditionally.**
+**The sign rule is confirmed on hardware; the PIVOT VALUE is not 16.** Measured
+2026-09-08, normalised to each row's own low-frequency plateau so the insertion
+loss drops out:
+
+| `FLT2Q` | action at the corner |
+|---|---|
+| 0 | **cut** −5.6 dB |
+| **16** | **cut −7.3 dB — the deepest of the four** |
+| 25 | boost +1.9 dB |
+| 31 | boost **+15.5 dB** |
+
+**So 16 is not the neutral point on this machine** — the manual's *"a value of
+16 is no cut or boost"* is right about the behaviour and wrong about the value.
+The inversion happens **somewhere between 16 and 25**, and that interval is
+unresolved.
+
+**It is not a corner case: 146 of 469 EQ keygroups (31.1 %) sit in `FLT2Q`
+17–23**, and `FLT2Q` **20 alone accounts for 104** — the single most common
+value in EQ mode, ahead of 25 (101). Decoding by `Q > 16` would assign the
+wrong sign to whatever part of that interval actually cuts, which is the
+inverted-effect failure rather than a lost one.
+
+**Until it is measured, decode `FLT2Q ≥ 24` as band-boost and `≤ 16` as
+band-stop** (together 323 of 469, 69 %), and treat 17–23 as uncertain rather
+than picking an unmeasured boundary.
+
+**And the boost is not gentle**: +15.5 dB at `FLT2Q` 31 against +1.9 at 25.
+Anything rendering it needs headroom.
+
+**So `FLT2MODE = 3` decodes to band-stop or band-boost by SIGN, never to one of
+them unconditionally.**
 
 **Our model already carries exactly this distinction**, and for the same
 reason: `e4b_writer` notes that band-stop (types 15–18) and band-boost (19–22)
@@ -735,6 +763,20 @@ reason: `e4b_writer` notes that band-stop (types 15–18) and band-boost (19–2
 AKAI EQ mode maps onto the existing pair — **type 15 `BS 2P` below 16, type 19
 `BB 2P` above** — with the filter being 2-pole, so the 2P variants
 specifically.
+
+**`FLT2GAIN` is a switch, and it exactly cancels the insertion loss.** Measured
+2026-09-08: the difference between `FLT2GAIN` 1 and 0 is **+6.03 dB, flat to
+0.02 dB across nine octave bands**, bringing the enabled path to +0 dB against
+bypass in every band. Declared range is 0..1, so it is +0 dB / +6 dB with
+nothing between.
+
+**The corpus agrees that 1 is the normal state**: of 2,457 enabled keygroups,
+**2,267 (92 %) carry `FLT2GAIN` = 1** — authors set the gain that cancels the
+loss. The 188 at 0 are deliberately 6 dB down and that is real authored intent,
+not a default.
+
+**For any write path: enabling filter 2 with `FLT2GAIN` = 1 is level-neutral.**
+That closes the 6 dB problem — it is a switch to set, not a gain to compute.
 
 **`LSI2_ON` cannot detect the board.** It accepts a write and reads back 1 with
 no board fitted, so a tool must be *told* the board is present — **nothing on
