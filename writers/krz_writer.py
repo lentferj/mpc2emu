@@ -514,7 +514,8 @@ def _build_keymap_entries(voice: VoiceLayer,
                            sample_id_map: dict,
                            samples_by_name: dict,
                            base_pitch: int,
-                           zone_gain_db: dict = None) -> bytes:
+                           zone_gain_db: dict = None,
+                           sample_gain_db: dict = None) -> bytes:
     """
     Build 128 keymap entries for one voice's zones.
 
@@ -577,7 +578,32 @@ def _build_keymap_entries(voice: VoiceLayer,
     # Only pay the 6-byte form when a zone actually needs a per-range volume;
     # otherwise emit exactly what we always did (§KRZSHAREDGAIN).
     zone_gain_db = zone_gain_db or {}
-    _use_vol = any(round((zone_gain_db.get(id(z), 0.0)) * 2)
+    _sample_mean_db = sample_gain_db or {}
+
+    def _zone_gain(z):
+        """Per-zone residual dB: what this zone needs on top of the per-sample
+        `volumeAdjust`.
+
+        DERIVED FROM THE ZONE, NOT LOOKED UP BY id(). The dict this used to
+        read is keyed by `id(zone)` and built from `bank.presets` BEFORE
+        `_coverage_remap_voices` and `_fit_layers` run -- and `_fit_layers`
+        does `v.zones = [copy.copy(z) for z in v.zones]`, so the zones reaching
+        here are different objects with different ids. Every lookup missed,
+        `_use_vol` stayed False, and the per-range volume was dropped for
+        exactly the remapped or fitted presets: the up-to-8.08 dB error that
+        §KRZSHAREDGAIN exists to remove, still present wherever the fitter ran.
+
+        The residual is `zone.volume - mean(sample)`, and both halves are
+        available here, so computing it needs no identity at all. The dict is
+        still honoured when a caller passes one explicitly.
+        """
+        if zone_gain_db:
+            hit = zone_gain_db.get(id(z))
+            if hit is not None:
+                return hit
+        return (z.volume or 0.0) - _sample_mean_db.get(z.sample_name, 0.0)
+
+    _use_vol = any(round(_zone_gain(z) * 2)
                    for z in (getattr(voice, 'zones', []) or []))
     _method = KEYMAP_METHOD_VOL if _use_vol else KEYMAP_METHOD
     _esize = KEYMAP_ENTRY_SIZE_VOL if _use_vol else KEYMAP_ENTRY_SIZE
@@ -686,7 +712,7 @@ def _build_keymap_entries(voice: VoiceLayer,
                 # Clamped to +-127: the panel's rails are -63.5..+63.5 dB at
                 # 0.5 dB/step, so 0x80 is a value the machine cannot produce.
                 _vb = max(_KEYMAP_VOL_MIN, min(_KEYMAP_VOL_MAX,
-                          int(round(zone_gain_db.get(id(zone), 0.0) * 2))))
+                          int(round(_zone_gain(zone) * 2))))
                 struct.pack_into('>hbHB', entries, offset,
                                  tuning, _vb, sid & 0xFFFF, 1)
             else:
@@ -731,9 +757,11 @@ def _build_keymap_entries(voice: VoiceLayer,
 
 def _write_keymap_object(f, name: str, voice: VoiceLayer, obj_id: int,
                           sample_id_map: dict, samples_by_name: dict,
-                          base_pitch: int, zone_gain_db: dict = None) -> list:
+                          base_pitch: int, zone_gain_db: dict = None,
+                          sample_gain_db: dict = None) -> list:
     entries, method, entry_size, header_sid, lost = _build_keymap_entries(
-        voice, sample_id_map, samples_by_name, base_pitch, zone_gain_db)
+        voice, sample_id_map, samples_by_name, base_pitch, zone_gain_db,
+        sample_gain_db)
 
     bw = _BlockWriter(f, _hash(T_KEYMAP, obj_id))
     bw.begin(name)
@@ -3166,7 +3194,8 @@ def write_krz(bank: Bank, output_path: str,
                 # Key on the bytes the keymap would actually contain, not on
                 # the voice: two different voices can yield the same keymap.
                 entries = _build_keymap_entries(
-                    voice, sample_id_map, samples_by_name, 0, zone_gain_db)[0]
+                    voice, sample_id_map, samples_by_name, 0, zone_gain_db,
+                    sample_gain_db)[0]
                 kid = _shared_keymaps.get(entries)
                 if kid is None:
                     kid = km_id
@@ -3216,7 +3245,7 @@ def write_krz(bank: Bank, output_path: str,
                     (preset.name, *z) for z in _write_keymap_object(
                         f, preset.name, voice, kid,
                         sample_id_map, samples_by_name, base_pitch,
-                        zone_gain_db))
+                        zone_gain_db, sample_gain_db))
 
         # --- Program objects (one layer per voice) ---
         for pi, preset in enumerate(bank.presets):
