@@ -102,6 +102,19 @@ roll-off slope. It must read **24 dB/oct** against FILTER 1 alone at
 **12 dB/oct**. If that does not come out, stop — nothing measured afterwards
 can be trusted.
 
+> **BOTH filters at the SAME corner — that is the whole check.** Measuring
+> filter 2 *alone* gives ~12 dB/octave, and that is the **premise** of this
+> check, not a refutation of it: two cascaded 2-pole sections give 24 dB/octave
+> asymptotically. Measured 2026-09-08 with filter 1 open, filter 2 swept:
+> −11.3 dB/oct at `FIL2FR` 40. A ~6 dB/octave result there *would* have
+> invalidated the check, because a 1-pole section cannot cascade to 24.
+>
+> **`FLT2MODE = 0` is a lowpass on the evidence, not on the panel photo.** Every
+> row of the octave-band table falls monotonically with frequency — `FIL2FR` 40
+> runs −8 dB at 31 Hz to −60 dB at 2 kHz. A bandpass would peak, a highpass
+> would rise, an EQ would tilt. That makes the slope figures above safely
+> interpretable.
+
 **1.3 FILTER 2 cutoff → Hz, per mode.** Do **not** assume it shares FILTER 1's
 law because it is the same LSI; measure it and compare. Sweep the cutoff byte
 across its range in LP, then confirm BP and HP land on the same law.
