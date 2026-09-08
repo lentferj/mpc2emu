@@ -37,6 +37,7 @@ import struct
 from pathlib import Path
 from typing import Optional
 
+from models.diagnostics import emit as _diag, WARNING as _W
 from models.common import (
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType,
     akai_filfrq_to_hz, hz_to_e4b_cutoff, AKAI_FILTER_LAW, AKAI_FILTER_OPEN,
@@ -732,6 +733,19 @@ def parse_program_bytes(data: bytes, fallback_name: str = '',
         polyphony=data[0x11],
         lo_key=data[0x13], hi_key=data[0x14],
         octave_shift=_s8(data[0x15]),
+        # STEREO LEVEL, 0x17 (0..99, 99 = full). Read by nobody until
+        # 2026-09-08. The manual calls it "the level of the program as it
+        # appears at the left/right stereo outputs ... the equivalent of a
+        # mixer's fader"; 12.3% of 10,933 library programs set it below 99, so
+        # a converter that ignores it renders those too loud. Pointed out by
+        # ConvertWithMoss PR #400.
+        #
+        # CARRIED, NOT YET APPLIED: whether it follows the measured program
+        # loudness law (dB = 0.642719*x - 87.63) is CWM's assumption, not our
+        # measurement, and at the commonest non-default value (90) that law
+        # would mean 5.8 dB. Applying an unverified law is worse than the
+        # honest drop; the drop is now REPORTED instead. See TODO.
+        stereo_level=data[0x17],
         loudness=data[0x19],
         # V_LOUD, byte 0x1a ("velocity > loudness") -- read by nobody until
         # 2026-09-01 (§KRZAMPVEL). Like the LFO it is per PROGRAM, not per
@@ -1121,6 +1135,44 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
             preset.voices.append(voice)
             _kg_of_voice.append(kg)
     if preset.voices:
+        # THREE PROGRAM-SCOPE FIELDS WE STILL DROP, now reported rather than
+        # silent. Pointed out by ConvertWithMoss PR #400, which applies all
+        # three on their side. Each is carried in `prog` and applied by
+        # nothing; the writer emits a fixed 0 / 99 / 0.
+        #
+        # They are NOT applied here because each needs one bench measurement
+        # first -- the octave shift's SIGN, and whether stereo level and pan
+        # reuse the loudness and constant-power laws we already measured. A
+        # wrong sign or a borrowed law is worse than an honest drop. Corpus
+        # prevalence over 10,933 library programs decides which matter:
+        # stereo level 12.3%, pan 0.8%, octave shift 0.3%.
+        _oct = prog.get('octave_shift', 0) or 0
+        if _oct:
+            _diag(_W, 'AKAI_OCTAVE_SHIFT_DROPPED',
+                  f"program transposes by {_oct:+d} octave(s) and that shift "
+                  f"is not carried, so this converts {abs(_oct)} octave(s) "
+                  f"away from the source pitch",
+                  subject=prog['name'], content_lost=True,
+                  detail={'octave_shift': _oct},
+                  remedy="Transpose the converted preset by "
+                         f"{_oct * 12:+d} semitones.")
+        _slv = prog.get('stereo_level', 99)
+        if _slv != 99:
+            _diag(_W, 'AKAI_STEREO_LEVEL_DROPPED',
+                  f"program sits at stereo level {_slv} of 99 and that level "
+                  f"is not carried, so this converts LOUDER than the source",
+                  subject=prog['name'], content_lost=False,
+                  detail={'stereo_level': _slv},
+                  remedy="Reduce the converted preset's level until the "
+                         "stereo-level law is measured.")
+        _ppan = prog.get('pan', 0) or 0
+        if _ppan:
+            _diag(_W, 'AKAI_PROGRAM_PAN_DROPPED',
+                  f"program pan {_ppan:+d} (L50..R50) is not carried; only "
+                  f"per-zone pan survives, so this converts centred",
+                  subject=prog['name'], content_lost=False,
+                  detail={'program_pan': _ppan})
+
         # AFTER the mute-group re-model, deliberately: that rewrites the losing
         # layer's envelope, so two keygroups identical in the source can end up
         # different here, and two that differed can end up the same. Merging
