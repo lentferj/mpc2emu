@@ -1380,8 +1380,17 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
         voice, 'velocity_to_volume_db', None)
     _vv_req = bool(getattr(voice, 'velocity_to_volume_requested', False))
     if _vv_db is not None:
+        # SIGNED. The clamp below already spans -127..127 and the cord amount
+        # is written as a signed byte, but `abs()` made every negative value
+        # unreachable -- so a REVERSE-velocity patch (louder when played soft)
+        # was written as a normal one and came out inverted rather than
+        # attenuated. Both `krz_parser` and `akai_s3000_parser` deliberately
+        # preserve this sign, krz_parser noting 38 of 16,649 real layers carry
+        # it, so the value arrives here correct and was destroyed on the way
+        # out. Reader and writer disagreed with each other, which is why no
+        # round trip flagged it.
         _vv_byte = max(-127, min(127, int(round(
-            abs(_vv_db) / E4XT_VEL_AMPVOL_DB_PER_PERCENT * 127.0 / 100.0))))
+            _vv_db / E4XT_VEL_AMPVOL_DB_PER_PERCENT * 127.0 / 100.0))))
     elif _vv_req:
         _vv_byte = _MOD_TMPL[_MOD_VEL_TO_VOL_AMT]
     else:
