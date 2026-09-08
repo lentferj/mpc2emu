@@ -39,7 +39,7 @@ from pathlib import Path
 from typing import Optional
 
 from models.common import (
-    AKAI_VLOUD_SWING_DB_PER_UNIT, fit_velocity_line,
+    AKAI_VLOUD_SWING_DB_PER_UNIT, fit_velocity_line, AKAI_KEYFOLLOW_NEG_SCALE,
     VELOCITY_CURVE_DB_LINEAR, VEL_VOL_PIVOT_AKAI,
     AKAI_LFO_DEPTH_CAL_LPTCH,
     akai_01_to_filq,
@@ -2239,7 +2239,22 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
         # A predicted knee at 24 was written down before that run and refuted --
         # the second prediction refuted on this one field.
         _kf = getattr(voice, 'filter_keytrack', 0.0) or 0.0
-        k[0x08] = _clamp(int(round(_kf * 12.0)), -30, 99) & 0xFF
+        # INVERT THE READER'S NEGATIVE SCALING. `akai_s3000_parser` multiplies
+        # a NEGATIVE K_FREQ/12 by AKAI_KEYFOLLOW_NEG_SCALE and leaves the
+        # positive side alone; this wrote a plain *12 for both, so the two were
+        # not inverses and an AKAI -> AKAI round trip shrank negative
+        # key-follow every pass: K_FREQ -30 went -30, -19, -12, -7 over three
+        # conversions, 23% of where it started, while the positive side was
+        # exact identity.
+        #
+        # The constant is explicitly NOT a confirmed law -- the same field on
+        # the same machine also measured 96-103% unscaled, and that
+        # disagreement is unresolved (see its comment and TODO.md). This does
+        # NOT settle it: whichever value is right, the reader and the writer
+        # have to be inverses of each other or repeated conversion degrades.
+        # Matching them is correct independently of the constant.
+        _kf_field = (_kf / AKAI_KEYFOLLOW_NEG_SCALE) if _kf < 0 else _kf
+        k[0x08] = _clamp(int(round(_kf_field * 12.0)), -30, 99) & 0xFF
         if _vf_lost > 50:
             _velfilt_clipped.append((index + 1, _vf_lost))
     # VELOCITY -> FILTER FREQUENCY, KEYGROUP BYTE 151. Written since 2026-08-16;
