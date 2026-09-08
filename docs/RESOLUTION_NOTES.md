@@ -314,6 +314,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIENV2FLOOR — where a downward ENV2 sweep actually stops (2026-09-08)](#akaienv2floor-where-a-downward-env2-sweep-actually-stops-2026-09-08)
 - [§AKAIIB304F — the second filter board, and the 4-pole slope we currently drop (2026-09-08)](#akaiib304f-the-second-filter-board-and-the-4-pole-slope-we-currently-drop-2026-09-08)
 - [§CWMPR400403 — checking two ConvertWithMoss PRs for derivation, and what they showed us (2026-09-08)](#cwmpr400403-checking-two-convertwithmoss-prs-for-derivation-and-what-they-showed-us-2026-09-08)
+- [§AKAIPROGSCOPE — three program-scope fields we drop, and what it would take to apply them (2026-09-08)](#akaiprogscope-three-program-scope-fields-we-drop-and-what-it-would-take-to-apply-them-2026-09-08)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -29727,3 +29728,37 @@ program fields we parse and drop (octave shift, program pan) or never parse
 Both recorded in `TODO.md`. **Their scaling constants deliberately do not
 transfer** — offsets are findings, scales are measurements, and we hold no EIII
 calibration.
+
+## §AKAIPROGSCOPE — three program-scope fields we drop, and what it would take to apply them (2026-09-08)
+
+**Status: carried and REPORTED as of 2026-09-08; not applied.** Procedure:
+`docs/re_procedures/akai_program_scope_laws.md`.
+
+`octave_shift` (0x15) and `pan` (0x18) were parsed into the program dict and
+read by nobody; stereo `LEVEL` (0x17) was not parsed at all. The writer emits a
+fixed 0 / 99 / 0. All three are **program-scope**, so each lands on every voice
+— the same shape as `vel_loudness`, which sat unread until §KRZAMPVEL for
+exactly this reason.
+
+**Found by reading [ConvertWithMoss PR #400](https://github.com/git-moss/ConvertWithMoss/pull/400)**
+(see §CWMPR400403 for the derivation check — their work is independent, and
+reading it is what put our own gaps in view).
+
+**Corpus, 10,933 programs over 21 discs, no out-of-range values in any field**
+so the reads are aligned:
+
+| field | non-default | note |
+|---|---|---|
+| stereo `LEVEL` | **12.3 %** | at the commonest non-default (90) the measured loudness law puts it **5.8 dB** below what we render |
+| `PAN` | 0.8 % | |
+| `OCTAVE` | 0.3 % | but a **pitch error of up to two octaves**, not a tone error |
+
+**Why reported rather than applied.** The semantics are settled by the manual;
+the three *laws* are not. The octave shift's sign is CWM's description, and
+whether `LEVEL` and `PAN` reuse the loudness and constant-power laws we already
+hold is their assumption. **A wrong sign or a borrowed law is worse than an
+honest drop — and a silent drop is worse than a reported one**, which is the
+part this change fixes now.
+
+Codes: `AKAI_OCTAVE_SHIFT_DROPPED` (content_lost, carries the semitone offset
+to apply by hand), `AKAI_STEREO_LEVEL_DROPPED`, `AKAI_PROGRAM_PAN_DROPPED`.
