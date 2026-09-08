@@ -738,8 +738,18 @@ loss drops out:
 
 **So 16 is not the neutral point on this machine** — the manual's *"a value of
 16 is no cut or boost"* is right about the behaviour and wrong about the value.
-The inversion happens **somewhere between 16 and 25**, and that interval is
-unresolved.
+
+**MEASURED CROSSING: `FLT2Q` ≈ 23.1**, from seven points:
+
+| `FLT2Q` | 0 | 16 | 18 | **20** | 21 | 25 | 31 |
+|---|---|---|---|---|---|---|---|
+| action | −4.13 | **−4.57** | −3.86 | **−2.77** | −2.06 | +1.85 | **+15.48** |
+
+**`FLT2Q` 20 is a CUT**, and it is the single most common value in EQ mode —
+104 of 469 keygroups. **A `Q > 16` rule would have inverted the sign on 22 % of
+the material that uses this mode**, which is the inverted-effect failure rather
+than a lost one, and it would have come from trusting the manual over the
+instrument.
 
 **It is not a corner case: 146 of 469 EQ keygroups (31.1 %) sit in `FLT2Q`
 17–23**, and `FLT2Q` **20 alone accounts for 104** — the single most common
@@ -747,12 +757,40 @@ value in EQ mode, ahead of 25 (101). Decoding by `Q > 16` would assign the
 wrong sign to whatever part of that interval actually cuts, which is the
 inverted-effect failure rather than a lost one.
 
-**Until it is measured, decode `FLT2Q ≥ 24` as band-boost and `≤ 16` as
-band-stop** (together 323 of 469, 69 %), and treat 17–23 as uncertain rather
-than picking an unmeasured boundary.
+**Decode: `FLT2Q ≤ 21` → band-stop, `≥ 25` → band-boost.** Both bounds are
+measured points. 22–24 are unmeasured but the interpolated crossing at 23.1
+places 22 and 23 on the cut side, and only **14 keygroups (3 % of EQ material)**
+sit there.
 
-**And the boost is not gentle**: +15.5 dB at `FLT2Q` 31 against +1.9 at 25.
-Anything rendering it needs headroom.
+**`FLT2Q` IS NOT A SIGNED GAIN AND SHOULD NOT BE MODELLED AS ONE.** The cut
+*deepens* from `Q` 0 to 16 (−4.13 → −4.57) before shallowing toward the
+crossing, so there is a minimum near 16 — suspiciously the value the manual
+calls neutral.
+
+Two live explanations, neither tested:
+
+1. **A panel/byte offset** — if the panel displays this field signed (−16…+15
+   over a 0..31 byte) then the manual's "16" is a *panel* number and byte 16 is
+   panel 0. Does not by itself explain a minimum at that point.
+2. **A measurement artefact of octave-band averaging** — the analysis bands are
+   octave-spaced (44, 89, … 5657 Hz) and the corner sits at `FIL2FR` 80. **A
+   notch narrower than an octave is partly averaged away**, so a *narrowing*
+   notch reads shallower even while its bottom deepens. That would produce the
+   observed minimum with no non-monotonic parameter at all — and it is the same
+   class as the dark-end anomaly earlier in this sweep, where the metric rather
+   than the filter was the story.
+
+**Distinguishable from captures already taken**: re-analyse with a narrow band
+at the corner instead of the octave mean. If the "shallowing" disappears, it was
+the metric.
+
+**Headroom, measured: +15.57 dB above bypass, not +21.5.** `FLT2GAIN` sits
+**downstream of the EQ stage and is shape-neutral** — at `Q` 31 the curve is
+identical between gain 0 and 1 to **0.01 dB** while the sample maximum doubles
+exactly (0.1288 → 0.2572), with no limiting or clipping at either setting. So
+the boost and the make-up gain are the same 6 dB already accounted for, not
+additive surprises. A converter enabling filter 2 on a high-`Q` EQ keygroup
+needs 15.57 dB of headroom above bypass.
 
 **So `FLT2MODE = 3` decodes to band-stop or band-boost by SIGN, never to one of
 them unconditionally.**
