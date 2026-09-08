@@ -1898,13 +1898,29 @@ tilt section and ENV3.
 only in a peer handoff; `docs/AKAI_S3000_FORMAT.md` has no FILTER 2, TONE or
 ENV3 rows, so our writer cannot address them and our reader silently drops them.
 
-**Phase 0 needs no hardware** and should happen regardless: put the offsets in
-our own format reference, then scan the 9442-program corpus for non-zero values
-at them — which confirms the offsets, shows what real material sets, and gives
-the prevalence. It also settles the write policy: **nothing on the wire
-distinguishes a fitted machine from an unfitted one**, so mapping a 4-pole
-source across both filters is correct on a fitted machine and half-filtered on
-an unfitted one. A flag (`--akai-ib304f`), not a default.
+**PHASE 0 IS DONE (2026-09-08).** The offsets are in
+`docs/AKAI_S3000_FORMAT.md` — 23 fields at keygroup 168–190, from s3ked's
+table, with the board-requirement split — and corpus-validated:
+
+- **829 of 4,436 S3000 programs (18.7 %) carry at least one keygroup with
+  `LSI2_ON = 1`.** This is systematic, not a footnote, and we drop all of it.
+- Where enabled, `FLT2MODE` spreads **LP 64.0 %, EQ 19.1 %, HP 15.2 %,
+  BP 1.6 %**; where disabled it is 0 in 99.5 %. That correlation is what proves
+  the read is aligned.
+- **S1000 programs have no such offsets** (150-byte keygroup), which is what
+  broke the first scan — 16,106 out-of-range values until it was restricted to
+  S3000.
+
+**So the READ path is unblocked and needs no hardware.** Decoding filter 2,
+tone and ENV3 into the model would let that 18.7 % survive into E4B and KRZ,
+where it can be rendered.
+
+**The WRITE path still needs the laws**, and those need the board *in circuit*.
+The write policy is unchanged and is settled by a fact, not a preference:
+**nothing on the wire distinguishes a fitted machine from an unfitted one**, and
+`LSI2_ON` cannot detect the board — it reads back 1 with no board present. So
+mapping a 4-pole source across both filters is correct on a fitted machine and
+half-filtered on an unfitted one. A flag (`--akai-ib304f`), never a default.
 
 **Status:** open. **Blocked on:** Phase 0 on nothing; Phase 1 on the board
 being installed. Procedure:
