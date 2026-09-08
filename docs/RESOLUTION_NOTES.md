@@ -29737,7 +29737,7 @@ remains reported because its combination rule is still unmeasured.
 
 | field | result |
 |---|---|
-| `STEREO` 0x17 | **linear in amplitude**, `20·log10(x/99)`, mean error **0.035 dB** over four points. The program-loudness hypothesis is wrong by up to **20.6 dB** at level 60 |
+| `STEREO` 0x17 | **linear in amplitude**, `20·log10(x/99)`, mean error **0.035 dB** over four points — **established on 60..99 only** |
 | `OSHIFT` 0x15 | **INERT** — stored and read back, pitch does not move, 0.0 cents across −1/0/+1 on two detectors |
 | `PANPOS` 0x18 | **live and strong** (+50 → +48.23 dB L/R balance) but the combination with zone pan is **VOID, not measured** |
 
@@ -29763,6 +29763,23 @@ main mix"*, onto an individual output. Applying the law there gives −39.9 dB, 
 a program routed elsewhere would convert to near-silence. It converts at full
 level with a warning instead. Real material never sets it (0x17 runs 10–99 over
 5,124 programs); a zero-filled header does, which is KGMUTE's trap again.
+
+**The law is bounded, and the bound is not cosmetic.** The sweep stopped at 60
+on a stated guard — level 0 looks exactly like a broken rig — so nothing below
+that is measured. **1.76 % of library programs (90 of 5,124) sit below 60**,
+down to 10, where the law extrapolates to **−19.91 dB** against −4.35 dB at the
+fitted floor: a 15.6 dB extrapolation on real material.
+
+It is **extrapolated rather than clamped**, for this project's own reason
+(`_rate_law_value`): clamping maps everything outside the window onto one
+number, producing a **plateau**, and a quieter program converting to the same
+level as a louder one destroys ordering. The extrapolation is reported instead.
+
+**Why level 0 cannot be settled on that bench, recorded so nobody spends a
+session on it:** the rig captures the **stereo pair only** and individual
+outputs were off, so *"gain zero"* and *"removed from the stereo mix"* predict
+**the same capture**. Discriminating them needs an individual-output capture the
+bench is not wired for. That is a reason, not an open gap.
 
 **The pan combination is VOID and was reported as such.** The probe wrote what
 was believed to be a keygroup copy and then the program copy — but there is **no
