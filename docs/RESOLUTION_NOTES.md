@@ -310,6 +310,8 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§WRITETWICEREADONCE — a field written in two places and read in one (2026-09-07)](#writetwicereadonce-a-field-written-in-two-places-and-read-in-one-2026-09-07)
 - [§SAMEDETECTOR — a quantity is comparable because of how it was produced, not what it is called (2026-09-07)](#samedetector-a-quantity-is-comparable-because-of-how-it-was-produced-not-what-it-is-called-2026-09-07)
 - [§FAILOPENCHECK — the onset check under-counted, and that direction reads as clean (2026-09-07)](#failopencheck-the-onset-check-under-counted-and-that-direction-reads-as-clean-2026-09-07)
+- [§E4BZEROSUSRELEASE — a zero sustain encoded every release as an instant cut (2026-09-08)](#e4bzerosusrelease-a-zero-sustain-encoded-every-release-as-an-instant-cut-2026-09-08)
+- [§AKAIENV2FLOOR — where a downward ENV2 sweep actually stops (2026-09-08)](#akaienv2floor-where-a-downward-env2-sweep-actually-stops-2026-09-08)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -29586,3 +29588,66 @@ exponential they were rejecting) and **held our envelope above the re-arm level*
 design rule that follows is s3ked's and is tighter than ours was: **the hold must be
 long enough that the notes separate**, which strictly implies — and is not implied by
 — long enough to reach the plateau.
+
+## §E4BZEROSUSRELEASE — a zero sustain encoded every release as an instant cut (2026-09-08)
+
+**Status: FIXED in `writers/e4b_writer.py`, INFERRED, not hardware-confirmed.**
+Bank and procedure ready: `docs/re_procedures/e4xt_zero_sustain_release.md`.
+
+`rel_span` is the complement of the decay span, so at `env_sustain = 0` there is
+nothing to traverse and `_env_span_rate(0, t)` returns **0 for any `t`** — a 5 s
+release and a 5 ms release both encoded as rate 0, which the decay block
+directly above documents as the **instant** rate and already floors against for
+exactly this reason. Release had no such floor.
+
+**Audible only when a key is lifted DURING the decay** of a percussive one-shot:
+the envelope leaves the decay from wherever it sits and a rate-0 release drops
+it to silence in one step. Held to the end of its own decay the voice is already
+silent, which is why it hides — and why a probe that does not release mid-decay
+measures nothing and reports a clean pass.
+
+Reachable from every source that specifies a duration rather than a rate — SFZ
+`ampeg_sustain=0`, XPM `VolumeSustain 0`, AKAI sustain 0 — since only
+`e4b_parser` sets `release_rate_db_per_s`.
+
+**The fix uses the full span as the reference distance.** The span is only a
+reference for turning seconds into a slew rate, and at sustain 0 the note can be
+released from anywhere up to full level, so the full span is the honest choice
+and it makes the rate honour the requested seconds. Plus the decay's
+minimum-audible floor.
+
+**What is NOT established:** that the resulting duration is right. The
+full-span reference is a model choice. Confirming the release now sounds does
+not confirm its length — that needs a rate ladder against measured times, the
+same missing measurement as the two-stage attack question in `TODO.md`.
+
+## §AKAIENV2FLOOR — where a downward ENV2 sweep actually stops (2026-09-08)
+
+**Status: the inversion is FIXED; the floor itself is OPEN.** Procedure and
+volume ready: `docs/re_procedures/akai_env2_downward_floor.md`.
+
+`AKAI_ENV2_SWEEP_FLOOR_HZ = 100.0` bounds the downward sweep and its own comment
+says it is almost certainly an artefact; `akai_filfrq_to_hz` is deliberately
+unclamped down to ~7.6 Hz. **Nearly four octaves apart.**
+
+That disagreement produced a sign inversion: `log2(base/floor)` goes negative
+for any corner under the floor, `min()` selects it, and the leading minus turns
+a downward sweep **upward** — FILFRQ 20 at depth −20 returned **+1951 cents**,
+FILFRQ 0 returned **+4460**, sign flipping at FILFRQ 36. **29.4 % of real
+library keygroups sit in the affected range.**
+
+Fixed by clamping the headroom at zero, so corners below the floor now get **no
+downward sweep at all** — under-sweeping rather than inverting, wrong by degree
+rather than direction. Re-basing on the corner law's own bottom would deepen
+every currently-bounded sweep, which no measurement supports.
+
+**The measurement design, and why it is inverted:** do not start from a low
+corner and ask how much further down it goes — at FILFRQ 20 the filter is shut
+and the signal is gone before the question is asked. Start high, sweep down with
+increasing depth, and find where descending stops.
+
+**The trap that produced the constant** is the thing to meet first: normalising
+each curve to its own 60–120 Hz band puts the 0 dB reference on the slope once
+the corner drops below it, so every setting reads the same corner. It read
+111.3 Hz identically for FILFRQ 0, 5, 10, 20 and 30. **A repeat of that mistake
+reproduces the original number and looks like confirmation.**
