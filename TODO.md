@@ -1875,7 +1875,14 @@ not gate**, so that question is open by a different route than expected.
 functional and are inert in silicon.** Before any further AKAI field is wired
 up from documentation alone, it should be shown to *do* something — the S1000
 and S3000-family documents disagree in at least these two places, and the
-S3000-family one has been right both times.
+**S3000-family one has been right both times**.
+
+**Next candidates, named rather than left implicit** (s3ked's suggestion):
+`PRIORT` and `POLYPH`, both described in the S1000 struct and both plausibly
+retired in the S3000 document. We parse `POLYPH` and consume it nowhere, so we
+are accidentally correct there too — which is luck until someone wires it up.
+**Check that a field does something before honouring it**, on this machine
+family specifically.
 
 **Status:** open, low priority. **Blocked on:** nothing; it is a caution, not a
 defect.
