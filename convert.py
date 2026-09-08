@@ -436,7 +436,11 @@ def write_akai_output(output_banks: List[Bank], out_dir: Path, bank_name: str,
         print(f"{'='*60}\n")
         return
 
+    # None = not asked for, False = asked for and failed, True = written.
+    _iso_ok = _hda_ok = None
+
     if args.iso:
+        _iso_ok = False
         path = out_dir / f"{bank_name}.iso"
         print(f"\n[ISO] Building AKAI CD3000 CD-ROM image "
               f"({len(volumes)} volume(s), {content/1048576:.1f} MB of content)...")
@@ -446,6 +450,7 @@ def write_akai_output(output_banks: List[Bank], out_dir: Path, bank_name: str,
         except AkaiImageError as e:
             print(f"  [ISO] ERROR: {e}")
         else:
+            _iso_ok = True
             print(f"  → {path.name}  ({info['bytes']/1048576:.0f} MB, "
                   f"{info['partitions']} partition(s), {info['files']} file(s))")
             print(f"  → Burn as a plain data image (it is NOT ISO 9660 — a "
@@ -453,6 +458,7 @@ def write_akai_output(output_banks: List[Bank], out_dir: Path, bank_name: str,
                   f"serve it from a ZuluSCSI CD device.")
 
     if args.hda:
+        _hda_ok = False
         path = out_dir / f"{bank_name}.hda"
         print(f"\n[HDA] Building AKAI hard-disk image "
               f"({len(volumes)} volume(s), {content/1048576:.1f} MB of content)...")
@@ -461,6 +467,7 @@ def write_akai_output(output_banks: List[Bank], out_dir: Path, bank_name: str,
         except AkaiImageError as e:
             print(f"  [HDA] ERROR: {e}")
         else:
+            _hda_ok = True
             print(f"  → {path.name}  ({info['bytes']/1048576:.0f} MB, "
                   f"{info['partitions']} partition(s), {info['files']} file(s), "
                   f"{info['free_blocks']*HD_BLOCK/1048576:.0f} MB free)")
@@ -514,7 +521,28 @@ def write_akai_output(output_banks: List[Bank], out_dir: Path, bank_name: str,
         if not _written:
             return 1
     else:
+        # AND THE IMAGE PATHS MUST BE CHECKED TOO. This printed
+        # "Done: N volume(s) written" from len(volumes) unconditionally, so a
+        # --hda or --iso build that raised AkaiImageError printed its ERROR
+        # line, fell through to here, reported success and returned 0 with no
+        # file on disk. Exactly the failure the comment above says was fixed
+        # for the floppy and loose-file paths -- fixed there, and left here.
+        _asked = [n for n, ok in (('--iso', _iso_ok), ('--hda', _hda_ok))
+                  if ok is not None]
+        _failed = [n for n, ok in (('--iso', _iso_ok), ('--hda', _hda_ok))
+                   if ok is False]
         print(f"\n{'='*60}")
+        if _failed and len(_failed) == len(_asked):
+            print(f"NOTHING WRITTEN: {' and '.join(_failed)} failed -- see "
+                  f"the ERROR line(s) above.")
+            print(f"{'='*60}\n")
+            return 1
+        if _failed:
+            print(f"PARTIAL: {' and '.join(_failed)} failed -- see the "
+                  f"ERROR line(s) above. The rest wrote "
+                  f"{len(volumes)} volume(s) to {out_dir}/")
+            print(f"{'='*60}\n")
+            return 1
         print(f"Done: {len(volumes)} volume(s) written to {out_dir}/")
         print(f"{'='*60}\n")
 
