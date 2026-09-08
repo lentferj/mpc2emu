@@ -665,9 +665,28 @@ data, then **four velocity zones**.
 not exist there at all.
 
 Twenty-three fields, from `s3ked`'s parameter table. The **board** column is
-whether the field declares the IB-304F as required — and the split is
-informative, because the eight that do not are why envelope-3 scaling could be
-measured on a machine that never had the board.
+whether the field genuinely requires the IB-304F.
+
+**Only seven fields are board-gated**: `FLT2GAIN`, `FLT2MODE`, `FLT2Q`,
+`FIL2FR`, `K_FRQ2`, `TONEFREQ`, `TONESLOP`. **Envelope 3 is not among them** —
+its eight stages were measured on an S3000XL with no filter board at all, which
+is what established that the generator lives in firmware and only the *panel
+page* is gated.
+
+> **`s3ked`'s table still declares `requires="IB304F"` on the eight ENV3
+> stages**, and its own §87 — titled *"Envelope 3 does not need the IB304F"* and
+> marked **corrected** — is the section that disproves it. The prose was fixed
+> and **the enforcing flag was left in place**, so their reader refuses those
+> exact fields on a boardless machine while the note three lines below says they
+> work there. Surfaced to Jan on 2026-09-08; not changed by us, it is their
+> table.
+>
+> **The pattern is the one this project keeps meeting**: a claim corrected in
+> prose while the artefact that enforced it survives, and afterwards the
+> section number makes the *artefact* look checked. §87's own words for the
+> original defect apply to its remedy — *"an assumption wearing a citation, the
+> most persuasive form a wrong claim can take, because the reference makes it
+> look checked."*
 
 | offset | field | board | what it is |
 |---|---|---|---|
@@ -680,7 +699,7 @@ measured on a machine that never had the board.
 | 174–176 | `MODVFLT2_1..3` | — | filter-2 modulation amounts |
 | 177 | `FIL2FR` | IB304F | filter 2 frequency |
 | 178 | `K_FRQ2` | IB304F | filter 2 key follow |
-| 179–186 | `ENV3R1/L1 … R4/L4` | IB304F | envelope 3, eight stages |
+| 179–186 | `ENV3R1/L1 … R4/L4` | **—** | envelope 3, eight stages — **not board-gated**, see below |
 | 187–190 | `V_ATT3` `V_REL3` `O_REL3` `K_DAR3` | — | envelope-3 modulation |
 
 **`LSI2_ON` cannot detect the board.** It accepts a write and reads back 1 with
