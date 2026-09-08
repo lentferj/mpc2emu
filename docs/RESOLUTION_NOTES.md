@@ -29731,8 +29731,51 @@ calibration.
 
 ## §AKAIPROGSCOPE — three program-scope fields we drop, and what it would take to apply them (2026-09-08)
 
-**Status: carried and REPORTED as of 2026-09-08; not applied.** Procedure:
-`docs/re_procedures/akai_program_scope_laws.md`.
+**Status: MEASURED 2026-09-08 (s3ked, S3000XL, SINGLE mode).** Stereo level is
+now APPLIED; octave shift is measured INERT and correctly dropped; program pan
+remains reported because its combination rule is still unmeasured.
+
+| field | result |
+|---|---|
+| `STEREO` 0x17 | **linear in amplitude**, `20·log10(x/99)`, mean error **0.035 dB** over four points. The program-loudness hypothesis is wrong by up to **20.6 dB** at level 60 |
+| `OSHIFT` 0x15 | **INERT** — stored and read back, pitch does not move, 0.0 cents across −1/0/+1 on two detectors |
+| `PANPOS` 0x18 | **live and strong** (+50 → +48.23 dB L/R balance) but the combination with zone pan is **VOID, not measured** |
+
+**Two results inverted what this project believed.**
+
+**The stereo-level concern was real in magnitude and wrong in direction.** This
+section previously warned that a program at level 90 rendered 5.8 dB too loud,
+from the program-loudness law. The measurement says **0.9 dB** — so the old
+renderer was close to right and the proposed fix would have been a large
+regression. *The hypothesis was not merely unconfirmed; acting on it was the
+risk.*
+
+**Octave shift is inert, so dropping it was correct and the diagnostic was
+harmful.** The earlier code emitted `content_lost=True` and told the user to
+transpose by hand — advice that would introduce a pitch error the hardware does
+not produce. The S1000 document calls offset 21 a ±2 octave shift; the
+S2800/S3000 document says *"Range: 0. Description: Not used"*, and **the
+S3000-family document is right for this machine**. No amount of reading settles
+a disagreement between two vendor documents.
+
+**Level 0 is a routing choice, not a level one** — *"you remove them from the
+main mix"*, onto an individual output. Applying the law there gives −39.9 dB, so
+a program routed elsewhere would convert to near-silence. It converts at full
+level with a warning instead. Real material never sets it (0x17 runs 10–99 over
+5,124 programs); a zero-filled header does, which is KGMUTE's trap again.
+
+**The pan combination is VOID and was reported as such.** The probe wrote what
+was believed to be a keygroup copy and then the program copy — but there is **no
+keygroup-scope `PANPOS`**, so both writes hit one field and the second always
+won. The numbers superficially read as "override" and were *not* reported that
+way, which is the harder and correct call.
+
+**`PLAYLO`/`PLAYHI` do not gate playback either** — narrowed to 60–62, notes 48
+and 72 sounded at full level. This costs us nothing because nothing consumes
+them, but it is a **second** documented-but-not-used field in the same header,
+and had they been wired up it would have been a live bug.
+
+Original procedure: `docs/re_procedures/akai_program_scope_laws.md`.
 
 `octave_shift` (0x15) and `pan` (0x18) were parsed into the program dict and
 read by nobody; stereo `LEVEL` (0x17) was not parsed at all. The writer emits a
