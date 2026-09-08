@@ -743,11 +743,32 @@ loss drops out:
 (0.62 Hz bins) — the octave-band figures first taken are wrong by up to 49 dB
 and are shown for contrast only:
 
-| `FLT2Q` | 0 | 15 | **16** | 18 | **20** | 21 | 25 | 27 | 29 | **31** |
-|---|---|---|---|---|---|---|---|---|---|---|
-| **depth dB** | −4.3 | −23.9 | **−53.9** | −16.6 | **−9.5** | −7.0 | +2.3 | +6.5 | +12.0 | **+22.4** |
-| width Hz | 2616 | 638 | **108** | 829 | 1156 | 1360 | 742 | 767 | 661 | 423 |
-| Q | 0.9 | 3.5 | **20.5** | 2.6 | 1.9 | 1.6 | 2.5 | 2.4 | 2.9 | 4.5 |
+| `FLT2Q` | 0 | 10 | 15 | **16** | 18 | **20** | 21 | 25 | 27 | 29 | **31** |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| **depth dB** | −4.3 | −10.0 | −23.9 | **−53.9** | −16.6 | **−9.5** | −7.0 | +2.3 | +6.5 | +12.0 | **+22.4** |
+| width Hz | 2616 | 1836 | 638 | **108** | 829 | 1156 | 1360 | 742 | 767 | 661 | 423 |
+| Q | 0.9 | 1.3 | 3.5 | **20.5** | 2.6 | 1.9 | 1.6 | 2.5 | 2.4 | 2.9 | 4.5 |
+
+**THE CENTRE FREQUENCY IS NOT A FUNCTION OF `FIL2FR` ALONE.** All eleven
+captures were taken at `FIL2FR` 80, so the centre should be constant. It is
+not — and the observed variation is **two separate effects**, only one of which
+is real:
+
+- **Within an arm: an artefact of feature width.** Centre estimate correlates
+  with width at **r = +0.826** across the cut arm — a 2616 Hz-wide, 4.3 dB-deep
+  dip has a poorly-located extremum, and the estimate walks from 2411 Hz at the
+  widest to ~2200 Hz at the sharpest. **Do not model this.**
+- **Between the arms: a real step of ~17–20 %**, which survives every way of
+  estimating it — 317 Hz using only the sharpest point on each arm (2201 vs
+  1884), 332 Hz excluding the singular `FLT2Q` 16 notch as unrepresentative,
+  367 Hz on arm means.
+
+**So a decoder mapping `FIL2FR` to a centre frequency will be ~20 % out on one
+arm or the other, depending which it was calibrated on.** Mechanism open: cut
+and boost may use different topologies, or the measured extremum of an
+asymmetric response may move with gain — the width correlation supports the
+second for the within-arm part, but does not explain a step. Distinguishing
+them needs `FIL2FR` varied at fixed `FLT2Q` on each arm, which is a new sweep.
 
 **Ten measured points covering 82.9 % of EQ keygroups directly.** Every
 remaining populated value sits inside a two-unit bracket except `FLT2Q` 10.
