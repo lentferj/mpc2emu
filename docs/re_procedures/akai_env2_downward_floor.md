@@ -120,6 +120,13 @@ been wrong with it.
    sustain, and take the spectrum **during the held portion**.
 3. Find the −3 dB corner **against the fixed reference from step 1**.
 4. Plot corner against depth.
+5. **Record the searched cents beside each depth byte**, not only the byte. The
+   writer's map is not linear — about 300 ct/unit at the top against 313 at the
+   bottom — so anyone re-deriving it linearly lands where the first version of
+   this plan landed, straight over the crossing. The generator prints both
+   columns; carry both into the results.
+6. **Record the SUSTN2 read back from the machine** beside every corner, for
+   the reason in the material section.
 
 ## What each outcome means
 
@@ -146,11 +153,26 @@ been wrong with it.
   the expected corner a broadband source still has full energy density and the
   −3 dB point is a real feature. The generator prints a ±1.5-octave band per
   step for this.
-- **Make the floor a PRECONDITION, not a trap** (s3ked). Predict the level in
-  the analysis band at each depth, compare against the rig floor
-  (0.05 dB, threshold 0.3 dB — §RIGNOISEFLOOR), and **drop any depth that
-  cannot clear it before running**, rather than discovering it afterwards.
-  Spend those captures where the answer is instead.
+- **The floor is a PRECONDITION, and it has been CHECKED — no depths need
+  dropping.** s3ked measured the rig's own floor per band rather than inferring
+  it, and it is flat to 11 Hz:
+
+  | band (Hz) | 11–22 | 22–44 | 44–88 | 88–176 |
+  |---|---|---|---|---|
+  | floor (dB) | −32 | −35 | −25 | −26 |
+  | typical SNR | +78 | +72 | +45 | +28 |
+
+  **60–80 dB of headroom in the two bands below 44 Hz.** The chain — sampler
+  output, interface, JACK — is not the limit here.
+
+  And the source is genuinely flat, which was the remaining risk:
+  `ENV2NZ.S3` measures **within 0.9 dB from 11 Hz to 5.6 kHz** (+36.5 to +37.9
+  across every band). So at the deepest step, a 38.8 Hz corner, the
+  ±1.5-octave band still carries full source energy over 45–78 dB of headroom.
+
+  **The failure mode was the fixed high-frequency probe, not the deep
+  settings.** −96 dB at 1 kHz is a real number; it is simply not the number the
+  experiment depends on.
 
 ## Not established by this run
 
