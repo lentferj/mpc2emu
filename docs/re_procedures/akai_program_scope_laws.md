@@ -9,8 +9,15 @@ SPDX-FileCopyrightText: Copyright (C) 2026  mpc2emu contributors
 
 Settle three laws so `octave_shift`, stereo `LEVEL` and program `PAN` can be
 applied instead of reported. Each is **one measurement**; together they are one
-short session and **no card swap** — `s3ked`'s probes set program parameters
-over SysEx.
+short session and **no card swap**.
+
+> **Field writes go through `PHEADER` (`0x28`), read back with `RPHEADER`
+> (`0x27`) — NOT `PDATA`.** `PDATA`/`KDATA` are whole-header writes that can
+> create or replace a program, and the spec says writing one whose name matches
+> an existing program **deletes that program first**. An earlier draft of this
+> procedure said "PDATA parameter writes"; that literal call would be a
+> destructive whole-structure write against a shared instrument. (s3ked, whose
+> rules forbid it outright.)
 
 ## Why these three
 
@@ -92,6 +99,21 @@ Zone pan uses constant power, `theta = (PANPOS + 50)/100 × pi/2`.
   survives every memory clear. Number test programs from 1.
 - **Measure in SINGLE mode.** In MULTI these three are part parameters and the
   program's own values do not apply; a null result there would mean nothing.
+
+  **The fields exist in BOTH structures, which is why this is a trap rather
+  than a contradiction.** s3ked's table lists `OUTPUT`/`STEREO`/`PANPOS` as
+  multipart **22/23/24** — the same numbers as the program header's
+  `0x16/0x17/0x18` in decimal. Both are real: the manual says *"stereo level,
+  pan, output and effects assignment are MULTI parameters, these are not
+  accessible in EDIT MULTI"*, i.e. the part's copies win in MULTI and the
+  program's own apply in SINGLE.
+
+  The program copies are populated in real material, not vestigial: across
+  5,124 library programs `0x17` never exceeds **99** and `0x18` reads as a
+  signed ±50, both anchored between fields already confirmed — the key range at
+  `0x13/0x14` and `PRLOUD` at `0x19`, whose dB law was fitted on hardware. The
+  chain's own prediction held too: `0x16` must then be `OUTPUT` with 255 = off,
+  and 3,188 of 5,124 read exactly 255.
 - **Change one field at a time.** `LEVEL = 0` removes the program from the
   stereo mix entirely, which looks like silence from a broken rig.
 - **Check what actually sounded** before interpreting — commanded notes
