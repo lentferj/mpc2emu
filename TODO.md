@@ -1941,8 +1941,30 @@ verified: the mode enum measured from response shape, the sign crossing at
 level-neutral switch, headroom +22 dB above bypass, and the arm-dependent
 centre-frequency caveat. See `docs/AKAI_S3000_FORMAT.md`.
 
-**Two open items, neither blocking:** a `FIL2FR`-at-fixed-`FLT2Q` sweep to
-separate the cut/boost topologies, and `FLT2Q` 22/23 for the last 14 keygroups.
+**NONE OF IT IS IN THE CONVERSION PATH YET.** The laws are measured; the code
+uses none of them. Today the AKAI writer does not reference `filter_type` at
+all, so a source HP, BP or 4-pole LP all collapse onto the machine's single
+2-pole lowpass, and the parser reads no filter-2 field, so an AKAI second
+filter is dropped entirely.
+
+**ONE MEASUREMENT GATES BOTH DIRECTIONS: `FIL2FR` → Hz.** It is unmeasured
+except at a single point, and **filter 2 does not share filter 1's corner law** —
+our `FILFRQ` law gives **2503 Hz at byte 80** where filter 2 measures
+**~2200 Hz** on the cut arm (0.88×). Without that law neither direction can
+place a corner:
+
+- **read** (AKAI → E4B/KRZ): mode, sign rule, depths and gain are all settled;
+  the centre frequency is not.
+- **write** (→ AKAI, behind `--akai-ib304f`): same gap, plus the 4-pole check
+  is still unrun.
+
+**Usefully, it is the same sweep already listed as open** — `FIL2FR` varied at
+fixed `FLT2Q` on each arm. That one run separates the cut/boost topologies
+*and* yields the corner law, and it must cover **both arms** because the centre
+steps ~17 % across the sign change.
+
+**Remaining after that:** `FLT2Q` 22/23 for the last 14 keygroups, which nothing
+depends on.
 
 **The WRITE path still needs the remaining laws**, and two sweeps gate it:
 
