@@ -743,16 +743,34 @@ loss drops out:
 (0.62 Hz bins) — the octave-band figures first taken are wrong by up to 49 dB
 and are shown for contrast only:
 
-| `FLT2Q` | 0 | **16** | 18 | **20** | 21 | 25 | **31** |
-|---|---|---|---|---|---|---|---|
-| **actual** | −4.3 | **−53.9** | −16.6 | **−9.5** | −7.0 | +2.3 | **+22.4** |
-| octave-band said | −4.13 | −4.57 | −3.86 | −2.77 | −2.06 | +1.85 | +15.48 |
-| notch/peak width | 2616 Hz | **108 Hz** | 829 | 1156 | 1360 | 742 | 423 |
+| `FLT2Q` | 0 | 15 | **16** | 18 | **20** | 21 | 25 | 27 | 29 | **31** |
+|---|---|---|---|---|---|---|---|---|---|---|
+| **depth dB** | −4.3 | −23.9 | **−53.9** | −16.6 | **−9.5** | −7.0 | +2.3 | +6.5 | +12.0 | **+22.4** |
+| width Hz | 2616 | 638 | **108** | 829 | 1156 | 1360 | 742 | 767 | 661 | 423 |
+| Q | 0.9 | 3.5 | **20.5** | 2.6 | 1.9 | 1.6 | 2.5 | 2.4 | 2.9 | 4.5 |
+
+**Ten measured points covering 82.9 % of EQ keygroups directly.** Every
+remaining populated value sits inside a two-unit bracket except `FLT2Q` 10.
+
+**THE CURVE DOES NOT INTERPOLATE, and the two cases where we checked prove it:**
+
+- `FLT2Q` **15** interpolated between 0 and 16 gives about **−50 dB**. It
+  measures **−23.9** — a **26 dB error** on 26 keygroups.
+- `FLT2Q` **27 and 29** interpolated linearly from 25..31 give +8.9 and +15.1.
+  They measure **+6.5 and +12.0** — the curve accelerates (gradients 2.1, 2.75,
+  5.2 dB/unit across 25→27→29→31), so linear **overshoots by ~3 dB** and 73
+  keygroups would have rendered that much too loud.
 
 **`FLT2Q` 16 is a TRUE NOTCH, not a point on a curve** — 108 Hz wide with a Q of
 20.5 against 1.6–2.6 at its neighbours, and 37 dB deeper than `Q` 18. The
 manual's *"16 is no cut or boost"* may be a garbled *"16 is the notch"*, but
 that is a reading, not a finding.
+
+**Confirmed a singular point from BOTH sides**: Q spikes to 20.5 against 3.5 at
+`FLT2Q` 15 and 2.6 at 18, and depth spikes 30 dB above either neighbour. A
+falsifier was filed in advance — a depth beyond −30 dB or Q above 10 at 15
+would have meant a notch *region* rather than a point; 15 came back −23.9 at
+Q 3.5.
 
 **It is also almost never authored: 2 of 469 EQ keygroups sit at 16.**
 
