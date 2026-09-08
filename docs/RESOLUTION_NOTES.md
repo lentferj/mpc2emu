@@ -315,6 +315,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIIB304F — the second filter board, and the 4-pole slope we currently drop (2026-09-08)](#akaiib304f-the-second-filter-board-and-the-4-pole-slope-we-currently-drop-2026-09-08)
 - [§CWMPR400403 — checking two ConvertWithMoss PRs for derivation, and what they showed us (2026-09-08)](#cwmpr400403-checking-two-convertwithmoss-prs-for-derivation-and-what-they-showed-us-2026-09-08)
 - [§AKAIPROGSCOPE — three program-scope fields we drop, and what it would take to apply them (2026-09-08)](#akaiprogscope-three-program-scope-fields-we-drop-and-what-it-would-take-to-apply-them-2026-09-08)
+- [§BOARDFITTED — the IB-304F went in, and every audio measurement became undated (2026-09-08)](#boardfitted-the-ib-304f-went-in-and-every-audio-measurement-became-undated-2026-09-08)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -16622,6 +16623,13 @@ in `akai_s3000_writer.py` that **envelope 3 is not board-gated** — measured by
 s3ked (§50, §86) working through modulation-matrix source 14 on an S3000XL
 established to have no expansion boards at all.
 
+> **PREMISE EXPIRED 2026-09-08: the IB-304F is now installed.** The finding is
+> not wrong — it was measured on a boardless machine, which is what makes it
+> interesting — but *"established to have no expansion boards at all"* is no
+> longer a description of this bench, and a reader today will take it as
+> current. **Everything ENV3-related was surprising BECAUSE of that premise and
+> is merely unremarkable without it.** See §BOARDFITTED.
+
 It does not, and the reason is already in that comment: *panel access needs the
 board; the generator is in firmware.* A spec table counts what the machine is
 sold as having, and the S3200XL is the model that exposes three. What this adds
@@ -29841,3 +29849,53 @@ part this change fixes now.
 
 Codes: `AKAI_OCTAVE_SHIFT_DROPPED` (content_lost, carries the semitone offset
 to apply by hand), `AKAI_STEREO_LEVEL_DROPPED`, `AKAI_PROGRAM_PAN_DROPPED`.
+
+## §BOARDFITTED — the IB-304F went in, and every audio measurement became undated (2026-09-08)
+
+**The bench changed.** Jan installed the IB-304F second filter board on
+2026-09-08. Nothing measured before that date became *wrong*; all of it became
+**undated with respect to the hardware** — a different and quieter problem, and
+§188's third class arriving live rather than as an example.
+
+**At risk, in the order it should be re-checked** (s3ked's ranking, and their
+reason is right — everything else is quoted against the first):
+
+1. **The rig noise floor** (§RIGNOISEFLOOR: flat to 11 Hz, 60–80 dB headroom
+   below 44 Hz). **The board sits in the signal path**, and every SNR argument
+   in this file is quoted against that table.
+2. **The `STEREO` amplitude law** (10..99, 0.244 dB). Probably post-filter and
+   unaffected — but *probably* is not a measurement, and re-checking three
+   points is cheap where re-sweeping nine is not.
+3. **Anything filter-shaped**: the modulation slots, the attack-shape work, the
+   ENV2 depth law.
+
+**A controlled A/B exists by accident, and it beats anything designed after the
+fact.** s3ked's §50 (2026-08-12) swept `FIL2FR` 20..99 with `LSI2_ON` at **both
+1 and 0** and recorded **no response either way**, boardless. Re-running that
+exact sweep now is **same rig, same fields, same method, only the hardware
+changed**.
+
+It also settles a question this project would otherwise have answered by eye:
+**does `LSI2_ON = 0` genuinely bypass?** Our converted keygroups carry **zeros**
+in all fifteen board fields, and `KGMUTE` is our own precedent that zeros are
+not safe by default — 255 is OFF there and **0 is a real mute group**, so every
+keygroup we authored inherited an active one from the buffer's zero fill. If
+enable-off does not bypass, every program on the test card is being filtered
+tonight in a way it was not yesterday.
+
+**`LSI2_ON` cannot detect the board.** It accepts a write and reads back 1 with
+no board present (§50), so **the audio response is the detector, not the flag**
+— which is also why a converter cannot know whether its output will be rendered
+through one filter or two.
+
+**Panel ground truth**, from Jan's photo of the FLT2 page:
+
+```
+  frequency: 99      Velocity>freq: +00     filter mode: LP
+  key follow: +00    Lfo2>freq:     +00     attenuator: +0dB
+  resonance: 0       Env3>freq:     +00     enable:      OFF
+```
+
+Mode enum order is **LP, BP, HP, EQ**. Note `attenuator`, which the operator's
+manual's FILTER 2 section never mentions, and that `Lfo2>freq` and `Env3>freq`
+are **separate** modulation routings.
