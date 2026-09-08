@@ -1751,6 +1751,44 @@ take the same time-alone path today).
 **Status:** open. **Blocked on:** an E4XT rate sweep. Note `eosed` can send
 whole presets over SysEx, so this needs no card crossing.
 
+## AKAI IB-304F second filter board not supported (OPEN 2026-09-08)
+
+The base S3000XL filter is **2-pole**; most sources we convert carry 4-pole,
+and that slope is lost today. The optional **IB-304F** adds FILTER 2 in series
+with FILTER 1 — set both to LOWPASS and it is a genuine 24 dB/oct — plus a TONE
+tilt section and ENV3.
+
+**Nothing in the converter knows about it.** The fifteen keygroup fields live
+only in a peer handoff; `docs/AKAI_S3000_FORMAT.md` has no FILTER 2, TONE or
+ENV3 rows, so our writer cannot address them and our reader silently drops them.
+
+**Phase 0 needs no hardware** and should happen regardless: put the offsets in
+our own format reference, then scan the 9442-program corpus for non-zero values
+at them — which confirms the offsets, shows what real material sets, and gives
+the prevalence. It also settles the write policy: **nothing on the wire
+distinguishes a fitted machine from an unfitted one**, so mapping a 4-pole
+source across both filters is correct on a fitted machine and half-filtered on
+an unfitted one. A flag (`--akai-ib304f`), not a default.
+
+**Status:** open. **Blocked on:** Phase 0 on nothing; Phase 1 on the board
+being installed. Procedure:
+`docs/re_procedures/akai_ib304f_filter_board.md`. Manual: S3000XL Operator's
+Manual pp. 103–111 (local copy under `~/Seafile/Bibliothek/Handbücher`).
+
+## AKAI CD3000 ISO mirror built for the --iso path's first hardware test (OPEN 2026-09-08)
+
+`--iso` has never been read by a sampler; the disk-image path has been, many
+times. `~/temp/HD4-MIRROR.iso` is the live test card's **exact content** —
+34 volumes, 1400 files, 184.6 MB — rebuilt through `build_akai_hd_image(...,
+cdrom=True)` and verified byte-identical to `HD4-work-v14.img` on every file.
+
+Same content is the point: the card is a **control** that has been measured off
+the machine repeatedly, so anything that differs on the CD is the **CD path**,
+not the material. 360 MB / 6 partitions (34 volumes need 5; the 240 MB default
+gives only 4), comfortably inside a CD.
+
+**Status:** built, awaiting a card swap. **Blocked on:** bench time.
+
 ## E4B zero-sustain release is inferred, not measured (OPEN 2026-09-08)
 
 At `env_sustain = 0` the release span is zero and `_env_span_rate(0, t)`
