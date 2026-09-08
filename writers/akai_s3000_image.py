@@ -240,9 +240,33 @@ def akai_volume_name(name: str) -> str:
     return akai_to_str(str_to_akai(name)).rstrip() or 'VOLUME'
 
 
+#: Largest file size the volume-directory entry can express: its size field is
+#: 24 bits (`_u24`), so 16,777,215 bytes. Not a policy limit -- a format one.
+AKAI_MAX_FILE_BYTES = 0xFFFFFF
+
+
 def _file_entry(name: str, ftype: int, size: int, start: int,
                 osver: int = OSVER_S3000) -> bytes:
-    """One 24-byte volume-directory entry."""
+    """One 24-byte volume-directory entry.
+
+    THE SIZE FIELD IS 24 BITS AND `_u24` MASKS RATHER THAN CHECKS, so a file
+    over 16 MB used to be written with a WRAPPED size and no complaint: a
+    16,779,264-byte sample declared itself as **2048 bytes**, and the sampler
+    loads 2 KB of a 16 MB sample. Silent, and it survives every round trip we
+    have, because our own reader reads back the same wrapped number.
+
+    16 MB is roughly 3.2 minutes of mono 16-bit 44.1 kHz -- comfortably inside
+    a 32 MB volume, so this is reachable with ordinary material rather than a
+    pathological case. Refuse loudly instead; the caller can trim or split.
+    """
+    if not 0 <= size <= AKAI_MAX_FILE_BYTES:
+        raise AkaiImageError(
+            f"{name!r} is {size:,} bytes, which the AKAI volume directory "
+            f"cannot express -- its size field is 24 bits, so the maximum is "
+            f"{AKAI_MAX_FILE_BYTES:,} bytes (~16 MB, about 3.2 minutes of mono "
+            f"16-bit 44.1 kHz). Writing it would silently record a wrapped "
+            f"size of {size & AKAI_MAX_FILE_BYTES:,} bytes and the sampler "
+            f"would load only that much. Trim or split the sample.")
     e = bytearray(24)
     e[0:AKAI_NAME_LEN] = str_to_akai(name)
     # e[12:16] are the four tag slots — 0 means untagged.
