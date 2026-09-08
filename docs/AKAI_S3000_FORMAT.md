@@ -739,11 +739,22 @@ loss drops out:
 **So 16 is not the neutral point on this machine** — the manual's *"a value of
 16 is no cut or boost"* is right about the behaviour and wrong about the value.
 
-**MEASURED CROSSING: `FLT2Q` ≈ 23.1**, from seven points:
+**MEASURED CROSSING: `FLT2Q` ≈ 23.1.** Depths from **raw-bin analysis**
+(0.62 Hz bins) — the octave-band figures first taken are wrong by up to 49 dB
+and are shown for contrast only:
 
-| `FLT2Q` | 0 | 16 | 18 | **20** | 21 | 25 | 31 |
+| `FLT2Q` | 0 | **16** | 18 | **20** | 21 | 25 | **31** |
 |---|---|---|---|---|---|---|---|
-| action | −4.13 | **−4.57** | −3.86 | **−2.77** | −2.06 | +1.85 | **+15.48** |
+| **actual** | −4.3 | **−53.9** | −16.6 | **−9.5** | −7.0 | +2.3 | **+22.4** |
+| octave-band said | −4.13 | −4.57 | −3.86 | −2.77 | −2.06 | +1.85 | +15.48 |
+| notch/peak width | 2616 Hz | **108 Hz** | 829 | 1156 | 1360 | 742 | 423 |
+
+**`FLT2Q` 16 is a TRUE NOTCH, not a point on a curve** — 108 Hz wide with a Q of
+20.5 against 1.6–2.6 at its neighbours, and 37 dB deeper than `Q` 18. The
+manual's *"16 is no cut or boost"* may be a garbled *"16 is the notch"*, but
+that is a reading, not a finding.
+
+**It is also almost never authored: 2 of 469 EQ keygroups sit at 16.**
 
 **`FLT2Q` 20 is a CUT**, and it is the single most common value in EQ mode —
 104 of 469 keygroups. **A `Q > 16` rule would have inverted the sign on 22 % of
@@ -772,19 +783,43 @@ Two live explanations, neither tested:
 1. **A panel/byte offset** — if the panel displays this field signed (−16…+15
    over a 0..31 byte) then the manual's "16" is a *panel* number and byte 16 is
    panel 0. Does not by itself explain a minimum at that point.
-2. **A measurement artefact of octave-band averaging** — the analysis bands are
-   octave-spaced (44, 89, … 5657 Hz) and the corner sits at `FIL2FR` 80. **A
-   notch narrower than an octave is partly averaged away**, so a *narrowing*
-   notch reads shallower even while its bottom deepens. That would produce the
-   observed minimum with no non-monotonic parameter at all — and it is the same
-   class as the dark-end anomaly earlier in this sweep, where the metric rather
-   than the filter was the story.
+2. **Octave-band averaging** — a notch narrower than the band is averaged away,
+   so a *narrowing* notch reads shallower even while its bottom deepens.
 
-**Distinguishable from captures already taken**: re-analyse with a narrow band
-at the corner instead of the octave mean. If the "shallowing" disappears, it was
-the metric.
+**RESOLVED, and both were true at once.** Re-analysis at 0.62 Hz bins confirmed
+the metric error — **49 dB at `FLT2Q` 16** — but the minimum did **not**
+disappear as predicted: it **deepened by 49 dB** and became the most conspicuous
+feature in the sweep. The two explanations were framed as alternatives and both
+hold: the metric was wrong *and* the parameter is genuinely non-monotonic.
 
-**Headroom, measured: +15.57 dB above bypass, not +21.5.** `FLT2GAIN` sits
+**The generalisable rule (s3ked's): a fixed-width analysis band cannot
+characterise a feature whose width is a free parameter — and `FLT2Q` is
+precisely a width control.** The same instrument produced the same class of
+error at both ends of one sweep: a corner that left the window at `FIL2FR` 20,
+and a notch narrower than the band at `FLT2Q` 16.
+
+**HEADROOM IS +22 dB, not the +15.57 first reported** — the octave-band figure
+understated the `Q` 31 peak by 7 dB, and this is the correction that clips.
+
+**Interpolating between the measured points is hazardous where the material
+actually sits.** 177 of 469 EQ keygroups fall in regions steeper than
+2 dB per `FLT2Q` unit, against only 14 in the sign-boundary gap:
+
+| unmeasured `Q` | keygroups | local gradient |
+|---|---|---|
+| 27 | 51 | +3.3 dB/unit |
+| 15 | 26 | −3.1 dB/unit |
+| 29 | 22 | +3.3 |
+| 10 | 22 | −3.1 |
+| 28 | 20 | +3.3 |
+
+The boost side above 25 holds ~102 keygroups across a run that climbs
+**20 dB in six steps with only its endpoints measured**, and `Q` 15 sits 26
+keygroups next to the singular notch. **Those are worth more captures than the
+sign boundary was.**
+
+**`FLT2GAIN` behaviour, measured: +15.57 dB above bypass at `Q` 31 under the
+octave metric.** `FLT2GAIN` sits
 **downstream of the EQ stage and is shape-neutral** — at `Q` 31 the curve is
 identical between gain 0 and 1 to **0.01 dB** while the sample maximum doubles
 exactly (0.1288 → 0.2572), with no limiting or clipping at either setting. So
