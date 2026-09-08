@@ -5,14 +5,21 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 
 # mpc2emu
 
-A sampler-conversion toolkit for vintage hardware. Converts sample libraries
-between common formats — mapping the musical parameters (filter, envelopes,
-LFO, loops) onto each target's own synth engine, not just carrying over raw
-samples — with optional vintage resampling, adaptive sample cleanup (silence
-trim, seamless sustain loops, single-cycle synthesis), and automatic fitting
-to hardware memory limits. Produces ZuluSCSI-ready CD ISO images, SCSI hard
-disk images, and Gotek floppies for the EMU Emulator 4 / E4XT and Kurzweil
-K2000 series.
+A sampler-conversion toolkit for vintage hardware — one that ended up doing
+rather more than converting parameters.
+
+Sample libraries move between formats with their **musical behaviour**
+re-modelled onto each target's own synth engine: filters, envelopes, LFOs and
+loops, but also behaviours the target has no field for at all, rebuilt out of
+what it does have. The mappings are **measured against real E4XT, K2000R and
+S3000XL hardware** rather than transcribed from documentation, because the
+documentation is often wrong and the machines disagree with it in audible ways.
+
+Plus optional vintage resampling, adaptive sample cleanup (silence trim,
+seamless sustain loops, single-cycle synthesis), and automatic fitting to
+hardware memory limits. Produces ZuluSCSI-ready CD ISO images, SCSI hard disk
+images, and Gotek floppies for the EMU Emulator 4 / E4XT and Kurzweil K2000
+series.
 
 > **Legal:** [DISCLAIMER.md](DISCLAIMER.md) · [LICENSE](LICENSE)
 
@@ -156,6 +163,69 @@ what transfers and how it was verified, and
 [`docs/MODULATION_MATRIX.md`](docs/MODULATION_MATRIX.md) gives the parameter-by-
 parameter matrix across the MPC, AKAI, E4B and KRZ paths — including, explicitly,
 what does **not** transfer.
+
+### It re-models behaviour, not just parameters
+
+A converter that only copies fields produces a preset that *looks* right and
+does not *sound* right. Three things follow from taking the sound as the
+target instead.
+
+**Behaviour with no field to copy gets rebuilt.** The AKAI keygroup **mute
+group** — two keygroups that cut each other — has no equivalent on the E4XT.
+The obvious candidate field turns out to be about note *allocation*: two voices
+in one Mono group under a single note change the mix by 0.13 dB, while the same
+group across two overlapping notes suppresses the first entirely. So the
+authority is across notes, not between sibling layers, and copying it would be
+wrong.
+
+Where two keygroups overlap in key *and* velocity, one note-on triggers both
+and the cut happens after a fixed latency, depending on nothing the player
+does — which is exactly an envelope. mpc2emu writes instant attack, short decay
+to zero, no sustain. **The timing is identical rather than approximated**,
+because both layers start together; only the ending's shape differs, costing a
+click's worth of high frequency.
+
+And where it genuinely *cannot* be re-modelled — the classic cross-note case, a
+closed hi-hat cutting an open one on a different key, where the cut time
+depends on when the second note arrives — it says so instead of pretending.
+The two cases are distinguishable in the file, which is why this is a three-way
+decision rather than a blanket warning. Sized before it was built: across 9442
+programs on library discs, 311 (3.3%) carry a mute group that would actually
+bite.
+
+**The laws are measured, and measurement keeps overturning what looked
+settled** — usually our own earlier fit, which is the point: a law that was
+never checked outside the range it was fitted in is a guess with a graph. Three
+that changed what comes out of the box:
+
+- The E4XT reaches full level **1.838× later** than its own attack-rate law
+  implies — constant across a 116× range, so every converted attack was nearly
+  twice too slow until it was measured.
+- The K2000's LFO rate is a **five-segment ladder, not a line.** The linear fit
+  it replaced was exact between bytes 36 and 126 and wrong at both ends: byte
+  184 is 24.0 Hz and read as 15.8, and every byte below 27 read as *stopped*.
+- The AKAI filter corner had been fitted to a **spectral centroid** — the
+  average frequency of everything the *source* contains, which sits above the
+  corner by a source-dependent amount. That is a **slope** error, not an
+  offset, so no calibration constant could ever have fixed it. Every AKAI
+  program written under the old law came out **0.31 octaves dark**.
+
+**A quantity is only comparable together with its reference.** Velocity→volume
+is not a number, it is a number *and a pivot*: the AKAI rotates its loudness
+swing about velocity 64, the K2000 about 127. Carrying the swing alone gives a
+patch that is correct at one velocity and wrong everywhere else, so the pivot
+travels with it. The same applies to filter depths in cents rather than
+fractions, and to envelope segments as spans rather than times.
+
+**The sample itself is fair game.** `--auto-loop` finds a seamless sustain
+loop, `--single-cycle` turns a sample into a looped oscillator with the tuning
+baked into the rate, and the trims reshape the audio rather than the metadata.
+
+**What does not transfer is documented, not hidden.**
+[`docs/MODULATION_MATRIX.md`](docs/MODULATION_MATRIX.md) gives the
+parameter-by-parameter matrix across the MPC, AKAI, E4B and KRZ paths —
+including, explicitly, what is lost — and the converter emits structured
+diagnostics saying when musical content was dropped and what to do about it.
 
 **Vintage resampling** can optionally run every sample through a model of the
 EMU Emulator II (µ-law companded 8-bit, 27,777 Hz — quiet passages keep ~14-bit
