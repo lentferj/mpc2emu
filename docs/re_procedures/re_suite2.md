@@ -5,7 +5,7 @@ SPDX-FileCopyrightText: Copyright (C) 2026  mpc2emu contributors
 
 # RE Suite #2 — open RE tasks from the 2026-06-13 aural pass
 
-Generator: `tests/re_banks/gen_re_suite2.py` → `/home/lentferj/temp/re_suite2/RE_SUITE2.iso`
+Generator: `tests/re_banks/gen_re_suite2.py` → `~/temp/re_suite2/RE_SUITE2.iso`
 (one bank, 4 presets). Load on the E4XT (copy to ZuluSCSI SD, rename `CDx.iso`).
 Keep the baseline `RE_SUITE2.E4B` — every diff is taken against it.
 

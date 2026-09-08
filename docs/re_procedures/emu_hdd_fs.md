@@ -9,8 +9,8 @@ running EOS 4.7** itself (the authoritative source — not a PC tool):
 
 | Reference | Path | Format |
 |---|---|---|
-| FAT      | `/home/lentferj/temp/hda-images/HD1-FEATUREDEMO.hda`        | FAT16, MBR |
-| EMU-fs   | `/home/lentferj/temp/hda-images/HD1-FEATUREDEMO_emufs.hda`  | EMU3/EMU4  |
+| FAT      | `~/temp/hda-images/HD1-FEATUREDEMO.hda`        | FAT16, MBR |
+| EMU-fs   | `~/temp/hda-images/HD1-FEATUREDEMO_emufs.hda`  | EMU3/EMU4  |
 
 Context: the EMU-fs `.hda` produced by reusing the CD ISO builder **works** on
 the E4XT (reads its banks); the first FAT attempt (partitionless FAT32) did

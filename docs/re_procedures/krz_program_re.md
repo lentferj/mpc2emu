@@ -147,7 +147,7 @@ that null result is itself the signal that we must first set an algorithm with a
 filter (→ strategy C / the SysEx algorithm byte).
 
 Regenerate: `python3 tests/re_banks/gen_krz_program_re.py --floppy`
-(writes `.KRZ` + Gotek `.img` + `.manifest.txt` to `/home/lentferj/temp/krz_re/`).
+(writes `.KRZ` + Gotek `.img` + `.manifest.txt` to `~/temp/krz_re/`).
 
 ---
 
@@ -573,7 +573,7 @@ rig itself is healthy — verified by an open-filter sanity take (centroid 9885 
 **JACK note (rig hygiene):** creating a fresh `jack.Client` per recording leaks
 metadata DBs / semaphores into `/dev/shm` and eventually throws
 `BDB2034 unable to allocate memory for mutex`, corrupting takes. Use **one
-persistent client** reused across takes (`/home/lentferj/temp/persist_rec.py`,
+persistent client** reused across takes (`~/temp/persist_rec.py`,
 class `Rec`). Do NOT `rm` `/dev/shm/jack_db-*` — it's the live jackd's DB.
 
 ### 17b. Filter-type bytes captured + implemented (2026-06-16) — RESOLVED
@@ -599,7 +599,7 @@ XPM `FilterType` enum (see `e4b_writer._XPM_FILTER_TYPE`) → K2000 byte
 (Low/Model/MPC→50, High→54, Band/Band-boost→55, BS-notch→56), called from
 `_patch_layer` (replaces the hard-coded `hob_f1[0]=50`). End-to-end verified:
 `write_krz` of a 4-voice bank (Low4/High4/Band4/BSnotch) → `krz_reader` reads
-50/54/55/56. Test artefact: `/home/lentferj/temp/FTYPE_RT.KRZ`.
+50/54/55/56. Test artefact: `~/temp/FTYPE_RT.KRZ`.
 
 ### 17c. First HW load-test of converted MPC banks (2026-06-16) — two bugs fixed
 
@@ -825,7 +825,7 @@ Software-only work (no disk-saves) while Jan was AFK:
   resonance, 1-pole no-resonance, byte encoders, write→read round-trip).  Run with
   `python3 tests/test_krz_writer.py`.
 
-- **Corpus cross-check** (`/home/lentferj/temp/corpus_filter_analysis.py` over the
+- **Corpus cross-check** (`~/temp/corpus_filter_analysis.py` over the
   160 third-party soundsets = 3188 programs / 14212 layers) **validated the filter
   byte map against real K2000 production files**: HOB0[0] = 2 (2POLE LOWPASS, 12019
   layers), 3 (BANDPASS), 15 (1-pole LOPASS), 50 (4POLE), 56 (DOUBLE NOTCH), 62
@@ -848,7 +848,7 @@ Software-only work (no disk-saves) while Jan was AFK:
 
 ### 17k. Modulation-routing byte offsets located via corpus (2026-06-16)
 
-`/home/lentferj/temp/corpus_routing.py` scans every layer of the 160 third-party soundset
+`~/temp/corpus_routing.py` scans every layer of the 160 third-party soundset
 soundsets (14212 layers) and, per (segment, byte-index), measures what fraction of
 values fall in the control-source code set (manual Ch25).  Positions dominated by
 control-source codes ARE the Src/route fields — and the codes that show up confirm

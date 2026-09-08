@@ -513,7 +513,7 @@ the state in which a stray Load is least survivable.
 
 ### 2b.4b What the staged walk script actually does, and what it does not
 
-`/home/lentferj/temp/re_e4xt_walk/walk.py` (eosed, 2026-08-17). Parses and runs
+`~/temp/re_e4xt_walk/walk.py` (eosed, 2026-08-17). Parses and runs
 `--help`; everything past that is unverified until the machine is up.
 
 In: the template-matching whitelist above with an empty library; DISK subtree
@@ -902,7 +902,7 @@ that will have produced findings.
 
 ## 5c. Phase 3 batch — built 2026-08-18, needs a card slot
 
-`/home/lentferj/temp/re_e4xt_confirm/CONFIRM.iso`. Six presets, three A/B pairs,
+`~/temp/re_e4xt_confirm/CONFIRM.iso`. Six presets, three A/B pairs,
 each pair on two ADJACENT keys so an A/B is two notes rather than a preset
 change:
 

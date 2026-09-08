@@ -213,7 +213,7 @@ user input; the soft-button labels are the bottom LCD row.
 - `tests/re_banks/krz_sysex_live.py` — split-port live connection (the routing above)
 - `tests/re_banks/krz_sysex_probe.py` — pure-python SysEx codecs (no MIDI dep), unit-tested
 - `tests/re_banks/krz_reader.py` — `.KRZ` *file* object reader (disk format)
-- Library: `/home/lentferj/git-repos/k2000` (psobot) — full protocol
+- Library: `~/git-repos/k2000` (psobot) — full protocol
 - Manual: `…/K2000/30 SysEx.pdf` (authoritative protocol reference)
 
 ---

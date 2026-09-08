@@ -5,7 +5,7 @@ SPDX-FileCopyrightText: Copyright (C) 2026  mpc2emu contributors
 
 # RE Suite — one bank for all open E4XT reverse-engineering tasks
 
-Generator: `tests/re_banks/gen_re_suite.py` → `/home/lentferj/temp/re_suite/RE_SUITE.iso`
+Generator: `tests/re_banks/gen_re_suite.py` → `~/temp/re_suite/RE_SUITE.iso`
 (one bank, 10 presets). Load it on the E4XT (copy to ZuluSCSI SD, rename `CDx.iso`).
 
 Two kinds of preset:

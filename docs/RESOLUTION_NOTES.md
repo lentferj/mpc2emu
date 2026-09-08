@@ -1017,7 +1017,7 @@ material), `--auto-loop-force`, `--auto-loop-trim` (drop audio past loop_end),
 **Results (objective sweep, mellotron/VPO/prophet/K2).** Solo/pure timbres (flute,
 cello, clean choir, analog synth) → excellent (match <0.07, natural 300-600 ms
 loops). Dense ensemble / noisy analog → inherently hard (0.2-0.55): longer crossfade
-+ flag/skip. Audition renders (loop×6 flat) in `/home/lentferj/temp/autoloop_work/aud/`.
++ flag/skip. Audition renders (loop×6 flat) in `~/temp/autoloop_work/aud/`.
 
 **Still to do:** local audition (Audacity/VLC) then **HW audition** on E4XT + K2000
 before merge to main; possibly pitch-based vibrato detection (amp-envelope misses
@@ -1543,7 +1543,7 @@ currently modelled. Low priority.
 
 All EOS `vpar[58]` filter-type bytes — including the swept/parametric ones — are
 confirmed from the hardware-saved `B.005-FILTERTYPES.E4B` (one preset per type,
-set on the E4XT and saved; in `/home/lentferj/temp/re_filter_types/`). Encoding
+set on the E4XT and saved; in `~/temp/re_filter_types/`). Encoding
 is `byte = group_base | variant`:
 
 - LP `0x00/01/02`, HP `0x08/09`, BP `0x10/11/12`
@@ -2426,7 +2426,7 @@ against a synthetic ±100 cent square signal (recovered 200.8 c peak-to-peak).
 
 ## 20. Regression sweep (input → E4B round-trip), 2026-06-11
 
-Harness `/home/lentferj/temp/regression/roundtrip.py`: for each real input file
+Harness `~/temp/regression/roundtrip.py`: for each real input file
 parse → `write_e4b` → `parse_e4b`, then compare the two models feature-by-feature
 (zones key/vel/root, sample mapping + PCM/rate/root, amp+filter envelopes, filter
 cutoff/res/env, key/vel→filter, non-transpose, chorus, LFO routing) with
@@ -4260,7 +4260,7 @@ code directly — inferred from reading `Emulator3Detector.java`).
 crash, structure looks sane") against every EIII/EIIIX/ESI bank identifiable
 by its 16-byte header magic across 17 commercial E4XT library CD-ROM `.iso`
 images in Jan's local collection
-(`/home/lentferj/Dokumente/SYNTHS/E4XT/{*.ISO,ISO-Images/*.iso}`) — banks
+(`~/Dokumente/SYNTHS/E4XT/{*.ISO,ISO-Images/*.iso}`) — banks
 were located by scanning each ISO's raw bytes for the three identifier
 strings (`EMULATOR THREE `, `EMULATOR 3X    `, `EMU SI-32 v3   `) and slicing
 from each match to the next (or a 130 MB cap), since these commercial disc
@@ -4307,7 +4307,7 @@ claim turned out to need one more layer of nuance).
 
 Checked against 5 real commercial EMU3-filesystem discs
 (`docs/EMU3_ISO_FORMAT.md` §2.4, read directly with a throwaway inspection
-script against `/home/lentferj/Dokumente/SYNTHS/E4XT/ISO-Images/`, known-good
+script against `~/Dokumente/SYNTHS/E4XT/ISO-Images/`, known-good
 media Jan pointed at): E4B entries always carry `props = \x00E4B0`
 (`library disc A.iso`, every bank); EIII entries always
 carry all-zero, across all three on-disk variants (`E-MU library disc B Series
@@ -8403,7 +8403,7 @@ separate defects in one parser to exactly that missing category.
 Saving a volume on the S3000XL produced `TL1.T`, `EFFECTS FILE.X`,
 `DRUM INPUTS.D` and `MULTI FILE.M3` unasked — **machine-authored examples of
 all four types we carry but have never read.** No reference documents any of
-them. Preserved at `/home/lentferj/temp/akai_resave_results/VOLUME_005/`.
+them. Preserved at `~/temp/akai_resave_results/VOLUME_005/`.
 
 ### Solid: all four share the program/sample header convention
 
@@ -9542,7 +9542,7 @@ machine plays at `44100·2^(f58/768)` = the stored rate, which is exactly what t
 baked tuning assumes. Correct by construction; not separately measured.
 
 **Stale artifacts, worth knowing before anyone reaches for a reference file:**
-~1265 sample headers under `/home/lentferj/temp` are rate=27500 with offset=0 and
+~1265 sample headers under `~/temp` are rate=27500 with offset=0 and
 would play 817 cents sharp — the PITCH_A configuration, now measured. All date
 **2026-06-07 to 2026-07-24**, at or before the fix. `B010_hw.E4B` and
 `B011_hw.E4B` are in that set. Do not treat a pre-2026-07-24 E4B from temp as
@@ -9761,7 +9761,7 @@ level up: a value test cannot separate lists it was never measured against.
 
 `_ALG_DSP_FUNCTIONS` in `parsers/krz_parser.py` counts each algorithm's
 addressable `Fn` slots, from the manual's algorithm chapter (`26 DSP Algs.pdf`,
-extracted to `/home/lentferj/temp/k2k_full/algorithm_slots_from_manual.json`).
+extracted to `~/temp/k2k_full/algorithm_slots_from_manual.json`).
 `0x52` is read only at three or more.
 
 Validated 9/9 against per-layer panel observations, both directions — six
@@ -9810,7 +9810,7 @@ down, ordered, and anchored.
 **This corrects `88e5cf0`, whose title claims a block code is slot-relative.
 It is not. I asserted that to k2kremote as well.**
 
-k2kremote supplied 40 anchor rows (`/home/lentferj/temp/k2k_full/slot_anchors.jsonl`)
+k2kremote supplied 40 anchor rows (`~/temp/k2k_full/slot_anchors.jsonl`)
 — per layer, the panel's function in every slot. Joined against our byte values
 by program id and algorithm, all 40 rows:
 
@@ -9906,7 +9906,7 @@ mistake, made in the section written to warn about it. The same check therefore
 belongs on our own figures rather than only in their write-up.
 
 **Checked, and clean.** Every corpus number in §KRZF3 comes from
-`/home/lentferj/temp/k2k_full/objects.jsonl` — 441 program objects read off the
+`~/temp/k2k_full/objects.jsonl` — 441 program objects read off the
 K2000R **by k2kremote over SysEx**, not produced by any writer of ours. Audited
 directly: zero of the 441 names match our generated-material patterns (`B.NNN-`
 bank prefixes, `RSPROBE`, `RSTONE`, `NSWHITE`, `NSPINK`, `VF NEW`/`VF OLD`,
@@ -26082,7 +26082,7 @@ state and this is the only recording of it.
 
 
 
-    /home/lentferj/temp/matrix_v7/rows/MX9 KR-E4 NOV54/KRE4NOV54_01.E4B
+    ~/temp/matrix_v7/rows/MX9 KR-E4 NOV54/KRE4NOV54_01.E4B
 
 Emitted with the `:955` write removed and `:637` untouched:
 

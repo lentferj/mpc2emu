@@ -17,7 +17,7 @@ the (already-applied) E4B Swept-EQ counterpart are in
    ```
    python3 tests/re_banks/gen_krz_paramid_re.py --floppy
    ```
-   → `/home/lentferj/temp/krz_re/PARAMIDRE.KRZ` (+ `.img` floppy, it's tiny).
+   → `~/temp/krz_re/PARAMIDRE.KRZ` (+ `.img` floppy, it's tiny).
    6 programs, all starting from the SAME baseline: **Algorithm 1 / F1 = 4POLE
    LOPASS W/SEP**, sharing one sawtooth sample + full-range keymap. **P000 is the
    untouched reference.**

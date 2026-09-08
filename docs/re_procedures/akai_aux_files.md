@@ -113,7 +113,7 @@ the stride; three tells us whether it is constant.
 ## Step 2 — save to a NEW volume
 
 Not over the originals. The decode is a **diff** against the unconfigured files
-already captured at `/home/lentferj/temp/akai_resave_results/VOLUME_005/`, so
+already captured at `~/temp/akai_resave_results/VOLUME_005/`, so
 both versions must survive.
 
 ## Step 3 — write down what was actually set
@@ -131,7 +131,7 @@ noting rather than working around.
 
 ```bash
 python3 tests/re_banks/akai_aux_diff.py \
-    "/home/lentferj/temp/akai_resave_results/VOLUME_005/DRUM INPUTS.D" \
+    "~/temp/akai_resave_results/VOLUME_005/DRUM INPUTS.D" \
     "/media/lentferj/AKAI/HD4.img#<NEWVOL>/DRUM INPUTS.D"
 ```
 
@@ -170,7 +170,7 @@ sampler; the remaining work is a diff and it needs the card in the reader.
 
 | volume | drum inputs | multi | role |
 |---|---|---|---|
-| `VOLUME_005` | default | default | the unconfigured baseline, already extracted to `/home/lentferj/temp/akai_resave_results/VOLUME_005/` |
+| `VOLUME_005` | default | default | the unconfigured baseline, already extracted to `~/temp/akai_resave_results/VOLUME_005/` |
 | `AUXKEY 1` | **configured** | default | isolates the drum-input layout |
 | `AUXKEY 2` | configured | **configured** | isolates the multi layout |
 
@@ -184,7 +184,7 @@ constant. A single-file diff with a built-in control.
 ```bash
 # 1. drum inputs: baseline -> configured
 python3 tests/re_banks/akai_aux_diff.py \
-    "/home/lentferj/temp/akai_resave_results/VOLUME_005/DRUM INPUTS.D" \
+    "~/temp/akai_resave_results/VOLUME_005/DRUM INPUTS.D" \
     "<HD4>#AUXKEY 1/DRUM INPUTS.D"
 
 # 2. multi: configured against the SAME disc's unconfigured multi

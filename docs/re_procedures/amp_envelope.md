@@ -72,11 +72,11 @@ PZT[10/11]= Amp Release2  rate / level  (default 0x00, 0x00 → stay silent)
 ## Step 1: Generate test banks
 
 ```bash
-cd /home/lentferj/git-repos/mpc2emu
+cd ~/git-repos/mpc2emu
 python3 tests/re_banks/gen_amp_envelope_test.py
 ```
 
-This produces 5 E4B files in `/home/lentferj/temp/re_amp_envelope/`:
+This produces 5 E4B files in `~/temp/re_amp_envelope/`:
 
 | File | PZT[4] | Expected behavior |
 |---|---|---|

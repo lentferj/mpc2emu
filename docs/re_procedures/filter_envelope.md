@@ -22,11 +22,11 @@ measured on the filter EG. See `docs/RESOLUTION_NOTES.md` §17 Gap A.
 ## Step 1: Generate the test bank
 
 ```bash
-cd /home/lentferj/git-repos/mpc2emu
+cd ~/git-repos/mpc2emu
 python3 tests/re_banks/gen_filter_envelope_test.py
 ```
 
-This writes, in `/home/lentferj/temp/re_filter_envelope/`:
+This writes, in `~/temp/re_filter_envelope/`:
 
 - `FLT_DECAY_CAL.E4B` — one bank, **6 presets**, differing only in the filter
   envelope Decay-1 rate byte `PZT[18]`.

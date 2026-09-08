@@ -45,8 +45,8 @@ is a way to measure the wrong keygroup.)*
 
 ```bash
 python3 tests/re_banks/gen_xpm_velocity_test.py
-# -> /home/lentferj/temp/re_xpm_velocity/XPM_VELSENS.xpm
-# -> /home/lentferj/temp/re_xpm_velocity/XPM_Noise.wav
+# -> ~/temp/re_xpm_velocity/XPM_VELSENS.xpm
+# -> ~/temp/re_xpm_velocity/XPM_Noise.wav
 ```
 
 Copy **both** files into a new, otherwise empty MPC project folder and load

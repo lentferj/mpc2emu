@@ -19,11 +19,11 @@ currently passes those 0–1 values straight through *as seconds*, which is wron
 ## Step 1: Generate the programs
 
 ```bash
-cd /home/lentferj/git-repos/mpc2emu
+cd ~/git-repos/mpc2emu
 python3 tests/re_banks/gen_xpm_envelope_test.py
 ```
 
-Produces, in `/home/lentferj/temp/re_xpm_envelope/`:
+Produces, in `~/temp/re_xpm_envelope/`:
 
 - `XPM_Tone.wav` — a looping sawtooth (sustains for any envelope length).
 - `XPM_VOL_DECAY.xpm` — 9 keygroups, one per key **C1…G#1**, sweeping

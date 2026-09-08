@@ -28,9 +28,9 @@ python3 tests/re_banks/krz_stereo_measure.py --selftest
 
 | item | value |
 |---|---|
-| bank | `/home/lentferj/temp/krz_stereo_hw/KRZSTHW_01.KRZ` (136 KB) |
-| floppy | `/home/lentferj/temp/krz_stereo_hw/KRZSTHW.img` (10% of a 1.44 MB disk) |
-| manifest | `/home/lentferj/temp/krz_stereo_hw/KRZSTHW.md` |
+| bank | `~/temp/krz_stereo_hw/KRZSTHW_01.KRZ` (136 KB) |
+| floppy | `~/temp/krz_stereo_hw/KRZSTHW.img` (10% of a 1.44 MB disk) |
+| manifest | `~/temp/krz_stereo_hw/KRZSTHW.md` |
 | programs | 200 `STIMAGE`, 201 `STLOOP`, 202 `STVOICE`, 203 `MNVOICE`, 204 `STFLAG`, 205 `PANREF` |
 | MIDI | `k2000r` port, channel 9 |
 | audio | JACK `system:capture_17/18` |

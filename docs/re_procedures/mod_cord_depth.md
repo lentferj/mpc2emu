@@ -39,11 +39,11 @@ Key/Velocity tracking use no LFO — play different keys / velocities instead.
 ## Step 1: Generate the test bank
 
 ```bash
-cd /home/lentferj/git-repos/mpc2emu
+cd ~/git-repos/mpc2emu
 python3 tests/re_banks/gen_mod_depth_test.py
 ```
 
-Writes to `/home/lentferj/temp/re_mod_depth/`:
+Writes to `~/temp/re_mod_depth/`:
 
 - `MOD_DEPTH_CAL.E4B` / `.iso` — 10 presets:
 
@@ -63,7 +63,7 @@ Writes to `/home/lentferj/temp/re_mod_depth/`:
 - **VelTrk 100**: play the same key three times at velocity **1, 64, 127**.
 
 Record dry (filter audible, no reverb), 44.1/48 kHz mono is fine. Put the WAVs in
-`/home/lentferj/temp/re_mod_depth/`.
+`~/temp/re_mod_depth/`.
 
 ## Step 3: Analyse
 

@@ -61,8 +61,8 @@ difference that depends on zone count is visible rather than averaged away.
 ## Step 1 — build the disc (offline, no hardware)
 
 ```bash
-cd /home/lentferj/git-repos/mpc2emu
-python3 tests/re_banks/gen_akai_resave_probe.py --hda /home/lentferj/temp/HD4.img --size-mb 32
+cd ~/git-repos/mpc2emu
+python3 tests/re_banks/gen_akai_resave_probe.py --hda ~/temp/HD4.img --size-mb 32
 ```
 
 Writes volume `RESAVE` holding `RSTONE.S3`, `RSCTRL.P3`, `RSPROBE.P3`,
@@ -78,15 +78,15 @@ the sampler needs to create its own save volume. A data-sized image would load
 fine and then have nowhere to save to — the failure would only appear at the
 machine, with the card already in it.
 
-**Keep the local copy.** `/home/lentferj/temp/HD4.img` is the pristine
+**Keep the local copy.** `~/temp/HD4.img` is the pristine
 reference the diff compares against; the card's copy is the one the machine
 will modify.
 
 ## Step 2 — put it on the card
 
 ```bash
-cp /home/lentferj/temp/HD4.img /media/lentferj/AKAI/HD4.img && sync
-md5sum /home/lentferj/temp/HD4.img /media/lentferj/AKAI/HD4.img   # must match
+cp ~/temp/HD4.img /media/lentferj/AKAI/HD4.img && sync
+md5sum ~/temp/HD4.img /media/lentferj/AKAI/HD4.img   # must match
 ```
 
 **Pick a free SCSI ID.** ZuluSCSI maps by filename: `CD0`–`CD3` are already
@@ -209,10 +209,10 @@ is wasted.
 ## Step 5 — bring the card back and diff
 
 ```bash
-cd /home/lentferj/git-repos/mpc2emu
+cd ~/git-repos/mpc2emu
 # ours = the pristine local reference; theirs = the machine's save volume
 python3 tests/re_banks/akai_resave_diff.py \
-    /home/lentferj/temp/HD4.img#RSCTRL.P3 \
+    ~/temp/HD4.img#RSCTRL.P3 \
     /media/lentferj/AKAI/HD4.img#<SAVEVOL>/RSCTRL.P3
 ```
 

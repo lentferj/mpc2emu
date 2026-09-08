@@ -39,11 +39,11 @@ write them because offsets [12], [13], [0], [1], and [15–21] are unidentified.
 ## Step 1: Generate test banks
 
 ```bash
-cd /home/lentferj/git-repos/mpc2emu
+cd ~/git-repos/mpc2emu
 python3 tests/re_banks/gen_zone_entry_test.py
 ```
 
-Produces in `/home/lentferj/temp/re_zone_entry/`:
+Produces in `~/temp/re_zone_entry/`:
 
 **Fine-tune test banks** (all other params identical):
 - `ZONE_FINE_00.E4B` — fine_tune = 0 cents

@@ -1550,7 +1550,7 @@ if __name__ == '__main__':
 # window rather than returning NaN that reads as "no pitch here".
 #
 # Use:
-#     sys.path.insert(0, '/home/lentferj/git-repos/s3ked')
+#     sys.path.insert(0, '~/git-repos/s3ked')
 #     from probes.measure import fundamental_hz, cents_between, rms_db
 #
 # Duplicating it here would have given this project a second, worse copy of a
