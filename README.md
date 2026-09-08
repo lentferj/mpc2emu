@@ -311,7 +311,7 @@ library (`mtools` is optional, only for one E4B HDA filesystem path).
 | Kurzweil KRZ | `.KRZ` | Kurzweil K2000 / K2500 / K2600 |
 | E-mu Emulator IIIX/ESI | `.E3X` / `.ESI` | Emulator IIIX, ESI-32/2000/4000 — also loads natively on the E4XT (its own backward-compatibility loader) |
 | TAL-Sampler | `.talsmpl` | TAL-Sampler VST/AU |
-| AKAI S1000/S3000 | `.S3` + `.P3`, `.hda`, `.iso`, `.img` | S3000XL and family — loose files, a partitioned SCSI/ZuluSCSI disk image (`--hda`), a CD3000 CD-ROM (`--iso`) or an AKAI floppy (`--floppy`). **Not hardware-confirmed yet** |
+| AKAI S1000/S3000 | `.S3` + `.P3`, `.hda`, `.iso`, `.img` | S3000XL and family — loose files, a partitioned SCSI/ZuluSCSI disk image (`--hda`), a CD3000 CD-ROM (`--iso`) or an AKAI floppy (`--floppy`). Disk images are **hardware-confirmed** — an S3000XL has mounted and played them repeatedly; `--iso` and `--floppy` have not been read by hardware |
 
 ---
 
@@ -1047,11 +1047,14 @@ example: the inherited S1000 tables describe keygroup offset 9 as
 offset 151; before that was found, every converted program got a **static**
 filter corner.
 
-> **Media output is a separate question.** The parameter scales below are
-> hardware-measured. Writing an AKAI *disk* — `--hda`, `--iso`, `--floppy` —
-> is byte-identical to `akaiutil`'s own output but **no S3000XL has yet
-> mounted one of ours**, so the media path is unconfirmed. See
-> [Supported Formats](#output).
+> **Media output, precisely.** The **disk-image path is hardware-confirmed**:
+> an S3000XL has mounted images written by `build_akai_hd_image` and by
+> `append_akai_volumes` many times — 18 volumes and 364 samples were swept off
+> one live card, programs were read on the machine's own panel, and converted
+> material has been measured back off it repeatedly. What has **not** been put
+> in front of hardware is the **CD3000 `--iso`** and the **`--floppy`** paths;
+> both are byte-identical to `akaiutil`'s output, which is a code-level check.
+> See [Supported Formats](#output).
 
 **What was measured, and what it changed:**
 
