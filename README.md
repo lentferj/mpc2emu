@@ -156,10 +156,11 @@ IIIX/ESI banks, and even a plain folder of root-note-named WAVs — and
 **It maps the musical parameters, not just the raw samples.** Filter
 type / cutoff / resonance, the amplitude and filter envelopes, the LFO, and the
 loops are translated onto each target's own synth engine — not left at default.
-That mapping is reverse-engineered against real E4XT and K2000R hardware; the
-[E4B Voice Parameters](#e4b-voice-parameters) and
-[KRZ Program Parameters](#krz-program-parameters) sections below document exactly
-what transfers and how it was verified, and
+That mapping is reverse-engineered against real E4XT, K2000R and S3000XL
+hardware; the [E4B Voice Parameters](#e4b-voice-parameters),
+[KRZ Program Parameters](#krz-program-parameters) and
+[AKAI Program Parameters](#akai-program-parameters) sections below document
+exactly what transfers and how it was verified, and
 [`docs/MODULATION_MATRIX.md`](docs/MODULATION_MATRIX.md) gives the parameter-by-
 parameter matrix across the MPC, AKAI, E4B and KRZ paths — including, explicitly,
 what does **not** transfer.
@@ -1019,6 +1020,41 @@ The converter prints a `[layers]` line per preset saying which path it took (and
 for a drum program, the reminder to use a drum channel). Wide-range octave-slice
 stacks that can't key-track past the K2000 up-pitch ceiling are first rebuilt as
 coverage multisample keymaps (a `[coverage]` note).
+
+---
+
+## AKAI Program Parameters
+
+Program and keygroup parameters are mapped to the S1000/S3000 engine from
+**scales measured on Jan's own S3000XL**, not from the inherited documentation
+— which is wrong often enough that it cannot be used as a source. The clearest
+example: the inherited S1000 tables describe keygroup offset 9 as
+`V_FREQ, not used, range 0..0`. Velocity→filter is real, and it is at
+offset 151; before that was found, every converted program got a **static**
+filter corner.
+
+> **Media output is a separate question.** The parameter scales below are
+> hardware-measured. Writing an AKAI *disk* — `--hda`, `--iso`, `--floppy` —
+> is byte-identical to `akaiutil`'s own output but **no S3000XL has yet
+> mounted one of ours**, so the media path is unconfirmed. See
+> [Supported Formats](#output).
+
+**What was measured, and what it changed:**
+
+| Parameter | The finding | Why it mattered |
+|---|---|---|
+| Filter corner (`FILFRQ`) | Re-derived from the **resonance peak**. The previous law was fitted to a spectral centroid — the average frequency of everything the *source* contains, which sits above the corner by a source-dependent amount | A **slope** error, not an offset, so no calibration constant could have fixed it. Every program written under the old law was **0.31 octaves dark** |
+| Envelope values | They are **slew rates, not durations** | How long a stage takes depends on how far it travels, so a "decay time" alone does not determine the byte — the sustain level has to be decoded first |
+| ENV2 filter depth | `octaves = 0.002612 × SUSTN2 × depth` — a **product** | A depth is meaningless without its sustain; the same depth byte at a different `SUSTN2` sweeps a different distance |
+| Mute group (`KGMUTE`, offset 160) | Two keygroups in one group cut each other by **19.1 dB**. `255` is off and `0` is a real group — so a zero-filled header inherits an active mute group for free | Re-modelled as an envelope on the E4B path; see [It re-models behaviour](#it-re-models-behaviour-not-just-parameters) |
+| Velocity → loudness | Rotates about **velocity 64** (the K2000 uses 127), and zero is genuinely neutral — measured at 0.00001 dB per velocity unit | A swing without its pivot is not a comparable quantity. Zero meaning *neutral* lets a program that ignores velocity convert as ignoring it, rather than as a smallest-available amount |
+| Attack (`ATTAK1`) | Time to 90% is measured and holds to 3.3%. The **exponential form is refuted** — `t50/t90` is 0.301 for any exponential, and the measured ratios run 1.5–2.9× above it | The curve shape is still open. The writer fits measured endpoints and assumes nothing about the curve between them, which is why the refutation leaves it standing |
+
+**Still open, and marked as such in the code:** the negative filter key-follow
+scale (0.622 from one bench sweep, against 96–103% unscaled from another on the
+same machine — unresolved), and how far a downward ENV2 sweep actually reaches.
+Both carry procedures in [`docs/re_procedures/`](docs/re_procedures/) rather
+than a guess in the converter.
 
 ---
 
