@@ -52,24 +52,36 @@ This single instruction decides whether the run is worth anything. A repeat of
 the original mistake will reproduce the original number and look like
 confirmation.
 
-## Route: this one DOES need the volume loaded
+## Route: SysEx, and NO card crossing — the source is already on the disk
 
-**Correction to an earlier claim (s3ked, 2026-09-08).** I said the primary
-route was SysEx with no card crossing. That is wrong, and it conflicts with
-this document's own requirement two sections down.
+**Corrected twice, and this is the settled version (Jan, 2026-09-08).**
 
-`s3ked`'s probes set *parameters on a resident program*. They cannot supply a
-sample. This measurement needs a **broadband source** — a sine tells you
-nothing about a filter — and the noise source `ENV2NZ.S3` lives in the volume.
-The resident material on that rig is pitched, MPC-sourced. So the SysEx route
-can set every field perfectly and still measure the wrong thing.
+The first version said "no card crossing" and was wrong: `s3ked`'s probes set
+*parameters on a resident program* and cannot supply a sample, while this
+measurement needs a **broadband source** — a sine tells you nothing about a
+filter.
 
-**Therefore:** either the volume is loaded (a card crossing — Jan's call), or a
-broadband sample is already resident, which it is not.
+The second version concluded a card crossing was therefore required. **Also
+wrong, and the error was mine: I confused a card LOAD with a card SWAP.** The
+HD4 card is already in the sampler's ZuluSCSI. Loading a volume from it is a
+machine operation, not a physical exchange.
 
-The SysEx route remains useful for one thing: **sweeping depth on an
-already-loaded volume**, which avoids a second crossing if more points are
-wanted after the first run.
+**And a suitable broadband source is already on that disk:**
+
+```
+  TC10 NOISE   NOISE WHT A.S3   176,400 samples = 4.0000 s @ 44.1 kHz
+                                flat within 0.78 dB, 11 Hz to 11.3 kHz
+               N50/N51          single-keygroup S3000 programs
+```
+
+Verified from the image, not assumed — the same check s3ked applied to the
+purpose-built source, which this one beats (0.78 dB to 11 kHz against 0.9 dB to
+5.6 kHz).
+
+**So the whole measurement is: load `TC10 NOISE`, then SysEx parameter writes
+and audio capture.** Single keygroup, so no layer interactions; S3000, so the
+board offsets exist. `~/temp/HWCHK_ENV2/` remains as a whole-pipeline check but
+is no longer the route.
 
 ## Material
 

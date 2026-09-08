@@ -73,6 +73,23 @@ on an unfitted one** — the second filter simply does nothing. This is a flag,
 not a default: `--akai-ib304f`. Writing the fields unasked would quietly change
 what every existing conversion sounds like on a fitted machine.
 
+## Material — already on the disk, no card swap
+
+**Everything below runs on volumes already present on the HD4 card in the
+sampler's ZuluSCSI.** A volume *load* is a machine operation; only a card
+*swap* needs hands, and none is required.
+
+| volume | contents | use |
+|---|---|---|
+| `TC10 NOISE` | 2 white-noise samples, `N50`/`N51` single-keygroup S3000 programs | **the filter work** — broadband source, verified flat **0.78 dB from 11 Hz to 11.3 kHz** |
+| `TC11 ATKCAL` | `ATKNOISE.S3` + 11 programs | **the ENV3 work** — an attack-calibration ladder already built |
+| any `MX*` | our own converted output | **the enable check** — do our zero-filled board fields read as OFF? |
+
+`TC10 NOISE`'s source was measured from the image rather than assumed, and it
+beats the one built for this purpose (0.78 dB to 11 kHz against 0.9 dB to
+5.6 kHz). Single keygroup means no layer interaction; S3000 means offsets
+168–190 exist at all.
+
 ## Phase 1 — with the board installed
 
 **1.1 Confirm the board is seen.** The FILTER 2 page opens instead of showing
