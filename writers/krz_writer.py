@@ -3035,8 +3035,12 @@ def write_krz(bank: Bank, output_path: str,
         # K2000: a regular program is max 3 layers; >3 layers is a "drum program"
         # that only sounds on a drum channel (HW-confirmed).  Cap STACKED/unison
         # programs (all layers overlap → redundant) to 3 so the common melodic case
-        # plays on any channel; KEEP SPLIT programs (velocity layers / drum kits /
-        # key splits — each layer covers unique territory) as drum programs.
+        # plays on any channel. SPLIT programs (velocity layers / drum kits /
+        # key splits — each layer covers unique territory) are ALSO fitted to 3
+        # BY DEFAULT; keeping them whole is opt-in via `faithful_layers` or
+        # `drum_program`. This comment said the opposite until 2026-09-08 -- it
+        # was left behind when the default flipped, and the branch immediately
+        # below has always been the authority. See its own note for why.
         if len(voices) > 3 and _voices_stacked(voices):
             print(f"  [layers] '{preset.name}': {len(voices)} stacked layers → "
                   f"3 spread across the stack (regular program, any channel).")

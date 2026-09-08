@@ -1002,19 +1002,33 @@ notes). Use `--mono` to halve that cost.
 
 A K2000 **regular program** holds up to **3 layers** and plays on any MIDI
 channel; a program with **more than 3 layers** is a **drum program** that only
-sounds on a drum channel (hardware-confirmed). The converter picks between them
-per preset:
+sounds on a drum channel (hardware-confirmed).
+
+**By default the converter fits to three layers**, whatever the preset looks
+like — because a program that does not sound on the channel it is played on is
+not a subtler rendering of the preset, it is silence. Keeping every layer used
+to be the only behaviour, and it shipped exactly that failure: a four-layer
+electric piano is a drum program, and a K2000R refused it on channel 9 while
+every internal check read clean.
 
 - **Velocity bands are split first** — a voice that carries several velocity
   layers as zones is broken into one layer per band, so the K2000 keymaps don't
   collide on a key.
 - **Stacked / unison programs** — every layer overlaps the same key + velocity
-  range (redundant detune/unison stacks) — are **spread-picked down to 3 layers**
-  so the common melodic case still plays on **any channel**.
-- **Split programs** — velocity layers, key splits, and **drum kits** where each
-  layer covers unique territory — are **kept in full as a drum program** (up to
-  the K2000 maximum of **32 layers**; anything beyond is clamped). Play these on
-  a **drum channel**.
+  range (redundant detune/unison stacks) — are **spread-picked** down to 3, so
+  nothing meaningful is lost.
+- **Split programs** — velocity layers, key splits and drum kits, where each
+  layer covers unique territory — are **also reduced to 3**, and here the loss
+  is real: the converter prints which bands it dropped and what it averaged,
+  because that is a compromise the listener should know about rather than
+  discover.
+
+Two flags override it when you know the target channel:
+
+| Flag | Effect |
+|---|---|
+| `--krz-faithful` | Keep **every** layer. Makes it a drum program, playable only on a drum channel. |
+| `--krz-drum-program` | Allow a split preset over three layers to be written as a drum program deliberately — up to the K2000 maximum of **32**; beyond that is clamped. |
 
 The converter prints a `[layers]` line per preset saying which path it took (and,
 for a drum program, the reminder to use a drum channel). Wide-range octave-slice
