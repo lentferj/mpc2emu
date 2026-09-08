@@ -52,11 +52,24 @@ This single instruction decides whether the run is worth anything. A repeat of
 the original mistake will reproduce the original number and look like
 confirmation.
 
-## Route: SysEx, no card crossing
+## Route: this one DOES need the volume loaded
 
-`s3ked`'s probes (`probes/calibrate.py`, `probes/measure.py`) set FILFRQ and the
-ENV2 depth directly. **This is the primary route.** The volume below is the
-fallback and the whole-pipeline check.
+**Correction to an earlier claim (s3ked, 2026-09-08).** I said the primary
+route was SysEx with no card crossing. That is wrong, and it conflicts with
+this document's own requirement two sections down.
+
+`s3ked`'s probes set *parameters on a resident program*. They cannot supply a
+sample. This measurement needs a **broadband source** — a sine tells you
+nothing about a filter — and the noise source `ENV2NZ.S3` lives in the volume.
+The resident material on that rig is pitched, MPC-sourced. So the SysEx route
+can set every field perfectly and still measure the wrong thing.
+
+**Therefore:** either the volume is loaded (a card crossing — Jan's call), or a
+broadband sample is already resident, which it is not.
+
+The SysEx route remains useful for one thing: **sweeping depth on an
+already-loaded volume**, which avoids a second crossing if more points are
+wanted after the first run.
 
 ## Material
 
@@ -77,6 +90,27 @@ swept corner **sits** rather than passing through.
 
 Base corner is ~4.3 octaves above 100 Hz and ~8 above 7.6 Hz, so the sweep has
 room to descend through both candidates.
+
+**Steps are dense where the answer is.** A first version stepped
+−4 −8 −12 −15 −19 −23 and jumped straight over the crossing: −15 is 136.9 Hz
+and −19 is 66.8 Hz, so **one step spanned the 100 Hz candidate** and the run
+could only ever have reported "somewhere between 67 and 137 Hz" — which does
+not distinguish 100 from 80 or 120, a weak answer about a constant stated to
+0.1 Hz. The crossing is now bracketed by **−16 (113.6 Hz)** and
+**−17 (95.0 Hz)**, under 20 Hz apart, for the price of two captures.
+
+**SUSTN2 must be read back on the machine and recorded beside every result.**
+§156 makes the shift a **product** — `octaves = 0.002612 x SUSTN2 x depth` — so
+this whole table is valid only at the sustain that actually landed. If the
+machine's SUSTN2 differs, every corner in the plot is wrong by a constant factor
+and **nothing in the output would show it.** The generator prints it (uniformly
+99 here) for exactly that comparison.
+
+*A near-miss worth keeping:* the first version of that readback printed byte
+`0x17` under a "SUSTN2" heading. The writer assigns
+`k[0x14..0x17] = attack, decay, sustain, release`, so `0x17` is RELSE2 — a real
+value under a wrong label, and the corner column computed from it would have
+been wrong with it.
 
 ## Procedure
 
@@ -106,9 +140,17 @@ room to descend through both candidates.
 - **A sine tells you nothing about a filter.** Broadband source only.
 - **Measure during ENV2's held sustain**, not its attack — a corner in motion
   is not a corner.
-- **Check the noise floor.** At deep settings the signal approaches it, and a
-  corner "measured" in the floor is not a measurement. The rig floor is
-  0.05 dB with a 0.3 dB threshold (§RIGNOISEFLOOR).
+- **Follow the corner with the analysis band; do not measure at a fixed high
+  frequency.** At a 95 Hz corner a 4-pole is ~81 dB down at 1 kHz, which is the
+  rig floor — a corner "found" up there is found in the noise. Measured around
+  the expected corner a broadband source still has full energy density and the
+  −3 dB point is a real feature. The generator prints a ±1.5-octave band per
+  step for this.
+- **Make the floor a PRECONDITION, not a trap** (s3ked). Predict the level in
+  the analysis band at each depth, compare against the rig floor
+  (0.05 dB, threshold 0.3 dB — §RIGNOISEFLOOR), and **drop any depth that
+  cannot clear it before running**, rather than discovering it afterwards.
+  Spend those captures where the answer is instead.
 
 ## Not established by this run
 
