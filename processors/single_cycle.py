@@ -60,7 +60,8 @@ import concurrent.futures
 from dataclasses import replace
 from typing import Optional, Tuple
 
-from models.common import SampleData, LoopType, Envelope
+from models.common import (SampleData, LoopType, Envelope,
+                           E4B_CUTOFF_MAX_HZ)
 from processors.resampler import _pcm_to_float, _float_to_pcm
 
 
@@ -346,7 +347,13 @@ def _neutralize_voice(v, keep_flt: bool, keep_lfo: bool, keep_amp: bool) -> None
     honouring the keep_* opt-outs (see module docstring)."""
     if not keep_flt:
         v.filter_type = _FILTER_TYPE_4PLP
-        v.filter_cutoff = 1.0
+        # WIDE OPEN, IN HERTZ. This read `1.0` -- a leftover from the old 0..1
+        # cutoff convention where 1.0 meant fully open. `filter_cutoff` has
+        # carried HERTZ since (default 20000.0), so 1.0 now means 1 Hz, and it
+        # was being set alongside a 4-pole lowpass: every --single-cycle preset
+        # shipped with its filter shut rather than neutral. The template is
+        # documented as neutral, and neutral for a lowpass is open.
+        v.filter_cutoff = E4B_CUTOFF_MAX_HZ
         v.filter_resonance = 0.0
         v.filter_env_cents = 0.0
         v.filter_keytrack = 0.0
