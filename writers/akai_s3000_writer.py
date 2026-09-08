@@ -748,7 +748,12 @@ def akai_env_bytes(env) -> tuple:
     _rate = getattr(env, 'release_rate_db_per_s', None)
     if _rate:
         _a, _b, _lo, _hi = _AK_RELSE1_RATE
-        r = int(round(max(0, min(127, math.log(_rate / _a) / _b))))
+        # 99, NOT 127 -- RELSE1 is an 0..99 field. Its sibling DECAY1 clamps to
+        # 99 twenty lines up, and `_rate_law_value` (the seconds path for this
+        # very byte) clamps to 99 as well; only this carried-rate branch used
+        # 127. Since `b` is negative, a SLOW release overflows: 1.0 dB/s wrote
+        # 103 and 0.25 dB/s wrote 117, both out of range for the field.
+        r = int(round(max(0, min(99, math.log(_rate / _a) / _b))))
     else:
         span_rel_db = _AK_SUSTAIN_DB_PER_UNIT * sus
         r = _rate_law_value(getattr(env, 'release', 0.5) or 0.5,
