@@ -1203,6 +1203,18 @@ def _make_layer_segments(keymap_id: int, stereo: bool = False,
     s52 = bytearray(15); s52[0] = 60
     s53 = bytearray(15)
     s53[0] = 1;  s53[2] = 0x70;  s53[13] = 4
+    # THE TWO WIRES MUST CARRY THE SAME GAIN. `dB = (5 - byte) * 6`, so the
+    # 0x53 byte 4 above is 6 dB while an unset 0x52[13] is 0 -> 30 dB: a 24 dB
+    # mismatch between the upper and lower wire of the same layer.
+    #
+    # NO ROUND TRIP CAN CATCH THIS. `krz_parser` reads the program-scope gain
+    # from 0x53 only, so it reads back exactly what was intended and the two
+    # sides agree perfectly on a file the machine does not. The shipping
+    # template was corrected for this on 2026-09-07 and this path -- which
+    # generates the RE banks hardware measurements are taken FROM -- was
+    # missed, so a wrong level here silently biases the measurements that
+    # calibrate everything else.
+    s52[13] = s53[13]
     s53[14] = 0x90 if stereo else 0x00
     segs += _pack_segment(0x50, bytes(s50))
     segs += _pack_segment(0x51, bytes(s51))
