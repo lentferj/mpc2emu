@@ -1751,7 +1751,7 @@ take the same time-alone path today).
 **Status:** open. **Blocked on:** an E4XT rate sweep. Note `eosed` can send
 whole presets over SysEx, so this needs no card crossing.
 
-## AKAI program-level octave shift, stereo level and pan are dropped (OPEN 2026-09-08)
+## AKAI program pan: combination rule with zone pan unmeasured (OPEN 2026-09-08)
 
 Found by reading [ConvertWithMoss PR #400](https://github.com/git-moss/ConvertWithMoss/pull/400),
 which implements the same three fields on their side. Independent work — the
@@ -1854,6 +1854,31 @@ been caught once treating one machine's rendering as another's.
 **Status:** open. **Blocked on:** nothing for the read path. The write path is
 blocked on hardware that does not exist here, so it should stay neutral rather
 than adopt someone else's constants.
+
+## Two AKAI header fields are documented but do nothing on this machine (OPEN 2026-09-08)
+
+Both found during the 2026-09-08 bench session (s3ked, S3000XL):
+
+- **`OSHIFT` (0x15)** — the byte is stored and read back, and **the pitch does
+  not move**: 0.0 cents across −1/0/+1 on two independent detectors. The S1000
+  document calls it a ±2 octave shift; the S2800/S3000 document says
+  *"Range: 0. Description: Not used"*.
+- **`PLAYLO`/`PLAYHI` (0x13/0x14)** — narrowed to 60–62 and read back as
+  stored, **notes 48 and 72 sounded at full level**. The range does not gate.
+
+**Neither costs us anything today** — `OSHIFT` is now an INFO note rather than
+applied, and nothing consumes the play range. But the play range half means the
+gate that would naturally have been used to measure a key-range shift **does
+not gate**, so that question is open by a different route than expected.
+
+**The pattern is the point: two fields in one header that are documented as
+functional and are inert in silicon.** Before any further AKAI field is wired
+up from documentation alone, it should be shown to *do* something — the S1000
+and S3000-family documents disagree in at least these two places, and the
+S3000-family one has been right both times.
+
+**Status:** open, low priority. **Blocked on:** nothing; it is a caution, not a
+defect.
 
 ## AKAI IB-304F second filter board not supported (OPEN 2026-09-08)
 
