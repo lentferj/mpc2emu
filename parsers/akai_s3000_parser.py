@@ -37,7 +37,7 @@ import struct
 from pathlib import Path
 from typing import Optional
 
-from models.diagnostics import emit as _diag, WARNING as _W
+from models.diagnostics import emit as _diag, WARNING as _W, INFO as _I
 from models.common import (
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType,
     akai_filfrq_to_hz, hz_to_e4b_cutoff, AKAI_FILTER_LAW, AKAI_FILTER_OPEN,
@@ -821,6 +821,39 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
     that two programs naming the same sample load it once and reference the
     same Bank sample rather than duplicating it.
     """
+
+    # STEREO LEVEL (0x17) IS LINEAR IN AMPLITUDE -- MEASURED, not assumed.
+    #
+    # It does NOT follow the program-loudness law, which was the working
+    # hypothesis and would have been a large regression: that law is wrong by
+    # up to 20.6 dB at level 60. Measured on an S3000XL 2026-09-08 (s3ked),
+    # four points against 20*log10(x/99):
+    #
+    #     x=99  0.000 dB      x=80  -1.835 (law -1.851)
+    #     x=90 -0.876 (-0.828)  x=60  -4.426 (law -4.350)
+    #
+    # mean error 0.035 dB. So the gain is proportional to x. `x/99` and `x/100`
+    # cannot be separated -- both are ratios to the same reference and the
+    # normalisation cancels -- so 99 is used as the full-scale reference
+    # because that is the field's documented maximum.
+    #
+    # Applied to every zone because it is PROGRAM-scope: the manual calls it
+    # "the equivalent of a mixer's fader" for the whole program.
+    # LEVEL 0 IS NOT "40 dB DOWN", IT IS "NOT IN THE STEREO MIX". The manual:
+    # "by mixing them out of the stereo outputs by setting this parameter to
+    # 00, you remove them from the main mix" -- the program is then heard on an
+    # individual output instead, which is a ROUTING decision, not a level one.
+    #
+    # Converting that to -39.9 dB of attenuation would turn a program that is
+    # routed elsewhere into a nearly silent one. Convert it at full level and
+    # say so instead. Real material never does this -- 0x17 runs 10..99 across
+    # 5,124 library programs -- but a zero-filled or partial header does, which
+    # is the same trap as KGMUTE, where 0 is a real group and 255 is "off".
+    _slv = prog.get('stereo_level', 99)
+    if _slv == 0:
+        _stereo_level_db = 0.0
+    else:
+        _stereo_level_db = 20.0 * math.log10(_slv / 99.0) if _slv != 99 else 0.0
     from parsers.xpm_parser import _safe_name, _unique_sample_name
     if cache is None:
         cache = {}
@@ -1122,7 +1155,8 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
                 # VLOUD1 through the measured slope. Was a hardcoded 1.0,
                 # which dropped the source's level offset AND meant +1 dB
                 # rather than unity, since the field is dB (§AKAIZONELOUD).
-                volume=z.get('loudness', 0) * AKAI_VLOUD_DB_PER_UNIT,
+                volume=(z.get('loudness', 0) * AKAI_VLOUD_DB_PER_UNIT
+                        + _stereo_level_db),
                 # AKAI pan is -50..+50 with 0 centred; `ZoneMapping.pan` is
                 # -1.0..+1.0 with 0.0 centred. Both ends are hard, so the
                 # scale is /50. Measured over 54 654 zones on the disc corpus:
@@ -1135,36 +1169,38 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
             preset.voices.append(voice)
             _kg_of_voice.append(kg)
     if preset.voices:
-        # THREE PROGRAM-SCOPE FIELDS WE STILL DROP, now reported rather than
-        # silent. Pointed out by ConvertWithMoss PR #400, which applies all
-        # three on their side. Each is carried in `prog` and applied by
-        # nothing; the writer emits a fixed 0 / 99 / 0.
+        # OCTAVE SHIFT IS INERT ON S3000-FAMILY HARDWARE -- MEASURED, so it is
+        # dropped deliberately and applying it would be a defect.
         #
-        # They are NOT applied here because each needs one bench measurement
-        # first -- the octave shift's SIGN, and whether stereo level and pan
-        # reuse the loudness and constant-power laws we already measured. A
-        # wrong sign or a borrowed law is worse than an honest drop. Corpus
-        # prevalence over 10,933 library programs decides which matter:
-        # stereo level 12.3%, pan 0.8%, octave shift 0.3%.
+        # The two AKAI documents disagree: the S1000 one calls offset 21 "play
+        # octave (keyboard) shift (+/-2)", the S2800/S3000 one says "Range: 0.
+        # Description: Not used". The S3000-family document is right for this
+        # machine. Measured on an S3000XL 2026-09-08 (s3ked): the byte is
+        # accepted and stored -- written 0/+1/-1, read back 0/1/255 -- and the
+        # pitch does not move. Two independent detectors, f0 131.26 Hz and
+        # spectral peak 131.54 for all three settings, 0.0 cents apart.
+        #
+        # So a converter that HONOURED this field would introduce a pitch error
+        # the hardware does not produce. An earlier version of this code told
+        # the user to transpose by hand, which was exactly that advice.
         _oct = prog.get('octave_shift', 0) or 0
         if _oct:
-            _diag(_W, 'AKAI_OCTAVE_SHIFT_DROPPED',
-                  f"program transposes by {_oct:+d} octave(s) and that shift "
-                  f"is not carried, so this converts {abs(_oct)} octave(s) "
-                  f"away from the source pitch",
-                  subject=prog['name'], content_lost=True,
-                  detail={'octave_shift': _oct},
-                  remedy="Transpose the converted preset by "
-                         f"{_oct * 12:+d} semitones.")
-        _slv = prog.get('stereo_level', 99)
-        if _slv != 99:
-            _diag(_W, 'AKAI_STEREO_LEVEL_DROPPED',
-                  f"program sits at stereo level {_slv} of 99 and that level "
-                  f"is not carried, so this converts LOUDER than the source",
+            _diag(_I, 'AKAI_OCTAVE_SHIFT_INERT',
+                  f"program sets octave shift {_oct:+d}, which is INERT on "
+                  f"S3000-family hardware (measured: the byte is stored and "
+                  f"the pitch does not move) -- correctly ignored, no action "
+                  f"needed",
                   subject=prog['name'], content_lost=False,
-                  detail={'stereo_level': _slv},
-                  remedy="Reduce the converted preset's level until the "
-                         "stereo-level law is measured.")
+                  detail={'octave_shift': _oct})
+        if prog.get('stereo_level', 99) == 0:
+            _diag(_W, 'AKAI_STEREO_LEVEL_ZERO',
+                  "program is set to stereo level 0, which takes it OUT of the "
+                  "stereo mix and onto an individual output -- a routing "
+                  "choice, not a level one. Converted at full level rather "
+                  "than silenced",
+                  subject=prog['name'], content_lost=False,
+                  detail={'stereo_level': 0,
+                          'individual_output': prog.get('output')})
         _ppan = prog.get('pan', 0) or 0
         if _ppan:
             _diag(_W, 'AKAI_PROGRAM_PAN_DROPPED',
