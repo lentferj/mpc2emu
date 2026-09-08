@@ -29764,16 +29764,35 @@ a program routed elsewhere would convert to near-silence. It converts at full
 level with a warning instead. Real material never sets it (0x17 runs 10–99 over
 5,124 programs); a zero-filled header does, which is KGMUTE's trap again.
 
-**The law is bounded, and the bound is not cosmetic.** The sweep stopped at 60
-on a stated guard — level 0 looks exactly like a broken rig — so nothing below
-that is measured. **1.76 % of library programs (90 of 5,124) sit below 60**,
-down to 10, where the law extrapolates to **−19.91 dB** against −4.35 dB at the
-fitted floor: a 15.6 dB extrapolation on real material.
+**Measured across 10..99 — the whole range real material uses.** The first
+sweep covered 60..99 and stopped on a stated guard (level 0 looks exactly like
+a broken rig). That bound mattered: **1.76 % of library programs sit below 60**,
+down to 10. Rather than leave a caveat, s3ked swept the rest:
 
-It is **extrapolated rather than clamped**, for this project's own reason
-(`_rate_law_value`): clamping maps everything outside the window onto one
-number, producing a **plateau**, and a quieter program converting to the same
-level as a louder one destroys ordering. The extrapolation is reported instead.
+| x | measured | `20·log10(x/99)` | residual |
+|---|---|---|---|
+| 60 | −4.431 | −4.350 | −0.081 |
+| 40 | −7.954 | −7.872 | −0.082 |
+| 20 | −14.073 | −13.892 | −0.181 |
+| 10 | −20.157 | −19.913 | −0.244 |
+
+**Proportionality holds to 0.244 dB across the field.** Nothing is extrapolated
+any more; the below-range diagnostic survives only for 1–9, expressible but
+never observed.
+
+**The residuals are structured and are deliberately NOT modelled.** They grow
+monotonically as x falls, and a single offset — `(x−0.38)/(99−0.38)` — cuts the
+maximum error to **0.060 dB**. That establishes *that* pure proportionality is
+not the exact law, **not what the exact law is**: one free parameter against
+nine points with no mechanism. 0.244 dB is inaudible, and an unexplained
+constant is precisely how `AKAI_ENV2_SWEEP_FLOOR_HZ` entered this codebase.
+
+**And the success criterion nearly hid the structure.** The prediction was
+filed in advance as *"mean |error| under 0.2 dB"* and passed at 0.095 — while
+the residuals were monotonic the whole time. **A mean of absolute residuals
+destroys the sign structure that reveals a systematic term, so it can only ever
+confirm.** Filing a falsifier first does not help if the falsifier cannot fail;
+the criterion belonged on the *signed* residuals against x.
 
 **Why level 0 cannot be settled on that bench, recorded so nobody spends a
 session on it:** the rig captures the **stereo pair only** and individual
