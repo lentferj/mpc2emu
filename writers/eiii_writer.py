@@ -513,8 +513,30 @@ def _write_zone(data: bytearray, offset: int, zone: ZoneMapping, voice: VoiceLay
         # The model states cents; EIII's byte is a 0..127 depth with no
         # measurement behind it, so the nominal span is the inverse of what
         # `eiii_parser` used on the way in. Named, not silent.
+        # A NEGATIVE DEPTH IS NOT REPRESENTABLE AND MUST NOT BE INVERTED.
+        # This byte is an UNSIGNED 0..127 depth, so a filter envelope that
+        # should CLOSE the corner has no encoding here. `abs()` turned it into
+        # the positive depth of the same size, which does not approximate it --
+        # it sweeps the corner the wrong way, and then writes the envelope
+        # because the amount is non-zero. Clamping to 0 (the earlier behaviour)
+        # is the honest answer: the envelope is dropped rather than reversed,
+        # and `if env_amount:` below already skips writing it.
+        #
+        # Negative depths reach here from XPM, SFZ and KRZ sources, so this is
+        # ordinary material. Reported rather than silent.
+        _fec = voice.filter_env_cents or 0.0
+        if _fec < 0:
+            _diag(_W, 'EIII_NEGATIVE_FILTER_ENV',
+                  f"a downward filter envelope ({_fec:.0f} cents) cannot be "
+                  f"written: this device's envelope-depth byte is unsigned, "
+                  f"so the envelope was dropped rather than reversed",
+                  content_lost=True,
+                  detail={'filter_env_cents': _fec},
+                  remedy="Invert the filter envelope's shape at the source if "
+                         "a downward sweep is required.")
+            _fec = 0.0
         env_amount = max(0, min(127, int(round(
-            abs(voice.filter_env_cents) / FILTER_ENV_FULL_CENTS * 127))))
+            _fec / FILTER_ENV_FULL_CENTS * 127))))
         data[offset + ZONE_VCF_ENVELOPE_AMOUNT] = env_amount
         if env_amount:
             _write_envelope(data, offset + ZONE_VCF_ENVELOPE, voice.filter_env)
