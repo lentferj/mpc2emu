@@ -1928,7 +1928,29 @@ The claim got smaller and the case got better.
 tone and ENV3 into the model would let that 18.7 % survive into E4B and KRZ,
 where it can be rendered.
 
-**The WRITE path still needs the laws**, and those need the board *in circuit*.
+**The enable question is ANSWERED (2026-09-08): `LSI2_ON = 0` is an exact
+bypass** — `FIL2FR` swept 20→99 with the enable off gives a **0.00 dB span** on
+level and brightness, against 38 dB with it on. Our zero-filled programs are
+unaffected, everything on the test card still means what it meant, and prior
+baselines stand.
+
+**The WRITE path still needs the laws**, and two sweeps now gate it:
+
+1. **`FLT2GAIN` — the more valuable one.** Enabling filter 2 costs **6.04 dB
+   even fully open** (`FIL2FR` 99, `FLT2GAIN` 0 which the panel shows as
+   +0 dB), with brightness identical either way, so it is level not tone. A
+   4-pole conversion therefore arrives 6 dB quiet unless compensated — and
+   whether the compensation belongs in `FLT2GAIN` or the zone level depends on
+   whether 0 is simply not unity, or the filter has real insertion loss.
+2. **`FLT2MODE` verification**, reading the field back at each setting: the
+   enum is currently a panel photo plus a corpus distribution, which is two
+   weak sources agreeing rather than a measurement.
+
+**One open oddity, deliberately not modelled:** brightness is non-monotonic at
+the dark end (`FIL2FR` 20 reads 13.7 dB brighter than 40, orderly from 40 up).
+Candidates are resonance at a low corner, `FLT2MODE = 0` not being LP, or — my
+hypothesis — the corner falling below the whole analysis band, where the ratio
+compares two stopband regions and stops describing the filter.
 The write policy is unchanged and is settled by a fact, not a preference:
 **nothing on the wire distinguishes a fitted machine from an unfitted one**, and
 `LSI2_ON` cannot detect the board — it reads back 1 with no board present. So
