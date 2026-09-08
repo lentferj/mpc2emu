@@ -978,7 +978,16 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
                         # that sweeps it up, which is a different patch.
                         cur.filter_env_cents = _k2_depth_cents(_d)
                     elif _src == _K2_CS_ATTACK_VEL:
-                        cur.velocity_to_filter_cents = _k2_depth_cents(_d)
+                        # ACCUMULATE, like the VelTrk branch forty lines up,
+                        # and for the reason stated there: "a program may carry
+                        # both, and they sum on the machine". That branch does
+                        # `+=`; this one assigned, and it runs SECOND, so a
+                        # layer carrying both VelTrk and AttVel silently lost
+                        # the VelTrk contribution entirely.
+                        cur.velocity_to_filter_cents += _k2_depth_cents(_d)
+                        # The floor is a property of THIS slot's range (MinDpt
+                        # at zero velocity), not a summed quantity, so it is
+                        # still assigned. Only the depth sums.
                         cur.velocity_to_filter_min_cents = _k2_depth_cents(_f)
                     elif _src == _K2_CS_LFO1:
                         cur.lfo1_to_filter = _amt
