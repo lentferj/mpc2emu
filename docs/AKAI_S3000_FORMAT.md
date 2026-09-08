@@ -659,6 +659,57 @@ data, then **four velocity zones**.
 | `14-17` | filter attack / decay / sustain / release |
 | `1e` | velocity-zone crossfade (0/1) |
 
+### The IB-304F second filter board — keygroup offsets 168–190
+
+**S3000 keygroups only.** An S1000 keygroup is 150 bytes, so these offsets do
+not exist there at all.
+
+Twenty-three fields, from `s3ked`'s parameter table. The **board** column is
+whether the field declares the IB-304F as required — and the split is
+informative, because the eight that do not are why envelope-3 scaling could be
+measured on a machine that never had the board.
+
+| offset | field | board | what it is |
+|---|---|---|---|
+| 168 | `LSI2_ON` | — | filter 2 + tone enable |
+| 169 | `FLT2GAIN` | IB304F | the panel's `attenuator` |
+| 170 | `FLT2MODE` | IB304F | **LP / BP / HP / EQ** |
+| 171 | `FLT2Q` | IB304F | resonance, 0–31 |
+| 172 | `TONEFREQ` | IB304F | tone centre frequency |
+| 173 | `TONESLOP` | IB304F | tone slope (spectral tilt) |
+| 174–176 | `MODVFLT2_1..3` | — | filter-2 modulation amounts |
+| 177 | `FIL2FR` | IB304F | filter 2 frequency |
+| 178 | `K_FRQ2` | IB304F | filter 2 key follow |
+| 179–186 | `ENV3R1/L1 … R4/L4` | IB304F | envelope 3, eight stages |
+| 187–190 | `V_ATT3` `V_REL3` `O_REL3` `K_DAR3` | — | envelope-3 modulation |
+
+**`LSI2_ON` cannot detect the board.** It accepts a write and reads back 1 with
+no board fitted, so a tool must be *told* the board is present — **nothing on
+the wire will say whether that claim is true.** The audio response is the only
+detector.
+
+**Corpus, 4,436 S3000 programs / 27,028 keygroups across 21 library discs:**
+
+- **829 programs (18.7 %) contain at least one keygroup with `LSI2_ON = 1`** —
+  2,457 keygroups in total. That material was authored for board-fitted
+  machines and **we currently drop all of it.**
+- Where **enabled**, `FLT2MODE` distributes across all four modes:
+  **LP 64.0 %, EQ 19.1 %, HP 15.2 %, BP 1.6 %.**
+- Where **disabled**, `FLT2MODE` is 0 in 99.5 % of keygroups.
+
+**That correlation is the alignment proof, and a histogram alone could not give
+it:** the mode field carries meaning *only* where the enable is set. A
+misaligned read would not reproduce that.
+
+> **How the first attempt was caught.** Scanning with a fixed `0xC0` stride
+> over *all* programs put **16,106 values out of range** — `LSI2_ON` is 0–1 and
+> read 0–255. The cause was S1000 programs, whose 150-byte keygroup does not
+> reach these offsets, so the read ran past the block. Restricting to S3000
+> programs dropped out-of-range to **20 of 27,028 (0.07 %)**. This is the mirror
+> of the error `corpus_scan_env2.py` already documents, and the same rule
+> caught it: *a distribution is not evidence that a read is aligned; an
+> out-of-range value is evidence that it is not.*
+
 Velocity zones sit at `0x22`, `0x3a`, `0x52`, `0x6a` — a **uniform 24-byte
 stride**: a 12-byte sample name then 12 bytes of zone parameters.
 

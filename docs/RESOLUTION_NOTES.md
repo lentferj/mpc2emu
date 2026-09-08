@@ -29853,16 +29853,27 @@ to apply by hand), `AKAI_STEREO_LEVEL_DROPPED`, `AKAI_PROGRAM_PAN_DROPPED`.
 ## §BOARDFITTED — the IB-304F went in, and every audio measurement became undated (2026-09-08)
 
 **The bench changed.** Jan installed the IB-304F second filter board on
-2026-09-08. Nothing measured before that date became *wrong*; all of it became
-**undated with respect to the hardware** — a different and quieter problem, and
-§188's third class arriving live rather than as an example.
+2026-09-08.
 
-**At risk, in the order it should be re-checked** (s3ked's ranking, and their
+**CORRECTED, and the correction is Jan's.** A first version of this section
+said every audio measurement became "undated with respect to the hardware".
+That is an overclaim. **The board being *fitted* is not the board being *in
+circuit*** — there is an enable, and with it OFF the signal path is the one
+every prior measurement was taken through. So prior measurements are **not
+obsolete; they need companions for the board-fitted case.**
+
+What is actually true is narrower and more useful: **provenance is now
+conditional on the enable state, which has to be read rather than assumed.** A
+measurement without its enable state recorded is the thing that has lost
+meaning — not the measurement itself.
+
+**What to re-check for the enable-ON case, in order** (s3ked's ranking, and their
 reason is right — everything else is quoted against the first):
 
 1. **The rig noise floor** (§RIGNOISEFLOOR: flat to 11 Hz, 60–80 dB headroom
-   below 44 Hz). **The board sits in the signal path**, and every SNR argument
-   in this file is quoted against that table.
+   below 44 Hz). The board sits in the signal path, and every SNR argument in
+   this file is quoted against that table — so it needs a second reading with
+   the filter enabled, not a replacement for the first.
 2. **The `STEREO` amplitude law** (10..99, 0.244 dB). Probably post-filter and
    unaffected — but *probably* is not a measurement, and re-checking three
    points is cheap where re-sweeping nine is not.
