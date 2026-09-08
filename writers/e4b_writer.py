@@ -1049,7 +1049,23 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
     #
     # 4-pole is exactly twice the dB at the same byte, measured at every point,
     # so `poles` covers the whole lowpass family from one table.
-    _poles = 4 if voice.filter_type in (3, 4, 5) else 2
+    # POLES COME FROM THE BYTE WE ARE WRITING, NOT THE SOURCE TYPE. The
+    # resonance law is a property of the E4XT filter this voice will actually
+    # BE -- vpar[58] -- and several source types collapse onto one destination.
+    # Deriving it from `voice.filter_type` disagreed with `e4b_parser`, which
+    # reads poles back from `filter_byte in (0x00, 0x02)`:
+    #
+    #   type 3, 4, 5      -> 0x00 / 0x02   both say 4   agree
+    #   type 0, 23, 24, 25 -> 0x00          writer 2, parser 4   DISAGREE
+    #
+    # and types 23-25 come straight from real MPC programs. The two do not
+    # cancel: `e4xt_resonance_byte` scales by poles/2, so writing at 2 and
+    # reading at 4 doubles the resonance every repack -- measured, 0.500 became
+    # 0.998 in ONE pass and saturated at 1.000 by the second.
+    #
+    # Mirroring the parser's own test makes them inverses by construction
+    # rather than by two lists agreeing.
+    _poles = 4 if vpar[58] in (0x00, 0x02) else 2
     vpar[61] = e4xt_resonance_byte(voice.filter_resonance, _poles)
     # Band-stop (15-18) AND band-boost (19-22) both map to Swept EQ 1-oct
     # (vpar[58]=0x20), where vpar[61] is GAIN, not Q — they are the SAME parametric
