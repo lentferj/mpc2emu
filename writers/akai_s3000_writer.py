@@ -1726,7 +1726,14 @@ def _mixdown(pcm: bytes, channels: int) -> bytes:
 #: **Settled the same morning (s3ked §50).** They measured it:
 #: `LSI2_ON` reads 0 at factory and `FIL2FR` produces no response swept 20..99
 #: with `LSI2_ON` at either value, so the board is genuinely not fitted on that
-#: machine. And its function does not cover these fields — the IB304F adds
+#: machine.
+#:
+#: **DATED 2026-08-12 — THE BOARD WAS FITTED ON 2026-09-08 and the same sweep
+#: now responds across 38 dB with `LSI2_ON` at 1, and not at all with it at 0
+#: (an exact bypass, 0.00 dB span).** The paragraph above is not wrong; it
+#: described the bench as it then was, and the A/B it enabled is what proved
+#: the original null was the board's absence rather than a method failure.
+#: Read it as history, not as the current machine. And its function does not cover these fields — the IB304F adds
 #: direct-to-disk recording, reverb, a digital EQ and a second filter, not
 #: auto-pan. So (2) now has a documentary *refutation* rather than merely no
 #: support, and why the remaining fields are inert is open again. `LSI2_ON` is
