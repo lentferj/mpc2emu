@@ -1751,6 +1751,28 @@ take the same time-alone path today).
 **Status:** open. **Blocked on:** an E4XT rate sweep. Note `eosed` can send
 whole presets over SysEx, so this needs no card crossing.
 
+## E4B zero-sustain release is inferred, not measured (OPEN 2026-09-08)
+
+At `env_sustain = 0` the release span is zero and `_env_span_rate(0, t)`
+returned the INSTANT rate for any requested time — every release a dead cut,
+audible whenever a key is lifted during the decay of a percussive one-shot.
+Fixed 2026-09-08 by using the full span as the reference distance, plus the
+minimum-audible floor the decay already carried.
+
+**The full-span reference is a model choice, not a measured law.** It is
+strictly better than a dead cut and it has never been in front of the machine.
+
+**Status:** open, **material ready**. **Blocked on:** bench time only — no card
+crossing needed, `eosed` sends whole presets over SysEx.
+Procedure: `docs/re_procedures/e4xt_zero_sustain_release.md`.
+Bank: `~/temp/HWCHK_REL.E4B` (generator
+`tests/re_banks/build_hwcheck_e4xt_release.py`), six presets including a
+pre-fix BEFORE case with `Rls1` forced to 0.
+
+**Note the failure mode of the probe itself:** note-off must land INSIDE the
+decay. A note held to its own silence measures nothing and reports a clean pass,
+which is the same reason the defect went unnoticed.
+
 ## AKAI ENV2 downward-sweep floor is an unmeasured bound (OPEN 2026-09-08)
 
 `AKAI_ENV2_SWEEP_FLOOR_HZ = 100.0` bounds how far down a negative ENV2 depth is
