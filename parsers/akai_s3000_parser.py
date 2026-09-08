@@ -389,9 +389,25 @@ def _env2_amount(depth, sustn2, filfrq, s3000):
     _lvl = AKAI_ENV2_FULL_LEVEL
     if depth < 0:
         # Downward sweep. The 7.86 kHz ceiling is an upper bound and does not
-        # apply; the floor is the machine's own lowest corner.
-        octaves = -min(AKAI_ENV2_OCT_PER_UNIT * _lvl * abs(depth),
-                       math.log2(max(base_hz, 1.0) / AKAI_FILTER_FLOOR_HZ))
+        # apply; the floor bounds how far down the sweep is modelled to reach.
+        #
+        # THE HEADROOM MUST NOT GO NEGATIVE. `akai_filfrq_to_hz` is deliberately
+        # unclamped below this floor (see AKAI_ENV2_SWEEP_FLOOR_HZ -- the corner
+        # keeps descending to ~7.6 Hz), so for any corner UNDER the floor the
+        # log2 term is negative, `min` selects it, and the leading minus turns a
+        # downward sweep INTO AN UPWARD ONE. Measured before the fix: FILFRQ 20
+        # with depth -20 returned +1951 cents, sweeping up where the S3000XL
+        # sweeps down, with the sign flipping at FILFRQ 36 (~103 Hz).
+        #
+        # Clamped at zero rather than re-based, deliberately. The floor constant
+        # is documented as almost certainly a measurement artefact, so a corner
+        # below it has no *modelled* downward headroom and contributes none --
+        # an under-sweep, which is wrong by degree. Re-basing on the corner
+        # law's own bottom would deepen every sweep that this bound currently
+        # limits, which is a behaviour change no measurement supports yet.
+        # See TODO 'AKAI ENV2 downward floor'.
+        _headroom = max(0.0, math.log2(max(base_hz, 1.0) / AKAI_FILTER_FLOOR_HZ))
+        octaves = -min(AKAI_ENV2_OCT_PER_UNIT * _lvl * abs(depth), _headroom)
     else:
         target_hz = akai_env2_target_hz(base_hz, _lvl, depth)
         octaves = math.log2(max(target_hz, 1e-6) / base_hz)

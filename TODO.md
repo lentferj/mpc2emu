@@ -1719,6 +1719,30 @@ Validated in both directions, which is what the earlier attempt failed:
 `tests/test_trim_slow_attack.py` pins both directions; reverting the fix fails
 two of its three tests.
 
+## AKAI ENV2 downward-sweep floor is an unmeasured bound (OPEN 2026-09-08)
+
+`AKAI_ENV2_SWEEP_FLOOR_HZ = 100.0` bounds how far down a negative ENV2 depth is
+modelled to sweep, and its own docstring says it is **almost certainly an
+artefact** of a normalisation that put the 0 dB reference on the slope once the
+corner dropped below the measurement band.
+
+Meanwhile `akai_filfrq_to_hz` is deliberately unclamped and descends to ~7.6 Hz,
+so the two disagree by nearly four octaves. That disagreement produced a
+sign inversion (fixed 2026-09-08: the headroom went negative and swept corners
+below 100 Hz *upward*), and the fix clamps the headroom at zero — meaning
+**every corner below 100 Hz now gets no downward sweep at all**, which is an
+under-sweep rather than a wrong direction.
+
+**What a real fix needs:** the actual lowest corner an ENV2 downward sweep
+reaches on the S3000XL. The obvious candidate is the corner law's own bottom
+(~7.6 Hz), which would deepen every sweep the bound currently limits — a
+behaviour change across a large share of the corpus, so it needs measuring
+rather than assuming.
+
+**Status:** open. **Blocked on:** an S3000XL sweep — set a low FILFRQ, a full
+negative ENV2 depth, and find where the corner actually lands. `s3ked`'s
+calibration kit already drives this parameter.
+
 ## Input-parser feature-parity gaps found via ConvertWithMoss 19.1.0 (ENHANCEMENT, OPEN 2026-07-25)
 
 Cross-referenced ConvertWithMoss's [19.1.0 release notes](https://github.com/git-moss/ConvertWithMoss/releases/tag/19.1.0)
