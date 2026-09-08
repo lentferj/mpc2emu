@@ -1156,10 +1156,34 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
     # So when the reader knew its own rate law it hands us the rate, and the
     # rate goes straight to a byte. Sources that genuinely specify a duration
     # (MPC, XPM) carry `None` and take the span path exactly as before.
+    #
+    # A ZERO SUSTAIN LEAVES NO SPAN, AND A SPAN OF ZERO ENCODES AS RATE 0 --
+    # which is the INSTANT rate, exactly the failure the decay block above was
+    # floored for. At sustain 0 the decay span is the whole span, so the
+    # complement is 0 and `_env_span_rate` returns 0 for ANY requested time:
+    # a 5 s release and a 5 ms release both become a dead cut.
+    #
+    # It is audible whenever a key is lifted DURING the decay of a percussive
+    # one-shot -- the envelope leaves the decay for the release segment from
+    # wherever it currently sits, and a rate-0 release drops it to silence in
+    # one step. (Held to the end of its own decay the voice is already silent
+    # and nothing is lost, which is why this hides in the common case.)
+    #
+    # The span is only a REFERENCE DISTANCE for turning seconds into a slew
+    # rate. When sustain is 0 the note can be released from anywhere up to full
+    # level, so the full span is the honest reference -- and it makes the rate
+    # honour the requested seconds instead of discarding them. INFERRED from
+    # the segment model, like the rest of this block; NOT hardware-confirmed.
     rel_span = max(0.0, _ENV_FULL_SPAN_DB - decay_span)
+    if rel_span <= 0.0:
+        rel_span = _ENV_FULL_SPAN_DB
     _rel_rate = getattr(voice.amp_env, 'release_rate_db_per_s', None)
     pzt[8] = (_env_db_per_s_to_rate(_rel_rate) if _rel_rate
               else _env_span_rate(rel_span, voice.env_release))
+    # And the same floor the decay carries: a release that was ASKED FOR must
+    # not encode to the instant rate.
+    if pzt[8] < E4B_MIN_AUDIBLE_DECAY_RATE and voice.env_release > 0.0:
+        pzt[8] = E4B_MIN_AUDIBLE_DECAY_RATE
     pzt[9] = _fenv_level(0.0)
     pzt[10] = 0;                                     pzt[11] = _fenv_level(0.0)   # Rls2 stay 0
     # Filter-envelope SHAPE — always written (§O, 2026-06-13).  Its depth/sign is
