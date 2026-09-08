@@ -608,12 +608,38 @@ S1000:  0000-0095  program common (150)   0096-012b  keygroup 1   012c-01c1  key
 | `0f` | MIDI program number |
 | `10` | MIDI channel (0–15, `0xff` = omni) |
 | `11` | polyphony (1–32; 1–16 on S1000) |
-| `13` | play range low (24–127) |
-| `14` | play range high |
-| `15` | octave shift (±2) |
-| `17` | stereo level |
-| `18` | pan |
-| `19` | loudness |
+| `13` | play range low (24–127) — `PLAYLO` |
+| `14` | play range high — `PLAYHI` |
+| `15` | octave shift (±2) — `OSHIFT` |
+| `16` | individual output assignment — `OUTPUT`, **`0xff` = off** |
+| `17` | stereo level (0–99, 99 = full) — `STEREO` |
+| `18` | pan (−50…+50, signed) — `PANPOS` |
+| `19` | loudness — `PRLOUD` |
+
+**`13`–`19` are one contiguous run and all seven are confirmed**, by three
+independent routes that agree 1:1:
+
+1. The **S1000 structure document** — `PRIDENT`, `KGRP1@`, `PRNAME`, then
+   `PRGNUM PMCHAN POLYPH PRIORT PLAYLO PLAYHI OSHIFT OUTPUT STEREO PANPOS
+   PRLOUD`; summing the field sizes puts `STEREO` at 23 (`0x17`) and `PANPOS`
+   at 24 (`0x18`).
+2. **s3ked's own field table**, at the same seven positions.
+3. **A prediction tested against 5,124 library programs.** If the run is
+   contiguous then `0x16` must be `OUTPUT` with `0xff` = off — and 3,188 of
+   5,124 read exactly `0xff`, with `0x17` never exceeding 99 and `0x18` reading
+   as a signed ±50. The run is anchored at both ends by fields confirmed
+   separately: the key range, and `PRLOUD`, whose dB law was fitted on hardware.
+
+**These same three fields also exist in the MULTI part**, at multipart 22/23/24
+— the identical positions. The multi part mirrors this region. The manual gives
+the precedence: *"stereo level, pan, output and effects assignment are MULTI
+parameters, these are not accessible in EDIT MULTI"* — the part's copies win in
+MULTI, the program's own apply in SINGLE. **Anything measuring these must do so
+in SINGLE**, or it measures the wrong copy.
+
+**`OSHIFT`, `STEREO` and `PANPOS` are read but not yet applied** — see
+`docs/re_procedures/akai_program_scope_laws.md`. Each needs one law measured
+first; all three are reported as dropped in the meantime.
 | `2a` | **number of keygroups (1–99)** |
 | `41-42` | tune offset (signed) |
 
