@@ -1902,8 +1902,15 @@ ENV3 rows, so our writer cannot address them and our reader silently drops them.
 `docs/AKAI_S3000_FORMAT.md` — 23 fields at keygroup 168–190, from s3ked's
 table, with the board-requirement split — and corpus-validated:
 
-- **829 of 4,436 S3000 programs (18.7 %) carry at least one keygroup with
-  `LSI2_ON = 1`.** This is systematic, not a footnote, and we drop all of it.
+- **831 of 4,436 S3000 programs (18.7 %) have the second filter ENABLED**, but
+  **only 333 (7.5 %) have one that is audibly doing anything** — 60 % of enabled
+  keygroups are LP at frequency 99 with resonance 0 and no modulation, i.e. a
+  pass-through. **7.5 % is the figure to plan against**; quoting 18.7 % as lost
+  material overstates it by 2.5×. (Jan's question: "do those programs also have
+  other parameters set, so filter 2 actually gets to work?")
+- The 983 active keygroups are deliberately configured — most with three to six
+  non-default parameters — and cluster in **EQ (469) and HP (374)**, the modes
+  audible regardless of corner frequency.
 - Where enabled, `FLT2MODE` spreads **LP 64.0 %, EQ 19.1 %, HP 15.2 %,
   BP 1.6 %**; where disabled it is 0 in 99.5 %. That correlation is what proves
   the read is aligned.

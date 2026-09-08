@@ -709,11 +709,26 @@ detector.
 
 **Corpus, 4,436 S3000 programs / 27,028 keygroups across 21 library discs:**
 
-- **829 programs (18.7 %) contain at least one keygroup with `LSI2_ON = 1`** —
-  2,457 keygroups in total. That material was authored for board-fitted
-  machines and **we currently drop all of it.**
-- Where **enabled**, `FLT2MODE` distributes across all four modes:
-  **LP 64.0 %, EQ 19.1 %, HP 15.2 %, BP 1.6 %.**
+- **831 programs (18.7 %) contain at least one keygroup with `LSI2_ON = 1`** —
+  2,457 keygroups in total.
+- **THE ENABLE IS NOT THE EFFECT. Only 333 programs (7.5 %) have a second
+  filter that is audibly doing anything**, and that is the figure to quote.
+  **60 % of enabled keygroups are inert** — mode LP at frequency 99, resonance
+  0, no modulation, key-follow or tone: the enable is on and the filter is a
+  pass-through. An earlier version of this section gave 18.7 % as the material
+  we lose, which overstates it by 2.5×.
+- The 983 active keygroups are **deliberately configured, not stray bytes**:
+  most carry three to six non-default parameters at once (counts by number of
+  parameters set — 1: 62, 2: 126, 3: 212, 4: 285, 5: 185, 6: 113).
+- What makes them active: frequency below 99 (37.6 %), mode ≠ LP (36.0 %),
+  resonance (27.6 %), modulation (21.3 %), tone (20.4 %), key-follow (7.4 %).
+- Among the **active** ones the modes invert: **EQ 469, HP 374**, against LP 99
+  and BP 39 — the two modes that change the sound *regardless* of corner
+  frequency, which is exactly what should dominate once a pass-through LP is
+  excluded.
+- Where **enabled** (active or not), `FLT2MODE` distributes across all four
+  modes: **LP 64.0 %, EQ 19.1 %, HP 15.2 %, BP 1.6 %** — the LP majority being
+  mostly the inert pass-throughs.
 - Where **disabled**, `FLT2MODE` is 0 in 99.5 % of keygroups.
 
 **That correlation is the alignment proof, and a histogram alone could not give
