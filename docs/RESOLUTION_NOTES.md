@@ -313,6 +313,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§E4BZEROSUSRELEASE — a zero sustain encoded every release as an instant cut (2026-09-08)](#e4bzerosusrelease-a-zero-sustain-encoded-every-release-as-an-instant-cut-2026-09-08)
 - [§AKAIENV2FLOOR — where a downward ENV2 sweep actually stops (2026-09-08)](#akaienv2floor-where-a-downward-env2-sweep-actually-stops-2026-09-08)
 - [§AKAIIB304F — the second filter board, and the 4-pole slope we currently drop (2026-09-08)](#akaiib304f-the-second-filter-board-and-the-4-pole-slope-we-currently-drop-2026-09-08)
+- [§CWMPR400403 — checking two ConvertWithMoss PRs for derivation, and what they showed us (2026-09-08)](#cwmpr400403-checking-two-convertwithmoss-prs-for-derivation-and-what-they-showed-us-2026-09-08)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -29687,3 +29688,42 @@ FILTER 1, unfixable by any constant, and it made every AKAI program 0.31
 octaves dark. And test whether ENV3's depth is a **product with its own
 sustain** before fitting a single constant, because ENV2's is
 (`octaves = 0.002612 × SUSTN2 × depth`).
+
+## §CWMPR400403 — checking two ConvertWithMoss PRs for derivation, and what they showed us (2026-09-08)
+
+**Question asked:** were
+[PR #400](https://github.com/git-moss/ConvertWithMoss/pull/400) (AKAI octave
+shift / stereo level / pan) and
+[PR #403](https://github.com/git-moss/ConvertWithMoss/pull/403) (E-mu LFO,
+tremolo, velocity-to-cutoff) derived from this project?
+
+**Answer: no, and there is positive evidence of independence for both.**
+
+**PR #400** looked closest, because our writer carries the same three offsets
+under the same names. But the diff shows **the offsets were already in
+ConvertWithMoss** — the change renames their existing `mixOutputSelect` to
+`stereoLevel` and starts *applying* fields they already parsed. And there is
+nothing on our side to copy: we write all three as **fixed constants**. The
+shared vocabulary is the AKAI program header's own.
+
+**PR #403** covers ground we mostly do not occupy (no Emax LFO code, no EIII
+zone 37/38 handling, no EII writer). On the one real overlap — E4 velocity to
+cutoff — the diff scales by a raw `depth * 127` / `amount / 127.0`, while this
+project carries `VEL_FILTER_FULL_CENTS = 9120.0` from a measured 7.6 octaves.
+**It uses the fraction approach we explicitly abandoned** ("two different
+definitions of 1.0, neither of which the writers on the other side agreed
+with"). None of 9120, 0.9462, 1.838 or 2.08 appears anywhere in it.
+
+**Timing, since it is the one thing not reassuring on its face:** both PRs
+opened 2026-09-08T17:24Z, ~3.6 h after our AKAI push at 13:50Z. But #400
+reports testing against a commercial CD-ROM with a measured result (1,465 zones
+0.7 dB lower), which is not 3.6 hours of work on a codebase one would first
+have to find. Both are from a third party, not the maintainer, and both follow
+one pattern: fields their parser already read but never applied.
+
+**The useful direction was the reverse one.** Reading them found three AKAI
+program fields we parse and drop (octave shift, program pan) or never parse
+(stereo level), and the EIII zone offsets that made per-zone LFO expensive.
+Both recorded in `TODO.md`. **Their scaling constants deliberately do not
+transfer** — offsets are findings, scales are measurements, and we hold no EIII
+calibration.

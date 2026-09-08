@@ -1751,6 +1751,69 @@ take the same time-alone path today).
 **Status:** open. **Blocked on:** an E4XT rate sweep. Note `eosed` can send
 whole presets over SysEx, so this needs no card crossing.
 
+## AKAI program-level octave shift, stereo level and pan are dropped (OPEN 2026-09-08)
+
+Found by reading [ConvertWithMoss PR #400](https://github.com/git-moss/ConvertWithMoss/pull/400),
+which implements the same three fields on their side. Independent work — the
+offsets were already in their parser — but it points straight at three gaps of
+ours.
+
+| Field | Offset | Our state |
+|---|---|---|
+| Octave shift | `0x15` | **Parsed and never used.** `akai_s3000_parser.py:734` puts `octave_shift` in the program dict; nothing reads it. The writer emits a fixed `0`. |
+| Stereo level | `0x17` | **Not read at all.** The writer emits a fixed `99` (full). |
+| Program pan | `0x18` | **Parsed and never used** (`:742`). Only the per-zone pan at keygroup `0x12` survives; the program's own is dropped. |
+
+**Consequences, in order of audibility:**
+
+1. **Octave shift is a pitch error of up to two octaves.** It transposes the
+   whole program: a key plays what is mapped an octave below or above it, so
+   the key ranges move against the shift and the tuning with it. A program
+   using it converts to the wrong notes, not merely a wrong tone.
+2. **Stereo level is a level error.** A program authored below full level
+   converts too loud. CWM measured **1,465 zones 0.7 dB lower** on one
+   commercial CD-ROM once applied — small per zone, systematic across a bank.
+3. **Program pan is dropped**, so a program panned as a whole flattens to
+   whatever its zones say.
+
+All three are **program-scope**, so each lands on every voice — the same shape
+as `vel_loudness`, which sat unread until §KRZAMPVEL for the same reason.
+
+**Status:** open, no hardware needed to implement; the read path is the whole
+job and the fields are already located. **Worth doing with a corpus scan
+first**, as with the mute group: how many library programs actually set a
+non-default octave shift or stereo level decides whether this is a footnote or
+a systematic level error across every AKAI-sourced conversion.
+
+## EIII per-zone LFO, tremolo and velocity-to-cutoff are not decoded (OPEN 2026-09-08)
+
+Found by reading [ConvertWithMoss PR #403](https://github.com/git-moss/ConvertWithMoss/pull/403).
+It names **zone 37 for tremolo and zone 38 for the filter LFO**, which is more
+than our EIII format notes carry.
+
+`parsers/eiii_parser.py:54` records this as a deliberate scope decision —
+*"Per-zone LFO, key-tracking and velocity-to-cutoff are not decoded"* — and
+`writers/eiii_writer.py:503` writes the LFO shape byte as a flat `0`. So an
+EIII source's tremolo and filter LFO are lost on read, and nothing is written
+on the way out either.
+
+**What changes now:** the offsets were the expensive part and the PR supplies
+them, so this drops from "RE project" to "decode two zone bytes".
+
+**What does NOT transfer from that PR: its scaling.** It uses *"24 dB and 5,100
+cents at full"*, which are their figures, not measurements we hold — and this
+project has **no EIII hardware calibration at all** (`eiii_writer.py` says so
+where it deliberately leaves key-tracking and velocity-to-cutoff neutral rather
+than invent a conversion). Take the offsets, verify the scales, and do not
+adopt a constant because it is written down somewhere.
+
+**Not a gap:** Emax LFO-to-cutoff and the Emulator II write path, also in that
+PR. Emax is a *resampling model* here (`--vintage emax1`), not an input format,
+and there is no EII writer — nothing to be missing.
+
+**Status:** open. **Blocked on:** nothing for the read path; the write path
+wants an EIII calibration that does not exist yet.
+
 ## AKAI IB-304F second filter board not supported (OPEN 2026-09-08)
 
 The base S3000XL filter is **2-pole**; most sources we convert carry 4-pole,
