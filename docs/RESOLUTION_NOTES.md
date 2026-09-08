@@ -29855,12 +29855,24 @@ to apply by hand), `AKAI_STEREO_LEVEL_DROPPED`, `AKAI_PROGRAM_PAN_DROPPED`.
 **The bench changed.** Jan installed the IB-304F second filter board on
 2026-09-08.
 
-**CORRECTED, and the correction is Jan's.** A first version of this section
-said every audio measurement became "undated with respect to the hardware".
-That is an overclaim. **The board being *fitted* is not the board being *in
-circuit*** — there is an enable, and with it OFF the signal path is the one
-every prior measurement was taken through. So prior measurements are **not
-obsolete; they need companions for the board-fitted case.**
+**CORRECTED, and then MEASURED.** A first version of this section said every
+audio measurement became "undated with respect to the hardware". That was an
+overclaim — Jan's point, that the board being *fitted* is not the board being
+*in circuit*. s3ked then measured it, and the correction is now a result:
+
+> **`LSI2_ON = 0` is an EXACT bypass.** Sweeping `FIL2FR` 20→99 with the enable
+> off gives **+56.83 dB level and −1.42 dB brightness at every point — a span
+> of 0.00 dB on both metrics.** With the enable on, the same sweep spans
+> **38.0 dB of level**.
+>
+> **So every prior audio baseline stands unchanged**, our zero-filled programs
+> are unaffected, and everything already on the test card still means what it
+> meant. What the board adds is the need for **companion measurements for the
+> enabled case** — not replacements.
+>
+> It also proves §50's original null was **the board's absence, not a method
+> failure**, which the A/B establishes rather than assumes: same rig, same
+> fields, same sweep, only the hardware changed.
 
 What is actually true is narrower and more useful: **provenance is now
 conditional on the enable state, which has to be read rather than assumed.** A
@@ -29893,6 +29905,20 @@ not safe by default — 255 is OFF there and **0 is a real mute group**, so ever
 keygroup we authored inherited an active one from the buffer's zero fill. If
 enable-off does not bypass, every program on the test card is being filtered
 tonight in a way it was not yesterday.
+
+**ENABLING FILTER 2 COSTS 6.04 dB EVEN FULLY OPEN, and that is a writer
+problem.** At `FIL2FR` 99 the enabled path measures **+50.79 dB against
++56.83 bypassed**, with **identical brightness** (−1.42 both ways, i.e.
+spectrally transparent). `FLT2GAIN` was 0 throughout, which the panel displays
+as **+0 dB**. So either 0 is not unity gain, or the filter has insertion loss.
+
+**Consequence for any `--akai-ib304f` write path:** a program converted with
+filter 2 enabled and everything else at default is **6 dB quieter** than the
+same program bypassed. Using the second filter to obtain a 4-pole slope
+therefore requires a compensating gain, or every such conversion arrives quiet.
+Which of the two mechanisms it is decides whether the compensation belongs in
+`FLT2GAIN` or in the zone level — **that is one sweep of `FLT2GAIN` and has not
+been run.**
 
 **`LSI2_ON` cannot detect the board.** It accepts a write and reads back 1 with
 no board present (§50), so **the audio response is the detector, not the flag**
