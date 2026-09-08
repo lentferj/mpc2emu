@@ -151,4 +151,17 @@ def collect() -> Iterator[List[Diagnostic]]:
     try:
         yield sink
     finally:
-        _sinks().remove(sink)
+        # REMOVE BY IDENTITY. `list.remove` compares with `==`, and two sinks
+        # holding equal contents -- most commonly two EMPTY lists -- compare
+        # equal, so an inner `collect()` removed the OUTER sink instead of its
+        # own. After that every emit in the outer block routed into an exited
+        # list nobody reads, and the diagnostics vanished silently; if the two
+        # had diverged by then it raised ValueError instead.
+        #
+        # Nesting is a documented property of this contextmanager, so this is
+        # the ordinary case, not an exotic one.
+        _s = _sinks()
+        for _i in range(len(_s) - 1, -1, -1):
+            if _s[_i] is sink:
+                del _s[_i]
+                break
