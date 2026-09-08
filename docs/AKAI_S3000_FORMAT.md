@@ -702,6 +702,40 @@ page* is gated.
 | 179–186 | `ENV3R1/L1 … R4/L4` | **—** | envelope 3, eight stages — **not board-gated**, see below |
 | 187–190 | `V_ATT3` `V_REL3` `O_REL3` `K_DAR3` | — | envelope-3 modulation |
 
+**`FLT2MODE` enum, measured from response shape 2026-09-08** (s3ked, `FIL2FR`
+80, all four values read back) — no longer resting on a panel photo:
+
+| value | mode | measured shape |
+|---|---|---|
+| 0 | **LP** | monotonic fall, −6 dB at 31 Hz to −30 at 8 kHz |
+| 1 | **BP** | **peak at 2 kHz**, falling either side |
+| 2 | **HP** | rise then plateau |
+| 3 | **EQ** | dip or bump at the corner — see below |
+
+**Mode 3 is a parametric band whose SIGN comes from `FLT2Q`, and reading it as
+a notch would be wrong for 78 % of real material.** The manual: *"a value of 16
+is no cut or boost. Raising the resonance above 16 will boost the selected
+cutoff frequency and lowering it below 16 will cut it."* The bench measurement
+was taken at low `Q` and therefore saw a **cut**; the corpus says that is the
+minority case.
+
+| mode 3, enabled keygroups | count |
+|---|---|
+| `FLT2Q` **> 16 → BOOST** | **367 (78 %)** |
+| `FLT2Q` < 16 → cut | 100 |
+| `FLT2Q` = 16 → flat | 2 |
+
+Commonest values are 20, 25, 27 — all boosts. **So `FLT2MODE = 3` decodes to
+band-stop or band-boost depending on `FLT2Q − 16`, never to one of them
+unconditionally.**
+
+**Our model already carries exactly this distinction**, and for the same
+reason: `e4b_writer` notes that band-stop (types 15–18) and band-boost (19–22)
+*"are the SAME parametric band filter, differing only in gain SIGN"*. So the
+AKAI EQ mode maps onto the existing pair — **type 15 `BS 2P` below 16, type 19
+`BB 2P` above** — with the filter being 2-pole, so the 2P variants
+specifically.
+
 **`LSI2_ON` cannot detect the board.** It accepts a write and reads back 1 with
 no board fitted, so a tool must be *told* the board is present — **nothing on
 the wire will say whether that claim is true.** The audio response is the only
