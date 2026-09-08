@@ -312,6 +312,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§FAILOPENCHECK — the onset check under-counted, and that direction reads as clean (2026-09-07)](#failopencheck-the-onset-check-under-counted-and-that-direction-reads-as-clean-2026-09-07)
 - [§E4BZEROSUSRELEASE — a zero sustain encoded every release as an instant cut (2026-09-08)](#e4bzerosusrelease-a-zero-sustain-encoded-every-release-as-an-instant-cut-2026-09-08)
 - [§AKAIENV2FLOOR — where a downward ENV2 sweep actually stops (2026-09-08)](#akaienv2floor-where-a-downward-env2-sweep-actually-stops-2026-09-08)
+- [§AKAIIB304F — the second filter board, and the 4-pole slope we currently drop (2026-09-08)](#akaiib304f-the-second-filter-board-and-the-4-pole-slope-we-currently-drop-2026-09-08)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -29651,3 +29652,38 @@ each curve to its own 60–120 Hz band puts the 0 dB reference on the slope once
 the corner drops below it, so every setting reads the same corner. It read
 111.3 Hz identically for FILFRQ 0, 5, 10, 20 and 30. **A repeat of that mistake
 reproduces the original number and looks like confirmation.**
+
+## §AKAIIB304F — the second filter board, and the 4-pole slope we currently drop (2026-09-08)
+
+**Status: OPEN, not started. Procedure ready:**
+`docs/re_procedures/akai_ib304f_filter_board.md`.
+
+The base S3000XL filter is **2-pole, 12 dB/octave**. E4B, KRZ and XPM sources
+routinely carry 4-pole filters, and on the AKAI path that slope is dropped —
+not approximated, dropped. The optional **IB-304F** puts a second 2-pole filter
+**in series** with the first, so LOWPASS on both with identical settings is a
+genuine **24 dB/octave**. It is the missing half of a mapping already made.
+
+**What the board adds:** FILTER 2 (LP / BP / HP / **EQ**), a **TONE** spectral
+tilt, and **ENV3**. Resonance runs **0–31** against FILTER 1's **0–15**; in EQ
+mode **16 is flat**, above boosts and below cuts, so a resonance sweep that
+crosses modes measures two different laws.
+
+**The gating fact for the converter: nothing on the wire distinguishes a fitted
+machine from an unfitted one.** The fifteen keygroup fields exist in the header
+on every machine and do nothing without the board (the machine's own refusal is
+*"2nd filter board IB304F not fitted!"*). So mapping a 4-pole source across both
+filters is right on a fitted machine and **half-filtered** on an unfitted one —
+which makes it a flag, never a default.
+
+**Phase 0 needs no hardware:** the offsets live only in a peer handoff and not
+in `docs/AKAI_S3000_FORMAT.md`, so a corpus scan over the 9442 indexed programs
+confirms them, shows what real material sets, and gives prevalence — all before
+the board is in the machine.
+
+**Two carried lessons the plan leads with.** Fit the cutoff law from the
+**resonance peak**, never a spectral centroid — that was a *slope* error on
+FILTER 1, unfixable by any constant, and it made every AKAI program 0.31
+octaves dark. And test whether ENV3's depth is a **product with its own
+sustain** before fitting a single constant, because ENV2's is
+(`octaves = 0.002612 × SUSTN2 × depth`).
