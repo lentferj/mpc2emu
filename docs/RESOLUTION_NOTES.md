@@ -30330,6 +30330,92 @@ model gives 9.6 dB, so 6 was plausible, but **an underived criterion cannot
 diagnose its own miss.** 3.75 against 6 said nothing until the 9.6 was computed,
 at which point the deficit localised to one section immediately.
 
+### Groups B and D — the cascade lift holds; the corner figures do not
+
+**B and D, corner against what the writer predicted.** The low-corner rows are
+**RETRACTED** — see below.
+
+```
+  prog  nominal   our pair   measured   meas/ours   status
+   43      200       207.2      204.4     0.987     RETRACTED (passband-sensitive)
+   51      250       257.5      265.0     1.029     RETRACTED
+   50      250       246.3      265.0       --      RETRACTED
+   44      800       820.7      789.6     0.962     stable to 0.5%
+   45     3000      2942.3     2804.4     0.953     stable to 0.5%
+```
+
+**Why the low corners are unusable, and it is the source, not the filter**
+(s3ked, 2026-09-09): the same captures analysed with two defensible passbands
+give **204.4 vs 148.9 Hz for program 43 — 27% apart.** A 200–250 Hz corner
+forces the passband to 90–160 Hz, only 0.4–1.1 octaves below it, so the
+"passband" median already contains attenuated points, the reference is
+depressed, and the −3 dB crossing walks. At 800 and 3000 Hz there is room and
+the two choices agree to 0.5%.
+
+**So the apparent drift is not under-determined, it is UNMEASURED.** Two
+reliable corners is not a trend in either direction — which removes both the
+three-point monotone trend and the four-point refutation of it.
+
+**The cascade lift still passes**, because that test never needed the trend: no
+corner is anywhere near 16% low, at any frequency, on any passband choice.
+
+**D's slopes are unaffected and stand.** A slope is a difference between two
+points, so the normalisation constant cancels exactly — −12.7 and −22.3 dB/oct
+hold whatever the passband. **That is why the 4-pole conclusion survives while
+the corner numbers do not, and it is worth knowing which kind of result a
+conclusion is leaning on.**
+
+### A refutation that got less scrutiny than the claim it refuted
+
+§AKAIFIL2POLES parked *"our filter-1 law reads 5.4% high at byte 64"*, flagged
+as one point. Program 50 appeared to refute it:
+
+```
+                            law     measured   law reads
+  FILFRQ 64                785.2       745.0      +5.4%
+  FILFRQ 48  (retracted)   246.3       265.0      -7.0%   <- opposite sign
+```
+
+**Program 50's corner is one of the retracted ones.** With either defensible
+passband:
+
+```
+  FILFRQ 48  passband 90-140   238.0      +3.5%
+  FILFRQ 48  passband 95-160   224.7      +9.6%
+```
+
+**Both the same sign as byte 64. The refutation is dead and the parked claim
+stands** — tentatively, since byte 48 spans +3.5 to +9.6% depending on a choice
+nobody has grounds to make. Status: **the filter-1 law may read ~5% high in
+this range; two points agree on direction and neither is solid. Worth a proper
+measurement, not a correction.**
+
+**The lesson is not the reversal, it is which number went unchecked.** The
+parked claim was labelled one-point-inconclusive and treated with suspicion.
+The number that *refuted* it was taken at face value and quoted to 0.1 Hz —
+and it was the weaker of the two, from a program whose corner the source cannot
+resolve.
+
+**A correction pointing at "I was wrong" feels epistemically virtuous, and that
+is exactly why it bypasses verification.** Retracting the parked fact felt like
+good practice, so the retraction itself was never audited. **Apply the same
+scrutiny to evidence that convicts you as to evidence that acquits you** — the
+direction a number points is not evidence about the number.
+
+### The band you choose and the threshold you choose fail the same way
+
+s3ked reported five wrong analysis passes tonight — a passband where the source
+has no energy, a corner search below that passband, harmonic sampling on an
+assumed root, a slope interpolated onto a noise floor, and the low-corner
+passband sensitivity above — and named the common fault themselves: **choosing
+an analysis band rather than deriving it from the data.**
+
+It is the same fault as this project's 2 kHz criterion, which was chosen rather
+than derived. **The difference is only in how they fail: a badly chosen band
+produces visibly wrong answers and is caught in minutes; a badly chosen
+threshold produces a plausible one and survives** until somebody computes what
+it should have been. Only one of the two announces itself.
+
 ### Two facts parked for group B
 
 - Program 41's corner measures **745 Hz** where our shipping filter-1 law puts
