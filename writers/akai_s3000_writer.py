@@ -49,7 +49,8 @@ from models.common import (
     AKAI_ENV2_DEPTH_OFFSET, AKAI_ENV2_DEPTH_MAX, akai_lfo2_rate_byte,
     Bank, LoopType, SampleData, safe_filename,
                            E4B_CUTOFF_MIN_HZ, E4B_CUTOFF_MAX_HZ, hz_to_e4b_cutoff,
-                           hz_to_akai_fil2fr, akai_depth_db_to_flt2q,
+                           hz_to_akai_fil2fr, hz_to_akai_fil2fr_hp,
+                           akai_depth_db_to_flt2q,
                            akai_fil2fr_to_hz, AKAI_FIL2FR_TRANSPARENT,
                            AKAI_FLT2MODE_LP, AKAI_FLT2MODE_BP, AKAI_FLT2MODE_HP,
                            AKAI_FLT2MODE_EQ, AKAI_LSI2_ON_OFFSET,
@@ -2173,7 +2174,11 @@ def _filter2_plan(voice):
         # asked. Measured, not derived: two ideal Butterworth sections predict
         # 0.802 and this machine gives 0.841.
         hz = hz / AKAI_CASCADE_CORNER_RATIO
-    fil2fr = hz_to_akai_fil2fr(hz)
+    # HP places its corner on the HIGHPASS curve. Using the mode-0 inverse here
+    # put the corner 35-50% out AND broke the reader/writer inverse the moment
+    # the reader learned the highpass curve.
+    fil2fr = (hz_to_akai_fil2fr_hp(hz) if mode == AKAI_FLT2MODE_HP
+              else hz_to_akai_fil2fr(hz))
     if fil2fr >= AKAI_FIL2FR_TRANSPARENT:
         return None                     # nothing to express
     if mode == AKAI_FLT2MODE_EQ:

@@ -47,17 +47,36 @@ predicted feature frequency decides the source, because **the two volumes on
 the card fail at opposite ends**:
 
 ```
-  rung    HP Hz  src        BP / EQcut Hz  src        EQboost Hz  src
-    20       19  SKIP                  44  noise             41  noise
-    30       30  noise                 71  noise             65  noise
-    37       48  noise                115  noise            105  noise
-    45       74  noise                177  noise            162  noise
-    64      285  noise                685  either           628  either
-    72      495  either              1190  either          1091  either
-    80      843  either              2025  FLATCOMB        1856  either
-    88     1426  either              3427  FLATCOMB        3141  FLATCOMB
-    94     4062  FLATCOMB            9760  FLATCOMB        8945  FLATCOMB
+  rung    BP / EQcut Hz  src        EQboost Hz  src
+    20              44   noise              41  noise
+    30              71   noise              65  noise
+    37             115   noise             105  noise
+    45             177   noise             162  noise
+    64             685   either            628  either
+    72            1190   either           1091  either
+    80            2025   FLATCOMB         1856  either
+    88            3427   FLATCOMB         3141  FLATCOMB
+    94            9760   FLATCOMB         8945  FLATCOMB
 ```
+
+**THE HP LADDER IS DONE (2026-09-09) AND ITS COLUMN HERE WAS WRONG.** This
+table originally carried an HP column built from the single-byte factor 0.688,
+which put rung 30 at 30 Hz. The measured HP curve puts it at **~21 Hz** — 18 %
+lower, and as marginal as the rung 20 this procedure had already skipped.
+s3ked got no crossing at rung 30 and correctly reported no number rather than
+one.
+
+**So the table above is the same mistake it warns about, one level up:** the
+source was chosen per rung from a *predicted* feature frequency, and the
+prediction came from a factor that the ladder then falsified. **A planning
+table built on an unverified constant inherits its error** — and the visible
+symptom was a rung that could not be measured, not a wrong answer, which is the
+lucky direction.
+
+The remaining BP and EQ columns rest on the same kind of single-byte factor
+(1.653 and 1.515) and should be treated as provisional in exactly the same way.
+**Expect the lowest one or two rungs of each to be unmeasurable rather than
+merely awkward.**
 
 - **`TC10 NOISE`** is continuous to 15 Hz. **Use it below ~300 Hz.**
 - **`FLATCOMB`** is a comb whose teeth are further apart than the analysis

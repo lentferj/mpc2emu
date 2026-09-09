@@ -46,7 +46,9 @@ from models.common import (
     AKAI_VLOUD_DB_PER_UNIT, AKAI_VLOUD_SWING_DB_PER_UNIT,
     AKAI_TUNE_UNITS_PER_SEMITONE,
     akai_filq_to_01, AKAI_MUTE_CUT_SECONDS,
-    akai_fil2fr_to_hz, akai_flt2q_to_depth_db, akai_flt2q_is_boost,
+    akai_fil2fr_to_hz, akai_fil2fr_hp_to_hz,
+    akai_flt2q_to_depth_db, akai_flt2q_is_boost,
+    AKAI_FIL2FR_HP_MEASURED,
     AKAI_LSI2_ON_OFFSET, AKAI_FLT2GAIN_OFFSET, AKAI_FLT2MODE_OFFSET,
     AKAI_FLT2Q_OFFSET, AKAI_FIL2FR_OFFSET, AKAI_FLT2MODE_LP,
     AKAI_FLT2MODE_BP, AKAI_FLT2MODE_HP, AKAI_FLT2MODE_EQ,
@@ -483,7 +485,12 @@ def _combine_akai_filters(kg, s3000):
     mode = kg.get('flt2_mode', 0)
     fr = kg.get('fil2fr', AKAI_FILTER_OPEN)
     q = kg.get('flt2_q', 0)
-    f2 = akai_fil2fr_to_hz(fr)
+    # HP HAS ITS OWN MEASURED CURVE. Using the mode-0 law here was 35-50% wrong
+    # across the ladder, and highpass is 39% of real board use. The two modes
+    # differ structurally, not by a scale factor: mode 0 flattens below byte 45
+    # and highpass does not. See AKAI_FIL2FR_HP_MEASURED.
+    f2 = (akai_fil2fr_hp_to_hz(fr) if mode == AKAI_FLT2MODE_HP
+          else akai_fil2fr_to_hz(fr))
 
     # ── Inert cases: the field is set but the filter is not shaping anything.
     # About 60% of keygroups with LSI2_ON land here, which is why the read gate
@@ -1140,7 +1147,20 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
             voice.filter_cutoff = _fhz
             _fr = kg.get('fil2fr', AKAI_FILTER_OPEN)
             _mode = kg.get('flt2_mode', 0)
-            if _mode != AKAI_FLT2MODE_LP:
+            _hp_pts = sorted(AKAI_FIL2FR_HP_MEASURED)
+            if _mode == AKAI_FLT2MODE_HP:
+                # HP IS CALIBRATED NOW, inside its ladder. Only say otherwise
+                # where the curve is extrapolated -- the ladder covers 37..72
+                # and mode 0 turned out to have three regions, so outside that
+                # span is a guess about a curve that has already surprised us.
+                if not (_hp_pts[0] <= _fr <= _hp_pts[-1]):
+                    _diag(_W, 'AKAI_FIL2FR_HP_EXTRAPOLATED',
+                          f'filter 2 highpass corner extrapolated outside the '
+                          f'measured ladder (FIL2FR {_fr}, measured '
+                          f'{_hp_pts[0]}..{_hp_pts[-1]})',
+                          content_lost=False, subject=preset.name,
+                          remedy='extend the highpass FIL2FR ladder')
+            elif _mode != AKAI_FLT2MODE_LP:
                 # **THE CORNER MOVES WITH THE MODE**: 41% between LP and HP at
                 # one byte. Every point of the corner law was measured in mode
                 # 0, which is 7% of real use -- EQ and HP are 89% of it. So

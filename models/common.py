@@ -1695,12 +1695,77 @@ AKAI_FIL2FR_EXTRAP_TOP_UNMEASURED_FROM = 94
 #: to make a ladder per mode the next thing worth bench time.
 #:
 #: (0.688 is within 3% of 1/sqrt(2). Noted, not concluded.)
+#: **THE CONSTANT-FACTOR MODEL IS FALSIFIED FOR HP, AND THE FALSIFIER WAS FILED
+#: IN ADVANCE** (s3ked ladder, 2026-09-09). The prediction was "each factor
+#: holds within 10% at every rung"; the HP factor drifts monotonically with no
+#: reversal, against our shipped law and against a single-exponential one alike:
+#:
+#:      byte   HP corner   / our law
+#:        37       34.2 Hz     0.493
+#:        45       63.0        0.589
+#:        64      250.6        0.605
+#:        72      467.4        0.649
+#:
+#: **HP has its own exponent, not a scaled mode-0 one** -- 0.07425 against
+#: 0.07024, so the "factor" is itself exponential and a single constant is
+#: wrong by up to a third across the range.
+#:
+#: **The 0.688 measured at byte 74 was not a bad measurement.** It is the top of
+#: the range, where the factor is largest. Two instruments agreeing about the
+#: highest rung, not disagreeing about the law.
+#:
+#: **And the two modes differ STRUCTURALLY, not just in scale.** Mode 0 flattens
+#: below byte 45 -- its byte-37 corner sits **+14.5%** above its own exponential
+#: -- while HP's byte-37 corner sits **-0.5%** from its own. Whatever makes mode
+#: 0 flatten at the bottom does not do so in highpass.
+AKAI_FIL2FR_HP_MEASURED = {37: 34.2, 45: 63.0, 64: 250.6, 72: 467.4}
+
+#: Exponent for extrapolation outside the measured HP span, from the ladder's
+#: own fit (residuals -0.5/+1.2/-1.8/+1.1 %). **Extrapolation here is a guess
+#: about a curve that has already surprised us once**: mode 0 has three regions
+#: and this ladder covers 37..72, so anything outside is reported as such.
+AKAI_FIL2FR_HP_EXPONENT = 0.07425
+
+#: Factors for the modes whose ladders have NOT been run. Each still rests on a
+#: single byte (74), and HP -- the one mode where a ladder now exists -- proved
+#: its single-byte factor wrong by up to a third at the ends. **So treat these
+#: as an indication of size and direction only.** They are reported by
+#: `AKAI_FIL2FR_MODE_UNCALIBRATED` and never applied.
 AKAI_FIL2FR_MODE_FACTOR = {
-    AKAI_FLT2MODE_HP: 0.688,
     AKAI_FLT2MODE_BP: 1.653,
     AKAI_FLT2MODE_EQ: 1.653,        # cut arm; the boost arm measures 1.515
 }
 AKAI_FIL2FR_EQ_BOOST_FACTOR = 1.515
+
+
+def akai_fil2fr_hp_to_hz(byte: int):
+    """`FIL2FR` -> the filter-2 HIGHPASS -3 dB corner in Hz, or None when open.
+
+    Measured points returned exactly, geometric interpolation between, and the
+    ladder's own exponent outside -- the same shape as `akai_fil2fr_to_hz`, for
+    the same reason: a fit has to choose which measurement to sacrifice.
+
+    **Highpass is 39% of real board use and was previously placed by the mode-0
+    law**, which is 35-50% wrong here.
+    """
+    if byte >= AKAI_FIL2FR_TRANSPARENT:
+        return None
+    pts = sorted(AKAI_FIL2FR_HP_MEASURED)
+    lo, hi = pts[0], pts[-1]
+    if byte in AKAI_FIL2FR_HP_MEASURED:
+        return AKAI_FIL2FR_HP_MEASURED[byte]
+    if byte < lo:
+        return AKAI_FIL2FR_HP_MEASURED[lo] * math.exp(
+            AKAI_FIL2FR_HP_EXPONENT * (byte - lo))
+    if byte > hi:
+        return AKAI_FIL2FR_HP_MEASURED[hi] * math.exp(
+            AKAI_FIL2FR_HP_EXPONENT * (byte - hi))
+    for x0, x1 in zip(pts, pts[1:]):
+        if x0 <= byte <= x1:
+            y0, y1 = AKAI_FIL2FR_HP_MEASURED[x0], AKAI_FIL2FR_HP_MEASURED[x1]
+            f = (byte - x0) / (x1 - x0)
+            return math.exp(math.log(y0) + f * (math.log(y1) - math.log(y0)))
+    return AKAI_FIL2FR_HP_MEASURED[hi]
 
 #: Where the measured span ends. Above this filter 2 is EXTRAPOLATED and says
 #: so: filter 1 departs from its own exponential from 84 up (§146, +2.3% at 84
@@ -1810,6 +1875,25 @@ def hz_to_akai_fil2fr(hz: float) -> int:
     for b in range(0, AKAI_FIL2FR_TRANSPARENT):
         v = akai_fil2fr_to_hz(b)
         d = abs(math.log(v) - target)
+        if best_d is None or d < best_d:
+            best, best_d = b, d
+    return best
+
+
+def hz_to_akai_fil2fr_hp(hz: float) -> int:
+    """Hz -> the `FIL2FR` byte whose HIGHPASS corner is nearest, in log Hz.
+
+    Inverse of `akai_fil2fr_hp_to_hz`, and it must exist as its own function:
+    placing a highpass corner with the mode-0 inverse while reading it back
+    with the highpass curve makes the reader and writer stop being inverses,
+    which is what the round-trip tests caught the moment the HP curve landed.
+    """
+    if hz is None:
+        return AKAI_FIL2FR_TRANSPARENT
+    target = math.log(max(1e-6, hz))
+    best, best_d = 0, None
+    for b in range(0, AKAI_FIL2FR_TRANSPARENT):
+        d = abs(math.log(akai_fil2fr_hp_to_hz(b)) - target)
         if best_d is None or d < best_d:
             best, best_d = b, d
     return best
