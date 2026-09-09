@@ -30465,6 +30465,45 @@ a withdrawn 0.594 and a refutation built on a retracted corner. The correction
 is cheap to earn properly: **a `FIL2FR` ladder per `FLT2MODE`**, which is now
 the top bench ask, and it covers 89 % of real board use.
 
+### The source was wrong for half its own disc, and said so in its docstring
+
+The `FILTER2` volume reused the Schroeder complex built for the `FILFRQ` 85–98
+sweep. Measured after the fact, 1/3-octave SNR:
+
+```
+   band Hz     15    22    31    44    63    90   125   250
+   FLATCOMB  +9.6  +3.8 +67.3  +9.1 +67.8 +54.8 +49.5 +60.1
+   noise    +58.7 +59.7 +54.9 +42.8 +63.9 +51.4 +46.2 +57.8
+```
+
+**It is a comb, and below ~125 Hz its teeth are further apart than the analysis
+bands.** "Does a harmonic land in this band" predicts all eight SNR figures
+correctly — **8/8** — so the +3.8 and +9.1 dB holes are gaps between harmonics,
+not noise.
+
+**That is the real cause of §198's ±30 % passband sensitivity.** The stated
+reason was that a 200 Hz corner leaves no room for a passband beneath it, which
+is true and which I accepted. The deeper reason is that with this source there
+is almost nothing down there to normalise against at all — and a continuous
+source would give a usable passband even close in.
+
+**The source's own docstring names the regime it was built for:** *"A source for
+the `FILFRQ` 85..98 sweep, where a sawtooth cannot go."* It exists to remove a
+source limit at the **top** of the range. It was reused unchanged on a disc
+whose lowest corners are 200 and 250 Hz.
+
+**A tool carried outside the regime it was built for, with the regime stated in
+the tool** — the same shape as the fixed-width analysis band, the 2 kHz
+threshold, and the three "independent" observations all taken inside one knee.
+Today's failures were almost entirely regime errors rather than arithmetic
+errors, and every one of them had its limit written down somewhere nobody
+re-read.
+
+**Both sources are already on the card**, so the fix costs nothing: noise for
+corners below ~300 Hz, the comb for 2 kHz and up. Below ~30 Hz neither is
+adequate and nothing on the card is — a valid passband there sits at 13–35 Hz,
+at the edge of what the rig is verified flat to.
+
 ### The band you choose and the threshold you choose fail the same way
 
 s3ked reported five wrong analysis passes tonight — a passband where the source
