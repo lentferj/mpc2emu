@@ -321,6 +321,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIFIL2POLES — filter 2 IS 2-pole, with a very wide knee (2026-09-09)](#akaifil2poles-filter-2-is-2-pole-with-a-very-wide-knee-2026-09-09)
 - [§AKAIFIL2CONV — two instances of a fix are not two instances of evidence (2026-09-09)](#akaifil2conv-two-instances-of-a-fix-are-not-two-instances-of-evidence-2026-09-09)
 - [§AKAIFIL2MODES — every mode has a ladder, and there are two exponents (2026-09-09)](#akaifil2modes-every-mode-has-a-ladder-and-there-are-two-exponents-2026-09-09)
+- [§AKAIFIL2HPREF — the whole highpass column moved, and the grouping is now unresolved (2026-09-09)](#akaifil2hpref-the-whole-highpass-column-moved-and-the-grouping-is-now-unresolved-2026-09-09)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -30709,3 +30710,74 @@ Rungs 88 and 94 for BP and EQ need `FLATCOMB`, so a volume load. The four laws
 are well determined over 30–80 and the top two rungs are not expected to change
 them — but *expected* is doing work in that sentence, and mode 0's own top
 turned out to steepen between 88 and 94.
+
+
+## §AKAIFIL2HPREF — the whole highpass column moved, and the grouping is now unresolved (2026-09-09)
+
+**Every HP figure in §AKAIFIL2MODES is superseded.** The column read
+34.2 / 63.0 / 250.6 / 467.4; it is now **36.1 / 64.9 / 247.8 / 448.4 / 794.8.**
+
+### The reference slid with the thing being measured
+
+The first HP ladder normalised each rung against **its own passband plateau**.
+Measured afterwards, the highpass has a **+1.1 dB passband bump sitting at
+~3.8× its corner, which scales with the corner** at every rung:
+
+```
+  byte 37  corner  36.1 Hz   bump at   145 Hz  = 4.0x
+  byte 45  corner  64.9       bump at   227     = 3.5x
+  byte 64  corner 247.8       bump at   921     = 3.7x
+  byte 72  corner 448.4       bump at  1720     = 3.8x
+  byte 80  corner 794.8       bump at  3303     = 4.2x
+```
+
+So at low rungs the plateau band sat **above** the bump and read the settled
+−6.02 dB insertion loss; at byte 80 it sat **on** the bump and read −5.34. **The
+reference moved with the curve** — which is the failure this project's own ENV2
+procedure names in bold, reached from the opposite side.
+
+Refitted against one fixed reference (−6.02 dB, independently confirmed at the
+settled low rungs), HP's exponent goes **0.07469 → 0.07161**.
+
+### That dissolves the two-group structure rather than adjusting it
+
+```
+   mode 0    0.06988
+   EQboost   0.07068
+   HP        0.07161     <- was 0.07469
+   EQcut     0.07371
+   BP        0.07421
+```
+
+**HP now sits between the groups** — 1.3 % above EQ-boost, 2.8 % below EQ-cut,
+both comparable to the within-group spreads. **A two-group split is no longer
+supported by these five numbers and is recorded as unresolved.**
+
+s3ked's original pairing (BP with EQ-cut, HP separate) is closer to this than
+ours was — and they declined to claim it back, on the grounds that it had been
+right off a range mismatch and **being accidentally right is not a result.**
+
+**Four statements of the same structure in one evening — 5:1, 1.2:1, 3.2:1,
+then none — and the underlying captures changed once.** Everything else was
+fitting range and reference choice.
+
+### The question it raised about mode 0, answered
+
+s3ked asked the right follow-up: **if the lowpass has an analogous bump and its
+law was fitted against a per-curve reference, then mode 0's bottom-end bend is
+partly the same artefact — and mode 0 is the denominator under every ratio.**
+
+**Checked: it is not exposed.** The mode-0 ladder was referenced against **the
+same program bypassed** — a separate capture with the filter out of circuit —
+not against a band inside its own response. A feature within the filter's own
+curve cannot move an external reference, and the bend is a per-rung deviation
+that a constant reference offset could not produce.
+
+So mode 0's +14.5 % bottom-end flattening survives the challenge. A test now
+pins that provenance, because **the argument depends entirely on it**: if the
+"bypassed" note were ever lost from the table, the evidence that its bend is
+real would go with it while the number stayed.
+
+BP and both EQ arms are unaffected — their features are extrema of the ratio
+curve, so no passband normalisation enters them. **Only the mode that used a
+plateau moved.**

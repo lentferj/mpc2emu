@@ -1725,13 +1725,26 @@ AKAI_FIL2FR_MEASURED_TO = 80
 #: `AKAI_FIL2FR_MODE_MEASURED` below**, so there is exactly one copy of these
 #: four numbers -- two tables of one measurement drifting apart is a failure
 #: this file records twice already.
-AKAI_FIL2FR_HP_MEASURED = {37: 34.2, 45: 63.0, 64: 250.6, 72: 467.4}
+#: **SUPERSEDED SET, 2026-09-09 late.** The first HP column (34.2 / 63.0 /
+#: 250.6 / 467.4) normalised each rung against its OWN passband plateau. The
+#: highpass has a **passband bump of ~+1.1 dB sitting at ~3.8x its corner and
+#: scaling with the corner**, so at low rungs the plateau band sat above the
+#: bump and read the settled -6.02 dB insertion loss, while at byte 80 it sat
+#: ON the bump and read -5.34. **The reference slid with the curve** -- the
+#: moving-reference failure, arrived at from the far side.
+#:
+#: Refitted against ONE fixed reference (-6.02 dB, §195's insertion loss,
+#: independently confirmed at the settled low rungs). **Take this column
+#: whole**: mixing a byte-80 point onto the old four is the exact error both
+#: projects made once tonight.
+AKAI_FIL2FR_HP_MEASURED = {37: 36.1, 45: 64.9, 64: 247.8, 72: 448.4,
+                           80: 794.8}
 
 #: Exponent for extrapolation outside the measured HP span, from the ladder's
 #: own fit (residuals -0.5/+1.2/-1.8/+1.1 %). **Extrapolation here is a guess
 #: about a curve that has already surprised us once**: mode 0 has three regions
 #: and this ladder covers 37..72, so anything outside is reported as such.
-AKAI_FIL2FR_HP_EXPONENT = 0.07425
+AKAI_FIL2FR_HP_EXPONENT = 0.07161
 
 #: **EVERY MODE NOW HAS A LADDER** (s3ked, 2026-09-09). The single-byte factors
 #: are gone: three of the four drift by 17-42% across the range, so none is
@@ -1786,7 +1799,7 @@ AKAI_FIL2FR_EQBOOST_MEASURED = {30: 54.2, 37: 90.8, 45: 159.7, 64: 607.9,
 #: ladder's span this is a guess about a curve that has already surprised us
 #: once -- mode 0 has three regions -- so the caller is told.
 AKAI_FIL2FR_MODE_EXPONENT = {
-    AKAI_FLT2MODE_HP: 0.07425,
+    AKAI_FLT2MODE_HP: 0.07161,
     AKAI_FLT2MODE_BP: 0.07421,
     AKAI_FLT2MODE_EQ: 0.07371,          # cut arm; boost uses the value below
 }
