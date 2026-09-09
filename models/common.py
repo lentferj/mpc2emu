@@ -1659,22 +1659,48 @@ AKAI_FIL2FR_EXTRAP_ABOVE = 0.17445      # 88 -> 94, the steep top
 #: `AKAI_FILTER_OPEN` is for filter 1 rather than the end of a slide.
 AKAI_FIL2FR_EXTRAP_TOP_UNMEASURED_FROM = 94
 
-#: **THE CORNER MOVES WITH `FLT2MODE`.** Measured at one byte:
+#: **THE FEATURE FREQUENCY MOVES WITH `FLT2MODE`, and by a lot.** HARDWARE
+#: MEASURED 2026-09-09 from programs the writer itself emitted (`FILTER2`
+#: volume, `FIL2FR` 74, filter 1 open, referenced to an unfiltered control,
+#: +55..+74 dB SNR), as ratios to the mode-0 law at the same byte:
 #:
-#:      FIL2FR 64, mode 0 (LP)    414.4 Hz
-#:      FIL2FR 64, mode 2 (HP)    246.2 Hz     ratio 0.594
+#:      mode 2  HP      -3 dB corner    0.688 x
+#:      mode 1  BP      peak            1.653 x
+#:      mode 3  EQ cut  dip             1.653 x
+#:      mode 3  EQ boost peak           1.515 x
 #:
-#: **41% apart at the same byte**, and the law above was measured entirely in
-#: mode 0 -- which is **7% of real use**. EQ and HP together are 89%.
+#: **BP and EQ-cut land on the SAME frequency**, which is one section placing
+#: its feature identically in two modes rather than a coincidence -- and the
+#: boost arm sitting lower than the cut arm is the same arm asymmetry §195
+#: found in the `FLT2Q` sweep.
 #:
-#: **This ratio is NOT applied.** One point establishes that the corner moves;
-#: it does not establish by how much across the range, and s3ked flagged the
-#: HP capture's own normalisation band as possibly sitting inside the
-#: transition. Correcting by a single unreplicated point would be the same
-#: mistake as fitting a law through one flagged measurement -- which this
-#: table already had to undo once. Each mode needs its own ladder; until then
-#: a non-LP decode carries the mode-0 corner and says so.
-AKAI_FIL2FR_HP_RATIO_AT_64 = 0.594
+#: **The EQ offset REPRODUCES across bytes, sessions and methods:** 1.515 here
+#: at `FIL2FR` 74 against 1.528 from §195 at `FIL2FR` 80 -- **0.8% apart**, one
+#: measured by rendering a file this writer emitted and the other by editing a
+#: resident program over SysEx.
+#:
+#: **An earlier 0.594 for HP is WITHDRAWN** (s3ked, same day). It came from one
+#: point at `FIL2FR` 64 whose normalisation band they had flagged at the time as
+#: possibly sitting inside the highpass transition; this disc was built with a
+#: control for exactly that and says 0.688. The decision to prefer the disc was
+#: recorded BEFORE the capture, so it is not a preference formed after seeing
+#: which number was nicer.
+#:
+#: **NONE OF THESE ARE APPLIED.** HP, BP and EQ-cut rest on ONE byte each; only
+#: EQ-boost has two, and those span 74..80 out of 0..99. A ratio measured at one
+#: byte and applied across the range is the exact mistake this table already had
+#: to undo once, on a five-point fit levered by a single flagged point. **What
+#: they are used for is to tell the caller how big the error is** --
+#: `AKAI_FIL2FR_MODE_UNCALIBRATED` quotes the factor for the mode in hand -- and
+#: to make a ladder per mode the next thing worth bench time.
+#:
+#: (0.688 is within 3% of 1/sqrt(2). Noted, not concluded.)
+AKAI_FIL2FR_MODE_FACTOR = {
+    AKAI_FLT2MODE_HP: 0.688,
+    AKAI_FLT2MODE_BP: 1.653,
+    AKAI_FLT2MODE_EQ: 1.653,        # cut arm; the boost arm measures 1.515
+}
+AKAI_FIL2FR_EQ_BOOST_FACTOR = 1.515
 
 #: Where the measured span ends. Above this filter 2 is EXTRAPOLATED and says
 #: so: filter 1 departs from its own exponential from 84 up (§146, +2.3% at 84

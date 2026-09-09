@@ -30402,6 +30402,69 @@ good practice, so the retraction itself was never audited. **Apply the same
 scrutiny to evidence that convicts you as to evidence that acquits you** — the
 direction a number points is not evidence about the number.
 
+### Group C — all four modes render, and the mode offset is large
+
+```
+  all at FIL2FR 74, filter 1 open, nominal 800 Hz, +55..+74 dB SNR
+                                              measured   / mode-0 law
+  46  HP        -3 dB corner                    566 Hz      0.688 x
+  47  BP        peak                           1359         1.653
+  48  EQ cut    dip   (FLT2Q 20)               1359         1.653
+  49  EQ boost  peak  (FLT2Q 27)               1246         1.515
+```
+
+**All four modes render: the writer's mode field works on hardware.**
+
+**BP and EQ-cut land on the same frequency**, which is one section placing its
+feature identically in two modes rather than a coincidence — and the boost arm
+sitting below the cut arm is the same arm asymmetry §195 found in the `FLT2Q`
+sweep, now seen from a second direction.
+
+**The EQ offset reproduces across bytes, sessions and methods:** 1.515 at
+`FIL2FR` 74 here against 1.528 at `FIL2FR` 80 in §195 — **0.8 % apart**, one
+measured by rendering a file this writer emitted, the other by editing a
+resident program over SysEx.
+
+### The strongest cross-validation of the day, and nobody designed it
+
+§195 measured the `FLT2Q` depth table by SysEx-editing a resident program. This
+disc measured it by rendering a file the writer produced, at a different byte,
+in a different session, from a different source:
+
+| | §195 predicted | disc measured |
+|---|---|---|
+| `FLT2Q` 20 | −9.5 dB | **−9.49 dB** |
+| `FLT2Q` 27 | +6.5 dB | **+6.73 dB** |
+| insertion loss | 6.03 dB | 6.06 / 5.94 dB |
+
+**Within 0.25 dB by two fully independent paths.** That is worth more than
+either measurement alone, and it was a by-product — the disc was cut to test
+the writer, not to re-check §195.
+
+### The 0.594 is withdrawn, by a rule fixed in advance
+
+s3ked's LP/HP ratio of 0.594 came from one point at `FIL2FR` 64 whose
+normalisation band they flagged at the time as possibly inside the highpass
+transition. The disc says **0.688**, from a purpose-built source with a control.
+
+**The decision to prefer the disc was written into the generator before the
+capture**, so it is not a preference formed after seeing which number was
+nicer — and it was s3ked's own measurement they offered to give up.
+
+### Why none of the mode factors are applied
+
+`AKAI_FIL2FR_MODE_FACTOR` records them and `AKAI_FIL2FR_MODE_UNCALIBRATED`
+quotes the one for the mode in hand, so a caller learns the size and direction
+of the error. **They are not applied to the corner.**
+
+HP, BP and EQ-cut rest on **one byte each**; only EQ-boost has two, and those
+span `FIL2FR` 74–80 out of 0–99. **A ratio measured at one byte and applied
+across the range is precisely the mistake this table already had to undo**, on
+a five-point fit levered by a single flagged point — and today it also produced
+a withdrawn 0.594 and a refutation built on a retracted corner. The correction
+is cheap to earn properly: **a `FIL2FR` ladder per `FLT2MODE`**, which is now
+the top bench ask, and it covers 89 % of real board use.
+
 ### The band you choose and the threshold you choose fail the same way
 
 s3ked reported five wrong analysis passes tonight — a passband where the source

@@ -54,6 +54,7 @@ from models.common import (
     AKAI_FIL2FR_MEASURED_TO, AKAI_FIL2FR_TRANSPARENT,
     AKAI_FIL2FR_EXTRAP_TOP_UNMEASURED_FROM,
     AKAI_CASCADE_CORNER_RATIO, AKAI_CASCADE_MATCHED_OCTAVES,
+    AKAI_FIL2FR_MODE_FACTOR, AKAI_FIL2FR_EQ_BOOST_FACTOR,
     akai_lfo_rate_hz, akai_lfo_depth_to_pitch, akai_lfo_delay_seconds,
     akai_env2_target_hz, E4B_CUTOFF_MAX_HZ, E4XT_FENV_BYTE_PER_UNIT,
     AKAI_ENV2_OCT_PER_UNIT, AKAI_ENV2_FULL_LEVEL, AKAI_FILTER_OPEN_HZ, AKAI_FILTER_FLOOR_HZ,
@@ -1149,11 +1150,21 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
                 # corner moves; it does not say by how much across the range,
                 # and this table has already had to undo one law fitted through
                 # a single flagged measurement.
+                # Quote the MEASURED factor for the mode in hand rather than a
+                # vague "it moves". The factors are hardware-measured but rest
+                # on one byte each (two for the EQ boost arm), so they are
+                # reported and NOT applied -- see AKAI_FIL2FR_MODE_FACTOR.
+                _fac = AKAI_FIL2FR_MODE_FACTOR.get(_mode)
+                if (_mode == AKAI_FLT2MODE_EQ
+                        and akai_flt2q_is_boost(kg.get('flt2_q', 0))):
+                    _fac = AKAI_FIL2FR_EQ_BOOST_FACTOR
                 _diag(_W, 'AKAI_FIL2FR_MODE_UNCALIBRATED',
                       f'filter 2 corner from the mode-0 law, but FLT2MODE is '
-                      f'{_mode}: the corner is known to move ~41% between modes',
+                      f'{_mode}: the feature measures {_fac:.3f}x the law at '
+                      f'the one byte tested',
                       content_lost=False, subject=preset.name,
-                      remedy='measure a FIL2FR ladder per FLT2MODE')
+                      remedy='measure a FIL2FR ladder per FLT2MODE',
+                      detail={'mode': _mode, 'measured_factor': _fac})
             elif _fr > AKAI_FIL2FR_EXTRAP_TOP_UNMEASURED_FROM:
                 # 95..98 sit between a real 5.9 kHz corner at 94 and a measured
                 # bypass at 99, and nothing in between was captured.
