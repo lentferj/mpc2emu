@@ -1866,7 +1866,20 @@ _PROGRAM_HW_DEFAULTS = {
     # reason about.
     0x67: (  8, 'RESERVED[0]'),
     0x68: (  8, 'RESERVED[1]'),
-    0x6d: ( 69, 'RESERVED[6]'),
+    # 0x6d IS NOT RESERVED: it is the LAST-PLAYED MIDI NOTE, runtime state the
+    # machine rewrites as you play. Identified 2026-09-09 (s3ked) while
+    # byte-diffing headers between two transports, when all twelve programs
+    # differed at this one offset with the same values -- 36, which was the
+    # note being played. Confirmed by playing 36 and 60 and watching it follow.
+    #
+    # We write 69, which is the value the machine itself leaves here, so the
+    # emitted file matches an untouched one. Nothing needs to change.
+    #
+    # **It makes any two dumps of the same program differ unless nothing has
+    # been played between them**, so exclude it from any header comparison --
+    # otherwise a clean transport reads as failing on every program at once,
+    # which is exactly the shape of a real transport fault.
+    0x6d: ( 69, 'LASTNOTE -- last-played MIDI note, RUNTIME STATE'),
 }
 
 

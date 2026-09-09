@@ -615,6 +615,33 @@ S1000:  0000-0095  program common (150)   0096-012b  keygroup 1   012c-01c1  key
 | `17` | stereo level (0–99, 99 = full) — `STEREO` |
 | `18` | pan (−50…+50, signed) — `PANPOS` |
 | `19` | loudness — `PRLOUD` |
+| `6d` | **last-played MIDI note — RUNTIME STATE, not a parameter** |
+
+**`6d` IS NOT A PARAMETER AND NOT RESERVED — it is the last note played**
+(s3ked, 2026-09-09, and it was found by accident). Diffing twelve program
+headers between two SCSI transports, **every one of the twelve differed, at
+this single offset, with the same values**: `0x24` (36) on one side and `0x45`
+(69) on the other. Twelve programs failing identically is exactly the shape of
+a transport fault, and the byte offset and value change were about to be
+reported as one.
+
+36 was the note being played all evening; nothing had been played since the
+other volume loaded. Tested directly:
+
+```
+  before any note        offset 6d = 0x45  (69)
+  after playing MIDI 36  offset 6d = 0x24  (36)
+  after playing MIDI 60  offset 6d = 0x3c  (60)
+```
+
+**69 is the value the machine leaves here from cold**, which is what our writer
+emits, so an emitted file matches an untouched one.
+
+**Exclude it from any header comparison.** It makes two dumps of the same
+program differ unless nothing has been played between them — so a clean
+transport reads as failing on every program at once. With it excluded the same
+comparison was **3720 bytes and zero differences**, which is how `--iso` came
+to be hardware-confirmed.
 
 **`13`–`19` are one contiguous run and all seven are confirmed**, by three
 independent routes that agree 1:1:

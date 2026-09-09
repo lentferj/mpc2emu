@@ -311,7 +311,7 @@ library (`mtools` is optional, only for one E4B HDA filesystem path).
 | Kurzweil KRZ | `.KRZ` | Kurzweil K2000 / K2500 / K2600 |
 | E-mu Emulator IIIX/ESI | `.E3X` / `.ESI` | Emulator IIIX, ESI-32/2000/4000 — also loads natively on the E4XT (its own backward-compatibility loader) |
 | TAL-Sampler | `.talsmpl` | TAL-Sampler VST/AU |
-| AKAI S1000/S3000 | `.S3` + `.P3`, `.hda`, `.iso`, `.img` | S3000XL and family — loose files, a partitioned SCSI/ZuluSCSI disk image (`--hda`), a CD3000 CD-ROM (`--iso`) or an AKAI floppy (`--floppy`). Disk images are **hardware-confirmed** — an S3000XL has mounted and played them repeatedly; `--iso` and `--floppy` have not been read by hardware |
+| AKAI S1000/S3000 | `.S3` + `.P3`, `.hda`, `.iso`, `.img` | S3000XL and family — loose files, a partitioned SCSI/ZuluSCSI disk image (`--hda`), a CD3000 CD-ROM (`--iso`) or an AKAI floppy (`--floppy`). Disk images are **hardware-confirmed** — an S3000XL has mounted and played them repeatedly. **`--iso` is hardware-confirmed too since 2026-09-09**: a CD3000 ISO carrying content byte-identical to a known-good disk image was loaded from a second SCSI id and its twelve program headers diffed against the disk-image originals — 3720 bytes, zero differences. `--floppy` has still not been read by hardware |
 
 ---
 
