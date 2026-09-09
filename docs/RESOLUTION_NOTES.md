@@ -317,6 +317,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIPROGSCOPE — three program-scope fields we drop, and what it would take to apply them (2026-09-08)](#akaiprogscope-three-program-scope-fields-we-drop-and-what-it-would-take-to-apply-them-2026-09-08)
 - [§BOARDFITTED — the IB-304F went in, and every audio measurement became undated (2026-09-08)](#boardfitted-the-ib-304f-went-in-and-every-audio-measurement-became-undated-2026-09-08)
 - [§AKAIFIL2FR — the filter-2 corner law, and a premise that was two quantities (2026-09-09)](#akaifil2fr-the-filter-2-corner-law-and-a-premise-that-was-two-quantities-2026-09-09)
+- [§AKAIFIL2 — wiring the IB-304F second filter into both directions (2026-09-09)](#akaifil2-wiring-the-ib-304f-second-filter-into-both-directions-2026-09-09)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -30007,3 +30008,141 @@ mismatch — and having no sign, it has no arms, so one ladder replaces two.
 right for what it measures, compared as though they measured the same thing.
 Re-running either computation confirms it. Only asking *what quantity is this*
 separates them.
+
+## §AKAIFIL2 — wiring the IB-304F second filter into both directions (2026-09-09)
+
+**Status: in progress.** The board is characterised; this is the conversion
+path. `docs/AKAI_S3000_FORMAT.md` holds the field map and the measurements,
+`docs/re_procedures/akai_fil2fr_corner_law.md` the sweep that closed the last
+gap.
+
+### The two directions are gated differently, and the reason is one byte
+
+**`LSI2_ON` reads back 1 on a machine with no board fitted.** Nothing on the
+wire says whether the hardware is there, so "check the enable flag" is not
+available in either direction — and the two directions do not fail the same
+way, so they must not be gated the same way.
+
+**READ (AKAI → model): gated on evidence in the data.** An inert filter 2 is
+detectable — about 60% of keygroups with `LSI2_ON` set leave the filter wide
+open, which is why the loss estimate fell from 18.7% of library material to
+7.5% when Jan asked whether those programs had anything else set. A setting
+that actually shapes the sound is the gate; a diagnostic names the assumption.
+Getting this wrong adds a filter that never sounded on the source machine.
+
+**WRITE (model → AKAI): gated on `--akai-ib304f`, never a default.** The output
+carries no evidence at all, and the failure is not subtle: an S3000XL with no
+board answers *"2nd filter board IB304F not fitted!"* and does not load the
+program. Jan's instruction, and it is the right one on its own merits.
+
+### The frequency law was measured, and both earlier readings of it were wrong
+
+s3ked's mode-0 corner ladder (2026-09-09, `FIL2FR` 30/45/64/72/80):
+
+```
+  filter 2 sits at ~0.515x filter 1's corner for the same byte -- 0.96 octaves
+  down, ratio stable at 0.50..0.53 across the four solid points.
+```
+
+**Both prior readings were artefacts of the comparand, in opposite directions.**
+"Filter 2 measures ~2200 where our law says 2503" compared an EQ extremum
+against a corner law and read a documented 1.29x gap as a filter-2 property.
+The correction to it — an EQ boost peak against a resonance-peak fit, which is
+genuinely like-for-like — matched to 1.1% and said the laws were *the same*.
+The first was wrong; the second was right about its own quantity and wrong
+about the question. **The real difference is 2x, and no comparison of EQ
+extrema could have found it**, because the EQ centre and the mode-0 corner are
+not the same quantity either.
+
+### The measurements ship, not a fit through them
+
+s3ked's own five-point fit is levered by byte 30 — the point they flagged as
+weakest, whose passband window had to sit at 12–20 Hz — and it pays for
+accommodating it by missing byte **45**, an unflagged point, by **−7.9%**:
+
+| byte | measured | 5-pt fit | 4-pt fit |
+|---|---|---|---|
+| 30 | 43.8 | +5.6% | +18.2% |
+| **45** | **105.0** | **−7.9%** | −1.2% |
+| 64 | 411.9 | +0.3% | +2.0% |
+| 72 | 718.1 | +1.9% | +1.4% |
+| 80 | 1215.6 | +0.6% | −2.2% |
+
+So `AKAI_FIL2FR_MEASURED` holds the five points and interpolates geometrically
+between them — the shape `AKAI_FILTER_MEASURED` already uses for filter 1, for
+the same reason: a fit has to choose which point to sacrifice, and here that
+choice is live.
+
+**The "shallower exponent than filter 1" reading is NOT established.** Drop
+byte 30 and the exponent moves 0.06744 → 0.07024, which is 1.1% from filter 1's
+0.07100; forcing filter 1's exponent outright costs 3.2% worst residual against
+2.1% for a free one. **One extra free parameter buying one point of residual on
+four points is not evidence of a different law shape.** The *factor* is solid;
+the *shape* is not, and only the factor is claimed.
+
+### What the ladder turned into, in one evening
+
+Three rounds of captures, each falsifying the round before:
+
+| round | claim | fate |
+|---|---|---|
+| 5 points, one exponential | filter 2 = 0.52x filter 1, shallower exponent | **exponent falsified** — an artefact of fitting through the flattened bottom |
+| +20, 30 re-take, 37 | filter 2 **flattens below 45**; filter 1 does not | stands |
+| +88, 94, 99, and mode 2 | top departs 88→94; **99 is a bypass**; **the corner moves with the mode** | stands |
+
+**`FIL2FR` coverage went from 57% to 98% of active library keygroups.** Nine
+measured points, 20..94, interpolated geometrically. The extrapolated regions
+are now 1.3% (below 20) and 0.7% (95..98).
+
+**Two constants that were borrowed from filter 1 turned out to be wrong, and
+both were wrong in the direction that looked right.** `AKAI_FILTER_SATURATED`
+(96) was applied to filter 2, so bytes 94..98 were folded into "wide open" —
+but 94 is a genuine 5.9 kHz corner. It survived because 1532 of 2457 enabled
+keygroups sit at 99, where the borrowed constant gives the right answer for the
+wrong reason. The law's departure point was likewise assumed at filter 1's 84
+and measures between 88 and 94.
+
+### The axis nobody measured governs 89% of the material
+
+```
+  FIL2FR 64, mode 0 (LP)    414.4 Hz
+  FIL2FR 64, mode 2 (HP)    246.2 Hz      41% apart at the same byte
+```
+
+**Every point of the corner law was measured in mode 0, which is 7% of real
+use.** EQ is 50% and HP 39%. So the frequency axis is now sampled at nine
+points and nearly closed, while the mode axis is sampled at one value out of
+four and governs almost everything — and no amount of further work on the first
+axis would have revealed that.
+
+**The measured LP/HP ratio is deliberately NOT applied.** One point establishes
+that the corner moves; it does not establish by how much across the range, and
+s3ked flagged that capture's own normalisation band as possibly sitting inside
+the highpass transition. Applying a single unreplicated point as a correction
+is the mistake this table already had to undo once, on the five-point fit. A
+non-LP decode carries the mode-0 corner and emits
+`AKAI_FIL2FR_MODE_UNCALIBRATED`.
+
+### Open
+
+- **A `FIL2FR` ladder per `FLT2MODE`** — three more sweeps (BP, HP, EQ), and
+  the two that matter cover 89% of real board use.
+- **The HP section's order.** Its profile rises only ~17 dB from 31 Hz to its
+  plateau, shallower than a 2-pole highpass at 246 Hz should manage. Either it
+  is a different order or the normalisation band sat inside the transition.
+- **`FIL2FR` 95..98** — between a real 5.9 kHz corner and a measured bypass,
+  with a discontinuity that suggests 99 is a special "off" value the way
+  `AKAI_FILTER_OPEN` is for filter 1. 0.7% of material.
+- **Below `FIL2FR` 20** — 1.3%, extrapolated along the flattened slope.
+
+### A note on how the errors were distributed
+
+Six defects in this work were each caught by the party that did **not** hold the
+number: s3ked caught our resonance-peak/corner mix-up, we caught their arm-step
+notch/peak mix-up and the byte-45 sacrifice, their ladder caught our shared-law
+assumption, our corpus scan caught our own unguarded EQ fallthrough (via a
+`KeyError` in the *display* code, not the logic), and their top-of-range sweep
+caught our borrowed saturation constant. **Neither session ever caught the
+quantity it was actively reasoning with.** The cheap mechanical defence — print
+where each number came from before comparing two — is what found the one defect
+nobody had argued about.

@@ -1530,6 +1530,246 @@ def akai_filfrq_to_hz(byte: int):
     return a * math.exp(b * max(0, byte))
 
 
+# ── AKAI IB-304F second filter (§AKAIFIL2) ────────────────────────────────
+#
+# The IB-304F adds a SECOND filter in series after the always-present 2-pole
+# lowpass. Everything below is measured except the frequency law, which is
+# flagged as provisional and isolated in ONE function so a single edit lands
+# the sweep result.
+#
+# **`LSI2_ON` cannot detect the board**: it reads back 1 on a machine with no
+# IB-304F fitted. So nothing on the wire tells the converter whether the
+# hardware is there, and the two directions are gated differently:
+#
+#   READ  (AKAI -> model): gated on EVIDENCE IN THE DATA. An inert filter 2 is
+#         detectable -- ~60% of keygroups with LSI2_ON set leave it wide open
+#         -- so a setting that actually shapes the sound is the gate, and a
+#         diagnostic names the assumption.
+#   WRITE (model -> AKAI): gated on the explicit `--akai-ib304f` flag, NEVER a
+#         default. The output carries no evidence at all: writing filter-2
+#         settings to a boardless machine gets *"2nd filter board IB304F not
+#         fitted!"* and the program does not load.
+
+AKAI_FLT2MODE_LP = 0        #: monotonic fall, -6 dB at 31 Hz to -30 at 8 kHz
+AKAI_FLT2MODE_BP = 1        #: peak at the corner, falling either side
+AKAI_FLT2MODE_HP = 2        #: rise then plateau
+AKAI_FLT2MODE_EQ = 3        #: parametric band, sign from FLT2Q
+
+#: Keygroup offsets, s3ked's IB-304F map (docs/AKAI_S3000_FORMAT.md).
+AKAI_LSI2_ON_OFFSET  = 168
+AKAI_FLT2GAIN_OFFSET = 169
+AKAI_FLT2MODE_OFFSET = 170
+AKAI_FLT2Q_OFFSET    = 171
+AKAI_FIL2FR_OFFSET   = 177
+
+#: `FLT2Q` -> depth in dB at the corner in EQ mode. MEASURED, raw 0.62 Hz bins
+#: (s3ked, 2026-09-08). The octave-band figures taken first are wrong by up to
+#: **49 dB** and are not recorded here at all -- a fixed-width analysis band
+#: cannot characterise a feature whose width is a free parameter, and `FLT2Q`
+#: is precisely a width control.
+#:
+#: **Not a signed gain.** The cut deepens from 0 to a true notch at 16 (108 Hz
+#: wide, Q 20.5) and then shallows toward the crossing, so the curve is
+#: genuinely non-monotonic; do not fit a line through it.
+AKAI_FLT2Q_DEPTH_DB = {0: -4.3, 10: -10.0, 15: -23.9, 16: -53.9, 18: -16.6,
+                       20: -9.5, 21: -7.0, 25: +2.3, 27: +6.5, 29: +12.0,
+                       31: +22.4}
+
+#: Sign bounds, both MEASURED points. The crossing interpolates to `FLT2Q`
+#: 23.1, which places the unmeasured 22 and 23 on the cut side -- 14 keygroups,
+#: 3% of EQ material. The manual's "16 is no cut or boost" is right about the
+#: behaviour and wrong about the value: 16 is the DEEPEST cut of all.
+AKAI_FLT2Q_BANDSTOP_MAX  = 21
+AKAI_FLT2Q_BANDBOOST_MIN = 25
+
+#: Headroom in dB at `FLT2Q` 31. **+22, not the +15.57 first reported** -- the
+#: octave-band metric understated the peak by 7 dB, and this is the correction
+#: that clips.
+AKAI_FLT2_HEADROOM_DB = 22.4
+
+#: **MEASURED, 2026-09-09** (s3ked, mode 0 / `FLT2Q` 0, -3 dB corner against
+#: the same program bypassed). The sweep FALSIFIED the shared-law hypothesis
+#: this function was written on: filter 2 sits about **half** filter 1\'s corner
+#: at the same byte -- very close to one octave down.
+AKAI_FIL2FR_LAW_MEASURED = True
+
+#: The seven measured corners (s3ked, 2026-09-09, mode 0 / `FLT2Q` 0, -3 dB
+#: corner taken as a ratio against the same program bypassed). **Shipped as
+#: points, not as a fit**, for the same reason `AKAI_FILTER_MEASURED` is -- and
+#: here that decision was load-bearing within the hour.
+#:
+#: The first run fitted a single exponential to five points and it was
+#: falsified by the next three: `FIL2FR` 20 came in at **26.9 Hz against 18.4
+#: predicted, 46% high**, past a falsifier stated in advance, and a re-take of
+#: byte 30 agreed with the original to 1.6%. So byte 30 was never a bad
+#: measurement, which was the standing explanation for it.
+#:
+#: **Filter 2 FLATTENS below FIL2FR 45; filter 1 does not.** Above 45 filter 2
+#: is a clean exponential at filter 1's own slope and half its frequency; below
+#: 45 it departs progressively:
+#:
+#:      local slope        octaves per 10 bytes
+#:        20 -> 30                0.68
+#:        30 -> 37                0.98
+#:        37 -> 45                0.78
+#:        45 -> 64                1.03
+#:        64 -> 72                1.00
+#:        72 -> 80                0.96
+#:        filter 1, throughout    1.02 .. 1.05   (checked to FILFRQ 0)
+#:
+#: **So the difference between the two filters is structural, not just a
+#: factor** -- and the "shallower exponent" reading of the first run was an
+#: artefact of fitting a single curve through the flattened region. Above 45
+#: the slope is filter 1's to within a few per cent.
+#:
+#: Two runs of the four overlapping points agree to within 1.8%.
+#: **The top departs too, and between 88 and 94 rather than filter 1's 84.**
+#: Byte 88 is still on the exponential (0.951 of it); byte 94 is **1.78x**
+#: above it. So the curve has three regions, not two, and neither boundary is
+#: borrowed from filter 1.
+AKAI_FIL2FR_MEASURED = {20: 26.9, 30: 43.1, 37: 69.4, 45: 106.9,
+                        64: 414.4, 72: 720.0, 80: 1225.0,
+                        88: 2073.1, 94: 5904.4}
+
+#: **MEASURED transparent: flat to 0.0 dB in every octave band from 31 Hz to
+#: 16 kHz.** At `FIL2FR` 99 the filter is out of circuit -- not a corner that
+#: has moved above the audio band, an actual bypass. It is where **1532 of 2457
+#: enabled keygroups sit**, so this is the single most common setting.
+#:
+#: **This replaces a value borrowed from filter 1.** `AKAI_FILTER_SATURATED`
+#: (96) was applied to filter 2 on the assumption that the two saturate alike;
+#: byte 94 is a genuine 5.9 kHz corner, so that assumption was wrong and was
+#: throwing away a real setting.
+AKAI_FIL2FR_TRANSPARENT = 99
+
+#: Extrapolation exponents, DIFFERENT AT THE TWO ENDS because the curve is not
+#: one exponential. Each is the local slope of the nearest measured interval.
+#:
+#: Neither is a law. They cover 23.4% of active filter-2 keygroups in the
+#: library corpus -- 1.4% below 20 and **22.0% above 80** -- so the top is
+#: where the next sweep belongs, and the bottom is nearly closed.
+AKAI_FIL2FR_EXTRAP_BELOW = 0.04714      # 20 -> 30, the flattened region
+AKAI_FIL2FR_EXTRAP_ABOVE = 0.17445      # 88 -> 94, the steep top
+
+#: **`FIL2FR` 95..98 are unmeasured and sit between a real 5.9 kHz corner at 94
+#: and a measured bypass at 99.** Extrapolating 88->94's slope through them
+#: gives corners from 7 to 12 kHz -- audible, so they are NOT folded into the
+#: bypass. But the jump from a 12 kHz corner to nothing at 99 is a
+#: discontinuity, which suggests 99 is a special "off" value the way
+#: `AKAI_FILTER_OPEN` is for filter 1 rather than the end of a slide.
+AKAI_FIL2FR_EXTRAP_TOP_UNMEASURED_FROM = 94
+
+#: **THE CORNER MOVES WITH `FLT2MODE`.** Measured at one byte:
+#:
+#:      FIL2FR 64, mode 0 (LP)    414.4 Hz
+#:      FIL2FR 64, mode 2 (HP)    246.2 Hz     ratio 0.594
+#:
+#: **41% apart at the same byte**, and the law above was measured entirely in
+#: mode 0 -- which is **7% of real use**. EQ and HP together are 89%.
+#:
+#: **This ratio is NOT applied.** One point establishes that the corner moves;
+#: it does not establish by how much across the range, and s3ked flagged the
+#: HP capture's own normalisation band as possibly sitting inside the
+#: transition. Correcting by a single unreplicated point would be the same
+#: mistake as fitting a law through one flagged measurement -- which this
+#: table already had to undo once. Each mode needs its own ladder; until then
+#: a non-LP decode carries the mode-0 corner and says so.
+AKAI_FIL2FR_HP_RATIO_AT_64 = 0.594
+
+#: Where the measured span ends. Above this filter 2 is EXTRAPOLATED and says
+#: so: filter 1 departs from its own exponential from 84 up (§146, +2.3% at 84
+#: rising to +23% at 94) and whether filter 2 does the same, at the same place,
+#: is unmeasured. **p90 of the corpus is 88**, so this is not a corner case --
+#: it needs a measured table built the way §146 built filter 1\'s.
+AKAI_FIL2FR_MEASURED_TO = 80
+
+
+def akai_fil2fr_to_hz(byte: int):
+    """`FIL2FR` -> the filter-2 -3 dB corner in Hz, or None when wide open.
+
+    **MEASURED 2026-09-09, and it is NOT filter 1\'s law.** Filter 2 sits at
+    about **0.515x** filter 1\'s corner for the same byte -- 0.96 octaves down,
+    stable at 0.50-0.53 across the four solid points.
+
+    Measured points are returned exactly and interpolated geometrically between
+    (the scale is logarithmic in frequency). Outside the span:
+
+      * **below 20** -- extrapolated along the flattened region's own slope,
+        `AKAI_FIL2FR_EXTRAP_BELOW`. Only 1.4% of active keygroups land here.
+      * **above `AKAI_FIL2FR_MEASURED_TO`** -- extrapolated, and the caller
+        should say so. Filter 1 leaves its own exponential from 84 up; whether
+        filter 2 does is unmeasured and p90 of the corpus is 88.
+      * at `AKAI_FIL2FR_TRANSPARENT` (99) -- None. **Measured flat to 0.0 dB
+        in every band**: the filter is out of circuit, not merely wide open.
+        95..98 are unmeasured and carry an extrapolated corner.
+
+    **The corner also moves with `FLT2MODE`** -- 41% between LP and HP at one
+    byte -- and everything here was measured in mode 0. See
+    `AKAI_FIL2FR_HP_RATIO_AT_64`.
+
+    **The hypothesis this function first shipped on was wrong, and the argument
+    against that hypothesis was also wrong.** "Filter 2 measures ~2200 where our
+    law says 2503" compared an EQ extremum against a corner law -- two correct
+    numbers naming different quantities. The correct like-for-like comparison
+    (an EQ boost peak against a resonance-peak fit) said the laws MATCHED to
+    1.1%, which is what put the shared-law assumption in. Both readings were
+    artefacts of the comparand; only the mode-0 corner ladder settled it, and
+    the real difference is 2x in the direction neither comparison suggested.
+    """
+    if byte >= AKAI_FIL2FR_TRANSPARENT:
+        return None
+    pts = sorted(AKAI_FIL2FR_MEASURED)
+    lo, hi = pts[0], pts[-1]
+    if byte in AKAI_FIL2FR_MEASURED:
+        return AKAI_FIL2FR_MEASURED[byte]
+    if byte < lo:
+        return AKAI_FIL2FR_MEASURED[lo] * math.exp(
+            AKAI_FIL2FR_EXTRAP_BELOW * (byte - lo))
+    if byte > hi:
+        return AKAI_FIL2FR_MEASURED[hi] * math.exp(
+            AKAI_FIL2FR_EXTRAP_ABOVE * (byte - hi))
+    for x0, x1 in zip(pts, pts[1:]):
+        if x0 <= byte <= x1:
+            y0, y1 = AKAI_FIL2FR_MEASURED[x0], AKAI_FIL2FR_MEASURED[x1]
+            f = (byte - x0) / (x1 - x0)
+            return math.exp(math.log(y0) + f * (math.log(y1) - math.log(y0)))
+    return AKAI_FIL2FR_MEASURED[hi]
+
+
+def akai_flt2q_to_depth_db(byte: int) -> float:
+    """`FLT2Q` -> depth in dB at the corner (EQ mode). Negative cuts.
+
+    Interpolates linearly between measured points, which is **hazardous where
+    the material actually sits**: 177 of 469 EQ keygroups fall in regions
+    steeper than 2 dB per unit, and `FLT2Q` 16 is a singular 108 Hz notch that
+    no interpolation through its neighbours reproduces. The measured points are
+    exact; the gaps are the honest best available and are marked by
+    `AKAI_FLT2Q_INTERPOLATED` at the point of use.
+    """
+    b = max(0, min(31, int(byte)))
+    if b in AKAI_FLT2Q_DEPTH_DB:
+        return AKAI_FLT2Q_DEPTH_DB[b]
+    pts = sorted(AKAI_FLT2Q_DEPTH_DB)
+    if b < pts[0]:
+        return AKAI_FLT2Q_DEPTH_DB[pts[0]]
+    if b > pts[-1]:
+        return AKAI_FLT2Q_DEPTH_DB[pts[-1]]
+    for x0, x1 in zip(pts, pts[1:]):
+        if x0 <= b <= x1:
+            y0, y1 = AKAI_FLT2Q_DEPTH_DB[x0], AKAI_FLT2Q_DEPTH_DB[x1]
+            return y0 + (y1 - y0) * (b - x0) / (x1 - x0)
+    return 0.0
+
+
+def akai_flt2q_is_boost(byte: int) -> bool:
+    """EQ mode: does this `FLT2Q` BOOST the band? 78% of real material does.
+
+    Reading mode 3 as a notch -- which the one low-Q bench capture suggested --
+    would be wrong for 367 of 469 enabled keygroups.
+    """
+    return int(byte) >= AKAI_FLT2Q_BANDBOOST_MIN
+
+
 def nominal_knob_to_hz(knob: float) -> float:
     """A source's normalised 0..1 cutoff knob -> Hz on the NOMINAL scale.
 

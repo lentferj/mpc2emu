@@ -46,6 +46,13 @@ from models.common import (
     AKAI_VLOUD_DB_PER_UNIT, AKAI_VLOUD_SWING_DB_PER_UNIT,
     AKAI_TUNE_UNITS_PER_SEMITONE,
     akai_filq_to_01, AKAI_MUTE_CUT_SECONDS,
+    akai_fil2fr_to_hz, akai_flt2q_to_depth_db, akai_flt2q_is_boost,
+    AKAI_LSI2_ON_OFFSET, AKAI_FLT2GAIN_OFFSET, AKAI_FLT2MODE_OFFSET,
+    AKAI_FLT2Q_OFFSET, AKAI_FIL2FR_OFFSET, AKAI_FLT2MODE_LP,
+    AKAI_FLT2MODE_BP, AKAI_FLT2MODE_HP, AKAI_FLT2MODE_EQ,
+    AKAI_FLT2Q_DEPTH_DB, AKAI_FIL2FR_LAW_MEASURED, AKAI_FILTER_SATURATED,
+    AKAI_FIL2FR_MEASURED_TO, AKAI_FIL2FR_TRANSPARENT,
+    AKAI_FIL2FR_EXTRAP_TOP_UNMEASURED_FROM,
     akai_lfo_rate_hz, akai_lfo_depth_to_pitch, akai_lfo_delay_seconds,
     akai_env2_target_hz, E4B_CUTOFF_MAX_HZ, E4XT_FENV_BYTE_PER_UNIT,
     AKAI_ENV2_OCT_PER_UNIT, AKAI_ENV2_FULL_LEVEL, AKAI_FILTER_OPEN_HZ, AKAI_FILTER_FLOOR_HZ,
@@ -425,6 +432,113 @@ def _env2_amount(depth, sustn2, filfrq, s3000):
     return octaves * 1200.0
 
 
+#: XPM `filter_type` values this combiner emits. Named because the numbers are
+#: meaningless on sight and a wrong one is silent.
+_XPM_LOW2, _XPM_LOW4 = 2, 3
+_XPM_HIGH2 = 7
+_XPM_BAND2, _XPM_BAND4 = 11, 12
+_XPM_BANDSTOP2 = 15
+_XPM_BANDBOOST2 = 19
+
+#: An EQ shallower than this is not doing audible work. The measured depth
+#: table never reaches 0 -- its smallest magnitude is 2.3 dB -- so this only
+#: catches values interpolated across the sign crossing at `FLT2Q` 23.1.
+_FLT2_EQ_INERT_DB = 1.0
+
+#: Two lowpasses within this many octaves of each other are read as one
+#: steeper filter rather than as the lower one alone.
+_FLT2_CASCADE_OCTAVES = 1.0
+
+
+def _combine_akai_filters(kg, s3000):
+    """The two series filters -> ONE model filter. Returns (type, hz, note).
+
+    **The model has one filter and an IB-304F machine has two in series**, so
+    something is always lost here; the job is to lose the least audible part
+    and say which. `note` is None when nothing was dropped, otherwise a short
+    string for the diagnostic.
+
+    Filter 1 is always a 2-pole lowpass. Filter 2 adds the mode, so the
+    combinations that matter are:
+
+      * **LP after LP** -- one steeper lowpass at the lower corner when the two
+        are within an octave, otherwise the lower corner alone at 2 poles. The
+        upper filter is then contributing rolloff an octave above the audible
+        knee and calling it 4-pole would overstate it.
+      * **HP after LP** -- a bandpass, which is the one shape filter 1 cannot
+        make at all and the main reason to fit the board.
+      * **BP after LP** -- a bandpass at filter 2's corner.
+      * **EQ after LP** -- a band-stop or band-boost. 78% of real material
+        boosts, so reading mode 3 as a notch would be wrong for 367 of 469
+        enabled keygroups.
+
+    **The gate is evidence, not `LSI2_ON`**, which reads back 1 on a machine
+    with no board fitted. See §AKAIFIL2.
+    """
+    f1 = akai_filfrq_to_hz(kg.get('filter_freq', AKAI_FILTER_OPEN))
+    if not s3000 or not kg.get('lsi2_on'):
+        return None
+    mode = kg.get('flt2_mode', 0)
+    fr = kg.get('fil2fr', AKAI_FILTER_OPEN)
+    q = kg.get('flt2_q', 0)
+    f2 = akai_fil2fr_to_hz(fr)
+
+    # ── Inert cases: the field is set but the filter is not shaping anything.
+    # About 60% of keygroups with LSI2_ON land here, which is why the read gate
+    # can be evidence-based at all.
+    if mode == AKAI_FLT2MODE_LP and f2 is None:
+        return None                                  # wide open lowpass
+    if mode == AKAI_FLT2MODE_HP and fr == 0:
+        return None                                  # highpass at DC
+    if mode == AKAI_FLT2MODE_EQ and abs(akai_flt2q_to_depth_db(q)) < _FLT2_EQ_INERT_DB:
+        return None                                  # flat parametric band
+    if f2 is None:
+        return None
+
+    if mode == AKAI_FLT2MODE_LP:
+        if f1 is None:
+            return (_XPM_LOW2, f2, None)
+        near = abs(math.log2(f1 / f2)) <= _FLT2_CASCADE_OCTAVES
+        return (_XPM_LOW4 if near else _XPM_LOW2, min(f1, f2),
+                None if near else 'second lowpass an octave clear of the first')
+
+    if mode == AKAI_FLT2MODE_HP:
+        if f1 is None:
+            return (_XPM_HIGH2, f2, None)
+        if f2 >= f1:
+            # Both corners fight: the highpass opens above where the lowpass
+            # has already closed. The machine passes very little; the model
+            # cannot say that, so keep the highpass and flag it.
+            return (_XPM_HIGH2, f2, 'highpass above the lowpass corner')
+        # A real bandpass, geometric centre -- the single frequency the model
+        # can hold that is equidistant from both edges in octaves.
+        return (_XPM_BAND4, math.sqrt(f1 * f2), None)
+
+    if mode == AKAI_FLT2MODE_BP:
+        return (_XPM_BAND4 if f1 is not None else _XPM_BAND2, f2, None)
+
+    if mode != AKAI_FLT2MODE_EQ:
+        # OUT OF RANGE. Found by scanning the library discs: 10 of 8583 S3000
+        # keygroups (0.12%) carry `FLT2MODE` outside 0..3 -- 10, 12, 99, 112,
+        # 255. That rate is the signature of unwritten bytes, not of a
+        # misaligned read: the same scan misaligned produced 16 106 out-of-range
+        # values, and correctly aligned it produces 20 of 27 028.
+        #
+        # **This branch exists because the EQ case was the fallthrough and was
+        # silently absorbing them** -- mode 255 was being decoded as a
+        # parametric band. An unrecognised mode means we do not know what the
+        # filter is doing, and the honest answer is to leave filter 2 out.
+        return None
+
+    # EQ. Filter 1's lowpass and filter 2's band cannot both be expressed.
+    # Keep whichever is doing the audible work: if the lowpass corner sits
+    # BELOW the band, the band is above the passband and inaudible.
+    if f1 is not None and f1 < f2:
+        return (_XPM_LOW2, f1, 'parametric band above the lowpass corner')
+    kind = _XPM_BANDBOOST2 if akai_flt2q_is_boost(q) else _XPM_BANDSTOP2
+    return (kind, f2, None if f1 is None else 'lowpass corner')
+
+
 def _cutoff_of(filfrq: int, s3000: bool) -> float:
     """FILFRQ -> the model's 0..1 cutoff position.
 
@@ -723,6 +837,19 @@ def parse_program_bytes(data: bytes, fallback_name: str = '',
             # program on earth.
             mute_group=(kg[AKAI_KGMUTE_OFFSET]
                         if len(kg) > AKAI_KGMUTE_OFFSET else AKAI_KGMUTE_OFF),
+            # ── IB-304F second filter. An S1000 keygroup is 150 bytes and
+            # cannot carry any of these, so a short block reports the board
+            # absent rather than reading zeros as settings.
+            lsi2_on=(kg[AKAI_LSI2_ON_OFFSET]
+                     if len(kg) > AKAI_LSI2_ON_OFFSET else 0),
+            flt2_gain=(kg[AKAI_FLT2GAIN_OFFSET]
+                       if len(kg) > AKAI_FLT2GAIN_OFFSET else 0),
+            flt2_mode=(kg[AKAI_FLT2MODE_OFFSET]
+                       if len(kg) > AKAI_FLT2MODE_OFFSET else 0),
+            flt2_q=(kg[AKAI_FLT2Q_OFFSET]
+                    if len(kg) > AKAI_FLT2Q_OFFSET else 0),
+            fil2fr=(kg[AKAI_FIL2FR_OFFSET]
+                    if len(kg) > AKAI_FIL2FR_OFFSET else AKAI_FILTER_OPEN),
             zones=zones,
         ))
 
@@ -985,6 +1112,49 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
             if voice.lfo1_rate is None:
                 voice.lfo1_rate = akai_lfo_rate_hz(prog.get('lfo_rate', 0))
         voice.filter_cutoff = _cutoff_of(kg['filter_freq'], prog['is_s3000'])
+        # ── IB-304F second filter, when the DATA says it is doing something.
+        # `LSI2_ON` alone is not evidence: it reads back 1 with no board fitted,
+        # so `_combine_akai_filters` returns None for a filter 2 that is set but
+        # inert -- about 60% of the keygroups that have the flag on. §AKAIFIL2.
+        _f2 = _combine_akai_filters(kg, prog['is_s3000'])
+        if _f2 is not None:
+            _ftype, _fhz, _dropped = _f2
+            voice.filter_type = _ftype
+            voice.filter_cutoff = _fhz
+            _fr = kg.get('fil2fr', AKAI_FILTER_OPEN)
+            _mode = kg.get('flt2_mode', 0)
+            if _mode != AKAI_FLT2MODE_LP:
+                # **THE CORNER MOVES WITH THE MODE**: 41% between LP and HP at
+                # one byte. Every point of the corner law was measured in mode
+                # 0, which is 7% of real use -- EQ and HP are 89% of it. So
+                # this warning fires on the common case, deliberately.
+                #
+                # The measured LP/HP ratio is NOT applied. One point says the
+                # corner moves; it does not say by how much across the range,
+                # and this table has already had to undo one law fitted through
+                # a single flagged measurement.
+                _diag(_W, 'AKAI_FIL2FR_MODE_UNCALIBRATED',
+                      f'filter 2 corner from the mode-0 law, but FLT2MODE is '
+                      f'{_mode}: the corner is known to move ~41% between modes',
+                      content_lost=False, subject=preset.name,
+                      remedy='measure a FIL2FR ladder per FLT2MODE')
+            elif _fr > AKAI_FIL2FR_EXTRAP_TOP_UNMEASURED_FROM:
+                # 95..98 sit between a real 5.9 kHz corner at 94 and a measured
+                # bypass at 99, and nothing in between was captured.
+                _diag(_W, 'AKAI_FIL2FR_EXTRAPOLATED',
+                      f'filter 2 corner extrapolated above the measured span '
+                      f'(FIL2FR {_fr} > {AKAI_FIL2FR_EXTRAP_TOP_UNMEASURED_FROM})',
+                      # Nothing is dropped -- a corner is carried, and it may
+                      # simply be the wrong one. The reader still gets a filter.
+                      content_lost=False, subject=preset.name,
+                      remedy='measure FIL2FR 95..98')
+            if _dropped:
+                _diag(_I, 'AKAI_FILTER2_PARTIAL',
+                      f'two series filters collapsed onto one: {_dropped} dropped',
+                      # This one DOES lose content: the machine had two filters
+                      # in series and the model can hold one, so the dropped
+                      # stage was audible on the source.
+                      content_lost=True, subject=preset.name)
         # VELOCITY -> FILTER FREQUENCY -- carried since 2026-08-31 (§AKAIVFRREAD).
         # Never read before this: `writers/akai_s3000_writer.py:496` already
         # documented the gap ("the AKAI reader does not populate
