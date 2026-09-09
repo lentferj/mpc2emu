@@ -489,12 +489,25 @@ Output:
                       The reader needs no flag: an unfitted board leaves the
                       filter inert in the data, and that is detectable.
 
-                      **The corner law was measured in lowpass mode only**,
-                      which is 7% of how the board is actually used in real
-                      library material, and the corner is known to move ~41%
-                      between modes.  A highpass or EQ corner is therefore
-                      placed by a law measured on a different mode, and a
-                      diagnostic says so.  Not hardware-verified.
+                      **HARDWARE-VERIFIED 2026-09-09** on an S3000XL with the
+                      board fitted, by rendering programs this writer emitted:
+                      all four modes render; the board-withheld and board-used
+                      builds of the same source diverge to 16.9 dB by 6 kHz;
+                      the 4-pole corner lands within 5% of nominal at 800 Hz
+                      and 3 kHz; and the two filter sections cascade to
+                      -22.3 dB/oct against a single section's -12.7.
+
+                      **What is NOT verified is the corner in the other three
+                      modes.**  The frequency law was measured in lowpass mode
+                      only, which is 7% of how the board is actually used —
+                      EQ is 50% and highpass 39% — and the feature frequency
+                      moves a long way with mode: measured at one byte, a
+                      highpass corner sits at 0.688x the lowpass law, and a
+                      bandpass or EQ feature at 1.65x.  Those factors are
+                      **reported and deliberately not applied**, because each
+                      rests on a single byte out of 0–99; a diagnostic quotes
+                      the one for the mode in hand so the size and direction
+                      of the error are visible rather than merely admitted.
   --akai-max-objects N  AKAI resident-object pool (--format akai).  The
                       S3000XL counts programs, KEYGROUPS and samples against
                       ONE budget — its LOAD page shows it as `free P/K/S` —
