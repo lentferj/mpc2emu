@@ -46,44 +46,49 @@ Same rungs as the mode-0 ladder so the results are directly comparable. The
 predicted feature frequency decides the source, because **the two volumes on
 the card fail at opposite ends**:
 
+**Plan the rungs so the plan does not depend on the factor being tested.**
+That is the mistake this table made in its HP column and it is worth stating as
+a rule, because the fix is cheap: give every rung its feature frequency under
+**both** the constant-factor assumption and a pessimistic drift, and require it
+to be measurable under the pessimistic one — since that is the case the ladder
+exists to detect.
+
+HP is the only mode with a ladder, so its own drift is the pessimistic model:
+its factor fell to **0.55×** of its byte-74 value by byte 20, 0.72× by byte 30.
+
 ```
-  rung    BP / EQcut Hz  src        EQboost Hz  src
-    20              44   noise              41  noise
-    30              71   noise              65  noise
-    37             115   noise             105  noise
-    45             177   noise             162  noise
-    64             685   either            628  either
-    72            1190   either           1091  either
-    80            2025   FLATCOMB         1856  either
-    88            3427   FLATCOMB         3141  FLATCOMB
-    94            9760   FLATCOMB         8945  FLATCOMB
+  rung   BP / EQcut, constant   with an HP-like drift   verdict
+    20              44.5 Hz              24.3 Hz        SKIP -- under the rig's floor
+    30              71.2                 51.0           ok
+    37             114.7                 85.7           ok
+    45             176.7                157.9           ok
+    64             685.0                628.2           ok
+    72            1190                  1100            ok
+    80            2025                  1900            ok
+    88            3427                  3250            ok
+    94            9760                  9300            ok
 ```
 
-**THE HP LADDER IS DONE (2026-09-09) AND ITS COLUMN HERE WAS WRONG.** This
-table originally carried an HP column built from the single-byte factor 0.688,
-which put rung 30 at 30 Hz. The measured HP curve puts it at **~21 Hz** — 18 %
-lower, and as marginal as the rung 20 this procedure had already skipped.
-s3ked got no crossing at rung 30 and correctly reported no number rather than
-one.
+**So BP and EQ start at rung 30, not 20.** Under the optimistic reading rung 20
+looks fine at 44 Hz; under the pessimistic one it is 24 Hz, below where the rig
+is verified flat. **A rung that is only measurable if the hypothesis is true
+cannot test the hypothesis.**
 
-**So the table above is the same mistake it warns about, one level up:** the
-source was chosen per rung from a *predicted* feature frequency, and the
-prediction came from a factor that the ladder then falsified. **A planning
-table built on an unverified constant inherits its error** — and the visible
-symptom was a rung that could not be measured, not a wrong answer, which is the
-lucky direction.
+**Sources** — by predicted feature frequency, taking the pessimistic column:
 
-The remaining BP and EQ columns rest on the same kind of single-byte factor
-(1.653 and 1.515) and should be treated as provisional in exactly the same way.
-**Expect the lowest one or two rungs of each to be unmeasurable rather than
-merely awkward.**
+| rungs | feature | source |
+|---|---|---|
+| 30–64 | 50 Hz – 700 Hz | **`TC10 NOISE`** — continuous to 15 Hz |
+| 72–80 | 1.1 – 2 kHz | either |
+| 88–94 | 3 – 10 kHz | **`FLATCOMB`** — beats the noise by 5–11 dB above 4 kHz |
 
-- **`TC10 NOISE`** is continuous to 15 Hz. **Use it below ~300 Hz.**
-- **`FLATCOMB`** is a comb whose teeth are further apart than the analysis
-  bands below ~125 Hz — measured SNR **+3.8 dB at 22 Hz, +9.1 at 44** — and it
-  beats the noise by 5–11 dB at 4–10 kHz. **Use it above ~2 kHz.**
-- **HP rung 20 is skipped**: 19 Hz leaves no room beneath the rig's verified-flat
-  11 Hz.
+`FLATCOMB` must not be used below ~125 Hz: it is a comb whose teeth are wider
+than the analysis bands there, measured at **+3.8 dB SNR at 22 Hz** and +9.1 at
+44.
+
+**Run EQ at two `FLT2Q` values, one per arm** — 20 (cut) and 27 (boost). Their
+centres measured 8 % apart at one byte, and whether that gap is constant across
+the range is exactly the same open question one level down.
 
 ## The reference side is not the same in all three modes
 
