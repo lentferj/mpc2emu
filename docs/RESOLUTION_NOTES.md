@@ -30608,35 +30608,57 @@ already taken, at no extra bench cost.
 BP and both EQ arms measured (s3ked §202), completing the set. **Every mode now
 decodes on its own measured points; no single-byte factor is applied anywhere.**
 
-### Two exponents, not five — after removing a confound
+### Two exponents, not five — and the separation took three attempts to state
 
 s3ked's ratios divide by a four-point exponential fit of mode 0, which is **not
 the curve this project ships** (mode 0 has three regions and flattens below
-byte 45). Refitting every mode over **45–80 only**, the range where mode 0 *is*
-exponential, so the bend cannot contaminate the comparison:
+byte 45). Refitting on a common range was right; **doing it on a range that was
+not actually common was not**, and this section records the correction rather
+than the first answer.
+
+**All five modes, fitted over 45–80 at n = 4:**
 
 ```
-   HP     0.07394  |
-   BP     0.07421  |  group A, internal spread 0.7 %
-   EQcut  0.07371  |
-   ------------------------------------------- 5.2 % apart
-   EQbst  0.07068  |  group B, internal spread 1.1 %
-   mode0  0.06988  |
+   mode 0    0.06988   |  group B, spread 1.1 %
+   EQboost   0.07068   |
+   ------------------------------------------  gap 5.6 %
+   EQcut     0.07371   |
+   BP        0.07421   |  group A, spread 1.3 %
+   HP        0.07469   |
 ```
 
-**Within-group spread is about the size of the fit residuals; between-group is
-five times it.** So the structure is two laws, not five.
+**The two-group structure holds.** Between-group separation is several times
+the within-group spread, and EQ **boost** sits with the **lowpass** while HP,
+BP and EQ-cut sit together — which is why EQ-boost's factor against mode 0
+looked constant (+4 %) while the others drifted 17–42 %. That is the same
+grouping seen from another angle, not a separate fact.
 
-**EQ BOOST belongs with the LOWPASS, not with the other two band modes.** That
-is why its factor against mode 0 looked constant (+4 % across the range) while
-the others drifted 17–42 % — the same grouping seen from a different angle, not
-a separate fact. s3ked had paired BP with EQ-cut and left HP separate; the
-common-range fit puts HP with them and moves EQ-boost across.
+**Three fits of the same five modes gave 5 : 1, 1.2 : 1 and 3.2 : 1, and the
+data never changed once.** Only the ranges did:
 
-BP and EQ-cut also share a residual S-shape the others lack
-(+2.2/−4.2/−0.9/+3.0 against HP's +0.6/−1.8/+1.3), which reads as one filter
-core reached two ways. **Not claimed** — this ladder cannot prove it — and it is
-why both keep their own table rather than being merged.
+| fit | what was compared | separation |
+|---|---|---|
+| s3ked's first | HP over 37–72 against BP/EQ over 30–80 | claimed as four separate laws |
+| ours | HP over 45–**72** (n=3) against BP/EQ over 45–**80** (n=4) | 5 : 1 |
+| genuinely common range | all five over 45–72 | 1.2 : 1 — establishes nothing |
+| after measuring HP at byte 80 | all five over 45–80, n=4 | ~3–4 : 1 |
+
+**We criticised the unequal-range comparison and then made it one turn later.**
+HP had no byte-80 point, and byte 80 is exactly where BP and EQ-cut carry their
+largest positive residuals — so including it for them and not for HP pushed the
+groups apart. **The rule: a comparison between fitted parameters is a claim
+about the fitting ranges until those are shown identical.**
+
+s3ked settled it by capturing the missing point rather than arguing about it —
+**60 seconds, against an exchange that had already cost more than that.** When a
+range is one point short, measuring the point is usually cheaper than the
+argument.
+
+**And the separation "ratio" is itself definition-dependent**: gap over the
+larger spread gives 4.2, other reasonable definitions give ~3.2. Neither is
+wrong and neither is a measurement. **The underlying numbers — a 5.6 % gap
+against 1.1 % and 1.3 % spreads — are what should be quoted**, which is the same
+lesson as naming the quantity before comparing two figures, one level up.
 
 ### Mode 0 is the special case, and it is the denominator
 
