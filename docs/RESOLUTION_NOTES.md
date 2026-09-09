@@ -30781,3 +30781,27 @@ real would go with it while the number stayed.
 BP and both EQ arms are unaffected — their features are extrema of the ratio
 curve, so no passband normalisation enters them. **Only the mode that used a
 plateau moved.**
+
+
+### The working rule this produced
+
+s3ked's formulation, adopted here: **whoever holds the raw captures owes the
+other a re-derivation whenever a number crosses, not just the number.**
+
+The reason is stronger than "be thorough". **Five clean numbers in a table are
+not merely silent about their reference — they look *more* trustworthy for being
+clean.** Nothing in 36.1 / 64.9 / 247.8 / 448.4 / 794.8 hints that 895.5 was
+ever in the running for the last one. A sliding reference is visible only where
+the captures are, and only if somebody deliberately re-derives a figure they
+already have.
+
+**This one was caught for an incidental reason:** a measured value was asked
+for instead of a fitted one, which sent the holder back to the raw data. That is
+not a process, it is luck, and the rule above is what luck should be replaced
+with.
+
+**And it is the same shape as a fitted number sitting in a measurements table.**
+The value and the evidence that the value means anything live in different
+places, and only one of them travels. Lose the docstring and the figure remains,
+quietly no longer supported — which is why `AKAI_FIL2FR_MEASURED`'s "bypassed"
+provenance now has a test on it rather than a comment.
