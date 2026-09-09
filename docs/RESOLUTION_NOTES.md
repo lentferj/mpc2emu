@@ -30166,6 +30166,42 @@ Every shape round-trips to within 2.8%. Getting there found two defects, and
 after the feature was "done" and the suite was green. The tests that now cover
 them were written from the failures, not from the design.
 
+### The cascade, and an error a round trip cannot see
+
+s3ked measured the two sections together (2026-09-09): `FILFRQ` 62 and `FIL2FR`
+72, individually 679 and 678 Hz, cascaded.
+
+**They multiply cleanly — the pair's response is the sum of the singles in dB
+to within 0.04 dB over six octaves.** So a single ratio is the right model
+rather than a fudge. But the pair's corner is **571 Hz, 0.841x** either
+section's.
+
+**Both directions had that wrong, in a way the round-trip test was structurally
+unable to detect.** The writer placed both sections at the corner the source
+asked for; the reader read the pair back as that same corner. Self-consistent
+to the last decimal, and 16% below the instrument. **A round trip validates
+agreement between two pieces of code, not agreement with the world**, and a
+symmetric error is invisible to it — the nine-case script passed at ±2.5%
+across every shape while this was live. The regression test that covers it now
+asserts an absolute frequency against the measurement, which is the only kind
+of check that can fail.
+
+Two ideal Butterworth sections predict 0.802. The measured 0.841 sits above it,
+consistent with filter 1's own **+0.74 dB passband bump** before its corner. The
+measurement is used; the theory is recorded as the reason to believe it.
+
+**The ratio applies only while the sections are matched**, which is how it was
+measured — 1 Hz apart. How the pair's corner moves as they separate is not
+measured and interpolating it would be invention, so outside a third of an
+octave the lower corner is reported, understating by at most 16%.
+
+**One more thing worth having before anyone validates a rig against a slope:**
+the asymptotic 24 dB/oct is not reachable at a 700 Hz corner on this
+instrument. Additivity is exact there (−12.7 and −6.8 sum to −19.5 against
+−19.6 measured), but filter 2 is still in its transition, and by the time both
+sections reach their asymptotes the response is 78 dB down and into the floor.
+A corner near 200–300 Hz is where 24 dB/oct is actually demonstrable.
+
 ### A note on how the errors were distributed
 
 Six defects in this work were each caught by the party that did **not** hold the

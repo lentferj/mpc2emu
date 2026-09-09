@@ -55,7 +55,7 @@ from models.common import (
                            AKAI_FLT2MODE_EQ, AKAI_LSI2_ON_OFFSET,
                            AKAI_FLT2MODE_OFFSET, AKAI_FLT2Q_OFFSET,
                            AKAI_FIL2FR_OFFSET, AKAI_FLT2GAIN_OFFSET,
-                           AKAI_FLT2_HEADROOM_DB)
+                           AKAI_FLT2_HEADROOM_DB, AKAI_CASCADE_CORNER_RATIO)
 from parsers.akai_s3000_parser import (
     AKAI_KGMUTE_OFFSET, AKAI_KGMUTE_OFF,
     str_to_akai, akai_to_str, AKAI_NAME_LEN, SAMPLE_HEADER_LEN, PROGRAM_COMMON_LEN,
@@ -2154,6 +2154,12 @@ def _filter2_plan(voice):
     hz = getattr(voice, 'filter_cutoff', None)
     if hz is None:
         return None
+    if mode == AKAI_FLT2MODE_LP and keep_f1:
+        # BOTH SECTIONS CARRY THE SAME CORNER, so the PAIR lands 16% below it.
+        # Place them high enough that the cascade arrives where the source
+        # asked. Measured, not derived: two ideal Butterworth sections predict
+        # 0.802 and this machine gives 0.841.
+        hz = hz / AKAI_CASCADE_CORNER_RATIO
     fil2fr = hz_to_akai_fil2fr(hz)
     if fil2fr >= AKAI_FIL2FR_TRANSPARENT:
         return None                     # nothing to express
@@ -2346,6 +2352,12 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
                       'filter_type': getattr(voice, 'filter_type', 0)})
 
     _cut = getattr(voice, 'filter_cutoff', None) if voice is not None else None
+    if (_f2 is not None and _f2[3] and _f2[0] == AKAI_FLT2MODE_LP
+            and _cut is not None):
+        # THE SAME LIFT filter 2 got. Both sections must move together or the
+        # pair is no longer matched and the measured cascade ratio -- which was
+        # taken with the two corners 1 Hz apart -- stops applying at all.
+        _cut = _cut / AKAI_CASCADE_CORNER_RATIO
     # Bound before the branch: two of the three arms below never reach the
     # velocity-filter call, and the code after this block reads both. The
     # highpass arm is new and did exactly that -- UnboundLocalError on the

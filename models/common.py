@@ -1736,6 +1736,33 @@ def akai_fil2fr_to_hz(byte: int):
     return AKAI_FIL2FR_MEASURED[hi]
 
 
+#: **The two sections cascade, so the PAIR's corner is not either section's.**
+#: MEASURED 2026-09-09 (s3ked): with `FILFRQ` 62 and `FIL2FR` 72 both landing
+#: on ~679 Hz individually, the pair's -3 dB corner is **571 Hz**.
+#:
+#: The cascade is the sum of the singles in dB **to within 0.04 dB over six
+#: octaves**, so the sections multiply cleanly and do not interact -- which is
+#: what makes a single ratio the right model rather than a fudge.
+#:
+#: Two ideal Butterworth sections predict 0.802; the measured 0.841 sits above
+#: it, consistent with filter 1's own **+0.74 dB passband bump** before its
+#: corner (a Q slightly above Butterworth). The measurement is used, not the
+#: theory.
+#:
+#: **A round trip cannot catch getting this wrong.** Writing both sections at
+#: the asked-for corner and reading the pair back as that same corner is
+#: self-consistent to the last decimal and 16% wrong against the instrument.
+#: That is exactly how it shipped for one commit, with a passing round-trip
+#: test at +-2.5%.
+AKAI_CASCADE_CORNER_RATIO = 0.841
+
+#: How close two corners must be for the ratio above to apply. It was measured
+#: with the two sections MATCHED to within 1 Hz; how the pair's corner moves as
+#: they separate is not measured, and interpolating it would be invention. Far
+#: apart, the lower section dominates and its own corner is the answer.
+AKAI_CASCADE_MATCHED_OCTAVES = 0.33
+
+
 def hz_to_akai_fil2fr(hz: float) -> int:
     """Hz -> the `FIL2FR` byte whose corner is nearest, in LOG frequency.
 

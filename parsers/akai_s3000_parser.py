@@ -53,6 +53,7 @@ from models.common import (
     AKAI_FLT2Q_DEPTH_DB, AKAI_FIL2FR_LAW_MEASURED, AKAI_FILTER_SATURATED,
     AKAI_FIL2FR_MEASURED_TO, AKAI_FIL2FR_TRANSPARENT,
     AKAI_FIL2FR_EXTRAP_TOP_UNMEASURED_FROM,
+    AKAI_CASCADE_CORNER_RATIO, AKAI_CASCADE_MATCHED_OCTAVES,
     akai_lfo_rate_hz, akai_lfo_depth_to_pitch, akai_lfo_delay_seconds,
     akai_env2_target_hz, E4B_CUTOFF_MAX_HZ, E4XT_FENV_BYTE_PER_UNIT,
     AKAI_ENV2_OCT_PER_UNIT, AKAI_ENV2_FULL_LEVEL, AKAI_FILTER_OPEN_HZ, AKAI_FILTER_FLOOR_HZ,
@@ -498,9 +499,24 @@ def _combine_akai_filters(kg, s3000):
     if mode == AKAI_FLT2MODE_LP:
         if f1 is None:
             return (_XPM_LOW2, f2, None)
-        near = abs(math.log2(f1 / f2)) <= _FLT2_CASCADE_OCTAVES
-        return (_XPM_LOW4 if near else _XPM_LOW2, min(f1, f2),
-                None if near else 'second lowpass an octave clear of the first')
+        _sep = abs(math.log2(f1 / f2))
+        near = _sep <= _FLT2_CASCADE_OCTAVES
+        if not near:
+            return (_XPM_LOW2, min(f1, f2),
+                    'second lowpass an octave clear of the first')
+        # THE PAIR'S CORNER IS NOT EITHER SECTION'S. Two matched 2-pole
+        # sections put the -3 dB point at 0.841 of their common corner --
+        # measured, and 16% away from the obvious answer. `filter_cutoff` is
+        # defined as the corner of the whole filter, so the whole filter is
+        # what has to be reported.
+        #
+        # The ratio is applied only while the two are MATCHED, which is how it
+        # was measured; how the pair's corner moves as they separate is not
+        # measured and interpolating it would be invention. Between the two
+        # regimes the answer is the lower corner, understating by at most 16%.
+        if _sep <= AKAI_CASCADE_MATCHED_OCTAVES:
+            return (_XPM_LOW4, min(f1, f2) * AKAI_CASCADE_CORNER_RATIO, None)
+        return (_XPM_LOW4, min(f1, f2), None)
 
     if mode == AKAI_FLT2MODE_HP:
         if f1 is None:
