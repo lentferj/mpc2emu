@@ -319,6 +319,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIFIL2FR — the filter-2 corner law, and a premise that was two quantities (2026-09-09)](#akaifil2fr-the-filter-2-corner-law-and-a-premise-that-was-two-quantities-2026-09-09)
 - [§AKAIFIL2 — wiring the IB-304F second filter into both directions (2026-09-09)](#akaifil2-wiring-the-ib-304f-second-filter-into-both-directions-2026-09-09)
 - [§AKAIFIL2POLES — filter 2 IS 2-pole, with a very wide knee (2026-09-09)](#akaifil2poles-filter-2-is-2-pole-with-a-very-wide-knee-2026-09-09)
+- [§AKAIFIL2CONV — two instances of a fix are not two instances of evidence (2026-09-09)](#akaifil2conv-two-instances-of-a-fix-are-not-two-instances-of-evidence-2026-09-09)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -30543,3 +30544,59 @@ search below that window, then harmonic sampling on an assumed root. **The
 control was on the disc; the note telling anyone to use it first was not in
 `whatiswhat.txt`.** Shipping a control is half of it; saying it is the reference
 is the other half.
+
+
+## §AKAIFIL2CONV — two instances of a fix are not two instances of evidence (2026-09-09)
+
+Two observations from closing the HP ladder, both of which correct something
+this file had recorded as a strength.
+
+### An agreement between two projects can be one inherited convention
+
+Our harness and s3ked's independently smooth spectra at **1/6 octave in log
+frequency**, and this was written up here as convergent validation. **s3ked's
+own read is that it is weaker than it looks: 1/6 octave is the conventional
+choice, so two projects picking it may be one convention inherited twice rather
+than two arrivals at a conclusion.**
+
+**What is real evidence is that both hit the BUG.** Their fixed-width boxcar
+turned a monotonic HP ratio into a bowl — which would have *confirmed* the
+constant-factor model — and our `hw_measure.py` comment records a corner
+reported at 545 Hz for a spectrum only 1.7 dB down at 10 kHz. Two independent
+failures of the same kind, from different sources, in different code.
+
+**Two instances of a fix can share a cause that has nothing to do with being
+right. Two instances of the failure cannot.** This is the same shape as the
+three "independent" observations that were all taken inside one filter knee
+(§AKAIFIL2POLES) — agreement is only evidence when the things agreeing could
+have disagreed for independent reasons.
+
+### Your own prior result is the least-audited input you have
+
+s3ked computed the HP ratio against a four-point exponential from their own
+earlier section rather than against the curve this project ships — which is a
+three-region measured table, deliberately not that fit. Their explanation, and
+it generalises:
+
+> §196 is my own section, so the number was familiar rather than verified, and
+> a law I derived is exactly the kind I stop reading critically.
+
+**The run was sound; only the comparison needed redoing** — and the corrected
+comparison made their own conclusion *stronger*, taking the drift from
+0.564→0.660 to 0.493→0.649.
+
+It pairs with the failure recorded in §AKAIFIL2POLES from the other direction:
+there, a number that *refuted* a claim of ours went unchecked because
+self-correction feels rigorous. **Familiar-because-mine and
+comfortable-because-it-convicts-me are two different routes to the same
+unaudited number.**
+
+### And the finding that came free
+
+The contrast that killed the constant-factor idea outright was not the drifting
+ratio but this: at byte 37, **mode 0 sits +14.5 % above its own exponential
+while HP sits −0.5 % from its own.** A different exponent still describes two
+curves of the same kind; mode 0 flattening at the bottom where HP stays
+exponential to its last measurable rung says they are **not the same kind of
+curve**, so no better factor exists to be found. It fell out of four points
+already taken, at no extra bench cost.
