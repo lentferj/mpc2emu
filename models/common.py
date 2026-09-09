@@ -1718,6 +1718,13 @@ AKAI_FIL2FR_EXTRAP_TOP_UNMEASURED_FROM = 94
 #: below byte 45 -- its byte-37 corner sits **+14.5%** above its own exponential
 #: -- while HP's byte-37 corner sits **-0.5%** from its own. Whatever makes mode
 #: 0 flatten at the bottom does not do so in highpass.
+#: Where mode 0's own measured span ends; above this it is extrapolated.
+AKAI_FIL2FR_MEASURED_TO = 80
+
+#: Kept as a name for the highpass ladder. **Defined here and referenced from
+#: `AKAI_FIL2FR_MODE_MEASURED` below**, so there is exactly one copy of these
+#: four numbers -- two tables of one measurement drifting apart is a failure
+#: this file records twice already.
 AKAI_FIL2FR_HP_MEASURED = {37: 34.2, 45: 63.0, 64: 250.6, 72: 467.4}
 
 #: Exponent for extrapolation outside the measured HP span, from the ladder's
@@ -1726,53 +1733,111 @@ AKAI_FIL2FR_HP_MEASURED = {37: 34.2, 45: 63.0, 64: 250.6, 72: 467.4}
 #: and this ladder covers 37..72, so anything outside is reported as such.
 AKAI_FIL2FR_HP_EXPONENT = 0.07425
 
-#: Factors for the modes whose ladders have NOT been run. Each still rests on a
-#: single byte (74), and HP -- the one mode where a ladder now exists -- proved
-#: its single-byte factor wrong by up to a third at the ends. **So treat these
-#: as an indication of size and direction only.** They are reported by
-#: `AKAI_FIL2FR_MODE_UNCALIBRATED` and never applied.
-AKAI_FIL2FR_MODE_FACTOR = {
-    AKAI_FLT2MODE_BP: 1.653,
-    AKAI_FLT2MODE_EQ: 1.653,        # cut arm; the boost arm measures 1.515
+#: **EVERY MODE NOW HAS A LADDER** (s3ked, 2026-09-09). The single-byte factors
+#: are gone: three of the four drift by 17-42% across the range, so none is
+#: applied as a constant and the measured points are used instead.
+#:
+#: **Fitted over 45..80 -- the range where mode 0 is exponential, so its bent
+#: bottom cannot contaminate the comparison -- the exponents fall into TWO
+#: GROUPS, not five:**
+#:
+#:      HP     0.07394  |
+#:      BP     0.07421  |  group A, spread 0.7%
+#:      EQcut  0.07371  |
+#:      -------------------------------------------- 5.2% apart
+#:      EQbst  0.07068  |  group B, spread 1.1%
+#:      mode0  0.06988  |
+#:
+#: Within-group spread is about the size of the fit residuals; between-group is
+#: five times it. **EQ BOOST belongs with the LOWPASS, not with the other two
+#: band modes** -- which is why its factor against mode 0 looked constant (+4%
+#: across the range) when the others did not. That was the same grouping seen
+#: from a different angle, not a separate fact.
+#:
+#: **BP and EQ-cut are barely distinguishable from each other** (0.7% apart) and
+#: share a residual S-shape the others do not have (+2.2/-4.2/-0.9/+3.0 against
+#: HP's +0.6/-1.8/+1.3), which s3ked reads as one filter core reached two ways.
+#: **Not claimed as fact** -- this ladder cannot prove it -- but it is why both
+#: keep their own table rather than being merged.
+#:
+#: **MODE 0 IS THE ODD ONE OUT AT THE BOTTOM.** Its byte-37 corner sits +14.5%
+#: above its own exponential; every other mode is within 2.5% of its own
+#: (BP +2.5, EQcut -0.6, EQbst +0.9, HP -0.5). Four modes clean, mode 0 alone
+#: bent -- so the flattening is a lowpass property and NOT a property of the
+#: FIL2FR control. Expressing the other modes as ratios to measured mode 0 puts
+#: a bend in the denominator, which is most of why those ratios looked like they
+#: drifted so hard at the bottom.
+AKAI_FIL2FR_MODE_MEASURED = {
+    AKAI_FLT2MODE_HP: AKAI_FIL2FR_HP_MEASURED,
+    AKAI_FLT2MODE_BP: {30: 55.7, 37: 95.2, 45: 165.5, 64: 635.7,
+                       72: 1190.9, 80: 2241.2},
 }
-AKAI_FIL2FR_EQ_BOOST_FACTOR = 1.515
+
+#: EQ is one `FLT2MODE` with two arms, and **the arms separate as the byte
+#: rises**: under resolution below byte 45, then 4.1% apart at 64, 8.3% at 72
+#: and **15.4% at 80**. One centre serves both arms below ~64 and is wrong above
+#: it, so they get separate tables. The 8% measured at byte 74 sits on that rise.
+AKAI_FIL2FR_EQCUT_MEASURED = {30: 55.7, 37: 90.8, 45: 164.1, 64: 632.8,
+                              72: 1171.9, 80: 2179.7}
+AKAI_FIL2FR_EQBOOST_MEASURED = {30: 54.2, 37: 90.8, 45: 159.7, 64: 607.9,
+                                72: 1082.5, 80: 1889.6}
+
+#: Extrapolation exponent per mode, from each ladder's own fit. Outside a
+#: ladder's span this is a guess about a curve that has already surprised us
+#: once -- mode 0 has three regions -- so the caller is told.
+AKAI_FIL2FR_MODE_EXPONENT = {
+    AKAI_FLT2MODE_HP: 0.07425,
+    AKAI_FLT2MODE_BP: 0.07421,
+    AKAI_FLT2MODE_EQ: 0.07371,          # cut arm; boost uses the value below
+}
+AKAI_FIL2FR_EQBOOST_EXPONENT = 0.07068
+
+
+def _fil2fr_from_table(byte, table, exponent):
+    """Shared shape: measured points exact, geometric between, fit outside."""
+    if byte >= AKAI_FIL2FR_TRANSPARENT:
+        return None
+    pts = sorted(table)
+    lo, hi = pts[0], pts[-1]
+    if byte in table:
+        return table[byte]
+    if byte < lo:
+        return table[lo] * math.exp(exponent * (byte - lo))
+    if byte > hi:
+        return table[hi] * math.exp(exponent * (byte - hi))
+    for x0, x1 in zip(pts, pts[1:]):
+        if x0 <= byte <= x1:
+            y0, y1 = table[x0], table[x1]
+            f = (byte - x0) / (x1 - x0)
+            return math.exp(math.log(y0) + f * (math.log(y1) - math.log(y0)))
+    return table[hi]
+
+
+def akai_fil2fr_mode_to_hz(byte: int, mode: int, boost: bool = False):
+    """`FIL2FR` -> the filter-2 feature frequency in Hz, FOR THIS MODE.
+
+    Lowpass returns its -3 dB corner; highpass its -3 dB corner; bandpass its
+    peak; EQ its dip or bump. **These are different quantities**, which is the
+    whole reason one law could not serve them -- and comparing across them is
+    how a 1.29x documented gap first got read as a property of filter 2.
+    """
+    if mode == AKAI_FLT2MODE_LP:
+        return akai_fil2fr_to_hz(byte)
+    if mode == AKAI_FLT2MODE_EQ:
+        tbl = (AKAI_FIL2FR_EQBOOST_MEASURED if boost
+               else AKAI_FIL2FR_EQCUT_MEASURED)
+        exp = (AKAI_FIL2FR_EQBOOST_EXPONENT if boost
+               else AKAI_FIL2FR_MODE_EXPONENT[AKAI_FLT2MODE_EQ])
+        return _fil2fr_from_table(byte, tbl, exp)
+    tbl = AKAI_FIL2FR_MODE_MEASURED.get(mode)
+    if tbl is None:
+        return akai_fil2fr_to_hz(byte)
+    return _fil2fr_from_table(byte, tbl, AKAI_FIL2FR_MODE_EXPONENT[mode])
 
 
 def akai_fil2fr_hp_to_hz(byte: int):
-    """`FIL2FR` -> the filter-2 HIGHPASS -3 dB corner in Hz, or None when open.
-
-    Measured points returned exactly, geometric interpolation between, and the
-    ladder's own exponent outside -- the same shape as `akai_fil2fr_to_hz`, for
-    the same reason: a fit has to choose which measurement to sacrifice.
-
-    **Highpass is 39% of real board use and was previously placed by the mode-0
-    law**, which is 35-50% wrong here.
-    """
-    if byte >= AKAI_FIL2FR_TRANSPARENT:
-        return None
-    pts = sorted(AKAI_FIL2FR_HP_MEASURED)
-    lo, hi = pts[0], pts[-1]
-    if byte in AKAI_FIL2FR_HP_MEASURED:
-        return AKAI_FIL2FR_HP_MEASURED[byte]
-    if byte < lo:
-        return AKAI_FIL2FR_HP_MEASURED[lo] * math.exp(
-            AKAI_FIL2FR_HP_EXPONENT * (byte - lo))
-    if byte > hi:
-        return AKAI_FIL2FR_HP_MEASURED[hi] * math.exp(
-            AKAI_FIL2FR_HP_EXPONENT * (byte - hi))
-    for x0, x1 in zip(pts, pts[1:]):
-        if x0 <= byte <= x1:
-            y0, y1 = AKAI_FIL2FR_HP_MEASURED[x0], AKAI_FIL2FR_HP_MEASURED[x1]
-            f = (byte - x0) / (x1 - x0)
-            return math.exp(math.log(y0) + f * (math.log(y1) - math.log(y0)))
-    return AKAI_FIL2FR_HP_MEASURED[hi]
-
-#: Where the measured span ends. Above this filter 2 is EXTRAPOLATED and says
-#: so: filter 1 departs from its own exponential from 84 up (§146, +2.3% at 84
-#: rising to +23% at 94) and whether filter 2 does the same, at the same place,
-#: is unmeasured. **p90 of the corpus is 88**, so this is not a corner case --
-#: it needs a measured table built the way §146 built filter 1\'s.
-AKAI_FIL2FR_MEASURED_TO = 80
+    """Kept as a name; the highpass case of `akai_fil2fr_mode_to_hz`."""
+    return akai_fil2fr_mode_to_hz(byte, AKAI_FLT2MODE_HP)
 
 
 def akai_fil2fr_to_hz(byte: int):

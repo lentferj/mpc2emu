@@ -46,7 +46,9 @@ from models.common import (
     AKAI_VLOUD_DB_PER_UNIT, AKAI_VLOUD_SWING_DB_PER_UNIT,
     AKAI_TUNE_UNITS_PER_SEMITONE,
     akai_filq_to_01, AKAI_MUTE_CUT_SECONDS,
-    akai_fil2fr_to_hz, akai_fil2fr_hp_to_hz,
+    akai_fil2fr_to_hz, akai_fil2fr_hp_to_hz, akai_fil2fr_mode_to_hz,
+    AKAI_FIL2FR_MODE_MEASURED, AKAI_FIL2FR_EQCUT_MEASURED,
+    AKAI_FIL2FR_EQBOOST_MEASURED,
     akai_flt2q_to_depth_db, akai_flt2q_is_boost,
     AKAI_FIL2FR_HP_MEASURED,
     AKAI_LSI2_ON_OFFSET, AKAI_FLT2GAIN_OFFSET, AKAI_FLT2MODE_OFFSET,
@@ -56,7 +58,6 @@ from models.common import (
     AKAI_FIL2FR_MEASURED_TO, AKAI_FIL2FR_TRANSPARENT,
     AKAI_FIL2FR_EXTRAP_TOP_UNMEASURED_FROM,
     AKAI_CASCADE_CORNER_RATIO, AKAI_CASCADE_MATCHED_OCTAVES,
-    AKAI_FIL2FR_MODE_FACTOR, AKAI_FIL2FR_EQ_BOOST_FACTOR,
     akai_lfo_rate_hz, akai_lfo_depth_to_pitch, akai_lfo_delay_seconds,
     akai_env2_target_hz, E4B_CUTOFF_MAX_HZ, E4XT_FENV_BYTE_PER_UNIT,
     AKAI_ENV2_OCT_PER_UNIT, AKAI_ENV2_FULL_LEVEL, AKAI_FILTER_OPEN_HZ, AKAI_FILTER_FLOOR_HZ,
@@ -489,8 +490,10 @@ def _combine_akai_filters(kg, s3000):
     # across the ladder, and highpass is 39% of real board use. The two modes
     # differ structurally, not by a scale factor: mode 0 flattens below byte 45
     # and highpass does not. See AKAI_FIL2FR_HP_MEASURED.
-    f2 = (akai_fil2fr_hp_to_hz(fr) if mode == AKAI_FLT2MODE_HP
-          else akai_fil2fr_to_hz(fr))
+    # EVERY MODE HAS ITS OWN MEASURED CURVE. Using the mode-0 law for all of
+    # them was 30-80% wrong depending on mode and byte, and the modes fall into
+    # two exponent groups rather than being one law with per-mode factors.
+    f2 = akai_fil2fr_mode_to_hz(fr, mode, akai_flt2q_is_boost(q))
 
     # ── Inert cases: the field is set but the filter is not shaping anything.
     # About 60% of keygroups with LSI2_ON land here, which is why the read gate
@@ -1147,52 +1150,30 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
             voice.filter_cutoff = _fhz
             _fr = kg.get('fil2fr', AKAI_FILTER_OPEN)
             _mode = kg.get('flt2_mode', 0)
-            _hp_pts = sorted(AKAI_FIL2FR_HP_MEASURED)
-            if _mode == AKAI_FLT2MODE_HP:
-                # HP IS CALIBRATED NOW, inside its ladder. Only say otherwise
-                # where the curve is extrapolated -- the ladder covers 37..72
-                # and mode 0 turned out to have three regions, so outside that
-                # span is a guess about a curve that has already surprised us.
-                if not (_hp_pts[0] <= _fr <= _hp_pts[-1]):
-                    _diag(_W, 'AKAI_FIL2FR_HP_EXTRAPOLATED',
-                          f'filter 2 highpass corner extrapolated outside the '
-                          f'measured ladder (FIL2FR {_fr}, measured '
-                          f'{_hp_pts[0]}..{_hp_pts[-1]})',
-                          content_lost=False, subject=preset.name,
-                          remedy='extend the highpass FIL2FR ladder')
+            # Every mode is calibrated now, so the warning is no longer
+            # "this mode is uncalibrated" but "this BYTE is outside the ladder
+            # that calibrated it". Mode 0 has three regions, so extrapolating
+            # any of these is a guess about a curve that has surprised us.
+            _lad = None
+            if _mode == AKAI_FLT2MODE_EQ:
+                _lad = (AKAI_FIL2FR_EQBOOST_MEASURED
+                        if akai_flt2q_is_boost(kg.get('flt2_q', 0))
+                        else AKAI_FIL2FR_EQCUT_MEASURED)
             elif _mode != AKAI_FLT2MODE_LP:
-                # **THE CORNER MOVES WITH THE MODE**: 41% between LP and HP at
-                # one byte. Every point of the corner law was measured in mode
-                # 0, which is 7% of real use -- EQ and HP are 89% of it. So
-                # this warning fires on the common case, deliberately.
-                #
-                # The measured LP/HP ratio is NOT applied. One point says the
-                # corner moves; it does not say by how much across the range,
-                # and this table has already had to undo one law fitted through
-                # a single flagged measurement.
-                # Quote the MEASURED factor for the mode in hand rather than a
-                # vague "it moves". The factors are hardware-measured but rest
-                # on one byte each (two for the EQ boost arm), so they are
-                # reported and NOT applied -- see AKAI_FIL2FR_MODE_FACTOR.
-                _fac = AKAI_FIL2FR_MODE_FACTOR.get(_mode)
-                if (_mode == AKAI_FLT2MODE_EQ
-                        and akai_flt2q_is_boost(kg.get('flt2_q', 0))):
-                    _fac = AKAI_FIL2FR_EQ_BOOST_FACTOR
-                _diag(_W, 'AKAI_FIL2FR_MODE_UNCALIBRATED',
-                      f'filter 2 corner from the mode-0 law, but FLT2MODE is '
-                      f'{_mode}: the feature measures {_fac:.3f}x the law at '
-                      f'the one byte tested',
-                      content_lost=False, subject=preset.name,
-                      remedy='measure a FIL2FR ladder per FLT2MODE',
-                      detail={'mode': _mode, 'measured_factor': _fac})
-            elif _fr > AKAI_FIL2FR_EXTRAP_TOP_UNMEASURED_FROM:
-                # 95..98 sit between a real 5.9 kHz corner at 94 and a measured
-                # bypass at 99, and nothing in between was captured.
+                _lad = AKAI_FIL2FR_MODE_MEASURED.get(_mode)
+            if _lad is not None:
+                _p = sorted(_lad)
+                if not (_p[0] <= _fr <= _p[-1]):
+                    _diag(_W, 'AKAI_FIL2FR_EXTRAPOLATED_FOR_MODE',
+                          f'filter 2 feature frequency extrapolated outside the '
+                          f'FLT2MODE {_mode} ladder (FIL2FR {_fr}, measured '
+                          f'{_p[0]}..{_p[-1]})',
+                          content_lost=False, subject=preset.name,
+                          remedy='extend the ladder for this mode')
+            elif _mode == AKAI_FLT2MODE_LP and _fr > AKAI_FIL2FR_EXTRAP_TOP_UNMEASURED_FROM:
                 _diag(_W, 'AKAI_FIL2FR_EXTRAPOLATED',
                       f'filter 2 corner extrapolated above the measured span '
                       f'(FIL2FR {_fr} > {AKAI_FIL2FR_EXTRAP_TOP_UNMEASURED_FROM})',
-                      # Nothing is dropped -- a corner is carried, and it may
-                      # simply be the wrong one. The reader still gets a filter.
                       content_lost=False, subject=preset.name,
                       remedy='measure FIL2FR 95..98')
             if _dropped:

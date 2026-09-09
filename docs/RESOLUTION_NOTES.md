@@ -320,6 +320,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIFIL2 — wiring the IB-304F second filter into both directions (2026-09-09)](#akaifil2-wiring-the-ib-304f-second-filter-into-both-directions-2026-09-09)
 - [§AKAIFIL2POLES — filter 2 IS 2-pole, with a very wide knee (2026-09-09)](#akaifil2poles-filter-2-is-2-pole-with-a-very-wide-knee-2026-09-09)
 - [§AKAIFIL2CONV — two instances of a fix are not two instances of evidence (2026-09-09)](#akaifil2conv-two-instances-of-a-fix-are-not-two-instances-of-evidence-2026-09-09)
+- [§AKAIFIL2MODES — every mode has a ladder, and there are two exponents (2026-09-09)](#akaifil2modes-every-mode-has-a-ladder-and-there-are-two-exponents-2026-09-09)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -30600,3 +30601,89 @@ curves of the same kind; mode 0 flattening at the bottom where HP stays
 exponential to its last measurable rung says they are **not the same kind of
 curve**, so no better factor exists to be found. It fell out of four points
 already taken, at no extra bench cost.
+
+
+## §AKAIFIL2MODES — every mode has a ladder, and there are two exponents (2026-09-09)
+
+BP and both EQ arms measured (s3ked §202), completing the set. **Every mode now
+decodes on its own measured points; no single-byte factor is applied anywhere.**
+
+### Two exponents, not five — after removing a confound
+
+s3ked's ratios divide by a four-point exponential fit of mode 0, which is **not
+the curve this project ships** (mode 0 has three regions and flattens below
+byte 45). Refitting every mode over **45–80 only**, the range where mode 0 *is*
+exponential, so the bend cannot contaminate the comparison:
+
+```
+   HP     0.07394  |
+   BP     0.07421  |  group A, internal spread 0.7 %
+   EQcut  0.07371  |
+   ------------------------------------------- 5.2 % apart
+   EQbst  0.07068  |  group B, internal spread 1.1 %
+   mode0  0.06988  |
+```
+
+**Within-group spread is about the size of the fit residuals; between-group is
+five times it.** So the structure is two laws, not five.
+
+**EQ BOOST belongs with the LOWPASS, not with the other two band modes.** That
+is why its factor against mode 0 looked constant (+4 % across the range) while
+the others drifted 17–42 % — the same grouping seen from a different angle, not
+a separate fact. s3ked had paired BP with EQ-cut and left HP separate; the
+common-range fit puts HP with them and moves EQ-boost across.
+
+BP and EQ-cut also share a residual S-shape the others lack
+(+2.2/−4.2/−0.9/+3.0 against HP's +0.6/−1.8/+1.3), which reads as one filter
+core reached two ways. **Not claimed** — this ladder cannot prove it — and it is
+why both keep their own table rather than being merged.
+
+### Mode 0 is the special case, and it is the denominator
+
+**Its byte-37 corner sits +14.5 % above its own exponential. Every other mode is
+within 2.5 % of its own** — BP +2.5, EQcut −0.6, EQbst +0.9, HP −0.5. Four modes
+clean at the bottom, mode 0 alone bent.
+
+So the flattening is **a lowpass property, not a property of the `FIL2FR`
+control** — and expressing every other mode as a ratio to *measured* mode 0 puts
+a bend in the denominator. That is most of why those ratios appeared to drift so
+hard at the bottom, and it is why the factor framing had to go rather than be
+refined.
+
+### The EQ arms separate with the byte
+
+Under resolution below byte 45, then **4.1 % at 64, 8.3 % at 72, 15.4 % at 80.**
+One centre serves both arms low down and is wrong high up, so the arms get
+separate tables. The 8 % measured at byte 74 sits on that rise — a single point
+on a slope, read at the time as a constant.
+
+### Two instrument errors, both at the bottom, both in the direction of the conclusion
+
+Recorded because this project runs the same shapes:
+
+- **A ~70 dB null in the reference at 11 kHz** captured the bandpass fit, which
+  returned **11 kHz for every byte**. What caught it was not suspecting the rig
+  but noticing that *a feature which does not move when the parameter moves is
+  not the filter*. One such result reads plausible; six identical ones cannot.
+- **Bin collapse at the low rungs.** 5.86 Hz bins make 55.7 Hz a ±11 % quantity,
+  and all three modes reported *identical* ratios at bytes 30 and 37 — read as
+  three modes agreeing, and it was one bin. Re-fitting at 1.46 Hz separated
+  them and **cut BP's apparent drift from +29 % to +20 %.**
+
+**Both ladders read their trend from the bottom rung, and both times the bottom
+rung was where the instrument was weakest** — the §201 smoother at one end and
+bin collapse at the other. And the coarse instrument exaggerated the drift *in
+the direction of the conclusion being drawn*, which is the dangerous direction.
+
+Our own tree was checked against both: `hw_measure.py` already smooths at 1/6
+octave in log frequency, and its corner search takes a reference band rather
+than an unconstrained extremum, so neither shape applies. **Checked rather than
+assumed** — the point of recording a peer's instrument failure is to test your
+own against it, not to sympathise.
+
+### Not measured
+
+Rungs 88 and 94 for BP and EQ need `FLATCOMB`, so a volume load. The four laws
+are well determined over 30–80 and the top two rungs are not expected to change
+them — but *expected* is doing work in that sentence, and mode 0's own top
+turned out to steepen between 88 and 94.

@@ -50,6 +50,7 @@ from models.common import (
     Bank, LoopType, SampleData, safe_filename,
                            E4B_CUTOFF_MIN_HZ, E4B_CUTOFF_MAX_HZ, hz_to_e4b_cutoff,
                            hz_to_akai_fil2fr, hz_to_akai_fil2fr_hp,
+                           akai_fil2fr_mode_to_hz,
                            akai_depth_db_to_flt2q,
                            akai_fil2fr_to_hz, AKAI_FIL2FR_TRANSPARENT,
                            AKAI_FLT2MODE_LP, AKAI_FLT2MODE_BP, AKAI_FLT2MODE_HP,
@@ -2177,8 +2178,21 @@ def _filter2_plan(voice):
     # HP places its corner on the HIGHPASS curve. Using the mode-0 inverse here
     # put the corner 35-50% out AND broke the reader/writer inverse the moment
     # the reader learned the highpass curve.
-    fil2fr = (hz_to_akai_fil2fr_hp(hz) if mode == AKAI_FLT2MODE_HP
-              else hz_to_akai_fil2fr(hz))
+    # PLACE THE FEATURE ON THIS MODE'S OWN CURVE, and stay the inverse of the
+    # reader by searching that same curve rather than by a second hand-derived
+    # law -- two inverses of one curve drifting apart is a documented failure
+    # in this file already.
+    _boost = (mode == AKAI_FLT2MODE_EQ and ftype >= 19)
+    if mode == AKAI_FLT2MODE_LP:
+        fil2fr = hz_to_akai_fil2fr(hz)
+    else:
+        _t = math.log(max(1e-6, hz))
+        fil2fr, _best = 0, None
+        for _b in range(0, AKAI_FIL2FR_TRANSPARENT):
+            _v = akai_fil2fr_mode_to_hz(_b, mode, _boost)
+            _d = abs(math.log(_v) - _t)
+            if _best is None or _d < _best:
+                fil2fr, _best = _b, _d
     if fil2fr >= AKAI_FIL2FR_TRANSPARENT:
         return None                     # nothing to express
     if mode == AKAI_FLT2MODE_EQ:
