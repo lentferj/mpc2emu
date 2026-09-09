@@ -318,6 +318,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§BOARDFITTED — the IB-304F went in, and every audio measurement became undated (2026-09-08)](#boardfitted-the-ib-304f-went-in-and-every-audio-measurement-became-undated-2026-09-08)
 - [§AKAIFIL2FR — the filter-2 corner law, and a premise that was two quantities (2026-09-09)](#akaifil2fr-the-filter-2-corner-law-and-a-premise-that-was-two-quantities-2026-09-09)
 - [§AKAIFIL2 — wiring the IB-304F second filter into both directions (2026-09-09)](#akaifil2-wiring-the-ib-304f-second-filter-into-both-directions-2026-09-09)
+- [§AKAIFIL2POLES — filter 2 IS 2-pole, with a very wide knee (2026-09-09)](#akaifil2poles-filter-2-is-2-pole-with-a-very-wide-knee-2026-09-09)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -30250,3 +30251,107 @@ caught our borrowed saturation constant. **Neither session ever caught the
 quantity it was actively reasoning with.** The cheap mechanical defence — print
 where each number came from before comparing two — is what found the one defect
 nobody had argued about.
+
+
+## §AKAIFIL2POLES — filter 2 IS 2-pole, with a very wide knee (2026-09-09)
+
+**Status: RESOLVED the same day it was raised, from captures already taken.
+No model change: `Low 4` for the pair is correct.**
+
+### The claim, and why it was wrong
+
+The first hardware test of the filter-2 path measured the cascade at **−20.0
+dB/oct** between 2 and 3 kHz where an ideal 4-pole gives −23.4, while filter 1
+alone measured −12.3 against an ideal −11.9. Subtracting put the whole deficit
+on filter 2 — 7.7 dB/oct where a second 2-pole should give 12 — and two earlier
+observations agreed: s3ked's filter-2-alone −6.8 dB/oct at 678 Hz, and their HP
+profile rising only ~17 dB, which they had flagged unprompted.
+
+**Three observations, three modes, one direction. The inference was that filter
+2 is 1-pole. It is not.**
+
+```
+              filter 2 alone, 678 Hz corner        1-pole   2-pole
+   1400 Hz          -5.9 dB/oct                      4.9     11.4
+   2000             -7.7                             5.4     11.8
+   3000             -9.2                             5.7     12.0
+   4000            -10.3                             5.8     12.0
+   6000            -10.6                             5.9     12.0
+```
+
+**A 1-pole asymptotes at 6 dB/oct and can never exceed it.** Filter 2 passes 6
+by 1.4 kHz and is still climbing at 10.6 three octaves above its corner.
+
+### What is actually different: knee width
+
+| | within 1 dB of the 12 dB/oct asymptote |
+|---|---|
+| filter 1 | by **1.0 octave** above its corner |
+| filter 2 | **not by 3.1 octaves** — still 1.4 dB short at 6 kHz |
+
+That one fact explains all three observations with no pole-count change.
+Candidate mechanism, **untested**: two staggered real poles rather than a
+complex-conjugate pair, which gives exactly this extended −6 dB/oct region
+before −12 takes over; filter 1's tight knee suggests poles close together.
+Distinguishing it needs a corner low enough that both poles sit well inside the
+measurable band.
+
+### THE LESSON, and it is about the word "independent"
+
+**Three observations that share a regime are not three independent
+observations.** All three were taken inside filter 2's transition band. Each had
+an available excuse individually — transition band, normalisation window, noise
+floor — and dismissing those excuses one at a time felt like corroboration.
+It was not: **they were one wide knee measured three times**, and the excuse I
+kept dismissing was the correct explanation.
+
+The tell was available: every one of the three sat within about three octaves of
+its corner, and nobody had established where filter 2's asymptote actually
+begins. **The question "are these measurements in the same regime?" would have
+dissolved the whole thing** — and it costs one line, like naming the quantity
+before comparing two numbers (§193).
+
+**The subtraction itself was sound.** It derived 7.7 dB/oct at x = 2.47 where
+direct measurement gives 7.7 at x = 2.95 and ~6.8 interpolated to x = 2.47. The
+method was right, the arithmetic was right, and the conclusion drawn from it was
+wrong — which is the same shape as every other failure in this file.
+
+### The gate result that prompted it still stands
+
+Group A passed: programs 41 and 42 diverge to **16.9 dB by 6 kHz**, and 42's
+corner measures **786 Hz against a nominal 800 (0.98x)** where the falsifier
+"systematically low by ~16%" would have put it near 672. The cascade lift is
+applied in the right direction in the emitted file.
+
+**The stated criterion nonetheless FAILED** — *"differ by more than 6 dB at 2
+kHz"*, measured 3.75 — and it is recorded as a fail rather than reinterpreted.
+**It was a guess**: no expected value was computed when it was written. An ideal
+model gives 9.6 dB, so 6 was plausible, but **an underived criterion cannot
+diagnose its own miss.** 3.75 against 6 said nothing until the 9.6 was computed,
+at which point the deficit localised to one section immediately.
+
+### Two facts parked for group B
+
+- Program 41's corner measures **745 Hz** where our shipping filter-1 law puts
+  byte 64 at 785 — **the law reads 5.4% high**, at a byte below the range §139
+  fitted. One point from a different source, so not conclusive, but group B's
+  entire test is corner accuracy and it inherits the offset through both
+  sections.
+- **A headroom table cannot answer a question it assumes.** The window advice
+  came with a column reading −24, −48, −72 at 500/1000/2000 Hz — *exactly* 24.0
+  dB per octave twice, which is `24 * log2(f/250)`, a model of an ideal 4-pole
+  presented among measured values. s3ked confirmed it and said so plainly. It
+  does not undermine the advice — a shallower real filter stays above the floor
+  *longer*, so the window is conservative — but it cannot be evidence in a
+  question about whether the slope is 24. **Given the wide knee, the real
+  cascade at 250 Hz will be shallower than 24 for some way up.**
+
+### And the disc carried the fix without the instruction
+
+The volume contains program 40 as an unfiltered reference precisely because the
+source comb defeats a naive normalisation. It still cost three wrong analysis
+passes to reach it — a passband window where the source has no energy, a corner
+search below that window, then harmonic sampling on an assumed root. **The
+control was on the disc; the note telling anyone to use it first was not in
+`whatiswhat.txt`.** Shipping a control is half of it; saying it is the reference
+is the other half.
