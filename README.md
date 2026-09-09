@@ -469,6 +469,32 @@ Output:
                       11.7 KB and four directory entries per volume.  Off by
                       default: no volume written this way has yet been loaded
                       by real hardware.
+  --akai-ib304f       AKAI: the target machine has the **IB-304F second-filter
+                      board**.  The base S3000XL has one 2-pole lowpass, so a
+                      highpass, bandpass, band-stop or band-boost source has
+                      nowhere to go and collapses to a lowpass at the same
+                      corner — which for a highpass inverts the sound rather
+                      than approximating it.  With the board there is a second
+                      filter in series that can be any of those shapes, and
+                      this flag lets the writer use it.
+
+                      **Off by default, and it has to stay that way.** Nothing
+                      in the file or on the wire says whether a board is
+                      fitted — `LSI2_ON` reads back 1 on a machine that has
+                      none — and a machine without one refuses the program
+                      outright with *"2nd filter board IB304F not fitted!"*.
+                      So this is the user asserting a fact about their own
+                      hardware; the converter cannot check it.
+
+                      The reader needs no flag: an unfitted board leaves the
+                      filter inert in the data, and that is detectable.
+
+                      **The corner law was measured in lowpass mode only**,
+                      which is 7% of how the board is actually used in real
+                      library material, and the corner is known to move ~41%
+                      between modes.  A highpass or EQ corner is therefore
+                      placed by a law measured on a different mode, and a
+                      diagnostic says so.  Not hardware-verified.
   --akai-max-objects N  AKAI resident-object pool (--format akai).  The
                       S3000XL counts programs, KEYGROUPS and samples against
                       ONE budget — its LOAD page shows it as `free P/K/S` —

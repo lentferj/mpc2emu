@@ -1736,6 +1736,50 @@ def akai_fil2fr_to_hz(byte: int):
     return AKAI_FIL2FR_MEASURED[hi]
 
 
+def hz_to_akai_fil2fr(hz: float) -> int:
+    """Hz -> the `FIL2FR` byte whose corner is nearest, in LOG frequency.
+
+    Inverse of `akai_fil2fr_to_hz`, and written as a search over that function
+    rather than as an algebraic inverse **because the curve is not one law**:
+    it flattens below byte 45, tracks filter 1's slope in the middle, and
+    steepens above 88. A hand-derived inverse of a three-region curve is
+    exactly the drift `AKAI_FILTER_LAW`\'s own comment warns about -- two
+    inverses of one curve came apart in a day and nine of ten values failed a
+    round trip while a docstring claimed they could not.
+
+    Distance is measured in log Hz because the scale is logarithmic: nearest in
+    Hz would put every low corner on the same byte.
+    """
+    if hz is None:
+        return AKAI_FIL2FR_TRANSPARENT
+    target = math.log(max(1e-6, hz))
+    best, best_d = 0, None
+    for b in range(0, AKAI_FIL2FR_TRANSPARENT):
+        v = akai_fil2fr_to_hz(b)
+        d = abs(math.log(v) - target)
+        if best_d is None or d < best_d:
+            best, best_d = b, d
+    return best
+
+
+def akai_depth_db_to_flt2q(db: float) -> int:
+    """A desired EQ depth in dB -> the nearest `FLT2Q`.
+
+    **The notch at 16 is excluded from the search.** It is a singular 108 Hz
+    feature at -53.9 dB, and a source asking for a deep cut would otherwise
+    land on it and get something 20x narrower than it asked for. Depth alone
+    does not describe that setting, so it is never chosen by depth alone.
+    """
+    best, best_d = 0, None
+    for b, v in AKAI_FLT2Q_DEPTH_DB.items():
+        if b == 16:
+            continue
+        d = abs(v - db)
+        if best_d is None or d < best_d:
+            best, best_d = b, d
+    return best
+
+
 def akai_flt2q_to_depth_db(byte: int) -> float:
     """`FLT2Q` -> depth in dB at the corner (EQ mode). Negative cuts.
 

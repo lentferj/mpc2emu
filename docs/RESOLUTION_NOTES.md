@@ -30135,6 +30135,37 @@ non-LP decode carries the mode-0 corner and emits
   `AKAI_FILTER_OPEN` is for filter 1. 0.7% of material.
 - **Below `FIL2FR` 20** — 1.3%, extrapolated along the flattened slope.
 
+### The write path, and two defects only a round trip could find
+
+Behind `--akai-ib304f`, off by default. Model shapes the base machine cannot
+make now map onto filter 2: highpass and bandpass take filter 1 out of circuit,
+a 4-pole lowpass uses both sections at one corner, and band-stop/band-boost
+become mode 3 with `FLT2Q` from the measured depth table. Without the flag, a
+source carrying one of those shapes emits `AKAI_FILTER_SHAPE_LOST` instead of
+silently becoming a lowpass — which for a highpass inverts the sound rather
+than approximating it.
+
+Every shape round-trips to within 2.8%. Getting there found two defects, and
+**neither was visible in the writer or the reader alone**:
+
+1. **EQ kept filter 1 in circuit**, which put its lowpass at the *same corner*
+   as the band. The band then sat exactly on the knee, the reader correctly
+   judged the lowpass to be doing the audible work, and **every band-stop and
+   band-boost round-tripped back into a plain 2-pole lowpass.** Both sides
+   were behaving correctly: the writer placed a filter where it hid the
+   feature it had just written. A model band-stop *is* the whole filter; there
+   is no separate lowpass to preserve.
+
+2. **`UnboundLocalError` on the first highpass voice.** The new arm skipped the
+   branch that binds `_vf_byte`, and code below reads it. No test caught it
+   because no test fed the writer a shape the base machine cannot make — the
+   suite's fixtures were all lowpasses, which is precisely the material this
+   feature exists to stop being.
+
+**Both were found by a nine-case round-trip script written in five minutes**,
+after the feature was "done" and the suite was green. The tests that now cover
+them were written from the failures, not from the design.
+
 ### A note on how the errors were distributed
 
 Six defects in this work were each caught by the party that did **not** hold the

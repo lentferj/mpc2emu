@@ -362,6 +362,7 @@ def write_akai_output(output_banks: List[Bank], out_dir: Path, bank_name: str,
     for bank in output_banks:
         files = build_akai_volume(bank, bank_name if len(output_banks) == 1 else None,
                                   type0=getattr(args, 'akai_type0', False),
+                                  ib304f=getattr(args, 'akai_ib304f', False),
                                   taken=_akai_taken, taken_prog=_akai_taken_prog)
         if files:
             volumes.append((akai_volume_name(bank.name), files))
@@ -625,6 +626,17 @@ def main():
              'S3000XL itself writes. Without this a built volume is a type-1 '
              'save and lacks them, which every real library volume carries. '
              'Adds ~11.7 KB per volume. NOT yet hardware-verified.')
+    ap.add_argument('--akai-ib304f', action='store_true',
+        help='AKAI: the target machine has the IB-304F second-filter board. '
+             'Lets highpass, bandpass, band-stop and band-boost sources map '
+             'onto filter 2 instead of collapsing to a 2-pole lowpass. '
+             'OFF BY DEFAULT AND MUST STAY THAT WAY: nothing in the file or on '
+             'the wire reveals whether a board is fitted (LSI2_ON reads back 1 '
+             'either way), and a machine without one refuses the program with '
+             '"2nd filter board IB304F not fitted!". The corner law behind it '
+             'was measured in lowpass mode only, and the corner is known to '
+             'move ~41%% between modes, so a highpass or EQ corner is placed '
+             'by a law measured on a different mode. NOT hardware-verified.')
     ap.add_argument('--akai-max-objects', type=int, default=None, metavar='N',
         help='AKAI resident-object pool (programs + keygroups + samples). '
              'Default 1006, measured on a 32 MB S3000XL; read STAT.max_blocks '

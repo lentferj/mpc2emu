@@ -48,7 +48,14 @@ from models.common import (
     AKAI_ENV2_ATTACK, AKAI_ENV2_DECAY, AKAI_ENV2_RELEASE,
     AKAI_ENV2_DEPTH_OFFSET, AKAI_ENV2_DEPTH_MAX, akai_lfo2_rate_byte,
     Bank, LoopType, SampleData, safe_filename,
-                           E4B_CUTOFF_MIN_HZ, E4B_CUTOFF_MAX_HZ, hz_to_e4b_cutoff)
+                           E4B_CUTOFF_MIN_HZ, E4B_CUTOFF_MAX_HZ, hz_to_e4b_cutoff,
+                           hz_to_akai_fil2fr, akai_depth_db_to_flt2q,
+                           akai_fil2fr_to_hz, AKAI_FIL2FR_TRANSPARENT,
+                           AKAI_FLT2MODE_LP, AKAI_FLT2MODE_BP, AKAI_FLT2MODE_HP,
+                           AKAI_FLT2MODE_EQ, AKAI_LSI2_ON_OFFSET,
+                           AKAI_FLT2MODE_OFFSET, AKAI_FLT2Q_OFFSET,
+                           AKAI_FIL2FR_OFFSET, AKAI_FLT2GAIN_OFFSET,
+                           AKAI_FLT2_HEADROOM_DB)
 from parsers.akai_s3000_parser import (
     AKAI_KGMUTE_OFFSET, AKAI_KGMUTE_OFF,
     str_to_akai, akai_to_str, AKAI_NAME_LEN, SAMPLE_HEADER_LEN, PROGRAM_COMMON_LEN,
@@ -2071,8 +2078,105 @@ def _program_common(name: str, n_keygroups: int, lo_key: int, hi_key: int,
     return p
 
 
+#: Model `filter_type` -> what the IB-304F has to do to express it, as
+#: (FLT2MODE, "does filter 1 stay in circuit"). Only the shapes the base
+#: machine CANNOT make need the board; a 1- or 2-pole lowpass is filter 1's
+#: own job and must not consume filter 2.
+_XPM_TO_FLT2 = {
+    3:  (AKAI_FLT2MODE_LP, True),    # Low 4  -- two 2-pole sections in series
+    4:  (AKAI_FLT2MODE_LP, True),    # Low 6  -- the closest this machine gets
+    5:  (AKAI_FLT2MODE_LP, True),    # Low 8  -- ditto
+    6:  (AKAI_FLT2MODE_HP, False),   # High 1
+    7:  (AKAI_FLT2MODE_HP, False),   # High 2
+    8:  (AKAI_FLT2MODE_HP, False),   # High 4
+    9:  (AKAI_FLT2MODE_HP, False),   # High 6
+    10: (AKAI_FLT2MODE_HP, False),   # High 8
+    11: (AKAI_FLT2MODE_BP, False),   # Band 2
+    12: (AKAI_FLT2MODE_BP, False),   # Band 4
+    13: (AKAI_FLT2MODE_BP, False),   # Band 6
+    14: (AKAI_FLT2MODE_BP, False),   # Band 8
+    # EQ takes filter 1 OUT, and getting this wrong is silent. It was True
+    # here for one revision, which put filter 1's lowpass at the SAME corner as
+    # the band -- so the band sat right at the knee and the reader correctly
+    # concluded the lowpass was doing the audible work and dropped the EQ. A
+    # round trip turned every band-stop and band-boost back into a plain
+    # 2-pole lowpass, and nothing in the writer or the reader was wrong on its
+    # own: the writer put a filter where it hid the feature it had just
+    # written. A model band-stop/boost IS the whole filter; there is no
+    # separate lowpass to preserve.
+    15: (AKAI_FLT2MODE_EQ, False),   # BandStop 2
+    16: (AKAI_FLT2MODE_EQ, False),   # BandStop 4
+    17: (AKAI_FLT2MODE_EQ, False),   # BandStop 6
+    18: (AKAI_FLT2MODE_EQ, False),   # BandBoost/stop 6..8 and boosts below
+    19: (AKAI_FLT2MODE_EQ, False),   # BandBoost 2
+    20: (AKAI_FLT2MODE_EQ, False),   # BandBoost 4
+    21: (AKAI_FLT2MODE_EQ, False),   # BandBoost 6
+    22: (AKAI_FLT2MODE_EQ, False),   # BandBoost 8
+}
+
+#: Default depth for a band-stop/boost whose source gives no dB figure. The
+#: model has no field for EQ depth, so this is the machine's own most common
+#: authored value rather than a midpoint: FLT2Q 20 alone accounts for 104 of
+#: 469 EQ keygroups on the library discs.
+_FLT2Q_DEFAULT_CUT = 20
+_FLT2Q_DEFAULT_BOOST = 27
+
+#: Poles the model's filter types ask for, by XPM number. Each AKAI section is
+#: 2-pole, so the machine can deliver 4 for a lowpass (both sections) and 2 for
+#: anything else (filter 1 has to leave the circuit). Anything steeper is a
+#: reduction, and it is worth saying out loud: an 8-pole lowpass and a 2-pole
+#: are not the same instrument.
+_XPM_POLES = {1: 1, 2: 2, 3: 4, 4: 6, 5: 8,
+              6: 1, 7: 2, 8: 4, 9: 6, 10: 8,
+              11: 2, 12: 4, 13: 6, 14: 8,
+              15: 2, 16: 4, 17: 6, 18: 8,
+              19: 2, 20: 4, 21: 6, 22: 8}
+
+
+def _filter2_plan(voice):
+    """Voice -> (FLT2MODE, FIL2FR, FLT2Q, keep_filter1) or None.
+
+    **Returns None for everything the base machine can already do.** A 2-pole
+    lowpass is filter 1's job; spending the board on it would gain nothing and
+    would make the program refuse to load on the 30 or so machines out of every
+    31 that have no board fitted.
+
+    Nothing here is hardware-confirmed. The corner law behind `FIL2FR` was
+    measured **in mode 0 only**, which is 7% of real board use, and the corner
+    is known to move 41% between LP and HP at one byte -- so an HP or EQ write
+    places the corner using a law measured on a different mode. That is the
+    honest best available and the caller says so; it is not a measurement.
+    """
+    ftype = getattr(voice, 'filter_type', 0) or 0
+    if ftype not in _XPM_TO_FLT2:
+        return None
+    mode, keep_f1 = _XPM_TO_FLT2[ftype]
+    hz = getattr(voice, 'filter_cutoff', None)
+    if hz is None:
+        return None
+    fil2fr = hz_to_akai_fil2fr(hz)
+    if fil2fr >= AKAI_FIL2FR_TRANSPARENT:
+        return None                     # nothing to express
+    if mode == AKAI_FLT2MODE_EQ:
+        # Band-boost vs band-stop is the model's own distinction (19..22 vs
+        # 15..18) and it decides the SIGN, which on this machine is a region
+        # of FLT2Q rather than a bit. 78% of real material boosts.
+        boost = ftype >= 19
+        res = getattr(voice, 'filter_resonance', None)
+        if res:
+            # Resonance is the only depth the model carries. Scaled onto the
+            # measured headroom, which is +22.4 dB -- NOT the +15.57 first
+            # reported, an octave-band figure that understated the peak by 7.
+            db = min(1.0, float(res)) * AKAI_FLT2_HEADROOM_DB
+            q = akai_depth_db_to_flt2q(db if boost else -db)
+        else:
+            q = _FLT2Q_DEFAULT_BOOST if boost else _FLT2Q_DEFAULT_CUT
+        return (mode, fil2fr, q, keep_f1)
+    return (mode, fil2fr, 0, keep_f1)
+
+
 def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
-              voice=None, dead_key_ranges=None) -> bytearray:
+              voice=None, dead_key_ranges=None, ib304f: bool = False) -> bytearray:
     """One 192-byte keygroup with up to four velocity zones."""
     k = bytearray(KEYGROUP_LEN)
     k[0x00] = _BLOCK_ID_KEYGROUP
@@ -2205,8 +2309,54 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
     # LINE across velocity and this machine expresses it as a resting corner
     # plus a bipolar depth about velocity 64.56. Picking the corner without the
     # depth is what silenced a zone: see akai_velocity_filter().
+    # ── IB-304F second filter, only when the caller has asserted the board.
+    # `LSI2_ON` cannot detect it -- it reads back 1 with no board fitted -- so
+    # nothing we could write or read would make this safe to default on. A
+    # machine without the board answers "2nd filter board IB304F not fitted!"
+    # and refuses the program, so the cost of guessing wrong is total.
+    _f2 = _filter2_plan(voice) if (voice is not None and ib304f) else None
+    if _f2 is not None:
+        _f2mode, _f2fr, _f2q, _keep_f1 = _f2
+        _want = _XPM_POLES.get(getattr(voice, 'filter_type', 0), 2)
+        _have = 4 if _keep_f1 and _f2mode == AKAI_FLT2MODE_LP else 2
+        if _want > _have:
+            _diag(_I, 'AKAI_FILTER_POLES_REDUCED',
+                  f'{_want}-pole filter written as {_have}-pole: each AKAI '
+                  f'section is 2-pole and this shape cannot use both',
+                  content_lost=True,
+                  detail={'requested_poles': _want, 'written_poles': _have})
+        k[AKAI_LSI2_ON_OFFSET] = 1
+        k[AKAI_FLT2MODE_OFFSET] = _f2mode
+        k[AKAI_FIL2FR_OFFSET] = _f2fr
+        k[AKAI_FLT2Q_OFFSET] = _f2q
+        k[AKAI_FLT2GAIN_OFFSET] = 0
+    elif voice is not None and not ib304f and \
+            getattr(voice, 'filter_type', 0) in _XPM_TO_FLT2:
+        # THE SHAPE IS BEING LOST, and silently until now. Without the board
+        # this machine has one 2-pole lowpass, so a highpass or a band becomes
+        # a lowpass at the same corner -- which for a highpass inverts the
+        # sound rather than approximating it.
+        _diag(_W, 'AKAI_FILTER_SHAPE_LOST',
+              f'filter type {getattr(voice, "filter_type", 0)} needs the '
+              f'IB-304F second filter; without it the shape becomes a '
+              f'2-pole lowpass',
+              content_lost=True,
+              remedy='enable IB-304F output if the target machine has the board',
+              detail={'cli_flag': '--akai-ib304f',
+                      'filter_type': getattr(voice, 'filter_type', 0)})
+
     _cut = getattr(voice, 'filter_cutoff', None) if voice is not None else None
-    if _cut is None:
+    # Bound before the branch: two of the three arms below never reach the
+    # velocity-filter call, and the code after this block reads both. The
+    # highpass arm is new and did exactly that -- UnboundLocalError on the
+    # first voice it saw, caught by a round-trip script rather than by a test,
+    # because no test exercised a source shape the base machine cannot make.
+    _vf_byte, _vf_lost = 0, 0.0
+    if _f2 is not None and not _f2[3]:
+        # Filter 2 carries the whole shape (highpass, bandpass) and filter 1
+        # must get out of the way, or its lowpass eats the passband.
+        k[0x07] = 99
+    elif _cut is None:
         k[0x07] = 99                 # wide open (HW-confirmed) when unknown
     else:
         _vmin = getattr(voice, 'velocity_to_filter_min_cents', 0.0) or 0.0
@@ -2597,7 +2747,8 @@ def _group_zones_into_keygroups(preset):
 def build_program(preset, name: str, prog_num: int = 0,
                   sample_roots: Optional[dict] = None,
                   midi_channel=None,
-                  stereo_right: Optional[dict] = None) -> bytes:
+                  stereo_right: Optional[dict] = None,
+                  ib304f: bool = False) -> bytes:
     """One Preset -> a complete `.a3p` file.
 
     `prog_num` is the MIDI program number written to PRGNUM; pass each
@@ -2935,7 +3086,8 @@ def build_program(preset, name: str, prog_num: int = 0,
                           vel_to_volume_db=_vvol)
     dead: list = []
     for i, ((klo, khi), owner, zs) in enumerate(keygroups):
-        out += _keygroup(klo, khi, zs, i, voice=owner, dead_key_ranges=dead)
+        out += _keygroup(klo, khi, zs, i, voice=owner, dead_key_ranges=dead,
+                         ib304f=ib304f)
     if dead:
         # Loud, because the failure it describes is silent on the machine: the
         # keygroup loads, occupies a directory entry, and never sounds.
@@ -3038,7 +3190,8 @@ def build_akai_volume(bank: Bank, bank_name: Optional[str] = None,
                       taken: Optional[set] = None,
                       taken_prog: Optional[set] = None,
                       type0: bool = False,
-                      stereo: bool = True) -> list:
+                      stereo: bool = True,
+                      ib304f: bool = False) -> list:
     """Build a Bank's AKAI volume contents as ``[(filename, data), ...]``.
 
     One file per program and per sample, which is how the sampler's own
@@ -3387,7 +3540,8 @@ def build_akai_volume(bank: Bank, bank_name: Optional[str] = None,
             _over_127 = True
         _pdata = build_program(preset, pname, prog_num=_pnum,
                                sample_roots=_roots,
-                               stereo_right=_stereo_right)
+                               stereo_right=_stereo_right,
+                               ib304f=ib304f)
         _check_stereo_halves(_pdata, fn, _stereo_right, quiet)
         files.append((fn, _pdata))
         n_written += 1
