@@ -2336,6 +2336,8 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
         k[AKAI_FIL2FR_OFFSET] = _f2fr
         k[AKAI_FLT2Q_OFFSET] = _f2q
         k[AKAI_FLT2GAIN_OFFSET] = 0
+        # `_f2fr` is provisional for the LP cascade and is re-derived below,
+        # once filter 1's byte is known. See the note there.
     elif voice is not None and not ib304f and \
             getattr(voice, 'filter_type', 0) in _XPM_TO_FLT2:
         # THE SHAPE IS BEING LOST, and silently until now. Without the board
@@ -2377,6 +2379,22 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
         # actually plays -- see the floor in akai_velocity_filter().
         k[0x07], _vf_byte, _vf_lost = akai_velocity_filter(_cut, _vmin, _vmax,
                                                            hi_key=hi_key)
+        if _f2 is not None and _f2[3] and _f2[0] == AKAI_FLT2MODE_LP:
+            # MATCH FILTER 2 TO WHERE FILTER 1 ACTUALLY LANDED, not to the
+            # nominal cutoff. `akai_velocity_filter` does not put the corner at
+            # `_cut`: it places it AT THE PIVOT of the velocity line and floors
+            # it so the corner clears the fundamentals this keygroup plays. So
+            # deriving the two bytes independently from one cutoff leaves them
+            # wherever those two different rules put them.
+            #
+            # It shipped that way for one commit. On real E4B material the
+            # sections came out **1.6 to 4.2 octaves apart** -- so far apart
+            # that the reader stopped calling them a cascade at all and every
+            # 4-pole lowpass in the conversion decoded back as a 2-pole. Unit
+            # tests missed it completely because a synthetic voice has no
+            # velocity modulation and hi_key 127, which is exactly the case
+            # where the two rules agree.
+            k[AKAI_FIL2FR_OFFSET] = hz_to_akai_fil2fr(akai_filfrq_to_hz(k[0x07]))
         # K_FREQ (0x08): key follow of filter frequency, SIGNED semitones,
         # oct/oct = K_FREQ / 12, pivot note 64. Never written before
         # 2026-08-24, so an AKAI -> AKAI round trip silently zeroed whatever

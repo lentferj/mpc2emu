@@ -30202,6 +30202,43 @@ instrument. Additivity is exact there (−12.7 and −6.8 sum to −19.5 against
 sections reach their asymptotes the response is 78 dB down and into the floor.
 A corner near 200–300 Hz is where 24 dB/oct is actually demonstrable.
 
+### The 4-pole path, and why unit tests could not see it break
+
+**End-to-end on a real E4B** (97 keygroups carrying model types 3, 8 and 15):
+
+```
+  --akai-ib304f OFF (default)   LSI2_ON set on 0 of 97    4-pole decoded: 0
+  --akai-ib304f ON              LSI2_ON set on 97         4-pole decoded: 21
+```
+
+The remaining 76 are honest: 49 have filter 1 wide open (a 4-pole with no
+corner is open), 20 are band-stops and 7 highpasses.
+
+**The 4-pole is the most tempting shape to let through ungated** — it *is* a
+lowpass, just steeper, so "degrade the slope, keep the corner" reads like a safe
+default. It is not. The second section needs the board, a machine without one
+refuses the whole program, and the corner moves too, because a matched pair
+sits 0.841x below its sections.
+
+**The first end-to-end run found that the 4-pole path was not firing at all.**
+`akai_velocity_filter` does not put filter 1's corner at `filter_cutoff` — it
+places it at the PIVOT of the velocity line and floors it so the corner clears
+the fundamentals the keygroup plays. Filter 2's byte was being derived
+independently from the same nominal cutoff, so the two sections landed wherever
+those two different rules put them: **1.6 to 4.2 octaves apart** on real
+material. Far enough that the reader stopped treating them as a cascade, and
+**every 4-pole lowpass in the conversion decoded back as a 2-pole.** Filter 2 is
+now derived from filter 1's *realised* corner; the sections come out within
+0.06 octaves.
+
+**Nine unit tests and a nine-case round trip all passed while this was live**,
+and could not have failed: a synthetic voice has no velocity modulation and
+`hi_key` 127, which is precisely the case where the two placement rules agree.
+**The fixtures were all built from the parameters the feature does not depend
+on.** The regression test now carries velocity depth and a keygroup high enough
+for the floor to bite — and asserts that filter 1 actually moved, so it cannot
+pass by testing the degenerate case.
+
 ### A note on how the errors were distributed
 
 Six defects in this work were each caught by the party that did **not** hold the
