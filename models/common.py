@@ -1846,6 +1846,65 @@ def _fil2fr_from_table(byte, table, exponent):
 AKAI_FIL2FR_PEAK_LAW = (6.7795, 0.07033)
 AKAI_FIL2FR_PEAK_LAW_VALID = (25, 88)
 
+#: **ABOVE 88 THE LAW STOPS AND THE POINTS TAKE OVER** (s3ked §205, 2026-09-10;
+#: `TC10 NOISE` prog 50, `FLT2Q` 31, `FILFRQ` 99, `FLT2GAIN` 0, referenced to the
+#: same program at `LSI2_ON` 0, three modes at every rung).
+#:
+#: **There is no breakpoint to find.** Rung 89 is already +1.6% off the lower
+#: law, so the departure begins at the first byte above 88 -- the bound was
+#: placed exactly right, and one byte further would have been wrong.
+#:
+#: **DO NOT FIT THIS REGION. The per-byte steps are uneven and the unevenness is
+#: real:**
+#:
+#:      88->89  1.0900   LARGE      predicted by the lower law: 1.0729
+#:      89->90  1.0568   small
+#:      90->91  1.0893   LARGE
+#:      91->92  1.0896   LARGE
+#:      92->93  1.0589   small
+#:      93->94  1.0924   LARGE
+#:
+#: Four large at ~1.090, two small at ~1.058 -- a **3.1% step-to-step
+#: difference against a 0.58% mean spread between the three modes at these
+#: rungs, so 5x the measurement scatter.** That is structure, and it is why
+#: three modes were captured at every rung rather than one.
+#:
+#: **A local exponential fits 88..94 at 1.1% worst residual and that 1.1% is
+#: hiding +-3% steps** -- it reproduces the average and none of the shape, and
+#: the shape is what an individual keygroup lands on. Same failure as every
+#: aggregate in this file: it answers a question about the range.
+#:
+#: **Observed and NOT claimed:** the two small steps fall at 89->90 and 92->93,
+#: three bytes apart. **Two instances do not establish a period.** If it is one,
+#: the next small step is 95->96 and a single capture pair settles it -- worth
+#: folding into anything else that touches the top, not worth a run alone.
+AKAI_FIL2FR_PEAK_MEASURED = {88: 3304.7, 89: 3602.1, 90: 3806.6, 91: 4146.5,
+                             92: 4518.1, 93: 4784.2, 94: 5226.1}
+
+
+def akai_fil2fr_peak_hz(byte: int):
+    """`FIL2FR` -> filter 2's tuning frequency f0 (the high-Q peak), in Hz.
+
+    The law below its bound, the measured points above it, geometric
+    interpolation between them -- and `None` past the last measurement rather
+    than an extrapolation of a region already known to be irregular.
+    """
+    lo, hi = AKAI_FIL2FR_PEAK_LAW_VALID
+    if byte <= hi:
+        a, k = AKAI_FIL2FR_PEAK_LAW
+        return a * math.exp(k * byte)
+    pts = sorted(AKAI_FIL2FR_PEAK_MEASURED)
+    if byte in AKAI_FIL2FR_PEAK_MEASURED:
+        return AKAI_FIL2FR_PEAK_MEASURED[byte]
+    if byte > pts[-1]:
+        return None                      # 95..98 unmeasured; do not invent it
+    for x0, x1 in zip(pts, pts[1:]):
+        if x0 <= byte <= x1:
+            y0, y1 = AKAI_FIL2FR_PEAK_MEASURED[x0], AKAI_FIL2FR_PEAK_MEASURED[x1]
+            f = (byte - x0) / (x1 - x0)
+            return math.exp(math.log(y0) + f * (math.log(y1) - math.log(y0)))
+    return AKAI_FIL2FR_PEAK_MEASURED[pts[-1]]
+
 
 def akai_fil2fr_mode_to_hz(byte: int, mode: int, boost: bool = False):
     """`FIL2FR` -> where filter 2 is TUNED, in Hz. **Mode-independent.**

@@ -31128,3 +31128,48 @@ comparison was one anyone would make. **Three days and four ladders is what it
 took to establish that two correct numbers were not comparable** — and the thing
 that finally exposed it was holding a parameter still, not measuring anything
 new.
+
+
+### Rungs 89–93: the prevalence figure picked the one interval where the shape changes
+
+Measured (s3ked §205) after the corpus weighting flipped the decision to run
+them. Three modes at every rung, mode spread 0.40–0.66 %.
+
+**No breakpoint exists.** Rung 89 is already +1.6 % off the lower law, so the
+departure begins at the first byte above 88. **The bound was placed exactly
+right, and one byte further would have been wrong.**
+
+**And the region is not fittable:**
+
+```
+   88->89  1.0900  LARGE        the lower law predicts 1.0729
+   89->90  1.0568  small
+   90->91  1.0893  LARGE
+   91->92  1.0896  LARGE
+   92->93  1.0589  small
+   93->94  1.0924  LARGE
+```
+
+Four large at ~1.090, two small at ~1.058 — a **3.1 % step-to-step difference
+against 0.58 % mode spread, five times the scatter.** A local exponential fits
+88–94 at 1.1 % worst residual **and that 1.1 % hides ±3 % steps.** It reproduces
+the average and none of the shape, and the shape is what an individual keygroup
+lands on.
+
+**Observed, not claimed:** the two small steps fall three bytes apart, at 89→90
+and 92→93. **Two instances do not establish a period.** If it is one the next is
+95→96, and a single capture pair settles it.
+
+### What the prevalence figure actually bought
+
+It was offered as a re-ranking — *this gap is bigger than that one*. **It turned
+out to pick the one interval where the shape of the answer changes.** The band
+contained both the departure's onset and the step structure, and **either would
+have been silently interpolated over** by a converter that had bounded its law
+at 88 and extrapolated beyond.
+
+That is a stronger argument for corpus-weighting proposed measurements than the
+one originally made for it: prevalence does not merely order the queue by how
+much material is affected — **it concentrates attention where the material is,
+which is where a format's irregularities tend to be**, because the irregularity
+is often *why* the values cluster there.
