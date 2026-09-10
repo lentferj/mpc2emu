@@ -2437,6 +2437,22 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
             # velocity modulation and hi_key 127, which is exactly the case
             # where the two rules agree.
             k[AKAI_FIL2FR_OFFSET] = hz_to_akai_fil2fr(akai_filfrq_to_hz(k[0x07]))
+            # AND IF THAT LANDS WIDE OPEN, TAKE THE BOARD BACK OUT.
+            #
+            # `akai_velocity_filter` can put filter 1 at 99 -- wide open -- for
+            # a source whose corner is above the machine's range. Filter 2 then
+            # matches it and both sections are transparent, but LSI2_ON was set
+            # before any of that was known. The result is a program that needs
+            # no filtering at all yet REFUSES TO LOAD on a machine without the
+            # board, which is the whole cost of the flag for none of its
+            # benefit.
+            #
+            # Found by converting real E4B material rather than synthetic
+            # voices: one preset in six came out this way.
+            if k[AKAI_FIL2FR_OFFSET] >= AKAI_FIL2FR_TRANSPARENT:
+                k[AKAI_LSI2_ON_OFFSET] = 0
+                k[AKAI_FLT2MODE_OFFSET] = 0
+                k[AKAI_FLT2Q_OFFSET] = 0
         # K_FREQ (0x08): key follow of filter frequency, SIGNED semitones,
         # oct/oct = K_FREQ / 12, pivot note 64. Never written before
         # 2026-08-24, so an AKAI -> AKAI round trip silently zeroed whatever
