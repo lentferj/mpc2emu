@@ -1573,11 +1573,23 @@ def _build_preset_body(preset: Preset, preset_idx: int,
     # [56-59] MIDI any-note/any-channel
     hdr[56] = hdr[57] = hdr[58] = hdr[59] = 0xFF
 
-    # VELOCITY-PIVOT OFFSET. We write the source's swing as `Vel<`, which
-    # attenuates from velocity 127; a source that rotates about some other
-    # velocity therefore sits a CONSTANT S*(127-P_src)/126 off, and a constant
-    # in dB is a level, not a curve. Repairing it upward would need headroom
-    # the volume field does not have, so the whole preset moves DOWN by its own
+    # VELOCITY-PIVOT OFFSET. We write the source's swing as `Vel+`, which
+    # BOOSTS from velocity 0 (see `E4XT_VEL_PIVOT['Vel+']` passed below); a
+    # source that rotates about some other velocity therefore sits a CONSTANT
+    # S*P_src/126 off, and a constant in dB is a level, not a curve.
+    #
+    # THE TARGET IS `Vel+`, NOT `Vel<` -- this said `Vel<` and carried that
+    # target's formula, S*(127-P_src)/126, until 2026-09-11. The two disagree
+    # at exactly the pivot every E-MU, MPC and KRZ source uses: at P_src=127
+    # the old formula gives 0 and predicts NO trim, where the code applies
+    # about -S. Measured on six HD0 presets: depths 16.4/18.6/12.7/23.1 dB
+    # against trims of 16.8/19.0/12.9/23.6 dB, and the two zero-depth presets
+    # untrimmed. The cost paragraph below always described `Vel+` correctly,
+    # so the block contradicted itself; a reader checking the writer against
+    # the wrong half would have read a correct trim as a level bug. One did.
+    #
+    # Repairing the offset upward would need headroom the volume field does not
+    # have, so the whole preset moves DOWN by its own
     # largest offset instead: inter-voice balance comes out exact and only the
     # preset's overall loudness changes. Jan's call, 2026-09-04.
     # ONE FIT PER VOICE, feeding BOTH knobs the writer has. A dB-linear target

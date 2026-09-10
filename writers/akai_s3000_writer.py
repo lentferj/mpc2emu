@@ -2681,12 +2681,18 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
         # clamped to 0..255 -- the byte's capacity, not the field's range. Any
         # value in between encodes cleanly and goes to the machine.
         #
-        # Unreachable today: nothing sets 'loudness' in the zone dict, so this
-        # is always 0. It is fixed because the failure mode is silent the
-        # moment somebody wires per-zone loudness. s3ked, 2026-08-12: their
-        # encoder guarded only fields with a display offset, a probe asked for
-        # MODVFILT1 = 60 against a -50..+50 range, the byte was duly sent, and
-        # the filter modulated the wrong way for a full run.
+        # This guard stopped being theoretical on 2026-08-17, when the zone
+        # builder below started setting 'loudness' from the model's dB volume.
+        # TWO CLAMPS, DIFFERENT BOUNDS, BOTH WANTED: this one bounds the BYTE
+        # to the field's declared -50..+50, the builder bounds the VALUE to
+        # +20, where the field was measured to saturate. Widening this one to
+        # match the builder would remove the guard; narrowing the builder to
+        # match this one would claim gain the hardware does not deliver.
+        #
+        # s3ked, 2026-08-12: their encoder guarded only fields with a display
+        # offset, a probe asked for MODVFILT1 = 60 against a -50..+50 range,
+        # the byte was duly sent, and the filter modulated the wrong way for a
+        # full run.
         k[o + 0x10] = _clamp(z.get('loudness', 0), -50, 50) & 0xff
         k[o + 0x11] = 0                 # filter frequency offset
         k[o + 0x12] = _clamp(z.get('pan', 0), -50, 50) & 0xff
