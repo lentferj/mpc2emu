@@ -29,6 +29,7 @@ little-endian:
 A file occupies ceil(size / blocksize) blocks chained through the FAT.
 """
 
+import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -775,8 +776,23 @@ def append_akai_volumes(image_path: str,
         if name in existing:
             action = on_duplicate
             if action == 'prompt':
-                ans = input(f"  Volume '{name}' is already on the image "
-                            f"— [s]kip, [a]dd anyway, [o]verwrite? ").strip().lower()
+                # A PROMPT WITH NO ONE TO ANSWER IT IS A HANG. `--add-to` runs
+                # in pipelines and scripts where stdin is not a terminal; there
+                # `input()` blocks or raises EOFError deep inside a write, with
+                # the image half-considered. Fall back to the conservative
+                # choice and say so, rather than asking a question nobody can
+                # hear.
+                if not sys.stdin or not sys.stdin.isatty():
+                    print(f"  Volume '{name}' is already on the image and "
+                          f"stdin is not a terminal — skipping it. Pass "
+                          f"--on-duplicate to choose explicitly.")
+                    skipped.append(name)
+                    continue
+                try:
+                    ans = input(f"  Volume '{name}' is already on the image "
+                                f"— [s]kip, [a]dd anyway, [o]verwrite? ").strip().lower()
+                except EOFError:
+                    ans = ''
                 action = {'s': 'skip', 'a': 'add-new', 'o': 'overwrite'}.get(
                     ans[:1] if ans else 's', 'skip')
             if action == 'skip':

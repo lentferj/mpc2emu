@@ -3605,8 +3605,13 @@ def build_akai_volume(bank: Bank, bank_name: Optional[str] = None,
         # loads, so the collision this was defending against does not occur
         # in ordinary use. Shifting our own numbering is not the fix for an
         # operating-procedure question on the machine side; reverted.
+        # PRGNUM 0 IS NEVER FREE. The boot-resident TEST PROGRAM occupies it
+        # and survives every memory clear, so a program loaded at 0 collides
+        # with something already in the machine. The fallback numbering counted
+        # from 0, which put the FIRST program of every volume built without
+        # usable source numbers straight onto it.
         _pnum = ((getattr(preset, 'program_number', 0) or 0) if _usable
-                 else n_written)
+                 else n_written + 1)
         if _pnum > 127 and not _over_127:
             _over_127 = True
         _pdata = build_program(preset, pname, prog_num=_pnum,
