@@ -1150,27 +1150,23 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
             voice.filter_cutoff = _fhz
             _fr = kg.get('fil2fr', AKAI_FILTER_OPEN)
             _mode = kg.get('flt2_mode', 0)
-            # Every mode is calibrated now, so the warning is no longer
-            # "this mode is uncalibrated" but "this BYTE is outside the ladder
-            # that calibrated it". Mode 0 has three regions, so extrapolating
-            # any of these is a guess about a curve that has surprised us.
-            _lad = None
-            if _mode == AKAI_FLT2MODE_EQ:
-                _lad = (AKAI_FIL2FR_EQBOOST_MEASURED
-                        if akai_flt2q_is_boost(kg.get('flt2_q', 0))
-                        else AKAI_FIL2FR_EQCUT_MEASURED)
-            elif _mode != AKAI_FLT2MODE_LP:
-                _lad = AKAI_FIL2FR_MODE_MEASURED.get(_mode)
-            if _lad is not None:
-                _p = sorted(_lad)
-                if not (_p[0] <= _fr <= _p[-1]):
-                    _diag(_W, 'AKAI_FIL2FR_EXTRAPOLATED_FOR_MODE',
-                          f'filter 2 feature frequency extrapolated outside the '
-                          f'FLT2MODE {_mode} ladder (FIL2FR {_fr}, measured '
-                          f'{_p[0]}..{_p[-1]})',
-                          content_lost=False, subject=preset.name,
-                          remedy='extend the ladder for this mode')
-            elif _mode == AKAI_FLT2MODE_LP and _fr > AKAI_FIL2FR_EXTRAP_TOP_UNMEASURED_FROM:
+            # THE TUNING IS MODE-INDEPENDENT; THE AUDIBLE FEATURE IS NOT.
+            # Filter 2 has one tuning law (mode 0's). Where the peak, dip or
+            # corner actually sits relative to it depends on FLT2Q -- measured,
+            # the BP peak slides 16% and the HP peak 44% across the FLT2Q range
+            # at a fixed FIL2FR. Nothing here models that offset, so say so
+            # rather than let a tuning frequency pass as a feature frequency.
+            #
+            # Not raised for mode 0 at high FLT2Q, where the two coincide.
+            if _mode != AKAI_FLT2MODE_LP:
+                _diag(_I, 'AKAI_FIL2FR_FEATURE_OFFSET_UNMODELLED',
+                      f'filter 2 tuning frequency carried for FLT2MODE {_mode}; '
+                      f'the audible feature sits at an unmodelled '
+                      f'FLT2Q-dependent offset from it',
+                      content_lost=False, subject=preset.name,
+                      remedy='model the feature offset against FLT2Q per mode',
+                      detail={'mode': _mode, 'flt2q': kg.get('flt2_q', 0)})
+            elif _fr > AKAI_FIL2FR_EXTRAP_TOP_UNMEASURED_FROM:
                 _diag(_W, 'AKAI_FIL2FR_EXTRAPOLATED',
                       f'filter 2 corner extrapolated above the measured span '
                       f'(FIL2FR {_fr} > {AKAI_FIL2FR_EXTRAP_TOP_UNMEASURED_FROM})',

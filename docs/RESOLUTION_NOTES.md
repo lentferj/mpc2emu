@@ -322,6 +322,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIFIL2CONV — two instances of a fix are not two instances of evidence (2026-09-09)](#akaifil2conv-two-instances-of-a-fix-are-not-two-instances-of-evidence-2026-09-09)
 - [§AKAIFIL2MODES — every mode has a ladder, and there are two exponents (2026-09-09)](#akaifil2modes-every-mode-has-a-ladder-and-there-are-two-exponents-2026-09-09)
 - [§AKAIFIL2HPREF — the whole highpass column moved, and the grouping is now unresolved (2026-09-09)](#akaifil2hpref-the-whole-highpass-column-moved-and-the-grouping-is-now-unresolved-2026-09-09)
+- [§AKAIFIL2ONELAW — there is one tuning law, and it was mode 0's all along (2026-09-10)](#akaifil2onelaw-there-is-one-tuning-law-and-it-was-mode-0s-all-along-2026-09-10)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -30805,3 +30806,97 @@ The value and the evidence that the value means anything live in different
 places, and only one of them travels. Lose the docstring and the figure remains,
 quietly no longer supported — which is why `AKAI_FIL2FR_MEASURED`'s "bypassed"
 provenance now has a test on it rather than a comment.
+
+
+## §AKAIFIL2ONELAW — there is one tuning law, and it was mode 0's all along (2026-09-10)
+
+**This retires the two-group structure, every per-mode factor, and the per-mode
+tuning tables — four nights of ladders.** Every *measurement* survives; only the
+interpretation of them as tuning laws is withdrawn.
+
+### The question was wrong, not unresolved
+
+Five "mode exponents" were measured and read as five tuning laws. They were five
+**different features** — a corner, a peak, a dip, another peak, a corner — each
+sitting at its own multiple of the tuning frequency, **and each measured at
+whatever `FLT2Q` that ladder happened to hold**: BP and HP at 0, the EQ arms at
+20 and 27.
+
+**The tell was in our own data for a day and neither project read it.** The two
+EQ arms are the *same mode* at the *same `FIL2FR`*, differing only in `FLT2Q`,
+and their centres diverge **15.4 % by byte 80**. **No tuning law can do that.**
+Something about the feature had to be moving — and we shipped separate tables
+for the two arms rather than asking what that implied.
+
+Holding `FIL2FR` at 80 and sweeping `FLT2Q` alone:
+
+```
+   FLT2Q     BP peak    HP peak    EQ feature
+      0      2241.2     3398.4     dip 2523.9
+     16      2030.3     2400.9     dip 2191.4
+     31      1889.6     1895.5     peak 1877.9
+```
+
+**The BP peak slides 16 %, the HP peak 44 %**, both deepening as they go — real
+movement, not a shallow-feature artefact.
+
+### At high Q every topology collapses onto one curve
+
+```
+   rung 45   BP 161.1   HP 162.6   EQ 161.1   spread 0.91 %
+   rung 64   BP 607.9   HP 610.8   EQ 607.9   spread 0.48 %
+   rung 80   BP 1889.6  HP 1895.5  EQ 1877.9  spread 0.94 %
+```
+
+One exponential fits all nine — refit here as `6.8418 * exp(0.07022 b)` against
+s3ked's `6.8437 * exp(0.07021 b)` — worst residual **0.86 %**.
+
+**And its exponent is mode 0's.** 0.04 % from s3ked's four-point mode-0 fit,
+**0.48 % from the curve this project actually ships**. A different feature, three
+modes none of which is mode 0, captures a day later through a restarted chain.
+The prefactor ratio 1.518 is the high-Q peak sitting above the −3 dB corner —
+the same relationship filter 1 shows at 1.2886.
+
+**Mode 0 was never the odd one out. It was the law**, and the other four
+exponents were measuring how far each feature sits from it.
+
+### What changed in code
+
+`akai_fil2fr_mode_to_hz` returns the mode-0 curve for **every** mode. The
+per-mode tables stay as data — they are real measurements of a specific feature
+at a specific `FLT2Q`, and remain correct for that — but they no longer stand in
+for tuning. A caller decoding a non-lowpass mode now gets
+`AKAI_FIL2FR_FEATURE_OFFSET_UNMODELLED`, because the audible feature sits at a
+`FLT2Q`-dependent offset nothing here models.
+
+### The shape of the mistake
+
+**Four ladders, four sections, and a night of corrections bought what one
+afternoon of holding `FIL2FR` still would have shown.** Every ladder varied
+`FIL2FR` and held `FLT2Q` fixed — at a *different* fixed value each time — so the
+one variable that moved the answer was the one never swept. **A parameter held
+constant across an experiment is invisible to it, and a parameter held at
+different constants across several experiments is worse than invisible: it looks
+like structure.**
+
+The corrective question was available at every stage and is embarrassingly
+cheap: *what else differs between these measurements besides the thing I am
+comparing?* It is the same question that dissolved the three "independent"
+observations taken inside one filter knee, one level up.
+
+### What is NOT withdrawn, and why
+
+§AKAIFIL2MODES's "mode 0 alone flattens at the bottom" **no longer follows from
+its own argument** — mode 0 was the only mode whose law came from a low-`FLT2Q`
+corner over the bottom of the range, so the flattening may be the same
+feature-offset effect.
+
+It stands for a different reason: the mode-0 ladder was **referenced against the
+same program bypassed**, so a feature inside the filter's own response cannot
+move it, and the bend is a per-rung deviation no constant offset could produce.
+**That argument was made about a different challenge and survives this one
+unchanged** — which is the value of an argument that does not depend on the
+conclusion it was built to defend.
+
+Testing it properly needs high-`FLT2Q` points below rung 45, and nothing on the
+resident volumes reaches there.

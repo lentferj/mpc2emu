@@ -1826,26 +1826,54 @@ def _fil2fr_from_table(byte, table, exponent):
     return table[hi]
 
 
-def akai_fil2fr_mode_to_hz(byte: int, mode: int, boost: bool = False):
-    """`FIL2FR` -> the filter-2 feature frequency in Hz, FOR THIS MODE.
+#: **ONE TUNING LAW, MEASURED AT HIGH Q** (s3ked §203, 2026-09-09). Holding
+#: `FLT2Q` at 31, every topology's peak lands on the same frequency:
+#:
+#:      rung 45   BP 161.1   HP 162.6   EQ 161.1   spread 0.91%
+#:      rung 64   BP 607.9   HP 610.8   EQ 607.9   spread 0.48%
+#:      rung 80   BP 1889.6  HP 1895.5  EQ 1877.9  spread 0.94%
+#:
+#: One exponential fits all nine to a worst residual of 0.86%:
+#: `Hz = 6.8437 * exp(0.07021 * FIL2FR)`.
+#:
+#: **Its exponent is mode 0's**, 0.5% from the curve this project already
+#: shipped -- a different feature, three modes none of which is mode 0, and
+#: captures taken a day later through a restarted chain. The prefactor ratio
+#: 1.518 is just the high-Q peak sitting above the -3 dB corner; filter 1 shows
+#: the same relationship at 1.2886.
+AKAI_FIL2FR_PEAK_LAW = (6.8437, 0.07021)
 
-    Lowpass returns its -3 dB corner; highpass its -3 dB corner; bandpass its
-    peak; EQ its dip or bump. **These are different quantities**, which is the
-    whole reason one law could not serve them -- and comparing across them is
-    how a 1.29x documented gap first got read as a property of filter 2.
+
+def akai_fil2fr_mode_to_hz(byte: int, mode: int, boost: bool = False):
+    """`FIL2FR` -> where filter 2 is TUNED, in Hz. **Mode-independent.**
+
+    **The per-mode tables were withdrawn from this path on 2026-09-09** and the
+    reason is worth the space, because four nights of ladders argued the
+    opposite.
+
+    Five "per-mode exponents" were measured -- HP, BP, EQ-cut, EQ-boost and
+    mode 0 -- and read as five tuning laws in two groups. They were five
+    *different features*: a corner, a peak, a dip, another peak and a corner,
+    each at its own multiple of the tuning frequency, **and each measured at
+    whatever `FLT2Q` that ladder happened to hold.** BP and HP were taken at
+    `FLT2Q` 0, the EQ arms at 20 and 27.
+
+    **The tell was in our own data and neither project read it.** The two EQ
+    arms are the same mode at the same `FIL2FR`, differing only in `FLT2Q`, and
+    their centres diverge 15.4% by byte 80. **No tuning law can do that** -- so
+    something about the FEATURE had to be moving, not the tuning. Sweeping
+    `FLT2Q` alone at one byte confirmed it: the BP peak slides 16% and the HP
+    peak 44%.
+
+    At `FLT2Q` 31 every topology's peak collapses onto one curve whose exponent
+    is mode 0's. **Mode 0 was never the odd one out; it was the law**, and the
+    other four exponents were measuring how far each feature sits from it.
+
+    So this returns the mode-0 curve for every mode. **The feature a listener
+    hears sits at a `FLT2Q`-dependent offset from it that nothing here models**
+    -- callers are told via `AKAI_FIL2FR_FEATURE_OFFSET_UNMODELLED`.
     """
-    if mode == AKAI_FLT2MODE_LP:
-        return akai_fil2fr_to_hz(byte)
-    if mode == AKAI_FLT2MODE_EQ:
-        tbl = (AKAI_FIL2FR_EQBOOST_MEASURED if boost
-               else AKAI_FIL2FR_EQCUT_MEASURED)
-        exp = (AKAI_FIL2FR_EQBOOST_EXPONENT if boost
-               else AKAI_FIL2FR_MODE_EXPONENT[AKAI_FLT2MODE_EQ])
-        return _fil2fr_from_table(byte, tbl, exp)
-    tbl = AKAI_FIL2FR_MODE_MEASURED.get(mode)
-    if tbl is None:
-        return akai_fil2fr_to_hz(byte)
-    return _fil2fr_from_table(byte, tbl, AKAI_FIL2FR_MODE_EXPONENT[mode])
+    return akai_fil2fr_to_hz(byte)
 
 
 def akai_fil2fr_hp_to_hz(byte: int):
