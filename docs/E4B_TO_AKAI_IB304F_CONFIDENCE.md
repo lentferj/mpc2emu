@@ -67,6 +67,61 @@ keygroups** in the whole local AKAI corpus (64 images) — not a sample.
 | Our emitted programs load and render on a board-fitted S3000XL | `FILTER2` volume, 12 programs, all four modes, gate confirmed by a withheld-board twin | **HW-E2E** |
 | `--iso` delivers the same bytes as a disk image | 12 program headers diffed, **3720 bytes, zero differences** | **HW-E2E** |
 | **A real E4B conversion sounds like its source** | `FXPATHS`, six A/B pairs on HD4 against the same six presets in E4XT RAM at P000–P005 | **PENDING — this is the open question** |
+| The board does not engage when nothing asks it to | `40`/`50` measured null: **0.10 dB rms against a 0.10 dB repeatability floor** | **HW-E2E**, and see the narrowing below |
+
+### What the `FX`/`NB` pairs can and cannot answer — corrected 2026-09-11
+
+**They were described here and to s3ked as *"the same program with the board
+off — same samples, same keygroups, one flag"*. That is false, and it cost four
+captures.** Measured from the volume's own headers:
+
+```
+   pair         FX FILFRQ                  NB FILFRQ
+   AIR HEED     99,99,99,99,99,99          89,67,67,77,80,89
+   SYNTH BAS    99                         39
+   OBX BP SW    99,99,99,99,99             39,39,39,39,39
+   REZ PLAY     42,42,42,42,42,99,99,99    39,39,39,39,39,39,39,39
+   MYSTERY M    42,42,42,42,42,99,99,99    39,39,39,39,39,69,69,69
+```
+
+**Three parameters differ, not one.** When the board is engaged for a non-lowpass
+shape the writer opens filter 1 (`FILFRQ` 99) and lets filter 2 carry the band;
+with the board withheld it must re-tune filter 1 instead — **and it also changes
+key-follow and velocity depth**:
+
+```
+   FX AIR HEED   K_FREQ 0     velocity->filter 0
+   NB AIR HEED   K_FREQ 0     velocity->filter 7      <- the corner moves with velocity
+   FX OBX BP SW  K_FREQ 0     NB OBX BP SW  K_FREQ 1  <- and with key
+```
+
+**This is correct behaviour and a correct fallback.** For the question the volume
+was built for — *does the conversion sound right with the board, and acceptable
+without it* — re-tuning filter 1 is exactly what should happen. **What it is not
+is a single-variable control**, so `FX − NB` is not filter 2's contribution and
+no pole count can be read from it.
+
+**And the `40`/`50` null means something narrower than it appeared.** It is null
+because that source's filter was already wide open, so the writer had nothing to
+approximate and both renderings coincided. *"The board does not engage unasked"*
+holds. *"Only the flag differs"* was never true of any pair where the board does
+something.
+
+**Isolating filter 2 needs a RAM-only A/B on program `44`** — the only one of the
+six without two filter modes layered on every note — clearing `LSI2_ON` alone and
+leaving filter 1 untouched.
+
+### And nothing has been measured across key or velocity
+
+Every capture so far is **one note at one velocity**. These programs span
+**5.6 to 7.0 octaves**, carry key-follow on some keygroups and not others, and
+differ between `FX` and `NB` in velocity depth. **A single point cannot
+characterise any of that**, and comparing two programs at one point compares two
+surfaces at one point.
+
+**The honest minimum is a grid on both sides** — the E4XT source and the AKAI
+conversion, five octaves by five velocities — and neither side has had one.
+
 
 ## The three things most worth knowing
 
