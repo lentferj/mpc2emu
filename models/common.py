@@ -1578,13 +1578,28 @@ AKAI_FIL2FR_OFFSET   = 177
 #: **-26.11**; with raw bins, **-49 to -55**. Each instrument reported exactly
 #: as much of the notch as its window could resolve.
 #:
-#: **-49.22 IS NOT THE NOTCH'S DEPTH AND MUST NOT BECOME A CONSTANT.** Two
-#: independent raw-bin measurements give -53.9 and -49.22 (and -55.28 on a
-#: cross-check); a deeper instrument reads deeper, and the coarser of the two
-#: read *deeper*, which is noise finding a lucky low bin rather than better
-#: resolution. **The supportable claim is "below -50 dB".** Nothing here
-#: depends on the exact figure -- the inert test is a sign/magnitude question
-#: and the writer's inverse excludes 16 outright.
+#: **-55.50 IS MEASURED, and the claim that it could not be was wrong.** This
+#: file said "below -50 dB, nobody has measured it", reasoning that the coarser
+#: instrument reading deeper meant both figures were bounds. **The cause was
+#: identified correctly and the conclusion drawn from it was backwards**
+#: (s3ked §207): eight independent captures at 0.73 Hz bins, averaged
+#: cumulatively, converge UPWARD and settle near -55.5:
+#:
+#:      N=1  -63.66   N=2  -59.58   N=3  -59.49   N=4  -58.12
+#:      N=5  -55.66   N=6  -55.30   N=7  -55.67   N=8  -56.21
+#:
+#: **A minimum found in a noisy spectrum is biased DEEP**, because the search
+#: takes whichever bin noise pushed lowest, and the bias shrinks as variance
+#: averages down. **So a deeper reading is not a better-resolved one -- it is
+#: usually a less-averaged one.** Both earlier figures were essentially right
+#: and agree to 1.4 dB.
+#:
+#: **AND IT IS NOT A NARROW NOTCH.** There are no -3 dB points within half an
+#: octave of the centre: it is a BROAD cut carrying a deep narrow core. Q reads
+#: 2.9 at -10 dB and 9.8 at -20 dB because those describe different parts of
+#: one shape, so a single Q is misleading in whichever direction it is quoted --
+#: including the "108 Hz wide, Q 20.5" this file used to justify raw bins. The
+#: conclusion (use raw bins) was right; the description was not.
 #:
 #: **Rung dependence:** rung 80 runs within about 1-2 dB of rung 64 across the
 #: range, and our own earlier rung-80 table agrees with this one to +-1.34 dB
@@ -1595,7 +1610,7 @@ AKAI_FLT2Q_DEPTH_DB = {
     4: -6.71,   5: -7.16,   6: -7.68,   7: -8.28,
     8: -8.98,   9: -9.77,  10: -10.73, 11: -11.92,
     12: -13.43, 13: -15.53, 14: -18.60, 15: -24.13,
-    16: -49.22, 17: -23.00, 18: -16.45, 19: -12.27,
+    16: -55.50, 17: -23.00, 18: -16.45, 19: -12.27,
     20: -9.15,  21: -6.44,  22: -4.09,  23: -2.01,
     24: 0.77,   25: 2.74,   26: 4.83,   27: 7.32,
     28: 9.99,   29: 13.13,  30: 17.19,  31: 23.74,
