@@ -31086,3 +31086,45 @@ checking someone else's claim.
 
 Worth recording as a standing prompt: **before asking for a measurement, divide
 the tables already held and see what the quotient does.**
+
+
+### The corpus knows which bytes matter and the bench does not
+
+s3ked declined the 88→94 run on the grounds that it "would only extend the
+usable range slightly." **The corpus says otherwise: `FIL2FR` 89–93 is 75 of 891
+active keygroups — 8.4 %, the second-largest remaining gap that touches real
+material — and the run is three minutes.**
+
+Their reasoning was sound in shape and wrong in input. They weighed the run
+against the *question* it would answer, having just answered the question that
+motivated it, and never against **how much real material sits in the band.**
+That is not a number the bench side has.
+
+**And the asymmetry ran both ways.** The 8.4 % figure only got computed here
+because Jan asked what was still unmeasured — *after* the decision had been
+taken. **The decision-relevant number was sitting in this project, unproduced,
+while the other project was deciding.** They did not ask; we did not volunteer.
+
+**So the pair of standing prompts, one per side:**
+
+- **Converter side:** before asking for hardware, divide the tables already held
+  and see what the quotient does — and **weight every proposed measurement by
+  corpus prevalence before anyone decides whether to run it.** That number
+  exists here and nowhere else.
+- **Bench side:** state the conditions beside every number, because the question
+  it will have to answer has not been asked yet. Two free results this week were
+  paid for in advance by exactly that.
+
+**Both are about the same thing: a decision made on one side of a boundary using
+only what is visible from that side.** The good instinct — not taking bench time
+merely because the machine is free — produced the wrong answer here for want of
+one question.
+
+### What the whole thread cost, plainly
+
+The opening error was comparing an EQ extremum against a corner law. Both
+quantities were correctly measured; the 1.29× gap between them was real; the
+comparison was one anyone would make. **Three days and four ladders is what it
+took to establish that two correct numbers were not comparable** — and the thing
+that finally exposed it was holding a parameter still, not measuring anything
+new.
