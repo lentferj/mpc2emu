@@ -325,6 +325,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIFIL2ONELAW — there is one tuning law, and it was mode 0's all along (2026-09-10)](#akaifil2onelaw-there-is-one-tuning-law-and-it-was-mode-0s-all-along-2026-09-10)
 - [§AKAIFIL2CLOSE — the law extended, and the last survivor of the mode-factor class falls (2026-09-10)](#akaifil2close-the-law-extended-and-the-last-survivor-of-the-mode-factor-class-falls-2026-09-10)
 - [§AKAIFLT2QDENSE — all 32 depths measured, and the bin width was the whole story (2026-09-10)](#akaiflt2qdense-all-32-depths-measured-and-the-bin-width-was-the-whole-story-2026-09-10)
+- [§AKAIFLT2RES — filter 2's resonance, and a constant nearly moved on a mislabelled number (2026-09-10)](#akaiflt2res-filter-2s-resonance-and-a-constant-nearly-moved-on-a-mislabelled-number-2026-09-10)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -31274,3 +31275,71 @@ which is what you want only if the window holds nothing bigger — so widening a
 search to be safe is the opposite of safe.** That is the same shape as the
 analysis bands, one level up: a window chosen for comfort rather than derived
 from what it must contain.
+
+
+## §AKAIFLT2RES — filter 2's resonance, and a constant nearly moved on a mislabelled number (2026-09-10)
+
+`VoiceLayer.filter_resonance` for an AKAI voice came from **`FILQ` — filter 1's
+resonance — unconditionally.** So whenever filter 2 carried the shape (highpass
+39 % of board use, bandpass 4 %) the model held the wrong filter's resonance
+entirely. Now measured and consumed.
+
+### The first measurement was right and in the wrong currency
+
+s3ked first measured **gain over each mode's own `FLT2Q` 0**. In that quantity:
+
+- the LP/HP gap **widened** with `FLT2Q`, so one curve could not serve;
+- filter 2 **out-resonated filter 1** by up to 4.5 dB at `FLT2Q` 31, exceeding
+  `RESONANCE_FULL_DB` (25.51, anchored on filter 1's own maximum).
+
+**That second point would have meant rescaling a cross-format constant** whose
+meaning every other writer depends on — moving it changes what a KRZ or E4B
+resonance means. It was flagged here as a decision to take deliberately rather
+than as a side effect, and **not taken.**
+
+In the model's actual quantity — peak dB above each curve's **own** passband:
+
+```
+   FLT2Q      LP        HP      gap
+       0    -3.27     +1.00    4.27
+      16    +1.06     +3.11    2.05
+      24    +5.96     +6.86    0.90
+      31   +23.70    +23.72    0.02
+```
+
+**The gap narrows monotonically to 0.02 dB, and both modes peak under full
+scale.** Both conclusions from the first currency were wrong, and **the entire
+`RESONANCE_FULL_DB` problem was the reference.**
+
+**The conversion offsets have opposite signs** — LP −3.27, HP +1.00 at `FLT2Q` 0
+— so no single offset could have converted the pair. A guess of "about −3 dB for
+a 2-pole at its corner" was right for the lowpass and wrong in sign for the
+highpass.
+
+**This is the closest call of the week.** Every other comparand error cost
+rework; this one was one step from changing a constant that means something to
+four other writers, on the strength of a number whose label did not describe it.
+What stopped it was refusing to wire a table until the quantity was confirmed —
+**and the cost of asking was one message.**
+
+### Bandpass has no passband, and that is not a measurement problem
+
+A bandpass's skirts fall away on both sides — **−20.15 dB at f0/8 and −20.38 at
+f0×8, against a peak of −11.33** — so there is no flat region for a peak to be
+"above". The model's quantity is undefined for it.
+
+Whether to give BP its own reference or treat its resonance as shape is a
+**modelling decision, not a measurement one.** Until it is made, BP borrows the
+highpass curve and emits `AKAI_BP_RESONANCE_BORROWED`. ~4 % of board use, and
+the cheapest of the three to get wrong.
+
+### Why the notch error survived two sessions
+
+s3ked's own account, and it is better than the one written here: the claim was
+**"neither of us has measured this"** — a claim of *ignorance*.
+
+**Claims of ignorance do not get audited, because they read as caution.** The
+reflex is to endorse rather than test. Every other wrong claim this week was a
+positive assertion and was checked within hours; this one stood through two
+sessions and was repeated approvingly here before anyone ran the averaging that
+disproved it.

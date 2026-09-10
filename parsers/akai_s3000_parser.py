@@ -49,7 +49,7 @@ from models.common import (
     akai_fil2fr_to_hz, akai_fil2fr_hp_to_hz, akai_fil2fr_mode_to_hz,
     AKAI_FIL2FR_MODE_MEASURED, AKAI_FIL2FR_EQCUT_MEASURED,
     AKAI_FIL2FR_EQBOOST_MEASURED,
-    akai_flt2q_to_depth_db, akai_flt2q_is_boost,
+    akai_flt2q_to_depth_db, akai_flt2q_is_boost, akai_flt2q_to_resonance,
     AKAI_FIL2FR_HP_MEASURED,
     AKAI_LSI2_ON_OFFSET, AKAI_FLT2GAIN_OFFSET, AKAI_FLT2MODE_OFFSET,
     AKAI_FLT2Q_OFFSET, AKAI_FIL2FR_OFFSET, AKAI_FLT2MODE_LP,
@@ -1145,6 +1145,35 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
         # inert -- about 60% of the keygroups that have the flag on. §AKAIFIL2.
         _f2 = _combine_akai_filters(kg, prog['is_s3000'])
         if _f2 is not None:
+            # RESONANCE FROM THE FILTER THAT IS SHAPING. `filter_resonance` came
+            # from FILQ -- filter 1's -- unconditionally, so whenever filter 2
+            # carried the shape (highpass and bandpass, 39% and 4% of board use)
+            # the model got the wrong filter's resonance entirely.
+            #
+            # EQ is excluded: its FLT2Q is a signed cut/boost depth, not a
+            # resonance, and AKAI_FLT2Q_DEPTH_DB already carries it.
+            _f2mode_r = kg.get('flt2_mode', 0)
+            if _f2mode_r != AKAI_FLT2MODE_EQ:
+                _r2 = akai_flt2q_to_resonance(kg.get('flt2_q', 0), _f2mode_r)
+                if not _f2[3]:
+                    # Filter 1 is out of circuit, so filter 2's is the only
+                    # resonance there is.
+                    voice.filter_resonance = _r2
+                elif _r2 > voice.filter_resonance:
+                    # Both sections in circuit and the model carries one number:
+                    # take the louder peak rather than silently keeping filter
+                    # 1's, and say that something was dropped.
+                    _diag(_I, 'AKAI_FILTER2_RESONANCE_DOMINATES',
+                          f'both filter sections resonate; carrying filter 2\'s '
+                          f'{_r2:.2f} over filter 1\'s {voice.filter_resonance:.2f}',
+                          content_lost=True, subject=preset.name)
+                    voice.filter_resonance = _r2
+                if _f2mode_r == AKAI_FLT2MODE_BP:
+                    _diag(_I, 'AKAI_BP_RESONANCE_BORROWED',
+                          'bandpass has no passband for a peak to be measured '
+                          'above; using the highpass resonance curve',
+                          content_lost=False, subject=preset.name,
+                          remedy='decide a reference for bandpass resonance')
             _ftype, _fhz, _dropped = _f2
             voice.filter_type = _ftype
             voice.filter_cutoff = _fhz

@@ -1622,6 +1622,67 @@ AKAI_FLT2Q_DEPTH_DB = {
 #: widens the threshold and silently discards real EQ settings either side.
 AKAI_FLT2Q_INERT_VALUE = 24
 
+#: `FLT2Q` -> filter 2's resonant peak **in dB above that curve's own
+#: passband**, which is the quantity `VoiceLayer.filter_resonance` is defined
+#: in (see `RESONANCE_FULL_DB`). Measured s3ked §207 at `FIL2FR` 64, f0 611 Hz,
+#: LP passband 76-153 Hz, HP passband 2444-4888 Hz -- **one band cannot serve
+#: both topologies**, which is the whole reason this needed its own run.
+#:
+#: **The first version of this measurement was in the wrong currency**: gain
+#: over each mode's own `FLT2Q` 0. In that quantity the LP/HP gap *widened* with
+#: `FLT2Q` and filter 2 appeared to out-resonate filter 1 by up to 4.5 dB,
+#: which would have meant rescaling `RESONANCE_FULL_DB` -- a cross-format
+#: constant whose meaning every other writer depends on. **In the correct
+#: quantity the gap NARROWS monotonically to 0.02 dB and both modes peak under
+#: full scale.** The entire problem was the reference.
+#:
+#: Conversion between the two, at `FLT2Q` 0: LP **-3.27 dB**, HP **+1.00**.
+#: Opposite signs, so no single offset could have converted the pair -- the two
+#: `FLT2Q` 0 shapes are not alike.
+#:
+#: Nine of 32 values (the decade points). **Interpolation is safe here and was
+#: not safe for the depth table**: all three resonance curves are monotonic and
+#: the dense sweep confirmed rather than corrected them, where the depth curve
+#: is three monotonic segments with a discontinuity between them.
+AKAI_FLT2Q_RESONANCE_DB = {
+    AKAI_FLT2MODE_LP: {0: -3.27, 4: -2.47, 8: -1.43, 12: -0.30, 16: 1.06,
+                       20: 2.90, 24: 5.96, 28: 11.77, 31: 23.70},
+    AKAI_FLT2MODE_HP: {0: 1.00, 4: 1.23, 8: 1.70, 12: 2.34, 16: 3.11,
+                       20: 4.40, 24: 6.86, 28: 12.07, 31: 23.72},
+}
+
+
+def akai_flt2q_to_resonance(byte: int, mode: int) -> float:
+    """`FLT2Q` -> the model's 0..1 resonance, for this mode.
+
+    **Bandpass is not covered and cannot be, by measurement.** A bandpass has no
+    passband -- its skirts fall away on both sides (-20.15 dB at f0/8, -20.38 at
+    f0x8, against a peak of -11.33) -- so there is no flat region for a peak to
+    be "above". Whether to give it its own reference or treat its resonance as
+    shape is a modelling decision, not a measurement one. Until it is made, BP
+    borrows the highpass curve and the caller says so; BP is ~4% of board use.
+
+    EQ is excluded too: its `FLT2Q` is a signed cut/boost depth, not a
+    resonance, and `AKAI_FLT2Q_DEPTH_DB` already carries it.
+    """
+    tbl = AKAI_FLT2Q_RESONANCE_DB.get(
+        mode if mode in AKAI_FLT2Q_RESONANCE_DB else AKAI_FLT2MODE_HP)
+    b = max(0, min(31, int(byte)))
+    pts = sorted(tbl)
+    if b in tbl:
+        db = tbl[b]
+    elif b <= pts[0]:
+        db = tbl[pts[0]]
+    elif b >= pts[-1]:
+        db = tbl[pts[-1]]
+    else:
+        for x0, x1 in zip(pts, pts[1:]):
+            if x0 <= b <= x1:
+                db = tbl[x0] + (tbl[x1] - tbl[x0]) * (b - x0) / (x1 - x0)
+                break
+    # Below the passband is not negative resonance, it is none.
+    return max(0.0, min(1.0, db / RESONANCE_FULL_DB))
+
 #: **Superseded as a decision rule by the dense table, kept as documentation.**
 #: These were the two measured points bracketing an interpolated crossing at
 #: `FLT2Q` ~23.1, which left 22, 23 and 24 unmeasured and assigned by
