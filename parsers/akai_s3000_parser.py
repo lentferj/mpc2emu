@@ -440,7 +440,8 @@ def _env2_amount(depth, sustn2, filfrq, s3000):
 #: XPM `filter_type` values this combiner emits. Named because the numbers are
 #: meaningless on sight and a wrong one is silent.
 _XPM_LOW2, _XPM_LOW4 = 2, 3
-_XPM_HIGH2 = 7
+_XPM_HIGH1 = 6      # ONE pole -- the highpass tap measures +6.1 dB/oct
+_XPM_HIGH2 = 7      # kept for reference; NOT what this machine's HP tap is
 _XPM_BAND2, _XPM_BAND4 = 11, 12
 _XPM_BANDSTOP2 = 15
 _XPM_BANDBOOST2 = 19
@@ -472,6 +473,11 @@ def _combine_akai_filters(kg, s3000):
         knee and calling it 4-pole would overstate it.
       * **HP after LP** -- a bandpass, which is the one shape filter 1 cannot
         make at all and the main reason to fit the board.
+
+    **THE HIGHPASS TAP IS ONE POLE, NOT TWO** (measured +6.1 dB/oct below f0,
+    flat to 8*f0 above it, so no second pole is hiding further out). This
+    decoded as XPM High 2 until 2026-09-10 and was overstating the slope by a
+    factor of two on 39% of board use.
       * **BP after LP** -- a bandpass at filter 2's corner.
       * **EQ after LP** -- a band-stop or band-boost. 78% of real material
         boosts, so reading mode 3 as a notch would be wrong for 367 of 469
@@ -531,12 +537,12 @@ def _combine_akai_filters(kg, s3000):
 
     if mode == AKAI_FLT2MODE_HP:
         if f1 is None:
-            return (_XPM_HIGH2, f2, None)
+            return (_XPM_HIGH1, f2, None)
         if f2 >= f1:
             # Both corners fight: the highpass opens above where the lowpass
             # has already closed. The machine passes very little; the model
             # cannot say that, so keep the highpass and flag it.
-            return (_XPM_HIGH2, f2, 'highpass above the lowpass corner')
+            return (_XPM_HIGH1, f2, 'highpass above the lowpass corner')
         # A real bandpass, geometric centre -- the single frequency the model
         # can hold that is equidistant from both edges in octaves.
         return (_XPM_BAND4, math.sqrt(f1 * f2), None)
@@ -1169,11 +1175,17 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
                           content_lost=True, subject=preset.name)
                     voice.filter_resonance = _r2
                 if _f2mode_r == AKAI_FLT2MODE_BP:
-                    _diag(_I, 'AKAI_BP_RESONANCE_BORROWED',
-                          'bandpass has no passband for a peak to be measured '
-                          'above; using the highpass resonance curve',
-                          content_lost=False, subject=preset.name,
-                          remedy='decide a reference for bandpass resonance')
+                    # KNOWN WRONG, not merely unverified. The taps are
+                    # different filter ORDERS -- the highpass is one pole and
+                    # the bandpass is a one-pole pair -- so there is no shared
+                    # Q to inherit and a value ported from the HP curve
+                    # describes a different filter.
+                    _diag(_W, 'AKAI_BP_RESONANCE_WRONG_ORDER',
+                          'bandpass resonance carried from the highpass curve, '
+                          'which is a different filter order (1-pole vs a '
+                          '1-pole pair) -- the value describes another filter',
+                          content_lost=True, subject=preset.name,
+                          remedy='measure bandpass resonance in its own right')
             _ftype, _fhz, _dropped = _f2
             voice.filter_type = _ftype
             voice.filter_cutoff = _fhz

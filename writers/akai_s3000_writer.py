@@ -2101,7 +2101,9 @@ _XPM_TO_FLT2 = {
     3:  (AKAI_FLT2MODE_LP, True),    # Low 4  -- two 2-pole sections in series
     4:  (AKAI_FLT2MODE_LP, True),    # Low 6  -- the closest this machine gets
     5:  (AKAI_FLT2MODE_LP, True),    # Low 8  -- ditto
-    6:  (AKAI_FLT2MODE_HP, False),   # High 1
+    # The HP tap is ONE pole (measured +6.1 dB/oct), so High 1 is exact and
+    # everything above it is a reduction that AKAI_FILTER_POLES_REDUCED reports.
+    6:  (AKAI_FLT2MODE_HP, False),   # High 1  -- exact
     7:  (AKAI_FLT2MODE_HP, False),   # High 2
     8:  (AKAI_FLT2MODE_HP, False),   # High 4
     9:  (AKAI_FLT2MODE_HP, False),   # High 6
@@ -2142,7 +2144,7 @@ _FLT2Q_DEFAULT_BOOST = 27
 #: reduction, and it is worth saying out loud: an 8-pole lowpass and a 2-pole
 #: are not the same instrument.
 _XPM_POLES = {1: 1, 2: 2, 3: 4, 4: 6, 5: 8,
-              6: 1, 7: 2, 8: 4, 9: 6, 10: 8,
+              6: 1, 7: 2, 8: 4, 9: 6, 10: 8,   # HP tap delivers 1, not 2
               11: 2, 12: 4, 13: 6, 14: 8,
               15: 2, 16: 4, 17: 6, 18: 8,
               19: 2, 20: 4, 21: 6, 22: 8}
@@ -2356,7 +2358,14 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
     if _f2 is not None:
         _f2mode, _f2fr, _f2q, _keep_f1 = _f2
         _want = _XPM_POLES.get(getattr(voice, 'filter_type', 0), 2)
-        _have = 4 if _keep_f1 and _f2mode == AKAI_FLT2MODE_LP else 2
+        # The highpass tap is ONE pole; bandpass is a one-pole pair, so 2;
+        # a lowpass cascade is filter 1's two plus filter 2's two.
+        if _keep_f1 and _f2mode == AKAI_FLT2MODE_LP:
+            _have = 4
+        elif _f2mode == AKAI_FLT2MODE_HP:
+            _have = 1
+        else:
+            _have = 2
         if _want > _have:
             _diag(_I, 'AKAI_FILTER_POLES_REDUCED',
                   f'{_want}-pole filter written as {_have}-pole: each AKAI '

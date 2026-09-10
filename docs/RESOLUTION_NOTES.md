@@ -326,6 +326,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIFIL2CLOSE — the law extended, and the last survivor of the mode-factor class falls (2026-09-10)](#akaifil2close-the-law-extended-and-the-last-survivor-of-the-mode-factor-class-falls-2026-09-10)
 - [§AKAIFLT2QDENSE — all 32 depths measured, and the bin width was the whole story (2026-09-10)](#akaiflt2qdense-all-32-depths-measured-and-the-bin-width-was-the-whole-story-2026-09-10)
 - [§AKAIFLT2RES — filter 2's resonance, and a constant nearly moved on a mislabelled number (2026-09-10)](#akaiflt2res-filter-2s-resonance-and-a-constant-nearly-moved-on-a-mislabelled-number-2026-09-10)
+- [§AKAIFIL2ARCH — the three taps are different filter orders (2026-09-10)](#akaifil2arch-the-three-taps-are-different-filter-orders-2026-09-10)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -31343,3 +31344,67 @@ reflex is to endorse rather than test. Every other wrong claim this week was a
 positive assertion and was checked within hours; this one stood through two
 sessions and was repeated approvingly here before anyone ran the averaging that
 disproved it.
+
+
+## §AKAIFIL2ARCH — the three taps are different filter orders (2026-09-10)
+
+Chasing the bandpass-resonance question found the architecture, and it corrects
+a decode that had been wrong on 39 % of board use.
+
+**Measured asymptotic slopes at `FLT2Q` 0, `FIL2FR` 64, against the bypass
+reference:**
+
+```
+   tap    lower skirt        upper skirt        pole count
+   LP    -0.12 / -0.44     -10.31 / -11.23      2
+   HP    +6.10 / +5.82      -0.58 / -0.32       1     <- not 2
+   BP    +6.15 / +5.71      -4.31 /  -5.40      1 each side
+```
+
+**This is not a state-variable filter.** An SVF taps one 2-pole core and gives
+−12 / ±6 / **+12**. This gives −12 / ±6 / **+6**. The architecture that fits is
+**two cascaded one-pole sections, each switchable**: LP mode = LP+LP, BP mode =
+HP+LP, HP mode = HP alone.
+
+**The highpass tap decoded as XPM High 2 until now**, overstating its slope by a
+factor of two on the mode that is 39 % of board use. Now XPM High 1, in both
+directions, with the writer's pole-reduction diagnostic counting 1 rather than 2.
+
+### Why the shared-Q reasoning failed
+
+The hypothesis — one resonant core, three taps, so bandpass inherits the same Q
+— predicted a single f0 across topologies, which §203 had already measured
+(0.48–0.94 % spread). It was a good hypothesis and it is wrong.
+
+Two routes to Q disagreed by exactly a factor of two: 0.686 from the lowpass
+peak, 0.327 from the bandpass skirt. **That was a 2-pole bandpass formula
+applied to a one-pole pair**, not the taps disagreeing.
+
+**And the alternative bet was refuted too.** The prediction here was that filter
+2 has no well-defined Q at all — staggered poles, from §197's wide knee. The
+skirts are textbook and reach their asymptotes in two to three octaves. **Both
+of the readings offered were wrong, and the measurement that settled it was one
+neither of us had proposed.**
+
+### The consequence for bandpass resonance
+
+**Borrowing the highpass curve is now known WRONG rather than unverified.** The
+taps are different filter orders, so there is no shared Q to inherit and a
+resonance ported from the HP curve describes a different filter. The diagnostic
+is raised from INFO to WARNING and says so.
+
+### An internal check that constrains what comes next
+
+**Two independent one-pole sections have only real poles, and a cascade of real
+poles cannot peak at all.** But the bandpass measures **+29.98 dB** over its own
+`FLT2Q` 0 at `FLT2Q` 31.
+
+So at high `FLT2Q` the sections cannot be independent. The architecture fitting
+both facts is **two one-pole sections with feedback**: at `FLT2Q` 0 the poles are
+real and each section shows 6 dB/oct; as `FLT2Q` rises the feedback moves them to
+a complex pair and the shape near f0 peaks, while the **far asymptotes stay at
+the section count**.
+
+That makes the pole-count reading safe to ship — pole count is asymptotic and
+does not change with resonance — and makes s3ked's own `FLT2Q` 0-only caveat
+**decisive rather than cautious** for anything about shape near f0.
