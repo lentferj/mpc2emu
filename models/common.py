@@ -1826,22 +1826,25 @@ def _fil2fr_from_table(byte, table, exponent):
     return table[hi]
 
 
-#: **ONE TUNING LAW, MEASURED AT HIGH Q** (s3ked §203, 2026-09-09). Holding
-#: `FLT2Q` at 31, every topology's peak lands on the same frequency:
+#: **ONE TUNING LAW, MEASURED AT HIGH Q** (s3ked §203/§204, 2026-09-09/10).
+#: Holding `FLT2Q` at 31, every topology's peak lands on the same frequency --
+#: **21 measurements, three topologies, seven rungs, 84x in frequency**, worst
+#: residual 0.8%.
 #:
-#:      rung 45   BP 161.1   HP 162.6   EQ 161.1   spread 0.91%
-#:      rung 64   BP 607.9   HP 610.8   EQ 607.9   spread 0.48%
-#:      rung 80   BP 1889.6  HP 1895.5  EQ 1877.9  spread 0.94%
+#: **Its exponent is mode 0's**, 0.5% from the -3 dB corner curve this project
+#: already shipped -- a different feature, three modes none of which is mode 0,
+#: and captures taken a day later through a restarted chain. The prefactor
+#: ratio ~1.5 is the high-Q peak sitting above the corner; filter 1 shows the
+#: same relationship at 1.2886.
 #:
-#: One exponential fits all nine to a worst residual of 0.86%:
-#: `Hz = 6.8437 * exp(0.07021 * FIL2FR)`.
-#:
-#: **Its exponent is mode 0's**, 0.5% from the curve this project already
-#: shipped -- a different feature, three modes none of which is mode 0, and
-#: captures taken a day later through a restarted chain. The prefactor ratio
-#: 1.518 is just the high-Q peak sitting above the -3 dB corner; filter 1 shows
-#: the same relationship at 1.2886.
-AKAI_FIL2FR_PEAK_LAW = (6.8437, 0.07021)
+#: **VALID 25..88 AND NOT BEYOND.** Rung 94 sits **+3.7% above** the law against
+#: <=0.8% everywhere else, and it departs in the tuning frequency itself rather
+#: than in some derived feature. **Fitting 25..94 as one exponential smears the
+#: residual to 2.2% and hides it entirely** -- the same shape as filter 1's own
+#: top, which §146 found departing from byte 84. Nothing measured says where
+#: between 88 and 94 the departure begins.
+AKAI_FIL2FR_PEAK_LAW = (6.7795, 0.07033)
+AKAI_FIL2FR_PEAK_LAW_VALID = (25, 88)
 
 
 def akai_fil2fr_mode_to_hz(byte: int, mode: int, boost: bool = False):

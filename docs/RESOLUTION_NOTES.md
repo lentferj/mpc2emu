@@ -323,6 +323,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIFIL2MODES — every mode has a ladder, and there are two exponents (2026-09-09)](#akaifil2modes-every-mode-has-a-ladder-and-there-are-two-exponents-2026-09-09)
 - [§AKAIFIL2HPREF — the whole highpass column moved, and the grouping is now unresolved (2026-09-09)](#akaifil2hpref-the-whole-highpass-column-moved-and-the-grouping-is-now-unresolved-2026-09-09)
 - [§AKAIFIL2ONELAW — there is one tuning law, and it was mode 0's all along (2026-09-10)](#akaifil2onelaw-there-is-one-tuning-law-and-it-was-mode-0s-all-along-2026-09-10)
+- [§AKAIFIL2CLOSE — the law extended, and the last survivor of the mode-factor class falls (2026-09-10)](#akaifil2close-the-law-extended-and-the-last-survivor-of-the-mode-factor-class-falls-2026-09-10)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -30973,3 +30974,70 @@ That is the four-ladder failure again, one level up: **a condition assumed
 constant because it was constant everywhere it had been looked at.** The
 difference this time is that it was caught while designing rather than after
 shipping — which is the whole return on having written the earlier one down.
+
+
+## §AKAIFIL2CLOSE — the law extended, and the last survivor of the mode-factor class falls (2026-09-10)
+
+```
+   Hz = 6.7795 * exp(0.07033 * FIL2FR)     rungs 25-88, worst residual 0.8 %
+```
+
+**21 measurements, three topologies, seven rungs, 84× in frequency.** Checked
+against the nine-point version it replaces: consistent to under 1 % across the
+old range, so this is an extension rather than a correction.
+
+### Mode 0's flattening is not in the tuning
+
+At byte 37 mode 0's **corner** sits +14.5 % above its own exponential. At the
+same byte, **f0 sits −0.8 % from the law.** So the tuning runs clean through the
+bottom and **what bends is the corner-to-f0 relationship**, which this project's
+own tables show directly: that ratio runs 1.30 at rung 30 to 1.54 at rung 80.
+
+The flattening was the last claim standing from the per-mode era, and it now
+joins the rest — a feature offset, not a property of the frequency control.
+
+**This does not contradict the provenance argument, and s3ked said so
+unprompted.** That argument showed the bend could not be a sliding-reference
+artefact, and it isn't. **It was a correct argument against the wrong
+alternative** — worth recording, because an argument that survives its challenge
+and still fails to save the claim is a shape neither of us had met.
+
+### The top departs, and a single fit would have hidden it
+
+Rung 94 sits **+3.7 % above** the law where everything else is inside 0.8 %, and
+it departs **in the tuning frequency itself**, not in a derived feature.
+**Fitting 25–94 as one exponential smears the worst residual to 2.2 % and hides
+it entirely.**
+
+So the law ships bounded at 25–88, with a test on the bound. Nothing measured
+says where between 88 and 94 the departure begins — and filter 1's own top does
+the same thing from byte 84 (§146), which is either a coincidence or the same
+mechanism twice and nobody has checked which.
+
+### A requirement that dissolved rather than being met
+
+The top rungs "needed `FLATCOMB`" and therefore a volume load. They did not —
+**because §203 changed what the measurement is.** A −3 dB corner hunt at
+3.4–9.8 kHz became a **+18 dB resonance at 3.3–5.2 kHz**, inside the noise
+source's own flat band.
+
+**The `FLATCOMB` requirement was never a property of the machine. It was a
+property of the weakest feature anyone had thought to look for.** Understanding
+the instrument better did not make the measurement easier to do — it made it a
+different measurement.
+
+### The number not to quote
+
+The low rungs report **0.00 % spread between the three modes**, and it must not
+be repeated. Three modes landing in one FFT bin agree *to within a bin*: **3.7 %
+at 39.6 Hz, 2.6 % at 55.7, 1.6 % at 90.8.**
+
+§AKAIFIL2MODES made exactly this mistake — three modes in one bin read as three
+modes agreeing — and had to be corrected. **The honest claim is that convergence
+holds below rung 45 to the resolution available there**, which is still four to
+sixteen times tighter than the 6.2 % it was invoked to explain. Tightening it
+needs a longer analysis window, not bench time.
+
+**That s3ked flagged their own cleanest-looking number as unquotable, in the
+message reporting it, is the single best habit either project picked up this
+week.**
