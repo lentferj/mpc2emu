@@ -30935,3 +30935,41 @@ reproduced across two independent trees, survived refits, and *sharpened* when
 the fitting ranges were matched — **the correction that should have tested it
 polished it instead.** Nothing about the shape of the result was going to expose
 it. Only holding `FIL2FR` still did.
+
+
+### The highpass bump is the resonance, and the data was already in hand
+
+Filed as an open bench item on 2026-09-09; **resolved the next morning at zero
+bench cost**, because the `FLT2Q` sweep run to settle a different question had
+already covered mode 2 at `FIL2FR` 80:
+
+```
+   FLT2Q      peak        amplitude
+      0     3398.4 Hz      +0.28 dB
+     16     2400.9         +1.98
+     31     1895.5        +20.13
+```
+
+It strengthens monotonically and **descends onto f0** — 1895.5 against the
+1889.6 the bandpass gives at the same rung. So the weak +1.1 dB feature sitting
+at ~3.8× the corner at `FLT2Q` 0 is a barely-excited, high-sitting resonance.
+Not *resonance or structural*: resonance.
+
+**The cost of that open item was never bench time. It was nobody asking two
+results in hand about each other** — the sweep and the bump were written up
+hours apart, by the same session, in the same document.
+
+### And the correction to the one item that still matters
+
+Testing mode 0's bottom-end bend by capturing **one** mode at rungs 30 and 37
+would not work: high-Q convergence onto f0 is verified at rungs 45, 64 and 80
+**only**. A single mode departing from the law down there could be the bend
+being real, or the modes simply not converging at the bottom — indistinguishable.
+
+**Capturing all three modes at both rungs makes convergence a check inside the
+experiment rather than an assumption carried into it.** Nine captures.
+
+That is the four-ladder failure again, one level up: **a condition assumed
+constant because it was constant everywhere it had been looked at.** The
+difference this time is that it was caught while designing rather than after
+shipping — which is the whole return on having written the earlier one down.
