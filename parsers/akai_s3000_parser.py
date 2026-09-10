@@ -44,7 +44,7 @@ from models.common import (
     AKAI_ENV2_ATTACK, AKAI_ENV2_DECAY, AKAI_ENV2_RELEASE,
     AKAI_ENV2_DEPTH_OFFSET, AKAI_ENV2_DEPTH_MAX, akai_env2_stage_seconds,
     AKAI_VLOUD_DB_PER_UNIT, AKAI_VLOUD_SWING_DB_PER_UNIT,
-    AKAI_TUNE_UNITS_PER_SEMITONE,
+    AKAI_TUNE_UNITS_PER_SEMITONE, AKAI_TUNE_UNITS_PER_CENT,
     akai_filq_to_01, AKAI_MUTE_CUT_SECONDS,
     akai_fil2fr_to_hz, akai_fil2fr_hp_to_hz, akai_fil2fr_mode_to_hz,
     AKAI_FIL2FR_MODE_MEASURED, AKAI_FIL2FR_EQCUT_MEASURED,
@@ -679,10 +679,24 @@ def parse_sample_bytes(data: bytes, fallback_name: str = '',
     n_samples = _u32(data, 0x1a)
     rate = _playback_rate(data, s3000)
 
-    # pitch offset: byte 0x14 is the /256 part, 0x15 the whole -- i.e. a
-    # 16-bit fixed-point cents value, low byte first like every other number
-    # in the format.
-    fine = _s16(data, 0x14) // 256
+    # pitch offset: a 16-bit signed fixed-point SEMITONE value, low byte first
+    # -- 0x15 is the whole semitone and 0x14 the /256 fraction. So the field is
+    # in 1/256-semitone units, which is 2.56 units per cent.
+    #
+    # THIS READ `// 256` AND CALLED THE RESULT CENTS. It is semitones, floored:
+    # a +50 cent sample stores 128 and read back as **0**, and -50 read back as
+    # **-1** because floor division breaks sign symmetry too. **Every
+    # sub-semitone sample tuning on a real disc read as zero**, while the writer
+    # stored the same field correctly at 2.56 units per cent -- so an
+    # AKAI->AKAI round trip silently flattened every fine tune and agreed with
+    # itself about it.
+    _tune_units = _s16(data, 0x14)
+    _tune_cents = _tune_units / AKAI_TUNE_UNITS_PER_CENT
+    # The model splits this: whole semitones move the root note, the remainder
+    # is `fine_tune` in cents. Truncate toward zero so the remainder keeps the
+    # sign of the whole, which is the convention the rest of this parser uses.
+    _tune_semis = int(_tune_cents / 100.0)
+    fine = _tune_cents - _tune_semis * 100.0
 
     pcm = data[header_len:]
     # `data length` is in SAMPLES; trust it over the file length, which may
@@ -706,7 +720,11 @@ def parse_sample_bytes(data: bytes, fallback_name: str = '',
     sd = SampleData(name=name, data=pcm, sample_rate=rate,
                     bit_depth=16, channels=1)
     sd.root_note = root if 0 < root < 128 else 60
-    sd.fine_tune = fine
+    # Whole semitones of sample tuning belong on the root note; SampleData has
+    # no coarse field and `fine_tune` is documented as -100..+100 cents.
+    if _tune_semis:
+        sd.root_note = max(0, min(127, sd.root_note - _tune_semis))
+    sd.fine_tune = int(round(fine))
 
     # playback type 2 is the only one that means "no loop"; the others all
     # sustain in some form. Loop 1 is the one that matters -- the remaining

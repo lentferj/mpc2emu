@@ -794,6 +794,13 @@ AKAI_VLOUD_DB_PER_UNIT = 0.60576
 #: 2026-08-23 (§AKAITUNEREAD).
 AKAI_TUNE_UNITS_PER_SEMITONE = 256
 
+#: 2.56 raw units to the cent. **Derived, never typed** -- 256 units per
+#: semitone over 100 cents per semitone. Writing 2.56 as a literal lets it
+#: drift out of agreement with the semitone constant it comes from, and the
+#: reader and writer disagreeing about exactly this is what zeroed every
+#: sub-semitone sample tuning on a real disc until 2026-09-10.
+AKAI_TUNE_UNITS_PER_CENT = AKAI_TUNE_UNITS_PER_SEMITONE / 100.0
+
 
 #: How long a keygroup sounds before its mute-group partner cuts it.
 #:
