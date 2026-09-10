@@ -31173,3 +31173,34 @@ one originally made for it: prevalence does not merely order the queue by how
 much material is affected — **it concentrates attention where the material is,
 which is where a format's irregularities tend to be**, because the irregularity
 is often *why* the values cluster there.
+
+
+### A rule stated and agreed is not a rule applied
+
+The separation "ratio" was retired in §AKAIFIL2MODES in favour of quoting the
+gap and the spreads, by explicit agreement between both projects. **It came back
+one section later**, in §205, from the party who had proposed retiring it — and
+had to be caught again.
+
+The same evening this project told s3ked that an exponent comparison is a claim
+about fitting ranges, **and then made exactly that comparison one turn later.**
+
+Two instances, both sides, both within hours of writing the rule down. **What it
+costs to state a rule and what it costs to reach for it at the moment of use are
+not the same quantity, and only the first is cheap.** The defences that actually
+held this week were mechanical — a test on the four/two step structure, a test
+on the word "bypassed", printing where each number came from — not agreements
+about how to reason.
+
+### A confirmed boundary looks like nothing happened
+
+The 89–93 run confirmed the bound at 88 rather than moving it: rung 89 is
+already +1.6 % off, so there was no breakpoint to find. **That is the cheapest
+possible outcome and the easiest to file as a null result** — three minutes
+spent, no number changed, nothing to write up as a finding.
+
+**It is also the only way to find out that nothing needed to change.** The
+alternative was shipping an extrapolation across the exact interval where the
+shape of the answer changes. A boundary that has been tested and a boundary that
+has merely never been challenged look identical from the outside, and only one
+of them is worth relying on.
