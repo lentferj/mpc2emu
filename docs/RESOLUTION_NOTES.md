@@ -31041,3 +31041,48 @@ needs a longer analysis window, not bench time.
 **That s3ked flagged their own cleanest-looking number as unquotable, in the
 message reporting it, is the single best habit either project picked up this
 week.**
+
+
+### The two filters' top-end departures are separate, and the check was free
+
+Filter 1 leaves its own law above byte 84; filter 2 leaves its own somewhere
+above 88. Coincidence or one mechanism twice? **Separate — they share neither a
+byte nor a frequency**, and settling it needed no bench time:
+
+```
+   filter 1, resonance-peak law, byte 84 (where it departs)   2513.9 Hz
+   filter 2, resonance-peak law, byte 88 (still clean, -0.0%) 3304.2 Hz
+
+   filter 1's departure FREQUENCY sits at byte 84.1 on filter 2's law,
+   and filter 2 is still exponential 3.9 bytes beyond it.
+```
+
+**Note what quantities that comparison uses: filter 1's resonance-peak law
+against filter 2's resonance-peak law.** This entire thread opened by comparing
+an EQ extremum against a *corner* law and reading a documented 1.29× gap as a
+property of filter 2. **The same two quantities, compared correctly, close it.**
+
+### What made it free, stated as a property rather than luck
+
+The rung-88 point answered a question it was not taken for. **That only works
+because it was recorded with its conditions attached** — mode, `FLT2Q`,
+reference, source. The same property is what let a sliding reference be caught
+from the other direction: a measurement whose conditions travel with it can be
+re-asked; one that arrives as a number cannot.
+
+**So the zero-cost check is the one to run first, and it is only zero-cost if
+the earlier measurement can be re-asked.** Two of this week's results came out
+of data already held — the highpass bump resolved from a sweep taken for a
+different question, and this — and in both cases the cost had been paid weeks
+earlier by writing down the conditions.
+
+### And the converter side could have found the corner-to-f0 result first
+
+The ratio running **1.30 at rung 30 to 1.54 at rung 80** — the evidence that
+mode 0's bend lives in the corner-to-f0 relationship rather than in the tuning —
+falls out of two tables this project had been carrying for a day, **with no
+hardware at all.** It was found by dividing one shipped table by another while
+checking someone else's claim.
+
+Worth recording as a standing prompt: **before asking for a measurement, divide
+the tables already held and see what the quotient does.**
