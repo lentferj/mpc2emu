@@ -30900,3 +30900,38 @@ conclusion it was built to defend.
 
 Testing it properly needs high-`FLT2Q` points below rung 45, and nothing on the
 resident volumes reaches there.
+
+
+### Two implementations agreeing is not two measurements agreeing
+
+Our refit of the nine points came out at `6.8418 * exp(0.07022 b)` against
+s3ked's `6.8437 * exp(0.07021 b)` — 0.03 % in the prefactor, 0.01 % in the
+exponent. **That is not confirmation of the measurement.** It is two
+implementations of the same least-squares over the same nine numbers, and it
+would agree just as closely if all nine were wrong.
+
+What it *does* rule out is a transcription slip between the two projects, which
+is worth something and is exactly as much as it is worth. **The distinction
+matters because agreement at four decimal places reads as strong evidence and
+here carries almost none** — the same shape as two projects independently
+choosing 1/6-octave smoothing, where the shared convention did the agreeing.
+
+### Encoding an anomaly as a feature is not a failure to notice
+
+s3ked's formulation, and it is the part of this episode worth keeping:
+
+> Encoding an anomaly as a feature is not a failure to notice — it is noticing
+> and then spending effort to make the anomaly fit. That costs more than
+> ignoring it would have, which is why it does not feel like an error while you
+> are doing it.
+
+The two EQ arms diverging 15.4 % was unambiguous, sat in both trees for a day,
+and **we responded by building separate tables for the two arms** — writing
+code, tests and documentation to accommodate a fact that refuted the model those
+tables belonged to. The effort spent is what made it feel like progress.
+
+**And the spurious structure had every property a real finding has.** It
+reproduced across two independent trees, survived refits, and *sharpened* when
+the fitting ranges were matched — **the correction that should have tested it
+polished it instead.** Nothing about the shape of the result was going to expose
+it. Only holding `FIL2FR` still did.
