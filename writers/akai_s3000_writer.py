@@ -2200,7 +2200,8 @@ def _filter2_plan(voice):
     if mode == AKAI_FLT2MODE_EQ:
         # Band-boost vs band-stop is the model's own distinction (19..22 vs
         # 15..18) and it decides the SIGN, which on this machine is a region
-        # of FLT2Q rather than a bit. 78% of real material boosts.
+        # of FLT2Q rather than a bit. Whole corpus: 45% of EQ keygroups
+        # boost under the shipped pivot, 74.5% under the manual's >16.
         boost = ftype >= 19
         res = getattr(voice, 'filter_resonance', None)
         if res:

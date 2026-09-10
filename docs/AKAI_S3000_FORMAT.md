@@ -740,17 +740,24 @@ page* is gated.
 | 3 | **EQ** | dip or bump at the corner — see below |
 
 **Mode 3 is a parametric band whose SIGN comes from `FLT2Q`, and reading it as
-a notch would be wrong for 78 % of real material.** The manual: *"a value of 16
-is no cut or boost. Raising the resonance above 16 will boost the selected
-cutoff frequency and lowering it below 16 will cut it."* The bench measurement
-was taken at low `Q` and therefore saw a **cut**; the corpus says that is the
-minority case.
+a notch would be wrong for a large fraction of real material either way.** The
+manual: *"a value of 16 is no cut or boost. Raising the resonance above 16 will
+boost the selected cutoff frequency and lowering it below 16 will cut it."*
 
-| mode 3, enabled keygroups | count |
-|---|---|
-| `FLT2Q` **> 16 → BOOST** | **367 (78 %)** |
-| `FLT2Q` < 16 → cut | 100 |
-| `FLT2Q` = 16 → flat | 2 |
+**Whole corpus, 64 images, 1084 EQ keygroups — and the answer depends on which
+pivot you use, so both are given:**
+
+| pivot | boost | cut |
+|---|---|---|
+| the manual's `FLT2Q` > 16 | **808 (74.5 %)** | 276 |
+| the MEASURED sign change, 23/24 | **488 (45.0 %)** | 596 |
+
+**An earlier "78 %" was measured on 6 of 64 images under the manual's pivot.**
+It survives the full corpus at 74.5 % — but the decoder uses the *measured*
+pivot, under which the split is close to even and slightly favours cut. **The
+two figures were quoted interchangeably in this repo's code for a week**, so a
+docstring justified the function with a statistic from a rule the function no
+longer used.
 
 **The sign rule is confirmed on hardware; the PIVOT VALUE is not 16.** Measured
 2026-09-08, normalised to each row's own low-frequency plateau so the insertion

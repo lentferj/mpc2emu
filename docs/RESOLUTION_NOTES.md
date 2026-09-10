@@ -327,6 +327,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIFLT2QDENSE — all 32 depths measured, and the bin width was the whole story (2026-09-10)](#akaiflt2qdense-all-32-depths-measured-and-the-bin-width-was-the-whole-story-2026-09-10)
 - [§AKAIFLT2RES — filter 2's resonance, and a constant nearly moved on a mislabelled number (2026-09-10)](#akaiflt2res-filter-2s-resonance-and-a-constant-nearly-moved-on-a-mislabelled-number-2026-09-10)
 - [§AKAIFIL2ARCH — the three taps are different filter orders (2026-09-10)](#akaifil2arch-the-three-taps-are-different-filter-orders-2026-09-10)
+- [§AKAICORPUSDENOM — the mode split was 6 of 64 images, and it swaps HP and EQ (2026-09-10)](#akaicorpusdenom-the-mode-split-was-6-of-64-images-and-it-swaps-hp-and-eq-2026-09-10)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -31456,3 +31457,60 @@ asked a question they were not taken for.**
 The other two: the highpass passband bump resolved from a `FLT2Q` sweep run for
 a different purpose, and the two filters' top-end departures separated from a
 rung-88 point taken for something else.
+
+
+## §AKAICORPUSDENOM — the mode split was 6 of 64 images, and it swaps HP and EQ (2026-09-10)
+
+Jan asked whether a corpus path had been checked. It had not: the glob was
+non-recursive **and** capped at the first six images, so every AKAI prevalence
+figure in this file came from **6 of 64 — 9 % of the material — and none of them
+said so.**
+
+**The mode split is the one that mattered**, because it set the ladder
+priorities and the framing of §201 onward:
+
+```
+   mode    full corpus (3168 active)    6-disc sample
+   HP           1824   57.6 %              38.7 %
+   EQ           1084   34.2 %              50.1 %
+   LP            149    4.7 %               7.0 %
+   BP            111    3.5 %               4.2 %
+```
+
+**HP and EQ swap ranks. The highpass is the most common filter-2 mode, not the
+second.**
+
+**What survives, and it is most of it.** "EQ and HP together are ~89 % of board
+use" becomes **91.8 %** — stronger. "Mode 0 is only 7 %, so everything was
+measured in the wrong mode" becomes **4.7 %** — also stronger. **And the largest
+correction of the week gets larger: `High 2` → `High 1` was described as
+affecting 39 % of board use; it is 57.6 %.**
+
+**What does not survive is a statistic that had already drifted from the code it
+justified.** `akai_flt2q_is_boost` carried *"78 % of real material does"*. Under
+the manual's pivot (`FLT2Q` > 16) that figure holds on the full corpus at
+**74.5 %** — but **the function uses the MEASURED sign change at 23/24, under
+which only 45 % boost.** The prose kept the old pivot's statistic while the code
+moved to a different rule, so the justification contradicted the behaviour it
+justified, in three files.
+
+### The denominator is not a caveat, it is the number
+
+s3ked's formulation, adopted: *"1.8 %, then zero, then 23.3 %" is not three
+judgements, it is one unstated sample size surfacing three times.* The §204 rule
+gains its second half — **the corpus side owes the prevalence figure before the
+decision, and owes the denominator with it.**
+
+### And the argument that settled the enum was the one that did not depend on any of it
+
+The `KFXCHAN` `0 = PRG` resolution needs only *many* keygroups at 0 and *many*
+programs selecting a bus. **Both survive a 9 % sample.** It is the only claim
+made today that a wrong denominator could not have broken — which is what makes
+a coherence argument worth more than a percentage.
+
+### Both of this week's dissolved questions were assigned to hardware
+
+The filter-1/filter-2 departure comparison, and this enumeration. **Both were
+answerable from files that had been on the disk for a month, and both were
+queued for the bench** — the second for a board fitted three hours earlier.
+s3ked's diagnosis: *hardware was the tool that had been working.*

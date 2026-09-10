@@ -2230,7 +2230,10 @@ def akai_flt2q_to_depth_db(byte: int) -> float:
 
 
 def akai_flt2q_is_boost(byte: int) -> bool:
-    """EQ mode: does this `FLT2Q` BOOST the band? 78% of real material does.
+    """EQ mode: does this `FLT2Q` BOOST the band?
+
+    **45% of real EQ material boosts under the pivot this function uses.** The 78% this docstring carried is a real figure measured under the MANUAL'S pivot (`FLT2Q` > 16) -- it survives the full corpus at 74.5% -- but the function was corrected to the MEASURED sign change between 23 and 24, and under that rule the split is 488 boost / 596 cut. **The prose kept the old pivot's statistic while the code moved**, so the justification contradicted the behaviour it justified.
+
 
     **Read off the measured table rather than a bound.** This tested
     `>= AKAI_FLT2Q_BANDBOOST_MIN` while 22, 23 and 24 were unmeasured and
@@ -2239,8 +2242,9 @@ def akai_flt2q_is_boost(byte: int) -> bool:
     be right about 22 and 23 and wrong about 24, which is a +0.77 dB boost it
     called a cut.
 
-    Reading mode 3 as a notch -- which the one low-Q bench capture suggested --
-    would be wrong for 367 of 469 enabled keygroups.
+    Reading mode 3 as a notch is still wrong for a large minority either way:
+    488 of 1084 EQ keygroups boost under the shipped pivot, 808 under the
+    manual's. Whole corpus, 64 images.
     """
     b = max(0, min(31, int(byte)))
     return AKAI_FLT2Q_DEPTH_DB[b] > 0.0

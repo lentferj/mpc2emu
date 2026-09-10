@@ -477,11 +477,13 @@ def _combine_akai_filters(kg, s3000):
     **THE HIGHPASS TAP IS ONE POLE, NOT TWO** (measured +6.1 dB/oct below f0,
     flat to 8*f0 above it, so no second pole is hiding further out). This
     decoded as XPM High 2 until 2026-09-10 and was overstating the slope by a
-    factor of two on 39% of board use.
+    factor of two on **57.6%** of board use -- the highpass is the most
+    common filter-2 mode, not the second. (39% came from 6 of 64 images.)
       * **BP after LP** -- a bandpass at filter 2's corner.
-      * **EQ after LP** -- a band-stop or band-boost. 78% of real material
-        boosts, so reading mode 3 as a notch would be wrong for 367 of 469
-        enabled keygroups.
+      * **EQ after LP** -- a band-stop or band-boost. Whole corpus: 488 of
+        1084 EQ keygroups boost under the shipped pivot (45%), 808 under the
+        manual's `> 16` (74.5%). Either way, reading mode 3 as a notch is
+        wrong for a large fraction.
 
     **The gate is evidence, not `LSI2_ON`**, which reads back 1 on a machine
     with no board fitted. See §AKAIFIL2.
