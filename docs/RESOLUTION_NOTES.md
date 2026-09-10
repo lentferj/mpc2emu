@@ -31408,3 +31408,51 @@ the section count**.
 That makes the pole-count reading safe to ship — pole count is asymptotic and
 does not change with resonance — and makes s3ked's own `FLT2Q` 0-only caveat
 **decisive rather than cautious** for anything about shape near f0.
+
+
+### Confirmed: the pole counts hold at every `FLT2Q`
+
+```
+   tap   FLT2Q 0    FLT2Q 31    near band at 31
+   LP    -11.23      -12.22        -13.82
+   BP     -5.40       -6.30         -7.89
+   HP     +6.10       +6.13        +12.26
+```
+
+**Far out the asymptotes are 12, 6, 6 at both extremes of resonance** — so pole
+count is asymptotic, does not move with `FLT2Q`, and the order table is safe at
+any resonance. The near bands steepen, which is the complex pair doing what
+feedback does.
+
+**Residual, explicitly not claimed:** *where* the asymptote begins as a function
+of resonance is unmeasured — only that four octaves out is far enough at
+`FLT2Q` 31. **Near-band slopes at high Q must not be read as orders.**
+
+### An a priori contradiction is not findable by measuring again
+
+The proposed architecture — "two cascaded one-pole sections, each switchable" —
+**cannot produce the +29.98 dB bandpass peak that had been measured and sent two
+messages earlier.** A cascade of real poles is monotonic. Both numbers sat in
+the same document, contradicting each other.
+
+**No amount of re-measuring would have surfaced that, because both measurements
+were correct.** The mechanism was wrong, not the data. The only check that finds
+this class is **asking whether the mechanism you have proposed could produce the
+numbers you already hold** — which costs nothing and was skipped.
+
+It is the same family as reading a report against itself, and strictly harder:
+there the two halves are adjacent on one page. Here they were two messages and
+several hours apart, and neither looked wrong alone. **What made it catchable
+was that a mechanism makes predictions about data already in hand, and those
+predictions can be checked before any new measurement is proposed.**
+
+### And the largest correction of the week came from the wrong question
+
+`High 2` → `High 1`, on **39 % of board use**, came out of a slope table taken
+to answer a question about *resonance*. **Third free result this week from the
+same cause: captures recorded with their conditions attached, so they could be
+asked a question they were not taken for.**
+
+The other two: the highpass passband bump resolved from a `FLT2Q` sweep run for
+a different purpose, and the two filters' top-end departures separated from a
+rung-88 point taken for something else.
