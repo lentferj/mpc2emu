@@ -698,6 +698,23 @@ def build_akai_hd_image(volumes: Sequence[Tuple[str, Sequence[Tuple[str, bytes]]
     }
 
 
+def _put_block(data: bytearray, o: int, payload: bytes) -> None:
+    """Write exactly one block at an absolute offset, or raise.
+
+    `data[o:o + HD_BLOCK] = payload` on a bytearray **appends** when `o` is past
+    the end instead of raising, so a block number that should have been
+    impossible becomes a silently mislocated write plus a longer file. This is
+    the guard for that; the allocator is clamped as well, and both are wanted
+    because they fail at different times -- the clamp stops the block being
+    allocated, this stops one arriving by any other path.
+    """
+    if o < 0 or o + HD_BLOCK > len(data):
+        raise AkaiImageError(
+            f"block write at offset {o} would fall outside the image "
+            f"({len(data)} bytes) -- refusing rather than appending")
+    data[o:o + HD_BLOCK] = payload
+
+
 def append_akai_volumes(image_path: str,
                         volumes: Sequence[Tuple[str, Sequence[Tuple[str, bytes]]]],
                         on_duplicate: str = 'prompt') -> Dict:
@@ -730,7 +747,18 @@ def append_akai_volumes(image_path: str,
     for psize in sizes:
         if psize == 0 or off * HD_BLOCK >= len(data):
             break
-        bases.append((off * HD_BLOCK, psize))
+        # CLAMP THE DECLARED SIZE TO WHAT THE FILE ACTUALLY HOLDS. A partition
+        # table can declare more blocks than the image contains -- a truncated
+        # or hand-built image does exactly that -- and the allocator would then
+        # hand out block numbers past EOF. Writing one is a bytearray
+        # slice-assign, which APPENDS rather than failing: the image grows, the
+        # data lands at the wrong offset, the directory points somewhere else,
+        # and the call reports success.
+        #
+        # Clamping here turns silent corruption into "no free blocks", which is
+        # the correct failure and is loud.
+        avail = (len(data) - off * HD_BLOCK) // HD_BLOCK
+        bases.append((off * HD_BLOCK, min(psize, avail)))
         off += psize
 
     existing = {}
@@ -782,14 +810,14 @@ def append_akai_volumes(image_path: str,
                 for j, b in enumerate(blks):
                     o = base + b * HD_BLOCK
                     chunk = fdata[j * HD_BLOCK:(j + 1) * HD_BLOCK]
-                    data[o:o + HD_BLOCK] = chunk + b'\0' * (HD_BLOCK - len(chunk))
+                    _put_block(data, o, chunk + b'\0' * (HD_BLOCK - len(chunk)))
                 _chain_into(data, base, blks, FAT_FILEEND)
                 entries.append(_file_entry(fname_, ftype, len(fdata), blks[0]))
 
             dirbytes = _volume_directory(entries, VOLDIR_HD_BLKS, HD_BLOCK)
             for j, b in enumerate(dirblocks):
                 o = base + b * HD_BLOCK
-                data[o:o + HD_BLOCK] = dirbytes[j * HD_BLOCK:(j + 1) * HD_BLOCK]
+                _put_block(data, o, dirbytes[j * HD_BLOCK:(j + 1) * HD_BLOCK])
             _chain_into(data, base, dirblocks, FAT_DIREND)
 
             o = base + _OFF_ROOTDIR + 16 * slot
