@@ -324,6 +324,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIFIL2HPREF — the whole highpass column moved, and the grouping is now unresolved (2026-09-09)](#akaifil2hpref-the-whole-highpass-column-moved-and-the-grouping-is-now-unresolved-2026-09-09)
 - [§AKAIFIL2ONELAW — there is one tuning law, and it was mode 0's all along (2026-09-10)](#akaifil2onelaw-there-is-one-tuning-law-and-it-was-mode-0s-all-along-2026-09-10)
 - [§AKAIFIL2CLOSE — the law extended, and the last survivor of the mode-factor class falls (2026-09-10)](#akaifil2close-the-law-extended-and-the-last-survivor-of-the-mode-factor-class-falls-2026-09-10)
+- [§AKAIFLT2QDENSE — all 32 depths measured, and the bin width was the whole story (2026-09-10)](#akaiflt2qdense-all-32-depths-measured-and-the-bin-width-was-the-whole-story-2026-09-10)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -31204,3 +31205,72 @@ alternative was shipping an extrapolation across the exact interval where the
 shape of the answer changes. A boundary that has been tested and a boundary that
 has merely never been challenged look identical from the outside, and only one
 of them is worth relying on.
+
+
+## §AKAIFLT2QDENSE — all 32 depths measured, and the bin width was the whole story (2026-09-10)
+
+The last large corpus gap. 8.0 % of active filter-2 keygroups sat on an
+interpolated `FLT2Q`, through a curve that turns out to be **three monotonic
+segments with a discontinuity between them** — deepening 0–15, a notch at 16,
+shallowing 17–23, boosting 24–31. It never could have been interpolated.
+
+### One feature, four instruments, four answers
+
+```
+   octave bands                     -4.57 dB
+   1/6-octave log smoothing        -26.11        (231 Hz window at 2 kHz)
+   raw bins, session A             -53.90
+   raw bins, session B             -49.22   (cross-check -55.28)
+```
+
+**The notch is ~108 Hz wide at Q 20.5. Each instrument reported exactly as much
+of it as its window could resolve.** The 1/6-octave figure was caught before it
+shipped because the arithmetic is checkable from the converter side: a 231 Hz
+window cannot measure a 108 Hz feature, and −26 sitting between −4.57 and −53.9
+is where a partly-too-wide window lands.
+
+**1/6-octave log smoothing was the right remedy for the wrong problem.** It is
+the standard fix for banded analysis destroying narrow features, and it was
+chosen for exactly that reason. **The notch is the one value in the table that
+sets its own resolution requirement**, and it is the value the whole cut arm
+bends around.
+
+### The depth of the notch is not a number we have
+
+−53.9, −49.22 and −55.28 are all resolution- and noise-limited, and **the
+coarser instrument read deeper** — which is noise finding a lucky low bin, not
+better resolution. **The supportable claim is "below −50 dB"**, and the test now
+asserts that it sits far below both neighbours rather than pinning a figure.
+Nothing downstream needs the exact value.
+
+### What the dense table changed in code
+
+- **The sign is read off the table, not off a bound.** `akai_flt2q_is_boost`
+  tested `>= 25` while 22, 23 and 24 were unmeasured and assigned from an
+  interpolated crossing at ~23.1. Measured: 22 and 23 are cuts, **24 is a
+  +0.77 dB boost the old rule called a cut.**
+- **`FLT2Q` 24 is the only value in the range whose |depth| is under 1 dB**, so
+  the reader's inert test is a single-value test in practice. Pinned, because
+  widening that threshold "to be safe" would silently discard a −2.01 dB cut at
+  23 and a +2.74 dB boost at 25.
+
+### Two independent sessions, different rungs, ±1.34 dB
+
+Our earlier eleven-point table (rung 80) against the new dense one (rung 64)
+agrees to within 1.34 dB at every value except the notch. **That comparison
+mixes rung with session and cannot separate them** — but either way one table
+serves at ±1–2 dB, which is below what the writer's dB→`FLT2Q` inverse can
+express.
+
+### And an extremum search that found the wrong extremum
+
+s3ked's first pass searched for the largest deviation anywhere in band. It
+returned **+4.19 dB at `FLT2Q` 0 while the EQ was cutting** (low-frequency junk
+winning) and reported a **−30 dB stopband as "resonance gain"**. Fixed by
+searching a neighbourhood of f0 for the feature actually expected there.
+
+Their formulation: **an extremum search finds the largest thing in the window,
+which is what you want only if the window holds nothing bigger — so widening a
+search to be safe is the opposite of safe.** That is the same shape as the
+analysis bands, one level up: a window chosen for comfort rather than derived
+from what it must contain.

@@ -1562,24 +1562,60 @@ AKAI_FLT2MODE_OFFSET = 170
 AKAI_FLT2Q_OFFSET    = 171
 AKAI_FIL2FR_OFFSET   = 177
 
-#: `FLT2Q` -> depth in dB at the corner in EQ mode. MEASURED, raw 0.62 Hz bins
-#: (s3ked, 2026-09-08). The octave-band figures taken first are wrong by up to
-#: **49 dB** and are not recorded here at all -- a fixed-width analysis band
-#: cannot characterise a feature whose width is a free parameter, and `FLT2Q`
-#: is precisely a width control.
+#: `FLT2Q` -> signed depth in dB at the EQ centre. **ALL 32 VALUES MEASURED**
+#: (s3ked §206, 2026-09-10): `TC10 NOISE` prog 50, `FIL2FR` 64, mode 3,
+#: `FILFRQ` 99, `FLT2GAIN` 0, referenced to the same program at `LSI2_ON` 0,
+#: **raw 1.465 Hz bins**, signed extremum within +-0.5 octave of f0.
 #:
-#: **Not a signed gain.** The cut deepens from 0 to a true notch at 16 (108 Hz
-#: wide, Q 20.5) and then shallows toward the crossing, so the curve is
-#: genuinely non-monotonic; do not fit a line through it.
-AKAI_FLT2Q_DEPTH_DB = {0: -4.3, 10: -10.0, 15: -23.9, 16: -53.9, 18: -16.6,
-                       20: -9.5, 21: -7.0, 25: +2.3, 27: +6.5, 29: +12.0,
-                       31: +22.4}
+#: **Nothing is interpolated any more**, which matters because this curve is
+#: exactly the kind that cannot be interpolated: three monotonic segments with
+#: a discontinuity between them. Deepening 0..15, a notch at 16, shallowing
+#: 17..23, boosting 24..31.
+#:
+#: **THE BIN WIDTH IS THE WHOLE STORY AT 16.** The notch is ~108 Hz wide at
+#: Q 20.5. Measured with octave bands it read **-4.57 dB**; with 1/6-octave
+#: smoothing (a 231 Hz window at 2 kHz, wider than the feature) it read
+#: **-26.11**; with raw bins, **-49 to -55**. Each instrument reported exactly
+#: as much of the notch as its window could resolve.
+#:
+#: **-49.22 IS NOT THE NOTCH'S DEPTH AND MUST NOT BECOME A CONSTANT.** Two
+#: independent raw-bin measurements give -53.9 and -49.22 (and -55.28 on a
+#: cross-check); a deeper instrument reads deeper, and the coarser of the two
+#: read *deeper*, which is noise finding a lucky low bin rather than better
+#: resolution. **The supportable claim is "below -50 dB".** Nothing here
+#: depends on the exact figure -- the inert test is a sign/magnitude question
+#: and the writer's inverse excludes 16 outright.
+#:
+#: **Rung dependence:** rung 80 runs within about 1-2 dB of rung 64 across the
+#: range, and our own earlier rung-80 table agrees with this one to +-1.34 dB
+#: at every value except the notch. That comparison mixes rung with session and
+#: cannot separate them, but either way one table serves at +-1-2 dB.
+AKAI_FLT2Q_DEPTH_DB = {
+    0: -5.46,   1: -5.69,   2: -5.93,   3: -6.38,
+    4: -6.71,   5: -7.16,   6: -7.68,   7: -8.28,
+    8: -8.98,   9: -9.77,  10: -10.73, 11: -11.92,
+    12: -13.43, 13: -15.53, 14: -18.60, 15: -24.13,
+    16: -49.22, 17: -23.00, 18: -16.45, 19: -12.27,
+    20: -9.15,  21: -6.44,  22: -4.09,  23: -2.01,
+    24: 0.77,   25: 2.74,   26: 4.83,   27: 7.32,
+    28: 9.99,   29: 13.13,  30: 17.19,  31: 23.74,
+}
 
-#: Sign bounds, both MEASURED points. The crossing interpolates to `FLT2Q`
-#: 23.1, which places the unmeasured 22 and 23 on the cut side -- 14 keygroups,
-#: 3% of EQ material. The manual's "16 is no cut or boost" is right about the
-#: behaviour and wrong about the value: 16 is the DEEPEST cut of all.
-AKAI_FLT2Q_BANDSTOP_MAX  = 21
+#: **The sign changes between 23 and 24, and `FLT2Q` 24 is the ONLY value in
+#: the whole range whose |depth| is under 1 dB.** So the reader's inert test is
+#: a single-value test in practice, not a range -- worth knowing before anyone
+#: widens the threshold and silently discards real EQ settings either side.
+AKAI_FLT2Q_INERT_VALUE = 24
+
+#: **Superseded as a decision rule by the dense table, kept as documentation.**
+#: These were the two measured points bracketing an interpolated crossing at
+#: `FLT2Q` ~23.1, which left 22, 23 and 24 unmeasured and assigned by
+#: extrapolation. **All three are now measured** -- 22 and 23 are cuts
+#: (-4.09, -2.01) and 24 is a +0.77 dB boost -- so the sign is read off the
+#: table instead of off a bound. The manual's "16 is no cut or boost" is wrong
+#: about the value by eight and wrong about the behaviour: 16 is the deepest
+#: cut in the range.
+AKAI_FLT2Q_BANDSTOP_MAX = 21
 AKAI_FLT2Q_BANDBOOST_MIN = 25
 
 #: Headroom in dB at `FLT2Q` 31. **+22, not the +15.57 first reported** -- the
@@ -2113,10 +2149,18 @@ def akai_flt2q_to_depth_db(byte: int) -> float:
 def akai_flt2q_is_boost(byte: int) -> bool:
     """EQ mode: does this `FLT2Q` BOOST the band? 78% of real material does.
 
+    **Read off the measured table rather than a bound.** This tested
+    `>= AKAI_FLT2Q_BANDBOOST_MIN` while 22, 23 and 24 were unmeasured and
+    assigned from an interpolated crossing at ~23.1. All three are measured
+    now, and the sign changes between 23 and 24 -- so the old rule happened to
+    be right about 22 and 23 and wrong about 24, which is a +0.77 dB boost it
+    called a cut.
+
     Reading mode 3 as a notch -- which the one low-Q bench capture suggested --
     would be wrong for 367 of 469 enabled keygroups.
     """
-    return int(byte) >= AKAI_FLT2Q_BANDBOOST_MIN
+    b = max(0, min(31, int(byte)))
+    return AKAI_FLT2Q_DEPTH_DB[b] > 0.0
 
 
 def nominal_knob_to_hz(knob: float) -> float:
