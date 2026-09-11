@@ -723,11 +723,40 @@ page* is gated.
 | 171 | `FLT2Q` | IB304F | resonance, 0–31 |
 | 172 | `TONEFREQ` | IB304F | tone centre frequency |
 | 173 | `TONESLOP` | IB304F | tone slope (spectral tilt) |
-| 174–176 | `MODVFLT2_1..3` | — | filter-2 modulation amounts |
+| 174–176 | `MODVFLT2_1..3` | — | filter-2 modulation amounts, **signed, ±50** (see below) |
 | 177 | `FIL2FR` | IB304F | filter 2 frequency |
 | 178 | `K_FRQ2` | IB304F | filter 2 key follow |
 | 179–186 | `ENV3R1/L1 … R4/L4` | **—** | envelope 3, eight stages — **not board-gated**, see below |
 | 187–190 | `V_ATT3` `V_REL3` `O_REL3` `K_DAR3` | — | envelope-3 modulation |
+
+**`MODVFLT2_1..3` RANGE — and what is measured versus inferred.** This row's
+range column was EMPTY until 2026-09-11, and an empty cell is not a range: a
+staged measurement volume read it as 0..99 by analogy with the neighbouring
+fields and put two of its six rungs outside anything the field can mean.
+
+*Measured* (s3ked, 2026-09-11, `F2DEPTH` PRGNUM 121–126, deflattened harmonic
+envelope at 5.0 s, dB against depth 0):
+
+| depth | 441 Hz | 882 Hz | 1323 Hz | 2646 Hz | 3528 Hz |
+|---|---|---|---|---|---|
+| 50 | +3.03 | +8.20 | +12.70 | +24.45 | +29.25 |
+| 99 | −1.21 | −2.45 | −3.25 | +0.62 | +9.88 |
+
+Depth 50 is a clean monotonic opening of the lowpass. **Depth 99 is not a larger
+version of it — it lands near the unmodulated case.** So the usable top is
+somewhere in 50 < *x* < 75, and 50 is the last value shown to behave.
+
+*Inferred, not measured:* that the limit is exactly ±50 and that the field is
+symmetric. ±50 is what every other signed depth on this machine uses (`ENV2`
+depth at 153, `VTUNO1..4`), and the writer already clamps that one to ±50 — but
+**nothing has yet measured the negative side of this field at all.** Whether the
+machine clamps, wraps or ignores above the limit is also unknown, and is
+deliberately not being measured: the writer will clamp, so the answer buys
+nothing.
+
+`F2DEPTH` v2 carries the negative rungs (−25, −50) that would settle the
+symmetry. Until they are captured, treat ±50 as a working bound with a measured
+ceiling and an assumed floor.
 
 **`FLT2MODE` enum, measured from response shape 2026-09-08** (s3ked, `FIL2FR`
 80, all four values read back) — no longer resting on a panel photo:
