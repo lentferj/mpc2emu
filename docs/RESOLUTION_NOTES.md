@@ -334,6 +334,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIRATESNAP — the converter diagnosed it correctly and a redirect_stdout cut the wire (2026-09-11)](#akairatesnap-the-converter-diagnosed-it-correctly-and-a-redirect_stdout-cut-the-wire-2026-09-11)
 - [§DEFPARAM — six definitional parameters, all inside tooling adopted to make two sides comparable (2026-09-11)](#defparam-six-definitional-parameters-all-inside-tooling-adopted-to-make-two-sides-comparable-2026-09-11)
 - [§ATKBIAS — fixing the two attack laws](#atkbias-fixing-the-two-attack-laws)
+- [§FIL2FRGAP — filling the 45–64 hole in the filter-2 corner table](#fil2frgap-filling-the-4564-hole-in-the-filter-2-corner-table)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -31957,3 +31958,40 @@ contaminated TWO independent laws in TWO code paths, and the round trip between
 them looked correct. A detector's bias does not stay in the measurement it was
 taken with — it is baked into every constant fitted from it, and constants travel
 further than captures do.
+
+## §FIL2FRGAP — filling the 45–64 hole in the filter-2 corner table
+
+**Do not patch this with the single reading.** `FIL2FR` 55 = 264.7 Hz came out of
+a depth-law capture, and s3ked flagged it rather than offering it as calibration.
+One point cannot distinguish "the table is wrong at 55" from "the region has
+structure the table averages over" — and the two call for different fixes.
+
+**The measurement that settles it is small.** Four programs, one keygroup each,
+`FIL2FR` **48 / 52 / 56 / 60**, `FLT2MODE` 0, `FLT2Q` 0, filter 1 pinned open
+(`FILFRQ` 99 — and note that asking for a wide `filter_cutoff` will instead make
+the writer emit `LSI2_ON = 0` and switch filter 2 off entirely; pin it in a
+post-patch). Plus the existing bracket points 45 and 64 re-read in the same
+session, because a re-read is what makes the new points commensurable with the
+old ones rather than merely adjacent to them.
+
+The subject should be the `F2DEPTH` saw, deflattened against a both-filters-open
+program, and read as the −3 dB corner — the same convention as the 2026-09-09
+points, or the result cannot join them in one table.
+
+**Then:** add the confirmed points to `AKAI_FIL2FR_MEASURED` as points, never as a
+refitted curve. That table already carries the reason — the first run fitted one
+exponential to five points and byte 20 falsified it at 46% high, past a falsifier
+stated in advance. A gap this wide is exactly where a fit would hide the same
+way.
+
+**Expected impact when applied:** sources whose cutoff lands in 45–64 currently
+get a corner up to ~18% low. That is a filter-2 corner error only; it does not
+touch the `MODVFLT2_3` depth law, which is measured in cents against each
+program's own depth-0 corner and so cancels any absolute table error.
+
+**Before trusting the single point at all, check the §204 question.** A third law
+gives 324 Hz at byte 55 and matches neither our table nor the new reading. s3ked
+suspects §204 was fitted on a *resonant peak at high `FLT2Q`* while these are
+−3 dB corners at `FLT2Q` 0, and §139 recorded exactly that kind of factor for
+filter 1. **Suspected, not checked** — and if it is right, §204 should be labelled
+with the feature it measures rather than silently disagreeing with two tables.
