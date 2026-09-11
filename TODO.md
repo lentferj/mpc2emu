@@ -650,10 +650,54 @@ its absence when one is not, on the same rigs, the same session, the same protoc
 **The negative control:** P000 has no effective envelope on either side and the two
 machines agree (1.28/0.93/0.65 against 1.12/0.82/0.74).
 
-**Status: defect HW-CONFIRMED.** **Blocked on:** nothing for a diagnostic — the
-silent case should warn today. The fix needs the assignable-matrix route measured
-(`MODVFLT2_1-3`: which source, which slot, what depth law), which is bench work on
-the AKAI.
+### The routing is ALREADY CORRECT — and by accident. Two fields missing, not one.
+
+`s3ked-47` read the resident volume, confirmed from the files here:
+
+```
+  MODSLFLT2_1-3 = [5, 8, 14]   velocity, LFO2, env3   (program 0x63-0x65)
+  ENV3 stages   = (0,0,0,0,0,0,0,0)  every keygroup, every program
+```
+
+**`env3` is filter 2's own envelope and it is already wired to slot 3 in
+everything we write** — because `MODSLFLT2_3 = 14` comes from
+`_PROGRAM_HW_DEFAULTS`, a block copied verbatim from the machine on the principle
+that reserved and default fields are the ones to copy rather than reason about.
+**Nothing in the writer knows what 14 means.** The fix being small is luck, not
+foresight.
+
+**So two fields are missing per keygroup, not one:** an **`ENV3` shape**
+(179–186, all zero) *and* a **`MODVFLT2_3` depth** (176, zero). Writing a depth
+into a flat envelope produces nothing and would have looked like the path not
+working.
+
+**Path confirmed live on hardware** (`s3ked-47`): `ENV3` shaped, `MODVFLT2_3`
+stepped 0/12/25/50, every field restored byte-exact. Depth 50 against depth 0,
+late in the note — **+6.08 / +6.02 / +6.12 dB at 149 / 199 / 298 Hz and
++0.37 / +0.40 above 999 Hz.** A lift concentrated at the EQ centre (`FIL2FR` 48 =
+198 Hz) and nothing above it.
+
+**The cents-per-unit law is still missing**, and the reason is the subject: their
+material's own late-minus-early change is **9.52 dB rms against the modulation's
+3.59** — the subject moves more than the thing being measured, which no window
+fixes.
+
+**Measurement volume built: `~/temp/HD_f2depth.img`, PRGNUM 121–126**, generator
+`~/temp/build_f2depth.py`. `MODVFLT2_3` = 0/12/25/50/75/99, identical otherwise,
+`FLT2MODE` LP at `FIL2FR` 66 = 476 Hz. Subject is a **seamless saw, `f0` 55.125 Hz,
+200 harmonics over 5.6 octaves, sustain 1.0, no envelopes** — flat by construction,
+nothing to subtract. A saw rather than a sine because **the law is a frequency
+shift in cents**, which 200 harmonics show directly.
+
+**Its `ENV3` shape is an ASSUMPTION and is flagged as one in the generator** —
+`(40, 99, 0, 99, 0, 99, 50, 0)`, never on hardware. `s3ked-47`'s verified bytes are
+requested; a wrong shape makes every rung read zero and looks exactly like the
+depth field not working.
+
+**Status: defect HW-CONFIRMED, fix scoped to two fields, law outstanding.**
+**Blocked on:** the verified `ENV3` bytes, then a card crossing (riding with
+`ATKCAL` and `POLES`). A diagnostic for the silent case needs nothing and should
+land regardless.
 
 ## E4XT and AKAI envelopes are differently SHAPED — 1 to 3.5 s apart (OPEN 2026-09-11)
 
