@@ -509,6 +509,40 @@ PRGNUM 109–116) is the calibration volume — a steady synthesized loop with *
 knee**, so it isolates the rate law from the segment question. Needs a card
 crossing.
 
+## Filter 1 bypass loses the CORNER as well as the envelope — 10x to 27x measured (OPEN 2026-09-11)
+
+**Same root as the item below, and now measured on hardware with a control.**
+`_XPM_TO_FLT2` marks HP, BP and EQ rows `keep_f1 = False`, taking filter 1 out so
+the band does not sit at a lowpass knee. **The shape is substituted into filter 2.
+The CORNER and the ENVELOPE are not.**
+
+Measured on PRG 44 / P004 — source shape at a **133 Hz** corner, our filter 1
+**open**:
+
+| note | centroid AKAI | centroid E4XT | ratio |
+|---|---|---|---|
+| 24 | 1191 Hz | **119 Hz** | 10.0× |
+| 52 | 4285 | **161** | 26.6× |
+| 79 | 5127 | 1400 | 3.7× |
+
+**The E4XT's spectrum is clamped near its own corner and ours is not.**
+
+**The control makes it attributable**, which nothing else in the campaign managed:
+P000's filter is wide open on *both* machines and the centroid ratio is **+3.9 to
+−0.7 dB**; purpose-built presets with the filter open and no envelope give a
+machine baseline slope of **−0.61 and −0.19 dB/oct (r −0.98, −0.92)**. So a 10–27×
+difference is the conversion, not the machines.
+
+**Spectral centroid is the measurement that works here**, because it is a frequency
+and therefore immune to the broadband level offset that made the band-residual
+matrix unscoreable (1 comparable cell of 30).
+
+**Status:** open, and the most audible conversion defect found in this campaign.
+**Blocked on:** a decision about what to do when a shape routes to filter 2 —
+filter 2's own corner (`FIL2FR`) is set, so the question is why the result does not
+follow it, and whether filter 1 should instead be left at the source corner rather
+than wide open. That is checkable in software before any bench time.
+
 ## Filter envelope is SILENTLY DROPPED when the shape routes to filter 2 (OPEN 2026-09-11)
 
 **`_XPM_TO_FLT2` marks HP, BP and EQ rows `keep_f1 = False`** — filter 1 is taken

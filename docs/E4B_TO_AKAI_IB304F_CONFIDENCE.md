@@ -351,6 +351,57 @@ and −16.7 — **the chain returned to within 0.2 dB**. Cross-repatch pairing w
 still avoided in favour of same-session baselines.
 
 
+## THE SPECTRAL LEG IS MEASURABLE AFTER ALL — in centroid, not in band residuals
+
+**Spectral centroid is a frequency, so it is immune to the broadband level offset
+that made the band residual unscoreable.** Measured 2026-09-11 from captures already
+held, both machines, five notes, `centroid_early`:
+
+**The control first, because it is what the campaign never had.** P000's filter is
+wide open on **both** machines:
+
+| P000 | n24 | n38 | n52 | n65 | n79 |
+|---|---|---|---|---|---|
+| centroid ratio, dB | +3.9 | +0.9 | +2.8 | +0.1 | −0.7 |
+
+**The two machines agree to within a few dB when neither filters.** And the
+purpose-built presets with the filter open and no envelope give the machine
+baseline as a slope: **−0.61 and −0.19 dB/oct, r = −0.981 and −0.923.** So the
+machines' own playback paths differ by well under 1 dB/oct of centroid.
+
+**Against that control, P004 is a 10× to 27× spectral difference:**
+
+| note | fund | centroid AKAI | centroid E4XT | ratio | dB |
+|---|---|---|---|---|---|
+| 24 | 33 Hz | 1191 Hz | **119 Hz** | 10.0× | +20.0 |
+| 38 | 73 | 2373 | **142** | 16.7× | +24.5 |
+| 52 | 165 | 4285 | **161** | 26.6× | +28.5 |
+| 65 | 349 | 4752 | 504 | 9.4× | +19.5 |
+| 79 | 784 | 5127 | 1400 | 3.7× | +11.3 |
+
+**The E4XT's centroid is pinned at 119–161 Hz — clamped by its own 133 Hz filter —
+while ours rises freely to 4285 Hz.** That is exactly what the files predict:
+**our filter 1 is left OPEN on this preset** (`_XPM_TO_FLT2` marks the EQ row
+`keep_f1 = False`) and the source's 133 Hz corner is therefore never applied. The
+`FLT2` EQ section we write in its place is not reproducing it.
+
+**So this is a large, attributable conversion defect with a clean control** — the
+first cell in the campaign with both. It is the same root as the dropped filter
+envelope (TODO: "Filter envelope is SILENTLY DROPPED when the shape routes to
+filter 2"): **taking filter 1 out of circuit loses both the corner and the
+envelope, and only the shape was substituted.**
+
+**The other filtered presets are filter-dominated as expected** — centroid slopes
++4.71 (P003), +3.48 (P005) against the ≤0.61 baseline — and those two carry
+mixed modes and sweeps, so their numbers are not yet attributable the way P004's
+is.
+
+**What this changes about the verdict below:** the band-residual matrix remains
+unscoreable, and that stands. **But "the spectral leg cannot be measured" was too
+strong** — it cannot be measured *in band residuals on this material*, and it can
+be measured in centroid, with a control, today, from captures already taken.
+
+
 ## The per-cell matrix is NOT published, and why
 
 Filed 2026-09-11 rather than left as an absence. The per-cell table was built and
