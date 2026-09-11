@@ -307,6 +307,46 @@ the comparison render and stays silent.
 `keygroup_count` threads the flag too, since the count is board-dependent, and
 a test asserts budget and file agree for **both** flag states.
 
+## TD1/TD2 — the non-saturating envelope test (OPEN 2026-09-11, material on the card)
+
+Two programs, **PRG 46/47 on the `FXPATHS` volume**, whose AKAI `DECAY1` lands
+**inside** the measured 45–85 window (78 and 73) where all four saturating
+presets wanted 99+.
+
+**What they test.** §E4XTAKAIENV reports the two machines 1–3.5 s apart in where
+their output is flattest, and the `DECAY1` shortfall orders that gap on the
+saturating presets. If that is the cause, a **non-saturating** preset must show a
+small gap.
+
+**Prediction filed with `eosed` 2026-09-11 10:52, before any capture:**
+
+> Gap **under 1.5 s** on both, comparable to PRG 42's 1.00 s. **A gap of 2.5 s or
+> more on either kills the `DECAY1` explanation.**
+
+One-sided deliberately: a small gap is consistent with the explanation *and* with
+two presets happening to agree; a large one falsifies it. Report as
+falsification-or-nothing.
+
+**`eosed`'s second filed prediction, which tests the subject rather than the
+hypothesis:** velocity→volume is 0.0 dB on both, so the five velocity passes must
+be **flat to the repeatability floor**. If either shows a velocity response, the
+file and the machine disagree about the preset and the envelope test is measuring
+something else — checked *before* any envelope number is computed.
+
+**Why these two of 327 presets.** Filter wide open (cutoff 20000, resonance ~0)
+**and `filter_env_cents` = 0**, so the tilt is the amplifier rather than a filter
+sweep — the confound that made PRG 40 useless as a control and still compromises
+it as the largest `DECAY1` data point. Velocity→volume 0.0 dB, so every velocity
+pass is a repeat and each gives a five-pass floor for free. One sample and one
+layer across notes 24–79. TD1 has a 997 ms loop and −13.6 dB sustain; TD2 has a
+242 ms loop and 5.8% sustain, so **TD1 is the primary and TD2 the second point**.
+
+Board-on and board-off produce **byte-identical** programs for both, verified — a
+wide-open filter leaves filter 2 nothing to do — so they were written board-off
+and load on a machine without the board.
+
+**Status:** open, material on the card. **Blocked on:** the capture.
+
 ## The FXPATHS test volume plays 3 of 6 presets sharp — my build script, not the converter (2026-09-11)
 
 **Status: CAUSE FOUND, corrected volume built, awaiting a card crossing.**
@@ -395,6 +435,20 @@ subject.
 **Blocked on:** the card going back into the sampler, then `s3ked-47`
 re-capturing **PRG 43, 44 and 45 only** — 40/41/42 were clean at 0/+2/+4 cents.
 No E4XT re-capture on any preset; that side was always right.
+
+**A second write followed at 11:02** adding PRG 46/47 (`TD1`/`TD2 ENVWIN`), the
+non-saturating envelope test, so one loading session covers both jobs. Card md5
+`ca11c6660611b10011e22880399bfe9f`; 36 volumes, 1448 files, all 1413
+non-`FXPATHS` files and all 29 pre-existing `FXPATHS` files byte-identical.
+
+**THE CARD WAS MOUNTED ON THE HOST THE WHOLE TIME, so the sampler saw nothing.**
+`s3ked-47`'s `loadvolp` refused at its own gate — four partitions returning an
+identical directory is the absent-medium signature — and **refused before
+running `CLR`**, which is the only reason the resident programs and therefore the
+existing captures survived. Both of my card writes and both of my read-back
+verifications happened on the host side of a card the sampler no longer had.
+**A read-back that confirms the bytes does not confirm the medium is reachable
+by the machine that needs it.** Unmounted 11:04.
 
 **Cheapest test that the write took:** play PRG 45 note 65 and confirm the two
 series land near **174.7 and 130.8 Hz**, the E4XT's own figures, rather than near
