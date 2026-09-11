@@ -31820,6 +31820,31 @@ the holder's side. **A fitted parameter has freedom that two measured points do
 not**, so it can sit outside the data's range while looking more precise than the
 thing it was derived from.
 
+### Where the day's two real defects actually came from
+
+Worth recording because it contradicts the obvious reading. Nine claims were
+refuted across two sessions on 2026-09-11 — a comb mechanism, chorus, the
+`DECAY1` explanation, a plateau-ripple bias, a layer-structure claim, an
+E4XT-specific instability, a "+7% above the ladder" flag, a repeat-pair window
+rule, and a "no second series" measured on the wrong side of the fundamental.
+
+**Neither of the two real defects came from a surviving hypothesis. Both came out
+of a dying one** (eosed's observation):
+
+- The **130-of-130 attack-reader bug** fell out of a peer reading one envelope
+  segment wrongly. Correcting that sent them to the device, the device showed a
+  two-segment attack, and the two-segment attack showed our reader had been wrong
+  on every attacked voice in the corpus.
+- The **board silently merging two filter shapes** fell out of suppressing a
+  warning. Having been burned, the next step was to read *every* warning a build
+  emits — which surfaced 31 diagnostics whose own guard forbids them firing.
+
+**So the practice is: when a claim dies, chase the wreckage rather than dropping
+it.** A refuted hypothesis has usually moved something — a measurement taken, a
+field read, a structure inspected — and that residue is where the findings were,
+both times. Dropping a dead claim cleanly is the tidy move and it would have cost
+both defects.
+
 ### Why §105's ladder cannot be a reference
 
 It is the measurement that started this enquiry and the one number in it that
