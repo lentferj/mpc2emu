@@ -718,8 +718,13 @@ def akai_lfo_rate_byte(hz: float) -> int:
     return int(round(max(lo, min(hi, (hz - c) / m))))
 
 
-def akai_env_bytes(env) -> tuple:
+def akai_env_bytes(env, quiet: bool = False) -> tuple:
     """Envelope -> (ATTAK1, DECAY1, SUSTN1, RELSE1).
+
+    `quiet` suppresses the range diagnostics, for a PROBE render that is never
+    written -- `keygroup_count` is a counting function and was emitting
+    content-loss warnings as a side effect of asking how many keygroups a preset
+    needs, once per preset, every time the bank splitter budgeted.
 
     Sustain is computed FIRST because the decay and release values depend on
     it: an envelope value is a slew rate, so the value needed for a given time
@@ -758,7 +763,7 @@ def akai_env_bytes(env) -> tuple:
         # 86..99 would tell us what we are delivering but could not deliver
         # more. The honest handling is to name it, like every other place this
         # writer runs out of range.
-        if _want > 99 or _want < 0:
+        if (_want > 99 or _want < 0) and not quiet:
             _diag(_W, 'AKAI_DECAY1_SATURATED',
                   f'source decay rate {_drate:.2f} dB/s needs DECAY1 '
                   f'{_want:.1f}, outside the field 0..99; written as {d}',
@@ -769,7 +774,7 @@ def akai_env_bytes(env) -> tuple:
                   detail={'wanted': round(_want, 1), 'written': d,
                           'rate_db_per_s': round(_drate, 3),
                           'fit_window': [_lo, _hi]})
-        elif not (_lo <= d <= _hi):
+        elif not (_lo <= d <= _hi) and not quiet:
             _diag(_W, 'AKAI_DECAY1_EXTRAPOLATED',
                   f'DECAY1 {d} is outside the measured window {_lo}..{_hi}; '
                   f'the rate is extrapolated, not measured',
@@ -780,7 +785,7 @@ def akai_env_bytes(env) -> tuple:
         span_decay_db = _AK_SUSTAIN_DB_PER_UNIT * (99 - sus)
         d = _rate_law_value(getattr(env, 'decay', 0.3) or 0.3,
                             span_decay_db, _AK_DECAY1_RATE, default=50,
-                            stage='DECAY1')
+                            stage='' if quiet else 'DECAY1')
 
     # Release travels from the sustain level down to the floor.
     #
@@ -804,7 +809,7 @@ def akai_env_bytes(env) -> tuple:
         span_rel_db = _AK_SUSTAIN_DB_PER_UNIT * sus
         r = _rate_law_value(getattr(env, 'release', 0.5) or 0.5,
                             span_rel_db, _AK_RELSE1_RATE, default=45,
-                            stage='RELSE1')
+                            stage='' if quiet else 'RELSE1')
 
     # Attack rises from silence to the peak, so unlike decay and release its
     # span is fixed and it needs no sustain-dependent distance.
@@ -2679,7 +2684,7 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
     # extrapolate.
     _env = getattr(voice, 'amp_env', None) if voice is not None else None
     if _env is not None:
-        _a, _d, _s, _r = akai_env_bytes(_env)
+        _a, _d, _s, _r = akai_env_bytes(_env, quiet=probe)
     else:
         _a, _d, _s, _r = 0, 50, 99, 45     # the historical defaults
     k[0x0c] = _a                        # amp attack
