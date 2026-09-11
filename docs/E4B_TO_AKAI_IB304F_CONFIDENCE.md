@@ -295,6 +295,63 @@ listener hears relative to the sound's own level, and the matrix is not the plac
 to settle that silently.
 
 
+## The per-cell matrix is NOT published, and why
+
+Filed 2026-09-11 rather than left as an absence. The per-cell table was built and
+**held**, because the level offset between the two machines varies from **+0.29 to
++40.22 dB across cells, with one cell negative** — and a recording-chain gain
+difference is a constant. Something upstream of the residual is wrong.
+
+**It is not the conversion's level handling**, which was measured against the
+source files at **0.2 dB across all six presets**. And it is not either
+explanation proposed:
+
+- **Window landing at different envelope phases.** The right size, the wrong
+  places. `pickwin`'s gap is one number *per preset*, and **within P004 the offset
+  runs +40.22 dB at note 24 against +4.16 dB at note 79** — 10× on one preset with
+  one gap. Across presets `rate × gap` predicts 15.8 dB for P001 (measured 0.29)
+  and 0 for P005 (measured −11.25).
+- **Loop entry falling inside the window.** Matches within P004 exactly — the
+  never-looping note gives 40.22 dB, the note looping at 1.545 s gives 4.16 — but
+  the looped cells span 0.29 to 32.14 dB and `r = +0.577` on n=8. A hint, not a
+  mechanism.
+
+### What the offset IS good for: a verdict flag
+
+**A large level offset means the two windows are not at comparable envelope
+positions — so that cell's SHAPE number is not a timbre comparison either.** It is
+not a nuisance to separate out and discard; it is evidence about whether the cell
+compares the same moment of the sound at all.
+
+```
+  |level offset| > 2.0 dB  ->  INDETERMINATE, whatever the shape number says
+```
+
+**Threshold set from measurement, not from the table:** per-preset level accuracy
+is 0.2 dB and the worst repeat floor is 1.6 dB, so an offset beyond ~2 dB cannot be
+level conversion. On the eight cells available it marks six indeterminate.
+
+### The band cut was wrong too, and the tell was visible
+
+The **−12 dB** level-relative cut leaves **5 usable bands of 58**. It came from
+repeatability work and was borrowed into a cross-machine spectral comparison —
+the same shape as a ladder written as a standalone result becoming a reference.
+**It should be −50 dB**, on s3ked's grounds: every repeat difference above 0.5 dB
+sits more than 34 dB down and every band within 20 dB repeats to ≤0.22 dB, which
+is two clean populations rather than one gradient. At −30 dB the usable count goes
+5 → 16.
+
+**5 of 58 should have stopped the table before the level offsets did.**
+
+### Next step, and it is free
+
+Anchor each cell's window to **that machine's own envelope**, as was done for the
+decay statistic. If the offsets collapse to a constant, the offset was window
+phase and the shape column becomes meaningful. If they do not, the matrix is
+published with most cells **indeterminate** and the reason stated — which is still
+the answer to the question, just a sparser one than hoped.
+
+
 ## Provisional: the two sides were built from different sources
 
 **This is one shared assumption under every cell, not a per-cell uncertainty,
