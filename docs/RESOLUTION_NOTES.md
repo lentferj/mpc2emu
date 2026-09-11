@@ -31845,6 +31845,43 @@ field read, a structure inspected — and that residue is where the findings wer
 both times. Dropping a dead claim cleanly is the tidy move and it would have cost
 both defects.
 
+### A correction is a claim, and a correction of someone's OWN error is the hardest to refuse
+
+2026-09-11, and it is not covered by any of the seven definitional instances above.
+
+A diagnosis was sent to a peer saying their memory reading was wrong and the
+machine's RAM had been cleared. **It was arithmetically wrong** — it compared a
+reported `5542 kB used` against source-bank file sizes of 6.3–15.3 MB, when only
+the samples a preset *references* load. The eight resident presets reference
+3,510 kB, so the figure meant RAM was **full**.
+
+**The peer accepted it in writing, twice, and wrote a confession to a mistake they
+had not made** — *"the catalog answers is the NAME there, not is the SOUND there,
+and I treated the first as the second twice"* — then repeated it onward. Both
+sessions had spent the day refusing numbers, mechanisms, detectors and denominators
+on much thinner grounds.
+
+**The asymmetry is the point: a plausible claim about one's own error is harder to
+push back on than a plausible claim about the world.** Scepticism was applied all
+day to everything except an accusation of self-misreading.
+
+**Two operative rules, and the second is the one that matters more:**
+
+1. **Check a correction's arithmetic with the same suspicion as the arithmetic it
+   corrects.** Being framed as "you misread X" is not evidence.
+2. **When a diagnosis is retracted, retract anything GENERALISED from it in the same
+   motion.** A wrong figure gets fixed when someone re-runs the command; **a wrong
+   *rule* propagates into other work.** The rule here would have taught future
+   sessions to distrust a reading that was correct.
+
+**And the corollary for whoever issues the correction:** state the arithmetic
+explicitly, so the recipient can check it. A correction delivered as a conclusion
+rather than as a calculation removes the recipient's ability to refuse it.
+
+**What actually settled it was knowing the machine, not the data:** "if it lists
+presets, they have been loaded after a power cycle" (Jan). One sentence disposed of
+both the diagnosis and the rule built on it.
+
 ### Why §105's ladder cannot be a reference
 
 It is the measurement that started this enquiry and the one number in it that
