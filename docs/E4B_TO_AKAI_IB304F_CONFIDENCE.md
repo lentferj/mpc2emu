@@ -295,6 +295,46 @@ intended measurement got and needs its own verification pass. `TODO.md`
 §E4XTAKAIENV.
 
 
+## Structural limits — things no setting can fix
+
+Distinct from the measurement gaps above: these are places where the two machines
+differ in a way our format cannot express, so they are not defects to be fixed and
+not errors to be reduced.
+
+**Attack SHAPE cannot be carried, only attack TIME.** Measured 2026-09-11 on both
+machines:
+
+| machine | t50/t90 | shape |
+|---|---|---|
+| AKAI S3000XL | 0.500–0.558 over `ATTAK1` 70–99 | **linear in amplitude** (0.556 predicted) |
+| E-MU E4XT | **0.797** | **convex, ≈ t^2.6** — slow start, accelerating |
+
+Our conversion carries a **time**. Matching it makes the endpoints agree and
+leaves the middle of the rise audibly different: on a 3.5 s attack the E4XT sits
+at **13%** of level where a linear ramp is at **29%**, and reaches half level a
+full **0.5 s** later. **No `ATTAK1` value can fix this**, because the field sets a
+rate and the difference is in the curve.
+
+It also explains a measurement artefact that looked like a defect: on the E4XT's
+convex rise, threshold-crossing and argmax detectors differ by **1.69×** on one
+capture (2.28 s against 3.85 s), both stable. On a straight ramp they agree. **The
+detector disagreement is the curvature, reported in the units of two
+conventions** — which is why "attack time" is a convention on the E4XT and close
+to a property on the AKAI.
+
+**The AKAI has no envelope-1 key-follow.** The format carries exactly two
+key-follow fields, `K_FRQ2` and `K_DAR3`; neither touches envelope 1, and
+`K_DAR3` measured inert (spread 1.02×). So a key-dependent amp envelope cannot be
+expressed, and a measured 941 ms of note-dependence in AKAI `t_peak` against
+0.16–0.24 s on the E4XT has no parameter in our control.
+
+**`DECAY1` has no range left at the slow end.** 9.9% of 666 corpus voices saturate
+at the byte ceiling; the worst wants 24.7 units beyond it, an 11.2× shortfall.
+Every source slower than `DECAY1` 99 decays alike. Reported as
+`AKAI_DECAY1_SATURATED` rather than corrected, because there is nothing to
+correct it with.
+
+
 ## The four things most worth knowing
 
 **1. The filter path is the measured part; the envelope path is not, and the
