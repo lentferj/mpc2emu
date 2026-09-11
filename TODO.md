@@ -6442,3 +6442,38 @@ separation, panner, shaper) rather than from the handful we happen to know.
 See `docs/RESOLUTION_NOTES.md` §K2ALGWALK for the full procedure, the validation
 rules and the traps — several of which cost real time on 2026-09-06 and are not
 obvious.
+
+## §ATKBIAS — Two attack laws are both ~1.8x wrong, and they cancel each other
+
+**Status:** FOUND 2026-09-11, HW-measured, **NOT FIXED**. Needs Jan's go-ahead
+and a hardware confirmation of the fix.
+**Blocked on:** nothing technical — the measurement exists. See
+`docs/RESOLUTION_NOTES.md` §ATKBIAS for the patch and why it must be applied to
+BOTH sides in one change.
+
+`_E4XT_ATK_SLOWDOWN = 1.838` (e4b_writer, used by e4b_parser) and the AKAI
+`_AK_ATTAK1_TIME` law were each fitted from `t_peak` on DECAYING material. That
+detector is biased long, and biased more for longer attacks. Both laws inherited
+the bias, in the same direction, at almost the same size.
+
+Measured on hardware at one stated convention (5 ms smoothing /
+threshold-crossing / −3.0 dB), s3ked's `ATKCAL` ladder plus eosed's E4XT point:
+
+* the E4XT does **2.035 s** where the byte intends 2.00 — **no slowdown at all**;
+  the 1.838 is the detector, not the machine.
+* our AKAI law is **1.58–1.85x slow** across ATTAK1 60..99 (measured
+  `t = 0.00015 * exp(0.10545 * ATTAK1)`, ours `0.000201173 * exp(0.10844 * v)`).
+
+**THE TWO ERRORS CANCEL IN E4B -> AKAI, WHICH IS WHY NOBODY HEARD IT.** Today
+that path is accurate to −0.7% / +0.9% / +2.6% at E4XT bytes 72 / 79 / 87.
+
+**What is actually broken today:**
+
+* **every non-E4B source -> AKAI**: attacks land at **0.54–0.61x** the requested
+  time. MPC, KRZ, SFZ, WAV — all of them, every attack.
+* **E4B -> AKAI above ATTAK1 99's ceiling**: −36% at E4XT byte 96, −56% at 102,
+  where the inflated request saturates the byte.
+* **E4B -> anything else**: the source is reported 1.838x slower than it is.
+
+**DO NOT FIX ONE SIDE.** Fixing only the parser makes E4B -> AKAI 0.59x; fixing
+only the writer makes it 1.84x. Both, together, or neither.

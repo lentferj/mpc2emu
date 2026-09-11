@@ -31915,3 +31915,44 @@ that states both. A measurement written as a standalone result became a referenc
 three weeks later, and the fields that make a result reproducible are not the
 fields that make it quotable.
 
+## §ATKBIAS — fixing the two attack laws
+
+**Both changes go in ONE commit. Either alone makes E4B -> AKAI worse than it
+is today.**
+
+**1. `writers/e4b_writer.py`** — `_E4XT_ATK_SLOWDOWN = 1.838` becomes `1.0`, and
+the derivation comment above it is replaced rather than edited. Its evidence
+table is a `t_peak` column against an `intends` column; hardware at the stated
+convention gives 2.035 s where that table's `intends` says 2.00 and its `t_peak`
+says 3.60. **The machine agrees with `intends`.** The comment's own argument that
+"a constant, not a curve — sd 0.05 across a 116x range" was right that the bias
+is constant and wrong about what was constant: a fixed-shape decaying sample
+biases `t_peak` by a roughly fixed factor.
+
+**2. `writers/akai_s3000_writer.py`** — `_AK_ATTAK1_TIME`'s `a, b` become
+`0.00015, 0.10545` (s3ked, `ATKCAL` PRGNUM 109–115, seven rungs, residuals
+−3.6% to +6.7%). The docstring's "confirmed against the measured points
+(0.320 s at 70 rising to 8.600 s at 99)" must go with it: hardware gives 0.248
+and 5.305 for those bytes, and the old points are long by a factor that GROWS
+with attack length — 1.29x at 70, 1.62x at 99 — which is the `t_peak` signature.
+
+**After both:** requested against delivered is 1.04 / 1.01 / 0.99 / 1.03 at
+0.1 / 0.5 / 2.0 / 5.0 s.
+
+**A real ceiling appears once the inflation is gone, and it is not a
+regression.** ATTAK1 99 is **5.13 s**; anything slower cannot be represented and
+should emit a diagnostic with the magnitude in it, the way
+`AKAI_SAMPLE_RATE_UNPLAYABLE` does. Today that ceiling is hidden because every
+request arrives 1.8x inflated and saturates earlier.
+
+**Confirming the fix needs hardware**: convert one source of known attack through
+a non-E4B path (the one with no cancelling error), write it to the card, and
+measure at 5 ms / threshold-crossing / −3.0 dB. A file-side round trip cannot
+see this — it is exactly what let the bug live, since the reader and writer errors
+stay entangled.
+
+**The general lesson, which is the reusable part:** `t_peak` on decaying material
+contaminated TWO independent laws in TWO code paths, and the round trip between
+them looked correct. A detector's bias does not stay in the measurement it was
+taken with — it is baked into every constant fitted from it, and constants travel
+further than captures do.
