@@ -403,6 +403,45 @@ there — the bandpass-resonance row that knowingly borrows the highpass curve, 
 the highpass pole count that was wrong in this converter until 2026-09-10. Offered
 as a place to look, not as an account.
 
+### The board alone produces the per-note swings — measured on one machine
+
+`s3ked-47`, 2026-09-11: `LSI2_ON` toggled on its own, same programs, same session,
+broadband RMS per note at velocity 80. Filter 1, samples, levels and the keygroup
+map untouched, verified by snapshot and restore across all 23 keygroups:
+
+| PRG | n24 | n38 | n52 | n65 | n79 | swing |
+|---|---|---|---|---|---|---|
+| 43 | −7.25 | −7.40 | −7.38 | −10.38 | −24.14 | **16.88 dB** |
+| 44 | −6.53 | −7.00 | −8.46 | −10.76 | −7.81 | 4.23 dB |
+| 45 | −6.89 | −7.51 | −7.30 | −9.73 | −13.56 | 6.67 dB |
+
+**4.2 to 16.9 dB of per-note broadband swing from the board alone**, one machine,
+one variable. The low end sits near the −6.02 dB insertion loss and grows with
+pitch — **the signature of a fixed-corner filter as the note rises past it**, which
+matches the corners being pinned at 133–164 Hz.
+
+**The `NB` programs are NOT the control for this**, and that was my error: they
+re-tune filter 1 as well as withholding the board. PRG 44 kg0 carries `FILFRQ 99 /
+FILQ 11 / K_FREQ 0` on `FX` against `FILFRQ 39 / FILQ 0 / K_FREQ 1` on `NB`.
+**`K_FREQ` is filter keyfollow, 0 on one side and 1 on the other**, which produces
+note-dependent level differences by construction — so that test would have found
+swings whether or not the board contributed any. A two-variable control looks
+exactly like a one-variable control until someone reads both headers.
+
+**And a keyboard-tracking asymmetry between the machines is NOT the mechanism.**
+The source asks for `filter_keytrack` **0.0449** — octaves of cutoff per octave of
+key — which is **0.206 octaves, 2.5 semitones, across the entire grid** against a
+fundamental that moves 4.58 octaves. Non-tracking on both machines. Our written
+`K_FREQ` of 0 is **rounding, not a dropped field**: a step is nominally 1/12
+oct/oct = 8.3%, the source asks 4.5%, which is 0.54 steps. A quantisation limit,
+not a defect.
+
+*(That rests on our keytrack read being correctly scaled. The writer's own comment
+records the NEGATIVE-side keyfollow scaling as explicitly not a confirmed law —
+the same field measured 96–103% unscaled on the same machine and the disagreement
+is open. These presets use the positive side, which is plain identity.)*
+
+
 ### So the conclusion is "not on this material", which is more useful
 
 A band residual needs the filter to **shape the spectrum without dominating the
