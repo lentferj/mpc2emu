@@ -1042,7 +1042,16 @@ def _rate_law_value(seconds: float, span: float, law, default: int,
               content_lost=False,
               remedy=f'extend the {stage} rate sweep past the window',
               detail={'written': out, 'fit_window': [lo, hi]},
-              echo=_env_range_echo((stage, 'extrap', out)))
+              # DEDUPED BY SIDE, NOT BY VALUE, unlike the saturation case
+              # above. Measured over 666 voices of real E4B material: 39.5% of
+              # them write RELSE1 BELOW 45, where s3ked's fit collapses to
+              # r2 0.51-0.73 and stops tracking the setting at all. Keyed by
+              # value that is ~45 distinct lines on an ordinary conversion,
+              # which is not a warning, it is wallpaper. One line per stage per
+              # side says the same thing and stays readable; the per-voice
+              # detail is still in the records for anyone counting.
+              echo=_env_range_echo(
+                  (stage, 'extrap', 'below' if out < lo else 'above')))
     return out
 
 
@@ -1392,10 +1401,36 @@ def build_sample(sd: SampleData, name: Optional[str] = None,
         # doing is not blocked. `convert.py` resamples before reaching here, so
         # in ordinary use this never fires.
         cents = 1200.0 * math.log2(played / float(sd.sample_rate))
-        print(f"    [WARN] {sd.name!r}: stored at {sd.sample_rate} Hz, which the "
-              f"S3000XL cannot play. It will sound at {played} Hz -- "
-              f"{cents:+.0f} cents. Resample to one of "
-              f"{AKAI_PLAYBACK_RATES} first (convert.py does this).")
+        # A DIAGNOSTIC, NOT A BARE print -- changed 2026-09-11 after this
+        # warning was destroyed by a caller's `redirect_stdout`.
+        #
+        # `build_fxvol.py` (a bench script) wrapped `build_akai_volume` in
+        # `contextlib.redirect_stdout(io.StringIO())` for tidy output, which
+        # swallowed this line for fifteen samples. The resulting volume played
+        # three of its six presets sharp -- by +210, +786 and +831 cents -- and
+        # two sibling sessions spent an hour recovering the fault from the audio
+        # of two different machines, having first concluded the CONVERTER was
+        # broken. It was not: `convert.py` snaps the rate and this never fires
+        # in ordinary use.
+        #
+        # The message was correct, specific, quantified, and named its own
+        # remedy. The only thing wrong with it was that it could be made
+        # unreachable by a caller who wanted less noise. A record goes to the
+        # diagnostic sinks regardless of where stdout points, so a caller that
+        # collects diagnostics cannot silence this by accident; `echo=` keeps
+        # the printed line byte-for-byte identical for everyone else.
+        _msg = (f"{sd.name!r}: stored at {sd.sample_rate} Hz, which the "
+                f"S3000XL cannot play. It will sound at {played} Hz -- "
+                f"{cents:+.0f} cents. Resample to one of "
+                f"{AKAI_PLAYBACK_RATES} first (convert.py does this).")
+        _diag(_W, 'AKAI_SAMPLE_RATE_UNPLAYABLE', _msg,
+              content_lost=True, subject=sd.name,
+              remedy='resample to a rate the machine plays before writing; '
+                     'convert.py does this automatically',
+              detail={'stored_rate': sd.sample_rate, 'played_rate': played,
+                      'cents': round(cents, 1),
+                      'playable': list(AKAI_PLAYBACK_RATES)},
+              echo=f"    [WARN] {_msg}")
     # ROOT: the ZONE's, when the zones agree, not the sample's own.
     #
     # **HARDWARE-CONFIRMED 2026-08-16 on Jan's S3000XL.** A calibration volume

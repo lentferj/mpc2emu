@@ -125,6 +125,24 @@ sides so every cell has a measured floor. **They are not yet scored**, because
 the campaign turned up four method problems that had to be settled first, and
 each of them would have produced confident wrong numbers.
 
+**AND CROSS-MACHINE, IT COVERS THREE PRESETS, NOT SIX.** The AKAI volume was
+built by a bench script that bypassed the playback-rate snap `convert.py`
+performs, so **three of the six presets played sharp** — by **+210, +786 and
++831 cents** — and those cells were comparing different pitches, not different
+conversions. Confirmed from both machines independently to within 2 cents of the
+shift predicted from the stored sample rates. **Not a converter fault:** the
+writer warns, naming the fault and its size in cents, and the script had
+suppressed its stdout for tidy output. See `TODO.md` and
+`RESOLUTION_NOTES.md` §AKAIRATESNAP; a corrected volume exists and needs a card
+crossing.
+
+**What survives:** P000, P001 and P002 cross-machine (shifts of 0, +2 and +4
+cents). **All** within-machine repeatability — both passes of a repeat pair play
+the same shifted sample on the same machine, so every floor is a real floor —
+and the three mechanism refutations that rest on it. **The preset that had been
+serving as the stable reference pair is one of the three shifted ones**, and it
+looked clean all night because nothing else about it was unusual.
+
 
 ## How the grid is scored, and why each rule is what it is
 

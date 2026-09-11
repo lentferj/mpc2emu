@@ -331,6 +331,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§E4XTAKAIENV — the envelopes are differently shaped, and the tool that found it was not looking (2026-09-11)](#e4xtakaienv-the-envelopes-are-differently-shaped-and-the-tool-that-found-it-was-not-looking-2026-09-11)
 - [§E4BSOURCEID — the two sides of the matrix came from different sources (2026-09-11)](#e4bsourceid-the-two-sides-of-the-matrix-came-from-different-sources-2026-09-11)
 - [§AKAIPRGNUMREAD — the writer's "honour the source" branch is unreachable from AKAI (2026-09-11)](#akaiprgnumread-the-writers-honour-the-source-branch-is-unreachable-from-akai-2026-09-11)
+- [§AKAIRATESNAP — the converter diagnosed it correctly and a redirect_stdout cut the wire (2026-09-11)](#akairatesnap-the-converter-diagnosed-it-correctly-and-a-redirect_stdout-cut-the-wire-2026-09-11)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -31683,4 +31684,62 @@ that — PRGNUM 40-45 and 50-55 with a gap — so it is a ready-made fixture, an
 **the fixture is why this matters**: the writer's honour-the-source branch has
 never been exercised by any AKAI source, so it is untested code reachable only
 from formats that are not AKAI.
+
+---
+
+## §AKAIRATESNAP — the converter diagnosed it correctly and a redirect_stdout cut the wire (2026-09-11)
+
+**TODO:** "The FXPATHS test volume plays 3 of 6 presets sharp".
+
+**Fixed in code; the volume rebuild needs a card crossing.**
+
+**The rule for bench scripts, stated first because it is the whole lesson:**
+**never wrap a converter call in `contextlib.redirect_stdout` in a script whose
+output you then act on.** If a build is too noisy, collect diagnostics with
+`models.diagnostics.collect()` and print a summary — that keeps the records and
+loses only the formatting.
+
+**What to do when calling a writer directly.** `build_akai_volume` does not
+resample, by design (`writers/akai_s3000_writer.py`: *"Resampling is a
+processor's job and doing it here would hide the problem from every other output
+path"*). So any direct caller must do the snap itself, the way `convert.py` does
+at its lines 1346-1363:
+
+```python
+from writers.akai_s3000_writer import akai_target_rate, AKAI_PLAYBACK_RATES
+from processors.resampler import resample_to_rate
+for i, s in enumerate(samples):
+    if s.sample_rate in AKAI_PLAYBACK_RATES:
+        continue
+    tgt = akai_target_rate(s.sample_rate)
+    out = resample_to_rate(s, tgt, allow_upsample=True)
+    if out.sample_rate != tgt:          # VERIFY -- see below
+        raise SystemExit(f"{s.name!r} did not resample: still {out.sample_rate}")
+    samples[i] = out
+```
+
+**`resample_to_rate` has silently returned its input unchanged for upsamples
+before**, and `convert.py` carries a comment about it: an earlier version
+counted what it *tried* and printed "31 sample(s) snapped" while 31 samples went
+to the writer at 27777 Hz. Check the result, not the request.
+
+**VERIFY A REBUILD BY FRAME COUNT, NOT BY THE RATE FIELD.** Both the broken and
+the corrected image report **44100 Hz for every sample** — the bug was that the
+rate field was *relabelled* while the data was untouched, so the field is the one
+thing that looks right in both. The discriminator is length: the corrected image's
+frames are longer by exactly the rate ratio (1.5750 for a 28000 Hz source, 1.1290
+for 39062, 1.6164 and 1.5908 for two others).
+
+**Why the warning did not help, and what changed.** It was a bare `print`. It is
+now `_diag(_W, 'AKAI_SAMPLE_RATE_UNPLAYABLE', ..., content_lost=True, echo=...)`,
+so the record reaches the diagnostic sinks wherever stdout points while the
+printed line stays byte-identical. `cents` is in the detail, because on the
+volume that exposed this the shifts ran **+2 to +831 cents** — three inaudible,
+three ruinous — and a report without the magnitude cannot be triaged.
+
+**And keep the broken artefact.** `~/temp/HD_fxpaths.img` is the exact content
+that was on the card for the 2026-09-11 captures. The corrected build goes to
+`HD_fxpaths_v2.img`. Overwriting the original would leave every capture
+describing an image that no longer exists — the measurements are still valid
+measurements *of that volume*, and that volume has to remain readable.
 

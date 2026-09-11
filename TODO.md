@@ -243,6 +243,77 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 
 ---
 
+## The FXPATHS test volume plays 3 of 6 presets sharp — my build script, not the converter (2026-09-11)
+
+**Status: CAUSE FOUND, corrected volume built, awaiting a card crossing.**
+
+`~/temp/HD_fxpaths.img` — the AKAI side of the 5x5 grid campaign — was built by
+a bench script that calls `build_akai_volume` **directly**, bypassing the
+playback-rate snap `convert.py` performs at its lines 1346-1363. The S3000XL
+plays **22050 and 44100 only**; anything else is relabelled and sounds at the
+wrong pitch.
+
+| preset | source rates | shift | effect |
+|---|---|---|---|
+| P000 El Meano | 44100 | +0 cents | clean |
+| P001 Air Heed | 44053, 44100 | +2 cents | negligible |
+| P002 Synth Bass | 44001 | +4 cents | negligible |
+| P003 Rez Play | 27284, 27721, 39062 | **+831 cents** | unusable |
+| P004 OBX BP Sweep | 39062 | **+210 cents** | unusable |
+| P005 Mystery Moog | 28000 | **+786 cents** | unusable |
+
+**Confirmed independently from both machines.** `eosed` measured the E4XT's two
+P005 layers at 174.73 and 130.83 Hz and the AKAI's at 275.39 and 205.81, giving
+**+788.1 and +784.4 cents against the +786.4 predicted** from the stored rate —
+two series, two machines, within 2 cents of a number derived from a file. A
+"different modulation rate" observation of +791.9 cents was the same shift a
+third time.
+
+**THE CONVERTER IS NOT AT FAULT, AND THE WARNING EXISTED.** The writer emits,
+once per sample: *"stored at 28000 Hz, which the S3000XL cannot play. It will
+sound at 44100 Hz -- +786 cents. Resample to one of (22050, 44100) first
+(convert.py does this)."* **The bench script wrapped the call in
+`contextlib.redirect_stdout(io.StringIO())` for tidy output and threw all
+fifteen of those away.** Two sibling sessions then spent an hour recovering the
+fault from the audio of two machines, having first concluded the converter was
+broken.
+
+**Every other failure this session was a guard that did not exist, did not fire,
+or fired on the wrong thing. This is the one where the system diagnosed itself
+correctly and was not allowed to say so.**
+
+**Fixed in code 2026-09-11:** the warning is now a diagnostic
+(`AKAI_SAMPLE_RATE_UNPLAYABLE`, `content_lost=True`, carrying `cents`) with
+`echo=` preserving the printed line byte-for-byte. **A record reaches the
+diagnostic sinks wherever stdout points**, so a caller cannot silence it by
+accident. Two regression tests assert exactly that, under
+`redirect_stdout`. `cents` is in the detail because +2 and +831 both read as
+"cannot be played" and only one of them matters.
+
+**Consequences for the campaign, agreed with `eosed` and `s3ked-47`:**
+
+- **Cross-machine band residuals are valid for three presets only** — P000, P001,
+  P002. P003/P004/P005 were comparing different pitches.
+- **All within-machine repeatability work survives**: both passes of a repeat
+  pair play the same shifted sample on the same machine, so every floor measured
+  is a real floor. So do the three mechanism refutations (unrouted LFO, shared
+  sample, chorus), which were within-machine.
+- **P004 was the stable reference pair** and is shifted 210 cents. It looked
+  clean all night because nothing else about it was unusual.
+- **The layer structure survives conversion intact** — `eosed` retracted an
+  earlier "E4XT one layer, AKAI two" after finding they had searched a fourth
+  *above* the fundamental where the second layer sits a fourth *below*.
+
+**Status/next:** corrected volume at **`~/temp/HD_fxpaths_v2.img`**, built with
+the snap in place and verified by frame count rather than by the rate field —
+the rate field reads 44100 in *both* images, which is precisely why relabelling
+was invisible. Ratios match exactly (1.5750 for the 28000 Hz set, 1.1290 for
+39062, 1.6164 and 1.5908 for the two M12 samples). The original is **kept
+deliberately**: it is the exact content measured on 2026-09-11, and overwriting
+it would leave the captures describing an image that no longer exists.
+**Blocked on:** a card crossing to put v2 on the AKAI, then re-capture P003,
+P004 and P005.
+
 ## E4XT and AKAI envelopes are differently SHAPED — 1 to 3.5 s apart (OPEN 2026-09-11)
 
 Measured on the 5x5 grid campaign, 2026-09-11, by `eosed`'s `pickwin` across
