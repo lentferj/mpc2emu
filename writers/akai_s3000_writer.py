@@ -31,6 +31,7 @@ obviously broken. Every default below is the one the format documentation
 lists, so an untouched field means "as the sampler would have made it".
 """
 
+import copy as _copy
 import hashlib
 import math
 import struct
@@ -2339,6 +2340,16 @@ def _filter2_plan(voice):
     return (mode, fil2fr, 0, keep_f1)
 
 
+#: What FIL2FR gets when filter 2 is OFF. Its own constant rather than a direct
+#: use of `AKAI_FIL2FR_TRANSPARENT`, so the golden-hash fixture can pin this one
+#: value back to akaiutil's 0 without also re-pointing the board-RELEASE
+#: comparison that reads the same number for a different purpose. One name, two
+#: meanings, is how a test fixture silently changes a code path it was not aimed
+#: at -- and the release path is only dormant in those tests by luck of them
+#: building with the board off.
+_FIL2FR_OFF_DEFAULT = AKAI_FIL2FR_TRANSPARENT
+
+
 def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
               voice=None, dead_key_ranges=None, ib304f: bool = False,
               probe: bool = False) -> bytearray:
@@ -2526,6 +2537,28 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
               remedy='enable IB-304F output if the target machine has the board',
               detail={'cli_flag': '--akai-ib304f',
                       'filter_type': getattr(voice, 'filter_type', 0)})
+
+    # FILTER 2 OFF MEANS FIL2FR 99, NOT 0 -- corrected 2026-09-11 from the corpus.
+    #
+    # The two paths disagreed by exactly this byte. With the board the release
+    # logic above leaves FIL2FR at 99 (the measured bypass) while clearing
+    # LSI2_ON/FLT2MODE/FLT2Q; without the board nothing wrote it at all, so it
+    # kept the buffer's 0 -- which is the SHUT end of the range, not the open
+    # one. Two conversions of one wide-open source therefore differed in a byte
+    # that should have been identical.
+    #
+    # MEASURED over 43 genuine discs, 25,045 keygroups: of the 20,177 with
+    # LSI2_ON = 0, **98.1% carry FIL2FR 99** and only 1.1% carry 0. So 99 is
+    # what the machine's own authoring tools write for a disabled filter 2, and
+    # our no-board path was the outlier.
+    #
+    # It also fails safe. `LSI2_ON` is not a reliable DETECTOR (it reads back 1
+    # with no board fitted), so relying on it to make FIL2FR inert is an
+    # inference rather than a measurement. If the byte is ever honoured, 99 is
+    # transparent and 0 is a closed filter -- the difference between inaudible
+    # and silent.
+    if not k[AKAI_LSI2_ON_OFFSET]:
+        k[AKAI_FIL2FR_OFFSET] = _FIL2FR_OFF_DEFAULT
 
     _cut = getattr(voice, 'filter_cutoff', None) if voice is not None else None
     if (_f2 is not None and _f2[3] and _f2[0] == AKAI_FLT2MODE_LP
@@ -3766,6 +3799,24 @@ def build_akai_volume(bank: Bank, bank_name: Optional[str] = None,
                       else preset.name), taken_prog, 'PROGRAM')
         # Zones address samples by name, so they must use the AKAI-shortened
         # ones or the program will reference files that were never written.
+        #
+        # ON A COPY -- this used to rewrite the CALLER'S zones, which made
+        # `build_akai_volume` non-idempotent: a second call on the same Bank saw
+        # zones already renamed to the shortened form while `_zone_roots` above
+        # had been keyed from them and `_chosen_root` still looked up
+        # `sd.name`. The lookup missed, every sample fell back to its own
+        # `root_note`, and the writer then compensated with per-zone tune --
+        # measured on a two-zone preset as roots 64/100 collapsing to 60/60 with
+        # tunes of -4 and **-40 semitones**. Same sounding pitch, absurd bytes,
+        # and only on the second build.
+        #
+        # It did not reach the card: the bench script that builds the board-on
+        # and board-off halves gives each call its OWN preset copies, so the
+        # second call's zones were never the first call's. Verified on the
+        # volume -- FX and NB carry identical zone tunes and correct per-zone
+        # roots. That is luck about how the caller was written, not a property
+        # of this function, which is why it is fixed here rather than there.
+        preset = _copy.deepcopy(preset)
         for v in preset.voices:
             for z in v.zones:
                 z.sample_name = name_map.get(z.sample_name, z.sample_name)
