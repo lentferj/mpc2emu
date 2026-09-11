@@ -343,6 +343,62 @@ is two clean populations rather than one gradient. At −30 dB the usable count 
 
 **5 of 58 should have stopped the table before the level offsets did.**
 
+### What the level offset probably IS: the filter
+
+Three facts from the files, the third decisive.
+
+**1. The corners are fixed at 133–164 Hz and the grid's fundamentals span 33 →
+784 Hz.** Identical on all three swinging presets:
+
+| note | fund | E4B cutoff | oct past | AKAI filter 1 | oct past |
+|---|---|---|---|---|---|
+| 24 | 33 Hz | 133 Hz | **−2.02** | 159 Hz | −2.29 |
+| 52 | 165 | 133 | +0.31 | 159 | +0.05 |
+| 79 | 784 | 133 | **+2.56** | 159 | +2.30 |
+
+**The note crosses the corner between 52 and 65.** Below it the filter is
+irrelevant; above it the filter dominates. The filter's contribution to broadband
+level therefore varies across the grid by **4.6 octaves of relative position** —
+over 100 dB of range at 24 dB/oct.
+
+**2. So a CONSTANT corner error produces a NOTE-DEPENDENT level difference.**
+159 Hz against 133 Hz is 0.26 octaves. Worth nothing in the passband, worth the
+slope times the offset in the stopband: **~0 dB at note 24 and ~6 dB at note 79,
+from one constant.**
+
+**3. And the filter sweeps 3–7 octaves during the note.** `filter_env_cents`
+3707 / 4754 / 8316 over decays of 3.24 / 5.51 / 6.13 s. **The corner moves through
+the fundamental while the window sits on it**, so a small difference in sweep rate
+or depth becomes tens of dB — and a different number at every note, because the
+fundamental being swept past differs.
+
+**That accounts for all four things that defeated the measurement:** the 30 dB
+magnitudes, the note-dependence within one preset, the sign reversals (the sweep
+crosses the fundamental in different directions at different notes), and why
+per-machine window anchoring did not help — **the level is a function of where the
+filter is, and the filter is moving.**
+
+### So the conclusion is "not on this material", which is more useful
+
+A band residual needs the filter to **shape the spectrum without dominating the
+broadband level**. These six presets have their corner 2+ octaves below most of the
+grid with a 3–7 octave sweep in flight, so the quantity being measured swamps the
+quantity used to normalise. **That is a material-selection failure**: the presets
+were chosen for filter-shape coverage without checking where their corners sat
+relative to the test notes.
+
+**For the next campaign, specifically:** choose material whose corner sits **near
+or above** the grid's fundamentals, and whose filter envelope is **shallow or
+finished** before the analysis window.
+
+**Honesty note.** Facts 1–3 are read straight from the files and the arithmetic
+follows. **The preset-by-preset split is partly post-hoc** — the three swinging
+presets have sweeps in flight during their windows (3.24–6.13 s) while P002's is
+finished (0.04 s) and P001's has barely begun (7.29 s), but **P000's 1.92 s sweep
+should be in flight and it shows a constant offset**; it fits only once you note its
+window sits at 4.75 s, by which time its sweep is done. That explanation was found
+after seeing which presets misbehaved.
+
 ### Next step, and it is free
 
 Anchor each cell's window to **that machine's own envelope**, as was done for the
