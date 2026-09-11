@@ -562,6 +562,42 @@ but could not deliver more. **The writer now reports it** —
 `wanted` in the detail because `written` alone cannot tell a 1.06x shortfall
 from a 5.93x when both are 99.
 
+**QUANTITATIVE PREDICTION FILED 2026-09-11 11:14, before the result.** Modelling
+both sides as rate machines decaying linearly in dB to sustain, the predicted
+AKAI-minus-E4XT level (negative = AKAI already lower) is:
+
+| preset | E4XT dec | span | E4XT dB/s | DEC1 | AKAI dB/s | t=1.0 s | t=2.0 s |
+|---|---|---|---|---|---|---|---|
+| P000 | 19.61 s | 4.9 | 0.25 | 99 | 1.47 | −1.23 | −2.45 |
+| P001 | 13.83 | 7.9 | 0.57 | 99 | 1.47 | −0.90 | **−1.81** |
+| P002 | 10.48 | 14.6 | 1.39 | 99 | 1.47 | −0.08 | **−0.17** |
+| P003 | 8.69 | 10.3 | 1.19 | 99 | 1.47 | −0.29 | −0.57 |
+| TD1 | 1.17 | 13.3 | 11.40 | 78 | 11.48 | −0.08 | +0.00 |
+| TD2 | 1.28 | 24.9 | 19.48 | 73 | 18.72 | +0.76 | +0.00 |
+
+**The discriminator is P001 against P002 — a factor of ten — and both are in
+captures already taken, so it needs no card.** They are also the only two presets
+whose argmins are identified on both sides, which is luck rather than design.
+**If P001's decay phase does not show the AKAI ~1.8 dB lower at 2 s while P002
+shows ~0.2 dB, the explanation fails on the statistic that should show it most
+directly and is withdrawn.**
+
+**TD1/TD2 are a WEAK test, by construction, and that was not seen when they were
+chosen.** Selecting for `DECAY1` *inside* the window means the written rate
+is nearly the requested rate, so the predicted divergence is ≤0.08 dB on TD1 and
+**exactly zero after t ≈ 1.3 s** on both, each having reached sustain. They are a
+negative control, not the positive test. Two consequences if they are analysed:
+all their signal is in the first ~1.3 s at ≤0.8 dB, so a late 1 s window sees
+nothing by construction; and **TD2's predicted divergence is POSITIVE** (`DECAY1`
+73 delivers 18.72 dB/s where the source asks 19.48), so a negative result there
+means the sign is wrong — a sharper check of the law than its magnitude.
+
+**Three load-bearing assumptions, two of them modelled rather than measured:**
+the AKAI is a measured rate machine (r² 0.99998) but **the E4XT is only modelled
+as one by our own writer**; the span comes from our sustain conversion, so a
+wrong sustain byte scales the prediction; and this is voice 0 only. A trajectory
+with the right shape and wrong depth points at the span, not at `DECAY1`.
+
 **Remaining candidates for the unexplained part:** the attack law (s3ked's
 varying-span test found ATTAK1 fits neither a rate nor a duration, so there is
 nothing to convert with and the writer uses a fixed default); the AKAI's
