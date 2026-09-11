@@ -241,8 +241,38 @@ presets** — and the cause is largely ours: `DECAY1` is an 0..99 field, the fou
 presets with a genuine decay stage all wanted **more** than 99 (117.2, 108.7,
 101.2, 99.6), and the resulting shortfall — 5.93x, 2.58x, 1.24x, 1.06x too fast
 — **orders those five gaps exactly**. The two presets whose envelopes agree best
-are the two with no decay stage at all. Held as suggestive: n=6, ordering known
-first, and the largest point is confounded by a deep filter envelope.
+are the two with no decay stage at all.
+
+**CUT DOWN TWICE on 2026-09-11, and the second cut is the serious one.** First,
+three of the six presets were pitch-shifted by a bench-script fault, so only
+three were comparable cross-machine at all. Then the "gap" turned out to be a
+difference of **argmins** — each machine's own flattest window — and **an argmin
+is only meaningful if it is separated from its alternatives**. Measured: only
+**two of six presets have a well-identified flattest window on both sides**. For
+the other four, at least one machine's argmin is drawn from a set of candidates
+spanning 1.0–1.5 s, so a gap of that order is indistinguishable from noise.
+**Five `ENVELOPE FINDING` flags were reported; two survive.**
+
+So the ordering now rests on **two usable points** — 2.58× → 3.00 s and 1.06× →
+1.00 s, which still order correctly — and the largest point (5.93× → 3.50 s) is
+**both** argmin-unidentified over 1.25 s **and** confounded by a −8936 cent
+filter envelope. It is the weakest, not the strongest.
+
+The candidate-set threshold (within 10% of best) is a judgement, not a test:
+there is no measured noise figure for the tilt statistic, so the verdicts are a
+ranking. The honest form is best-versus-second directly.
+
+**The replacement statistic has no argmin in it:** compare the two machines'
+**onset-aligned level trajectories over the decay phase**, which is where
+`DECAY1` acts and where they can actually differ. It also works on the
+flat-landscape presets where the gap statistic cannot.
+
+**One distinction worth keeping, because it bounds the damage:** an unidentified
+argmin is **harmless for the residual** and **fatal for the envelope gap**. The
+residual applies *one* window to *both* machines, so a flat landscape means the
+choice barely matters; the gap is the distance between each side's *own* argmin,
+which is exactly what a flat landscape destroys. The distributed windows stand;
+the gaps do not.
 **A target limit, not a defect** — the field has no range left — and the writer
 now says so (`AKAI_DECAY1_SATURATED`). The filter path is now HW-verified in
 both directions; the **envelope** rows in this document have never been better

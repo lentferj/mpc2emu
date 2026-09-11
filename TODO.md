@@ -502,8 +502,30 @@ at all**. Four different envelopes collapsed onto one byte.
 not "the machines disagree by 1 to 3.5 s".** Same numbers, a different reading
 for anyone deciding whether to trust the converter.
 
-**AND THE GAP ITSELF MAY BE PARTLY ARGMIN NOISE — found 2026-09-11 while
-designing the test meant to confirm it.** The "gap" is the distance between the
+**AND THE GAP IS PARTLY ARGMIN NOISE — MEASURED 2026-09-11, four of six flags
+fall.** Candidates within 10% of the best, and the time span they cover:
+
+| preset | E4XT | AKAI | verdict |
+|---|---|---|---|
+| P000 | 3 within, span 1.25 s | 1, span 0 | unidentified |
+| P001 | 1, span 0 | 1, span 0 | **both identified** |
+| P002 | 1, span 0 | 1, span 0 | **both identified** |
+| P003 | 1, span 0 | 3 within, span 1.25 s | unidentified |
+| P004 | 3 within, span 1.50 s | 2 within, span 1.25 s | unidentified |
+| P005 | 1, span 0 | 2 within, span 1.00 s | unidentified |
+
+**Five `ENVELOPE FINDING` flags were reported; two survive.** The 10% threshold
+is a judgement — there is no measured noise figure for the tilt statistic, so
+treat it as a ranking and prefer best-versus-second directly (P001 E4XT 2.68 vs
+3.00; P004 E4XT 3.12 vs 3.28).
+
+**It bounds differently for the two statistics**, which is what limits the
+damage: an unidentified argmin is **harmless for the residual** (one window
+applied to *both* machines, so the choice barely matters) and **fatal for the
+gap** (the distance between each side's *own* argmin). The distributed windows
+stand; the gaps do not.
+
+**Found while designing the test meant to confirm it.** The "gap" is the distance between the
 two machines' *flattest* windows, i.e. the argmin of tilt on each side. **An
 argmin is only meaningful if it is separated from its alternatives.** A preset
 that reaches steady sustain and then holds has near-zero tilt across every
