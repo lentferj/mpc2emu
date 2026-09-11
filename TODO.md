@@ -502,9 +502,32 @@ at all**. Four different envelopes collapsed onto one byte.
 not "the machines disagree by 1 to 3.5 s".** Same numbers, a different reading
 for anyone deciding whether to trust the converter.
 
+**AND THE GAP ITSELF MAY BE PARTLY ARGMIN NOISE — found 2026-09-11 while
+designing the test meant to confirm it.** The "gap" is the distance between the
+two machines' *flattest* windows, i.e. the argmin of tilt on each side. **An
+argmin is only meaningful if it is separated from its alternatives.** A preset
+that reaches steady sustain and then holds has near-zero tilt across every
+candidate window past the decay, so the argmin is picked out of a flat landscape
+by noise and **the two machines can report windows seconds apart while agreeing
+perfectly.**
+
+That is a false gap, and it would read as a clean result in either direction —
+it would have falsified this very explanation on TD1/TD2, whose envelopes hold
+flat for ~4.8 s of a 6 s hold, and it may be inflating the 1–3.5 s spread on the
+original six. **The diagnostic is cheap and comes from data already captured:
+report the SPREAD of tilt across all candidate windows alongside the chosen one,
+or the count of candidates within noise of the winner.** If a dozen sit within
+0.05 dB, no gap computed from that argmin means anything.
+
+For a decay-to-sustain preset the better statistic has no argmin in it at all:
+compare the two machines' level trajectories over the **decay phase**,
+onset-aligned, which is where `DECAY1` acts and where the machines can actually
+differ.
+
 **Held as suggestive, not established:** n=6, the gaps were known before the
-shortfall was computed, and Pearson is only +0.730 — the ordering agrees, the
-scale does not, and there is no account of why 1.24x should cost 2.75 s. El
+shortfall was computed, Pearson is only +0.730 — the ordering agrees, the scale
+does not, and there is no account of why 1.24x should cost 2.75 s — and now the
+separation of each argmin is unmeasured. El
 Meano is also confounded by `filter_env_cents = -8936` over a 1.92 s decay, so
 part of its tilt is the **filter** sweeping rather than the amplifier.
 **Falsifiable form:** a preset whose `DECAY1` does not saturate should show a
