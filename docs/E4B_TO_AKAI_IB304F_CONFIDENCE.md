@@ -361,10 +361,22 @@ irrelevant; above it the filter dominates. The filter's contribution to broadban
 level therefore varies across the grid by **4.6 octaves of relative position** —
 over 100 dB of range at 24 dB/oct.
 
-**2. So a CONSTANT corner error produces a NOTE-DEPENDENT level difference.**
-159 Hz against 133 Hz is 0.26 octaves. Worth nothing in the passband, worth the
-slope times the offset in the stopband: **~0 dB at note 24 and ~6 dB at note 79,
-from one constant.**
+**2. ~~So a CONSTANT corner error produces a NOTE-DEPENDENT level difference.~~
+REFUTED 2026-09-11, on direction.** The claim was: 159 Hz against 133 Hz is 0.26
+octaves, worth nothing in the passband and slope-times-offset in the stopband, so
+~0 dB at note 24 and ~6 dB at note 79. **The measurement goes the other way on all
+three presets:**
+
+| note | oct past 133 Hz | P003 | P004 | P005 |
+|---|---|---|---|---|
+| 24 | −2.02 | **+32.09** | **+31.18** | +10.03 |
+| 52 | +0.31 | +25.53 | +2.77 | +7.22 |
+| 79 | **+2.56** | **−3.55** | −0.63 | **−18.26** |
+
+Pearson(offset, octaves past corner) = **−0.840 / −0.894 / −0.850**. The offset is
+**largest BELOW the corner** and smallest or sign-reversed above it — the opposite
+of the prediction, strongly and consistently. **A constant corner error is not the
+mechanism.**
 
 **3. And the filter sweeps 3–7 octaves during the note.** `filter_env_cents`
 3707 / 4754 / 8316 over decays of 3.24 / 5.51 / 6.13 s. **The corner moves through
@@ -372,11 +384,24 @@ the fundamental while the window sits on it**, so a small difference in sweep ra
 or depth becomes tens of dB — and a different number at every note, because the
 fundamental being swept past differs.
 
-**That accounts for all four things that defeated the measurement:** the 30 dB
-magnitudes, the note-dependence within one preset, the sign reversals (the sweep
-crosses the fundamental in different directions at different notes), and why
-per-machine window anchoring did not help — **the level is a function of where the
-filter is, and the filter is moving.**
+**Facts 1 and 3 together still account for the scale and the irregularity**, but
+**not for any particular form** — and that is the correction fact 2's failure
+forces. A *sweeping* corner crosses each note's fundamental at a **different time**,
+and the window catches each crossing at a different point, so there is no monotone
+relationship to expect in the first place. The monotone-in-octaves-past-corner
+shape was fact 2's prediction, not fact 3's.
+
+So: **the offset is dominated by where the sweeping filter sits relative to the
+fundamental when the window opens — a different number for every note, with no
+monotone form.** That is consistent with the conclusion below and it is the part
+that survives. It also explains why per-machine window anchoring did not help:
+the level is a function of where the *filter* is, and the filter is moving.
+
+**One observation, not a mechanism:** the offset being largest *below* the corner
+points at the **low-frequency side** of the shape, and two known weaknesses sit
+there — the bandpass-resonance row that knowingly borrows the highpass curve, and
+the highpass pole count that was wrong in this converter until 2026-09-10. Offered
+as a place to look, not as an account.
 
 ### So the conclusion is "not on this material", which is more useful
 
