@@ -319,12 +319,12 @@ wrong pitch.
 
 | preset | source rates | shift | effect |
 |---|---|---|---|
-| P000 El Meano | 44100 | +0 cents | clean |
-| P001 Air Heed | 44053, 44100 | +2 cents | negligible |
-| P002 Synth Bass | 44001 | +4 cents | negligible |
-| P003 Rez Play | 27284, 27721, 39062 | **+831 cents** | unusable |
-| P004 OBX BP Sweep | 39062 | **+210 cents** | unusable |
-| P005 Mystery Moog | 28000 | **+786 cents** | unusable |
+| P000 | 44100 | +0 cents | clean |
+| P001 | 44053, 44100 | +2 cents | negligible |
+| P002 | 44001 | +4 cents | negligible |
+| P003 | 27284, 27721, 39062 | **+831 cents** | unusable |
+| P004 | 39062 | **+210 cents** | unusable |
+| P005 | 28000 | **+786 cents** | unusable |
 
 **Confirmed independently from both machines.** `eosed` measured the E4XT's two
 P005 layers at 174.73 and 130.83 Hz and the AKAI's at 275.39 and 205.81, giving
@@ -433,12 +433,12 @@ field and **four of the six presets wanted more than 99**:
 
 | preset | source decay | DECAY1 wanted | written | decays X too fast | gap |
 |---|---|---|---|---|---|
-| El Meano | 19.61 s | 117.2 | 99 | **5.93** | 3.50 s |
-| Air Heed | 13.83 s | 108.7 | 99 | 2.58 | 3.00 s |
-| Rez Play | 8.69 s | 101.2 | 99 | 1.24 | 2.75 s |
-| Synth Bass | 10.48 s | 99.6 | 99 | 1.06 | 1.00 s |
-| OBX BP Sweep | no decay stage | — | 50 | 1.00 | 1.00 s |
-| Mystery Moog | no decay stage | — | 50 | 1.00 | 0.00 s |
+| P000 | 19.61 s | 117.2 | 99 | **5.93** | 3.50 s |
+| P001 | 13.83 s | 108.7 | 99 | 2.58 | 3.00 s |
+| P003 | 8.69 s | 101.2 | 99 | 1.24 | 2.75 s |
+| P002 | 10.48 s | 99.6 | 99 | 1.06 | 1.00 s |
+| P004 | no decay stage | — | 50 | 1.00 | 1.00 s |
+| P005 | no decay stage | — | 50 | 1.00 | 0.00 s |
 
 **Exact rank agreement on all six, zero free parameters, Spearman +0.829** —
 and the two presets whose envelopes agree best are the two with **no decay stage
