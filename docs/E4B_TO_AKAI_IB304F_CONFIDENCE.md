@@ -217,9 +217,16 @@ needs a card crossing. See `TODO.md` §E4BSOURCEID.
 
 ### A separate finding the grid produced, larger than anything it was scoring
 
-**The two machines' envelopes are differently shaped.** The point in a 6 s hold
-where each machine's output is flattest differs by **1 to 3.5 seconds on five of
-six presets** — 3.5 s out of 6 s on one. The filter path is now HW-verified in
+**Our decay times saturate, by up to 5.9x.** The point in a 6 s hold where each
+machine's output is flattest differs by **1 to 3.5 seconds on five of six
+presets** — and the cause is largely ours: `DECAY1` is an 0..99 field, the four
+presets with a genuine decay stage all wanted **more** than 99 (117.2, 108.7,
+101.2, 99.6), and the resulting shortfall — 5.93x, 2.58x, 1.24x, 1.06x too fast
+— **orders those five gaps exactly**. The two presets whose envelopes agree best
+are the two with no decay stage at all. Held as suggestive: n=6, ordering known
+first, and the largest point is confounded by a deep filter envelope.
+**A target limit, not a defect** — the field has no range left — and the writer
+now says so (`AKAI_DECAY1_SATURATED`). The filter path is now HW-verified in
 both directions; the **envelope** rows in this document have never been better
 than DERIVED. A disagreement of that size in where the output settles is more
 audible than any corner-frequency error here. It was found as a by-product by a

@@ -31527,7 +31527,34 @@ s3ked's diagnosis: *hardware was the tool that had been working.*
 
 **TODO:** "E4XT and AKAI envelopes are differently SHAPED — 1 to 3.5 s apart".
 
-**How to fix it — in order, because each step can make the next unnecessary.**
+**MOSTLY ANSWERED THE SAME DAY, and the answer is that it is ours.** `DECAY1`
+is an 0..99 field; four of the six presets wanted 117.2, 108.7, 101.2 and 99.6.
+The resulting shortfall (5.93x, 2.58x, 1.24x, 1.06x too fast) **orders the
+measured gaps exactly**, and the two presets that agree best have no decay stage
+at all. A target limit, not a defect — the field has no range left, so it
+**reports** (`AKAI_DECAY1_SATURATED`, carrying `wanted`, since `written` is 99
+for all four and the factor is the whole loss). Held as suggestive: n=6, the
+gaps were known first, and the largest point is confounded by a deep filter
+envelope. Steps 1 and 2 below remain worth doing for the residual.
+
+**Two process errors on the way, both found by running rather than by green
+tests, and both the same shape as earlier failures the same night.**
+
+- **The guard went into the wrong branch first.** It was added to the
+  carried-rate path, tests passed, and it fired on **none** of the six: E4B
+  sources leave `decay_rate_db_per_s` unset, so they all take the seconds path.
+  A guard in one of two branches does not fire on the material that motivated
+  it. The fix moved it into `_rate_law_value`, which both paths share.
+- **The sustain encoder was reimplemented instead of called.** The first table
+  had sustain bytes 56/39/19/30 where the card holds 91/86/75/82 — `round(s*99)`
+  against the writer's dB law — so every "wanted DECAY1" in that pass was
+  computed over the wrong span. Caught only by checking the computed bytes
+  against the bytes actually in the image. **Identical to reading a level off a
+  rebuilt `FXPATHS.E4B` three hours earlier: a plausible reconstruction of
+  something that could have been read directly.**
+
+**How to fix the residual — in order, because each step can make the next
+unnecessary.**
 
 1. **Separate amplifier from filter before measuring anything.** P000 carries
    `filter_env_cents = -8936` over a 1.92 s decay, so its tilt is partly the

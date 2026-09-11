@@ -271,12 +271,46 @@ bigger audible difference than any corner-frequency error that document worries
 about, and it was found by a tool written to choose analysis windows, not to
 measure envelopes.
 
-**Candidate causes, none tested.** Attack/decay/sustain-level law mismatch
-(AKAI ENV1 rate laws against EOS's); the AKAI's ENV2-to-level interaction; our
-two-stage-to-one-stage envelope reduction; and the K2000 envelope re-cycle bug
-(§KRZENVLOOP) is a reminder that a held envelope can do something other than
-hold. Note P000 also has `filter_env_cents = -8936` over a 1.92 s decay, so part
-of its tilt is the **filter** sweeping, not the amplifier.
+**LARGELY ATTRIBUTED, SAME DAY — and it is our side.** `DECAY1` is an 0..99
+field and **four of the six presets wanted more than 99**:
+
+| preset | source decay | DECAY1 wanted | written | decays X too fast | gap |
+|---|---|---|---|---|---|
+| El Meano | 19.61 s | 117.2 | 99 | **5.93** | 3.50 s |
+| Air Heed | 13.83 s | 108.7 | 99 | 2.58 | 3.00 s |
+| Rez Play | 8.69 s | 101.2 | 99 | 1.24 | 2.75 s |
+| Synth Bass | 10.48 s | 99.6 | 99 | 1.06 | 1.00 s |
+| OBX BP Sweep | no decay stage | — | 50 | 1.00 | 1.00 s |
+| Mystery Moog | no decay stage | — | 50 | 1.00 | 0.00 s |
+
+**Exact rank agreement on all six, zero free parameters, Spearman +0.829** —
+and the two presets whose envelopes agree best are the two with **no decay stage
+at all**. Four different envelopes collapsed onto one byte.
+
+**So the honest statement of this row is "our `DECAY1` saturates by up to 5.9x",
+not "the machines disagree by 1 to 3.5 s".** Same numbers, a different reading
+for anyone deciding whether to trust the converter.
+
+**Held as suggestive, not established:** n=6, the gaps were known before the
+shortfall was computed, and Pearson is only +0.730 — the ordering agrees, the
+scale does not, and there is no account of why 1.24x should cost 2.75 s. El
+Meano is also confounded by `filter_env_cents = -8936` over a 1.92 s decay, so
+part of its tilt is the **filter** sweeping rather than the amplifier.
+**Falsifiable form:** a preset whose `DECAY1` does not saturate should show a
+small gap.
+
+**A TARGET LIMIT, NOT A BUG, AND THEREFORE NOT A BENCH ASK.** `DECAY1` has no
+range left; measuring the unfitted 86..99 region would tell us what we deliver
+but could not deliver more. **The writer now reports it** —
+`AKAI_DECAY1_SATURATED` / `AKAI_RELSE1_SATURATED`, `content_lost=True`, carrying
+`wanted` in the detail because `written` alone cannot tell a 1.06x shortfall
+from a 5.93x when both are 99.
+
+**Remaining candidates for the unexplained part:** the attack law (s3ked's
+varying-span test found ATTAK1 fits neither a rate nor a duration, so there is
+nothing to convert with and the writer uses a fixed default); the AKAI's
+ENV2-to-level interaction; our two-stage-to-one-stage reduction. §KRZENVLOOP is
+a reminder that a held envelope can do something other than hold.
 
 **Status:** open, and it should be its own row in the confidence matrix rather
 than folded into the per-cell residuals. **Blocked on:** nothing for the
