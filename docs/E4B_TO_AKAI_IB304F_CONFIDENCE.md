@@ -203,6 +203,71 @@ one-pair floor understates spread, so cells carrying one pass more easily than
 they should. Two presets have ten pairs; four have one.
 
 
+## The decay leg: a measured difference with no mechanism
+
+Measured 2026-09-11 on five comparable presets, both sides anchored to each
+machine's own measured peak, converted to **rate** because both machines are rate
+machines on decay (E4XT slopes −5.75/−5.73/−4.50/−4.68 dB/s across successive
+intervals; AKAI r² 0.99998):
+
+| preset | E4XT dB/s | AKAI dB/s | E4XT/AKAI | `DECAY1` shortfall predicted |
+|---|---|---|---|---|
+| P001 | 5.28 | 0.87 | **6.07×** | 2.58 |
+| P002 | 5.80 | 2.03 | 2.86× | 1.06 |
+| P003 | 16.87 | 10.97 | 1.54× | 1.24 |
+| P004 | 13.80 | 5.15 | 2.68× | **1.00** (no decay stage) |
+| P005 | 7.58 | 4.08 | 1.86× | **1.00** (no decay stage) |
+
+**The AKAI decays SLOWER on every preset, by 1.54× to 6.07× in rate.** Saturation
+predicts it *faster*, by the shortfall factor. **The sign is wrong before any
+magnitude is considered.**
+
+**The single cleanest refutation needs no model at all: P004 diverges 2.68× on a
+preset whose envelope does nothing.** With a flat envelope on both machines and
+the pitch now correct, a 2.68× difference cannot be an envelope difference.
+
+**A correlation exists and is not taken.** Shortfall against ratio gives Pearson
++0.916 on five points — and **−0.597** with P001 removed. One preset extreme on
+both axes, and a magnitude agreement cannot rescue a prediction pointing the other
+way.
+
+**Mechanisms eliminated from the files, none replacing it:** per-voice attack
+differences, envelope key-follow (the format has two such fields, neither on
+envelope 1, and the one that exists measured inert), sample identity, pitch-scaled
+sample decay (a 24× range across notes, r ≈ 0), loop preservation, ping-pong loop
+mode (EOS has none), finite loop repeat count (we write 9999 = hold, verified on
+the card) and playback type (reads "loop in release" on every sample).
+
+**So the honest state of the decay leg is: a large, same-sign, reproducible
+difference with no explanation.** That is recorded as a finding rather than a gap.
+
+### Two cell-level cautions that come with those numbers
+
+**Loop entry falls inside the hold at a note-dependent time**, spanning a factor of
+~500 because it is `loop_start / (rate × playback)`:
+
+```
+  P004   n24 12.688 s (never)   n38 5.652   n52 2.518   n65 1.871   n79 1.545
+  P005   n24  6.292 s (never)   n38 2.803   n52 1.998   n65 2.090   n79 1.165
+  P001   n24  0.628 s           n38 0.280   n52 0.125   n65 0.059   n79 0.026
+```
+
+A window straddling entry measures a **blend** of pre-loop decay and post-loop
+steady level, not a rate. Both machines enter at the same time, so this is not the
+between-machine difference — but affected cells are marked rather than averaged
+over.
+
+**Two of five presets are non-monotonic on both machines** (P001 and P005, the two
+two-layer presets), so those trajectories are partly measuring modulation phase.
+
+**And divergence in dB ranks the presets differently from divergence as a fraction
+of the E4XT fall** — 3.50–8.65 dB with P004 largest, against 35–84% with P001
+largest and P003 smallest. **Both columns are reported per cell** rather than one
+chosen: dB is the unit the conversion's laws are in, the fraction is what a
+listener hears relative to the sound's own level, and the matrix is not the place
+to settle that silently.
+
+
 ## Provisional: the two sides were built from different sources
 
 **This is one shared assumption under every cell, not a per-cell uncertainty,
