@@ -587,9 +587,34 @@ and that asymmetry is our conversion's doing rather than a machine difference. I
 is a live candidate for the −6.40 dB/oct cross-machine slope, alongside the
 pole-count branch.
 
-**Status:** open. **Blocked on:** nothing for a diagnostic — the silent case should
-warn today. The fix needs the assignable-matrix route measured (which source, which
-slot, what depth law), which is bench work on the AKAI.
+### HARDWARE-CONFIRMED 2026-09-11, with a positive AND a negative control
+
+Measured from captures already held, via **spectral centroid late/early** within
+the note — does the filter open as the note sounds?
+
+| preset | our envelope | E4XT late/early | AKAI late/early |
+|---|---|---|---|
+| **P004** | **dropped** | **2.57 / 3.08 / 1.48 ×** | 0.53 / 0.67 / 0.76 × |
+| **P005** | **dropped** | **2.39 / 1.62 / 1.66 ×** | 1.32 / 0.34 / 0.89 × |
+| P003 | **kept**, depth 12 | 2.90 / 2.48 / 5.88 × | **1.61 / 2.40 / 2.22 ×** |
+| P000 | none either side | 1.28 / 0.93 / 0.65 × | 1.12 / 0.82 / 0.74 × |
+| | | *(notes 38 / 52 / 65)* | |
+
+**Where we dropped the envelope, the E4XT's filter opens by 1.5–3.1× and ours does
+not** — our centroid *falls*, which is just the sample's own high-frequency decay.
+
+**The positive control is the decisive one: P003 is the preset where we DID write
+the depth (12 on 5 of 8 keygroups), and there BOTH machines open** — E4XT 2.5–5.9×,
+AKAI 1.6–2.4×. So the measurement detects a filter envelope when one is present and
+its absence when one is not, on the same rigs, the same session, the same protocol.
+
+**The negative control:** P000 has no effective envelope on either side and the two
+machines agree (1.28/0.93/0.65 against 1.12/0.82/0.74).
+
+**Status: defect HW-CONFIRMED.** **Blocked on:** nothing for a diagnostic — the
+silent case should warn today. The fix needs the assignable-matrix route measured
+(`MODVFLT2_1-3`: which source, which slot, what depth law), which is bench work on
+the AKAI.
 
 ## E4XT and AKAI envelopes are differently SHAPED — 1 to 3.5 s apart (OPEN 2026-09-11)
 
