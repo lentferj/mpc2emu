@@ -111,29 +111,142 @@ something.
 six without two filter modes layered on every note — clearing `LSI2_ON` alone and
 leaving filter 1 untouched.
 
-### And nothing has been measured across key or velocity
+### The key/velocity grid — CAPTURED on both sides 2026-09-11, not yet scored
 
-Every capture so far is **one note at one velocity**. These programs span
-**5.6 to 7.0 octaves**, carry key-follow on some keygroups and not others, and
-differ between `FX` and `NB` in velocity depth. **A single point cannot
-characterise any of that**, and comparing two programs at one point compares two
-surfaces at one point.
+Until 2026-09-11 every capture was **one note at one velocity**, against
+programs spanning **5.6 to 7.0 octaves** with key-follow on some keygroups and
+not others. A single point cannot characterise that, and comparing two programs
+at one point compares two surfaces at one point.
 
-**The honest minimum is a grid on both sides** — the E4XT source and the AKAI
-conversion, five octaves by five velocities — and neither side has had one.
+**Both grids now exist** — six presets, five notes (24/38/52/65/79), five
+velocities (16/48/80/104/127), on the E4XT (`eosed`) and on our AKAI conversion
+of the same material (`s3ked-47`), plus a repeat pass at velocity 80 on both
+sides so every cell has a measured floor. **They are not yet scored**, because
+the campaign turned up four method problems that had to be settled first, and
+each of them would have produced confident wrong numbers.
 
 
-## The three things most worth knowing
+## How the grid is scored, and why each rule is what it is
 
-**1. The biggest gap is not the smallest number.** `FIL2FR` 95–98 is 0.3 % and
+Settled 2026-09-11 with `eosed`. These are methodological decisions with dates
+and reasons, not details.
+
+**Floors are per cell — preset × note × band — never per preset.** One preset's
+repeatability varied **13×** with window position, and within one preset at
+matched level the spread ran 0.283 to 1.194 dB across five notes. A single noise
+floor for the matrix would be wrong in at least three distinct ways:
+analysis-path noise, level-dependent noise in bands below about −40 dB, and
+per-preset instability nobody has explained.
+
+**Exclusion is level-relative, not frequency-relative.** Bands more than ~12 dB
+below *that note's own peak band* are indeterminate. The effect first read as
+"confined to low frequency" and was confined to **low level** — for a note whose
+fundamental is 349 Hz, the 20–80 Hz bands sit ~40 dB down, and *low frequency*
+and *low level* were confounded in every earlier statement about it.
+
+**`indeterminate` is a verdict, printed as such, never folded into
+`agreeing`.** A cell whose floor exceeds its residual cannot fail, and **a cell
+that cannot fail must not be allowed to pass.**
+
+**The verdict uses the median floor; the max is printed beside it.** Where a
+cell's max floor exceeds its residual but its median does not, the stricter
+reading wins — the window was chosen by a rule that does not optimise the max.
+
+**Windows are chosen by within-pass spectral drift, not by level tilt and not by
+repeat-pair difference.** All three were tried:
+
+| rule | quantity | independent of the floor? | tracks what the residual sees? |
+|------|----------|---------------------------|-------------------------------|
+| level tilt | smoothed level envelope, within pass | yes | **no** |
+| repeat-pair | spectrum, across passes | **no** | yes |
+| **drift (adopted)** | spectrum, within one pass | yes | yes |
+
+Level tilt can be flat while the spectrum moves as fast as a filter sweeps, and
+on one preset it selected that preset's **worst** available window. Repeat-pair
+selection was rejected because **the repeat pair is the floor** — minimising it
+over ~20 candidate windows biases the floor downward and systematically
+overstates significance, which would make the matrix manufacture conversion
+findings.
+
+**Drift scores rank windows; they are not floors and must not be printed next to
+residuals.** One preset scores 13.62 dB of within-window drift and repeats to
+0.056 dB, because **a deterministic sweep produces large drift and repeats
+perfectly.** Drift predicts poor repeatability only in combination with timing
+jitter (±5 ms here).
+
+**In honesty about how much the drift rule bought:** it fixes the one preset the
+diagnosis was about (0.971 → 0.119 dB median) and changes every other preset by
+≤0.023 dB, at or below the repeat noise. It is adopted for its independence from
+the floor, not on a claim of general superiority. The two rules disagree on all
+six presets, so **no window in this campaign was robust to the selection rule.**
+
+**Floors from one repeat pair are labelled differently from floors from ten.** A
+one-pair floor understates spread, so cells carrying one pass more easily than
+they should. Two presets have ten pairs; four have one.
+
+
+## Provisional: the two sides were built from different sources
+
+**This is one shared assumption under every cell, not a per-cell uncertainty,
+and it does not average out.**
+
+The AKAI volume was built from extracts of **`HD0-20260514.img.lzo`, a backup
+from 14 May**. The E4XT side was loaded through the front panel from **live HD0
+on 2026-09-11**. If any of the four source banks was edited in between, the two
+machines played **different material**, and the residual method's premise — same
+material, so the material's own structure cancels — fails. **The failure
+direction is the bad one:** it appears as a per-preset conversion error that does
+not exist, spectrally arbitrary, so it resembles a genuine hard-to-explain
+residual rather than a level offset or a filter difference.
+
+**Closed 2026-09-11 across the volume field**, on all six presets and in both
+field families: per-zone values on the four multi-zone presets and the voice
+field on the five single-zone voices, all fitting one units factor (127/96).
+**Closed across the remaining sound-determining fields** by reading them off the
+device against a table generated from the backup — filter type, cutoff,
+resonance, keytrack, both envelopes, velocity→filter and →volume, zone key and
+velocity ranges, root key, tuning, pan, sample names. **A field that cannot
+affect a capture cannot manufacture a residual**, so that set closes the risk
+that matters.
+
+**Not closed as identity.** One matching field set is evidence, not proof: a
+replaced sample or an edited key range outside the compared set reads clean. The
+proper close is a byte-for-byte diff of the four banks against live HD0, which
+needs a card crossing. See `TODO.md` §E4BSOURCEID.
+
+
+### A separate finding the grid produced, larger than anything it was scoring
+
+**The two machines' envelopes are differently shaped.** The point in a 6 s hold
+where each machine's output is flattest differs by **1 to 3.5 seconds on five of
+six presets** — 3.5 s out of 6 s on one. The filter path is now HW-verified in
+both directions; the **envelope** rows in this document have never been better
+than DERIVED. A disagreement of that size in where the output settles is more
+audible than any corner-frequency error here. It was found as a by-product by a
+tool written to choose analysis windows, so it has had none of the scrutiny the
+intended measurement got and needs its own verification pass. `TODO.md`
+§E4XTAKAIENV.
+
+
+## The four things most worth knowing
+
+**1. The filter path is the measured part; the envelope path is not, and the
+envelope disagreement is larger.** Everything below concerns filter behaviour,
+which is now hardware-verified in both directions. The two machines' envelopes
+are **1 to 3.5 seconds apart** in where their output settles, on five of six
+presets, and those rows have never been better than DERIVED. **A reader who
+takes this document's care about corner frequencies as the measure of the
+conversion's fidelity will have the proportions backwards.**
+
+**2. The biggest gap is not the smallest number.** `FIL2FR` 95–98 is 0.3 % and
 gets a warning; **the non-LP feature outside 30–80 is 16.4 %** and gets the same
 warning. Both are honest, neither is equally important.
 
-**2. Highpass carries the most weight and the least margin.** It is **57.6 %** of
+**3. Highpass carries the most weight and the least margin.** It is **57.6 %** of
 board use, its feature table is the narrowest of the four (37–80, five points),
 and its pole count was wrong in this converter until 2026-09-10.
 
-**3. One row is knowingly wrong.** Bandpass resonance borrows the highpass
+**4. One row is knowingly wrong.** Bandpass resonance borrows the highpass
 curve, and the two taps are different filter orders. It affects 3.5 % of
 material, and the fix is a modelling decision about what "bandpass resonance"
 should mean rather than a measurement.
