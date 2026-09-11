@@ -322,12 +322,18 @@ standing rule (Jan, 2026-09-04) forbids *writing* it. There is no newer backup �
 `HD0-20260514.img.lzo` is the most recent of four. Ride this on the same swap as
 the other crossing-gated items.
 
-## AKAI parser drops PRGNUM — every read reports program_number 0 (OPEN 2026-09-11)
+## AKAI parser dropped PRGNUM — every read reported program_number 0 — FIXED 2026-09-11
 
-`parsers/akai_s3000_parser.py` sets `program_number=0` unconditionally (two
-sites, both constructing a `Preset`), although PRGNUM is sitting at program byte
-**`0x0f`** and is trivially readable — reading it there by hand is how the
-FXPATHS pairing was verified on 2026-09-11.
+**Status: FIXED 2026-09-11** (`parsers/akai_s3000_parser.py`,
+`program_number=prog['midi_program']`), with three tests in
+`tests/test_akai_roundtrip.py`.
+
+**The parser was not failing to read PRGNUM — it read it and threw it away.**
+`parse_program_bytes` has always returned `midi_program` from program byte
+`0x0f`; the `Preset(...)` construction two hundred lines later overwrote it with
+a literal 0. I first wrote this item up as "the parser never reads PRGNUM at
+all", which is wrong in the way that matters: the read was correct, the plumbing
+was missing, and a test aimed at the read passes either way.
 
 The writer honours `preset.program_number` **when it is usable** (§AKAIPRGNUM0,
 `writers/akai_s3000_writer.py`) and otherwise falls back to `n_written + 1`.
@@ -356,7 +362,17 @@ volumes, 5,009 programs) **PRGNUM 0 is the MOST COMMON value — 1,339 programs,
 behaviour is left alone pending Jan, since the fallback's start at 1 rests only
 on the withdrawn claim and real discs start at 0.
 
-**Status:** open, software only. **Blocked on:** nothing.
+**The second `Preset(program_number=0)` site is correct and was left alone:**
+it is `parse_akai_sample`, which reads a lone `.S3` sample file. There is no
+program there, so there is no program number to carry.
+
+**The test for this was written vacuous first, and the revert check is the only
+reason that was caught.** Three tests, all green, all passing with the fix
+reverted — because every one went through `build_program` with a `Preset` built
+in Python and none crossed the file -> `Preset` boundary where the defect lived.
+The real test goes through `parse_akai_program` and asserts on
+`presets[0].program_number`. Recorded in the test's own docstring, because
+"tests pass" was true of the useless version too.
 
 ## AKAI reader may emit phantom files from junk in unallocated directory slots
 

@@ -31602,10 +31602,16 @@ nobody can attribute it.
 
 **TODO:** "AKAI parser drops PRGNUM — every read reports program_number 0".
 
-**The patch is one line per site.** PRGNUM is program byte **`0x0f`**;
-`writers/akai_s3000_writer.py:1962` writes it as `min(prog_num, 127)`. In
-`parsers/akai_s3000_parser.py`, the two `Preset(...)` constructions (around
-`:1081` and `:1822`) hardcode `program_number=0`; read the byte instead.
+**DONE 2026-09-11.** One line: `program_number=prog['midi_program']` in
+`parsers/akai_s3000_parser.py`.
+
+**The framing in the first draft of this note was wrong.** I wrote that the
+parser "never reads PRGNUM at all". It always did — `parse_program_bytes`
+returns `midi_program` from program byte `0x0f` — and the `Preset(...)`
+construction overwrote it with 0. **The read was fine; the plumbing was
+missing**, and that distinction decides where a test has to look. Only the
+program site was changed; the other `program_number=0` is `parse_akai_sample`,
+a lone sample file with no program and therefore no number.
 
 **Pass the byte straight through — and do NOT add a special case for 0.** I
 nearly wrote the opposite here on the strength of the §AKAIPRGNUM0 comment's

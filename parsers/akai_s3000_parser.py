@@ -1077,8 +1077,20 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
     # Capped at 16 to match the E4B and KRZ name fields, which is above the
     # AKAI's own 12, so nothing real is truncated.
     _pname = prog['name']
+    # PRGNUM: PLUMB IT THROUGH. `parse_program_bytes` has always read it --
+    # `midi_program` from program byte 0x0f -- and this line then threw it away,
+    # so every AKAI read reported program_number 0 and the writer's
+    # honour-the-source-numbers branch (§AKAIPRGNUM0) could never fire for an
+    # AKAI source. The feature was unreachable from the one format that would
+    # exercise it, which is why no round trip flagged it.
+    #
+    # A source value of 0 is ORDINARY INTENT, not a missing value: across 43
+    # genuine S3000XL library discs (2,410 volumes, 5,009 programs) PRGNUM 0 is
+    # the MOST COMMON value at 1,339 programs (26.7%), ahead of 1 (611) and
+    # 2 (395). So this must not special-case 0 -- the writer's `_usable` test
+    # (unique, and within 0..127) is the right gate and needs no new rule.
     preset = Preset(name=(_pname[:16] if _pname else _safe_name(fallback_name)),
-                    program_number=0)
+                    program_number=prog['midi_program'])
     missing: set = set()
 
     _kg_of_voice = []
