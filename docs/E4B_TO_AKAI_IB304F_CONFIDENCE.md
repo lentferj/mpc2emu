@@ -442,6 +442,52 @@ the same field measured 96–103% unscaled on the same machine and the disagreem
 is open. These presets use the positive side, which is plain identity.)*
 
 
+### The cross-machine difference is −6.40 dB/OCTAVE, which is a slope and not a level
+
+Regressing eosed's per-note broadband offsets against log frequency over the
+grid's 4.58 octaves:
+
+| preset | slope dB/oct | r | endpoint span | in pole units |
+|---|---|---|---|---|
+| P003 | −6.83 | −0.840 | 35.64 dB | 1.14 |
+| P004 | −6.62 | −0.894 | 31.81 | 1.10 |
+| P005 | −5.75 | −0.850 | 28.29 | 0.96 |
+| **pooled** | **−6.40** | | | **1.07** |
+
+**`s3ked-47` predicted ~6 dB/octave from a one-pole difference, before seeing
+this.** Measured 6.40 across three presets with *different* filter modes — and they
+flagged in advance that mixed modes should not give a clean slope, which makes the
+consistency either luck or a sign the modes share the cause.
+
+**So the "unexplained level offset" is a SLOPE.** That reframes it: a horizontal
+corner offset produces a *constant* dB difference in the stopband, not a
+pitch-dependent one, so **a corner error cannot be it** — consistent with fact 2's
+refutation above. The sign says the **AKAI skirt is steeper**: our side loses more
+as pitch rises, by about one pole's worth.
+
+**Two candidates remain and they are indistinguishable on this data:**
+
+1. **A pole-count difference.** Credible rather than speculative: `s3ked-47`
+   measured the board's highpass tap at **one pole** in 2026 where this converter's
+   decoder read `High 2`. A pole count being off by one has already happened on
+   this exact hardware.
+2. **A sweep-depth difference.** `filter_env_cents` of 3707–8316 is in flight on
+   exactly these three presets, and a difference in how far the corner travels
+   produces the same pitch-dependent signature.
+
+**The discriminator is a STATIC subject** — same shape, same corner, filter
+envelope removed (`SUSTN2` and depth at zero), measured across the same five
+notes. Slope still ≈ −6 dB/oct ⇒ **pole count**, and our cascade model is off by
+one. Slope collapses ⇒ **the sweep**, and the pole counts are fine. One small
+volume, one capture session, and it separates the two remaining causes of the
+largest cross-machine number in this document.
+
+**On paper the counts match**, which is the argument against branch 1: the source
+asks filter type 3 (`Low 4`, four poles) and we deliver filter 1's two plus filter
+2's two. For the AKAI to be one pole steeper, something counted as 2 would have to
+be 3. That is why the static test comes before any further theorising.
+
+
 ### So the conclusion is "not on this material", which is more useful
 
 A band residual needs the filter to **shape the spectrum without dominating the
