@@ -311,6 +311,45 @@ at 13:18.
 - **The machine went quiet while idle**, with nothing touching the rig between
   11:45 and 13:15.
 
+**CAUSE FOUND, and no bench work was needed: the E4XT's RAM was cleared by a power
+cycle** (§48). One command settled it:
+
+```
+  sample memory   131072 kB total, 125530 free  ->   5542 kB used (5.4 MB)
+  preset memory     4485 kB total,   4480 free  ->      5 kB used
+```
+
+The four source banks are 6.3, 15.3, 6.9 and 6.2 MB on disk. **Six presets cannot
+live in 5.4 MB of sample RAM, and eight cannot live in 5 kB of preset RAM.** The
+remedy applied to the AKAI card around 12:00 was "re-seat in the ZuluSCSI **or a
+ZuluSCSI power-cycle**", and whatever was power-cycled took the E4XT's RAM with it.
+
+### The trap: a catalog answers "is the NAME there", not "is the SOUND there"
+
+**`eoscli catalog` still returns all eight preset names.** The preset *directory*
+survives a RAM clear; the voice, zone and sample data do not. So the machine lists
+its presets, selects them on program change, updates its display — and has nothing
+to play.
+
+**That reading was made twice** — once in a morning status line and once while
+diagnosing the silence — and `memory` was one command away throughout. It is the
+same shape as the other content-versus-label confusions in this document:
+`SSRATE` reading 44100 in both the broken and the corrected volume, and `attack_ms`
+agreeing where `t_peak_ms` disagreed. **The field that names the thing is not the
+field that is the thing.**
+
+### Two different validity boundaries today
+
+| kind of data | valid |
+|---|---|
+| **audio captures** | at or before **11:42** only |
+| **parameter reads** | **throughout**, including after the power cycle |
+
+Parameter reads come out of the surviving preset directory, so the filter-envelope
+shape recorded below (`Atk1 78 → Atk2 100 → Dcy1 99 → Dcy2 0`, read at 13:15) is
+good despite post-dating the clear. **Mixing the two boundaries would let a valid
+read vouch for an invalid capture.**
+
 **Everything in this document rests on captures at or before 11:42 and is
 unaffected.** The static-versus-static test of the −6.40 dB/oct slope — the one
 that would separate the pole-count branch from the dropped-sweep branch — **has
