@@ -652,9 +652,57 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     # 15x at byte 122 -- worst exactly where real presets live -- and it
     # reached every E4B-sourced conversion.
     #
-    # ATTACK IS DELIBERATELY NOT SPAN-SCALED: it climbs the full range by
-    # definition, and the writer encodes it with the same time-alone law, so
-    # the two already agree there.
+    # ATTACK IS SPAN-SCALED PER SEGMENT, corrected 2026-09-11. This said
+    # "ATTACK IS DELIBERATELY NOT SPAN-SCALED: it climbs the full range by
+    # definition" -- **true of the attack as a whole and false of each
+    # SEGMENT**, which is the unit the rate bytes act on. A correct statement
+    # about the wrong unit of analysis.
+    #
+    # The amp attack has TWO segments: `pzt[0]` is Atk1's rate, `pzt[1]` its
+    # target LEVEL, `pzt[2]` Atk2's rate. Atk1 climbs 0 -> L1 and Atk2 climbs
+    # L1 -> 100, so each covers a FRACTION of the range and each byte's
+    # full-traversal time must be scaled by that fraction.
+    #
+    # TWO ERRORS, WHICH PARTLY CANCEL -- which is why this looked right. The old
+    # form also applied `_E4XT_ATK_SLOWDOWN` to segment 1 only:
+    #
+    #     old:  R(pzt[0]) * SLOWDOWN  +  R(pzt[2])
+    #     new:  SLOWDOWN * ( R(pzt[0]) * L1  +  R(pzt[2]) * (1 - L1) )
+    #
+    # The segment-2 terms are equal when `SLOWDOWN * (1 - L1) == 1`, i.e. at a
+    # knee of **45.6%**. The preset this was found on has a knee of 43%, so the
+    # old form landed 5.4% from correct by sitting 2.6 points from an accidental
+    # fixed point.
+    #
+    # EVIDENCE (eosed, 2026-09-11, read off an E4XT and against their §105
+    # rate ladder):
+    #   * raw bytes confirmed against the device: pzt[0]=39, pzt[1]=55,
+    #     pzt[2]=78 against a panel reading of Atk1 rate 39, level 43%,
+    #     Atk2 rate 78;
+    #   * the level byte is LINEAR here (55/127 = 43.3% against 43%), NOT the
+    #     dB law that governs sustain -- the dB reading gives 58688%;
+    #   * their measured byte->t_peak ladder IS `env_rate_to_seconds * 1.838`
+    #     on BOTH segments (ratios 1.056 at byte 39, 1.008 at byte 78), which
+    #     is what establishes that the slowdown applies to segment 2 as well;
+    #   * the new form gives 3.254 s against their device decomposition of
+    #     3.29 s -- 1%.
+    #
+    # EXPOSURE, measured over 666 voices in 21 banks: 130 have an attack and
+    # **all 130 are two-segment** -- there is not one single-segment attack in
+    # the corpus, so the case the old form was correct for does not occur.
+    # Knees run 0% to 68% (median 49%); old/new runs 0.54x to 1.61x; **48% were
+    # more than 25% out**.
+    #
+    # THE WRITER IS UNAFFECTED and stays an exact inverse: it emits
+    # `pzt[1] = _fenv_level(100.0) = 127` and `pzt[2] = 0`, so L1 = 1.0 and
+    # this reduces to `SLOWDOWN * R(pzt[0])`, identical to the old first term.
+    # No E4B->E4B round trip changes; only third-party banks do.
+    #
+    # **PENDING HARDWARE CONFIRMATION.** The bytes, the linear level law and the
+    # both-segments slowdown are established, but no converted program built
+    # with this formula has been measured. `~/temp/HD_atkcal.img` is the
+    # calibration volume for it -- it has no knee, so it isolates the rate law
+    # from the segment question.
     _decay_span = env_level_byte_to_db(pzt[7])
     _rel_span   = max(0.0, ENV_FULL_SPAN_DB - _decay_span)
     # INVERSE OF THE WRITER, INCLUDING ITS ATTACK CORRECTION. The writer divides
@@ -666,8 +714,10 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     # since each individual file still looks well-formed. That is TODO item (1)
     # in its purest form, so it is fixed here at the same time rather than left
     # to be discovered as a drift.
-    env_attack  = (_fenv_rate_inv(pzt[0]) * _E4XT_ATK_SLOWDOWN
-                   + _stage2_seconds(pzt[2]))
+    _atk_l1 = max(0.0, min(1.0, pzt[1] / 127.0))
+    env_attack  = _E4XT_ATK_SLOWDOWN * (
+        _fenv_rate_inv(pzt[0]) * _atk_l1
+        + _stage2_seconds(pzt[2]) * (1.0 - _atk_l1))
     env_decay   = (env_rate_to_span_seconds(_decay_span, pzt[4])
                    + _stage2_seconds(pzt[6]))
     env_release = (env_rate_to_span_seconds(_rel_span, pzt[8])

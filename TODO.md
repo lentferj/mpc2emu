@@ -454,6 +454,61 @@ by the machine that needs it.** Unmounted 11:04.
 series land near **174.7 and 130.8 Hz**, the E4XT's own figures, rather than near
 275.4 and 205.8.
 
+## E4B two-segment attack was read wrong — 130 of 130 attacked voices (FIXED 2026-09-11, pending HW)
+
+**Status: FIXED in `parsers/e4b_parser.py`, PENDING HARDWARE CONFIRMATION.**
+
+The amp attack has **two segments**: `pzt[0]` is Atk1's rate, `pzt[1]` its target
+**level**, `pzt[2]` Atk2's rate. Atk1 climbs 0 → L1 and Atk2 climbs L1 → 100, so
+each covers a *fraction* of the range. Our reader did:
+
+```
+  old:  R(pzt[0]) * SLOWDOWN  +  R(pzt[2])
+  new:  SLOWDOWN * ( R(pzt[0]) * L1  +  R(pzt[2]) * (1 - L1) ),  L1 = pzt[1]/127
+```
+
+**Two errors, which partly cancel** — the slowdown was applied to segment 1 only,
+*and* neither segment was scaled by its share of the range. The segment-2 terms
+are equal when `SLOWDOWN * (1 - L1) = 1`, i.e. at a knee of **45.6%**. The preset
+it was found on has a knee of **43%**, so the old form landed 5.4% from correct
+by sitting 2.6 points from an accidental fixed point. **That is why it looked
+right.**
+
+**The root was the comment justifying it:** *"ATTACK IS DELIBERATELY NOT
+SPAN-SCALED: it climbs the full range by definition."* True of the attack as a
+whole, **false of each segment** — a correct statement about the wrong unit of
+analysis. The test pinning it was circular in the same way: it asserted the old
+form "matching the writer, which only corrects `pzt[0]`", but the writer only
+corrects `pzt[0]` because it never emits a second segment, so it matched a case
+the writer cannot produce.
+
+**Evidence** (`eosed`, read off an E4XT, with their §105 rate ladder):
+
+- raw bytes confirmed against the device — `pzt[0]`=39, `pzt[1]`=55, `pzt[2]`=78
+  against a panel reading of Atk1 rate 39, level 43%, Atk2 rate 78;
+- the level byte is **linear** here, 55/127 = 43.3% against 43% — **not** the dB
+  law that governs sustain, which gives a nonsensical 58688%;
+- their measured byte→`t_peak` ladder **is** `env_rate_to_seconds × 1.838` on
+  **both** segments (ratios 1.056 at byte 39, 1.008 at byte 78) — this is what
+  establishes the slowdown applies to segment 2;
+- the new form gives 3.254 s against their device decomposition of 3.29 s, 1%.
+
+**Exposure, 666 voices over 21 banks:** 130 have an attack and **all 130 are
+two-segment** — there is not one single-segment attack in the corpus, so the case
+the old form was correct for does not occur. Knees 0–68% (median 49%), old/new
+0.54× to 1.61×, **48% more than 25% out**.
+
+**Blast radius is third-party banks only.** The writer emits
+`pzt[1] = _fenv_level(100.0) = 127` and `pzt[2] = 0`, so L1 = 1.0 and the new form
+reduces to `SLOWDOWN * R(pzt[0])` — identical to the old first term. Reader and
+writer stay exact inverses and no E4B→E4B round trip changes. A test pins that.
+
+**Blocked on:** hardware confirmation. No converted program built with the
+corrected formula has been measured. `~/temp/HD_atkcal.img` (volume `ATKCAL`,
+PRGNUM 109–116) is the calibration volume — a steady synthesized loop with **no
+knee**, so it isolates the rate law from the segment question. Needs a card
+crossing.
+
 ## E4XT and AKAI envelopes are differently SHAPED — 1 to 3.5 s apart (OPEN 2026-09-11)
 
 Measured on the 5x5 grid campaign, 2026-09-11, by `eosed`'s `pickwin` across
