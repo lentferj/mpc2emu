@@ -6627,3 +6627,27 @@ recorded for filter 1 — suspected, not checked.
 against each program's own depth-0 corner, so an absolute error in the table
 cancels. It affects sources whose cutoff lands in 45–64 being written to a corner
 up to ~18% off.
+
+## §NAMEHIST — one already-published commit message carries a library preset name
+
+**Status: KNOWN AND DELIBERATELY NOT FIXED.** Jan's call, 2026-09-11.
+
+Commit **`3f78fb1`** is an ancestor of `origin/main` and its message contains an
+E4B commercial-library preset name. Every *unpushed* message and every tracked
+file was cleared on 2026-09-11; this one is already public.
+
+**Removing it means rewriting published history and force-pushing**, which has
+its own costs and was judged not worth them. It is recorded here rather than
+quietly accepted, so that:
+
+* nobody re-derives it as a new finding;
+* the rule is understood as *stop adding to it*, not *it was never broken*;
+* if the repo is ever rewritten for another reason, this rides along.
+
+**How the sweep is done** — the naive one misses things. An AKAI program name is
+12 characters, so on-card names are truncations that do not match a search for
+the full preset name, and a name in prose can break across a line. Scan
+distinctive tokens case-insensitively, not full strings, and read every hit:
+one of the useful tokens is also an ordinary English word, and on the last sweep
+six of its hits were exactly that. The token list and the id→name map live in
+`tests/fxpaths_id_map.txt`, which is gitignored.

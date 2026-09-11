@@ -335,6 +335,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§DEFPARAM — six definitional parameters, all inside tooling adopted to make two sides comparable (2026-09-11)](#defparam-six-definitional-parameters-all-inside-tooling-adopted-to-make-two-sides-comparable-2026-09-11)
 - [§ATKBIAS — fixing the two attack laws](#atkbias-fixing-the-two-attack-laws)
 - [§FIL2FRGAP — filling the 45–64 hole in the filter-2 corner table](#fil2frgap-filling-the-4564-hole-in-the-filter-2-corner-table)
+- [§NAMEHIST — the one published commit message that still names a preset](#namehist-the-one-published-commit-message-that-still-names-a-preset)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -32037,3 +32038,36 @@ suspects §204 was fitted on a *resonant peak at high `FLT2Q`* while these are
 −3 dB corners at `FLT2Q` 0, and §139 recorded exactly that kind of factor for
 filter 1. **Suspected, not checked** — and if it is right, §204 should be labelled
 with the feature it measures rather than silently disagreeing with two tables.
+
+## §NAMEHIST — the one published commit message that still names a preset
+
+**The fix is a force-push and it is deliberately not being applied.** Recorded so
+the decision is visible rather than inferred.
+
+**If it is ever revisited**, the operation is a message-only rewrite across the
+whole history rather than the unpushed range:
+
+```
+  git filter-branch -f --msg-filter '<substitution>' -- --all
+```
+
+**Verify it the way the 2026-09-11 rewrite was verified**, because a message
+filter that touches trees is a much worse outcome than the problem:
+
+```
+  git branch backup-before-rewrite          # before anything
+  git diff backup-before-rewrite HEAD       # MUST be empty: messages only
+```
+
+That check caught nothing on 2026-09-11 and was still the right thing to run —
+it is what licenses the claim that only messages moved.
+
+**Then re-scan, and scan the rewrite's own commit too.** The 2026-09-11 pass
+produced a commit whose message quoted the very names it was removing, in the
+course of documenting how to find them. It was caught by re-running the scan
+after the rewrite rather than before; **a name-removal commit is a likely place
+for the names to survive**, and the details belong in the gitignored map, not in
+the message.
+
+**Cost of not fixing it:** one preset name is discoverable in public history. The
+tracked tree and every unpushed message are clean, so nothing new is being added.
