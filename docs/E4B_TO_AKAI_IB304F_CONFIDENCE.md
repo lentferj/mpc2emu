@@ -307,13 +307,24 @@ machines:
 | machine | t50/t90 | shape |
 |---|---|---|
 | AKAI S3000XL | 0.500–0.558 over `ATTAK1` 70–99 | **linear in amplitude** (0.556 predicted) |
-| E-MU E4XT | **0.797** | **convex, ≈ t^2.6** — slow start, accelerating |
+| E-MU E4XT | **0.765**, five notes, spread 0.079 | **convex** — slow start, accelerating |
 
 Our conversion carries a **time**. Matching it makes the endpoints agree and
-leaves the middle of the rise audibly different: on a 3.5 s attack the E4XT sits
-at **13%** of level where a linear ramp is at **29%**, and reaches half level a
-full **0.5 s** later. **No `ATTAK1` value can fix this**, because the field sets a
-rate and the difference is in the curve.
+leaves the middle of the rise different, which is audible. Stated from measured
+points rather than a fitted exponent — E4XT medians `t10` 0.846 s, `t50` 1.712 s,
+`t90` 2.214 s, against a linear ramp reaching the same `t90`:
+
+- **3.4× slower to 10%** of level (0.846 s against 0.246 s);
+- **1.39× slower to half** (1.712 s against 1.230 s);
+- half level arrives **0.48 s late**.
+
+**No `ATTAK1` value can fix this**, because the field sets a rate and the
+difference is in the curve.
+
+*(An earlier version of this row read 0.797 and "≈ t^2.6", taken from a
+quarter-second table on one note — and that note is the lowest of the five at
+0.701. Corrected to the five-note median. The conclusion is unchanged and better
+supported: 0.765 against 0.556 and 0.301, convex on every note, spread 0.079.)*
 
 It also explains a measurement artefact that looked like a defect: on the E4XT's
 convex rise, threshold-crossing and argmax detectors differ by **1.69×** on one
