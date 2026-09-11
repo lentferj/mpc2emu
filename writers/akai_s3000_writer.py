@@ -2335,8 +2335,15 @@ def _filter2_plan(voice):
 
 
 def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
-              voice=None, dead_key_ranges=None, ib304f: bool = False) -> bytearray:
-    """One 192-byte keygroup with up to four velocity zones."""
+              voice=None, dead_key_ranges=None, ib304f: bool = False,
+              probe: bool = False) -> bytearray:
+    """One 192-byte keygroup with up to four velocity zones.
+
+    `probe` renders for COMPARISON rather than for output -- see
+    `_voice_kg_signature`. It suppresses the diagnostics, because a hypothetical
+    keygroup that is never written has not lost anything, and reporting it
+    doubles every filter warning on the real build.
+    """
     k = bytearray(KEYGROUP_LEN)
     k[0x00] = _BLOCK_ID_KEYGROUP
     # Own RAM address: one block past the previous one.
@@ -2486,11 +2493,13 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
         else:
             _have = 2
         if _want > _have:
-            _diag(_I, 'AKAI_FILTER_POLES_REDUCED',
-                  f'{_want}-pole filter written as {_have}-pole: each AKAI '
-                  f'section is 2-pole and this shape cannot use both',
-                  content_lost=True,
-                  detail={'requested_poles': _want, 'written_poles': _have})
+            if not probe:
+                _diag(_I, 'AKAI_FILTER_POLES_REDUCED',
+                      f'{_want}-pole filter written as {_have}-pole: each '
+                      f'AKAI section is 2-pole and this shape cannot use both',
+                      content_lost=True,
+                      detail={'requested_poles': _want,
+                              'written_poles': _have})
         k[AKAI_LSI2_ON_OFFSET] = 1
         k[AKAI_FLT2MODE_OFFSET] = _f2mode
         k[AKAI_FIL2FR_OFFSET] = _f2fr
@@ -2498,8 +2507,8 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
         k[AKAI_FLT2GAIN_OFFSET] = 0
         # `_f2fr` is provisional for the LP cascade and is re-derived below,
         # once filter 1's byte is known. See the note there.
-    elif voice is not None and not ib304f and \
-            getattr(voice, 'filter_type', 0) in _XPM_TO_FLT2:
+    elif (voice is not None and not ib304f and not probe
+            and getattr(voice, 'filter_type', 0) in _XPM_TO_FLT2):
         # THE SHAPE IS BEING LOST, and silently until now. Without the board
         # this machine has one 2-pole lowpass, so a highpass or a band becomes
         # a lowpass at the same corner -- which for a highpass inverts the
@@ -2841,7 +2850,7 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
     return k
 
 
-def keygroup_count(preset) -> int:
+def keygroup_count(preset, ib304f: bool = False) -> int:
     """How many keygroups `build_program` will emit for this preset.
 
     Exported so the bank splitter can budget for them without a second copy of
@@ -2863,7 +2872,11 @@ def keygroup_count(preset) -> int:
     of the change and the budget has to see it: a program that used to cost
     three objects and lose half its envelopes costs six and keeps them.
     """
-    return min(len(_group_zones_into_keygroups(preset)), MAX_KEYGROUPS)
+    # ib304f REACHES HERE TOO. The board can force a SPLIT that the board-off
+    # path merges, so the keygroup count is board-dependent and a budget
+    # computed with the wrong flag under-counts exactly the programs the board
+    # makes bigger.
+    return min(len(_group_zones_into_keygroups(preset, ib304f)), MAX_KEYGROUPS)
 
 
 def _root_offset_units(z, sample_roots: Optional[dict]) -> int:
@@ -2884,7 +2897,8 @@ def _root_offset_units(z, sample_roots: Optional[dict]) -> int:
     return int(round((sr - zr))) * _AKAI_TUNE_UNITS_PER_SEMITONE
 
 
-def _voice_kg_signature(lo_key: int, hi_key: int, voice) -> bytes:
+def _voice_kg_signature(lo_key: int, hi_key: int, voice,
+                        ib304f: bool = False) -> bytes:
     """Byte-exact fingerprint of the keygroup this voice alone would produce.
 
     **Built by CALLING `_keygroup`, not by listing the fields it reads.** A
@@ -2901,11 +2915,26 @@ def _voice_kg_signature(lo_key: int, hi_key: int, voice) -> bytes:
     per-keygroup state. `index` is fixed at 0 so the RAM address, which is
     positional, does not enter the comparison.
     """
+    # `ib304f` MUST BE PASSED. It was not until 2026-09-11, and the docstring
+    # above explains why that mattered more than it looks: the whole point of
+    # rendering through `_keygroup` is that the question is answered by the same
+    # code that answers it for real. Calling the same code with a DIFFERENT FLAG
+    # is the same drift the approach was chosen to prevent, one level down.
+    #
+    # THE BUG IT CAUSED. With the board on, two voices at one key range that
+    # differ ONLY in filter 2 -- a lowpass and a highpass at the same corner,
+    # which is precisely what the board exists to express -- rendered identical
+    # signatures (both with filter 2 switched off), so they MERGED into one
+    # keygroup and one of the two shapes was silently dropped. Verified: two
+    # such voices produced 1 keygroup with `ib304f=True` where 2 are needed.
+    #
+    # Board OFF is unaffected and correctly merges, because without the board
+    # both voices genuinely do become the same 2-pole lowpass.
     return bytes(_keygroup(lo_key, hi_key, [], index=0, voice=voice,
-                           dead_key_ranges=[]))
+                           dead_key_ranges=[], ib304f=ib304f, probe=True))
 
 
-def _group_zones_into_keygroups(preset):
+def _group_zones_into_keygroups(preset, ib304f: bool = False):
     """[( (lo,hi), voice, [zones...] )] -- the ONE grouping rule.
 
     Shared by `build_program` and `keygroup_count` so the object budget and the
@@ -2944,7 +2973,7 @@ def _group_zones_into_keygroups(preset):
             if not (getattr(z, 'sample_name', '') or '').strip():
                 continue
             rng = (z.lo_key, z.hi_key)
-            key = (rng, _voice_kg_signature(rng[0], rng[1], voice))
+            key = (rng, _voice_kg_signature(rng[0], rng[1], voice, ib304f))
             if key not in by_key:
                 by_key[key] = []
                 order.append(key)
@@ -2985,7 +3014,7 @@ def build_program(preset, name: str, prog_num: int = 0,
     # lossy: a layered program came back with every layer wearing the first
     # one's envelope. Voices whose keygroup settings differ now get their own
     # keygroup, which is what the source material does.
-    _groups = _group_zones_into_keygroups(preset)
+    _groups = _group_zones_into_keygroups(preset, ib304f)
 
     keygroups = []
     dropped = 0

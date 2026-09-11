@@ -243,6 +243,62 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 
 ---
 
+## AKAI object budget does not know the IB-304F can force a split (OPEN 2026-09-11)
+
+`keygroup_count(preset, ib304f=False)` and
+`bank_splitter.akai_object_count(presets, n_samples, ib304f=False)` both now take
+the flag, but **nothing passes it**: `convert.py` knows `--akai-ib304f` and the
+splitter does not receive it.
+
+With the board on, two layers in one key range that differ only in filter 2 need
+**separate** keygroups where the board-off path correctly merges them — so a
+board-on program can cost more objects than the budget predicts, and the S3000XL
+counts every keygroup against its object pool.
+
+**Low severity, deliberately left.** The split needs a specific shape: one key
+range, same corner, same resonance, different filter SHAPE. On the 666-voice
+local E4B corpus it never occurs. So this is a budget edge rather than a live
+defect, and the plumbing is in place for a caller that knows the flag.
+
+**Status:** open, software only. **Blocked on:** nothing; thread `args.akai_ib304f`
+from `convert.py` through `split_into_banks` to `akai_object_count`.
+
+## The keygroup fingerprint was rendered without the board flag — FIXED 2026-09-11
+
+**Status: FIXED 2026-09-11**, with three tests in `tests/test_akai_filter2.py`.
+
+`_group_zones_into_keygroups` merges zones by `(key range, keygroup-settings
+fingerprint)`, and `_voice_kg_signature` produces that fingerprint by rendering a
+throwaway keygroup through `_keygroup` — deliberately, so that, in its own
+docstring's words, *"the question is answered by the same code that answers it
+for real."*
+
+**It rendered with `ib304f` left at its default `False` while the real build used
+the caller's value.** Calling the same code with a **different flag** is the same
+drift that approach was chosen to prevent, one level down.
+
+**The defect:** with the board on, two voices at one key range differing ONLY in
+filter 2 — a lowpass and a highpass at the same corner, which is precisely what
+the board exists to express — fingerprinted identically, **merged into one
+keygroup, and one of the two shapes was silently dropped.** Verified: two such
+voices produced **1** keygroup with `ib304f=True` where 2 are needed. Board-off
+is unaffected and correctly merges, because without the board both voices
+genuinely do become the same 2-pole lowpass.
+
+**Found by a warning COUNT, not by a test.** A board-ON build emitted **31
+`AKAI_FILTER_SHAPE_LOST`** diagnostics, whose guard is `not ib304f` and which
+therefore cannot fire on a board-on build. The count was the only visible
+symptom; nothing about the output looked wrong.
+
+**Second defect in the same place: the fingerprint render emitted diagnostics.**
+A hypothetical keygroup that is never written has not lost anything, and
+reporting it **doubled every filter warning on the real build** — board-off went
+**62 to 31, and 31 is the true count**. `_keygroup` now takes `probe=True` for
+the comparison render and stays silent.
+
+`keygroup_count` threads the flag too, since the count is board-dependent, and
+a test asserts budget and file agree for **both** flag states.
+
 ## The FXPATHS test volume plays 3 of 6 presets sharp — my build script, not the converter (2026-09-11)
 
 **Status: CAUSE FOUND, corrected volume built, awaiting a card crossing.**

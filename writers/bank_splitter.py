@@ -297,11 +297,22 @@ _AKAI_OBJECT_POOL = 1006
 #: are counted here as two.
 
 
-def akai_object_count(presets, n_samples: int) -> int:
-    """programs + keygroups + samples, the way the S3000XL counts them."""
+def akai_object_count(presets, n_samples: int, ib304f: bool = False) -> int:
+    """programs + keygroups + samples, the way the S3000XL counts them.
+
+    `ib304f` because the keygroup count is BOARD-DEPENDENT: with the second
+    filter available, two layers that differ only in filter 2 need separate
+    keygroups where the board-off path correctly merges them. Defaulting to
+    False keeps every existing caller's behaviour, and **under-counts when the
+    board is on** -- see TODO "AKAI object budget does not know the IB-304F can
+    force a split". The split that matters is rare (same corner, same
+    resonance, different filter SHAPE in one key range), so this is a budget
+    edge rather than a live defect; it is plumbed so a caller that knows the
+    flag can pass it.
+    """
     from writers.akai_s3000_writer import keygroup_count
     return (len(presets)
-            + sum(keygroup_count(p) for p in presets)
+            + sum(keygroup_count(p, ib304f) for p in presets)
             + n_samples)
 
 
