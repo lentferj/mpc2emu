@@ -2977,9 +2977,12 @@ cutoff + resonance), filter envelope, and LFOs from the `VoiceLayer` model into
 the KRZ program object — i.e. give the K2000 path the synth fidelity the E4XT
 path already has.
 
-**Where we are:** sample mapping + tuning convert and sound (HW-confirmed). The
-program is written as a proven-but-flat minimal layer (`PGM LYR ENC ENV CAL
-HOB×4`, amp env = sustain-only). The full plan, corpus analysis, byte-level
+**Where we are — CLOSED, and this paragraph was stale until 2026-09-11.** It
+said the program is "written as a proven-but-flat minimal layer ... amp env =
+sustain-only". That stopped being true when `_patch_layer()` landed: the amp and
+filter envelopes, filter type/cutoff/resonance and LFO1 are all carried, over
+Algorithm 1 with F1 = `4POLE LOPASS W/SEP`, and the result is hardware-verified
+on the K2000R. A reader planning work from this section would have re-done it. The full plan, corpus analysis, byte-level
 hypotheses, and per-parameter checklists are in
 `docs/re_procedures/krz_program_re.md`. Do **not** duplicate them here; this
 section is the decision log + open questions.

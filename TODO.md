@@ -337,15 +337,15 @@ was missing, and a test aimed at the read passes either way.
 
 The writer honours `preset.program_number` **when it is usable** (§AKAIPRGNUM0,
 `writers/akai_s3000_writer.py`) and otherwise falls back to `n_written + 1`.
-Because the parser always supplies 0, **an AKAI -> AKAI conversion always takes
-the fallback and renumbers every program sequentially**, discarding whatever the
-source volume assigned. A volume whose programs were deliberately numbered to
-sit at particular MIDI program changes loses that silently.
+**Before the fix** the parser always supplied 0, so an AKAI -> AKAI conversion
+always took the fallback and renumbered every program sequentially, discarding
+whatever the source volume assigned — a volume whose programs were deliberately
+numbered to sit at particular MIDI program changes lost that silently.
 
-Low severity, but note the shape: the writer's "honour the source's numbers"
-branch **cannot currently fire for AKAI sources at all**, so it is untested by
-any AKAI round trip. The feature exists and is unreachable from the one format
-that would exercise it.
+Note the shape, because it is why no test caught it: the writer's "honour the
+source's numbers" branch **could not fire for AKAI sources at all**, so it was
+untested by any AKAI round trip. The feature existed and was unreachable from the
+one format that would exercise it.
 
 **Found while writing this up, and reproduced:** `_usable` requires the wanted
 numbers to be **unique**, so a bank with exactly **one** preset has
@@ -376,8 +376,11 @@ The real test goes through `parse_akai_program` and asserts on
 
 ## AKAI reader may emit phantom files from junk in unallocated directory slots
 
-**Status:** MEASURED 2026-08-14 — exposure is theoretical **in this corpus**,
-and the reason it is theoretical is the part that matters. **Open decision:**
+**Status:** MEASURED 2026-08-14 on VinSamLib's 21 discs, and **re-measured
+2026-09-11 on 43 discs local to this machine** — exposure is theoretical in both
+corpora, and the reason it is theoretical is the part that matters. The guard is
+now shown to be a no-op here (0 of 66,625 entries), so the only remaining reason
+not to add it is that it changes reader behaviour. **Open decision for Jan:**
 whether to add the positive guard below.
 
 `_volume_files` is length-bounded — it walks a fixed entry count over a
@@ -452,10 +455,44 @@ Require a properly terminated chain covering the declared size before emitting.
 That makes a phantom impossible rather than merely unobserved, and on their
 corpus it changes **0** entries.
 
-Not added here, for a reason worth stating: it is a behaviour change to a
-reader, and it cannot be validated on this machine because the AKAI corpus is
-not on this disk. VinSamLib reached the same conclusion independently and has
-put it to Jan rather than acting. **Do NOT instead add a stop condition** —
+**THE BLOCKER IS GONE AND THE GUARD IS NOW MEASURED HERE (2026-09-11).** This
+said the guard "cannot be validated on this machine because the AKAI corpus is
+not on this disk". **The corpus is on this disk** — Jan pointed at
+`~/Dokumente/SYNTHS/Akai S3000XL/ISOs-from-SD` on 2026-09-11 — and the stale
+sentence was doing real work, because it was the stated reason for not acting.
+
+Measured over **43 genuine discs, 2,410 volumes, 66,625 emitted file entries**:
+
+| condition | entries |
+|---|---|
+| chain properly terminated **and** covering the declared size | **66,625** |
+| terminated but short of the declared size | 0 |
+| covering the size on an **unterminated** chain | **0** |
+| chains refused for looping | 0 |
+
+**So the positive guard would drop zero currently-emitted entries.** It cannot
+change behaviour on this corpus, which is what makes it safe to add rather than
+merely harmless-looking. Note the second row is 0 because the size half is
+*already* enforced — `_read_blocks(...)[:size]` plus the `len(raw) < size` drop —
+though it is reported through `short`, whose message says the image is truncated.
+**A short chain inside an intact image would be misattributed by that warning**,
+which is a separate, smaller thing worth fixing when the guard lands.
+
+**One measurement that looked like a finding and was not, recorded so nobody
+re-derives it.** A first pass counted **1,505 unterminated chains** and that
+number is real — but 69,035 `_chain` calls minus 66,625 file entries is exactly
+2,410, the volume count, so every one of them is a **volume-directory** walk, not
+a file. Those are walked with `(FAT_DIREND, FAT_FILEEND)` and then deliberately
+truncated to `dir_blks` from the volume type, with a comment at the call site
+explaining why the chain is not trusted alone: an S1000 volume's
+end-of-directory FAT code is the same value an S3000 uses for "reserved".
+**Already handled by design; not a defect, and not evidence for the guard
+either.**
+
+Still not added here, for the one reason that survives: it is a behaviour change
+to a reader, and VinSamLib reached the same conclusion independently and put it to
+Jan rather than acting. **The decision is now Jan's with evidence behind it
+instead of Jan's for want of a corpus.** **Do NOT instead add a stop condition** —
 that trades this failure mode for the one s3ked spent 2026-08-14 retracting,
 and theirs is worse: a heuristic stop invents records that are not there and
 hides real ones behind the first junk slot.
@@ -2573,17 +2610,23 @@ fidelity we don't yet emit. Fix recipes in `docs/RESOLUTION_NOTES.md` §KRZ-CWM.
 
 ---
 
-## KRZ: program parameters (envelopes / filter / LFOs) — OPEN (2026-06-14)
+## KRZ: program parameters (envelopes / filter / LFOs) — IMPLEMENTED + HW-VERIFIED (2026-06-14 opened, closed since)
 
-**Status:** strategy + tooling complete; hardware RE not yet started.
-**Blocked on:** hardware iteration on the K2000R (and, ideally, a PC↔K2000R MIDI
-link to enable the scripted-SysEx approach — open question for Jan).
+**Status: DONE and hardware-verified** — `_patch_layer()` in
+`writers/krz_writer.py` carries the amp envelope, the filter envelope, filter
+type/cutoff/resonance and LFO1 into the program object, over Algorithm 1 with
+F1 = `4POLE LOPASS W/SEP`. **This entry still said "hardware RE not yet started"
+on 2026-09-11**, long after the RE was done, the writer was shipped and the
+result was confirmed on the K2000R; the stale text survived because nothing
+re-reads a heading that already says OPEN.
 
-We can convert sample mapping + tuning to KRZ (HW-confirmed sounding) but **not**
-envelopes / filter / cutoff / resonance / LFOs the way the E4XT path does. We
-have the program object's *structure* (segment skeleton, the Algorithm-1
-`PITCH → 4POLE LOPASS W/SEP → AMP` target, the uniform 4×HOB DSP-function-page
-layout) but not the *byte semantics* — those need RE.
+The RE lever was scripted SysEx plus the Gotek disk-diff method — the
+PC↔K2000R MIDI link that this entry listed as an open question for Jan exists
+and was what made it tractable.
+
+**What remains open is narrower and has its own entries:** the envelope
+re-cycle behaviour (§KRZENVLOOP), the filter-envelope depth that is measured but
+not yet usable (§KRZENVDEPTH), and the bandpass-plus-sweep silent preset below.
 
 The plan, three RE strategies (scripted SysEx / forward-RE test banks /
 create-on-HW + diff), per-parameter checklists, the corpus analysis, and the
