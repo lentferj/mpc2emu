@@ -6506,10 +6506,44 @@ only the writer makes it 1.84x. Both, together, or neither.
 
 ## §FIL2FRGAP — the filter-2 corner table has a 19-byte hole and reads ~18% low in it
 
-**Status:** FOUND 2026-09-11. **NOT FIXED** — one measurement, taken to answer a
-different question, and not yet confirmed as a calibration point.
-**Blocked on:** s3ked confirming whether their `FIL2FR` 55 reading is
-table-grade, or a short re-measure of 48/52/56/60.
+**Status: PROBABLY AN ARTEFACT. DO NOT ACT ON THIS SECTION.** Raised 2026-09-11
+18:24 and undermined the same evening by the measurement method that produced it.
+**Blocked on:** s3ked reprocessing v2's `FIL2FR` 55 depth-0 rung with the
+corrected baseline window. **No card crossing needed — the captures exist.**
+
+**What changed.** The single reading came from a baseline held in a **fixed
+80–200 Hz window** while the corner moved. Reprocessing v3 with the window held
+at a fixed *relative* position (1.6–2.6 octaves below each corner) collapsed a
+monotone drift from 83.2 to 15.3 cents and **confirmed our table**: `FIL2FR`
+72→80 measured 904.7 cents against our 920.1, a 15-cent disagreement over eight
+bytes.
+
+**Where the fixed window sat, which is the whole story:**
+
+| `FIL2FR` | our Hz | window top vs corner |
+|---|---|---|
+| 55 | 218 | **0.13 octaves below — essentially ON the corner** |
+| 66 | 476 | 1.25 octaves below — near the correct position |
+| 72 | 720 | 1.85 |
+| 80 | 1225 | 2.61 |
+
+A baseline taken *at* the corner includes attenuated signal, so it reads low, so
+the −3 dB point is reached later, so **the corner measures HIGH** — and 264.7
+against 218.1 is high by 335 cents. The direction is what the bias predicts. At
+`FIL2FR` 66, where the fixed window was already near-correct, the correction
+moved the reading **0.4 cents** (470.9 → 470.8).
+
+**MY OWN ARGUMENT FOR THIS SECTION WAS CONFOUNDED, AND IT WAS THE PERSUASIVE
+ONE.** I argued the disagreement tracked *table density* — agreeing where the
+table has points, disagreeing in the 19-byte hole. But window proximity predicts
+exactly the same pattern, because low bytes put the corner low, which is where a
+fixed low window sits closest to it. **Density and proximity are collinear across
+these two points, and two points cannot separate them.** The argument felt
+strong because it explained the data; so did the wrong one.
+
+**The 45–64 hole is still real** — 19 bytes against 6–10 everywhere else — and
+still worth filling on general grounds. What is no longer supported is the claim
+that the table is *wrong* there.
 
 `AKAI_FIL2FR_MEASURED` has points at 45 (106.9 Hz) and 64 (414.4 Hz) and
 **nothing between** — a 19-byte gap where every value is log interpolation. Every

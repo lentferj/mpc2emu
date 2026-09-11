@@ -926,3 +926,61 @@ and its pole count was wrong in this converter until 2026-09-10.
 curve, and the two taps are different filter orders. It affects 3.5 % of
 material, and the fix is a modelling decision about what "bandpass resonance"
 should mean rather than a measurement.
+
+---
+
+## The `MODVFLT2_3` depth law: ~225 cents per unit (2026-09-11)
+
+The number the dropped-filter-envelope fix needs. Measured by s3ked across the
+`F2DEPTH` v2 and v3 volumes, five ladders at three corners, all reprocessed on
+the corrected baseline window:
+
+| corner | rungs | cents/unit | max residual |
+|---|---|---|---|
+| `FIL2FR` 66 (v3) | 0, 2, 4, 6, 8, 10 | 230.0 | 68.8 cents |
+| `FIL2FR` 72 (v3) | 0, 4, 8 | 219.7 | 13.1 |
+| `FIL2FR` 80 (v3) | 0, −4, −8 | 227.8 | 19.2 |
+| `FIL2FR` 66 (v2) | 0, 5 | 229.1 | |
+| `FIL2FR` 66 (v2) | 0, 10 | 230.9 | |
+
+**~225 cents/unit, ±5% between corners**, and v2's 66 ladder reprocessed lands on
+v3's independent 66 fit — different session, different reference program.
+
+**The field is symmetric to the measurement's resolution and no further.** ±4
+gives +891.9 against −892.0 cents; the method's own residual is 15–20 cents, so
+that is agreement *to the resolution*, not to 0.1 cents. The ±8 pair differs by
+65 cents, and that is the honest statement of how far symmetry has been tested.
+
+**SUPERSEDES the 220 cents/unit recorded earlier the same day** (218.8 / 221.3),
+which becomes 229.1 / 230.9 on the same captures once the window is corrected.
+
+### The ladder design was wrong in a way that looked like rigour
+
+**My six-rung ladder is the worst of the three** — 68.8 cents maximum residual
+against 13.1 and 19.2 for the three-rung ladders. Its extra rungs sit at low
+depths, where the corner is low, where fewest harmonics fall in the baseline
+window: **the additional points bought resolution exactly where the method is
+weakest.** s3ked's statement of it is the one to keep — *six points per corner is
+not six points of evidence* — and it was their own request for six that I was
+satisfying, so neither of us saw it coming.
+
+### What caught the error
+
+The v3 captures first produced a **monotone −60 cents/octave drift** against our
+stated corners, which reads exactly like `FIL2FR`'s byte spacing being too wide —
+an accusation aimed at a table I had just flagged as having a bad region. It was
+wrong. The baseline sat in a fixed 80–200 Hz window while the corner moved from
+436 Hz to 1873 Hz, so a residual slope accumulated over more octaves at the top.
+
+**This is the third time in this project that a window held constant in the wrong
+coordinate has manufactured a result**, and the first that built one rather than
+erasing one. The 48 Hz boxcar and the 1/6-octave smoother over a 108 Hz notch
+both *removed* a feature, and a missing feature announces itself. This one
+produced a finding, aimed it at a named table, and gave it a plausible magnitude
+— because **a tilt is what a real tuning error looks like**.
+
+It was caught only because the analysis order required measuring the method's
+own residual against stated corners before reading anything else. The two
+near-coincident rung pairs did not catch it and could not: they closed at +12.7
+and +12.8 cents, equal to 0.1, which is the predicted within-pair cancellation.
+**Comparing the instrument to itself cannot detect a bias in the instrument.**

@@ -31961,6 +31961,16 @@ further than captures do.
 
 ## §FIL2FRGAP — filling the 45–64 hole in the filter-2 corner table
 
+**FIRST: REPROCESS, DO NOT RE-MEASURE.** As of 2026-09-11 evening this section
+is probably chasing an artefact — see TODO §FIL2FRGAP. The `FIL2FR` 55 reading
+was taken with a baseline window sitting 0.13 octaves below the corner, which
+biases a corner high, and it is high by exactly the amount and in exactly the
+direction that predicts. v2's captures still exist, so the decisive test is to
+reprocess PRG 34 (`FIL2FR` 55, depth 0) with the corrected relative window. If it
+returns near 218 Hz, this section closes with no bench time at all.
+
+Only if it does NOT:
+
 **Do not patch this with the single reading.** `FIL2FR` 55 = 264.7 Hz came out of
 a depth-law capture, and s3ked flagged it rather than offering it as calibration.
 One point cannot distinguish "the table is wrong at 55" from "the region has
