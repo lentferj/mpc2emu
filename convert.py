@@ -1318,7 +1318,11 @@ def main():
         print(w)
     output_banks, warnings = split_into_banks(
         source_banks, args.bank_size, bank_name, args.format,
-        pram_k=args.pram, max_objects=args.akai_max_objects)
+        pram_k=args.pram, max_objects=args.akai_max_objects,
+        # The board changes the KEYGROUP COUNT, so it changes the object
+        # budget. Passed here rather than defaulted in the splitter, because a
+        # default is what made the budget disagree with the writer.
+        ib304f=getattr(args, 'akai_ib304f', False))
     for w in warnings:
         print(w)
     print_split_summary(source_banks, output_banks, args.bank_size)

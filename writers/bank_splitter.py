@@ -591,6 +591,11 @@ class TargetBank:
     pram_budget: int = 0
     #: 0 = no resident-object pool (every format but AKAI).
     object_pool: int = 0
+    #: The IB-304F second filter, which makes the keygroup count BOARD-DEPENDENT:
+    #: two layers in one key range differing only in filter 2 need separate
+    #: keygroups with the board and correctly share one without it. Budgeting
+    #: with the wrong value under-counts exactly the programs the board enlarges.
+    ib304f: bool = False
 
     def _unique_sample_name(self, base: str) -> str:
         if base not in self._sample_names:
@@ -669,7 +674,8 @@ class TargetBank:
         # unloadable. Only applied where a pool is known.
         if self.object_pool:
             if akai_object_count(self.presets + [preset],
-                                 len(self._sample_names) + new_samples) > self.object_pool:
+                                 len(self._sample_names) + new_samples,
+                                 self.ib304f) > self.object_pool:
                 return False
 
         # PRAM, not object count, is what a K2000 actually runs out of.
@@ -698,6 +704,7 @@ def split_into_banks(
     fmt: str = 'e4b',
     pram_k=None,
     max_objects=None,
+    ib304f: bool = False,
 ) -> Tuple[List[Bank], List[str]]:
     """
     Pack presets from multiple source banks into size-limited output banks.
@@ -811,7 +818,8 @@ def split_into_banks(
         if not placed:
             # Open a new target bank
             tb = TargetBank(index=len(target_banks) + 1,
-                            pram_budget=_pram, object_pool=_pool)
+                            pram_budget=_pram, object_pool=_pool,
+                            ib304f=ib304f)
             tb.add_preset(preset, needed_samples)
             target_banks.append(tb)
 

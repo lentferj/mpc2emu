@@ -243,7 +243,7 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 
 ---
 
-## AKAI object budget does not know the IB-304F can force a split (OPEN 2026-09-11)
+## AKAI object budget did not know the IB-304F can force a split — FIXED 2026-09-11
 
 `keygroup_count(preset, ib304f=False)` and
 `bank_splitter.akai_object_count(presets, n_samples, ib304f=False)` both now take
@@ -260,8 +260,16 @@ range, same corner, same resonance, different filter SHAPE. On the 666-voice
 local E4B corpus it never occurs. So this is a budget edge rather than a live
 defect, and the plumbing is in place for a caller that knows the flag.
 
-**Status:** open, software only. **Blocked on:** nothing; thread `args.akai_ib304f`
-from `convert.py` through `split_into_banks` to `akai_object_count`.
+**Status: FIXED 2026-09-11.** `args.akai_ib304f` is threaded from `convert.py`
+through `split_into_banks` into `TargetBank.ib304f` and on to
+`akai_object_count`. Verified by spying on the real function rather than by
+asserting a bank count, since a count can come out right for the wrong reason
+when the pool is loose: `ib304f=False` reaches the budget only as `False`,
+`True` only as `True`.
+
+**A parameter that exists and is never supplied is the same defect as the
+fingerprint one a level up** — plumbing present, value absent — and both were
+introduced by giving the new argument a safe-looking default.
 
 ## The keygroup fingerprint was rendered without the board flag — FIXED 2026-09-11
 
