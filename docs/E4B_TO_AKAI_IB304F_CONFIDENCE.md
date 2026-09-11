@@ -313,7 +313,16 @@ at 13:18.
 
 **CAUSE: Jan had unplugged the E4XT from the audio bay.** That is the whole of the
 13:18–15:15 silence. RAM was fine throughout, the audio path was fine once
-repatched, and no bench fault existed.
+repatched, and no bench fault existed. **The machine has held its eight presets
+loaded and sounding the entire time**, confirmed by the 15:29 captures: 0/5 silent
+on both presets, peaks −10.6 to −31.2 dBFS.
+
+**The retracted RAM-clear claim was then repeated anyway, at 16:20, three hours
+after being withdrawn** — in a status line stating the E4XT "was cleared and has
+not been reloaded". Jan corrected it a second time. **That is the precise failure
+this document already warned about**: a wrong figure is fixed when someone re-runs
+the command, and a wrong *narrative* propagates. Retracting it once in the file was
+not enough to stop it being restated from memory.
 
 ### A WRONG diagnosis was recorded here first, and both halves of it were wrong
 
