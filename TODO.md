@@ -6448,11 +6448,34 @@ obvious.
 
 ## §ATKBIAS — Two attack laws are both ~1.8x wrong, and they cancel each other
 
-**Status:** FOUND 2026-09-11, HW-measured, **NOT FIXED**. Needs Jan's go-ahead
-and a hardware confirmation of the fix.
-**Blocked on:** nothing technical — the measurement exists. See
-`docs/RESOLUTION_NOTES.md` §ATKBIAS for the patch and why it must be applied to
-BOTH sides in one change.
+**Status:** FIXED 2026-09-11 (commit `3411013`), **HARDWARE-CONFIRMED the same
+day** by the `ATKFIX` volume, PRGNUM 19/38/39. Unpushed pending Jan's go-ahead.
+
+`ATKFIX` was built through `convert.py` from **SFZ**, deliberately not E4B: the
+two errors cancelled precisely on the E4B path, so an E4B test would have passed
+before the fix and after it and told us nothing either time.
+
+| PRG | SFZ asks | ATTAK1 | predicted | measured | vs SFZ |
+|---|---|---|---|---|---|
+| 19 | 0.50 s | 77 | 0.50 s | 0.495 s | −1.0% |
+| 38 | 2.00 s | 90 | 1.99 s | 2.005 s | +0.2% |
+| 39 | 4.00 s | 97 | 4.15 s | 4.350 s | +8.7% |
+
+Neither filed falsifier fired: 0.55× would have given 0.28 / 1.1 / 2.2 s, and a
+doubly-applied correction 0.9 / 3.6 / 7.5 s.
+
+**WHAT THIS CONFIRMS IS THE WIRING, NOT THE LAW.** The predicted column comes
+from the same `ATKCAL` fit the law was refitted against, so a source's attack is
+shown to survive parse → convert → write → playback intact. The law itself rests
+on `ATKCAL` alone and is not independently retested here. PRG 39's +4.8% against
+prediction sits inside `ATKCAL`'s own residual band (+6.7% at ATTAK1 85, −3.6% at
+99), so it is the law's accuracy at the top of the range rather than anything new.
+
+**Follow-up done:** `AKAI_ATTACK_CEILING` diagnostic added — ATTAK1 99 is 5.13 s
+and a slower request is silently clamped. The ceiling was unreachable while the
+law ran 1.8× long, so correcting the law made a real content loss reachable for
+the first time.
+**Blocked on:** nothing. See `docs/RESOLUTION_NOTES.md` §ATKBIAS.
 
 `_E4XT_ATK_SLOWDOWN = 1.838` (e4b_writer, used by e4b_parser) and the AKAI
 `_AK_ATTAK1_TIME` law were each fitted from `t_peak` on DECAYING material. That

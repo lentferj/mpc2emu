@@ -868,7 +868,35 @@ def akai_env_bytes(env, quiet: bool = False) -> tuple:
 
     # Attack rises from silence to the peak, so unlike decay and release its
     # span is fixed and it needs no sustain-dependent distance.
-    a = akai_attack_byte(getattr(env, 'attack', 0.0) or 0.0)
+    _atk_want = getattr(env, 'attack', 0.0) or 0.0
+    a = akai_attack_byte(_atk_want)
+
+    # ATTAK1 99 IS A HARD CEILING AT 5.13 s AND IT ONLY BECAME VISIBLE ON
+    # 2026-09-11 (TODO §ATKBIAS). While the law ran 1.8x long, every request
+    # arrived inflated and saturated the byte earlier, so the clamp was real
+    # but always attributed to the inflation. Now that the law is right, a
+    # source asking for a slower attack silently gets the fastest thing the
+    # machine can still call slow -- and a swell arriving 30% short is exactly
+    # the kind of loss that sounds like a choice.
+    #
+    # Magnitude in the record, per the rate-snap lesson: "+2 cents" and
+    # "+831 cents" both read as "cannot be played" without the number.
+    if not quiet and a >= _AK_ATTAK1_TIME[3]:
+        _ceiling = _ak_attack_seconds(_AK_ATTAK1_TIME[3])
+        if _atk_want > _ceiling * 1.02:
+            _msg = (f"attack of {_atk_want:.2f} s exceeds the S3000XL's slowest, "
+                    f"{_ceiling:.2f} s at ATTAK1 {_AK_ATTAK1_TIME[3]}. It will "
+                    f"sound {_ceiling:.2f} s -- {_atk_want - _ceiling:.2f} s "
+                    f"short, {(1 - _ceiling / _atk_want) * 100:.0f}% fast.")
+            _diag(_W, 'AKAI_ATTACK_CEILING', _msg,
+                  content_lost=True,
+                  remedy='there is no workaround on this machine, because the '
+                         'envelope cannot rise more slowly; either shorten the '
+                         'source attack knowingly or accept the clamp',
+                  detail={'requested_s': round(_atk_want, 3),
+                          'ceiling_s': round(_ceiling, 3),
+                          'attak1': _AK_ATTAK1_TIME[3]},
+                  echo=f"    [WARN] {_msg}")
 
     return a, d, sus, r
 
@@ -998,6 +1026,17 @@ def _akai_sustain_fraction(byte: int) -> float:
     if byte <= 0:
         return 0.0
     return (_first_reaching(byte) + _first_reaching(byte + 1)) / 2.0
+
+
+def _ak_attack_seconds(byte: int) -> float:
+    """ATTAK1 -> seconds, from the law itself.
+
+    Exists so the ceiling in the diagnostic is DERIVED rather than written down:
+    a refit of `_AK_ATTAK1_TIME` moves the ceiling, and a hardcoded 5.13 would
+    quietly stop being true. The 2026-09-11 refit moved it from 9.25 s to 5.13 s.
+    """
+    a, b, _, _ = _AK_ATTAK1_TIME
+    return a * math.exp(b * byte)
 
 
 def akai_attack_byte(seconds: float) -> int:
