@@ -622,6 +622,45 @@ dB/oct is close to exactly **one pole** (6 dB/oct) against two poles at 12.
 **So: the sweep is not the cause. What sets the residual slope is still open
 between pole count and resting corner.**
 
+**UPDATE 2026-09-11 17:30 — THE POLE BRANCH IS CLOSED. IT IS THE RESTING
+CORNER.** Measured on one machine, `POLES` volume, PRGNUM 117–120 (s3ked), as
+slopes referenced to a both-filters-open program, fitted above 2× the corner with
+a per-capture noise floor and a 20 dB margin required over it:
+
+| program | corner Hz | fit band | n | octaves | dB/oct | poles |
+|---|---|---|---|---|---|---|
+| `PL F1` (Low 2, filter 1 alone) | 158 | 331–2811 | 45 | 3.09 | −12.06 | **2.01** |
+| `PL CASC` (Low 4) | 373 | 772–1158 | 8 | 0.58 | −24.13 | 3.52–4.02 |
+| `PL CASC2` (Low 4, 2× corner) | 703 | 1433–1984 | 11 | 0.47 | −21.13 | |
+
+**Filter 1 is exactly two poles — 2.01 over 3.09 octaves on 45 harmonics**, which
+is both the result and the validation of the method on a band long enough to
+trust. The cascade lands in 3.5–4.0 and **nowhere near 3 or 5**, so our 4-pole
+model is right and a pole-count error cannot own the −6.40.
+
+**What this datum is NOT.** The corner-independence check — `PL CASC` against
+`PL CASC2`, which had to agree because a pole count cannot depend on where the
+corner sits — **is inconclusive, not passed**. They differ by 3.00 dB/oct, half a
+pole, which is inside what a half-octave fit on 8 and 11 points can resolve. The
+limit is structural rather than a choice of fit: a 4-pole cascade reaches the
+recording floor within about an octave and a half of its corner, so the usable
+skirt is short however it is fitted. Excluding 3 and 5 is what these captures
+support; separating 3.5 from 4.0 is not.
+
+**Three fits were discarded before this one, all the same error in different
+clothes** (s3ked's own account): a floor guard that tested the *reference's*
+level instead of the filtered program's, which returned **positive** slopes for a
+lowpass; then a floor estimated from inter-harmonic bins, which sat *below* the
+true floor so a 12 dB SNR guard passed points already flat; caught only by
+reading absolute levels, where `PL CASC` falls to 46 dB by 1764 Hz and then
+*rises* to 54 — a signal sitting on the floor. **Each attempt produced a
+plausible number, and each number was made of noise.** Same shape as the
+sawtooth's intrinsic 6 dB/oct tilt: a reference that is wrong in a smooth way
+yields a wrong answer that looks like a measurement.
+
+So the residual slope is now the **resting corner's** to own, and that is the
+next thing to measure.
+
 **A clean datum in its own right:** removing the sweep costs about **10 dB** on
 both presets (P004 −9.2 → −19.5, P005 −16.5 → −26.6). **The sweep passes through a
 region that lets substantially more through than its resting position does** —
