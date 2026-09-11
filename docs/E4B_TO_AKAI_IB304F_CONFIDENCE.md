@@ -235,7 +235,19 @@ needs a card crossing. See `TODO.md` §E4BSOURCEID.
 
 ### A separate finding the grid produced, larger than anything it was scoring
 
-**Our decay times saturate, by up to 5.9x.** The point in a 6 s hold where each
+**Our decay times saturate, by up to 5.9x — and that does NOT explain the
+envelope difference.** The attribution was withdrawn 2026-09-11 against its own
+filed criterion: anchored to each note's own peak, the AKAI decays **less** than
+the E4XT by ~4 dB over 1 s on both tested presets, where the prediction was
+*more* by 0.9 dB — and the control preset, predicted to show 9% of the test
+preset's divergence, showed 85%. A near-common offset on two presets whose
+shortfalls differ 2.4-fold is not the shape saturation makes. Five candidate
+mechanisms for the residual were then eliminated from the files (per-voice
+attacks, envelope key-follow, sample identity, pitch-scaled sample decay, loop
+state) and **no replacement is offered**. The saturation measurement itself is
+read from files and stands.
+
+The point in a 6 s hold where each
 machine's output is flattest differs by **1 to 3.5 seconds on five of six
 presets** — and the cause is largely ours: `DECAY1` is an 0..99 field, the four
 presets with a genuine decay stage all wanted **more** than 99 (117.2, 108.7,

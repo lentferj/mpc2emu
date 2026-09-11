@@ -482,7 +482,53 @@ bigger audible difference than any corner-frequency error that document worries
 about, and it was found by a tool written to choose analysis windows, not to
 measure envelopes.
 
-**LARGELY ATTRIBUTED, SAME DAY — and it is our side.** `DECAY1` is an 0..99
+**THE `DECAY1` EXPLANATION IS WITHDRAWN (2026-09-11 11:40).** It was filed with a
+stated criterion — *"if P001 does not show the AKAI ~1.8 dB lower at 2 s while
+P002 shows ~0.2 dB, the explanation fails and is withdrawn without a third
+framing"* — and the measurement met it. Both sides anchored to each note's own
+peak, median of five notes, fall over 1.0 s:
+
+| preset | AKAI | E4XT | AKAI − E4XT | predicted |
+|---|---|---|---|---|
+| P001 | −0.87 | −5.28 | **+4.41 dB** | −0.90 dB |
+| P002 | −2.03 | −5.80 | **+3.77 dB** | −0.08 dB |
+
+**The sign is wrong** — the AKAI decays *less*, not more — and **P002, the floor
+preset predicted to show 9% of P001's divergence, shows 85% of it.** A
+near-common ~4 dB on two presets whose shortfalls differ 2.4-fold is not the
+shape a saturation effect makes: saturation scales with the shortfall.
+
+**What is withdrawn is the EXPLANATION, not the measurement.** The saturation
+itself is read from files and stands: `DECAY1` is an 0..99 field, four of the six
+presets wanted more than 99, 9.9% of 666 voices across 21 banks saturate, worst
+24.7 units past the ceiling giving an 11.2× shortfall. It is still a real target
+limit and the writer still reports it. It simply does not account for the
+envelope difference.
+
+**Five candidate mechanisms for the residual were eliminated from the files**
+(2026-09-11), none of them offered as a replacement:
+
+1. **Per-voice attack differences** — all four of P001's voices carry attack
+   3.430 s, so every keygroup gets `ATTAK1` 90 and our side is note-independent.
+2. **Envelope key-follow** — the format has exactly two key-follow fields,
+   `K_FRQ2` and `K_DAR3`; neither touches envelope 1, and `K_DAR3` measured
+   inert (spread 1.02×).
+3. **Sample identity** — all five grid notes play the same two samples, so the
+   predictor has zero variance.
+4. **Pitch-scaled sample decay** — spans 0.16 to 3.90 dB/s across the notes, a
+   24× range, and correlates at r = −0.069 / −0.338 / +0.009 against AKAI
+   `t_peak`, E4XT `t_peak` and their difference.
+5. **Loop state** — preserved on both sides, same `loop_type`, loop points
+   correctly rescaled by the resample ratio.
+
+**Caveats that weaken even the refuting numbers, recorded because they bound what
+was shown:** P001 is modulation-contaminated and **non-monotonic on both
+machines**, so its three points are partly measuring phase rather than decay;
+P002 is monotonic on both and is the cleaner comparison — **and it was chosen as
+the control, not the test**, so the trustworthy number sits on the preset that was
+meant to carry none.
+
+**Original claim, retained for the record:** `DECAY1` is an 0..99
 field and **four of the six presets wanted more than 99**:
 
 | preset | source decay | DECAY1 wanted | written | decays X too fast | gap |
