@@ -6503,3 +6503,46 @@ that path is accurate to −0.7% / +0.9% / +2.6% at E4XT bytes 72 / 79 / 87.
 
 **DO NOT FIX ONE SIDE.** Fixing only the parser makes E4B -> AKAI 0.59x; fixing
 only the writer makes it 1.84x. Both, together, or neither.
+
+## §FIL2FRGAP — the filter-2 corner table has a 19-byte hole and reads ~18% low in it
+
+**Status:** FOUND 2026-09-11. **NOT FIXED** — one measurement, taken to answer a
+different question, and not yet confirmed as a calibration point.
+**Blocked on:** s3ked confirming whether their `FIL2FR` 55 reading is
+table-grade, or a short re-measure of 48/52/56/60.
+
+`AKAI_FIL2FR_MEASURED` has points at 45 (106.9 Hz) and 64 (414.4 Hz) and
+**nothing between** — a 19-byte gap where every value is log interpolation. Every
+other gap in the table is 6–10 bytes.
+
+Measuring `F2DEPTH` v2, s3ked read **`FIL2FR` 55 at 264.7 Hz**; our table says
+218.1. Their `FIL2FR` 66 read 470.9 against our 475.8, **agreeing to 1.0%** — and
+66 sits in the narrow 64–72 gap. So their method cross-checks against our table
+where the table is dense, and disagrees where it is empty.
+
+**The provenance matches exactly**, which is what makes the two comparable: our
+points are s3ked's own, 2026-09-09, *"mode 0 / `FLT2Q` 0, −3 dB corner taken as a
+ratio against the same program bypassed"*, and the new reading is the same
+measurer, mode and Q, deflattened against a both-filters-open program.
+
+If it holds, the span is not one slope and the table's recorded **1.03 oct/10
+bytes for 45→64 is an average hiding both halves**:
+
+| span | oct/10 bytes |
+|---|---|
+| 45 → 55 | 1.31 |
+| 55 → 64 | 0.72 |
+
+and our interpolation runs low across the middle of the gap — −7.5% at byte 49,
+**−17.6% at 55**, −12.1% at 58.
+
+**Do not insert 264.7 into the table on this alone.** It is a single point taken
+while answering the depth-law question, and s3ked flagged it rather than offering
+it. A third law (§204) gives 324 Hz at the same byte and matches neither, which
+s3ked suspects is a resonant-peak-versus-corner difference of the kind §139
+recorded for filter 1 — suspected, not checked.
+
+**This does NOT affect the `MODVFLT2_3` depth law.** That is measured in cents
+against each program's own depth-0 corner, so an absolute error in the table
+cancels. It affects sources whose cutoff lands in 45–64 being written to a corner
+up to ~18% off.
