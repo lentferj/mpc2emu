@@ -6506,7 +6506,54 @@ only the writer makes it 1.84x. Both, together, or neither.
 
 ## §FIL2FRGAP — the filter-2 corner table has a 19-byte hole and reads ~18% low in it
 
-**Status: PROBABLY AN ARTEFACT. DO NOT ACT ON THIS SECTION.** Raised 2026-09-11
+**Status: THE CHARGE IS AN ARTEFACT, AND THE TABLE CANNOT BE SETTLED BY THIS
+METHOD AT ALL. DO NOT BUILD A VOLUME FOR IT.** Both the four-program run and the
+`+8` redesign that was meant to rescue it are **withdrawn**.
+
+**The −3 dB corner is not a well-defined observable here, at any note and any
+corner frequency.** The falsifying test cost no card contact: `K_FREQ` and
+`K_FRQ2` read 0 on all fourteen resident programs, so neither cutoff follows the
+key, and an octave-lower probe note doubles the harmonics below every corner
+while the corners stay put. s3ked captured `LONOTE` 24 against 36 on three
+programs in RAM and restored with an independent re-read:
+
+| | PRG 121 note 36 | note 24 | PRG 35 note 36 | note 24 |
+|---|---|---|---|---|
+| window spread | 269.3 c | 284.1 c | 346.7 c | 346.7 c |
+
+**Two to six times the harmonics; the spread does not move.** So the constraint
+was never sampling density — **the deflattened response has no flat passband to
+reference at all**, only a gentler slope leading into a steeper one, and where
+the baseline sits changes what "3 dB below the passband" *means*. The 1225 Hz
+rung with thirteen harmonics beneath it is no better behaved than the 476 Hz one.
+
+That is also why the differentials held, and for a better reason than was first
+given: a difference between two programs is read at the same place on the same
+ambiguous curve, so the ill-definition cancels.
+
+**What the item needs against what the method delivers:**
+
+| quantity | moves with the window |
+|---|---|
+| absolute corner | ~300 cents |
+| `FIL2FR` 66→80 interval | ~70 |
+| depth law per unit | ~18 |
+
+**§FIL2FRGAP needs 40-cent resolution; the interval is good to 70.** Settling it
+needs a **different observable** — a fixed-slope crossing, a fit to the whole
+transition, or an A/B against a program *known* flat rather than assumed flat —
+not a better subject. **That question is settled on the host, not at the bench.**
+
+**The redesign was the more dangerous artefact, not the original error.** A wrong
+number gets checked. A plausible mechanism attached to a *real* limitation gets
+**built**: it explained the data, predicted the right direction, named the right
+bytes, and arrived with a fix that would have consumed six of four free PRGNUMs
+plus a card crossing. The experiment that killed it was twenty minutes of RAM
+writes.
+
+---
+
+*(earlier status, kept for the record)* **PROBABLY AN ARTEFACT.** Raised 2026-09-11
 18:24 and undermined the same evening by the measurement method that produced it.
 **Blocked on:** s3ked reprocessing v2's `FIL2FR` 55 depth-0 rung with the
 corrected baseline window. **No card crossing needed — the captures exist.**
