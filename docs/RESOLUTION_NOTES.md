@@ -31882,6 +31882,29 @@ rather than as a calculation removes the recipient's ability to refuse it.
 presets, they have been loaded after a power cycle" (Jan). One sentence disposed of
 both the diagnosis and the rule built on it.
 
+### Restoring a file with `mv` can leave stale bytecode that Python trusts
+
+Practical, and it bit the verification method rather than the code.
+
+The revert-check used all day is: save the file, break the fix, confirm the test
+fails, restore, re-run. **Restoring with `mv backup original` preserves the
+BACKUP's mtime** — which can be older than the `.pyc` compiled from the broken
+version, so Python considers the cache current and keeps loading the broken code.
+
+It presented as **three failing tests**, one of them a pre-existing golden-hash
+test, with `grep` showing the source fully restored. `_PROGRAM_HW_DEFAULTS[0x65]`
+read `14` in the file and loaded as `0`.
+
+**Use `cp` to restore, not `mv`** — `cp` writes a new mtime. Or clear
+`__pycache__` after any restore. The other revert-checks that day used `cp` in
+both directions and were unaffected.
+
+**The general shape:** a verification procedure has its own failure modes, and
+this one reported *the code is broken* when the code was fine and the procedure
+was broken. Same family as a control that cannot fail — except here the control
+failed for a reason outside the thing under test, which is more convincing and
+just as wrong.
+
 ### Why §105's ladder cannot be a reference
 
 It is the measurement that started this enquiry and the one number in it that
