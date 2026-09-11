@@ -257,6 +257,33 @@ steady level, not a rate. Both machines enter at the same time, so this is not t
 between-machine difference — but affected cells are marked rather than averaged
 over.
 
+**Corroborated from the E4XT audio, and its detectability is preset-dependent in
+the way that matters.** Local slope change over ±0.35 s at the predicted entry
+time, scored against the same statistic computed at every other time in the same
+note as a null — because these envelopes swing anyway, and a first pass gave
+changes of +14, −20 and −79 dB/s that looked decisive and were not:
+
+| preset | note | change at entry | median elsewhere | percentile |
+|---|---|---|---|---|
+| P004 | 52 | 14.17 | 5.08 | 88% |
+| P004 | 65 | 20.47 | 7.97 | 91% |
+| P004 | 79 | 78.70 | 18.15 | **100%** |
+| P005 | 38 | 1.19 | 7.44 | 10% |
+| P005 | 52 | 24.22 | 14.56 | 76% |
+| P005 | 65 | 10.27 | 9.34 | 54% |
+| P005 | 79 | 19.41 | 11.46 | 75% |
+
+**On the single-layer preset the predicted time is at the 88th, 91st and 100th
+percentile of that note's own distribution. On the two-layer modulated preset it is
+not** — one lands at the 10th, flatter than typical.
+
+So the confound is real and **buried in the modulation on exactly the presets that
+need checking most.** That is why the rule is *mark the cells from the file-side
+prediction*, not *verify each one from the audio*: verification is unavailable
+where it would matter. Held as **corroboration rather than independent
+confirmation** — the file said where to look, and the null is computed from the
+same capture the signal is in, so the percentiles are not independent draws.
+
 **Two of five presets are non-monotonic on both machines** (P001 and P005, the two
 two-layer presets), so those trajectories are partly measuring modulation phase.
 
