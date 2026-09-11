@@ -307,6 +307,45 @@ the comparison render and stays silent.
 `keygroup_count` threads the flag too, since the count is board-dependent, and
 a test asserts budget and file agree for **both** flag states.
 
+## Pole count vs resting corner — measurement volume BUILT, awaiting a crossing (2026-09-11)
+
+The cross-machine difference is **−6.40 dB/oct**, a *slope*, so it is a pole count
+or a resting corner — a horizontal corner offset cannot make a slope. The static
+test ruled out the sweep; the two remaining candidates need a subject where the
+filter's skirt is measured **directly on one machine**, with no cross-machine
+comparison and no corner matching.
+
+**`~/temp/HD_poles.img`, volume `POLES`, PRGNUM 117–120.** Generator with the full
+analysis spec: `~/temp/build_poles.py`.
+
+| PRGNUM | program | filter |
+|---|---|---|
+| 117 | `PL REF` | open — the reference spectrum |
+| 118 | `PL F1` | Low 2, `FILFRQ` 45 = 198 Hz, filter 2 off |
+| 119 | `PL CASC` | Low 4, 246 + 252 Hz — the cascade we write for a 4-pole source |
+| 120 | `PL CASC2` | Low 4, 473 + 476 Hz — the **same** cascade, corner doubled |
+
+**Material:** one steady saw, `f0` exactly **55.125 Hz** (800 samples at 44100, so
+the loop is seamless by construction), **200 harmonics spanning 5.6 octaves**, one
+note, sustain 1.0, no envelope. A filter's slope lives in the relative amplitudes
+of harmonics above the corner, so **one capture per program replaces a sweep**.
+
+**Method:** subtract 117's harmonic amplitudes from each other program's and fit
+against log frequency, using harmonics at least an octave above that program's
+corner. **The reference cancels the sample, the converter, the rig and the level**
+— which is what the band-residual matrix could not do.
+
+**Expect −12 dB/oct on 118 and −24 on 119. And 119 must equal 120: a pole count is
+corner-independent, so if they disagree the −6.40 dB/oct has no pole explanation.**
+
+The corners are printed from the **written bytes** rather than predicted. 119 and
+120 sit above the requested 200/400 Hz because the writer lifts a matched cascade
+by 1/`AKAI_CASCADE_CORNER_RATIO` so the *pair* lands on target — that is the
+behaviour under test, not an error.
+
+**Status:** built and verified. **Blocked on:** a card crossing, riding with
+`ATKCAL`; neither justifies a dedicated swap.
+
 ## TD1/TD2 — the non-saturating envelope test (OPEN 2026-09-11, material on the card)
 
 Two programs, **PRG 46/47 on the `FXPATHS` volume**, whose AKAI `DECAY1` lands
