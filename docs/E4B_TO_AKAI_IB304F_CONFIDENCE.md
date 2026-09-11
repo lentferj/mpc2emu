@@ -295,6 +295,34 @@ listener hears relative to the sound's own level, and the matrix is not the plac
 to settle that silently.
 
 
+## CAPTURE VALIDITY BOUNDARY — E4XT audio dead after 2026-09-11 11:42
+
+**Every E4XT capture taken after 11:42 on 2026-09-11 is the noise floor and must
+not be used.** Last good capture `NOTEDEP` at 11:42; first silent one `FENVFLAT`
+at 13:18.
+
+- MIDI **reaches the machine and acts** — program changes select, confirmed on the
+  panel. Notes produce nothing.
+- **Not edits**: presets that were never touched are equally silent (P000/P001/P002
+  at −71.1 / −72.0 / −73.9 dBFS against −9.2 and −16.7 the night before), and every
+  edited parameter was restored and verified by read-back.
+- **Not JACK and not the interface**: concurrent AKAI captures on the neighbouring
+  channels are fine.
+- **The machine went quiet while idle**, with nothing touching the rig between
+  11:45 and 13:15.
+
+**Everything in this document rests on captures at or before 11:42 and is
+unaffected.** The static-versus-static test of the −6.40 dB/oct slope — the one
+that would separate the pole-count branch from the dropped-sweep branch — **has
+not been run**, and the two silent results are the dead audio path rather than a
+filter result.
+
+**One datum survives, from the parameter read rather than the audio:** P004 and
+P005's filter envelope is `Atk1 78 → Atk2 100 → Dcy1 99 → Dcy2 0`. **It rises to
+full and returns to zero** — so the sweep we drop is one that ends where it
+begins, which bears on how the loss should be modelled.
+
+
 ## The per-cell matrix is NOT published, and why
 
 Filed 2026-09-11 rather than left as an absence. The per-cell table was built and
