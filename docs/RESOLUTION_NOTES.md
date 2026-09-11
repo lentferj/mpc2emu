@@ -31791,6 +31791,35 @@ collapsed a genuinely-late peak from 5.99 s to 2.41 s on *drifting* material,
 because 99% of a late reference is crossed during the ramp when the plateau falls.
 It is safe on material that is steady by construction and nowhere else.
 
+### Two failure modes that look alike and are not
+
+Worth separating, because only one of them has a cheap fix.
+
+**Not looking at a population you can see.** A corpus figure taken off 6 of 64
+disc images; every AKAI prevalence number that followed was from 9% of the
+material. The fix is to check the denominator, and nothing about the situation
+prompts you to.
+
+**Not asking a session that is holding the answer.** 2026-09-11: a peer's message
+carried a quarter-second table for one note. A shape figure computed from it
+(`t50/t90` 0.797, "≈ t^2.6") went into a tracked document. They had all five
+notes — median 0.765, that note the lowest of the five, and their five notes span
+exponents **1.66–2.36**, so `t^2.6` was **outside the range their own data
+supported**.
+
+**This one only exists when two sessions work one problem, and the fix is a single
+question.** *Do you have the other notes?* It is cheaper than any of the
+verification disciplines in this file and it is the one nobody thinks to apply,
+because a number arriving from a peer feels like a result rather than like a
+sample.
+
+**The defence that held: state conclusions from measured points, not fitted
+parameters.** The restatement — 3.44× slower to 10% of level, 1.39× to half, half
+level 0.48 s late — came from two columns of one table and reproduced exactly on
+the holder's side. **A fitted parameter has freedom that two measured points do
+not**, so it can sit outside the data's range while looking more precise than the
+thing it was derived from.
+
 ### Why §105's ladder cannot be a reference
 
 It is the measurement that started this enquiry and the one number in it that
