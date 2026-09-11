@@ -141,7 +141,7 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 | ~~**Our EOS envelope rate law is 18-25% fast**~~ **FIXED 2026-08-24, swept 60-100** | *(2026-08-24, §E4BRATEANCHOR)* We carry `dB/s = 27.9*2**(-(byte-72)/12.3)`. eosed's four fresh hardware points: byte 69 -> 27.36/27.97 measured against our 33.04; byte 80 -> 13.44/14.24 against our 17.78. The **slope** is right (12.3 vs ln2/0.0565 = 12.27) -- it is the anchor, ~3 bytes' worth. Inverting for 15.224 dB/s: eosed's law 79.7, their direct solve 78.1/78.9, ours 82.8. **The smell was already in the file and written off** as *"5%, unexplained and not worth chasing"*. Invisible to our 499 tests because every path uses this law in BOTH directions, so a round trip through our own code cancels it exactly. **Seven hardware points now, bytes 69/80/99.** Refitting our own parameterisation to all of them gives **halving 12.519, 23.882 dB/s at byte 72** and holds every point within **2.3%**; our current 12.3/27.9 is **13-19% fast uniformly**, the signature of a pure anchor error with the slope right all along. Three independent inversions agree the AKAI's release rate lands on **byte 80** (79.79 / 80.13 / 80.04); ours says 82.75. An earlier reading of 78-79 was withdrawn -- the fits ran down to floor+6 dB and the noise floor levered the slope, worst at the slowest byte. **FIXED:** swept on a stationary looped-noise subject, bytes 60/72/88/100 measured at 46.48/23.70/9.67/4.84 against 46.59/23.65/9.58/4.86 -- **every byte to 1%**, and byte 100 is twelve outside the original fit window. Constants are now `1382 x exp(-0.0565 x byte)` with halving and reference DERIVED from those two rather than maintained by hand. Our own 7-point refit was **rejected**: two of its points came from fits standing in the noise floor. |
 | **`Preset.program_number` reaches the TOC only -- it does NOT place the preset on the machine** | *(2026-08-24)* `write_e4b` builds each preset body with the **enumerate index** (`_build_preset_body(p, i, ...)`) while the TOC entry gets `midi_prog=p.program_number`. Setting `program_number = 10` on the first preset of a bank therefore writes **body index 0, TOC midi_prog 10** -- the two disagree inside one file, and a bank cannot be asked to place its presets at chosen slots. Found while trying to keep a calibration bank clear of P000 so it could be MERGED onto a machine already holding the preset under test; the change looked applied (the generator printed PC10-15) and was inert where it mattered. **Which field the E4XT honours on load is not known** and is one bank-scan away from being known. **Until it is, do not rely on preset numbering for anything a measurement depends on** -- identify presets by scanning names and verifying a field the machine actually uses (root key), which is what the bench side now does. |
 | **E4B sample names can collide with an already-loaded bank, and the E4XT silently rebinds to the old samples** | *(2026-08-24, §E4BNAMEDEDUP)* **Measured, and it invalidated a listening verdict before anyone acted on it.** Merging a revised bank onto a machine holding an older one with the same sample names bound **five of six voices to the OLD samples** — voice→sample came back `24/54/25/22/26/23` merged against `4/1/5/2/6/3` loaded alone, i.e. exactly +20 on five of them. The merge added **one** sample, not sixteen. Not a memory shortage: 121 MB free at the time. The two banks differ in **exactly one bit** (loop-in-release), so a name or name+size matcher matches all sixteen and a content matcher matches none — which leaves index 0 being the lone exception **unexplained**. **Invisible to every check we have:** the preset's parameters are right, the bank on disc is right, only the sound is wrong — and it looked exactly like a converter defect. **Fix:** give written sample names something a previously-loaded bank cannot collide with. Not wired yet — a naming change alters every conversion and wants its own listen. **Also note:** while two banks share sample names, an A/B with both resident may be structurally impossible in either order; capture one side to audio instead. |
-| **The AKAI writer ignores `filter_type` entirely, and the IB-304F needs an option** | *(2026-08-24, §AKAIFILT2)* Two things, one live now and one waiting on hardware. **LIVE:** `writers/akai_s3000_writer.py` never looks at `filter_type`, so a 2-pole source and a 4-pole source produce byte-identical AKAI output — the same shape as this week's reader defects, in the other direction. Recommended: keep the CORNER and accept 12 dB/oct less rolloff, because the resonant peak sits at the corner and moving it trades a slope error for a misplaced-resonance error, which is far more audible (§AKAIENV2DEPTH). Say so in the conversion log. **WAITING ON THE BOARD** (ordered 2026-08-17): `--akai-filter-board`, default OFF, never populating FILTER2/TONE/ENV3 when off since s3ked crashed an S3000XL twice exercising that area, and nothing on the wire distinguishes a fitted machine. Two 2-pole sections DO make 24 dB/oct, but two *identical* ones give Linkwitz-Riley (−6 dB at the corner), not Butterworth — a proper 4-pole needs Q 0.5412 and 1.3065 at the same corner. **Measure `FLT2Q`'s law first:** 0.5412 is below `FILQ 0`'s Q of 1.067, so a Butterworth 4-pole may not be reachable at all, which would invalidate the approach. |
+| ~~**The AKAI writer ignores `filter_type` entirely, and the IB-304F needs an option**~~ **BOTH HALVES CLOSED 2026-09-11** | *(2026-08-24, §AKAIFILT2; closed 2026-09-11)* **The writer reads `filter_type` now** — `_XPM_TO_FLT2`, `_XPM_POLES` and `_filter2_plan` in `writers/akai_s3000_writer.py`, and the flag shipped as **`--akai-ib304f`** (not `--akai-filter-board` as this row predicted), default OFF, hardware-verified both directions on 2026-09-11. **Two claims in the old row were refuted by the measurement and are kept here because they were load-bearing:** (1) *"Two 2-pole sections DO make 24 dB/oct"* — the board's sections are **one-pole each**, measured, so LP is 2-pole total and the HP tap is **1-pole**; the whole Butterworth/Linkwitz-Riley argument, including the Q 0.5412/1.3065 pair and the worry that `FILQ 0`'s Q of 1.067 makes Butterworth unreachable, was reasoning about a filter topology this board does not have. (2) *"Measure `FLT2Q`'s law first"* was right as advice and it is done — all 32 depths measured. The surviving recommendation from the row is unchanged and still correct: **keep the CORNER** rather than the slope when only one filter is available, because the resonant peak sits at the corner and a misplaced resonance is far more audible than 12 dB/oct of missing rolloff. See the dedicated IB-304F section below for the four open residuals. |
 | **Eight findings from 2026-08-23 are NOT applied — see §AKAIFIXPLAN2 for the plan** | *(2026-08-23)* The seven reader items are fixed and tested; these are what was found and deliberately left. In order of reach: **(1)** the E4B reader decodes envelope rates without the span the writer encodes with, so they are not inverses and it touches every E4B-sourced conversion (§E4BENVSPAN) — and may be eosed's unexplained ~1.9×; ~~**(2)** KGMUTE is never written~~ — **DONE 2026-08-24**: the golden test already had the mechanism, `no_hw_defaults`, with three existing precedents; the answer was in its docstring; **(3)** the E4B resonance writer is `round(res*127)` on a non-linear field, the same shape as the K2000 depth bug — eosed's measured curve now exists (§E4XTQCAL); **(4)** the FilterEnv depth composes two laws measured on two machines and over-delivers 2.5–6.7×, needing two calibrations and a reformulation in terms of corner positions (§AKAIENV2DEPTH); **(5)** an audit of every fitted law for evaluation outside its calibrated range, three instances found in one evening; **(6)** an AKAI→AKAI round-trip test and a saturation invariant, which between them would have caught most of tonight; **(7)** two parked hardware jobs; **(8)** ~~one commit message 342 commits back that names a vendor~~ — **Jan's call 2026-08-24: leave it.** Not worth rewriting 342 commits for one word in a July message; everything downstream of it is clean. |
 | ~~**AKAI reader divides zone tune by 16 instead of 2.56, and never fills `coarse_tune`**~~ | **FIXED 2026-08-23, with tests.**  *(2026-08-23, §AKAITUNEREAD)* **Found from the audio during the listening audit, and HARDWARE-CONFIRMED BY EAR the same evening** — Jan played source against conversion and reported both predicted symptoms unprompted: the conversion sounds significantly lower than the source, and it beats against itself. `parsers/akai_s3000_parser.py:626` writes `fine_tune=(kg['tune'] + z['tune']) // 16`. AKAI tune units are **1/256 semitone**, so cents are `/2.56` — every AKAI-sourced detune arrives at **16% of what the source asked for**. Worse, `fine_tune` is documented ±100 cents and `coarse_tune` (semitones) is never populated, so anything ≥1 semitone saturates. Traced end to end on real files: an octave-stacked EP program's `VTUNO 3072` (+1200 ct) reaches the model as `fine_tune 192` and the written E4B as **98 cents** — an octave layer becomes a semitone layer, which changes the chord rather than detuning it. **The writer was fixed 2026-08-11** and `_akai_tune_units` states the factor is "2.56, NOT 256 and NOT 16" — the read half was missed, so the two are not inverses and no test closes the loop (§KRZENVDEPTH2 with the sign flipped: there they shared an error and were exact inverses; here they disagree and still nothing looks). **Corpus scale:** 22343 programs, 42.2% carry zone tuning; of 258992 zones, 33.0% are tuned, 11.4% by ≥1 semitone, and **14124 are exact octave layers** — the largest non-zero bucket by 4×. **Deliberately not fixed mid-audit**: Jan is comparing material built with the current reader. Fix + a regression test that fails with `//16` restored + an AKAI→AKAI round-trip test, which is the shape that would have caught it on the day the writer was fixed. |
 | **AKAI: the service manual caps a volume at 255 samples / 254 programs; we allow 509 of each** | *(2026-08-23, §AKAIOBJCAPS)* Both AKAI spec sheets — the S2000/S3000XL/S3200XL service manual Jan pointed at in the Bibliothek, and independently the S3000XL owner's manual — give `Maximum sample number 255` / `Maximum program number 254`. `bank_splitter.py:160` carries `'akai': (509, 509, 510)`, which is the **volume directory** budget and was never meant to be the resident one — the same gap `_AKAI_OBJECT_POOL` exists to cover. A 300-sample volume passes every check we have and would load **partially**, the quiet failure. **Corpus is consistent but cannot confirm it:** 4253 authored volumes on the local AKAI ISOs top out at 191 samples / 128 programs, so they look identical under either cap — recorded as corroboration only, per §AGREEMENT. **Not tightened unilaterally**, because if 255 is wrong we split banks that would have loaded whole. Needs one volume of 260 tiny samples on the S3000XL; procedure in the section. Note 255 + 254 = 509 exactly, which may mean one budget written twice or nothing at all. **Strengthened the same day by the S1000 manual:** it states its own, *different* pair — 200 samples / 100 programs — and splitting the corpus scan by generation shows the two populations separating at exactly that boundary (S1000: 2803 volumes, max 120 samples / **43** programs; S3000: 1433 volumes, max 191 / **128**). No S1000 volume passes the S1000's stated cap and only S3000 volumes pass it, which is the discrimination the flat scan could not give. Also explains why this never bit: an S1000 volume directory holds **126** entries, so its 200-sample cap is unreachable within one volume — the S3000's 510 is what makes 255 the binding limit. |
@@ -242,6 +242,121 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 | **The ~2 dB gain-dataset anomaly** | key, velocity and transposition all measured flat. Isolated to one early measurement that four later independent runs contradict. Recorded in case it recurs |
 
 ---
+
+## E4XT and AKAI envelopes are differently SHAPED — 1 to 3.5 s apart (OPEN 2026-09-11)
+
+Measured on the 5x5 grid campaign, 2026-09-11, by `eosed`'s `pickwin` across
+both machines: the point in a 6 s hold where each machine's output is *flattest*
+differs between the E4XT and our AKAI conversion on **five of six presets**.
+
+| preset | chosen window | min-max tilt dB | E4XT's own best | AKAI's own best | gap |
+|--------|---------------|-----------------|-----------------|-----------------|-----|
+| P000 | 0.75-1.75 s | 3.82 | 4.25 s | 0.75 s | **3.50 s** |
+| P001 | 3.75-4.75 | 3.42 | 1.50 | 4.50 | 3.00 s |
+| P002 | 0.25-1.25 | 6.51 | 1.25 | 0.25 | 1.00 s |
+| P003 | 1.25-2.25 | 5.03 | 2.25 | 5.00 | 2.75 s |
+| P004 | 5.00-6.00 | 3.15 | 5.00 | 4.00 | 1.00 s |
+| P005 | 4.25-5.25 | 2.79 | — | — | agree |
+
+**On P000 the gap is 3.5 s out of a 6 s hold.** This is not a measurement-floor
+problem and it is not absorbed by the min-max compromise window — every cell
+carries its own `win_tilt_db` so the price is visible per cell, but the price is
+real.
+
+**Why this outranks the filter work it was collected to support.** The IB-304F
+filter path is now measured to HW confidence in both directions. The **envelope**
+path is not: `docs/E4B_TO_AKAI_IB304F_CONFIDENCE.md` carries the envelope rows at
+**DERIVED**, never HW. A 1-3.5 s disagreement in where the output settles is a
+bigger audible difference than any corner-frequency error that document worries
+about, and it was found by a tool written to choose analysis windows, not to
+measure envelopes.
+
+**Candidate causes, none tested.** Attack/decay/sustain-level law mismatch
+(AKAI ENV1 rate laws against EOS's); the AKAI's ENV2-to-level interaction; our
+two-stage-to-one-stage envelope reduction; and the K2000 envelope re-cycle bug
+(§KRZENVLOOP) is a reminder that a held envelope can do something other than
+hold. Note P000 also has `filter_env_cents = -8936` over a 1.92 s decay, so part
+of its tilt is the **filter** sweeping, not the amplifier.
+
+**Status:** open, and it should be its own row in the confidence matrix rather
+than folded into the per-cell residuals. **Blocked on:** nothing for the
+analysis — both grids are captured. A clean measurement wants a single
+full-scale sample with no filter motion on both machines, which needs a card
+crossing for the AKAI side.
+
+## The E4B->AKAI confidence matrix rests on two different sources (OPEN 2026-09-11)
+
+The 5x5 grid campaign compares an E4XT against our AKAI conversion of the same
+material. **The two sides were not built from the same source.**
+
+- The **AKAI** volume (`~/temp/HD_fxpaths.img`, programs `FX EL MEANO` ..
+  `FX MYSTERY M`, PRGNUM 40-45) was built from `~/temp/hd0_fx/*.E4B`, which are
+  extracts of **`HD0-20260514.img.lzo`** — a backup from **14 May**.
+- The **E4XT** side was loaded by `eosed` through the front panel from **live
+  HD0, on 2026-09-11**.
+
+If Jan has edited any of those four banks in the four months between, the two
+machines played **different material**, and the residual method's premise —
+same material, so the material's own structure cancels — fails. **The failure
+direction is the bad one:** it appears as a per-preset conversion error that
+does not exist, spectrally arbitrary, so it looks like a genuine hard-to-explain
+residual rather than like a level offset or a filter error. That is exactly the
+kind of finding that survives scrutiny because nobody can attribute it.
+
+Partly closed 2026-09-11: `eosed` read the **sound-determining fields** off the
+device against `/home/lentferj/temp/hd0_expected_fields.txt` (generated from the
+backup extracts — filter type/cutoff/resonance/keytrack, both envelopes,
+velocity->filter and ->volume with pivot and curve, zone key/velocity ranges,
+root key, tuning, pan, volume, sample names). **A field that cannot affect a
+capture cannot manufacture a residual**, so that set closes the risk that
+matters. It does not establish identity: one matching field set is evidence, not
+proof, and a replaced sample or an edited key range outside the compared set
+would read clean.
+
+**Status:** open, matrix marked provisional on this point **at the top of the
+document, not in a footnote** — it is one shared assumption under every cell
+rather than a per-cell uncertainty, and it does not average out.
+**Blocked on:** a card crossing. Extract the four banks from **live HD0** and
+diff byte-for-byte against `~/temp/hd0_fx/`. A read of HD0 is permitted; the
+standing rule (Jan, 2026-09-04) forbids *writing* it. There is no newer backup —
+`HD0-20260514.img.lzo` is the most recent of four. Ride this on the same swap as
+the other crossing-gated items.
+
+## AKAI parser drops PRGNUM — every read reports program_number 0 (OPEN 2026-09-11)
+
+`parsers/akai_s3000_parser.py` sets `program_number=0` unconditionally (two
+sites, both constructing a `Preset`), although PRGNUM is sitting at program byte
+**`0x0f`** and is trivially readable — reading it there by hand is how the
+FXPATHS pairing was verified on 2026-09-11.
+
+The writer honours `preset.program_number` **when it is usable** (§AKAIPRGNUM0,
+`writers/akai_s3000_writer.py`) and otherwise falls back to `n_written + 1`.
+Because the parser always supplies 0, **an AKAI -> AKAI conversion always takes
+the fallback and renumbers every program sequentially**, discarding whatever the
+source volume assigned. A volume whose programs were deliberately numbered to
+sit at particular MIDI program changes loses that silently.
+
+Low severity, but note the shape: the writer's "honour the source's numbers"
+branch **cannot currently fire for AKAI sources at all**, so it is untested by
+any AKAI round trip. The feature exists and is unreachable from the one format
+that would exercise it.
+
+**Found while writing this up, and reproduced:** `_usable` requires the wanted
+numbers to be **unique**, so a bank with exactly **one** preset has
+`_wanted == [0]` — unique and in range — and writes **PRGNUM 0** as though the
+source had asked for it. 1 preset writes `[0]`, 2 writes `[1, 2]`, 3 writes
+`[1, 2, 3]`. **306 of 2,410 real volumes hold exactly one program**, so the case
+is ordinary.
+
+**And a claim in the writer's own comment is withdrawn by the same corpus scan.**
+`writers/akai_s3000_writer.py` asserted "PRGNUM 0 IS NEVER FREE", contradicting
+Jan's correction three lines above it. Across 43 genuine S3000XL discs (2,410
+volumes, 5,009 programs) **PRGNUM 0 is the MOST COMMON value — 1,339 programs,
+26.7 %** — ahead of 1 (611) and 2 (395). The comment is corrected; the numbering
+behaviour is left alone pending Jan, since the fallback's start at 1 rests only
+on the withdrawn claim and real discs start at 0.
+
+**Status:** open, software only. **Blocked on:** nothing.
 
 ## AKAI reader may emit phantom files from junk in unallocated directory slots
 
@@ -1895,7 +2010,7 @@ family specifically.
 **Status:** open, low priority. **Blocked on:** nothing; it is a caution, not a
 defect.
 
-## AKAI IB-304F second filter board not supported (OPEN 2026-09-08)
+## AKAI IB-304F second filter board — IMPLEMENTED + HW-VERIFIED both directions (2026-09-11), four residuals open
 
 The base S3000XL filter is **2-pole**; most sources we convert carry 4-pole,
 and that slope is lost today. The optional **IB-304F** adds FILTER 2 in series
@@ -1997,12 +2112,47 @@ The write policy is unchanged and is settled by a fact, not a preference:
 mapping a 4-pole source across both filters is correct on a fitted machine and
 half-filtered on an unfitted one. A flag (`--akai-ib304f`), never a default.
 
-**Status:** open. **Blocked on:** Phase 0 on nothing; Phase 1 on the board
-being installed. Procedure:
-`docs/re_procedures/akai_ib304f_filter_board.md`. Manual: S3000XL Operator's
-Manual pp. 103–111 (local copy under `~/Seafile/Bibliothek/Handbücher`).
+**Status: IMPLEMENTED AND HARDWARE-VERIFIED IN BOTH DIRECTIONS, 2026-09-11.**
+The board went in on 2026-09-10 and the read and write paths were measured on
+it the same night. Still **gated behind `--akai-ib304f`, never a default** --
+`LSI2_ON` reads back 1 with no board, so nothing on the wire can detect one
+(Jan, twice: "it has to be gated behind the Filter-Board option, ofc" and "the
+AKAI 4Pole LP has to remain gated behind the filter card option, still").
 
-## AKAI CD3000 ISO mirror built for the --iso path's first hardware test (OPEN 2026-09-08)
+What is measured, in `models/common.py`:
+
+- **ONE tuning law for every mode**, `Hz = 6.7795 * exp(0.07033 * FIL2FR)`,
+  rungs 25-88, plus 89-94 measured point by point. Per-mode tuning was
+  implemented and then **withdrawn**: the feature frequency moves with
+  `FLT2MODE` and with `FLT2Q`, the *tuning* does not.
+- **`FIL2FR` 99 is a measured bypass**, not an extrapolation off the top.
+- **All 32 `FLT2Q` depths** (`AKAI_FLT2Q_DEPTH_DB`), and per-mode resonance for
+  LP and HP. `AKAI_FLT2Q_INERT_VALUE = 24`.
+- **Pole counts corrected**: LP 2-pole, **HP 1-pole**, BP 1+1. Two cascaded
+  one-pole sections with feedback -- **not** a state-variable filter, which
+  would give +12 on the BP tap where this gives +6. Three "independent"
+  observations said 1-pole; all three were taken inside its wide knee.
+- **Cascade corner ratio 0.841**; the writer lifts both sections by 1/0.841 so
+  the PAIR lands on the requested corner. This was 16% low in both directions
+  at once for a week -- **a round trip cannot see a symmetric error.**
+
+**Four residuals, none needing a card swap:**
+
+1. `FLT2Q`-dependent feature offset is unmodelled (diagnostic
+   `AKAI_FIL2FR_FEATURE_OFFSET_UNMODELLED`).
+2. `FIL2FR` 95-98 unmeasured -- between the law's top rung and the measured
+   bypass.
+3. `FIL2FR` below 25 unmeasured; `AKAI_FIL2FR_EXTRAP_BELOW` is a fitted slope.
+4. BP resonance ordering: `AKAI_BP_RESONANCE_WRONG_ORDER` fires and the
+   modelling decision is not made.
+
+Procedure: `docs/re_procedures/akai_ib304f_filter_board.md` and
+`docs/re_procedures/akai_fil2fr_mode_ladders.md`. Confidence table for the
+E4B->AKAI path: `docs/E4B_TO_AKAI_IB304F_CONFIDENCE.md`. Manual: S3000XL
+Operator's Manual pp. 103–111 (local copy under
+`~/Seafile/Bibliothek/Handbücher`).
+
+## AKAI `--iso` path — HW-CONFIRMED on a real sampler (2026-09-09)
 
 `--iso` has never been read by a sampler; the disk-image path has been, many
 times. `~/temp/HD4-MIRROR.iso` is the live test card's **exact content** —
@@ -2014,7 +2164,17 @@ the machine repeatedly, so anything that differs on the CD is the **CD path**,
 not the material. 360 MB / 6 partitions (34 volumes need 5; the 240 MB default
 gives only 4), comfortably inside a CD.
 
-**Status:** built, awaiting a card swap. **Blocked on:** bench time.
+**Status: HARDWARE-CONFIRMED 2026-09-09.** Read by the sampler off the test
+card; volumes mount and programs load. `--iso` is no longer an unexercised
+path. The control worked as designed -- the material was already known off the
+machine, so the CD path was the only variable.
+
+The transport test reused the parked `CD3` id (Jan: "park 'CD3' (->XX_) und
+reuse that id"); `CD3-mpc2emu-krzfix-backup-20260909.iso` in `~/temp/` is that
+volume's pre-overwrite backup, part of 620 MB of irreproducible CD images
+backed up before the swap.
+
+**Still not hardware-confirmed: `--floppy`.**
 
 ## E4B zero-sustain release is inferred, not measured (OPEN 2026-09-08)
 

@@ -3628,11 +3628,34 @@ def build_akai_volume(bank: Bank, bank_name: Optional[str] = None,
         # loads, so the collision this was defending against does not occur
         # in ordinary use. Shifting our own numbering is not the fix for an
         # operating-procedure question on the machine side; reverted.
-        # PRGNUM 0 IS NEVER FREE. The boot-resident TEST PROGRAM occupies it
-        # and survives every memory clear, so a program loaded at 0 collides
-        # with something already in the machine. The fallback numbering counted
-        # from 0, which put the FIRST program of every volume built without
-        # usable source numbers straight onto it.
+        # "PRGNUM 0 IS NEVER FREE" -- WITHDRAWN 2026-09-11, it contradicted
+        # Jan's correction three lines above it. That paragraph claimed the
+        # boot-resident TEST PROGRAM "survives every memory clear"; Jan had
+        # already said CLR clears it as part of the normal panel workflow.
+        # Both statements stood here at once, and the code implements the
+        # retracted one.
+        #
+        # THE CORPUS SETTLES IT, in Jan's favour: across 43 genuine S3000XL
+        # library discs -- 2,410 volumes, 5,009 programs -- **PRGNUM 0 is the
+        # single MOST COMMON value, 1,339 programs (26.7%)**, ahead of 1 (611)
+        # and 2 (395). Commercial libraries would not ship a quarter of their
+        # programs onto a number that collides with something unclearable.
+        #
+        # The fallback still counts from 1, which is harmless -- both 0 and 1
+        # are legal -- so this is left alone rather than changed on a comment
+        # fix. Flagged for Jan: the off-by-one is justified only by the
+        # withdrawn claim, and starting at 0 would match what real discs do.
+        #
+        # WHAT IS STILL A REAL DEFECT, separately (§AKAIPRGNUMREAD): `_usable`
+        # requires the wanted numbers to be UNIQUE, so a bank with exactly ONE
+        # preset has `_wanted == [0]` -- unique and in range -- and writes
+        # PRGNUM 0 as though the source had asked for it. For an AKAI source
+        # that 0 is not intent, it is `akai_s3000_parser`'s hardcoded
+        # placeholder, because the parser never reads PRGNUM at all. Verified
+        # 2026-09-11: 1 preset -> PRGNUM [0], 2 -> [1, 2], 3 -> [1, 2, 3].
+        # 306 of those 2,410 real volumes hold exactly one program, so the
+        # case is ordinary, not a corner. Low severity now that 0 is known
+        # legal; the fix is the parser reading byte 0x0f.
         _pnum = ((getattr(preset, 'program_number', 0) or 0) if _usable
                  else n_written + 1)
         if _pnum > 127 and not _over_127:
