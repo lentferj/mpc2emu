@@ -843,8 +843,8 @@ differ.
 **Held as suggestive, not established:** n=6, the gaps were known before the
 shortfall was computed, Pearson is only +0.730 — the ordering agrees, the scale
 does not, and there is no account of why 1.24x should cost 2.75 s — and now the
-separation of each argmin is unmeasured. El
-Meano is also confounded by `filter_env_cents = -8936` over a 1.92 s decay, so
+separation of each argmin is unmeasured. P000
+is also confounded by `filter_env_cents = -8936` over a 1.92 s decay, so
 part of its tilt is the **filter** sweeping rather than the amplifier.
 **Falsifiable form:** a preset whose `DECAY1` does not saturate should show a
 small gap.
@@ -946,8 +946,8 @@ crossing for the AKAI side.
 The 5x5 grid campaign compares an E4XT against our AKAI conversion of the same
 material. **The two sides were not built from the same source.**
 
-- The **AKAI** volume (`~/temp/HD_fxpaths.img`, programs `FX EL MEANO` ..
-  `FX MYSTERY M`, PRGNUM 40-45) was built from `~/temp/hd0_fx/*.E4B`, which are
+- The **AKAI** volume (`~/temp/HD_fxpaths.img`, programs `FX P000` ..
+  `FX P005`, PRGNUM 40-45) was built from `~/temp/hd0_fx/*.E4B`, which are
   extracts of **`HD0-20260514.img.lzo`** — a backup from **14 May**.
 - The **E4XT** side was loaded by `eosed` through the front panel from **live
   HD0, on 2026-09-11**.

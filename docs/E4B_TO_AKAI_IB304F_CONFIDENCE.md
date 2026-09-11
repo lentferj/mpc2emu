@@ -77,11 +77,11 @@ captures.** Measured from the volume's own headers:
 
 ```
    pair         FX FILFRQ                  NB FILFRQ
-   AIR HEED     99,99,99,99,99,99          89,67,67,77,80,89
-   SYNTH BAS    99                         39
-   OBX BP SW    99,99,99,99,99             39,39,39,39,39
-   REZ PLAY     42,42,42,42,42,99,99,99    39,39,39,39,39,39,39,39
-   MYSTERY M    42,42,42,42,42,99,99,99    39,39,39,39,39,69,69,69
+   P001         99,99,99,99,99,99          89,67,67,77,80,89
+   P002         99                         39
+   P004         99,99,99,99,99             39,39,39,39,39
+   P003         42,42,42,42,42,99,99,99    39,39,39,39,39,39,39,39
+   P005         42,42,42,42,42,99,99,99    39,39,39,39,39,69,69,69
 ```
 
 **Three parameters differ, not one.** When the board is engaged for a non-lowpass
@@ -90,9 +90,9 @@ with the board withheld it must re-tune filter 1 instead — **and it also chang
 key-follow and velocity depth**:
 
 ```
-   FX AIR HEED   K_FREQ 0     velocity->filter 0
-   NB AIR HEED   K_FREQ 0     velocity->filter 7      <- the corner moves with velocity
-   FX OBX BP SW  K_FREQ 0     NB OBX BP SW  K_FREQ 1  <- and with key
+   FX P001       K_FREQ 0     velocity->filter 0
+   NB P001       K_FREQ 0     velocity->filter 7      <- the corner moves with velocity
+   FX P004       K_FREQ 0     NB P004       K_FREQ 1  <- and with key
 ```
 
 **This is correct behaviour and a correct fallback.** For the question the volume
