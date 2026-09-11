@@ -1184,6 +1184,24 @@ def akai_filter_env_bytes(env, cents: float, filfrq: int = 99):
     `filfrq` defaults to 99 (wide open) so existing callers keep working, and
     a wide-open base returns depth 0 -- correctly, since there is nowhere for
     the corner to sweep from there.
+
+    **AND THAT CORRECT RULE SILENTLY DROPS THE ENVELOPE FOR EVERY SHAPE ROUTED
+    TO FILTER 2** (found 2026-09-11, see TODO). `_XPM_TO_FLT2` marks HP, BP and
+    EQ rows `keep_f1 = False`, taking filter 1 out so the band is not sitting at
+    a lowpass knee -- so this function is handed `filfrq = 99` and returns depth
+    0, exactly as documented. **The logic is right and the input is wrong:** the
+    corner that should sweep is `FIL2FR`, and ENV2's dedicated depth (keygroup
+    153) modulates filter 1 only.
+
+    Measured over 666 corpus voices: 318 carry a filter envelope, and **23 of
+    them (7.2%) lose it entirely this way** -- median **3784 cents, 3.2 octaves**
+    of filter movement written as depth 0. The ENV2 *shape* bytes are still
+    written, so the program looks like it has a filter envelope and does not.
+
+    The machine has a route we do not use: `MODVFLT2_1-3`, the assignable
+    modulation slots targeting filter 2, read 0 on every keygroup of every
+    program checked. Fixing this needs that path measured; **reporting it needs
+    nothing**, and it is unreported today.
     """
     sus = int(round(max(0.0, min(1.0, getattr(env, 'sustain', 0.5))) * 99))
     a = _env2_stage_byte(getattr(env, 'attack', 0.0) or 0.0, 99, _AK_ATTAK2_FULL)

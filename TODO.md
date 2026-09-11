@@ -509,6 +509,54 @@ PRGNUM 109–116) is the calibration volume — a steady synthesized loop with *
 knee**, so it isolates the rate law from the segment question. Needs a card
 crossing.
 
+## Filter envelope is SILENTLY DROPPED when the shape routes to filter 2 (OPEN 2026-09-11)
+
+**`_XPM_TO_FLT2` marks HP, BP and EQ rows `keep_f1 = False`** — filter 1 is taken
+out and the whole shape lives in filter 2. That is correct and deliberate: leaving
+filter 1 in at the same corner put the band at the knee and the reader concluded
+the lowpass was doing the audible work.
+
+**But the AKAI's filter envelope (ENV2, dedicated depth at keygroup byte 153)
+modulates FILTER 1.** So when filter 1 is bypassed, `akai_filter_env_bytes` is
+handed `filfrq = 99` — wide open — and its own docstring then does exactly what it
+says: *"a wide-open base returns depth 0, correctly, since there is nowhere for the
+corner to sweep from there."*
+
+**The logic is right and the input is wrong.** The corner that should be swept is
+`FIL2FR`, not filter 1's, and nothing sweeps it. **The result is that the source's
+filter envelope disappears with no diagnostic at all** — the ENV2 shape bytes
+(ATTAK2/DECAY2/SUSTN2/RELSE2) are still written, so the program *looks* like it has
+a filter envelope; only the depth is zero.
+
+**Measured over 666 voices in 21 banks:**
+
+| | count | share |
+|---|---|---|
+| voices with a filter envelope | 318 | 47.7% |
+| …whose shape keeps filter 1, sweep survives | 292 | 91.8% |
+| …**whose shape bypasses filter 1, SWEEP DROPPED** | **23** | **7.2%** |
+| …shape not available on the board | 3 | 0.9% |
+
+**Cents dropped: min 501, median 3784, max 8316 — the median is 3.2 OCTAVES of
+filter movement written as depth 0.**
+
+**The machine has a path we do not use.** `MODVFLT2_1-3` are the assignable
+modulation slots targeting filter 2; `s3ked-47` read them as 0 on every keygroup of
+all three test programs. Routing ENV2 (or the appropriate source) to filter 2
+through that matrix is what this needs.
+
+**It reaches the 2026-09-11 campaign directly and changes an interpretation.**
+PRG 44 and PRG 45 were read as "static filters, so the sweep branch is dead" —
+they are static **because we dropped their sweep**, while their sources carry 4754
+and 8316 cents. **So those cells compare a static AKAI against a sweeping E4XT**,
+and that asymmetry is our conversion's doing rather than a machine difference. It
+is a live candidate for the −6.40 dB/oct cross-machine slope, alongside the
+pole-count branch.
+
+**Status:** open. **Blocked on:** nothing for a diagnostic — the silent case should
+warn today. The fix needs the assignable-matrix route measured (which source, which
+slot, what depth law), which is bench work on the AKAI.
+
 ## E4XT and AKAI envelopes are differently SHAPED — 1 to 3.5 s apart (OPEN 2026-09-11)
 
 Measured on the 5x5 grid campaign, 2026-09-11, by `eosed`'s `pickwin` across
