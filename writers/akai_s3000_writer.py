@@ -739,11 +739,48 @@ def akai_env_bytes(env) -> tuple:
     _drate = getattr(env, 'decay_rate_db_per_s', None)
     if _drate:
         _a, _b, _lo, _hi = _AK_DECAY1_RATE
-        d = int(round(max(0, min(99, math.log(_drate / _a) / _b))))
+        _want = math.log(_drate / _a) / _b
+        d = int(round(max(0, min(99, _want))))
+        # SAY SO WHEN THE BYTE SATURATES. Extrapolating past the fitted window
+        # is deliberate (see `_rate_law_value`: clamping makes a PLATEAU and
+        # ordering is the one thing a converter must not lose) -- but DECAY1 is
+        # an 0..99 field, and at the ceiling the plateau comes back anyway,
+        # because every source slower than DECAY1 99 lands on DECAY1 99.
+        #
+        # MEASURED ON REAL MATERIAL 2026-09-11. Of six presets taken off an
+        # E4XT disk, the four with a genuine decay stage ALL saturated here --
+        # source decays of 19.61, 13.83, 10.48 and 8.69 s, a 2.26x spread,
+        # collapsed onto one byte. The other two have no decay stage at all.
+        # So this is not a corner: on slow pads it is the common case.
+        #
+        # A TARGET LIMIT, NOT A BUG, WHICH IS WHY IT REPORTS RATHER THAN
+        # CORRECTS. The field has no room left; measuring the unfitted region
+        # 86..99 would tell us what we are delivering but could not deliver
+        # more. The honest handling is to name it, like every other place this
+        # writer runs out of range.
+        if _want > 99 or _want < 0:
+            _diag(_W, 'AKAI_DECAY1_SATURATED',
+                  f'source decay rate {_drate:.2f} dB/s needs DECAY1 '
+                  f'{_want:.1f}, outside the field 0..99; written as {d}',
+                  content_lost=True,
+                  remedy='DECAY1 has no range left on this machine; every '
+                         'source slower than DECAY1 99 decays alike. Shorten '
+                         'the source decay or accept the ceiling.',
+                  detail={'wanted': round(_want, 1), 'written': d,
+                          'rate_db_per_s': round(_drate, 3),
+                          'fit_window': [_lo, _hi]})
+        elif not (_lo <= d <= _hi):
+            _diag(_W, 'AKAI_DECAY1_EXTRAPOLATED',
+                  f'DECAY1 {d} is outside the measured window {_lo}..{_hi}; '
+                  f'the rate is extrapolated, not measured',
+                  content_lost=False,
+                  remedy='extend the DECAY1 rate sweep past the window',
+                  detail={'written': d, 'fit_window': [_lo, _hi]})
     else:
         span_decay_db = _AK_SUSTAIN_DB_PER_UNIT * (99 - sus)
         d = _rate_law_value(getattr(env, 'decay', 0.3) or 0.3,
-                            span_decay_db, _AK_DECAY1_RATE, default=50)
+                            span_decay_db, _AK_DECAY1_RATE, default=50,
+                            stage='DECAY1')
 
     # Release travels from the sustain level down to the floor.
     #
@@ -766,7 +803,8 @@ def akai_env_bytes(env) -> tuple:
     else:
         span_rel_db = _AK_SUSTAIN_DB_PER_UNIT * sus
         r = _rate_law_value(getattr(env, 'release', 0.5) or 0.5,
-                            span_rel_db, _AK_RELSE1_RATE, default=45)
+                            span_rel_db, _AK_RELSE1_RATE, default=45,
+                            stage='RELSE1')
 
     # Attack rises from silence to the peak, so unlike decay and release its
     # span is fixed and it needs no sustain-dependent distance.
@@ -923,7 +961,25 @@ def akai_attack_byte(seconds: float) -> int:
     return int(round(max(lo, min(float(hi), v))))
 
 
-def _rate_law_value(seconds: float, span: float, law, default: int) -> int:
+#: Printed-once keys for the envelope-range diagnostics. The RECORD is always
+#: emitted -- a collector gets every occurrence -- but `akai_env_bytes` runs per
+#: KEYGROUP, so a 99-keygroup program would otherwise print 99 identical lines
+#: and bury everything else in the conversion log. Keyed by the numbers, so two
+#: genuinely different envelopes still each report. Same `echo=''` device
+#: `krz_writer` uses where a record and its human-readable form differ.
+_ENV_RANGE_PRINTED: set = set()
+
+
+def _env_range_echo(key) -> str:
+    """'' to suppress printing, None to let the diagnostic render itself."""
+    if key in _ENV_RANGE_PRINTED:
+        return ''
+    _ENV_RANGE_PRINTED.add(key)
+    return None
+
+
+def _rate_law_value(seconds: float, span: float, law, default: int,
+                    stage: str = '') -> int:
     """Invert `rate = a*exp(b*v)` for a stage covering `span` in `seconds`.
 
     Returns `default` when the span is zero -- a stage with nowhere to travel
@@ -960,7 +1016,34 @@ def _rate_law_value(seconds: float, span: float, law, default: int) -> int:
     if rate <= 0:
         return default
     v = math.log(rate / a) / b
-    return int(round(max(0.0, min(99.0, v))))
+    out = int(round(max(0.0, min(99.0, v))))
+    # REPORT THE CEILING, AND REPORT IT FROM HERE. The same diagnostic lives on
+    # the carried-rate branch in `akai_env_bytes`, and on real E4B material that
+    # branch never fires -- `decay_rate_db_per_s` is unset, so every one of the
+    # six presets measured on 2026-09-11 came through THIS path instead. A guard
+    # added to one of two branches is a guard that does not fire on the material
+    # that motivated it, and only running it on that material showed so.
+    if stage and (v > 99.0 or v < 0.0):
+        _diag(_W, f'AKAI_{stage}_SATURATED',
+              f'{stage} needs {v:.1f} for {seconds:.2f} s over {span:.1f} dB, '
+              f'outside the field 0..99; written as {out}',
+              content_lost=True,
+              remedy=f'{stage} has no range left on this machine; every source '
+                     f'past the ceiling behaves alike. Shorten the source '
+                     f'stage or accept it.',
+              detail={'wanted': round(v, 1), 'written': out,
+                      'seconds': round(seconds, 3), 'span_db': round(span, 1),
+                      'fit_window': [lo, hi]},
+              echo=_env_range_echo((stage, 'sat', round(v, 1), out)))
+    elif stage and not (lo <= out <= hi):
+        _diag(_W, f'AKAI_{stage}_EXTRAPOLATED',
+              f'{stage} {out} is outside the measured window {lo}..{hi}; the '
+              f'rate is extrapolated, not measured',
+              content_lost=False,
+              remedy=f'extend the {stage} rate sweep past the window',
+              detail={'written': out, 'fit_window': [lo, hi]},
+              echo=_env_range_echo((stage, 'extrap', out)))
+    return out
 
 
 #: ENVELOPE 2, the FILTER envelope. Times for a FULL 0..99 traverse, from
