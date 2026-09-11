@@ -332,6 +332,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§E4BSOURCEID — the two sides of the matrix came from different sources (2026-09-11)](#e4bsourceid-the-two-sides-of-the-matrix-came-from-different-sources-2026-09-11)
 - [§AKAIPRGNUMREAD — the writer's "honour the source" branch is unreachable from AKAI (2026-09-11)](#akaiprgnumread-the-writers-honour-the-source-branch-is-unreachable-from-akai-2026-09-11)
 - [§AKAIRATESNAP — the converter diagnosed it correctly and a redirect_stdout cut the wire (2026-09-11)](#akairatesnap-the-converter-diagnosed-it-correctly-and-a-redirect_stdout-cut-the-wire-2026-09-11)
+- [§DEFPARAM — six definitional parameters, all inside tooling adopted to make two sides comparable (2026-09-11)](#defparam-six-definitional-parameters-all-inside-tooling-adopted-to-make-two-sides-comparable-2026-09-11)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -31742,4 +31743,61 @@ that was on the card for the 2026-09-11 captures. The corrected build goes to
 `HD_fxpaths_v2.img`. Overwriting the original would leave every capture
 describing an image that no longer exists — the measurements are still valid
 measurements *of that volume*, and that volume has to remain readable.
+
+---
+
+## §DEFPARAM — six definitional parameters, all inside tooling adopted to make two sides comparable (2026-09-11)
+
+Not a bug report. A list, because the same failure happened six times in one day
+and sharing one analyser prevented none of them.
+
+**Sharing an implementation fixes the arithmetic and leaves every naming and
+reference choice untouched, and that is where all six lived.**
+
+| # | parameter | how it bit |
+|---|---|---|
+| 1 | **`hold`** | `measure.py`'s `--hold` help promised it was recorded in the features file "so takes at different holds can never be compared by accident". It was not written. Every HOLD 2.0 and 6.0 file was indistinguishable on the one parameter the campaign changed. |
+| 2 | **`attack_ms` vs `t_peak_ms`** | Two attack numbers out of one trusted function, a second apart on the same preset. The *agreeing* one was the wrong one — 0.27 s apart against 0.88 s. Caught only because s3ked asked which field before concluding. |
+| 3 | **offset origin** | One side's trajectory offsets ran from the onset, the other's from each note's own peak. With a 206 ms peak spread, "+0.00" landed after the peak on half the notes. |
+| 4 | **interpolation rule** | A rate ladder quoted linearly and logarithmically interchangeably; 0.4 s apart over the widest gap. |
+| 5 | **level law** | The amp **sustain** byte is dB-law; the attack **segment-level** byte is linear. Reading the attack level through the dB law gives 58688%. |
+| 6 | **smoothing width** | The last to be found and the only one implicit on *both* sides. A "+7% above the ladder" result spans **0.935 to 1.069** as the envelope smoothing runs 5 ms to 1 s. Withdrawn once stated. |
+
+**The rule that came out of it (eosed's wording):** *the fix is to state the
+detector, not to find an unbiased one.* There may not be an unbiased one; a stated
+one cancels when both sides use it. **Fixed at 5 ms** across this project's
+tooling — chosen because `gridfeat` and `measure.py` already do that, so nothing
+recomputes, not because 5 ms is right.
+
+### And a corollary: `t_peak` fails at BOTH ends
+
+`t_peak` is an argmax, so it needs the signal to have a located maximum.
+
+- **On decaying material** the sample's fall pulls the product's peak *earlier*
+  than the envelope's knee. Measured: a 3.43 s attack read as 2.92 s.
+- **On perfectly steady material it has nowhere to sit.** A linear ramp into a
+  flat hold rises and then is constant; the argmax lands wherever noise peaks,
+  **anywhere in the plateau**. Scatter is of order the plateau length.
+
+The second case was designed into `ATKCAL` by accident: the material was built
+*constant* to remove the first bias, and removing the contour removed the feature
+that gives an argmax a location. **Its analysis rule is therefore a threshold
+crossing, and it is written into the generator** (`~/temp/build_atkcal.py`) rather
+than carried in a message — smooth at 5 ms, reference = median of the last 2.0 s,
+report first reach of reference − 0.1 dB.
+
+**Do not generalise that rule.** "First reach of 99% of a late-window median"
+collapsed a genuinely-late peak from 5.99 s to 2.41 s on *drifting* material,
+because 99% of a late reference is crossed during the ramp when the plateau falls.
+It is safe on material that is steady by construction and nowhere else.
+
+### Why §105's ladder cannot be a reference
+
+It is the measurement that started this enquiry and the one number in it that
+cannot be pinned down: **its material is unnamed** (`method: "one preset with
+steady material"`, preset not identified) **and its smoothing width is
+unstated**. Two unknown parameters cannot serve as a reference for a measurement
+that states both. A measurement written as a standalone result became a reference
+three weeks later, and the fields that make a result reproducible are not the
+fields that make it quotable.
 
