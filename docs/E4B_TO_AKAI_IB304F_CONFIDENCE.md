@@ -658,8 +658,67 @@ plausible number, and each number was made of noise.** Same shape as the
 sawtooth's intrinsic 6 dB/oct tilt: a reference that is wrong in a smooth way
 yields a wrong answer that looks like a measurement.
 
-So the residual slope is now the **resting corner's** to own, and that is the
-next thing to measure.
+~~So the residual slope is now the **resting corner's** to own, and that is the
+next thing to measure.~~
+
+**RETRACTED 40 MINUTES LATER, 2026-09-11 17:42, by a file-side test that needed
+no hardware and should have been run before the sentence was written.** The
+resting corner does not own it either. Both candidates are now closed and the
+−6.40 dB/oct is **unexplained again**.
+
+**First, the doc's own argument for dismissing a corner error was WRONG, and it
+has to go before anything built on it can be trusted.** It read: *a horizontal
+corner offset produces a constant dB difference in the stopband, not a
+pitch-dependent one, so a corner error cannot be it.* True of one note's
+**spectrum**; false of a **per-note broadband level**, which is what was measured.
+As a note rises, more of its energy crosses a fixed corner, so two machines with
+different corners diverge smoothly with pitch — zero when both pass everything,
+saturating at `poles × 20 log10(ratio)` when both stop everything, and monotone
+in between. Over a 4.58-octave grid that middle section is a straight line.
+
+Simulated (4 poles both sides, sawtooth source, eosed's own five notes 24–79),
+with a corner ratio of 2.74 and the higher corner at 800 Hz:
+
+| | slope dB/oct | r | endpoint span |
+|---|---|---|---|
+| simulated pure corner difference | −6.15 | −0.827 | 31.4 dB |
+| **measured, pooled** | **−6.40** | −0.84…−0.89 | 28.3–35.6 dB |
+
+All three statistics at once, from one parameter. Identical corners give
++0.000 dB/oct and 0.00 dB span, so the model is not manufacturing slope. **A
+resting-corner difference is entirely capable of producing this signature** — the
+argument that said otherwise was simply wrong.
+
+**Second, and decisively: these presets do not have one.** What the writer
+actually puts on the machine, against what the source declares:
+
+| preset | E4XT cutoff | FILFRQ | our corner | ratio | predicted slope | measured |
+|---|---|---|---|---|---|---|
+| P003 | 1169.4 Hz | 69 | 1128 Hz | 1.04 | **−0.02** | −6.83 |
+| P004 | 156.8 Hz | 42 | 159 Hz | 0.99 | **+0.12** | −6.62 |
+| P005 | 20000 Hz | 99 | 8481 Hz | 2.36 | **−0.03** | −5.75 |
+
+For P003 and P004 **the two machines' corners agree within 4%**, and that part
+does not depend on the sawtooth assumption at all: two filters at the same corner
+with the same pole count cannot differ by 6.8 dB/oct whatever the source. P005's
+corners do differ 2.36×, but both sit far above the grid's highest fundamental,
+where the effect is −0.03.
+
+**So the doc reached the right conclusion by the wrong route, and I then inverted
+it on the strength of the route rather than the conclusion.** Closing the pole
+branch made the corner the only survivor, and I wrote it up as the owner without
+checking what corners these presets carry — a five-minute test against files
+already on disk.
+
+**The −6.40 dB/oct has no mechanism.** Not the sweep (tested, survived), not the
+pole count (measured, 2.01 and ≈4), not the resting corner (these presets have
+no meaningful one). It should be carried as unexplained, not as belonging to
+whichever candidate is last standing.
+
+**One check still owed before even this is firm:** the passage above says the
+three presets have *different filter modes*, but `MXE4.E4B` reports
+`filter_type 3` for all of P000–P005. Either the modes claim is wrong or the
+measured bank was not this file, and that wants confirming with eosed.
 
 **A clean datum in its own right:** removing the sweep costs about **10 dB** on
 both presets (P004 −9.2 → −19.5, P005 −16.5 → −26.6). **The sweep passes through a
