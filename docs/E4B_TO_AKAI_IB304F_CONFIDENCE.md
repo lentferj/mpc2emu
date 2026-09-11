@@ -311,55 +311,44 @@ at 13:18.
 - **The machine went quiet while idle**, with nothing touching the rig between
   11:45 and 13:15.
 
-**CAUSE FOUND, and no bench work was needed: the E4XT's RAM was cleared by a power
-cycle** (§48). One command settled it:
+**CAUSE: Jan had unplugged the E4XT from the audio bay.** That is the whole of the
+13:18–15:15 silence. RAM was fine throughout, the audio path was fine once
+repatched, and no bench fault existed.
 
-```
-  sample memory   131072 kB total, 125530 free  ->   5542 kB used (5.4 MB)
-  preset memory     4485 kB total,   4480 free  ->      5 kB used
-```
+### A WRONG diagnosis was recorded here first, and both halves of it were wrong
 
-The four source banks are 6.3, 15.3, 6.9 and 6.2 MB on disk. **Six presets cannot
-live in 5.4 MB of sample RAM, and eight cannot live in 5 kB of preset RAM.** The
-remedy applied to the AKAI card around 12:00 was "re-seat in the ZuluSCSI **or a
-ZuluSCSI power-cycle**", and whatever was power-cycled took the E4XT's RAM with it.
+**Claimed: the RAM had been cleared by a power cycle**, from
+`sample memory 5542 kB used / preset memory 5 kB used`, on the argument that the
+four source banks are 6.3–15.3 MB on disk so six presets "cannot live in 5.4 MB".
 
-### The trap: a catalog answers "is the NAME there", not "is the SOUND there"
+**The denominator was wrong.** Only the samples a preset *references* are loaded,
+not whole banks. Measured from the files afterwards: the eight resident presets
+reference **3,510 kB** of sample data. **5,542 kB used is therefore consistent with
+RAM being full**, not empty — and the 5 kB of preset memory is right too, since six
+presets weigh ~4 kB. *Comparing a reported figure against a file size that contains
+much more than the thing reported* is the same error as taking a corpus figure off
+6 of 64 disc images, which is elsewhere in these notes.
 
-**`eoscli catalog` still returns all eight preset names.** The preset *directory*
-survives a RAM clear; the voice, zone and sample data do not. So the machine lists
-its presets, selects them on program change, updates its display — and has nothing
-to play.
+**And the lesson drawn from it was wrong too, which is worse than the fault.** It
+read: *"a catalog answers is the NAME there, not is the SOUND there"*. **On the
+E4XT presets and samples do not survive a power cycle** (Jan, 2026-09-11), so a
+catalog that lists names means they *were* loaded. The catalog reading was correct;
+the memory reading built on top of it was not. **A plausible general lesson,
+extracted from a misdiagnosis, is more durable than the misdiagnosis and does more
+damage** — it would have taught future sessions to distrust a reading that was
+right.
 
-**That reading was made twice** — once in a morning status line and once while
-diagnosing the silence — and `memory` was one command away throughout. It is the
-same shape as the other content-versus-label confusions in this document:
-`SSRATE` reading 44100 in both the broken and the corrected volume, and `attack_ms`
-agreeing where `t_peak_ms` disagreed. **The field that names the thing is not the
-field that is the thing.**
-
-### Two different validity boundaries today
+### Two different validity boundaries still apply
 
 | kind of data | valid |
 |---|---|
-| **audio captures** | at or before **11:42** only |
-| **parameter reads** | **throughout**, including after the power cycle |
+| **audio captures** | at or before **11:42**, and again from **15:15** after the repatch |
+| **parameter reads** | throughout |
 
-Parameter reads come out of the surviving preset directory, so the filter-envelope
-shape recorded below (`Atk1 78 → Atk2 100 → Dcy1 99 → Dcy2 0`, read at 13:15) is
-good despite post-dating the clear. **Mixing the two boundaries would let a valid
-read vouch for an invalid capture.**
-
-**Everything in this document rests on captures at or before 11:42 and is
-unaffected.** The static-versus-static test of the −6.40 dB/oct slope — the one
-that would separate the pole-count branch from the dropped-sweep branch — **has
-not been run**, and the two silent results are the dead audio path rather than a
-filter result.
-
-**One datum survives, from the parameter read rather than the audio:** P004 and
-P005's filter envelope is `Atk1 78 → Atk2 100 → Dcy1 99 → Dcy2 0`. **It rises to
-full and returns to zero** — so the sweep we drop is one that ends where it
-begins, which bears on how the loss should be modelled.
+The repatch was verified rather than assumed: a sweeping baseline re-taken in the
+same session gives P004 −9.2 dB and P005 −16.5 against the previous night's −9.2
+and −16.7 — **the chain returned to within 0.2 dB**. Cross-repatch pairing was
+still avoided in favour of same-session baselines.
 
 
 ## The per-cell matrix is NOT published, and why
@@ -543,11 +532,40 @@ as pitch rises, by about one pole's worth.
    produces the same pitch-dependent signature.
 
 **The discriminator is a STATIC subject** — same shape, same corner, filter
-envelope removed (`SUSTN2` and depth at zero), measured across the same five
-notes. Slope still ≈ −6 dB/oct ⇒ **pole count**, and our cascade model is off by
-one. Slope collapses ⇒ **the sweep**, and the pole counts are fine. One small
-volume, one capture session, and it separates the two remaining causes of the
-largest cross-machine number in this document.
+envelope removed, measured across the same five notes. Slope still ≈ −6 dB/oct ⇒
+**pole count**. Slope collapses ⇒ **the sweep**.
+
+**RUN 2026-09-11 15:29, and the slope SURVIVES.** E4XT filter envelope flattened
+to static-open, against AKAI programs that are already static (we drop their
+sweep), both captures same chain and same session:
+
+| preset | sweeping | static-open | change |
+|---|---|---|---|
+| P004 | −6.63 dB/oct | **−7.96** | −1.33 |
+| P005 | −5.73 | **−5.36** | +0.37 |
+
+**By the rule stated before the test, that points at the pole count**, and −6.63
+dB/oct is close to exactly **one pole** (6 dB/oct) against two poles at 12.
+
+**Three reasons it is not yet a conclusion**, all `eosed`'s:
+
+1. **n = 2**, and the two *changes* go in opposite directions (−1.33, +0.37) — the
+   survival is resolved, the change is not.
+2. **The two "statics" are not at the same corner.** The E4XT's is held at 99% of
+   the envelope; ours is wherever `FIL2FR` rests. A resting-corner difference
+   remains live — and it cannot be dismissed with the argument that refuted
+   fact 2, since that argument was precisely that a corner error does *not* make
+   this monotone form.
+3. **P005's slope is carried by note 79** either way (−18.10 sweeping, −15.46
+   static).
+
+**So: the sweep is not the cause. What sets the residual slope is still open
+between pole count and resting corner.**
+
+**A clean datum in its own right:** removing the sweep costs about **10 dB** on
+both presets (P004 −9.2 → −19.5, P005 −16.5 → −26.6). **The sweep passes through a
+region that lets substantially more through than its resting position does** —
+which is what our dropped-envelope defect is throwing away.
 
 **On paper the counts match**, which is the argument against branch 1: the source
 asks filter type 3 (`Low 4`, four poles) and we deliver filter 1's two plus filter
