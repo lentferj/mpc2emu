@@ -368,15 +368,37 @@ accident. Two regression tests assert exactly that, under
   earlier "E4XT one layer, AKAI two" after finding they had searched a fourth
   *above* the fundamental where the second layer sits a fourth *below*.
 
-**Status/next:** corrected volume at **`~/temp/HD_fxpaths_v2.img`**, built with
-the snap in place and verified by frame count rather than by the rate field —
-the rate field reads 44100 in *both* images, which is precisely why relabelling
-was invisible. Ratios match exactly (1.5750 for the 28000 Hz set, 1.1290 for
-39062, 1.6164 and 1.5908 for the two M12 samples). The original is **kept
-deliberately**: it is the exact content measured on 2026-09-11, and overwriting
-it would leave the captures describing an image that no longer exists.
-**Blocked on:** a card crossing to put v2 on the AKAI, then re-capture P003,
-P004 and P005.
+**Status: CORRECTED VOLUME IS ON THE CARD (2026-09-11 10:35), verified by
+reading it back off the card.** Card md5 `48d809dfa61d53ec61df3ac4db4fb0e2`;
+host copy of the same state `~/temp/HD4-work-fxfix.img`; previous card state
+`~/temp/HD4-card-live-20260911.img` (`922c4e...`), confirmed byte-identical to
+the card before writing.
+
+Replaced **in place** (`on_duplicate='overwrite'`), not rebuilt: 36 volumes
+before and after, 1442 files before and after, **all 1413 non-`FXPATHS` files
+byte-identical — 0 changed, 0 missing, 0 added**. Inside the volume 14 of 29
+files are unchanged: the 12 programs, because AKAI references samples by **name**
+so program bytes do not move when sample lengths change, plus the two samples
+already at 44100. PRGNUM unchanged at 40–45 / 50–55.
+
+**Verify a rebuild of this kind by FRAME COUNT, not by the rate field.** Both the
+broken and the corrected volume report `SSRATE` **44100 for every sample** — the
+fault was a relabelled field over untouched data, so the field that names the bug
+is the one field that looked right in both. Frames on the card now: `DOS MOOGS G1`
+166592 (was 105773, ×1.5750), `BASIC OB A2` 171414 (×1.1290), `M12 LEAD 1 A`
+8851 (×1.5908), `DANCE PAD` 133651 (unchanged).
+
+The broken volume is **kept on the host** as `~/temp/HD_fxpaths.img`: it is the
+exact content the 2026-09-11 captures describe, so those measurements keep their
+subject.
+
+**Blocked on:** the card going back into the sampler, then `s3ked-47`
+re-capturing **PRG 43, 44 and 45 only** — 40/41/42 were clean at 0/+2/+4 cents.
+No E4XT re-capture on any preset; that side was always right.
+
+**Cheapest test that the write took:** play PRG 45 note 65 and confirm the two
+series land near **174.7 and 130.8 Hz**, the E4XT's own figures, rather than near
+275.4 and 205.8.
 
 ## E4XT and AKAI envelopes are differently SHAPED — 1 to 3.5 s apart (OPEN 2026-09-11)
 
