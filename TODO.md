@@ -575,6 +575,28 @@ AKAI-minus-E4XT level (negative = AKAI already lower) is:
 | TD1 | 1.17 | 13.3 | 11.40 | 78 | 11.48 | −0.08 | +0.00 |
 | TD2 | 1.28 | 24.9 | 19.48 | 73 | 18.72 | +0.76 | +0.00 |
 
+**CORRECTED 2026-09-11 11:21 — the magnitudes stand, the TIMES did not.** The
+model left **attack** out, because `akai_env_bytes`'s docstring said attack was a
+fixed default with nothing to convert — false since `akai_attack_byte` landed, and
+that function is called four lines below the sentence. **P001's attack is 3.43 s**,
+so the −1.81 dB figure named t = 2.0 s, a time at which neither machine is falling
+yet. Read the divergence from each machine's own decay start:
+
+| preset | attack | +0.5 s | +1.0 s | +2.0 s | absolute time to sample |
+|---|---|---|---|---|---|
+| P000 | 0 | −0.61 | −1.23 | −2.45 | t = 0.5 / 1.0 / 2.0 s |
+| P001 | **3.43 s** | −0.45 | −0.90 | −1.81 | **t = 3.9 / 4.4 / 5.4 s** |
+| P002 | 0 | −0.04 | −0.08 | −0.17 | t = 0.5 / 1.0 / 2.0 s |
+| P003 | 0 | −0.14 | −0.29 | −0.57 | t = 0.5 / 1.0 / 2.0 s |
+
+Prefer P001's **+1.0 s point at t = 4.4 s** over +2.0 s: 5.4 s leaves only 0.6 s
+of a 6.0 s hold, so release bleed is a risk there.
+
+**A positive finding fell out of the same correction: the attack conversion is
+good to 0.05 s on a 3.43 s attack** (ATTAK1 90 → 3.48 s), and P001 is the only
+non-zero attack in the set. `eosed`'s trajectory independently shows it rising to
+a peak near 3 s while every other preset starts falling at once.
+
 **The discriminator is P001 against P002 — a factor of ten — and both are in
 captures already taken, so it needs no card.** They are also the only two presets
 whose argmins are identified on both sides, which is luck rather than design.

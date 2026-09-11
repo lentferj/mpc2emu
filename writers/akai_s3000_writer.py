@@ -731,8 +731,20 @@ def akai_env_bytes(env, quiet: bool = False) -> tuple:
     it: an envelope value is a slew rate, so the value needed for a given time
     depends on the distance the stage travels, and sustain sets that distance.
 
-    Attack is a fixed default -- s3ked's varying-span test found it fits
-    neither a rate nor a duration, so there is nothing to convert with.
+    ATTACK IS CONVERTED, and this said it was not until 2026-09-11. The
+    sentence here read "a fixed default -- s3ked's varying-span test found it
+    fits neither a rate nor a duration, so there is nothing to convert with",
+    which describes the behaviour before `akai_attack_byte` existed. That
+    function inverts the MEASURED time law (0.320 s at ATTAK1 70 rising to
+    8.600 s at 99) and is called four lines below.
+
+    It is load-bearing, not cosmetic. Building a predicted envelope trajectory
+    on 2026-09-11 I read this line, left attack out of the model, and filed a
+    prediction naming t = 2.0 s for a preset whose attack is **3.43 s** -- so
+    the figure was read off a decay that had not begun. The magnitude survived;
+    the time did not. Measured on that preset the conversion is good to **0.05 s
+    on a 3.43 s attack** (3.48 s written), which is also the first confirmation
+    that this path works on real material.
     """
     sus = akai_sustain_byte(getattr(env, 'sustain', 0.8))
 
