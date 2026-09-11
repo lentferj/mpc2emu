@@ -592,10 +592,25 @@ yet. Read the divergence from each machine's own decay start:
 Prefer P001's **+1.0 s point at t = 4.4 s** over +2.0 s: 5.4 s leaves only 0.6 s
 of a 6.0 s hold, so release bleed is a risk there.
 
-**A positive finding fell out of the same correction: the attack conversion is
-good to 0.05 s on a 3.43 s attack** (ATTAK1 90 → 3.48 s), and P001 is the only
-non-zero attack in the set. `eosed`'s trajectory independently shows it rising to
-a peak near 3 s while every other preset starts falling at once.
+**A "positive finding" here is WITHDRAWN within the hour.** It read: the attack
+conversion is good to 0.05 s on a 3.43 s attack. That compared the ATTAK1 we
+write, run back through the same law, against the source's own field — **two
+file-side numbers, neither a measurement of a machine.** An internal consistency
+check of the converter, not confirmation the hardware agrees.
+
+Nor does `eosed`'s trajectory confirm it, as was also claimed: it shows P001
+rising to a peak near 3 s while the others fall at once, which confirms **that
+P001 has a long attack**, not that 3.43 s is the right number. It mildly
+disfavours it — **measured `t_peak` is 2.92 s, a ratio of 0.851.**
+
+Per §105, `t_peak` and the 10–90 % rise differ by **1.6×** on this machine, so a
+15 % gap between a field value and a measured peak is inside definitional slop
+and distinguishes nothing. **A real test needs `t_peak` measured on BOTH machines
+and more than one preset with a non-zero attack; this set has exactly one.**
+
+**Anchor P001's decay at its MEASURED peak, 2.92 s, not the field's 3.43.** At
+3.43 s the trajectory is already −4.21 dB below its own reference, i.e. 0.51 s of
+decay has happened before the measurement starts.
 
 **The discriminator is P001 against P002 — a factor of ten — and both are in
 captures already taken, so it needs no card.** They are also the only two presets

@@ -742,9 +742,22 @@ def akai_env_bytes(env, quiet: bool = False) -> tuple:
     on 2026-09-11 I read this line, left attack out of the model, and filed a
     prediction naming t = 2.0 s for a preset whose attack is **3.43 s** -- so
     the figure was read off a decay that had not begun. The magnitude survived;
-    the time did not. Measured on that preset the conversion is good to **0.05 s
-    on a 3.43 s attack** (3.48 s written), which is also the first confirmation
-    that this path works on real material.
+    the time did not.
+
+    **THE CONVERSION IS STILL UNCONFIRMED, and a claim that it was is withdrawn
+    (2026-09-11, same hour).** This said it is "good to 0.05 s on a 3.43 s
+    attack". That compared the ATTAK1 we write, run back through the same law,
+    against the source's own field -- **two file-side numbers, neither of them a
+    measurement of a machine.** It is an internal consistency check of this
+    function, which is worth having and is not evidence the hardware agrees.
+
+    Measuring it is harder than it looks, per §105: "attack time" means `t_peak`
+    on one reading and the 10-90% rise on another, and those differ by a factor
+    of **1.6** on this machine. The E4XT's measured `t_peak` for that preset is
+    **2.92 s against the field's 3.43** -- a ratio of 0.851, comfortably inside
+    what a definitional mismatch alone would produce, so it distinguishes
+    nothing. A real test needs `t_peak` measured on BOTH machines and more than
+    one preset with a non-zero attack; this set contains exactly one.
     """
     sus = akai_sustain_byte(getattr(env, 'sustain', 0.8))
 
