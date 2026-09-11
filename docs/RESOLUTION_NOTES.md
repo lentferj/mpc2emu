@@ -31976,8 +31976,40 @@ a depth-law capture, and s3ked flagged it rather than offering it as calibration
 One point cannot distinguish "the table is wrong at 55" from "the region has
 structure the table averages over" — and the two call for different fixes.
 
-**The measurement that settles it is small.** Four programs, one keygroup each,
-`FIL2FR` **48 / 52 / 56 / 60**, `FLT2MODE` 0, `FLT2Q` 0, filter 1 pinned open
+**THE RUN AS ORIGINALLY FILED CANNOT BE MEASURED, AND WOULD HAVE RETURNED FOUR
+UNDETERMINED NUMBERS AFTER A CARD CROSSING.** `FIL2FR` 48 puts the corner at
+132.4 Hz with two harmonics beneath it; a baseline two octaves below lands at
+33.1 Hz, under the saw's 55.125 Hz fundamental. **Bytes 48–60 are the emptiest
+part of the table precisely because they are the hardest part of it to measure.**
+
+**The fix, and it uses this parameter's own result: put every program at a shared
+`MODVFLT2_3` offset of +8.** At ~230 cents/unit that is ×2.89, lifting a 132 Hz
+corner to 383 Hz — into the band where a baseline has somewhere to stand.
+Verified for all six bytes:
+
+| `FIL2FR` | corner | at +8 | baseline 2 oct below | harmonics below corner |
+|---|---|---|---|---|
+| 45 | 106.9 | 309 | 77 Hz | 1 → 5 |
+| 48 | 132.4 | 383 | 96 Hz | 2 → 6 |
+| 52 | 176.1 | 510 | 127 Hz | 3 → 9 |
+| 56 | 234.2 | 678 | 170 Hz | 4 → 12 |
+| 60 | 311.6 | 902 | 226 Hz | 5 → 16 |
+| 64 | 414.4 | 1199 | 300 Hz | 7 → 21 |
+
+Every baseline clears the fundamental. **Because the offset is SHARED it cancels
+exactly in the byte-to-byte intervals**, which is what the table needs, so the
+depth law's own ±8 cents/unit uncertainty never enters. Anchor the chain to the
+existing 45 and 64 values, which also makes those two a consistency check on the
+table's own 45→64 interval. (s3ked's design, 2026-09-11; arithmetic verified
+here.)
+
+**PRGNUM BUDGET: this needs six programs and the card has four free** (57, 58,
+59, 127). It requires recycling, most naturally `F2DEPTH`'s thirteen — but only
+once s3ked confirms v3 need not be re-captured, since every result so far has
+come from reprocessing existing captures rather than new ones.
+
+**The measurement**: six programs, one keygroup each,
+`FIL2FR` **45 / 48 / 52 / 56 / 60 / 64**, `FLT2MODE` 0, `FLT2Q` 0, filter 1 pinned open
 (`FILFRQ` 99 — and note that asking for a wide `filter_cutoff` will instead make
 the writer emit `LSI2_ON = 0` and switch filter 2 off entirely; pin it in a
 post-patch). Plus the existing bracket points 45 and 64 re-read in the same

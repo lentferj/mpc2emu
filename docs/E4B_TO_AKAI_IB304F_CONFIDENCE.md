@@ -943,8 +943,19 @@ the corrected baseline window:
 | `FIL2FR` 66 (v2) | 0, 5 | 229.1 | |
 | `FIL2FR` 66 (v2) | 0, 10 | 230.9 | |
 
-**~225 cents/unit, ±5% between corners**, and v2's 66 ladder reprocessed lands on
-v3's independent 66 fit — different session, different reference program.
+~~**~225 cents/unit, ±5% between corners**~~ — **SUPERSEDED WITHIN THE HOUR.
+~230 ±8 cents/unit.** The table above is one window's values read as *the*
+values: the divisors that set the baseline position were picked, not derived,
+and nobody swept them. Swept, the law runs 220–244 across every window and
+220–236 once the one nearest the corner is dropped. v2's 66 ladder reprocessed
+still lands on v3's independent 66 fit — different session, different reference
+program — and that part stands.
+
+**THE LAW SURVIVES BECAUSE IT IS A DIFFERENCE, AND THAT IS THE GENERAL POINT.**
+The identical window sweep moves an **absolute** corner reading by **295 cents**
+and this **differential** one by **18**. Prefer a differential wherever the
+question allows it; an absolute reading is hostage to an analysis choice nobody
+wrote down.
 
 **The field is symmetric to the measurement's resolution and no further.** ±4
 gives +891.9 against −892.0 cents; the method's own residual is 15–20 cents, so
@@ -978,6 +989,25 @@ erasing one. The 48 Hz boxcar and the 1/6-octave smoother over a 108 Hz notch
 both *removed* a feature, and a missing feature announces itself. This one
 produced a finding, aimed it at a named table, and gave it a plausible magnitude
 — because **a tilt is what a real tuning error looks like**.
+
+**AND THE 15.3-CENT "METHOD RESIDUAL" WAS THE CLOSEST APPROACH OF SIX UNSWEPT
+CHOICES, QUOTED AS THE METHOD'S ACCURACY.** Across the sweep the drift runs −5.5
+to +71.8 cents. So two findings were reported as one and only the first survives:
+
+* **The absolute window WAS tilted** — its −83.1 cent drift is reproduced by no
+  relative window at all. **The charge against our `FIL2FR` table is an
+  artefact**, and that holds whatever replaces the window.
+* ~~**"The table is right"**~~ — **does not survive.** The drift scatters 77
+  cents across the sweep, so the method **clears our table of the specific charge
+  without vouching for it.** The 904.7-vs-920.1 agreement was one window's value.
+
+**`FIL2FR` 55 = 264.7 Hz is WITHDRAWN AS UNMEASURABLE, not corrected.**
+Reprocessing puts it at 215.1 or 243.1 depending on the baseline — but the
+`FIL2FR` 66 control moved **269 cents** across the same sweep. A number that
+moves that far with an arbitrary analysis choice is not a measurement. **That is
+a third category worth keeping, beside "right" and "wrong": a reading the subject
+cannot support at all.** `FIL2FR` 55 has three harmonics below its corner and a
+relative baseline window holds at most one.
 
 It was caught only because the analysis order required measuring the method's
 own residual against stated corners before reading anything else. The two
