@@ -295,10 +295,39 @@ _AK_RELSE1_RATE = (23042.3, -0.09754, 45, 99)   # dB/s,  log-space r2 0.99996
 #: section number alone is not a citation; a superseding section can exist and
 #: usually does.
 #:
-#: Constants are §141's refit (2026-08-20), superseding §31's (0.000150326,
-#: 0.11175, fitted 55..90). The two agree to 2.5% at ATTAK1 80 and 3.5% at 99,
-#: and §141 validated against ATTAK1 99 directly, which §31 never fitted.
-_AK_ATTAK1_TIME = (0.000201173, 0.10844, 0, 99)   # seconds,  s3ked §141
+#: **REFITTED 2026-09-11 FROM `ATKCAL`, BECAUSE EVERY EARLIER FIT USED A BIASED
+#: DETECTOR.** §31 (0.000150326, 0.11175) and §141 (0.000201173, 0.10844) were
+#: both read with `t_peak` on DECAYING material, which peaks after the envelope
+#: does and by more the longer the attack. Both ran 1.6-1.9x LONG against the
+#: machine, so both encoded attacks roughly twice as fast as asked.
+#:
+#: `ATKCAL` removed the bias at the source: a synthesized CONSTANT-AMPLITUDE
+#: sine, so the measured contour IS the envelope and `t_peak` is not merely
+#: biased but degenerate (a plateau has no unique maximum). Read instead at a
+#: stated convention -- 5 ms smoothing / threshold-crossing / -3.0 dB -- over
+#: seven rungs, s3ked, PRGNUM 109-115:
+#:
+#:     ATTAK1   60     70     80     85     90     95     99
+#:     seconds  0.085  0.248  0.669  1.095  1.960  3.425  5.305
+#:
+#: Residuals -3.6% to +6.7%. The old docstring's "confirmed against the measured
+#: points (0.320 s at 70 rising to 8.600 s at 99)" is exactly the artefact: the
+#: machine gives 0.248 and 5.305 there, long by 1.29x at 70 and 1.62x at 99 --
+#: a factor that GROWS with attack length, which is the `t_peak` signature and
+#: not something a constant could have absorbed.
+#:
+#: A control that could have failed and did not: PRG 116, same ATTAK1 90 across
+#: FIVE keygroups instead of one, measured 1.960 s against PRG 113's 1.960 s.
+#: Keygroup count does not enter the law.
+#:
+#: **ATTAK1 99 = 5.13 s IS A REAL CEILING** and it only becomes visible once the
+#: inflation is gone -- previously every request arrived 1.8x too large and
+#: saturated the byte earlier. Slower attacks cannot be represented.
+#:
+#: Paired with `_E4XT_ATK_SLOWDOWN`, which carried the same bias and cancelled
+#: this one in E4B -> AKAI. See TODO §ATKBIAS. Both were fixed together; either
+#: alone makes that path worse than leaving both wrong.
+_AK_ATTAK1_TIME = (0.00015, 0.10545, 0, 99)   # seconds, s3ked ATKCAL 2026-09-11
 
 # NOT WIRED, and each for its own reason rather than as a batch:
 #

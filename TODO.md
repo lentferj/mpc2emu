@@ -508,7 +508,10 @@ each covers a *fraction* of the range. Our reader did:
 
 **Two errors, which partly cancel** — the slowdown was applied to segment 1 only,
 *and* neither segment was scaled by its share of the range. The segment-2 terms
-are equal when `SLOWDOWN * (1 - L1) = 1`, i.e. at a knee of **45.6%**. The preset
+are equal when `SLOWDOWN * (1 - L1) = 1`, i.e. at a knee of `1 - 1/SLOWDOWN`.
+At the old SLOWDOWN of 1.838 that was **45.6%** and the corpus sat on it; since
+§ATKBIAS set SLOWDOWN to 1.0 the fixed point is at a 0% knee — gone — and the
+old form would now be wrong on every preset. The preset
 it was found on has a knee of **43%**, so the old form landed 5.4% from correct
 by sitting 2.6 points from an accidental fixed point. **That is why it looked
 right.**

@@ -670,7 +670,10 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     #     new:  SLOWDOWN * ( R(pzt[0]) * L1  +  R(pzt[2]) * (1 - L1) )
     #
     # The segment-2 terms are equal when `SLOWDOWN * (1 - L1) == 1`, i.e. at a
-    # knee of **45.6%**. The preset this was found on has a knee of 43%, so the
+    # knee of `1 - 1/SLOWDOWN`. At the old SLOWDOWN of 1.838 that was **45.6%**
+    # and the corpus sat on it; since SLOWDOWN became 1.0 (TODO §ATKBIAS) the
+    # fixed point is at a 0% knee, i.e. gone, and the old form is wrong
+    # everywhere. The preset this was found on has a knee of 43%, so the
     # old form landed 5.4% from correct by sitting 2.6 points from an accidental
     # fixed point.
     #

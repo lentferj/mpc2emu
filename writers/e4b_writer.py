@@ -805,15 +805,11 @@ def _set_cord(mod: bytearray, slot: int, src: int, dst: int,
     mod[o + 3] = flag & 0xFF
 
 
-#: The E4XT reaches full level 1.84x LATER than `env_seconds_to_rate` intends.
+#: The E4XT reaches full level WHEN `env_seconds_to_rate` intends. No slowdown.
 #:
-#: MEASURED BY eosed 2026-09-07: an eight-point ladder over the Atk1 rate byte
-#: on a resident preset, rise taken from audio with the hold and RMS window
-#: scaled per point (hold ~6x the intended time, window ~5% of the expected
-#: rise). Sweeping the byte rather than building a disc is what made this
-#: separable at all -- an end-to-end bank yields one number in which the
-#: reader's and writer's errors stay entangled, which is exactly how this and
-#: the MPC envelope-law error hid each other by partly cancelling.
+#: **WAS 1.838 FROM 2026-09-07 TO 2026-09-11, AND THE 1.838 WAS THE DETECTOR.**
+#: The value came from an eight-point ladder over the Atk1 rate byte, read with
+#: `t_peak` -- the time of peak amplitude -- on a DECAYING preset:
 #:
 #:     byte   intends   t_peak    ratio
 #:       72      2.00     3.60     1.80
@@ -822,26 +818,32 @@ def _set_cord(mod: bytearray, slot: int, src: int, dst: int,
 #:       96      8.00    15.10     1.89
 #:      102     11.62    21.30     1.83
 #:
-#:     t_peak / intended = 1.838, sd 0.050 above 2 s  (1.869, sd 0.082 overall)
+#: `t_peak` on decaying material is biased LATE: the sample is already falling
+#: while the envelope is still rising, so the product peaks after the envelope
+#: does. Re-measured 2026-09-11 at a stated convention -- 5 ms smoothing /
+#: threshold-crossing / -3.0 dB (eosed, same preset) -- byte 72 gives **2.035 s**.
+#: That is the `intends` column to 1.8%, not the `t_peak` column to 80%.
 #:
-#: A CONSTANT, not a curve: sd 0.05 across a 116x range of intended times. The
-#: three sub-second points drift (1.00, 1.28, 1.68) and are excluded -- at byte
-#: 48 the analysis window is ~3.5% of the rise, so quantisation is a real
-#: fraction of the reading. Do not read this law below ~2 s without re-measuring.
+#: **THE ARGUMENT THAT MADE IT LOOK SOLID WAS THE WEAKEST PART.** It read: "a
+#: CONSTANT, not a curve -- sd 0.05 across a 116x range of intended times". A
+#: fixed-shape decaying sample biases `t_peak` by a roughly FIXED FACTOR, so
+#: constancy is what the artefact predicts too. Constancy distinguished nothing.
 #:
-#: WHY A SCALAR IS LEGITIMATE HERE AND NOWHERE ELSE IN THIS ENVELOPE. The byte
-#: is a slew RATE (§ENVSPAN, hardware), so a stage's time is its span over that
-#: rate -- and correcting a rate with one constant is only valid where the span
-#: is constant. **Attack alone has a fixed span**: it always travels 0 -> 100.
-#: Decay travels 100 -> sustain and release travels sustain -> 0, both variable,
-#: and both remain BLOCKED on the sustain-level sweep §ENVSPAN calls for. Do not
-#: generalise this constant to pzt[4] or pzt[8].
+#: Cross-checked against the other machine: s3ked's `ATKCAL` ladder puts the
+#: S3000XL at 1.960 s for the ATTAK1 value our law maps 2.0 s to, at the same
+#: convention. Two independent machines within 3.7% of each other and of
+#: `intends`; the 1.838 agreed with neither.
+#:
+#: This constant and the AKAI `_AK_ATTAK1_TIME` law were fitted from the same
+#: biased detector and CANCELLED in E4B -> AKAI, which is why the round trip
+#: looked correct for two months. See TODO §ATKBIAS. They were fixed together.
 #:
 #: `voice.env_attack` denotes TIME TO FULL LEVEL, which is what the MPC's own
 #: envelope law denotes (§MPCENV, and the 2026-09-07 sweep: measured 10-90% is
 #: 0.704x the law value, consistent with a roughly amplitude-linear ramp rather
-#: than with the law being a 10-90% figure).
-_E4XT_ATK_SLOWDOWN = 1.838
+#: than with the law being a 10-90% figure). That part still stands -- it was
+#: never a `t_peak` reading.
+_E4XT_ATK_SLOWDOWN = 1.0
 
 
 def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,

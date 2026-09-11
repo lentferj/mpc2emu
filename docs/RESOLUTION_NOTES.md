@@ -333,6 +333,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIPRGNUMREAD — the writer's "honour the source" branch is unreachable from AKAI (2026-09-11)](#akaiprgnumread-the-writers-honour-the-source-branch-is-unreachable-from-akai-2026-09-11)
 - [§AKAIRATESNAP — the converter diagnosed it correctly and a redirect_stdout cut the wire (2026-09-11)](#akairatesnap-the-converter-diagnosed-it-correctly-and-a-redirect_stdout-cut-the-wire-2026-09-11)
 - [§DEFPARAM — six definitional parameters, all inside tooling adopted to make two sides comparable (2026-09-11)](#defparam-six-definitional-parameters-all-inside-tooling-adopted-to-make-two-sides-comparable-2026-09-11)
+- [§ATKBIAS — fixing the two attack laws](#atkbias-fixing-the-two-attack-laws)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
