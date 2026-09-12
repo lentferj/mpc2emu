@@ -31954,9 +31954,18 @@ measure at 5 ms / threshold-crossing / −3.0 dB. A file-side round trip cannot
 see this — it is exactly what let the bug live, since the reader and writer errors
 stay entangled.
 
-**The general lesson, which is the reusable part:** `t_peak` on decaying material
-contaminated TWO independent laws in TWO code paths, and the round trip between
-them looked correct. A detector's bias does not stay in the measurement it was
+**The general lesson, which is the reusable part:** an **unstated detector
+convention** contaminated TWO independent laws in TWO code paths, and the round
+trip between them looked correct.
+
+**Note the correction, because the first version of this note got the mechanism
+wrong while getting the fix right.** It blamed the decaying material for biasing
+`t_peak` late. The material biases an argmax **early** — a falling sample
+subtracts from the rising envelope and brings the maximum forward. The 1.8× is
+the detector: an argmax against a −3 dB threshold on a convex rise. **A wrong
+mechanism attached to a correct conclusion survives because the conclusion keeps
+testing true**, and it misdirects the fix: this one implied steady material would
+solve it, and steady material with an argmax still reads 3.849 s. A detector's bias does not stay in the measurement it was
 taken with — it is baked into every constant fitted from it, and constants travel
 further than captures do.
 

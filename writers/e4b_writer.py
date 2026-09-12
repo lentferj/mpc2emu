@@ -818,11 +818,26 @@ def _set_cord(mod: bytearray, slot: int, src: int, dst: int,
 #:       96      8.00    15.10     1.89
 #:      102     11.62    21.30     1.83
 #:
-#: `t_peak` on decaying material is biased LATE: the sample is already falling
-#: while the envelope is still rising, so the product peaks after the envelope
-#: does. Re-measured 2026-09-11 at a stated convention -- 5 ms smoothing /
-#: threshold-crossing / -3.0 dB (eosed, same preset) -- byte 72 gives **2.035 s**.
-#: That is the `intends` column to 1.8%, not the `t_peak` column to 80%.
+#: **THE 1.8x IS THE DETECTOR, NOT THE MATERIAL.** `t_peak` is an ARGMAX, and on
+#: a convex rise an argmax and a -3 dB threshold measure different points of the
+#: curve, by an amount the curvature sets (eosed §113). Re-measured at a stated
+#: convention -- 5 ms smoothing / threshold-crossing / -3.0 dB, same preset --
+#: byte 72 gives **2.035 s**: the `intends` column to 1.8%, the `t_peak` column
+#: to 80%.
+#:
+#: **A DECAYING SAMPLE BIASES AN ARGMAX *EARLY*, NOT LATE** -- this comment said
+#: the opposite until 2026-09-12, and stated as its reason the argument for the
+#: correct direction. The product of a rising envelope and a falling sample
+#: maximises where `E'/E = -S'/S`, and with `S' < 0` that is while the envelope
+#: is STILL RISING. The fall subtracts from the rise and brings the maximum
+#: forward; it cannot push it back. eosed measured the same sign directly --
+#: 3.600 s decaying against 3.849 s steady, same argmax detector -- and §112
+#: had measured it independently, a sample's own fall pulling `t_peak` 11%
+#: early.
+#:
+#: **So steady material does NOT fix this and it is worth being clear why:**
+#: steady material with an argmax still reads 3.849 s. What fixes it is stating
+#: the convention.
 #:
 #: **THE ARGUMENT THAT MADE IT LOOK SOLID WAS THE WEAKEST PART.** It read: "a
 #: CONSTANT, not a curve -- sd 0.05 across a 116x range of intended times". A

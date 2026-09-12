@@ -297,9 +297,16 @@ _AK_RELSE1_RATE = (23042.3, -0.09754, 45, 99)   # dB/s,  log-space r2 0.99996
 #:
 #: **REFITTED 2026-09-11 FROM `ATKCAL`, BECAUSE EVERY EARLIER FIT USED A BIASED
 #: DETECTOR.** §31 (0.000150326, 0.11175) and §141 (0.000201173, 0.10844) were
-#: both read with `t_peak` on DECAYING material, which peaks after the envelope
-#: does and by more the longer the attack. Both ran 1.6-1.9x LONG against the
-#: machine, so both encoded attacks roughly twice as fast as asked.
+#: both read with `t_peak`, which is an ARGMAX -- and on a convex rise an argmax
+#: sits far later than a -3 dB threshold crossing, by an amount the curvature
+#: sets. Both ran 1.6-1.9x LONG against the machine, so both encoded attacks
+#: roughly twice as fast as asked.
+#:
+#: **The DETECTOR is the whole of it. The decaying material biased the argmax
+#: slightly EARLY** (a falling sample subtracts from the rise and brings the
+#: maximum forward), which masked part of the detector's effect rather than
+#: causing it. An earlier version of this note blamed the material and had the
+#: sign backwards.
 #:
 #: `ATKCAL` removed the bias at the source: a synthesized CONSTANT-AMPLITUDE
 #: sine, so the measured contour IS the envelope and `t_peak` is not merely

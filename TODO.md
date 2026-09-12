@@ -6479,8 +6479,20 @@ the first time.
 
 `_E4XT_ATK_SLOWDOWN = 1.838` (e4b_writer, used by e4b_parser) and the AKAI
 `_AK_ATTAK1_TIME` law were each fitted from `t_peak` on DECAYING material. That
-detector is biased long, and biased more for longer attacks. Both laws inherited
-the bias, in the same direction, at almost the same size.
+detector is an **argmax**, and on a convex rise an argmax sits far later than a
+−3 dB threshold crossing. Both laws inherited the bias, in the same direction, at
+almost the same size.
+
+**CORRECTED 2026-09-12: the cause is the DETECTOR, not the material.** This
+section first said `t_peak` on decaying material is biased *late*. It is biased
+**early** — the product of a rising envelope and a falling sample maximises while
+the envelope is still rising, so the fall brings the maximum forward and cannot
+push it back. eosed isolated the two variables at byte 72: decaying→steady with
+the argmax held is 3.600 → 3.849 s (**1.07×, early**), and argmax→threshold with
+steady held is 3.849 → 2.035 s (**0.53×**). The detector accounts for all of it.
+
+**The practical difference: steady material does not fix this.** Steady material
+with an argmax still reads 3.849 s. Stating the convention is what fixes it.
 
 Measured on hardware at one stated convention (5 ms smoothing /
 threshold-crossing / −3.0 dB), s3ked's `ATKCAL` ladder plus eosed's E4XT point:
