@@ -685,8 +685,13 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     #   * the level byte is LINEAR here (55/127 = 43.3% against 43%), NOT the
     #     dB law that governs sustain -- the dB reading gives 58688%;
     #   * their measured byte->t_peak ladder IS `env_rate_to_seconds * 1.838`
-    #     on BOTH segments (ratios 1.056 at byte 39, 1.008 at byte 78), which
-    #     is what establishes that the slowdown applies to segment 2 as well;
+    #     on BOTH segments (ratios 1.056 at byte 39, 1.008 at byte 78). That
+    #     1.838 is now known to be the DETECTOR -- an argmax against a -3 dB
+    #     threshold on a convex rise, not a machine slowdown (§ATKBIAS,
+    #     2026-09-11) -- and SLOWDOWN is 1.0. What the observation still
+    #     establishes is STRUCTURAL and survives the reinterpretation: whatever
+    #     factor a detector imposes, it imposes it on BOTH segments equally, so
+    #     the correction belongs outside the bracket rather than on segment 1;
     #   * the new form gives 3.254 s against their device decomposition of
     #     3.29 s -- 1%.
     #
@@ -701,11 +706,12 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     # this reduces to `SLOWDOWN * R(pzt[0])`, identical to the old first term.
     # No E4B->E4B round trip changes; only third-party banks do.
     #
-    # **PENDING HARDWARE CONFIRMATION.** The bytes, the linear level law and the
-    # both-segments slowdown are established, but no converted program built
-    # with this formula has been measured. `~/temp/HD_atkcal.img` is the
-    # calibration volume for it -- it has no knee, so it isolates the rate law
-    # from the segment question.
+    # **STILL PENDING HARDWARE CONFIRMATION, AND `ATKCAL` DID NOT PROVIDE IT.**
+    # ATKCAL was captured and analysed 2026-09-11 and settled the AKAI `ATTAK1`
+    # rate law (it has no knee, by design). **This two-segment READ is a
+    # different claim** -- no converted program built with this formula has been
+    # measured, and the volume that would test it needs a KNEE, which ATKCAL
+    # deliberately lacks.
     _decay_span = env_level_byte_to_db(pzt[7])
     _rel_span   = max(0.0, ENV_FULL_SPAN_DB - _decay_span)
     # INVERSE OF THE WRITER, INCLUDING ITS ATTACK CORRECTION. The writer divides

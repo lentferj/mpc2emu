@@ -6573,9 +6573,14 @@ corrected baseline window. **No card crossing needed — the captures exist.**
 **What changed.** The single reading came from a baseline held in a **fixed
 80–200 Hz window** while the corner moved. Reprocessing v3 with the window held
 at a fixed *relative* position (1.6–2.6 octaves below each corner) collapsed a
-monotone drift from 83.2 to 15.3 cents and **confirmed our table**: `FIL2FR`
-72→80 measured 904.7 cents against our 920.1, a 15-cent disagreement over eight
-bytes.
+monotone drift from 83.2 to 15.3 cents: `FIL2FR` 72→80 measured 904.7 cents
+against our 920.1, a 15-cent disagreement over eight bytes.
+
+**THAT DOES NOT CONFIRM THE TABLE, AND AN EARLIER VERSION OF THIS PARAGRAPH SAID
+IT DID.** The 15.3-cent residual was the closest approach of six unswept window
+choices; across the sweep the drift runs −5.5 to +71.8 cents and the 904.7 was
+one window's value like the rest. **The method clears our table of the specific
+charge without vouching for it.**
 
 **Where the fixed window sat, which is the whole story:**
 

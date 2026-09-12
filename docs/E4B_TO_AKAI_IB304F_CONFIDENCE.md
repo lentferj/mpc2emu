@@ -929,7 +929,7 @@ should mean rather than a measurement.
 
 ---
 
-## The `MODVFLT2_3` depth law: ~225 cents per unit (2026-09-11)
+## The `MODVFLT2_3` depth law: ~230 ±8 cents per unit (2026-09-11)
 
 The number the dropped-filter-envelope fix needs. Measured by s3ked across the
 `F2DEPTH` v2 and v3 volumes, five ladders at three corners, all reprocessed on
