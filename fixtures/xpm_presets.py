@@ -68,7 +68,9 @@ def _xpm(path: str, name: str,
         </Layer>
       </Layers>
     </Instrument>\n''' for i, (lo, hi, root, stem) in enumerate(zones))
-    with open(path, 'w') as f:
+    # encoding is explicit: an XPM declares UTF-8 in its own prologue, and a
+    # fixture written through the locale codec would differ between machines
+    with open(path, 'w', encoding='utf-8') as f:
         f.write('<?xml version="1.0" encoding="UTF-8"?>\n'
                 '<MPCVObject><Version><File_Version>2.1</File_Version></Version>\n'
                 ' <Program type="Keygroup">\n'
