@@ -491,13 +491,16 @@ def shrink_bank(bank: Bank, target_bytes: Optional[int] = None,
                   f"Key-zone and velocity-layer thinning cannot go below one "
                   f"sample per voice, and free whole samples at a time.",
                   content_lost=True, subject=str(preset.name),
-                  remedy='reduce the sample data itself as well, with --mono '
-                         'or --max-sample-rate, which shrink below that floor; '
-                         'or raise the target',
+                  remedy='also reduce the sample data itself, by mono '
+                         'conversion or a sample-rate ceiling; those shrink '
+                         'below the one-sample-per-voice floor that thinning '
+                         'cannot cross. Or raise the target.',
                   detail={'target_bytes': tgt,
                           'reached_bytes': plan.est_bytes,
                           'over_bytes': over,
-                          'key_pct': plan.key_pct, 'vel_pct': plan.vel_pct},
+                          'floor_bytes': plan.est_bytes,
+                          'key_pct': plan.key_pct, 'vel_pct': plan.vel_pct,
+                          'cli_flag': ['--mono', '--max-sample-rate']},
                   echo=f"    [WARN] '{preset.name}' could not reach "
                        f"{tgt/1048576:.2f} MB — smallest reachable is "
                        f"{plan.est_bytes/1048576:.2f} MB "
