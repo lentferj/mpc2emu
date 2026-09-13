@@ -247,7 +247,22 @@ def _read_smpl_pitch_fraction_cents(wav_bytes: bytes):
         if tag == b'smpl':
             if pos + 8 + 20 <= len(wav_bytes):
                 frac = struct.unpack_from('<I', wav_bytes, pos + 8 + 16)[0]
-                return round(frac / 4294967296.0 * 100.0)
+                # ALL BITS SET IS A SENTINEL, NOT A TUNING. 0xFFFFFFFF is
+                # 99.99999998 cents, which `round()` turned into exactly 100 --
+                # and 100 cents is A WHOLE SEMITONE, which the AKAI writer then
+                # faithfully stored as 256 tune units. Seven of sixteen samples
+                # in one drum kit carried it and every one played a semitone
+                # sharp (2026-09-13, Jan's Vol MPC). The kit's own XPM says
+                # `TuneFine 0`, so the authoring tool meant "unset".
+                if frac == 0xFFFFFFFF:
+                    return None
+                # A FRACTION OF A SEMITONE CANNOT BE A WHOLE ONE. The field is
+                # defined as the fraction ABOVE MIDIUnityNote, so its value is
+                # in [0, 100) cents by construction; anything that rounds to 100
+                # is a unity-note change, not a fraction, and returning it here
+                # would move the pitch by a semitone while looking like fine
+                # tune.
+                return min(99, round(frac / 4294967296.0 * 100.0))
             return None
         pos += 8 + sz + (sz & 1)
     return None
