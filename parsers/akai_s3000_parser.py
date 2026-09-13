@@ -33,6 +33,7 @@ It does not drive SCSI hardware.
 """
 
 import os
+import math as _math
 import struct
 from pathlib import Path
 from typing import Optional
@@ -278,6 +279,11 @@ def _s8(v: int) -> int:
 _AKAI_PLAYBACK_RATES = (22050, 44100)
 
 
+#: Dedupe key: one record per (declared, played) pair, not per sample --
+#: a 120-sample volume would otherwise emit 120 identical records.
+_SSRATE_REPORTED: set = set()
+
+
 def _playback_rate(data: bytes, s3000: bool) -> int:
     """The rate the sample will SOUND at, which is not always what it declares.
 
@@ -315,6 +321,38 @@ def _playback_rate(data: bytes, s3000: bool) -> int:
     """
     declared = _u16(data, 0x8a)
     index = _AKAI_PLAYBACK_RATES[1 if (data[0x01] & 1) else 0]
+    # A DECLARED RATE THE MACHINE CANNOT PLAY MEANS THE AUDIO IS AT THAT RATE
+    # AND WILL SOUND TRANSPOSED. Returning the index is right -- §143 measured
+    # that the loader ignores SSRATE -- but returning it SILENTLY is how this
+    # hid: on 2026-09-13 a whole volume carried SSRATE 27777 (the Emulator II
+    # rate) with the index at 44100, so every sample sounded +802 cents sharp,
+    # and this function reported a serene 44100 for all 120 of them. The first
+    # check anyone ran said "all playable" and the search went elsewhere for a
+    # day.
+    #
+    # ONLY when `declared` is a rate the machine cannot produce at all. A plain
+    # 22050/44100 contradiction is common metadata noise -- 22% of 19 340
+    # factory headers disagree -- and the machine resolves it to the index with
+    # no consequence. An UNPLAYABLE declared rate is different: it cannot be a
+    # mislabel between the two real ones, so it is the signature of content
+    # written at a rate that was never snapped.
+    if declared and declared not in _AKAI_PLAYBACK_RATES and declared != index:
+        _key = (declared, index)
+        if _key not in _SSRATE_REPORTED:
+            _SSRATE_REPORTED.add(_key)
+            _cents = 1200.0 * _math.log2(index / float(declared))
+            _diag(_W, 'AKAI_SSRATE_UNPLAYABLE',
+                  f"sample header declares {declared} Hz, which this machine "
+                  f"cannot produce; the loader reads byte 0x01 and will play it "
+                  f"at {index} Hz. If the audio really is at {declared} Hz it "
+                  f"sounds {_cents:+.0f} cents off. This is what an unsnapped "
+                  f"vintage-resample rate looks like on disc.",
+                  content_lost=False,
+                  remedy='resample the audio to a rate the machine plays and '
+                         'write that rate into the header, so the two agree',
+                  detail={'declared_rate': declared, 'played_rate': index,
+                          'cents': round(_cents, 1),
+                          'playable': list(_AKAI_PLAYBACK_RATES)})
     if s3000:
         return index
     return declared or index
