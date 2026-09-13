@@ -908,6 +908,85 @@ def _chain_into(data: bytearray, base: int, blocks: Sequence[int], end: int) -> 
         _u16(data, base + _OFF_FAT + 2 * b, nxt)
 
 
+def delete_akai_volume(image_path: str, name: str,
+                       partition: Optional[str] = None) -> Dict:
+    """Delete one volume from an AKAI hard-disk image, in place.
+
+    Releases the volume's directory and file blocks in the FAT and returns its
+    root slot to the INACTIVE state, which is what the sampler itself leaves
+    behind. Block contents are not wiped -- the machine does not wipe them
+    either, and doing so would rewrite a large part of the image for no gain.
+
+    `partition` is the letter shown beside the volume ('A', 'B', ...); pass it
+    when the same name appears in more than one partition. Returns
+    ``{'deleted': name, 'partition': letter, 'index': slot}``.
+
+    **THE EMPTY SLOT IS NOT A PHANTOM, AND THIS WAS CHECKED AGAINST REAL
+    MEDIA.** `_free_volume` renames the slot to `VOLUME {n:03d}` with a start
+    block of 0, which looks invented until you read a genuine AKAI card: every
+    never-used slot on Jan's is already named exactly that. Slots 27..99 of his
+    HD4 read `VOLUME 028`, `VOLUME 029`, ... So a deleted volume is returned to
+    the same representation an untouched slot has, byte for byte, and any
+    reader that skips one skips the other -- ours keys on byte 12 being
+    `VOL_TYPE_INACT`, which this writes.
+
+    Exposed 2026-09-13 at VinSamLib's request: the capability had existed since
+    the appender needed it, but only as a private helper called from one place,
+    so their Delete button could offer the action and not perform it. A user
+    confirmed "this cannot be undone" and got an AttributeError.
+    """
+    path = Path(image_path)
+    data = bytearray(path.read_bytes())
+    if len(data) < PARTHEAD_BLKS * HD_BLOCK:
+        raise AkaiImageError(f"{path.name} is too small to be an AKAI disk image")
+
+    def u16(o):
+        return data[o] | (data[o + 1] << 8)
+
+    if not all(u16(2 + 2 * i) == (i * _MAGICVAL) & 0xFFFF for i in (1, 2, 50, 97)):
+        raise AkaiImageError(
+            f"{path.name} is not an AKAI hard-disk image (partition header "
+            f"magic missing)")
+
+    partnum = min(data[_OFF_PARTTAB + 0x100], MAX_PARTITIONS)
+    sizes = [u16(_OFF_PARTTAB + 0x102 + 2 * i) for i in range(partnum)] or [u16(0)]
+    bases, off = [], 0
+    for psize in sizes:
+        if psize == 0 or off * HD_BLOCK >= len(data):
+            break
+        bases.append(off * HD_BLOCK)
+        off += psize
+
+    want = akai_volume_name(name).rstrip()
+    hits = []
+    for pi, base in enumerate(bases):
+        letter = chr(ord('A') + pi)
+        if partition and letter != partition.upper():
+            continue
+        for vi in range(ROOTDIR_ENTRIES):
+            o = base + _OFF_ROOTDIR + 16 * vi
+            if data[o + 12] == VOL_TYPE_INACT:
+                continue
+            if akai_to_str(data[o:o + AKAI_NAME_LEN]).rstrip() == want:
+                hits.append((letter, base, vi))
+
+    if not hits:
+        where = f" in partition {partition}" if partition else ""
+        raise AkaiImageError(f"no volume named {name!r}{where} on {path.name}")
+    if len(hits) > 1:
+        raise AkaiImageError(
+            f"{name!r} appears in partitions "
+            f"{', '.join(h[0] for h in hits)} on {path.name} -- pass "
+            f"`partition` to say which")
+
+    letter, base, vi = hits[0]
+    _free_volume(data, base, vi)
+    _refresh_cdinfo(data, base, sizes[ord(letter) - ord('A')]) \
+        if _is_cdrom_partition(data, base) else None
+    path.write_bytes(bytes(data))
+    return {'deleted': want, 'partition': letter, 'index': vi}
+
+
 def _free_volume(data: bytearray, base: int, vi: int) -> None:
     """Release a volume's directory and file blocks, and clear its root slot.
 
