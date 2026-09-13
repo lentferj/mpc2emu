@@ -39,6 +39,7 @@ left untouched and reported.
 Pure Python (array + math), matching the rest of the DSP here — no numpy.
 """
 
+from models.diagnostics import emit as _diag, WARNING as _W
 import math
 from dataclasses import replace
 from typing import Optional, Tuple
@@ -256,11 +257,46 @@ def trim_tail_bank(bank, *, thresh_db: float = _DEFAULT_THRESH_DB,
                       if info['orig_frames'] else 0.0)
             drop = '  [loop dropped]' if info['loop_dropped'] else (
                    '  [loop kept]' if info.get('loop_guarded') else '')
+            _line = (f"    '{info['name']}': {info['orig_frames']} → "
+                     f"{info['new_frames']} f  (-{shrink:.1f}%, "
+                     f"cut {info['cut_frames'] / sr:.2f}s){drop}")
             if info['loop_dropped']:
                 n_drop += 1
-            print(f"    '{info['name']}': {info['orig_frames']} → "
-                  f"{info['new_frames']} f  (-{shrink:.1f}%, "
-                  f"cut {info['cut_frames'] / sr:.2f}s){drop}")
+                # PER SAMPLE, NOT PER PROGRAM, AT VinSamLib'S REQUEST: on the
+                # preset that exposed this, one of three samples lost 77% of
+                # itself while the others lost a third, and a single summary
+                # line would have hidden it.
+                #
+                # content_lost=True because a dropped loop is not cosmetic -- a
+                # sustained pad stops sustaining, which changes what the
+                # instrument can PLAY, not how it sounds. That is what routes it
+                # into their import risk box instead of a line a user skims.
+                #
+                # This was a bare print until 2026-09-13. It announced every
+                # drop faithfully to a terminal, and their GUI drives convert.py
+                # as a subprocess and surfaces diagnostic RECORDS -- so a user
+                # importing a pad lost its loop and was told nothing. Found from
+                # Jan's Vol MPC, where one sample was cut by 77% with its loop
+                # removed and nothing reached him.
+                _diag(_W, 'TRIM_TAIL_LOOP_DROPPED',
+                      f"{info['name']!r}: tail trim cut "
+                      f"{shrink:.0f}% ({info['cut_frames'] / sr:.2f} s) and "
+                      f"DROPPED the sample's loop, which spanned into the "
+                      f"trimmed tail. A sustained sound will no longer sustain.",
+                      content_lost=True, subject=str(info['name']),
+                      remedy='keep the loop and trim only what lies beyond it, '
+                             'or leave the tail alone for sustained material',
+                      detail={'orig_frames': info['orig_frames'],
+                              'new_frames': info['new_frames'],
+                              'cut_frames': info['cut_frames'],
+                              'cut_percent': round(shrink, 1),
+                              'cut_seconds': round(info['cut_frames'] / sr, 3),
+                              'had_loop': True,
+                              'sample_rate': new_s.sample_rate,
+                              'cli_flag': ['--trim-tail-keep-loops']},
+                      echo=_line)
+            else:
+                print(_line)
         elif info['reason'] not in ('nothing to trim',):
             print(f"    '{info['name']}': kept ({info['reason']})")
 
