@@ -606,6 +606,19 @@ Silence trimming (tighten sample starts and ends):
   --trim-start [DB]   Cut leading silence off the START of each sample (the MPC
                       ONE autosampler leaves a gap before the attack). Two-stage
                       onset detector; validated against Audacity on fast attacks.
+  --trim-start-drop-loops   DISCARD a loop whose start lies in the lead-in.
+                      Off by default since 2026-09-13: the default keeps the loop
+                      and clamps the trim to it, which still removes lead-in
+                      before it. Destructive — a sustained sound whose loop is
+                      dropped stops sustaining.
+  --trim-tail-drop-loops    The same for the tail: discard a loop whose end lies
+                      in the tail instead of clamping the cut to just past it.
+                      Destructive for library material — on a real pad bank the
+                      old default dropped 4 of 5 loops and cut one sample by 63%,
+                      where keeping them trims nothing at all, because a looped
+                      sustained sample has no tail to trim: the loop IS the
+                      sustain. Use it for autosampler takes whose whole-file loop
+                      is a capture artefact.
   --trim-start-fade MS  With --trim-start: fade-in length starting exactly at the
                       new sample start  (default: short, click-suppressing)
   --trim-start-keep-loops  With --trim-start: never trim a sample whose loop start

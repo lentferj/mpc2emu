@@ -828,15 +828,17 @@ def main():
     ap.add_argument('--trim-start-fade', type=float, default=5.0, metavar='MS',
         help='With --trim-start: fade-in length (ms) starting exactly at the new '
              'sample start, to avoid a click (default: 5).')
+    ap.add_argument('--trim-start-drop-loops', action='store_true',
+        help='With --trim-start: DISCARD a loop whose start lies in the lead-in, '
+             'instead of preserving it. Off by default since 2026-09-13 — the '
+             'default is now to keep the loop by clamping the trim to the loop '
+             'start, which still removes lead-in that lies before it. Use this '
+             'for autosampler takes whose whole-file loop is a capture artefact '
+             'rather than musical. It is a DESTRUCTIVE option: a sustained sound '
+             'whose loop is dropped stops sustaining.')
     ap.add_argument('--trim-start-keep-loops', action='store_true',
-        help='With --trim-start: never trim a sample that carries a loop whose '
-             'start lies in the lead-in — preserve the loop by clamping the trim '
-             'to the loop start, instead of dropping the loop and shortening it. '
-             'Use this when the input is percussion / drum-loop / rhythmic '
-             'material whose loop is musically meaningful and may legitimately '
-             'start near the sample start. Sustained one-shots (organ, pads, '
-             'strings) do NOT need this — their autosampler loop is just a '
-             'whole-take default worth dropping.')
+        help=argparse.SUPPRESS)     # now the default; accepted so existing
+                                    # command lines and scripts keep working
     ap.add_argument('--trim-tail', nargs='?', const=72.0, type=float, default=None,
         metavar='DB',
         help='Cleanly cut the decaying tail + trailing silence off the END of '
@@ -849,22 +851,24 @@ def main():
              'audible decay); 45 trims into the natural release for a tighter '
              'sample. By default a sample whose loop spans the trimmed tail (an '
              "autosampler's whole-take loop) has that loop DROPPED so the result "
-             'is a clean one-shot — see --trim-tail-keep-loops. Runs before '
+             'is a clean one-shot ONLY with --trim-tail-drop-loops; by default the loop is kept and the cut clamped to it. Runs before '
              'single-cycle/reduce/resample so everything downstream sees the '
              'shortened samples.')
     ap.add_argument('--trim-tail-fade', type=float, default=5.0, metavar='MS',
         help='With --trim-tail: fade-out length (ms) ending exactly at the new '
              'sample end, to avoid a click (default: 5).')
+    ap.add_argument('--trim-tail-drop-loops', action='store_true',
+        help='With --trim-tail: DISCARD a loop whose end lies in the tail, '
+             'instead of preserving it. Off by default since 2026-09-13 — the '
+             'default is now to keep the loop by clamping the cut to just past '
+             'loop end, which still removes any genuine tail beyond it. Use this '
+             'for autosampler takes whose whole-file loop is a capture artefact '
+             'rather than musical. It is a DESTRUCTIVE option: a sustained sound '
+             'whose loop is dropped stops sustaining, and on real library '
+             'material it removes the sustain it was meant to tidy.')
     ap.add_argument('--trim-tail-keep-loops', action='store_true',
-        help='With --trim-tail: never trim a sample that carries a loop whose end '
-             'lies in the tail — preserve the loop (and any silence inside it) by '
-             'skipping the trim for that sample, instead of dropping the loop and '
-             'shortening it. Use this when the input is percussion / drum-loop / '
-             'rhythmic material whose loop is musically meaningful and may legit- '
-             'imately contain trailing silence (e.g. a one-bar loop with space on '
-             'the last beat): trimming that silence would break the loop length. '
-             'Sustained one-shots (organ, pads, strings) do NOT need this — their '
-             'autosampler loop is just a whole-take default worth dropping.')
+        help=argparse.SUPPRESS)     # now the default; accepted so existing
+                                    # command lines and scripts keep working
     ap.add_argument('--auto-loop', nargs='?', const='auto', default=None,
         metavar='auto|MS',
         help='Place a clean, seamless FORWARD sustain loop in each sample so held '
@@ -1112,9 +1116,16 @@ def main():
         print(f"\n[{step_n}] Start trim ({_sthr_db:g} dB below peak)...")
         step_n += 1
         from processors.start_trim import trim_start_bank
+        # The old opt-in is now the default. READ it rather than ignore it, so a
+        # script that still passes it is told it is redundant instead of the
+        # flag silently meaning nothing.
+        if args.trim_start_keep_loops:
+            print("  Note: --trim-start-keep-loops is the default since "
+                  "2026-09-13; pass --trim-start-drop-loops for the old "
+                  "loop-discarding behaviour.")
         for bank in source_banks:
             trim_start_bank(bank, thresh_db=_sthr_db, fade_ms=args.trim_start_fade,
-                            drop_full_loop=not args.trim_start_keep_loops)
+                            drop_full_loop=args.trim_start_drop_loops)
 
     # ── Tail trim ───────────────────────────────────────────────────────────────
     # Runs after start-trim (before single-cycle/reduce/resample) so the shortened
@@ -1124,9 +1135,13 @@ def main():
         print(f"\n[{step_n}] Tail trim ({_thr_db:g} dB below peak)...")
         step_n += 1
         from processors.tail_trim import trim_tail_bank
+        if args.trim_tail_keep_loops:
+            print("  Note: --trim-tail-keep-loops is the default since "
+                  "2026-09-13; pass --trim-tail-drop-loops for the old "
+                  "loop-discarding behaviour.")
         for bank in source_banks:
             trim_tail_bank(bank, thresh_db=_thr_db, fade_ms=args.trim_tail_fade,
-                           drop_full_loop=not args.trim_tail_keep_loops)
+                           drop_full_loop=args.trim_tail_drop_loops)
 
     # ── Auto sustain-loop ───────────────────────────────────────────────────────
     # After trim-tail (loop the trimmed body) and before single-cycle (which would
