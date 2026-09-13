@@ -42,6 +42,7 @@ untouched and reported.
 Pure Python (array + math), matching the rest of the DSP here — no numpy.
 """
 
+from models.diagnostics import emit as _diag, WARNING as _W
 from dataclasses import replace
 from typing import Tuple
 
@@ -254,11 +255,36 @@ def trim_start_bank(bank, *, thresh_db: float = _DEFAULT_THRESH_DB,
                       if info['orig_frames'] else 0.0)
             drop = '  [loop dropped]' if info['loop_dropped'] else (
                    '  [loop kept]' if info.get('loop_guarded') else '')
+            _line = (f"    '{info['name']}': {info['orig_frames']} → "
+                     f"{info['new_frames']} f  (-{shrink:.1f}%, "
+                     f"cut {info['cut_frames'] / sr:.2f}s){drop}")
             if info['loop_dropped']:
                 n_drop += 1
-            print(f"    '{info['name']}': {info['orig_frames']} → "
-                  f"{info['new_frames']} f  (-{shrink:.1f}%, "
-                  f"cut {info['cut_frames'] / sr:.2f}s){drop}")
+                # Same record as tail_trim's. It was left a bare print when the
+                # tail path was fixed on 2026-09-13 -- identical code shape, one
+                # file over, and a start trim that eats a loop is exactly as
+                # silent to a GUI as the tail one was. Caught by VinSamLib
+                # reading the commit rather than the symptom.
+                _diag(_W, 'TRIM_START_LOOP_DROPPED',
+                      f"{info['name']!r}: start trim cut "
+                      f"{shrink:.0f}% ({info['cut_frames'] / sr:.2f} s) and "
+                      f"DROPPED the sample's loop, which began inside the "
+                      f"trimmed lead-in. A sustained sound will no longer "
+                      f"sustain.",
+                      content_lost=True, subject=str(info['name']),
+                      remedy='keep the loop and trim only the lead-in that lies '
+                             'before it, or leave the start alone for sustained '
+                             'material',
+                      detail={'orig_frames': info['orig_frames'],
+                              'new_frames': info['new_frames'],
+                              'cut_frames': info['cut_frames'],
+                              'cut_percent': round(shrink, 1),
+                              'cut_seconds': round(info['cut_frames'] / sr, 3),
+                              'had_loop': True,
+                              'sample_rate': new_s.sample_rate},
+                      echo=_line)
+            else:
+                print(_line)
         elif info['reason'] not in ('nothing to trim',):
             print(f"    '{info['name']}': kept ({info['reason']})")
 

@@ -272,12 +272,17 @@ def trim_tail_bank(bank, *, thresh_db: float = _DEFAULT_THRESH_DB,
                 # instrument can PLAY, not how it sounds. That is what routes it
                 # into their import risk box instead of a line a user skims.
                 #
-                # This was a bare print until 2026-09-13. It announced every
-                # drop faithfully to a terminal, and their GUI drives convert.py
-                # as a subprocess and surfaces diagnostic RECORDS -- so a user
-                # importing a pad lost its loop and was told nothing. Found from
-                # Jan's Vol MPC, where one sample was cut by 77% with its loop
-                # removed and nothing reached him.
+                # This was a bare print until 2026-09-13. VinSamLib IMPORT this
+                # module and call `trim_tail_bank` directly -- they do not run
+                # convert.py -- and they surface diagnostic RECORDS, so a print
+                # reached nobody. A user importing a pad lost its loop and was
+                # told nothing. Found from Jan's Vol MPC, where one sample was
+                # cut by 63% with its loop removed.
+                #
+                # WHAT THIS MEANS FOR CHANGES HERE: the CLI defaults and flag
+                # names cannot reach them in either direction. This function's
+                # SIGNATURE, the diagnostic `code` strings and the `detail` keys
+                # can, and are not ours to change quietly.
                 _diag(_W, 'TRIM_TAIL_LOOP_DROPPED',
                       f"{info['name']!r}: tail trim cut "
                       f"{shrink:.0f}% ({info['cut_frames'] / sr:.2f} s) and "
@@ -292,8 +297,15 @@ def trim_tail_bank(bank, *, thresh_db: float = _DEFAULT_THRESH_DB,
                               'cut_percent': round(shrink, 1),
                               'cut_seconds': round(info['cut_frames'] / sr, 3),
                               'had_loop': True,
-                              'sample_rate': new_s.sample_rate,
-                              'cli_flag': ['--trim-tail-keep-loops']},
+                              'sample_rate': new_s.sample_rate},
+                      # NO cli_flag. It named '--trim-tail-keep-loops', which
+                      # became the DEFAULT the same hour -- so the record would
+                      # have advised a flag that does nothing. Under the current
+                      # defaults this fires only when someone asked for it with
+                      # --trim-tail-drop-loops, and there is no flag that
+                      # prevents it beyond not passing that one. The remedy text
+                      # says what to do and names nothing, which is what a GUI
+                      # wants anyway.
                       echo=_line)
             else:
                 print(_line)
