@@ -56,9 +56,11 @@ from __future__ import annotations
 
 import cmath
 import math
+import weakref
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from models.common import Bank, Preset, SampleData, VoiceLayer
+from models.diagnostics import emit as _diag, WARNING as _W
 
 #: Frame length for the centroid FFT. Power of two; 2048 at 44.1 kHz is 46 ms,
 #: long enough to resolve a bass fundamental and short enough to stay inside a
@@ -71,8 +73,38 @@ _FRAME = 2048
 #: hammer noise rather than the sustained timbre.
 _FRAME_AT = 0.25
 
+#: Keyed by `id()` BUT WITH A WEAKREF THAT EVICTS THE ENTRY WHEN THE SAMPLE
+#: DIES. `id()` alone is unique only among LIVE objects: CPython reuses an
+#: address as soon as the previous tenant is collected, so a freed sample's
+#: centroid was being served for a completely different one. Demonstrated
+#: 2026-09-13 -- a 32-harmonic tone reported a sine's 447 Hz because it landed
+#: on the same address. It surfaced as one test failing only when the whole
+#: suite ran, and in a real conversion, where samples are created and dropped
+#: constantly, it would have been an intermittent wrong measurement.
+#:
+#: A WeakKeyDictionary would be the obvious fix and does not work here:
+#: SampleData is a dataclass with `eq`, so it is unhashable. The eviction
+#: callback gives the same guarantee -- the id cannot be reused while the entry
+#: lives, because the entry is removed the moment the object is collected.
 _centroid_cache: Dict[int, Optional[float]] = {}
 _energy_cache: Dict[int, float] = {}
+_cache_refs: Dict[int, "weakref.ref"] = {}
+
+
+def _cache_put(sd: SampleData, centroid: Optional[float], energy: float) -> None:
+    key = id(sd)
+
+    def _evict(_ref, _key=key):
+        _centroid_cache.pop(_key, None)
+        _energy_cache.pop(_key, None)
+        _cache_refs.pop(_key, None)
+
+    _centroid_cache[key] = centroid
+    _energy_cache[key] = energy
+    try:
+        _cache_refs[key] = weakref.ref(sd, _evict)
+    except TypeError:                       # not weakref-able: do not cache it
+        _evict(None)
 
 
 def _fft(a: List[complex]) -> List[complex]:
@@ -140,12 +172,11 @@ def sample_centroid(sd: SampleData) -> Optional[float]:
     frames = _frames(sd)
     sr = getattr(sd, 'sample_rate', 44100) or 44100
     if len(frames) < _FRAME:
-        _centroid_cache[key] = None
-        _energy_cache[key] = 0.0
+        _cache_put(sd, None, 0.0)
         return None
     start = min(int(len(frames) * _FRAME_AT), len(frames) - _FRAME)
     seg = frames[start:start + _FRAME]
-    _energy_cache[key] = math.sqrt(sum(s * s for s in seg) / len(seg))
+    _rms = math.sqrt(sum(s * s for s in seg) / len(seg))
     # Hann window: an unwindowed frame smears energy across the whole spectrum
     # and pulls every centroid toward the middle, which would flatten exactly
     # the differences this is here to detect.
@@ -158,7 +189,7 @@ def sample_centroid(sd: SampleData) -> Optional[float]:
         num += mag * (k * sr / _FRAME)
         den += mag
     val = (num / den) if den > 0 else None
-    _centroid_cache[key] = val
+    _cache_put(sd, val, _rms)
     return val
 
 
@@ -189,11 +220,9 @@ def _sounding(preset: Preset, note: int, vel: int):
 def sample_energy(sd: SampleData) -> float:
     """RMS of a sample, for weighting layers in a mix. Cached alongside the
     centroid, from the same frame, so the two always describe the same audio."""
-    key = id(sd)
-    if key not in _energy_cache:
+    if id(sd) not in _energy_cache:
         sample_centroid(sd)                    # fills both caches
-        _energy_cache.setdefault(key, 0.0)
-    return _energy_cache[key]
+    return _energy_cache.get(id(sd), 0.0)
 
 
 def _mix_centroid(zones, note: int, by_name: Dict[str, SampleData]):
@@ -385,9 +414,22 @@ def plan_shrink(preset: Preset, samples: List[SampleData], target_bytes: int,
             for vp in near(int(bv)):
                 consider(float(kp), float(vp))
 
-    if not feasible:                           # nothing reached the target
-        after, est = _simulate(preset, samples, max_pct, max_pct)
-        return ShrinkPlan(max_pct, max_pct, est,
+    if not feasible:
+        # NOTHING REACHES THE TARGET. Do not fall back to max thinning on both
+        # axes -- that was the first behaviour here and it is maximally
+        # destructive for a goal it still does not meet. Take the SMALLEST
+        # reachable size instead, and among plans that reach it, the cheapest.
+        floor_plans = []
+        for kp in steps:
+            for vp in steps:
+                after, est = _simulate(preset, samples, kp, vp)
+                floor_plans.append((est, kp, vp, after))
+        smallest = min(e for e, _, _, _ in floor_plans)
+        near = [f for f in floor_plans if f[0] <= smallest * 1.02]
+        best_floor = min(near, key=lambda f: (
+            coverage_error_cents(preset, f[3], by_name), f[1] + f[2]))
+        est, kp, vp, after = best_floor
+        return ShrinkPlan(kp, vp, est,
                           coverage_error_cents(preset, after, by_name),
                           orig_bytes, False, len(seen), blind, rugged=False)
 
@@ -435,6 +477,33 @@ def shrink_bank(bank: Bank, target_bytes: Optional[int] = None,
         note = ''
         if not plan.feasible:
             note = 'TARGET NOT REACHABLE'
+            # NEVER SILENT, AND ALWAYS WITH THE MAGNITUDE. Without this the
+            # whole user-visible output was "shrank 1 preset(s)" while the
+            # result sat 14% over the target -- the same shape as the rate-snap
+            # bug, where "+2 cents" and "+831 cents" both read as a bare
+            # warning and every preset looked alike.
+            over = plan.est_bytes - tgt
+            _diag(_W, 'SHRINK_TARGET_UNREACHABLE',
+                  f"preset '{preset.name}' cannot reach "
+                  f"{tgt/1048576:.2f} MB by thinning: the smallest reachable "
+                  f"size is {plan.est_bytes/1048576:.2f} MB, "
+                  f"{over/1024:.0f} KB over ({plan.est_bytes/tgt*100-100:.0f}%). "
+                  f"Key-zone and velocity-layer thinning cannot go below one "
+                  f"sample per voice, and free whole samples at a time.",
+                  content_lost=True, subject=str(preset.name),
+                  remedy='reduce the sample data itself as well, with --mono '
+                         'or --max-sample-rate, which shrink below that floor; '
+                         'or raise the target',
+                  detail={'target_bytes': tgt,
+                          'reached_bytes': plan.est_bytes,
+                          'over_bytes': over,
+                          'key_pct': plan.key_pct, 'vel_pct': plan.vel_pct},
+                  echo=f"    [WARN] '{preset.name}' could not reach "
+                       f"{tgt/1048576:.2f} MB — smallest reachable is "
+                       f"{plan.est_bytes/1048576:.2f} MB "
+                       f"({over/1024:.0f} KB over). Thinning cannot go below "
+                       f"one sample per voice; use --mono or --max-sample-rate "
+                       f"to shrink the sample data itself.")
         elif plan.blind:
             note = 'no audio: key axis only'
         elif plan.rugged:
