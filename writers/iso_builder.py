@@ -63,6 +63,7 @@ Cluster size 1 MB (cse=5) fits within 5 FAT blocks and produces the
 identical fixed-position layout the EOS firmware expects.
 """
 
+import sys
 import struct
 from pathlib import Path
 from typing import List, Optional
@@ -943,6 +944,14 @@ def _emu_resolve_duplicate(name: str, policy: str) -> str:
     """Resolve a name collision → 'add-new' / 'skip' / 'overwrite'."""
     if policy in ('add-new', 'skip', 'overwrite'):
         return policy
+    # NO TERMINAL, NO PROMPT. `input()` on a pipe blocks for ever, and this
+    # runs under VinSamLib's GUI importer and in CI, where nothing can answer
+    # it. Mirrors the guard `akai_s3000_image` already has; skipping is the
+    # non-destructive answer, and it says which flag decides.
+    if not sys.stdin or not sys.stdin.isatty():
+        print(f"  Bank '{name}' already exists and stdin is not a terminal "
+              f"— skipping it. Pass --on-duplicate to choose explicitly.")
+        return 'skip'
     while True:
         ans = input(f"  Bank '{name}' already exists — [a]dd as new / [s]kip / "
                     f"[o]verwrite? ").strip().lower()
