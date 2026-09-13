@@ -2653,7 +2653,7 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
               f'2-pole lowpass',
               content_lost=True,
               remedy='enable IB-304F output if the target machine has the board',
-              detail={'cli_flag': '--akai-ib304f',
+              detail={'cli_flag': ['--akai-ib304f'],
                       'filter_type': getattr(voice, 'filter_type', 0)})
 
     # FILTER 2 OFF MEANS FIL2FR 99, NOT 0 -- corrected 2026-09-11 from the corpus.

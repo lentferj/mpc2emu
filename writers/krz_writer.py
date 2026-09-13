@@ -3115,7 +3115,7 @@ def write_krz(bank: Bank, output_path: str,
                       detail={'layers': n, 'requested': True,
                               'layers_clamped': max(0, len(voices) - _MAX_KRZ_LAYERS),
                               'silent_on_normal_channel': True,
-                              'cli_flag': '--krz-drum-program'},
+                              'cli_flag': ['--krz-drum-program']},
                       # REMEDY TEXT CARRIES NO CLI FLAG. VinSamLib renders these
                       # in a GUI that has no command line, and was already
                       # rewriting our flag names into its own control names by
@@ -3156,7 +3156,7 @@ def write_krz(bank: Bank, output_path: str,
                       content_lost=bool(_dropped),
                       detail={'layers_before': _was2, 'layers_after': len(voices),
                               'dropped_velocity_bands': [list(b) for b in _dropped],
-                              'cli_flag': '--krz-drum-program'},
+                              'cli_flag': ['--krz-drum-program']},
                       remedy='converting it as a drum program keeps every '
                              'layer, but that program sounds ONLY on a drum '
                              'channel',
@@ -3182,7 +3182,7 @@ def write_krz(bank: Bank, output_path: str,
                   detail={'layers': n, 'requested': True,
                           'layers_clamped': max(0, len(voices) - _MAX_KRZ_LAYERS),
                           'silent_on_normal_channel': True,
-                          'via': '--krz-faithful', 'cli_flag': '--krz-faithful'},
+                          'via': '--krz-faithful', 'cli_flag': ['--krz-faithful']},
                   remedy='play it on the drum channel, or convert without '
                          'faithful mode',
                   echo='')

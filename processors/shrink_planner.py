@@ -60,7 +60,8 @@ import weakref
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from models.common import Bank, Preset, SampleData, VoiceLayer
-from models.diagnostics import emit as _diag, WARNING as _W
+from models.diagnostics import (emit as _diag, WARNING as _W,
+                                INFO as _I)
 
 #: Frame length for the centroid FFT. Power of two; 2048 at 44.1 kHz is 46 ms,
 #: long enough to resolve a bass fundamental and short enough to stay inside a
@@ -511,6 +512,26 @@ def shrink_bank(bank: Bank, target_bytes: Optional[int] = None,
             note = 'no audio: key axis only'
         elif plan.rugged:
             note = 'rugged objective'
+            # NOT a warning: a user cannot act on "the objective was rugged",
+            # and content_lost is False because nothing extra was thrown away.
+            # It is published because it is the one signal that the chosen plan
+            # was NOT simply the cheapest -- so when two similar presets thin
+            # differently, this is the answer, and it belongs in a record
+            # rather than a log line nobody kept. (VinSamLib's request.)
+            _diag(_I, 'SHRINK_PLAN_RUGGED',
+                  f"preset '{preset.name}': a milder thinning scored WORSE "
+                  f"than the one chosen, so the cost surface is not smooth "
+                  f"here. Picked the mildest plan within tolerance of the "
+                  f"cheapest rather than the cheapest outright. Typical of "
+                  f"stacked layers, where which voice keeps coverage at which "
+                  f"note decides the mix.",
+                  content_lost=False, subject=str(preset.name),
+                  remedy='nothing to do; recorded so an unexpectedly mild or '
+                         'aggressive plan can be explained later',
+                  detail={'key_pct': plan.key_pct, 'vel_pct': plan.vel_pct,
+                          'cost_cents': round(plan.cost_cents, 1),
+                          'reached_bytes': plan.est_bytes},
+                  echo='')
         rows.append((preset.name, cur, plan.est_bytes, plan.key_pct,
                      plan.vel_pct, plan.cost_cents, note))
 
