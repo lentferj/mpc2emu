@@ -866,9 +866,18 @@ def append_akai_volumes(image_path: str,
             # and would send a caller to rebuild a larger image that cannot
             # help. VinSamLib branch on exactly this distinction.
             _short = max(0, _need_blocks - _best_free) if _slots_anywhere else 0
-            _why = ("every volume slot is taken (a partition holds "
-                    f"{ROOTDIR_ENTRIES}); a larger image will not help, "
-                    "delete a volume or use another partition"
+            # "A LARGER IMAGE WILL NOT HELP" WAS WRONG, and VinSamLib caught
+            # it by rebuilding one: partition COUNT follows from disk SIZE, so a
+            # bigger image gains partitions and each partition brings another
+            # ROOTDIR_ENTRIES slots. Measured: 8 MB and 32 MB both plan one
+            # partition (100 slots), 120 MB plans two (200). Their rebuild took
+            # this fixture from 8 MB to 61 MB and 101 volumes. What is true is
+            # only that APPENDING cannot help -- the distinction the caller
+            # needs is which refusal it is, not whether to give up.
+            _why = ("every volume slot in every partition is taken (each holds "
+                    f"{ROOTDIR_ENTRIES}); appending cannot place it. Deleting a "
+                    "volume frees a slot, and rebuilding larger gains "
+                    "partitions, which is where more slots come from"
                     if not _slots_anywhere else
                     f"the largest free run is {_best_free} block(s) and this "
                     f"volume needs {_need_blocks}")

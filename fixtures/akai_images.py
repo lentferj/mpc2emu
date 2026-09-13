@@ -1,7 +1,14 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
 # mpc2emu — https://github.com/lentferj/mpc2emu
-"""AKAI hard-disk images that are broken in one specific way each."""
+"""AKAI hard-disk images that are broken in one specific way each.
+
+Every generator here takes a DIRECTORY and returns the path to the file
+it wrote, matching `xpm_presets`. They took a file path until VinSamLib
+passed a directory to one and got `IsADirectoryError` out of
+`atomic_write` -- not a bug, but exactly the friction a fixture library
+should not have.
+"""
 from __future__ import annotations
 
 import contextlib
@@ -32,7 +39,7 @@ def _one_zone_bank(name: str, samples) -> Bank:
     return Bank(name=name, presets=[p], samples=list(samples))
 
 
-def unplayable_ssrate_image(path: str, rate: int = 27777) -> str:
+def unplayable_ssrate_image(directory: str, rate: int = 27777) -> str:
     """An image whose samples declare a rate the S3000XL cannot play.
 
     **Reproduces:** Jan's Vol MPC, 2026-09-13. Every sample carried `SSRATE`
@@ -55,12 +62,14 @@ def unplayable_ssrate_image(path: str, rate: int = 27777) -> str:
     with contextlib.redirect_stdout(buf):
         files = build_akai_volume(bank, bank_name='BADRATE')
         items = list(files.items() if isinstance(files, dict) else files)
+        os.makedirs(directory, exist_ok=True)
+        path = os.path.join(directory, 'unplayable_ssrate.hda')
         build_akai_hd_image([('BADRATE', items)], path, size_mb=8)
     return path
 
 
-def full_image_no_free_blocks(path: str, size_mb: int = 2,
-                              leave_blocks: int = 8) -> str:
+def full_image_no_free_blocks(directory: str, size_mb: int = 2,
+                              leave_blocks: int = 1) -> str:
     """An image with a free volume SLOT but not enough free blocks.
 
     **Reproduces:** the refusal VinSamLib's rebuild path branches on. Distinct
@@ -75,25 +84,35 @@ def full_image_no_free_blocks(path: str, size_mb: int = 2,
     Must raise `AkaiImageError` and emit `AKAI_IMAGE_NO_ROOM` with a non-zero
     `short_blocks` and `had_free_slot` True.
 
-    `leave_blocks` is how much room to leave -- small enough that any real
-    volume will not fit, large enough that the disc is not pathologically full.
+    **LEAVES ONE BLOCK, SO ANY VOLUME FAILS.** It left eight, which is full
+    only relative to a large enough addition -- VinSamLib appended a small
+    volume and it SUCCEEDED. That puts the "does it fail?" burden on the test
+    author and lets a careless test pass while exercising nothing, which is this
+    module's own rule turned on it. The smallest possible volume needs
+    `VOLDIR_HD_BLKS` (2) plus one data block, so one free block cannot hold
+    anything at all.
     """
     from writers.akai_s3000_image import (build_akai_hd_image, HD_BLOCK,
                                           PARTHEAD_BLKS, VOLDIR_HD_BLKS)
     from writers.akai_s3000_writer import build_akai_volume
     total = (size_mb * 1048576) // HD_BLOCK
-    hog_blocks = max(1, total - PARTHEAD_BLKS - VOLDIR_HD_BLKS - leave_blocks)
+    # minus one more for the PROGRAM file, which shares the partition with
+    # the sample and is easy to forget when counting blocks
+    hog_blocks = max(1, total - PARTHEAD_BLKS - VOLDIR_HD_BLKS
+                     - 1 - leave_blocks)
     frames = hog_blocks * HD_BLOCK // 2
     bank = _one_zone_bank('HOG', [_tone('BIG', frames=frames)])
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
         files = build_akai_volume(bank, bank_name='HOG')
         items = list(files.items() if isinstance(files, dict) else files)
+        os.makedirs(directory, exist_ok=True)
+        path = os.path.join(directory, 'no_free_blocks.hda')
         build_akai_hd_image([('HOG', items)], path, size_mb=size_mb)
     return path
 
 
-def full_image_no_free_slot(path: str, size_mb: int = 8) -> str:
+def full_image_no_free_slot(directory: str, size_mb: int = 8) -> str:
     """An image with free blocks but every volume slot taken.
 
     **Reproduces:** the other half of the no-room refusal. A partition holds
@@ -115,5 +134,7 @@ def full_image_no_free_slot(path: str, size_mb: int = 8) -> str:
             files = build_akai_volume(bank, bank_name=f'V{i:03d}')
             vols.append((f'V{i:03d}',
                          list(files.items() if isinstance(files, dict) else files)))
+        os.makedirs(directory, exist_ok=True)
+        path = os.path.join(directory, 'no_free_slot.hda')
         build_akai_hd_image(vols, path, size_mb=size_mb)
     return path
