@@ -121,6 +121,61 @@ def akai_target_rate(rate: int) -> int:
     return 22050 if rate <= 22050 else 44100
 
 
+def snap_bank_to_playback_rates(bank, *, quiet: bool = False) -> dict:
+    """Resample every sample in `bank` to a rate the S3000XL can actually play.
+
+    **CALL THIS BEFORE `build_akai_volume` IF YOU ARE NOT USING convert.py.**
+    The writer deliberately does not resample -- that is a processor's job, and
+    doing it inside the writer would hide the problem from every other output
+    path -- so it WARNS and carries on. A caller that ignores the warning ships
+    a volume whose audio is at one rate and whose header says another.
+
+    **This existed only inside convert.py until 2026-09-13, which made it
+    unreachable.** VinSamLib import `build_akai_volume` and call it directly, so
+    the snap never ran for them; a whole volume reached Jan's S3000XL with
+    `SSRATE` 27777 against a 44100 index and every sample sounded **+802 cents
+    sharp**. They could not have called this even had they wanted to. A library
+    whose correct use requires reimplementing a step it keeps to itself is the
+    library's defect, not the caller's.
+
+    Returns ``{'snapped': int, 'failed': int, 'unchanged': int}``.
+
+    **VERIFY, DO NOT ASSUME** -- kept from convert.py's own scar tissue. The
+    first version counted every sample it TRIED, while `resample_to_rate`
+    silently returns the input unchanged for an upsample, which is most cases
+    here. It printed "31 sample(s) snapped" and 31 samples went to the writer at
+    27777 Hz. So the result rate is checked and a failure is counted as a
+    failure.
+    """
+    from processors.resampler import resample_to_rate
+    snapped = failed = unchanged = 0
+    for i, s in enumerate(bank.samples):
+        if s.sample_rate in AKAI_PLAYBACK_RATES:
+            unchanged += 1
+            continue
+        tgt = akai_target_rate(s.sample_rate)
+        if not quiet:
+            print(f"    {s.name!r}: {s.sample_rate} -> {tgt} Hz"
+                  f"   (unresampled it would sound "
+                  f"{1200 * math.log(tgt / float(s.sample_rate), 2):+.0f} cents)")
+        out = resample_to_rate(s, tgt, allow_upsample=True)
+        if out.sample_rate != tgt:
+            _msg = (f"{s.name!r} did not resample: still {out.sample_rate} Hz, "
+                    f"wanted {tgt}. It will not play correctly on the sampler.")
+            _diag(_W, 'AKAI_RATE_SNAP_FAILED', _msg, content_lost=True,
+                  subject=s.name,
+                  remedy='resample this sample to a playable rate by another '
+                         'route before writing it',
+                  detail={'from_rate': s.sample_rate, 'target_rate': tgt,
+                          'result_rate': out.sample_rate},
+                  echo=f"    [ERROR] {_msg}")
+            failed += 1
+        else:
+            bank.samples[i] = out
+            snapped += 1
+    return {'snapped': snapped, 'failed': failed, 'unchanged': unchanged}
+
+
 def akai_playback_rate(rate: int) -> int:
     """The rate the machine will ACTUALLY play a sample stored at `rate`.
 

@@ -1396,37 +1396,27 @@ def main():
         # Runs LAST, after --max-sample-rate and the vintage --resample
         # profiles, so a user's explicit rate choice is honoured first and only
         # then snapped to something the machine can actually play.
-        from writers.akai_s3000_writer import (akai_target_rate,
+        from writers.akai_s3000_writer import (snap_bank_to_playback_rates,
                                                AKAI_PLAYBACK_RATES)
+        # ONE IMPLEMENTATION, AND IT LIVES WITH THE WRITER. This was inline
+        # here until 2026-09-13, which made it unreachable to anyone importing
+        # build_akai_volume directly -- and a whole volume reached Jan's
+        # S3000XL +802 cents sharp for exactly that reason: SSRATE 27777
+        # against a 44100 index, because the caller had no snap to call. A step
+        # a caller MUST run does not belong inside the CLI that happens to run
+        # it first.
         _fixed = _failed = 0
+        _announced = False
         for bank in output_banks:
-            for i, s in enumerate(bank.samples):
-                if s.sample_rate in AKAI_PLAYBACK_RATES:
-                    continue
-                tgt = akai_target_rate(s.sample_rate)
-                if _fixed == 0:
-                    print(f"\n[{step_n}] AKAI playback-rate snap (the S3000XL "
-                          f"plays only {AKAI_PLAYBACK_RATES[0]} and "
-                          f"{AKAI_PLAYBACK_RATES[1]} Hz)...")
-                print(f"    {s.name!r}: {s.sample_rate} -> {tgt} Hz"
-                      f"   (unresampled it would sound "
-                      f"{1200 * math.log(tgt / float(s.sample_rate), 2):+.0f} cents)")
-                out = resample_to_rate(s, tgt, allow_upsample=True)
-                # VERIFY, DO NOT ASSUME. The first version of this counted every
-                # sample it TRIED and reported them as snapped -- while
-                # resample_to_rate silently returned the input unchanged for any
-                # upsample, which is most of the cases here. It printed
-                # "31 sample(s) snapped" and 31 samples went to the writer at
-                # 27777 Hz. Same failure as a build log echoing the request
-                # instead of the byte.
-                if out.sample_rate != tgt:
-                    print(f"    [ERROR] {s.name!r} did not resample: still "
-                          f"{out.sample_rate} Hz, wanted {tgt}. It will not play "
-                          f"correctly on the sampler.")
-                    _failed += 1
-                else:
-                    bank.samples[i] = out
-                    _fixed += 1
+            if not _announced and any(s.sample_rate not in AKAI_PLAYBACK_RATES
+                                      for s in bank.samples):
+                print(f"\n[{step_n}] AKAI playback-rate snap (the S3000XL "
+                      f"plays only {AKAI_PLAYBACK_RATES[0]} and "
+                      f"{AKAI_PLAYBACK_RATES[1]} Hz)...")
+                _announced = True
+            _res = snap_bank_to_playback_rates(bank)
+            _fixed += _res['snapped']
+            _failed += _res['failed']
         if _fixed or _failed:
             print(f"    {_fixed} sample(s) snapped"
                   + (f", {_failed} FAILED" if _failed else "") + ".")
