@@ -636,6 +636,25 @@ Auto-loop (make held notes sustain indefinitely):
                       its loop points, for inspection in an audio editor.
 
 Sample-count reduction (fit modern libraries into vintage memory limits):
+  --shrink-to SIZE    Shrink each preset to at most SIZE (e.g. 8MB / 4096K) by
+                      CHOOSING --reduce-key-zones and --reduce-velocity-layers
+                      for you, per preset. Rather than assume which axis costs
+                      less, it measures this material: thinning key zones makes
+                      survivors stretch, which shifts a note's whole spectrum by
+                      the transposition; thinning velocity layers substitutes one
+                      layer's timbre for another's. Both are scored as spectral-
+                      centroid error in cents, so the two are directly
+                      comparable, and the cheapest combination that reaches the
+                      target wins.
+  --shrink-by PCT     The same, relative: shrink each preset BY this percentage
+                      of its current size (40 keeps ~60%).
+  --shrink-report     Print what each preset cost and which axis paid for it.
+                      Note the cost compares PLANS FOR ONE PRESET; it is not a
+                      fidelity score to compare between presets.
+                      Runs AFTER --mono, --resample and --max-sample-rate, so
+                      reductions you have already asked for are counted first
+                      and it never thins for bytes that were going to be freed
+                      anyway.
   --reduce-key-zones PCT        Remove PCT% of per-voice key-zone samples
   --reduce-velocity-layers PCT  Remove PCT% of per-preset velocity-layer voices
                       Both default to 0 (off) and are independent — e.g. set

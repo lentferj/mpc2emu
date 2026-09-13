@@ -728,6 +728,19 @@ def main():
              'gives +1.46 st headroom at 44.1 kHz, so wide zones clamp); pass 0 '
              'to disable, or any HZ to override. No default for e4b. '
              'See docs/RESOLUTION_NOTES.md "KRZ up-pitch clamp".')
+    ap.add_argument('--shrink-to', dest='shrink_to', type=_size_bytes_type,
+        default=None, metavar='SIZE',
+        help='Shrink each preset to at most SIZE (e.g. 8MB / 4096K) by CHOOSING '
+             '--reduce-key-zones and --reduce-velocity-layers automatically. '
+             'Each preset is measured and the combination that costs the least '
+             'audible damage is applied; see --shrink-report.')
+    ap.add_argument('--shrink-by', dest='shrink_by', type=float, default=None,
+        metavar='PCT',
+        help='Like --shrink-to, but relative: shrink each preset BY this '
+             'percentage of its current size (e.g. 40 keeps ~60%%).')
+    ap.add_argument('--shrink-report', action='store_true',
+        help='With --shrink-to/--shrink-by, print what each preset cost and '
+             'which axis paid for it.')
     ap.add_argument('--reduce-key-zones', type=float, default=0.0, metavar='PCT',
         help='Remove PCT%% of per-voice key-zone samples, spreading '
              'survivors to fill the gaps (0-100)')
@@ -1277,6 +1290,28 @@ def main():
                 target = max(_KRZ_RATE_FLOOR, min(s.sample_rate, target))
                 if target < s.sample_rate:
                     bank.samples[i] = resample_to_rate(s, target)
+
+    # ── Automatic thinning for a memory target ────────────────────────────────
+    # DELIBERATELY LAST AMONG THE STEPS THAT CHANGE SAMPLE SIZE, and it must
+    # stay there. The planner measures the preset as it now stands, so every
+    # size reduction the user has ALREADY asked for has to have happened first
+    # or it thins for bytes that were going to be freed anyway:
+    #     --mono                  halves every stereo sample
+    #     --resample              vintage profiles change rate and width
+    #     --max-sample-rate       downsamples everything above a ceiling
+    #     KRZ headroom downsample drops rates to buy up-pitch room
+    # Ordering is the whole fix -- none of those needs modelling, because after
+    # them `estimate_preset_size` simply reads the real thing.
+    if args.shrink_to is not None or args.shrink_by is not None:
+        from processors.shrink_planner import shrink_bank
+        what = (f"to {args.shrink_to/1048576:.1f} MB per preset"
+                if args.shrink_to is not None else f"by {args.shrink_by:.0f}%")
+        print(f"\n[{step_n}] Shrinking {what} "
+              f"(choosing key-zone / velocity-layer thinning per preset)...")
+        step_n += 1
+        for bank in source_banks:
+            shrink_bank(bank, target_bytes=args.shrink_to,
+                        by_pct=args.shrink_by, report=args.shrink_report)
 
     # ── TAL-Sampler output ────────────────────────────────────────────────────
     if args.format == 'talsmpl':
