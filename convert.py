@@ -1421,6 +1421,26 @@ def main():
             print(f"    {_fixed} sample(s) snapped"
                   + (f", {_failed} FAILED" if _failed else "") + ".")
             step_n += 1
+        if _failed:
+            # REFUSE TO WRITE. This used to print the failure and write the
+            # volume anyway, exiting 0 -- which is the exact shape of the bug
+            # that produced it: a warning standing next to a volume that was
+            # still written, and then loaded onto a sampler. A sample left at a
+            # rate the machine cannot play sounds transposed and short, and
+            # nothing downstream will catch it: the header looks right, the
+            # reader reports the rate it will SOUND at, and the file is
+            # indistinguishable from a good one until somebody plays it.
+            #
+            # VinSamLib reached the same decision independently on their path
+            # and put it best: the one thing that volume must not be is quietly
+            # present on a disc. Consistent with the fit assistant, which also
+            # exits non-zero rather than ship an unloadable bank.
+            print(f"\n  [ERROR] {_failed} sample(s) could not be resampled to a "
+                  f"rate the S3000XL plays. They would sound transposed and "
+                  f"short.")
+            print("  Refusing to write. Resample those samples by another route, "
+                  "or exclude them.")
+            sys.exit(3)
         # Propagate the failure: a run where every volume was skipped must not
         # exit 0, or a batch script sees a clean finish and no files.
         _rc = write_akai_output(output_banks, out_dir, bank_name, args, step_n)
