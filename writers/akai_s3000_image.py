@@ -33,6 +33,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
+from models.diagnostics import emit as _diag, WARNING as _W
 from parsers.akai_s3000_parser import AKAI_NAME_LEN, akai_to_str, str_to_akai
 from writers.atomic import atomic_write
 
@@ -804,6 +805,10 @@ def append_akai_volumes(image_path: str,
                 del existing[name]
 
         placed = False
+        _best_free = 0
+        _slots_anywhere = False
+        _need_blocks = (VOLDIR_HD_BLKS
+                        + sum(_blocks(len(d), HD_BLOCK) for _n, d in files))
         for base, psize in bases:
             fat = [u16(base + _OFF_FAT + 2 * i) for i in range(PART_MAX_BLOCKS)]
             slot = next((i for i in range(ROOTDIR_ENTRIES)
@@ -814,6 +819,8 @@ def append_akai_volumes(image_path: str,
             free = [b for b in range(PARTHEAD_BLKS, min(psize, PART_MAX_BLOCKS))
                     if fat[b] == FAT_FREE]
             need = VOLDIR_HD_BLKS + sum(_blocks(len(d), HD_BLOCK) for _n, d in files)
+            _best_free = max(_best_free, len(free))
+            _slots_anywhere = True
             if len(free) < need:
                 continue
 
@@ -847,9 +854,34 @@ def append_akai_volumes(image_path: str,
             break
 
         if not placed:
-            raise AkaiImageError(
-                f"no room on {path.name} for volume '{name}' — no partition has "
-                f"both a free volume slot and enough free blocks")
+            # THE NUMBERS GO IN THE REFUSAL. It used to say only that there was
+            # no room, so a caller wanting to rebuild the image bigger had to
+            # GUESS how much bigger -- VinSamLib did exactly that, and landed on
+            # a heuristic close to but not the same as ours. A refusal that
+            # states the shortfall lets the next step be exact instead.
+            _short = max(0, _need_blocks - _best_free)
+            _why = ("no partition has a free volume slot"
+                    if not _slots_anywhere else
+                    f"the largest free run is {_best_free} block(s) and this "
+                    f"volume needs {_need_blocks}")
+            _msg = (f"no room on {path.name} for volume '{name}' — {_why}"
+                    + (f"; short by {_short} block(s) "
+                       f"({_short * HD_BLOCK / 1048576:.1f} MB)"
+                       if _short else ""))
+            _diag(_W, 'AKAI_IMAGE_NO_ROOM', _msg, content_lost=True,
+                  subject=name,
+                  remedy='delete a volume to free space, or rebuild the image '
+                         'large enough to hold what it already has plus this',
+                  detail={'volume': name,
+                          'needed_blocks': _need_blocks,
+                          'largest_free_blocks': _best_free,
+                          'short_blocks': _short,
+                          'block_size': HD_BLOCK,
+                          'needed_bytes': _need_blocks * HD_BLOCK,
+                          'short_bytes': _short * HD_BLOCK,
+                          'had_free_slot': _slots_anywhere},
+                  echo='')
+            raise AkaiImageError(_msg)
 
     # A CD-ROM partition carries an index of every file on it.  Leaving it
     # stale after an append would show the sampler the old contents, so it is
