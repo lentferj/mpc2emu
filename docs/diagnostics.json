@@ -1,0 +1,498 @@
+{
+  "schema": 1,
+  "note": "Generated from the source by diagnostics_catalog.py. Consumers key on `code` and `detail_keys`; both are part of the contract and are not changed silently.",
+  "codes": [
+    {
+      "code": "AKAI_ATTACK_CEILING",
+      "severity": "warning",
+      "content_lost": true,
+      "detail_keys": [
+        "attak1",
+        "ceiling_s",
+        "requested_s"
+      ],
+      "emitted_from": [
+        "writers/akai_s3000_writer.py"
+      ]
+    },
+    {
+      "code": "AKAI_BP_RESONANCE_WRONG_ORDER",
+      "severity": "warning",
+      "content_lost": true,
+      "detail_keys": [],
+      "emitted_from": [
+        "parsers/akai_s3000_parser.py"
+      ]
+    },
+    {
+      "code": "AKAI_DECAY1_EXTRAPOLATED",
+      "severity": "warning",
+      "content_lost": false,
+      "detail_keys": [
+        "fit_window",
+        "written"
+      ],
+      "emitted_from": [
+        "writers/akai_s3000_writer.py"
+      ]
+    },
+    {
+      "code": "AKAI_DECAY1_SATURATED",
+      "severity": "warning",
+      "content_lost": true,
+      "detail_keys": [
+        "fit_window",
+        "rate_db_per_s",
+        "wanted",
+        "written"
+      ],
+      "emitted_from": [
+        "writers/akai_s3000_writer.py"
+      ]
+    },
+    {
+      "code": "AKAI_FIL2FR_EXTRAPOLATED",
+      "severity": "warning",
+      "content_lost": false,
+      "detail_keys": [],
+      "emitted_from": [
+        "parsers/akai_s3000_parser.py"
+      ]
+    },
+    {
+      "code": "AKAI_FIL2FR_FEATURE_OFFSET_UNMODELLED",
+      "severity": "info",
+      "content_lost": false,
+      "detail_keys": [
+        "flt2q",
+        "mode"
+      ],
+      "emitted_from": [
+        "parsers/akai_s3000_parser.py"
+      ]
+    },
+    {
+      "code": "AKAI_FILTER2_PARTIAL",
+      "severity": "info",
+      "content_lost": true,
+      "detail_keys": [],
+      "emitted_from": [
+        "parsers/akai_s3000_parser.py"
+      ]
+    },
+    {
+      "code": "AKAI_FILTER2_RESONANCE_DOMINATES",
+      "severity": "info",
+      "content_lost": true,
+      "detail_keys": [],
+      "emitted_from": [
+        "parsers/akai_s3000_parser.py"
+      ]
+    },
+    {
+      "code": "AKAI_FILTER_POLES_REDUCED",
+      "severity": "info",
+      "content_lost": true,
+      "detail_keys": [
+        "requested_poles",
+        "written_poles"
+      ],
+      "emitted_from": [
+        "writers/akai_s3000_writer.py"
+      ]
+    },
+    {
+      "code": "AKAI_FILTER_SHAPE_LOST",
+      "severity": "warning",
+      "content_lost": true,
+      "detail_keys": [
+        "cli_flag",
+        "filter_type"
+      ],
+      "emitted_from": [
+        "writers/akai_s3000_writer.py"
+      ]
+    },
+    {
+      "code": "AKAI_IMAGE_NO_ROOM",
+      "severity": "warning",
+      "content_lost": true,
+      "detail_keys": [
+        "block_size",
+        "had_free_slot",
+        "largest_free_blocks",
+        "needed_blocks",
+        "needed_bytes",
+        "short_blocks",
+        "short_bytes",
+        "volume"
+      ],
+      "emitted_from": [
+        "writers/akai_s3000_image.py"
+      ]
+    },
+    {
+      "code": "AKAI_KEYGROUPS_DROPPED",
+      "severity": "warning",
+      "content_lost": true,
+      "detail_keys": [
+        "dropped",
+        "keygroups",
+        "limit"
+      ],
+      "emitted_from": [
+        "writers/akai_s3000_writer.py"
+      ]
+    },
+    {
+      "code": "AKAI_LAYERS_SPILLED",
+      "severity": "info",
+      "content_lost": false,
+      "detail_keys": [
+        "keygroups_added",
+        "max_per_keygroup",
+        "spilled"
+      ],
+      "emitted_from": [
+        "writers/akai_s3000_writer.py"
+      ]
+    },
+    {
+      "code": "AKAI_NAMES_SHORTENED",
+      "severity": "info",
+      "content_lost": false,
+      "detail_keys": [
+        "count",
+        "limit",
+        "renamed"
+      ],
+      "emitted_from": [
+        "writers/akai_s3000_writer.py"
+      ]
+    },
+    {
+      "code": "AKAI_OCTAVE_SHIFT_INERT",
+      "severity": "info",
+      "content_lost": false,
+      "detail_keys": [
+        "octave_shift"
+      ],
+      "emitted_from": [
+        "parsers/akai_s3000_parser.py"
+      ]
+    },
+    {
+      "code": "AKAI_PROGRAM_PAN_DROPPED",
+      "severity": "warning",
+      "content_lost": false,
+      "detail_keys": [
+        "program_pan"
+      ],
+      "emitted_from": [
+        "parsers/akai_s3000_parser.py"
+      ]
+    },
+    {
+      "code": "AKAI_RATE_SNAP_FAILED",
+      "severity": "warning",
+      "content_lost": true,
+      "detail_keys": [
+        "from_rate",
+        "result_rate",
+        "target_rate"
+      ],
+      "emitted_from": [
+        "writers/akai_s3000_writer.py"
+      ]
+    },
+    {
+      "code": "AKAI_SAMPLE_RATE_UNPLAYABLE",
+      "severity": "warning",
+      "content_lost": true,
+      "detail_keys": [
+        "cents",
+        "playable",
+        "played_rate",
+        "stored_rate"
+      ],
+      "emitted_from": [
+        "writers/akai_s3000_writer.py"
+      ]
+    },
+    {
+      "code": "AKAI_SSRATE_UNPLAYABLE",
+      "severity": "warning",
+      "content_lost": false,
+      "detail_keys": [
+        "cents",
+        "declared_rate",
+        "playable",
+        "played_rate"
+      ],
+      "emitted_from": [
+        "parsers/akai_s3000_parser.py"
+      ]
+    },
+    {
+      "code": "AKAI_STEREO_LEVEL_EXTRAPOLATED",
+      "severity": "info",
+      "content_lost": false,
+      "detail_keys": [
+        "applied_db",
+        "measured_range",
+        "stereo_level"
+      ],
+      "emitted_from": [
+        "parsers/akai_s3000_parser.py"
+      ]
+    },
+    {
+      "code": "AKAI_STEREO_LEVEL_ZERO",
+      "severity": "warning",
+      "content_lost": false,
+      "detail_keys": [
+        "individual_output",
+        "stereo_level"
+      ],
+      "emitted_from": [
+        "parsers/akai_s3000_parser.py"
+      ]
+    },
+    {
+      "code": "E4B_VELOCITY_SPLIT",
+      "severity": "info",
+      "content_lost": false,
+      "detail_keys": [
+        "voices_added",
+        "windows"
+      ],
+      "emitted_from": [
+        "writers/e4b_writer.py"
+      ]
+    },
+    {
+      "code": "E4B_ZONE_SAMPLE_MISSING",
+      "severity": "warning",
+      "content_lost": true,
+      "detail_keys": [
+        "hi_key",
+        "lo_key",
+        "sample"
+      ],
+      "emitted_from": [
+        "writers/e4b_writer.py"
+      ]
+    },
+    {
+      "code": "EIII_KEY_OVERLAP_SPLIT",
+      "severity": "info",
+      "content_lost": false,
+      "detail_keys": [
+        "layers",
+        "layers_added",
+        "zones"
+      ],
+      "emitted_from": [
+        "writers/eiii_writer.py"
+      ]
+    },
+    {
+      "code": "EIII_NEGATIVE_FILTER_ENV",
+      "severity": "warning",
+      "content_lost": true,
+      "detail_keys": [
+        "filter_env_cents"
+      ],
+      "emitted_from": [
+        "writers/eiii_writer.py"
+      ]
+    },
+    {
+      "code": "EIII_PRESET_LIMIT",
+      "severity": "warning",
+      "content_lost": true,
+      "detail_keys": [
+        "device",
+        "first_dropped_voice",
+        "limit"
+      ],
+      "emitted_from": [
+        "writers/eiii_writer.py"
+      ]
+    },
+    {
+      "code": "EIII_SAMPLE_LIMIT",
+      "severity": "warning",
+      "content_lost": true,
+      "detail_keys": [
+        "device",
+        "first_dropped",
+        "limit"
+      ],
+      "emitted_from": [
+        "writers/eiii_writer.py"
+      ]
+    },
+    {
+      "code": "KRZ_COVERAGE_REMAP",
+      "severity": "info",
+      "content_lost": false,
+      "detail_keys": [
+        "coverage_layers"
+      ],
+      "emitted_from": [
+        "writers/krz_writer.py"
+      ]
+    },
+    {
+      "code": "KRZ_DRUM_PROGRAM",
+      "severity": "warning",
+      "content_lost": "varies",
+      "detail_keys": [
+        "cli_flag",
+        "layers",
+        "layers_clamped",
+        "requested",
+        "silent_on_normal_channel",
+        "via"
+      ],
+      "emitted_from": [
+        "writers/krz_writer.py"
+      ]
+    },
+    {
+      "code": "KRZ_LAYERS_THINNED",
+      "severity": "warning",
+      "content_lost": "varies",
+      "detail_keys": [
+        "cli_flag",
+        "dropped_velocity_bands",
+        "layers_after",
+        "layers_before"
+      ],
+      "emitted_from": [
+        "writers/krz_writer.py"
+      ]
+    },
+    {
+      "code": "KRZ_ROM_ONLY",
+      "severity": "info",
+      "content_lost": false,
+      "detail_keys": [
+        "programs",
+        "rom_only",
+        "samples"
+      ],
+      "emitted_from": [
+        "parsers/krz_parser.py"
+      ]
+    },
+    {
+      "code": "KRZ_ZONES_DROPPED",
+      "severity": "warning",
+      "content_lost": true,
+      "detail_keys": [
+        "count",
+        "reasons",
+        "zones"
+      ],
+      "emitted_from": [
+        "writers/krz_writer.py"
+      ]
+    },
+    {
+      "code": "SF2_ENTRIES_DROPPED",
+      "severity": "warning",
+      "content_lost": true,
+      "detail_keys": [
+        "dropped",
+        "dropped_indices",
+        "dropped_names",
+        "imported",
+        "listed",
+        "ordinals_shifted"
+      ],
+      "emitted_from": [
+        "parsers/sf2_parser.py"
+      ]
+    },
+    {
+      "code": "SF2_PRESETS_TRUNCATED",
+      "severity": "warning",
+      "content_lost": true,
+      "detail_keys": [
+        "imported",
+        "limit",
+        "listed"
+      ],
+      "emitted_from": [
+        "parsers/sf2_parser.py"
+      ]
+    },
+    {
+      "code": "SHRINK_PLAN_RUGGED",
+      "severity": "info",
+      "content_lost": false,
+      "detail_keys": [
+        "cost_cents",
+        "key_pct",
+        "reached_bytes",
+        "vel_pct"
+      ],
+      "emitted_from": [
+        "processors/shrink_planner.py"
+      ]
+    },
+    {
+      "code": "SHRINK_TARGET_UNREACHABLE",
+      "severity": "warning",
+      "content_lost": true,
+      "detail_keys": [
+        "cli_flag",
+        "floor_bytes",
+        "key_pct",
+        "over_bytes",
+        "reached_bytes",
+        "target_bytes",
+        "vel_pct"
+      ],
+      "emitted_from": [
+        "processors/shrink_planner.py"
+      ]
+    },
+    {
+      "code": "TRIM_START_LOOP_DROPPED",
+      "severity": "warning",
+      "content_lost": true,
+      "detail_keys": [
+        "cut_frames",
+        "cut_percent",
+        "cut_seconds",
+        "had_loop",
+        "new_frames",
+        "orig_frames",
+        "sample_rate"
+      ],
+      "emitted_from": [
+        "processors/start_trim.py"
+      ]
+    },
+    {
+      "code": "TRIM_TAIL_LOOP_DROPPED",
+      "severity": "warning",
+      "content_lost": true,
+      "detail_keys": [
+        "cut_frames",
+        "cut_percent",
+        "cut_seconds",
+        "had_loop",
+        "new_frames",
+        "orig_frames",
+        "sample_rate"
+      ],
+      "emitted_from": [
+        "processors/tail_trim.py"
+      ]
+    }
+  ]
+}

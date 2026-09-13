@@ -859,8 +859,16 @@ def append_akai_volumes(image_path: str,
             # GUESS how much bigger -- VinSamLib did exactly that, and landed on
             # a heuristic close to but not the same as ours. A refusal that
             # states the shortfall lets the next step be exact instead.
-            _short = max(0, _need_blocks - _best_free)
-            _why = ("no partition has a free volume slot"
+            # A SHORTFALL ONLY MEANS SOMETHING IF A SLOT EXISTS. With every
+            # slot taken, `_best_free` was never updated and the shortfall came
+            # out as the whole requirement -- so the message said "no free
+            # volume slot; short by 7 blocks", which reads as a space problem
+            # and would send a caller to rebuild a larger image that cannot
+            # help. VinSamLib branch on exactly this distinction.
+            _short = max(0, _need_blocks - _best_free) if _slots_anywhere else 0
+            _why = ("every volume slot is taken (a partition holds "
+                    f"{ROOTDIR_ENTRIES}); a larger image will not help, "
+                    "delete a volume or use another partition"
                     if not _slots_anywhere else
                     f"the largest free run is {_best_free} block(s) and this "
                     f"volume needs {_need_blocks}")
