@@ -27,7 +27,12 @@
     {
       "name": "_AK_ATTAK1_TIME",
       "module": "writers.akai_s3000_writer",
-      "value": [0.000213, 0.10811, 0, 99],
+      "value": [
+        0.000213,
+        0.10811,
+        0,
+        99
+      ],
       "quantity": "ATTAK1 byte -> seconds, t = a * exp(b * byte)",
       "machine": "AKAI S3000XL",
       "convention": "time to FULL level (the ramp is linear in amplitude)",
@@ -36,13 +41,21 @@
       "measured_by": "s3ked",
       "section": "§234",
       "date": "2026-09-14",
-      "known_limits": "BEST AVAILABLE, NOT EXACT. The same byte gives a 33% different attack of a different shape on a second program of the same machine (§236), with material, note, plateau level, carrier, V_LOUD, decay, velocity routing, velocity and rig latency all eliminated by measurement. Fitted 60..99; below 60 is extrapolated and unmeasured.",
-      "supersedes": "(0.00015, 0.10545) 2026-09-11, which was read at -3 dB through a 5 ms RMS window on a 33 Hz tone -- 1.41 x 1.26 = 1.78x slow"
+      "known_limits": "BEST AVAILABLE, NOT EXACT, and the size of the doubt is 28%. Two capture paths in this project disagree by that much on identical bytes -- the shared measure.py path this law rests on, and the jcap/rtmidi path written 2026-09-14 -- and which is correct is NOT established (s3ked §237). A third, independent reading favours this law: §141 (2026-08-20, a different session, method and rig, time to 90% of the plateau on a resident sine) agrees with it within 2% at ATTAK1 80, 90 and 99. The disagreement is at ATTAK1 60, below §141's lowest rung, and a FIXED +48.5 ms offset would be 34% there and 0.5% at 99 -- consistent with §141 -- where a multiplicative 1.344 would require §141 to have measured 11.6 s at ATTAK1 99 instead of 8.6. Separately: REPEATABILITY IS +-5% (8 takes, sd 0.0031 s on a mean of 0.1895), measured for the first time 2026-09-14, and every attack figure this project has published before that is a SINGLE TAKE, including this law's ladder and §141's. Fitted 60..99; below 60 is extrapolated and unmeasured.",
+      "supersedes": "(0.00015, 0.10545) 2026-09-11, which was read at -3 dB through a 5 ms RMS window on a 33 Hz tone -- 1.41 x 1.26 = 1.78x slow",
+      "withdrawn_caveats": [
+        "§236's program-dependence (the same byte giving a 33% different attack on a second program) was WITHDRAWN by s3ked §237 on 2026-09-14, hours after it was found. It never compared two programs: it compared yesterday's capture path against today's, with the program riding along, because the same program had never been measured twice. Nine variables had been correctly eliminated from a comparison with no effect in it. Recorded because this file carried that caveat for one hour and it was already false."
+      ]
     },
     {
       "name": "_AK_RELSE1_RATE",
       "module": "writers.akai_s3000_writer",
-      "value": [23042.3, -0.09754, 45, 99],
+      "value": [
+        23042.3,
+        -0.09754,
+        45,
+        99
+      ],
       "quantity": "RELSE1 byte -> dB/s",
       "machine": "AKAI S3000XL",
       "convention": "a RATE over a span, not a duration",
@@ -57,7 +70,12 @@
     {
       "name": "_AK_DECAY1_RATE",
       "module": "writers.akai_s3000_writer",
-      "value": [23525.6, -0.09776, 45, 85],
+      "value": [
+        23525.6,
+        -0.09776,
+        45,
+        85
+      ],
       "quantity": "DECAY1 byte -> dB/s",
       "machine": "AKAI S3000XL",
       "convention": "a RATE over a span, not a duration",
@@ -72,7 +90,12 @@
     {
       "name": "AKAI_FILTER_LAW",
       "module": "models.common",
-      "value": [7.60732, 0.07245, 40, 84],
+      "value": [
+        7.60732,
+        0.07245,
+        40,
+        84
+      ],
       "quantity": "FILFRQ byte -> Hz, Hz = a * exp(b * byte)",
       "machine": "AKAI S3000XL",
       "convention": "the -3 dB corner, which is what every source format means by cutoff",
@@ -189,7 +212,38 @@
     {
       "name": "KRZ_ENV_TIME_GRID",
       "module": "models.common",
-      "value": [[0, 2, 0.02], [2, 5, 0.04], [5, 10, 0.1], [10, 15, 0.5], [15, 25, 1.0], [25, 60, 5.0]],
+      "value": [
+        [
+          0,
+          2,
+          0.02
+        ],
+        [
+          2,
+          5,
+          0.04
+        ],
+        [
+          5,
+          10,
+          0.1
+        ],
+        [
+          10,
+          15,
+          0.5
+        ],
+        [
+          15,
+          25,
+          1.0
+        ],
+        [
+          25,
+          60,
+          5.0
+        ]
+      ],
       "quantity": "K2000 envelope-time display grid, seconds per editor step; time byte = steps(seconds) + 3",
       "machine": "Kurzweil K2000R",
       "convention": "the EDITOR's step grid, so byte 3 is 0.00 s and the finest quantum is 20 ms",

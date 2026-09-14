@@ -6693,3 +6693,45 @@ output this writer has always produced, so the rule is the only surviving
 candidate — but it may be stricter than the machine requires. A six-program
 bank would settle it, and could only relax the rule, never widen it. Design in
 `docs/RESOLUTION_NOTES.md` §KRZNULLRUN.
+
+## §ATKPATH — two capture paths disagree by 28% on identical bytes
+
+**Status:** open, and it sits under every attack number this project holds.
+**Blocked on:** one slow rung captured through the newer path. No reload needed.
+
+s3ked §237 (2026-09-14) withdrew §236's program-dependence: it had compared
+2026-09-13's `measure.py` path against 2026-09-14's jcap/rtmidi path, with the
+program riding along, because the same program had never been measured twice.
+The paths differ by **28% at `ATTAK1` 60** — five times the run-to-run spread.
+
+`_AK_ATTAK1_TIME` rests entirely on the older path, and §235's firmware-table
+comparison rests on that law.
+
+**The discriminating capture, and it is smaller than "one rung through both":**
+one SLOW rung through the NEWER path.
+
+| rung | §234 (older path) | additive +48.5 ms | multiplicative x1.344 |
+|---|---|---|---|
+| 90 | 3.552 | **3.601** | **4.774** |
+| 99 | 9.629 | 9.678 | 12.941 |
+
+32% apart at `ATTAK1` 90, against ±5% repeatability. **§141 (2026-08-20, a
+different session, method and rig) agrees with the older path within 2% at 80,
+90 and 99** — which is consistent with an additive offset and would require
+§141 to have measured 11.6 s at 99 instead of 8.6 for a multiplicative one.
+
+**If additive, it reaches past the ladder.** The unexplained 51.5 ms floor at
+`ATTAK1` 0 was measured through the newer path, and 48.5 and 51.5 agree inside
+the run-to-run spread. One fixed offset would then explain the floor, the
+withdrawn 33% "program-dependence" and the 28% ladder gap together. Against it:
+the floor's shape. Sound crosses eight times the noise floor at 0.3 ms, which a
+plain delay would push out — so if it is additive it is not simple latency.
+
+**Also now known and previously unmeasured:** repeatability is **±5%** (8 takes,
+sd 0.0031 s on 0.1895). Every attack figure published before 2026-09-14 is a
+single take, §141's and §234's included. `HOLD` moves the knee 0.3% across
+2/6/12 s, and the harness `T_ON` anchor is out by 8.5 ms — both too small to
+matter, both worth having.
+
+Resolution strategy in `docs/RESOLUTION_NOTES.md` is this entry; the
+measurement is s3ked's and the bench is Jan's.
