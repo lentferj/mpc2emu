@@ -21,7 +21,19 @@
     "",
     "`provenance_gap: true` marks an entry whose method or subject nobody has",
     "written down. It is a to-do, not a defect in the value -- but a constant",
-    "with no recorded convention is one misreading away from 2026-09-11."
+    "with no recorded convention is one misreading away from 2026-09-11.",
+    "",
+    "`detector` records HOW the quantity was read, and whether the reading was",
+    "adequate for the subject. Added 2026-09-14 after the day's single largest",
+    "source of error turned out to be detector adequacy rather than any value:",
+    "an envelope detector's window must span a fixed number of CARRIER CYCLES,",
+    "not a fixed number of milliseconds. Below about one cycle the carrier leaks",
+    "into the envelope and its peaks cross a -3 dB threshold with no attack in",
+    "progress -- 0.052 cycles gives 20.6 dB of swing on a tone with no",
+    "modulation at all, 5.2 cycles gives 0.26 dB (eosed §121). A constant read",
+    "through an under-resolved detector is wrong in a way its own residuals",
+    "cannot show, so the field says `null` where nobody recorded the method",
+    "rather than being left out."
   ],
   "entries": [
     {
@@ -48,7 +60,8 @@
         "'The law may be out by up to 28%' stood here for 20 minutes and was wrong twice over: the disagreement was 9% across most of the range and 34% only at the fast end, and the +-5% repeatability it leaned on is specific to ATTAK1 60. Both figures had travelled here without their conditions.",
         "The 9% path disagreement was RESOLVED by s3ked §239: JACK runs at 48000 and the newer analysis scripts had SR = 44100 hardcoded, so every absolute time through that path read 8.8% long. measure.py writes WAVs and reads the rate from the file, which is why the older path -- the one this law rests on -- could not make the mistake. Confirmed against a value known a priori rather than against another capture: the probe carrier read 961 Hz on MIDI note 84, and 961 x 48000/44100 = 1046.0 Hz against C6's 1046.5, a miss of 0.05%. ROOT CAUSE, which is worth more than the constant: captures were saved as .npz arrays with no sample rate in them and the rate was then supplied from memory by a separate script -- the data and the fact needed to interpret it were separated, and the fact was wrong. That is this file's own reason for existing, one level up.",
         "THIS FIELD WAS REWRITTEN FOUR TIMES ON 2026-09-14, each time honestly and each superseded within the hour. Kept visible rather than tidied: the point of this file was never to be right first time, it was to make a correction land in one obvious place instead of in a comment nobody re-reads."
-      ]
+      ],
+      "detector": "Hilbert envelope, line/plateau knee. IMMUNE BY CONSTRUCTION: the Hilbert envelope is exact for a single tone and has no window to choose. This matters here -- the subject's 33 Hz carrier is 0.165 cycles in a 5 ms window, about 11 dB of swing, and the 5 ms RMS reading of this same capture ran 17-33% SHORT of the Hilbert one. That reading is what the 2026-09-11 regression was fitted to."
     },
     {
       "name": "_AK_RELSE1_RATE",
@@ -68,7 +81,8 @@
       "section": null,
       "date": null,
       "known_limits": "Fitted 45..99 only. Below 35 the fit collapses to r2 0.51-0.73 AND stops depending on the setting, which is the signature of measuring the rig's own tail rather than the envelope. Marked unmeasurable rather than filled in.",
-      "provenance_gap": true
+      "provenance_gap": true,
+      "detector": "log-space fit to a dB/s slope; window and subject carrier not recorded. Below RELSE1 35 the fit collapses and stops depending on the setting, which is the signature of measuring the rig's tail rather than the field."
     },
     {
       "name": "_AK_DECAY1_RATE",
@@ -88,7 +102,8 @@
       "section": null,
       "date": null,
       "known_limits": "Fitted 45..85.",
-      "provenance_gap": true
+      "provenance_gap": true,
+      "detector": "not recorded."
     },
     {
       "name": "AKAI_FILTER_LAW",
@@ -107,7 +122,8 @@
       "measured_by": "s3ked",
       "section": "§139",
       "date": null,
-      "known_limits": "§54 claims the same quantity by another route (peak sits AT the corner, does not move with FILQ) and disagrees by 1.29x. That is an unexplained disagreement, not a definitional offset, and s3ked has it open with one sweep intended to yield both numbers. §139 is used because it measures the -3 dB point directly."
+      "known_limits": "§54 claims the same quantity by another route (peak sits AT the corner, does not move with FILQ) and disagrees by 1.29x. That is an unexplained disagreement, not a definitional offset, and s3ked has it open with one sweep intended to yield both numbers. §139 is used because it measures the -3 dB point directly.",
+      "detector": "direct -3 dB point measurement; window and subject carrier not recorded."
     },
     {
       "name": "_E4XT_ATK_SLOWDOWN",
@@ -121,7 +137,8 @@
       "measured_by": "eosed",
       "section": "§117, §119",
       "date": "2026-09-14",
-      "known_limits": "THE RECORDED REASON IN THE SOURCE IS STILL WRONG AND IS SCHEDULED FOR REWRITE. It claims the machine agrees with `intends` 'at the same convention'; those are two conventions. Matching at full traversal instead would need ~1.17 -- as measured on ONE preset, spread across presets unmeasured. 1.4125 is a property of a LINEAR ramp and must not be carried here: the E4XT's is strongly convex, 28% delivered at its own nominal attack time (§ATTACKSHAPE)."
+      "known_limits": "THE RECORDED REASON IN THE SOURCE IS STILL WRONG AND IS SCHEDULED FOR REWRITE. It claims the machine agrees with `intends` 'at the same convention'; those are two conventions. Matching at full traversal instead would need ~1.17 -- as measured on ONE preset, spread across presets unmeasured. 1.4125 is a property of a LINEAR ramp and must not be carried here: the E4XT's is strongly convex, 28% delivered at its own nominal attack time (§ATTACKSHAPE).",
+      "detector": "not a detector reading at all -- a choice of which point of a convex curve to match. The measurements it is weighed against were read at a fixed 5 ms window on transposed material, which eosed §121 shows can manufacture a note-effect of 1.25x where none exists."
     },
     {
       "name": "ENV_RATE_SWEEP_A",
@@ -136,7 +153,8 @@
       "section": null,
       "date": null,
       "known_limits": "EXTRAPOLATED, not measured, at byte 0 itself. The cross-check that supported this ladder read byte 89 as 10.1 s on one preset and 9.10 s on another -- an 11% disagreement recorded as agreement, corrected 2026-09-14 to 'the byte is the MAIN term, not the only term'. Neither cross-check row recorded its note or its preset. THE EXPLANATION PREVIOUSLY OFFERED HERE IS WITHDRAWN: this field said the 11% might be the E4XT's 'measured note-dependence of 1.25x across 55 semitones'. eosed §121 (2026-09-14) shows there IS no note-dependence -- the 1.25x was a fixed 5 ms detector on TRANSPOSED material. A note ladder plays one sample at many rates, so the material's own modulation stretches by 2^((origkey-note)/12) and a fixed window resolves a different number of sample-periods at every rung. Scale the detector with the playback rate and the effect goes flat (t90 ratio 0.962). The control that settles it: a preset with an INSTANT attack still read 0.060 s at note 16 against 0.020 s at note 64 -- a 3x note-effect on a rise that does not exist. So the 11% is unexplained again, and the paths it was blamed on are both cleared. Smoothing can CREATE a spread it cannot remove: the widest rate-scaled window here is 31.7 ms against a 2.570 s measurement, 1.24%, which cannot hide a 1.7 s effect but can manufacture one out of a 30 dB ripple crossing a threshold early.",
-      "provenance_gap": true
+      "provenance_gap": true,
+      "detector": "fixed 5 ms window. EXPOSED: the ladder rows record neither preset, note nor carrier, so cycles-per-window cannot be reconstructed for any row. The 11% cross-check gap is unexplained and this is one reason it cannot be chased."
     },
     {
       "name": "ENV_RATE_SWEEP_K",
@@ -150,7 +168,8 @@
       "measured_by": "eosed",
       "section": null,
       "date": null,
-      "known_limits": "DISAGREES WITH ENV_RATE_K (0.0581) BY 2.8%, which is inside the noise of both fits, and nothing yet picks between them. The firmware route to settling it is CLOSED: EOS 4.61 and 4.70 ship as an LZEXE stub plus a packed floppy image whose decompressor lives in the E4XT's boot ROM (eosed §116, entropy + autocorrelation + 36 schemes + an XOR whose expected agreement was computed before running). It stays with the captures."
+      "known_limits": "DISAGREES WITH ENV_RATE_K (0.0581) BY 2.8%, which is inside the noise of both fits, and nothing yet picks between them. The firmware route to settling it is CLOSED: EOS 4.61 and 4.70 ship as an LZEXE stub plus a packed floppy image whose decompressor lives in the E4XT's boot ROM (eosed §116, entropy + autocorrelation + 36 schemes + an XOR whose expected agreement was computed before running). It stays with the captures.",
+      "detector": "fixed 5 ms window; see ENV_RATE_SWEEP_A."
     },
     {
       "name": "ENV_RATE_A",
@@ -165,7 +184,8 @@
       "section": null,
       "date": null,
       "known_limits": "Rate 0 is the deliberate 'instant' encoding and is NOT a point on this curve; `env_rate_to_seconds` must return 0 there. It used to return 0.031, and the commonest single round-trip difference over the E4B corpus was 'attack 0.0 -> 0.031' on 77.4% of zones.",
-      "provenance_gap": true
+      "provenance_gap": true,
+      "detector": "not recorded."
     },
     {
       "name": "ENV_RATE_K",
@@ -180,7 +200,8 @@
       "section": null,
       "date": null,
       "known_limits": "See ENV_RATE_SWEEP_K: 2.8% apart and unresolved.",
-      "provenance_gap": true
+      "provenance_gap": true,
+      "detector": "not recorded."
     },
     {
       "name": "ENV_LEVELBYTE_DB_INTERCEPT",
@@ -195,7 +216,8 @@
       "section": null,
       "date": null,
       "known_limits": "Named for the BYTE deliberately: `ENV_LEVEL_DB_INTERCEPT` exists for the sustain-PERCENT law and silently shadowed this one when it was first written, so every reading came out 0 dB with no error.",
-      "provenance_gap": true
+      "provenance_gap": true,
+      "detector": "not recorded."
     },
     {
       "name": "ENV_LEVELBYTE_DB_PER_BYTE",
@@ -210,7 +232,8 @@
       "section": null,
       "date": null,
       "known_limits": null,
-      "provenance_gap": true
+      "provenance_gap": true,
+      "detector": "not recorded."
     },
     {
       "name": "KRZ_ENV_TIME_GRID",
@@ -256,7 +279,8 @@
       "section": null,
       "date": null,
       "known_limits": "The 20 ms quantum is 1/50 s and has no relation to the 41.7 ms in §KRZENVLOOP (1/24 s) -- checked 2026-09-14 and recorded as coincidence. The 27 ms release floor that trips §KRZDBLZERO is 0.5 * 20 ms / (0.2 * 1.9): this grid, _REL1_TIME_FRAC and KRZ_RELEASE_FACTOR, and nothing from the machine.",
-      "provenance_gap": true
+      "provenance_gap": true,
+      "detector": "read off the editor's own display, not detected from audio."
     },
     {
       "name": "KRZ_RELEASE_FACTOR",
@@ -270,7 +294,8 @@
       "measured_by": null,
       "section": null,
       "date": null,
-      "known_limits": "ONE OBSERVATION, ONE PROGRAM. 'roughly constant' is asserted in the source comment and is not measured across the range."
+      "known_limits": "ONE OBSERVATION, ONE PROGRAM. 'roughly constant' is asserted in the source comment and is not measured across the range.",
+      "detector": "read off the machine's display against a curve value; one program."
     },
     {
       "name": "KRZ_2POLE_F0_TO_3DB",
@@ -284,7 +309,8 @@
       "measured_by": "k2kremote",
       "section": null,
       "date": "2026-09-02",
-      "known_limits": "The 4-pole is DELIBERATELY not corrected by the same route; see KRZ_4POLE_F0_TO_3DB."
+      "known_limits": "The 4-pole is DELIBERATELY not corrected by the same route; see KRZ_4POLE_F0_TO_3DB.",
+      "detector": "four independent routes -- gain at the corner, the -3 dB crossing, an external instrument measuring the same quantity, and an A/B by ear."
     },
     {
       "name": "KRZ_4POLE_F0_TO_3DB",
@@ -299,7 +325,8 @@
       "section": null,
       "date": "2026-09-02",
       "known_limits": null,
-      "provenance_gap": true
+      "provenance_gap": true,
+      "detector": "not recorded."
     }
   ]
 }
