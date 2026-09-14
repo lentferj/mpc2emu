@@ -338,6 +338,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§NAMEHIST — the one published commit message that still names a preset](#namehist-the-one-published-commit-message-that-still-names-a-preset)
 - [§KRZNOTCHPOLES — `NOTCH FILTER` (code 4) may be two-pole, not four](#krznotchpoles-notch-filter-code-4-may-be-two-pole-not-four)
 - [§KRZNULLRUN — is "two consecutive null stages" the trigger, or only sufficient?](#krznullrun-is-two-consecutive-null-stages-the-trigger-or-only-sufficient)
+- [§ATKPATH — two capture paths disagree by 28% on identical bytes](#atkpath-two-capture-paths-disagree-by-28-on-identical-bytes)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -32186,3 +32187,87 @@ an amp-envelope loop at all — the Musician's Guide is explicit that a note ent
 its release section as soon as Note State goes off, regardless of loop type and
 count. §KRZDBLZERO happens *under sustain*, where looping is exactly what the
 engine is allowed to do. Keep them apart until something joins them.
+
+## §ATKPATH — two capture paths disagree by 28% on identical bytes
+
+**Opened 2026-09-14 when s3ked §237 withdrew §236.** This sits under every
+attack number this project holds, so read it before quoting one.
+
+### What happened
+
+§236 reported the same `ATTAK1` byte giving a 33% different attack, of a
+different shape, on a second program of the same machine, with nine variables
+eliminated by measurement. It was withdrawn hours later. **It never compared two
+programs.** It compared 2026-09-13's `measure.py` capture path against
+2026-09-14's jcap/rtmidi path, with the program riding along, because the same
+program had never been measured twice.
+
+The repeatability number that closed it had never been taken in three months of
+attack work: **±5%**, eight takes of one program, sd 0.0031 s on a mean of
+0.1895. With it, the three captures taken *today* agree to 2.5% and the odd one
+out is yesterday's capture of the same program, 28% low against itself.
+
+**The transferable rule is s3ked's: eliminating nine variables is not evidence
+that the tenth exists.** The length of the elimination list is what stopped
+either of us asking for a second take of the same program — four minutes of
+bench time that would have closed it before any of the nine were measured.
+
+### Why it matters
+
+`_AK_ATTAK1_TIME` rests entirely on the older path. §235's firmware-table
+comparison rests on that law. If the newer path is right, both move by 28%.
+
+### The discriminating capture
+
+Not "one rung through both paths" — **one SLOW rung through the NEWER path**,
+which is smaller and settles more:
+
+| rung | §234, older path | additive +48.5 ms | multiplicative ×1.344 |
+|---|---|---|---|
+| 90 | 3.552 | **3.601** | **4.774** |
+| 99 | 9.629 | 9.678 | 12.941 |
+
+32% apart at `ATTAK1` 90 against ±5% repeatability. One program, a few settled
+takes, no reload.
+
+### A third reading already favours the older path
+
+**§141 (2026-08-20)** — a different session, a different method (time to 90% of
+the plateau, a threshold on a resident sine) and a different rig — converted to
+the knee convention by the linear-ramp factor:
+
+| `ATTAK1` | §141 t90 → knee | §234 knee | ratio |
+|---|---|---|---|
+| 70 | 0.356 | 0.418 | 1.176 |
+| 80 | 1.178 | 1.192 | 1.012 |
+| 90 | 3.489 | 3.552 | 1.018 |
+| 99 | 9.556 | 9.629 | 1.008 |
+
+Three of four inside 2%. **But this does not rule the newer path out**, because
+the disagreement is at `ATTAK1` 60, below §141's lowest rung. What it rules out
+is a *shape*: a fixed +48.5 ms offset is 34% at 60 and 0.5% at 99, which is
+consistent with §141 agreeing at the slow rungs, whereas a multiplicative 1.344
+would require §141 to have measured **11.6 s** at 99 where it measured 8.6.
+
+### If it is additive, it reaches past the ladder
+
+The unexplained **51.5 ms floor at `ATTAK1` 0** was measured through the newer
+path, and 48.5 and 51.5 agree inside the run-to-run spread. One fixed offset in
+that path would explain the floor, the withdrawn 33% "program-dependence" and
+the 28% ladder gap **together** — three findings, one cause, and the cause in
+the instrument rather than the machine.
+
+**Against it:** the floor's shape. Sound crosses eight times the noise floor at
+0.3 ms, which a plain delay would push out. So if the offset is additive it is
+not simple latency, and that wants explaining rather than assuming.
+
+### Small things that settled cleanly on the way
+
+- `HOLD` moves the knee by **0.3%** across 2 / 6 / 12 s.
+- The harness's assumed `T_ON` anchor is out by **8.5 ms**.
+- A take with **no settle between captures** read 11% high, with line-fit
+  residuals of 55–66% against 2.3–4.6% for settled takes — contaminated by the
+  previous note's tail. It would have entered the record as a third value.
+
+Both of the first two are far too small to matter here, and neither had been
+measured before.
