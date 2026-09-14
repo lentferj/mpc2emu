@@ -6835,11 +6835,15 @@ magnitude does not. One preset, one note.
 
 ## §XPMPADMAP — the pad→note map is in the file and we do not read it
 
-**Status:** open. The false claim and the misleading warning are FIXED; the
-mapping behaviour is deliberately unchanged.
-**Blocked on:** one note on hardware. Play C1 on a converted drum kit — if the
-KICK speaks, our consecutive-from-36 layout is right and `<PadNoteMap>` is an
-input remap; if the RIM speaks, it is not.
+**Status:** ANSWERED 2026-09-14 — the map is AUTHORITATIVE, confirmed on the
+E4XT. Nineteen notes carry sound on one side or the other and exactly one agrees,
+at the single note where the two layouts coincide. The converter is NOT yet
+changed.
+**Blocked on:** VinSamLib's cheap confirmation (note 82 should sound sample 04 on
+the MPC and is empty on our E4B — unmissable, and far from every other pad), then
+a behaviour change that must be GATED ON `<Program type>`: 3,370 Keygroup
+programs carry a placeholder map of `[0,1,2,…,15]` and reading it would write
+zones at notes 0-15.
 
 `_pad_note_map` reads `el.text` where the value is in a nested `<Note>` child, so
 it returns nothing and the docstring recorded that as "MPC 2.x XML does not store

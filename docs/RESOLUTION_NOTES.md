@@ -342,7 +342,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§E4BRATEMOD — envelope-rate modulation is not representable at byte level](#e4bratemod-envelope-rate-modulation-is-not-representable-at-byte-level)
 - [§MPCVELATK — the MPC has velocity→attack, and we drop it on 35% of keygroups](#mpcvelatk-the-mpc-has-velocityattack-and-we-drop-it-on-35-of-keygroups)
 - [§EOSRATEPIECE — the EOS envelope rate law is piecewise, and ours is one exponential](#eosratepiece-the-eos-envelope-rate-law-is-piecewise-and-ours-is-one-exponential)
-- [§XPMPADMAP — MPC 2.x DOES store a pad→note map; we look in the wrong place](#xpmpadmap-mpc-2x-does-store-a-padnote-map-we-look-in-the-wrong-place)
+- [§XPMPADMAP — the pad→note map is authoritative (ANSWERED on hardware 2026-09-14)](#xpmpadmap-the-padnote-map-is-authoritative-answered-on-hardware-2026-09-14)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -32913,10 +32913,68 @@ have produced a single time. **A single rung cannot separate two slopes at all**
 — that version of the check could not have failed informatively. Two rungs, both
 inside one segment, is what made it decisive.
 
-## §XPMPADMAP — MPC 2.x DOES store a pad→note map; we look in the wrong place
+## §XPMPADMAP — the pad→note map is authoritative (ANSWERED on hardware 2026-09-14)
 
 **Found by VinSamLib 2026-09-14**, hitting our own warning on a file that plainly
 contains the map it says the format does not have.
+
+### ANSWERED: the map is authoritative
+
+Jan played the converted bank on the E4XT and reported, before seeing any
+prediction:
+
+> *note 36 is off, pitch too low, note 37, too, note 39 plays on the emu,
+> doesn't play on the source, note 40 seems to be right, same as note 38*
+
+**Nineteen notes carry sound on one side or the other. Exactly one agrees — note
+40 — and 40 is the single note where the two layouts coincide** (`map[5] = 40`,
+and ours is `36 + 4 = 40`). One agreement out of nineteen, at precisely the
+coincidence, is not something a listener manufactures.
+
+**Note 39 sounds on our E4B and is silent on the MPC.** 39 is not among the
+map's values; our consecutive 36..51 covers it. That is a spurious key, and it is
+the cleanest single symptom.
+
+### The direction question dissolves for playback
+
+"Pad N sounds at note `map[N]`" and "incoming note `map[N]` fires pad N" make the
+**identical prediction for every MIDI-driven test**, and both are satisfied. The
+zone is `key = root = map[N]` for sample N — no inversion anywhere. The worry was
+about applying it backwards, building sample `map[N]` at key N, and nothing here
+invites that.
+
+### And the instrument-order objection dissolves too
+
+Kick → 37 is not GM **because this map is not describing sounds at all.** It is
+the MPC factory default, stamped on every program regardless of content — which
+is why it sits on `FX-Atmostpheres` and on a piano-chord bank alike. **It is
+furniture, not a statement.** Holding that objection was right and its resolution
+is that the premise behind it was wrong.
+
+### The corpus numbers, split by `<Program type>` — and why two counts disagreed
+
+VinSamLib could not reproduce the 8.3% and said consecutive-from-36 appears on no
+Drum program at all. **Both counts are right about different populations.**
+Jan's full backup, 6082 XPMs:
+
+| type | programs | populated map | dominant |
+|---|---|---|---|
+| Drum | 757 | 757 | 692 factory, **63 consecutive-from-36**, 2 other |
+| Keygroup | 4754 | 3390 | **3370 placeholder `[0,1,2,…,15]`**, 20 consecutive |
+| MIDI / Plugin / CV / Clip | 484 | 484 | all placeholder |
+
+The 63 are real Drum programs — but **all of them are from `Projects/`,
+`MPC Bible`, and `Templates/`, i.e. Jan's own sessions and tutorial files. Not
+one commercial expansion program carries it.** A corpus of expansions alone sees
+zero, exactly as VinSamLib reports.
+
+### The gating requirement, which their warning makes concrete
+
+**`<Program type>` must gate the map.** 3,370 Keygroup programs carry the
+placeholder `[0,1,2,…,15]`, and reading it would write zones at notes 0–15 —
+catastrophic, and it would *look* like a populated map to any check that only
+asks whether the field is present. **"Populated" and "meaningful" are different
+questions**, and the placeholder is the case that separates them.
 
 ### The false claim, and how it got there
 
