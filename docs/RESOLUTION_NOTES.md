@@ -32641,6 +32641,70 @@ What the modulation's full scale is in internal units. **If a full-scale cord
 spans the whole 0..127 index, 0.110 is ~14 bytes and matters; if it spans a few
 internal steps it is nothing.** That is a firmware question, not a corpus one.
 
+### THE GATE IS DISCHARGED (2026-09-14, same day)
+
+`CD7-CORDMAP.iso` — one preset, one voice, **three cords planted directly in the
+E4B file bytes** at `voice[190 + 4N]`, every other slot zero — written to the
+E4XT's ZuluSCSI card and **loaded natively, so the machine parsed the E4B with no
+assumption of ours anywhere in the path.** Bank identified by shape before
+anything was read.
+
+| slot | planted in the E4B | read back over SysEx |
+|---|---|---|
+| 3 | src 40, dst 73, amt 99 | src 40, **dst 73** (`VEnvAtk`), amt 78 |
+| 7 | src 41, dst 75, amt 98 | src 41, **dst 75** (`VEnvRls`), amt 77 |
+| 11 | src 42, dst 82, amt 97 | src 42, **dst 82** (`FEnvDcy`), amt 76 |
+
+**Sources and destinations byte-identical at three non-adjacent codes.** The E4B
+file cord-destination byte and the EOS SysEx destination id are one enumeration,
+for all 43 codes at once, and the corpus histogram above is a real reading of
+what modulates what.
+
+### The amounts differ exactly, which hands over a conversion nobody had
+
+```
+  file  99 -> 78     98 -> 77     97 -> 76     28 -> 22
+  round(file * 100/127):  78         77           76         22
+```
+
+**The E4B stores the cord amount as a signed byte in ±127; the SysEx parameter
+reports it as a percentage in ±100.** `models.common.cord_byte_to_amount` divides
+by 127 and is therefore **correct for the file representation** — confirmed
+rather than assumed, for the first time.
+
+**The fourth row is the check that makes it a law rather than a fit.** 28 → 22 is
+the EOS template default — the `+0.220` measured in the corpus histogram above —
+and it lands on the same relation without having been used to derive it. A value
+from an unrelated source, predicted rather than fitted.
+
+So a cord amount of 1.000 in our model is file byte 127 and SysEx 100%, and the
+median authored envelope-rate cord of **0.110 is file ~14, SysEx 11%**.
+
+### What is STILL open, and it is one leg not two
+
+The **file ↔ SysEx** leg is closed. The **SysEx ↔ internal** leg is not: §127
+gives the index as `(field + second term) >> 5`, and the second term's full scale
+lives in a routine nobody has read. **So amounts convert exactly between file and
+parameter, and still cannot be turned into bytes of rate.** That is what decides
+whether §E4BRATEMOD is a footnote or a rework.
+
+### Why this test worked when three others that day did not
+
+Not luck, and worth copying:
+
+- **Three values, not one.** A single match can coincide at one value.
+- **Non-adjacent codes.** An off-by-one that lands on one code cannot land on three.
+- **A shape the instrument does not ship** — exactly three non-zero cords in slots
+  3, 7 and 11 — so a leftover bank cannot impersonate the result, and the bank was
+  identified by that shape *before* anything was read.
+- **Uniqueness enforced in the build**, so the planted triples could not be
+  confused with anything else in the image, checked again on the card rather than
+  in `~/temp`.
+
+**It was built so that a wrong answer could not look like a right one** — which is
+the property the day's three plausible-but-wrong results all lacked, and each of
+those was discovered by accident after the fact.
+
 ### The check that gates all of it
 
 Our destination codes are E4B **file** bytes at `voice[190 + 4N + 1]`; eosed's

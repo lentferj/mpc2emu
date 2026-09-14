@@ -6737,11 +6737,17 @@ measurement is s3ked's and the bench is Jan's.
 
 ## §E4BRATEMOD — envelope-rate modulation is not representable at byte level
 
-**Status:** open, measured on the corpus, NOT acted on. No writer change yet.
-**Blocked on:** one check — whether E4B file cord-destination bytes and EOS
-SysEx destination ids share a numbering. Cheap: set a cord on a preset whose
-`.E4B` we hold, read the destination back over SysEx, compare against the file
-byte at `voice[190 + 4N + 1]`. **One preset settles all 43 codes.**
+**Status:** open, NARROWED. The destination-mapping gate is DISCHARGED
+(2026-09-14): `CD7-CORDMAP.iso` planted three cords in E4B file bytes, the E4XT
+loaded it natively, and all three sources and destinations read back identical
+over SysEx. File byte and SysEx id are one enumeration for all 43 codes. The
+amounts also settled a scale nobody had: the file stores ±127, SysEx reports
+±100, `round(file * 100/127)` exact on four values including the template
+default, so `cord_byte_to_amount`'s /127 is confirmed correct for the file.
+**Blocked on:** the SysEx ↔ internal leg — the second term's full scale in
+`(field + second term) >> 5`, which lives in a routine nobody has read. Until
+then an amount converts exactly between file and parameter and still cannot be
+turned into bytes of rate, which is what decides footnote vs rework.
 
 eosed read the EOS 4.70 envelope segment stepper (§125): the table index is
 `(rate field + a second term) >> 5`, clamped to 0..127 afterwards. **So the

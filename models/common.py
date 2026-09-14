@@ -2695,7 +2695,26 @@ def cord_amount_to_byte(amount: float) -> int:
 
 
 def cord_byte_to_amount(b: int) -> float:
-    """Inverse of cord_amount_to_byte: stored byte → −1.0..+1.0."""
+    """Inverse of cord_amount_to_byte: stored byte → −1.0..+1.0.
+
+    **THE /127 IS CONFIRMED AGAINST HARDWARE, 2026-09-14, and it is not what the
+    machine's own display says.** The E4B FILE stores a cord amount as a signed
+    byte in ±127; the EOS SysEx parameter reports the same cord as a PERCENTAGE
+    in ±100. Three cords planted in an E4B, loaded natively off a disc and read
+    back over SysEx:
+
+        file  99 -> 78     98 -> 77     97 -> 76     28 -> 22
+        round(file * 100 / 127):  78         77           76         22
+
+    The fourth row is the EOS template default (+0.220, the commonest cord
+    amount in the corpus) and it was NOT used to derive the relation -- a value
+    from an unrelated source, predicted rather than fitted.
+
+    So this function is right for FILE bytes and would be wrong by 127/100 for
+    anything read over SysEx. Nothing here reads SysEx; recorded so that if
+    something ever does, the two scales are not silently mixed. See
+    `docs/RESOLUTION_NOTES.md` §E4BRATEMOD.
+    """
     return (b - 256 if b >= 128 else b) / 127.0
 
 
