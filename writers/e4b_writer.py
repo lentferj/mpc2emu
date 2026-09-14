@@ -861,6 +861,62 @@ def _set_cord(mod: bytearray, slot: int, src: int, dst: int,
 _E4XT_ATK_SLOWDOWN = 1.0
 
 
+#: **THE MPC's DECAY AND RELEASE ARE CONVEX, AND ONE SEGMENT CANNOT CARRY THEM.**
+#: Measured 2026-09-14 on two ladders (`XPM_VOL_DECAY` / `XPM_VOL_RELEASE`,
+#: stationary sawtooth, so no material division), both stages giving the same
+#: normalised shape:
+#:
+#:     depth      machine      our old straight line
+#:     -10 dB     0.44 x T        0.10 x T
+#:     -20 dB     0.75            0.20
+#:     -30 dB     0.90            0.31
+#:     -40 dB     0.97            0.41
+#:     -60 dB     1.00            0.61
+#:
+#: The SECONDS were right all along -- time to fall 60 dB matches the law to
+#: 1-3% across a 13x range. What was wrong is that a single stage spread them
+#: over `_ENV_FULL_SPAN_DB` (97.82 dB), so the E4B ran **1.63x** ahead of the
+#: source through the whole audible fall -- 97.82/60 = 1.630 -- and by 0.44 T
+#: was 33 dB down where the MPC is 10. That is what Jan heard as "the release
+#: and sustain sound longer on the source".
+#:
+#: The E4B envelope has TWO decay and TWO release stages and this writer used
+#: one of each, holding the second at zero time. Fitting the measured curve with
+#: both, in SPAN-RELATIVE terms so it works for any depth:
+#:
+#:     segment 1   48% of the span   in 96% of the time
+#:     segment 2   the remaining 52% in the last 4%
+#:
+#: Worst error across the audible 0..-40 dB band: **3.3 dB**, against up to
+#: 53 dB for the straight line it replaces.
+#: **THE KNEE IS AN ABSOLUTE DEPTH, NOT A SHARE OF THE SPAN**, because the
+#: machine's stated time buys a fixed ~60 dB of fall and not the whole 97.82 dB
+#: to digital silence. Span-relative was tried first and stretches the curve
+#: whenever the target is silence: at 0.44 T it put the envelope 22 dB down
+#: where the MPC is 10. An absolute knee reproduces the measured curve at every
+#: depth that matters.
+_ENV_SHAPE_KNEE_DB    = 29.0   #: depth segment 1 reaches
+_ENV_SHAPE_BREAK_TIME = 0.96   #: share of the TIME segment 1 is given
+#: A shallow fall still splits proportionally, so a decay to a sustain only a
+#: few dB down does not spend 96% of its time covering a knee it never reaches.
+_ENV_SHAPE_MAX_FRAC   = 0.48
+
+
+def _env_db_to_level_byte(db_below_peak: float) -> int:
+    """dB below peak -> envelope LEVEL byte. Inverse of `_env_level_db`."""
+    # Solved against `_env_level_db` itself rather than re-importing its two
+    # constants -- a second copy of a law is how the two drift apart, which is
+    # the fault this project has met in three codecs already.
+    lo, hi = 0, 127
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if _env_level_db(mid) <= db_below_peak:
+            hi = mid
+        else:
+            lo = mid + 1
+    return lo
+
+
 def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
                  level_offset_db: float = 0.0,
                  vel_swing_db=None) -> bytes:
@@ -1164,11 +1220,22 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
     # far better than nothing does. Only when a decay was ASKED FOR and it
     # falls to silence: rate 0 into a non-zero sustain is a legitimate instant
     # jump and is left alone.
-    _dcy = _env_span_rate(decay_span, voice.env_decay)
+    # TWO SEGMENTS (2026-09-14) -- see _ENV_SHAPE_KNEE_DB. Dcy2 used to hold
+    # the sustain at zero time; it now carries the cliff.
+    _d_mid_db = min(_ENV_SHAPE_KNEE_DB, _ENV_SHAPE_MAX_FRAC * decay_span)
+    if voice.env_decay > 0.0 and decay_span > 1.0:
+        _dcy = _env_span_rate(_d_mid_db, _ENV_SHAPE_BREAK_TIME * voice.env_decay)
+        _dcy2 = _env_span_rate(decay_span - _d_mid_db,
+                               (1.0 - _ENV_SHAPE_BREAK_TIME) * voice.env_decay)
+        _mid = _env_db_to_level_byte(_d_mid_db)
+    else:
+        # Nothing to shape: an instant decay, or a fall too shallow to split.
+        _dcy = _env_span_rate(decay_span, voice.env_decay)
+        _dcy2, _mid = 0, sus
     if _dcy < E4B_MIN_AUDIBLE_DECAY_RATE and voice.env_decay > 0.0 and sus == 0:
         _dcy = E4B_MIN_AUDIBLE_DECAY_RATE
-    pzt[4] = _dcy;                                   pzt[5] = sus                 # Dcy1 → sustain
-    pzt[6] = 0;                                      pzt[7] = sus                 # Dcy2 hold sustain
+    pzt[4] = _dcy;                                   pzt[5] = _mid                # Dcy1 → the knee
+    pzt[6] = _dcy2;                                  pzt[7] = sus                 # Dcy2 → sustain
     # RELEASE: sustain -> silence, i.e. the COMPLEMENT of the decay span.
     # INFERRED, not measured. What eosed measured is that release rate is
     # INDEPENDENT of the sustain level -- t-40dB held at 0.193 s +/- 0.022
@@ -1211,14 +1278,25 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
     if rel_span <= 0.0:
         rel_span = _ENV_FULL_SPAN_DB
     _rel_rate = getattr(voice.amp_env, 'release_rate_db_per_s', None)
-    pzt[8] = (_env_db_per_s_to_rate(_rel_rate) if _rel_rate
-              else _env_span_rate(rel_span, voice.env_release))
+    # TWO SEGMENTS here too, same shape and the same reason.
+    _r_mid_db = min(_ENV_SHAPE_KNEE_DB, _ENV_SHAPE_MAX_FRAC * rel_span)
+    if _rel_rate:
+        _rls, _rls2 = _env_db_per_s_to_rate(_rel_rate), 0
+        _rmid = _fenv_level(0.0)
+    elif voice.env_release > 0.0 and rel_span > 1.0:
+        _rls = _env_span_rate(_r_mid_db, _ENV_SHAPE_BREAK_TIME * voice.env_release)
+        _rls2 = _env_span_rate(rel_span - _r_mid_db,
+                               (1.0 - _ENV_SHAPE_BREAK_TIME) * voice.env_release)
+        _rmid = _env_db_to_level_byte(decay_span + _r_mid_db)
+    else:
+        _rls = _env_span_rate(rel_span, voice.env_release)
+        _rls2, _rmid = 0, _fenv_level(0.0)
     # And the same floor the decay carries: a release that was ASKED FOR must
     # not encode to the instant rate.
-    if pzt[8] < E4B_MIN_AUDIBLE_DECAY_RATE and voice.env_release > 0.0:
-        pzt[8] = E4B_MIN_AUDIBLE_DECAY_RATE
-    pzt[9] = _fenv_level(0.0)
-    pzt[10] = 0;                                     pzt[11] = _fenv_level(0.0)   # Rls2 stay 0
+    if _rls < E4B_MIN_AUDIBLE_DECAY_RATE and voice.env_release > 0.0:
+        _rls = E4B_MIN_AUDIBLE_DECAY_RATE
+    pzt[8] = _rls;                                   pzt[9] = _rmid               # Rls1 → the knee
+    pzt[10] = _rls2;                                 pzt[11] = _fenv_level(0.0)   # Rls2 → silence
     # Filter-envelope SHAPE — always written (§O, 2026-06-13).  Its depth/sign is
     # the Cord 05 (FilterEnv→FilterFreq) amount in the mod table (set below only
     # when filter_env_cents>0), so at amount 0 the env is inert/inaudible — but

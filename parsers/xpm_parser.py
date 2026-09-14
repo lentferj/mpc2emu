@@ -1267,6 +1267,18 @@ def _pad_note_map(root) -> dict:
         except ValueError:
             continue
         text = (el.text or '').strip()
+        if not text:
+            # **THE VALUE IS IN A NESTED CHILD, NOT THE ELEMENT BODY.**
+            #     <PadNote number="1">
+            #       <Note>37</Note>
+            #     </PadNote>
+            # `el.text` is the whitespace between the two tags. Reading only
+            # the body returned a clean zero for years and the zero was written
+            # down as "MPC 2.x XML does not store this" -- which is what stopped
+            # anyone looking. Found by VinSamLib 2026-09-14.
+            child = el.find('Note')
+            if child is not None:
+                text = (child.text or '').strip()
         if idx < 0 or not text:
             continue
         try:
@@ -1707,16 +1719,16 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
                 f"sample data, so there is nothing to convert.")
         pad_notes = _pad_note_map(root) if is_drum else {}
         if is_drum and not pad_notes:
-            # THE OLD TEXT SAID "MPC 2.x does not store one" AND THAT WAS
-            # FALSE (2026-09-14). It does; this reader looks in the wrong place
-            # -- see `_pad_note_map`. Saying the format is empty is what stopped
-            # anyone looking, so the message now says what is actually true.
-            print(f"  [WARN] drum program's pad→note map is NOT being used — "
-                  f"laying pads out from MIDI {_PAD_BASE_NOTE} instead. The map "
-                  f"IS in the file (91.7% of corpus drum programs carry a "
-                  f"non-consecutive one); whether it says which note a pad "
-                  f"SOUNDS at or which note FIRES it is unsettled, so it is not "
-                  f"read. See TODO §XPMPADMAP")
+            # Only fires when a drum program genuinely has no usable map --
+            # the fallback is then really in use. Every corpus drum program
+            # carries one, so in practice this is a third-party or hand-built
+            # file. The two earlier versions of this message were both wrong:
+            # the first claimed the format does not store a map, the second
+            # that we could not tell which direction it meant. See §XPMPADMAP.
+            print(f"  [WARN] drum program carries no pad→note map — laying pads "
+                  f"out from MIDI {_PAD_BASE_NOTE}. Every program in the "
+                  f"reference corpus has one, so this file is unusual; a kit "
+                  f"built for a custom layout will land on different keys")
 
         # Decide head-vs-tail truncation ONCE for this program, from its own
         # set of sample names -- a multisample wants the tail, a drum kit the
