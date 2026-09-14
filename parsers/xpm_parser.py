@@ -1212,16 +1212,53 @@ def _pad_note_map(root) -> dict:
     Read from `<PadNoteMap><PadNote number="N">note</PadNote>`, which the MPC 3
     path fills in from the program's own `padNoteMap.noteForPad`.
 
-    **MPC 2.x XML does not store this.** All 11 520 `<PadNote>` elements across
-    the 90 drum programs in the MPC One corpus carry a `number` attribute and an
-    empty body, and the neighbouring `ProgramPads-v2.10` blob holds pad colours
-    (`0,127,0` green, `0,127,127` teal), not notes. So an unmapped pad falls
-    back to `_PAD_BASE_NOTE + index`, wrapped into range.
+    **"MPC 2.x XML does not store this" WAS FALSE AND STOOD HERE UNTIL
+    2026-09-14. IT DOES STORE IT, and this function looks in the wrong place.**
 
-    That fallback is right for the 24 corpus programs that use the MPC default
-    and wrong for the 31 that carry a custom (often General-MIDI) layout --
-    but for a 2.x file there is nothing better to read, and consecutive keys
-    still give a playable kit. Callers warn when they fall back.
+    The old claim: "all 11 520 `<PadNote>` elements carry a `number` attribute
+    and an empty body". The body IS empty -- because the value is in a NESTED
+    CHILD:
+
+        <PadNote number="1">
+          <Note>37</Note>
+        </PadNote>
+
+    `el.text` is the whitespace between the two tags. **A scan that looked at
+    the element body returned a clean zero, and the zero became a documented
+    property of the format** -- which is what stopped anyone looking, for as
+    long as the sentence stood. Found by VinSamLib, who hit the warning on a
+    file that plainly contains the map.
+
+    Measured across Jan's MPC One corpus, 6082 XPMs:
+
+        drum programs                                         757
+        carrying a POPULATED <PadNote><Note> map          757  (100%)
+        pads 1-12 == 36..47, i.e. what we assume            63  ( 8.3%)
+        pads 1-12 something else                           694  (91.7%)
+
+    **So the fallback this function documents as "right for 24 programs" is in
+    fact right for 63 of 757 and wrong for the rest.**
+
+    **THE BEHAVIOUR IS DELIBERATELY UNCHANGED, because the map's DIRECTION is
+    not established.** `<PadNoteMap>` may be an OUTPUT map (which note this pad
+    sounds at) or an INPUT map (which incoming note fires this pad). The two
+    invert, and under the second reading the consecutive-from-36 layout is
+    already correct for playback. Reading the child and using it blind would be
+    a coin flip on 91.7% of drum programs.
+
+    **Evidence that it is closer to the INPUT reading, and it is not a
+    measurement:** there are only THREE distinct pads-1..16 maps across all 757
+    programs (five distinct full 128-pad maps), and the dominant one -- 692
+    programs -- appears on drum kits AND on `FX-Atmostpheres`, `FX-Bleeps and
+    Drones` and `FX-Melodic Chords and Hits` alike. **A map identical across
+    kits and FX banks is not describing the sounds.** Its pads 13-16 are
+    49/55/51/53, which is GM crash/splash/ride/ride-bell.
+
+    Settled by one note on hardware -- Jan has an E4XT and an ISO carrying a
+    converted kit. Play C1: if the KICK speaks, the current layout is right and
+    the map is an input remap; if the RIM speaks, it is not. See TODO
+    §XPMPADMAP. Callers warn when they fall back, and that warning no longer
+    claims the format is empty.
     """
     out = {}
     for el in root.iter('PadNote'):
@@ -1670,9 +1707,16 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
                 f"sample data, so there is nothing to convert.")
         pad_notes = _pad_note_map(root) if is_drum else {}
         if is_drum and not pad_notes:
-            print(f"  [WARN] drum program has no pad→note map (MPC 2.x does not "
-                  f"store one) — laying pads out from MIDI {_PAD_BASE_NOTE}; a "
-                  f"kit using a custom/GM layout will land on different keys")
+            # THE OLD TEXT SAID "MPC 2.x does not store one" AND THAT WAS
+            # FALSE (2026-09-14). It does; this reader looks in the wrong place
+            # -- see `_pad_note_map`. Saying the format is empty is what stopped
+            # anyone looking, so the message now says what is actually true.
+            print(f"  [WARN] drum program's pad→note map is NOT being used — "
+                  f"laying pads out from MIDI {_PAD_BASE_NOTE} instead. The map "
+                  f"IS in the file (91.7% of corpus drum programs carry a "
+                  f"non-consecutive one); whether it says which note a pad "
+                  f"SOUNDS at or which note FIRES it is unsettled, so it is not "
+                  f"read. See TODO §XPMPADMAP")
 
         # Decide head-vs-tail truncation ONCE for this program, from its own
         # set of sample names -- a multisample wants the tail, a drum kit the

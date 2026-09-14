@@ -342,6 +342,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§E4BRATEMOD — envelope-rate modulation is not representable at byte level](#e4bratemod-envelope-rate-modulation-is-not-representable-at-byte-level)
 - [§MPCVELATK — the MPC has velocity→attack, and we drop it on 35% of keygroups](#mpcvelatk-the-mpc-has-velocityattack-and-we-drop-it-on-35-of-keygroups)
 - [§EOSRATEPIECE — the EOS envelope rate law is piecewise, and ours is one exponential](#eosratepiece-the-eos-envelope-rate-law-is-piecewise-and-ours-is-one-exponential)
+- [§XPMPADMAP — MPC 2.x DOES store a pad→note map; we look in the wrong place](#xpmpadmap-mpc-2x-does-store-a-padnote-map-we-look-in-the-wrong-place)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -32911,3 +32912,82 @@ The instruction it replaced was "confirm the table at bytes 20–59", which woul
 have produced a single time. **A single rung cannot separate two slopes at all**
 — that version of the check could not have failed informatively. Two rungs, both
 inside one segment, is what made it decisive.
+
+## §XPMPADMAP — MPC 2.x DOES store a pad→note map; we look in the wrong place
+
+**Found by VinSamLib 2026-09-14**, hitting our own warning on a file that plainly
+contains the map it says the format does not have.
+
+### The false claim, and how it got there
+
+`parsers/xpm_parser._pad_note_map` said:
+
+> **MPC 2.x XML does not store this.** All 11 520 `<PadNote>` elements across the
+> 90 drum programs in the MPC One corpus carry a `number` attribute and an empty
+> body.
+
+The body **is** empty. The value is in a nested child:
+
+```xml
+<PadNote number="1">
+  <Note>37</Note>
+</PadNote>
+```
+
+`el.text` is the whitespace between the two tags. **A scan that looked at the
+element body returned a clean zero, and the zero became a documented property of
+the format** — which is precisely what stopped anyone looking, for as long as the
+sentence stood.
+
+### What is actually there
+
+Measured across Jan's MPC One corpus, 6082 XPMs:
+
+| | |
+|---|---|
+| drum programs | 757 |
+| carrying a populated `<PadNote><Note>` map | **757 (100%)** |
+| pads 1–12 == 36..47, i.e. what we assume | 63 (8.3%) |
+| pads 1–12 something else | **694 (91.7%)** |
+
+So the fallback the docstring described as "right for 24 programs, wrong for 31"
+is right for 63 of 757.
+
+### Why the behaviour was NOT changed
+
+**The map's direction is not established.** `<PadNoteMap>` may be an OUTPUT map
+(which note this pad sounds at) or an INPUT map (which incoming note fires this
+pad). The two invert, and under the second reading our consecutive-from-36
+layout is **already correct for playback**. Reading the child and using it blind
+is a coin flip on 91.7% of drum programs.
+
+### Evidence for the INPUT reading — suggestive, not measured
+
+There are only **three** distinct pads-1..16 maps across all 757 programs (five
+distinct full 128-pad maps):
+
+```
+  692 programs   [37, 36, 42, 82, 40, 38, 46, 44, 48, 47, 45, 43, 49, 55, 51, 53]
+   63 programs   [36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51]
+    2 programs   [35, 40, 44, 49, 36, 38, 42, 46, 39, 41, 43, 88, 45, 47, 48, 50]
+```
+
+The dominant map appears on drum kits **and** on `FX-Atmostpheres`, `FX-Bleeps
+and Drones` and `FX-Melodic Chords and Hits` alike. **A map identical across kits
+and FX banks is not describing the sounds.** Its pads 13–16 are 49/55/51/53 —
+GM crash / splash / ride / ride-bell.
+
+**Against a naive reading either way:** VinSamLib reports instruments in order
+1=Kick, 2=Rim, 3=Snare, so if pad N holds instrument N the map sends Kick to 37
+and Snare to 42, which is not GM; inverted, note 36 fires the Rim, which is not
+GM either. **So the instrument-order assumption may be the wrong part**, and
+neither direction should be adopted from the numbers alone.
+
+### The test, which costs one note
+
+Jan has an E4XT and an ISO carrying a converted kit. **Play C1.** If the KICK
+speaks, the current layout is right and the map is an input remap. If the RIM
+speaks, it is not.
+
+VinSamLib's notes carry "2.x consecutive-from-36" as one of three drum-mapping
+claims **no note has ever confirmed on hardware**. This settles that one.

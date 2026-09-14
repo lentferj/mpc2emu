@@ -6832,3 +6832,22 @@ why it is filed rather than written.
 **Limits:** within-band spread across smoothing widths is 1.8% and 3.0% against a
 3.8% between-band difference — the direction holds at every width tried, the
 magnitude does not. One preset, one note.
+
+## §XPMPADMAP — the pad→note map is in the file and we do not read it
+
+**Status:** open. The false claim and the misleading warning are FIXED; the
+mapping behaviour is deliberately unchanged.
+**Blocked on:** one note on hardware. Play C1 on a converted drum kit — if the
+KICK speaks, our consecutive-from-36 layout is right and `<PadNoteMap>` is an
+input remap; if the RIM speaks, it is not.
+
+`_pad_note_map` reads `el.text` where the value is in a nested `<Note>` child, so
+it returns nothing and the docstring recorded that as "MPC 2.x XML does not store
+this". **757 of 757 corpus drum programs carry a populated map and 694 of them
+(91.7%) are not consecutive-from-36.**
+
+Not fixed blind because the map's DIRECTION is unestablished — output (which note
+a pad sounds at) and input (which note fires a pad) invert, and under the second
+our current layout is already right. Suggestive evidence for input: only three
+distinct maps across 757 programs, and the dominant one appears on FX banks as
+well as kits. Full trace in `docs/RESOLUTION_NOTES.md` §XPMPADMAP.
