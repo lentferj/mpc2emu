@@ -6734,3 +6734,44 @@ matter, both worth having.
 
 Resolution strategy in `docs/RESOLUTION_NOTES.md` is this entry; the
 measurement is s3ked's and the bench is Jan's.
+
+## §E4BRATEMOD — envelope-rate modulation is not representable at byte level
+
+**Status:** open, measured on the corpus, NOT acted on. No writer change yet.
+**Blocked on:** one check — whether E4B file cord-destination bytes and EOS
+SysEx destination ids share a numbering. Cheap: set a cord on a preset whose
+`.E4B` we hold, read the destination back over SysEx, compare against the file
+byte at `voice[190 + 4N + 1]`. **One preset settles all 43 codes.**
+
+eosed read the EOS 4.70 envelope segment stepper (§125): the table index is
+`(rate field + a second term) >> 5`, clamped to 0..127 afterwards. **So the
+stored byte is a contribution to a rate, not a rate**, the internal resolution
+is 32× the MIDI byte, and envelope-rate modulation moves in steps no parameter
+read can see.
+
+Measured here over 380 banks, 95,132 voices, 700,257 active cords:
+
+| | cords | share |
+|---|---|---|
+| envelope-rate destinations, all | 102,073 | 14.6% |
+| minus the stock `Velocity→VEnvAtk` @28 in slot 8 | 38,515 | **5.5%** |
+
+**75.1% of all `VEnvAtk` cords are one identical triple** — source `0x0C`,
+amount 28, slot 8 — an EOS template default, the same pattern as the stock
+`ModWheel→C02Amt` this parser already treats as a default rather than a routing.
+
+Of what remains: **median amount 0.110 of full scale**, p90 0.528, only 18.5%
+reaching half scale — but present on **37.9% of voices**. So the defect shape is
+"small error on a third of the corpus", not "large error on 5%", which is the
+kind that does not announce itself.
+
+**What is still unknown:** what the modulation's full scale is in internal
+units. If a full-scale cord spans the whole 0..127 index then 0.110 is ~14 bytes
+and matters; if it spans a few internal steps it is nothing. That is eosed's
+side.
+
+**Informative absence:** `VEnvRts` (72), `FEnvRts` (80) and `AEnvRts` (88), the
+all-segments-at-once destinations, appear **zero** times in 700,257 cords.
+Authors modulate individual segments, overwhelmingly the attack. A converter
+modelling "envelope rate" as one quantity would be modelling something nobody
+uses.
