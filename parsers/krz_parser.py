@@ -502,6 +502,16 @@ _unknown_f1_blocks = set()
 #: lifecycle as `_unknown_f1_blocks`: reset by `parse_krz`, drained by it.
 _lpgate_layers = []
 
+#: The two DSP functions that are really TWO filters making a SECOND notch or
+#: peak, rather than two combining into a steeper single one. XPM has no way to
+#: express the second, so one is carried and one is dropped.
+_K2_DUAL_FILTER = {55: 'TWIN PEAKS (two bandpasses)',
+                   56: 'DOUBLE NOTCH W/SEP (two notches)'}
+
+#: Cutoffs of the dual-filter layers seen in the current file; same lifecycle as
+#: `_unknown_f1_blocks`.
+_dual_filter_layers = []
+
 #: `LPGATE` -- a lowpass whose cutoff the AMPENV scales. Named rather than
 #: written as a bare 57 at its one use, because the constant is the thing that
 #: makes the special case legible.
@@ -565,8 +575,8 @@ _K2_FILTER_TO_XPM = {
     3:  11,   # 2-pole BANDPASS -> Band2
     51: 19,   # PARA MID (parametric boost) -> BB 2P (canonical of 19-22)
     54: 8,    # 4-pole HIPASS W/SEP -> High4 (canonical of 6-10)
-    55: 12,   # 4-pole TWIN PEAKS BANDPASS -> Band4 (canonical of 12-14)
-    56: 15,   # 4-pole DOUBLE NOTCH W/SEP -> BS 2P (canonical of 15-18)
+    55: 11,   # TWIN PEAKS  -> Band2, and see _K2_DUAL_FILTER below
+    56: 15,   # DOUBLE NOTCH W/SEP -> BandStop 2-pole, ditto
     50: 3,    # 4-pole LOPASS W/SEP -> Low4 (canonical "default" family)
     # Read off the machine's own display by the k2kremote project, 2026-08-16.
     4:  15,   # NOTCH FILTER      -> BandStop 2-pole  (see the note below)
@@ -641,12 +651,36 @@ _K2_FILTER_TO_XPM = {
 #: handlers imply nothing either way. **A test that can only fail informatively
 #: is worth identifying before spending a hardware crossing on it.**
 #:
-#: **STILL OPEN, and deliberately not changed with it: code 56.** Its own comment
-#: here calls it "4-pole DOUBLE NOTCH W/SEP" and it maps to 15, BandStop 2-pole
-#: -- while every other four-pole sibling maps to its four-pole XPM value (50 ->
-#: Low4, 54 -> High4, 55 -> Band4). That is an internal-consistency argument, not
-#: a printed one, and today has been unkind to those. 250 slots in 72 files,
-#: awaiting the Guide's own entry for DOUBLE NOTCH WITH SEPARATION.
+#: **CODE 56 ANSWERED THE SAME DAY, AND THE QUESTION HAD A FALSE PREMISE.** It is
+#: neither a 2-pole notch nor a 4-pole notch: it is **two two-pole notches**. The
+#: Guide's filters overview names all four combined functions and then separates
+#: them by what the second filter DOES:
+#:
+#:     "Four of the filters ... (both Four Pole filters, the Double Notch, and
+#:      the Twin Peaks) are actually two filters combined into one DSP function
+#:      ... In the case of the Notch and Band Pass filters, this can be used to
+#:      create two separate notches or band passes. In the case of the four pole
+#:      filters, it affects the shape of the roll off."
+#:
+#: and code 56's own entry calls it "a three-stage function that puts two notches
+#: in the frequency response".
+#:
+#: **So the internal-consistency argument pointed the wrong way, and it took 55
+#: with it.** 50 -> Low4 and 54 -> High4 are right because those two combine to
+#: steepen ONE rolloff. 55 (TWIN PEAKS) and 56 (DOUBLE NOTCH) combine to make a
+#: SECOND peak or notch, so their poles do not add: each half is two-pole.
+#: **55 was mapped to Band4 on that wrong reading and is corrected here to
+#: Band2** (165 slots in 43 files); 56 stays at BandStop 2-pole (250 slots in 72
+#: files) and was right by accident rather than by argument.
+#:
+#: **Both are choices between two wrong answers.** Two-pole loses the second
+#: notch or peak; four-pole would lose it as well AND get the remaining one's
+#: steepness wrong, since XPM's 4-pole BandStop is one steeper notch, a response
+#: the K2000 does not produce at any separation setting. The second filter is
+#: unrepresentable in a single XPM filter either way, which is a genuine content
+#: loss -- see `KRZ_DUAL_FILTER_APPROXIMATED`. Same shape as LPGATE: the decode
+#: is faithful and the render cannot be, so it is reported rather than mapped
+#: silently.
 
 #: seg[0] codes that are NOT filters at all. A K2000 F-slot holds any DSP block,
 #: and the same byte position names a pitch, width, amplitude or shaper function
@@ -973,6 +1007,8 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
                 cur.filter_type = _K2_FILTER_TO_XPM[b0]
                 if b0 == _K2_FILTER_LPGATE:
                     _lpgate_layers.append(cur.filter_cutoff)
+                elif b0 in _K2_DUAL_FILTER:
+                    _dual_filter_layers.append(_K2_DUAL_FILTER[b0])
                 # The byte denotes f0; the model carries a -3 dB corner
                 # (2026-09-02). Inverse of the writer's division.
                 hz = krz_cutoff_byte_to_hz(seg[1])
@@ -1337,6 +1373,7 @@ def parse_krz(path: str) -> Bank:
     # batch, so a summary would have described the whole run as one bank.
     _unknown_f1_blocks.clear()
     _lpgate_layers.clear()
+    _dual_filter_layers.clear()
     data = Path(path).read_bytes()
     osize, objs = _read_objects(data)
     pcm_words = (len(data) - osize) // 2
@@ -1736,6 +1773,25 @@ def parse_krz(path: str) -> Bank:
                      'the map in this file can be extended',
               echo=f"  [WARN] {len(_codes)} unknown DSP block code(s) in F1 "
                    f"slots: {_codes} — those layers convert with no filter.")
+    if _dual_filter_layers:
+        _kinds = sorted(set(_dual_filter_layers))
+        _diag(_I, 'KRZ_DUAL_FILTER_APPROXIMATED',
+              f"{len(_dual_filter_layers)} layer(s) use a K2000 DSP function "
+              f"that is really TWO filters making a second notch or peak "
+              f"({', '.join(_kinds)}). Only one is carried",
+              # Genuinely lost, unlike KRZ_NULL_STAGE_SPACED: the second notch
+              # or peak has no representation in a single XPM filter, at any
+              # pole count. Four-pole would not rescue it -- that is one
+              # STEEPER notch, a response the K2000 does not produce at any
+              # separation setting.
+              content_lost=True,
+              detail={'layers': len(_dual_filter_layers), 'kinds': _kinds},
+              remedy='the separation control positions the second filter; if '
+                     'the target format has a second filter stage, place it '
+                     'from the K2000 separation value by hand',
+              echo=f"  [INFO] {len(_dual_filter_layers)} layer(s) use a two-filter "
+                   f"K2000 function ({', '.join(_kinds)}) — the second notch or "
+                   f"peak cannot be expressed and is dropped.")
     if _lpgate_layers:
         _diag(_I, 'KRZ_LPGATE_APPROXIMATED',
               f"{len(_lpgate_layers)} layer(s) use LPGATE, a lowpass whose "

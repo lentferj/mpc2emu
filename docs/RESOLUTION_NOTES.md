@@ -32152,6 +32152,47 @@ maps to its four-pole XPM value (50 → Low4, 54 → High4, 55 → Band4). That 
 internal-consistency argument, not a printed one. 250 slots in 72 files; awaiting
 the Guide's entry for DOUBLE NOTCH WITH SEPARATION.
 
+### Code 56 answered the same day — the question had a false premise
+
+It is neither a 2-pole notch nor a 4-pole notch. **It is two two-pole notches.**
+The Guide's filters overview names all four combined functions and then splits
+them by what the second filter *does*:
+
+> *"Four of the filters ... (**both Four Pole filters, the Double Notch, and the
+> Twin Peaks**) are actually two filters combined into one DSP function ... **In
+> the case of the Notch and Band Pass filters, this can be used to create two
+> separate notches or band passes. In the case of the four pole filters, it
+> affects the shape of the roll off.**"*
+
+and code 56's own entry calls it *"a three-stage function that puts two notches
+in the frequency response"*.
+
+**So the internal-consistency argument pointed the wrong way, and it took code 55
+with it.** 50 → Low4 and 54 → High4 are right because those two halves combine to
+steepen *one* rolloff. 55 (`TWIN PEAKS`) and 56 (`DOUBLE NOTCH`) combine to make a
+*second* peak or notch, so their poles do not add — each half is two-pole.
+
+| code | was | now | corpus |
+|---|---|---|---|
+| 55 `TWIN PEAKS` | Band**4** | Band**2** | 165 slots, 43 files |
+| 56 `DOUBLE NOTCH W/SEP` | BandStop 2-pole | unchanged | 250 slots, 72 files |
+
+**56 was right by accident rather than by argument, and 55 was wrong for the
+reason 56 looked wrong.** Had the consistency argument been applied as first
+intended, 56 would have been "fixed" into a second error.
+
+**Both are choices between two wrong answers.** Two-pole loses the second notch
+or peak. Four-pole would lose it *as well*, and get the remaining one's steepness
+wrong — XPM's 4-pole BandStop is one *steeper* notch, a response the K2000 does
+not produce at any separation setting. The second filter is unrepresentable in a
+single XPM filter either way.
+
+That is a genuine content loss, and unlike `KRZ_NULL_STAGE_SPACED` — corrected to
+`content_lost: false` earlier the same day — it belongs in that bucket honestly.
+**Same shape as LPGATE: the decode is faithful and the render cannot be**, so it
+reports `KRZ_DUAL_FILTER_APPROXIMATED` rather than being mapped silently.
+Measured after wiring: **419 layers in 79 files.**
+
 ### A counting bug this turned up, worth more than the mapping
 
 A scan that counted only tag `0x50` reported codes 35 and 36 as **absent from

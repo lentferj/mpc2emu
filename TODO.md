@@ -6671,7 +6671,7 @@ six of its hits were exactly that. The token list and the id→name map live in
 
 ## §KRZNOTCHPOLES — code 4 CLOSED; code 56 still open
 
-**Status:** code 4 closed 2026-09-14 from the Musician's Guide (two independent statements) and remapped to XPM 15. Code 56 `DOUBLE NOTCH W/SEP` still maps to BandStop 2-pole while its own comment calls it 4-pole; awaiting the Guide's entry for it.
+**Status:** CLOSED 2026-09-14. Code 4 remapped to XPM 15 (two independent statements in the Guide). Code 56 turned out to be TWO two-pole notches rather than one filter of either pole count, so it stays at BandStop 2-pole -- and the same sentence corrected code 55 (`TWIN PEAKS`) from Band4 to Band2. Both now report `KRZ_DUAL_FILTER_APPROXIMATED`, since the second notch or peak has no XPM representation at any pole count.
 **Blocked on:** the Musician's Guide entry for NOTCH FILTER (k2kremote holds
 the PDF), or the ROM dispatch at `0x1177A4` showing whether codes 4 and 36
 share a handler.

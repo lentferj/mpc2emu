@@ -373,6 +373,18 @@
       ]
     },
     {
+      "code": "KRZ_DUAL_FILTER_APPROXIMATED",
+      "severity": "info",
+      "content_lost": true,
+      "detail_keys": [
+        "kinds",
+        "layers"
+      ],
+      "emitted_from": [
+        "parsers/krz_parser.py"
+      ]
+    },
+    {
       "code": "KRZ_LAYERS_THINNED",
       "severity": "warning",
       "content_lost": "varies",
