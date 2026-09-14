@@ -6855,3 +6855,26 @@ a pad sounds at) and input (which note fires a pad) invert, and under the second
 our current layout is already right. Suggestive evidence for input: only three
 distinct maps across 757 programs, and the dominant one appears on FX banks as
 well as kits. Full trace in `docs/RESOLUTION_NOTES.md` §XPMPADMAP.
+
+## §MPCENVREL — the MPC release law is ~2.8x short and the decay shape is wrong
+
+**Status:** open, measured on two patches, NOT fixed.
+**Blocked on:** a ladder. One patch per stage is not a law.
+
+  decay   (Sangre, sustain 0)   asks 3.351 s   measures 2.94 s   13% short
+  release (SY Precious)         asks 0.497 s   measures ~1.4 s   **2.8x wrong**
+
+Two different bugs: the decay's time is roughly right and its SHAPE is convex
+(7-16 dB louder than our linear-in-dB line through the middle); the release's
+SECONDS are wrong outright, and no curve correction closes 3.8x.
+
+§MPCENV validated time-to-silence acoustically ON A DECAY and recorded the
+release as "read at 32 clicks" -- one detent off the display. The measured field
+fits to 13%; the read one is out by 2.8x. Same gap its attack figure had, which
+was 3.7x out until someone played it.
+
+**The calibration run:** one ladder, BOTH fields, across the whole range --
+both of tonight's subjects ask 3.351 s, outside §MPCENV's 0-2.42 s acoustic
+window, so even the decay's 13% may be an extrapolation edge. Stationary
+material (CD4-NOISE2 class) so no division is needed. Details and the identity
+checks in `docs/RESOLUTION_NOTES.md` §MPCENVREL.

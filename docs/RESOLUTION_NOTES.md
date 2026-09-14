@@ -343,6 +343,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§MPCVELATK — the MPC has velocity→attack, and we drop it on 35% of keygroups](#mpcvelatk-the-mpc-has-velocityattack-and-we-drop-it-on-35-of-keygroups)
 - [§EOSRATEPIECE — the EOS envelope rate law is piecewise, and ours is one exponential](#eosratepiece-the-eos-envelope-rate-law-is-piecewise-and-ours-is-one-exponential)
 - [§XPMPADMAP — the pad→note map is authoritative (ANSWERED on hardware 2026-09-14)](#xpmpadmap-the-padnote-map-is-authoritative-answered-on-hardware-2026-09-14)
+- [§MPCENVREL — the MPC release law's SECONDS are ~2.8x short; the decay's shape is wrong](#mpcenvrel-the-mpc-release-laws-seconds-are-28x-short-the-decays-shape-is-wrong)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -33049,3 +33050,101 @@ speaks, it is not.
 
 VinSamLib's notes carry "2.x consecutive-from-36" as one of three drum-mapping
 claims **no note has ever confirmed on hardware**. This settles that one.
+
+## §MPCENVREL — the MPC release law's SECONDS are ~2.8x short; the decay's shape is wrong
+
+**Measured 2026-09-14 on the bench, two patches, after Jan reported "the release
+and sustain sound longer on the source" on a converted E4B.**
+
+**These are two different bugs and they were merged into one for most of the
+evening.** Separating them is the finding:
+
+| stage | asks | measures | |
+|---|---|---|---|
+| decay (`Sangre`, sustain 0) | 3.351 s | 2.94 s | 13% short — roughly right |
+| release (`SY Precious`) | 0.497 s | ~1.4 s | **2.8× wrong — not a shape at all** |
+
+**No curve correction closes a factor of 3.8, and a shape error cannot be
+asymmetric between two fields that share one law.**
+
+### The decay: right time, wrong shape
+
+`Sangre`, note 60, held 4 s, against the linear-in-dB slew `e4b_writer` produces:
+
+```
+   t      measured   our line   MPC louder by
+  0.4      -4.58     -11.68        +7.1
+  0.8     -13.41     -23.35        +9.9
+  1.4     -29.04     -40.87       +11.8
+  2.0     -42.72     -58.39       +15.7
+  2.6     -65.16     -75.90       +10.7
+```
+
+Convex — holds through the middle, then falls to silence early. **The two curves
+converge at both ends, which is exactly what matching time-to-silence guarantees
+and why the error is invisible to every check we have.**
+
+Independently reproduced: VinSamLib measured 7–18.5 dB from their own capture
+with their own analysis, dividing the source material out. **Different capture,
+different window, different code.** Had we shared an analysis path the agreement
+would have proved only that the path was deterministic.
+
+### The release: the seconds are simply wrong
+
+`SY Precious`, material divided out (its keygroup at note 60 is rooted at 60, so
+no time-warp is needed):
+
+```
+   after note-off   measured   our line
+      0.10 s         -6.03     -19.69
+      0.50 s        -24.17     -98.47
+      1.00 s        -51.45    -196.93
+
+   falls 60 dB in   1.14 s     our line 0.30 s      ->  3.8x
+```
+
+### Why the two fields differ, from §MPCENV's own provenance
+
+§MPCENV validated time-to-silence **acoustically, on a decay** — *"at 2.42 s the
+output is −56 dB and in the noise floor immediately after"*. It records the
+release as *"read at 32 clicks"*: one detent, 13.4 ms, off the firmware display.
+
+**The decay was measured and the release was read.** The one that was measured
+fits to 13%; the one that was read is out by 2.8× at the other end of its range.
+That is the identical gap §MPCENV's own attack figure had — *"the attack segment
+has never been measured as audio"* — which turned out to be 3.7× out when
+someone finally played it.
+
+### Identity checks, which the day earned
+
+- `Precious` correlates **+0.883** with its own source contour and matches it to
+  0.2 dB for the first second — the capture is the program it is claimed to be.
+- `Sangre` against `Precious` correlates **+0.560** — the two MIDI channels are
+  genuinely separating, and one patch is not being measured twice.
+
+This forecloses the failure the K2000R bank-of-100 note describes: a rig that
+sounds fine and measures the wrong instrument.
+
+### The material trap, which did not fire but will
+
+`SY Precious`'s source is **not flat** — 16.6 dB of variation over 0–5 s — and it
+loops from 3.812 s. The division was valid anyway, because the loop does not wrap
+before 9.71 s so file time equals note time throughout the window. **The check
+retired a doubt rather than catching an error, and those are worth separating: a
+check that has never failed is not thereby a check that works.** On a longer note
+or a shorter sample the loop wraps, straight subtraction compares the release
+against the wrong part of the file, and returns a clean wrong number.
+
+### What this does NOT establish
+
+One patch per stage, one value of each field, one velocity, one note. **The 3.8×
+needs a ladder before it is a law.**
+
+And both subjects ask a 3.351 s decay, which is **outside §MPCENV's 0–2.42 s
+acoustic window** — so the decay's apparent 13% may be the edge of an
+extrapolation rather than a good fit that sags. VinSamLib's point, and it widens
+the target: **one ladder, both fields, across the whole range** — not just the
+release.
+
+`CD4-NOISE2`-class stationary material is the right subject, since it needs no
+division and no assumption about what the sample is doing.
