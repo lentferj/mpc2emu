@@ -481,7 +481,12 @@ def _k2_depth_cents(b: int) -> float:
     return krz_depth_byte_to_cents(b)
 
 
-#: Codes seen in an F1 slot that this reader cannot name. Collected rather
+#: Codes seen in an F1 **or F3** slot that this reader cannot name -- the branch
+#: that fills this handles both tags, so the name undersells it. Measured
+#: 2026-09-14: codes 35 (`BAND2`) and 36 (`NOTCH2`) occur ONLY in F3 slots, 242
+#: and 674 times, and never in F1. Their names mean what they say -- they are the
+#: second filter of a two-filter algorithm -- and a scan that counted only tag
+#: 0x50 reported both as absent from the corpus entirely. Collected rather
 #: than warned per-occurrence -- a bank can hold hundreds and the useful
 #: report is the SET, summarised once, like the skipped-object [WARN] above.
 #:
@@ -564,7 +569,7 @@ _K2_FILTER_TO_XPM = {
     56: 15,   # 4-pole DOUBLE NOTCH W/SEP -> BS 2P (canonical of 15-18)
     50: 3,    # 4-pole LOPASS W/SEP -> Low4 (canonical "default" family)
     # Read off the machine's own display by the k2kremote project, 2026-08-16.
-    4:  16,   # NOTCH             -> notch
+    4:  15,   # NOTCH FILTER      -> BandStop 2-pole  (see the note below)
     12: 19,   # HIFREQ STIMULATOR -> treated as a shelving boost
     14: 19,   # STEEP RESONANT BASS
     69: 2,    # LOPAS2            -> Low2
@@ -610,13 +615,38 @@ _K2_FILTER_TO_XPM = {
     70: 1,    # LPCLIP -> Low1,      "just like LOPASS" (code 15)    31 files
 }
 
-#: **AN INCONSISTENCY THIS EXPOSED AND DID NOT FIX.** Code 4, `NOTCH FILTER`,
-#: maps to XPM 16 = BandStop **4-pole** above. The Guide says NOTCH2 differs
-#: from NOTCH only in having a fixed width, so both are TWO-pole and 4 should
-#: probably be 15. Left alone deliberately: changing an existing mapping is a
-#: different claim from adding a missing one, it moves material that converts
-#: today, and the Guide sentence is about NOTCH2 rather than about NOTCH. In
-#: TODO.md as §KRZNOTCHPOLES.
+#: **§KRZNOTCHPOLES, RAISED AND CLOSED 2026-09-14.** Adding `NOTCH2` as 2-pole
+#: exposed code 4 mapping to XPM 16, BandStop **4-pole**. It was left alone at
+#: first on the right grounds -- changing an existing mapping is a different
+#: claim from adding a missing one, it moves material that converts today, and
+#: the Guide sentence available then was about NOTCH2 rather than about NOTCH.
+#:
+#: Closed by k2kremote reading the Guide's own entry rather than by inference,
+#: and it says so in two independent places:
+#:
+#:     heading   "Two-pole Notch Filter (NOTCH FILTER)"
+#:     body      "The two-pole notch filter has two control input pages,
+#:                one for center frequency, one for width."
+#:
+#: and the DSP-function contents listing enumerates the family outright --
+#: TWO-POLE NOTCH (4), TWO-POLE NOTCH FIXED WIDTH (36), TWO-POLE BANDPASS (3),
+#: TWO-POLE BANDPASS FIXED WIDTH (35) -- with the only four-pole entries being
+#: the `W/SEP` ones. **So the "differs only in fixed width" sentence was never
+#: doing the work; the pole count is declared for each.** 315 slots in 60 files.
+#:
+#: **The ROM route would NOT have settled it, and that is worth recording.** The
+#: fallback proposed was: if codes 4 and 36 share a dispatch handler they share
+#: a pole count. They do not share one -- each has its own entry and its own
+#: name pointer at `0x1177A4`. Shared handler implies shared pole count; SEPARATE
+#: handlers imply nothing either way. **A test that can only fail informatively
+#: is worth identifying before spending a hardware crossing on it.**
+#:
+#: **STILL OPEN, and deliberately not changed with it: code 56.** Its own comment
+#: here calls it "4-pole DOUBLE NOTCH W/SEP" and it maps to 15, BandStop 2-pole
+#: -- while every other four-pole sibling maps to its four-pole XPM value (50 ->
+#: Low4, 54 -> High4, 55 -> Band4). That is an internal-consistency argument, not
+#: a printed one, and today has been unkind to those. 250 slots in 72 files,
+#: awaiting the Guide's own entry for DOUBLE NOTCH WITH SEPARATION.
 
 #: seg[0] codes that are NOT filters at all. A K2000 F-slot holds any DSP block,
 #: and the same byte position names a pitch, width, amplitude or shaper function

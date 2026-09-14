@@ -336,7 +336,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§ATKBIAS — fixing the two attack laws](#atkbias-fixing-the-two-attack-laws)
 - [§FIL2FRGAP — filling the 45–64 hole in the filter-2 corner table](#fil2frgap-filling-the-4564-hole-in-the-filter-2-corner-table)
 - [§NAMEHIST — the one published commit message that still names a preset](#namehist-the-one-published-commit-message-that-still-names-a-preset)
-- [§KRZNOTCHPOLES — `NOTCH FILTER` (code 4) may be two-pole, not four](#krznotchpoles-notch-filter-code-4-may-be-two-pole-not-four)
+- [§KRZNOTCHPOLES — `NOTCH FILTER` (code 4) is two-pole (CLOSED 2026-09-14)](#krznotchpoles-notch-filter-code-4-is-two-pole-closed-2026-09-14)
 - [§KRZNULLRUN — is "two consecutive null stages" the trigger, or only sufficient?](#krznullrun-is-two-consecutive-null-stages-the-trigger-or-only-sufficient)
 - [§ATKPATH — two capture paths disagree by 28% on identical bytes](#atkpath-two-capture-paths-disagree-by-28-on-identical-bytes)
 <!-- INDEX:END -->
@@ -32084,7 +32084,7 @@ the message.
 **Cost of not fixing it:** one preset name is discoverable in public history. The
 tracked tree and every unpushed message are clean, so nothing new is being added.
 
-## §KRZNOTCHPOLES — `NOTCH FILTER` (code 4) may be two-pole, not four
+## §KRZNOTCHPOLES — `NOTCH FILTER` (code 4) is two-pole (CLOSED 2026-09-14)
 
 **Raised 2026-09-14 while adding `NOTCH2` (code 36), not yet decided.**
 
@@ -32117,6 +32117,59 @@ about reads standing in for measurements).
 Neither is large, and that is a reason to settle it cheaply rather than a reason
 to leave it — a wrong pole count is inaudible on a notch until it is the only
 thing shaping a sound.
+
+### CLOSED by the Guide, for the price of a page lookup
+
+k2kremote read the entry rather than inferring from the NOTCH2 sentence, and it
+says so twice:
+
+> **Two-pole Notch Filter (NOTCH FILTER)**
+>
+> *"The two-pole notch filter has two control input pages, one for center
+> frequency, one for width."*
+
+The DSP-function contents listing settles the family independently:
+
+    TWO-POLE NOTCH                  code 4    NOTCH FILTER
+    TWO-POLE NOTCH, FIXED WIDTH     code 36   NOTCH2
+    TWO-POLE BANDPASS               code 3    BANDPASS FILT
+    TWO-POLE BANDPASS, FIXED WIDTH  code 35   BAND2
+    DOUBLE NOTCH WITH SEPARATION    code 56
+
+**So "differs only in a fixed width" was never doing the work** — the pole count
+is declared for each, and the only four-pole entries are the `W/SEP` ones.
+Code 4 now maps to XPM 15, BandStop 2-pole. 315 slots in 60 files.
+
+**The ROM fallback would not have settled it.** The proposal was: if codes 4 and
+36 share a dispatch handler they share a pole count. They do not — each has its
+own entry and name pointer at `0x1177A4`. Shared handler implies shared pole
+count; **separate handlers imply nothing either way.** A test that can only fail
+informatively is worth identifying before spending a hardware crossing on it.
+
+**Not changed with it: code 56.** Its comment calls it "4-pole DOUBLE NOTCH
+W/SEP" and it maps to 15, BandStop 2-pole, while every other four-pole sibling
+maps to its four-pole XPM value (50 → Low4, 54 → High4, 55 → Band4). That is an
+internal-consistency argument, not a printed one. 250 slots in 72 files; awaiting
+the Guide's entry for DOUBLE NOTCH WITH SEPARATION.
+
+### A counting bug this turned up, worth more than the mapping
+
+A scan that counted only tag `0x50` reported codes 35 and 36 as **absent from
+the corpus entirely**. They are not — the parser branch that reads F1 handles
+tag `0x52` as well, and measured across 669 files:
+
+| code | F1 slots (0x50) | F3 slots (0x52) |
+|---|---|---|
+| 35 `BAND2` | 0 | **242 in 50 files** |
+| 36 `NOTCH2` | 0 | **674 in 53 files** |
+| 3, 4, 50, 54, 55, 56 | all | 0 |
+
+**They occur only in F3, and their names say why** — they are the second filter
+of a two-filter algorithm. The earlier prevalence figures quoted for them were
+right because they came from the parser's own collector, which follows both
+tags; the direct scan written to confirm them was the thing that was wrong.
+`_unknown_f1_blocks` is named for one tag and fed by two, which is what made the
+confirmation look like a refutation.
 
 ## §KRZNULLRUN — is "two consecutive null stages" the trigger, or only sufficient?
 

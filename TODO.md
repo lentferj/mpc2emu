@@ -6669,9 +6669,9 @@ one of the useful tokens is also an ordinary English word, and on the last sweep
 six of its hits were exactly that. The token list and the id→name map live in
 `tests/fxpaths_id_map.txt`, which is gitignored.
 
-## §KRZNOTCHPOLES — `NOTCH FILTER` (code 4) may be mapped at the wrong pole count
+## §KRZNOTCHPOLES — code 4 CLOSED; code 56 still open
 
-**Status:** open, undecided, no hardware needed for the first two checks.
+**Status:** code 4 closed 2026-09-14 from the Musician's Guide (two independent statements) and remapped to XPM 15. Code 56 `DOUBLE NOTCH W/SEP` still maps to BandStop 2-pole while its own comment calls it 4-pole; awaiting the Guide's entry for it.
 **Blocked on:** the Musician's Guide entry for NOTCH FILTER (k2kremote holds
 the PDF), or the ROM dispatch at `0x1177A4` showing whether codes 4 and 36
 share a handler.
