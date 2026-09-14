@@ -6681,3 +6681,15 @@ We map code 4 to XPM 16 (BandStop 4-pole) and, since 2026-09-14, code 36
 NOTCH FILTER only in having a fixed width, which would make both two-pole.
 Existing mapping deliberately not changed. Resolution strategy in
 `docs/RESOLUTION_NOTES.md` §KRZNOTCHPOLES.
+
+## §KRZNULLRUN — the double-null rule is conservative and unmeasured
+
+**Status:** implemented and shipping; the narrowing measurement is open.
+**Blocked on:** the K2000R, silent since 2026-09-11. No card crossing needed.
+
+`_break_null_runs` forbids two consecutive envelope stages that are both
+(level 0, time 0). Three broader readings of §KRZDBLZERO are already refuted by
+output this writer has always produced, so the rule is the only surviving
+candidate — but it may be stricter than the machine requires. A six-program
+bank would settle it, and could only relax the rule, never widen it. Design in
+`docs/RESOLUTION_NOTES.md` §KRZNULLRUN.

@@ -337,6 +337,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§FIL2FRGAP — filling the 45–64 hole in the filter-2 corner table](#fil2frgap-filling-the-4564-hole-in-the-filter-2-corner-table)
 - [§NAMEHIST — the one published commit message that still names a preset](#namehist-the-one-published-commit-message-that-still-names-a-preset)
 - [§KRZNOTCHPOLES — `NOTCH FILTER` (code 4) may be two-pole, not four](#krznotchpoles-notch-filter-code-4-may-be-two-pole-not-four)
+- [§KRZNULLRUN — is "two consecutive null stages" the trigger, or only sufficient?](#krznullrun-is-two-consecutive-null-stages-the-trigger-or-only-sufficient)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -32115,3 +32116,73 @@ about reads standing in for measurements).
 Neither is large, and that is a reason to settle it cheaply rather than a reason
 to leave it — a wrong pole count is inaudible on a notch until it is the only
 thing shaping a sound.
+
+## §KRZNULLRUN — is "two consecutive null stages" the trigger, or only sufficient?
+
+**Implemented 2026-09-14 as the conservative reading; the measurement that would
+narrow it has not been made.**
+
+`_break_null_runs` in `writers/krz_writer.py` forbids two consecutive envelope
+stages that both carry level 0 and time byte 3 (zero seconds), because
+§KRZDBLZERO found the K2000 reading that as the end of the envelope and looping
+back to Att1 while the key is held.
+
+### What is already settled, without hardware
+
+Three broader readings of the same symptom were available. All three are refuted
+by output this project has always produced — 500 of 500 envelopes across the
+attack × decay × sustain × release space contain **every one** of these:
+
+| candidate trigger | where it already occurs, always |
+|---|---|
+| two consecutive ZERO-TIME stages, any level | `Att2`/`Att3` are always `(100, 0.00)` |
+| a single `(level 0, time 0)` stage | `Rel3` is always `(0, 0.00)` |
+| two consecutive NO-OP stages (no time, no level change) | `Att2`/`Att3`, after `Att1` ends at 100 |
+
+If any of those were the trigger, every bank this writer has ever made would
+re-cycle under sustain. They do not. **Only "both fields zero, twice in a row"
+survives**, which is what the rule encodes.
+
+### What is open
+
+Whether that is *the* trigger or merely *sufficient* for it. Narrower
+possibilities the evidence does not separate:
+
+- only the **second** stage's fields matter, not both;
+- it must be the **last** pair of the envelope, not any pair;
+- the level must be zero but the time need only be **below some threshold**
+  rather than exactly zero.
+
+Each would let the rule be relaxed. None would let it be widened, which is why
+shipping ahead of the measurement is safe: **a bench result can only take stages
+out of the rule's scope, never add them.**
+
+### The bank that would settle it
+
+One purpose-built KRZ, programs differing only in which stages are null, all
+else identical, each held well past its own total:
+
+| program | shape | separates |
+|---|---|---|
+| 1 | `Rel2`/`Rel3` both null | the baseline — must re-cycle |
+| 2 | `Rel2` null, `Rel3` given 20 ms | is it the pair, or the last stage? |
+| 3 | `Rel2` given 20 ms, `Rel3` null | which stage of the pair matters |
+| 4 | `Dec1`/`Rel1` null, tail non-null | is it any pair, or only the tail? |
+| 5 | `Rel2` level 1, time 0, `Rel3` null | does LEVEL alone break it? |
+| 6 | `Rel2` level 0, time 20 ms, `Rel3` null | does TIME alone break it? |
+
+5 and 6 also settle the currency question — the fix spends time (Jan, 2026-09-14)
+because the level route rests on a guess about which field the firmware tests.
+If 5 does not re-cycle, level is free and the 20 ms can be given back.
+
+**These files deliberately produce the defect**, so they must never sit in a
+conversion path; name them so nobody mistakes them for output. No card crossing
+— the K2000R loads them like any bank, and it has been silent since 2026-09-11,
+so this waits on the instrument rather than on anyone's time.
+
+**Related and NOT the same thing:** k2kremote's post-note-off re-articulation
+(complete, full-length, ~1.15 s after note-off, from the fixed writer) cannot be
+an amp-envelope loop at all — the Musician's Guide is explicit that a note enters
+its release section as soon as Note State goes off, regardless of loop type and
+count. §KRZDBLZERO happens *under sustain*, where looping is exactly what the
+engine is allowed to do. Keep them apart until something joins them.
