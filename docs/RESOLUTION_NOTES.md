@@ -341,6 +341,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§ATKPATH — two capture paths disagree by 28% on identical bytes](#atkpath-two-capture-paths-disagree-by-28-on-identical-bytes)
 - [§E4BRATEMOD — envelope-rate modulation is not representable at byte level](#e4bratemod-envelope-rate-modulation-is-not-representable-at-byte-level)
 - [§MPCVELATK — the MPC has velocity→attack, and we drop it on 35% of keygroups](#mpcvelatk-the-mpc-has-velocityattack-and-we-drop-it-on-35-of-keygroups)
+- [§EOSRATEPIECE — the EOS envelope rate law is piecewise, and ours is one exponential](#eosratepiece-the-eos-envelope-rate-law-is-piecewise-and-ours-is-one-exponential)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -32839,3 +32840,74 @@ arise, not how often it matters.**
 - **K2000** — has a general cord matrix and the destination list is now decoded
   from ROM (§KRZNOTCHPOLES's source), so whether an envelope rate is reachable is
   answerable from the table rather than from a capture. Not yet looked at.
+
+## §EOSRATEPIECE — the EOS envelope rate law is piecewise, and ours is one exponential
+
+**Measured 2026-09-14 (eosed §129). The question "should `ENV_RATE_K` move to
+0.0565?" was the wrong question, and the answer to it is no.**
+
+### Measured without touching the table
+
+Two rungs per band, both inside one table segment, each rung measured twice,
+audio and byte numbers only:
+
+```
+  byte      25      55      60     100
+  t90    0.210   1.160   1.500  14.520 s     repeat spreads 0.020/0.000/0.000/0.080
+
+  k per byte at matched 2 ms smoothing:
+    60 -> 100   0.05649        25 -> 55   0.05866
+```
+
+The two bands differ by **3.8%, in the direction the table predicts.** So §122's
+piecewise structure — which had only ever been read off the firmware — is now
+established by a measurement independent of it.
+
+### Each of our two constants is right in one band and wrong in the other
+
+| band | measured | `ENV_RATE_K` 0.0581 | `ENV_RATE_SWEEP_K` 0.0565 |
+|---|---|---|---|
+| 60–100 | ~0.0564 | +2.9% off | fits |
+| 25–55 | ~0.0587 | fits (+1.0%) | −3.8% off |
+
+### The corpus decides it, and it decides against the change
+
+**90.3% of on-curve rate bytes sit in 20–59**, where `ENV_RATE_K`'s 0.0581 is the
+better constant. Moving it to 0.0565 — which the firmware table pointed at this
+morning, and which two other lines of evidence supported — **would trade a good
+fit over 90% of the corpus for a better one over 8%.**
+
+`ENV_RATE_K` stays. A piecewise law would beat both constants and is filed rather
+than written, since it corrects ~2.9% on 8% of usage.
+
+**This is the second time today the corpus weight reversed a firmware-led
+conclusion.** The first was the same table's non-exponential shape, where a refit
+would have made 90% of the corpus worse. *A firmware table says what the machine
+intends across its whole range; the corpus says which part of that range anyone
+actually uses.*
+
+### Limits, stated
+
+Within-band spread across smoothing widths is 1.8% and 3.0%, against a 3.8%
+between-band difference. **The direction holds at every width tried; the
+magnitude does not.** The 25–55 slope sits 2% below the table's 0.0600. One
+preset, one note.
+
+### Byte 25 nearly inverted the result
+
+Its two takes were **0.200 and 0.220 s — exactly one 20 ms window apart on a
+0.21 s rise.** At 20 ms smoothing the 25–55 pair reads 0.05697 and the two bands
+look identical; at 2 ms it reads 0.05866 and they separate. **The conclusion
+inverted on the detector width**, and that was visible only because the rung was
+measured twice.
+
+Same shape as §121's carrier-cycle artefact, arriving in a different place: a
+detector whose window is comparable to the thing being measured does not add
+noise, it changes the answer.
+
+### Why the check worked
+
+The instruction it replaced was "confirm the table at bytes 20–59", which would
+have produced a single time. **A single rung cannot separate two slopes at all**
+— that version of the check could not have failed informatively. Two rungs, both
+inside one segment, is what made it decisive.

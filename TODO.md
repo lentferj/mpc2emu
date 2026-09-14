@@ -6805,3 +6805,30 @@ flag), so the E4XT key→attack law has nothing to map onto on this side.
 Prevalence bounds how often the question arises, not how much it matters: the
 MPC's own scale for the field is uncalibrated. Details in
 `docs/RESOLUTION_NOTES.md` §MPCVELATK.
+
+## §EOSRATEPIECE — the EOS envelope rate law is piecewise; ours is one exponential
+
+**Status:** open, measured, deliberately not implemented.
+**Blocked on:** nothing — a judgement about whether 2.9% on 8% of usage is worth
+a piecewise law.
+
+eosed §129 measured two rungs per band, both inside one table segment, each rung
+twice, using audio and byte numbers only — so it is independent of the firmware
+table it confirms:
+
+| band | measured k | `ENV_RATE_K` 0.0581 | `ENV_RATE_SWEEP_K` 0.0565 |
+|---|---|---|---|
+| bytes 60–100 | ~0.0564 | **+2.9% off** | fits |
+| bytes 25–55 | ~0.0587 | fits (+1.0%) | **−3.8% off** |
+
+**`ENV_RATE_K` STAYS AT 0.0581.** 90.3% of on-curve corpus rate bytes sit in
+20–59, where it is the better constant. Moving it to 0.0565 — which the firmware
+table pointed at this morning — would trade a good fit over 90% of the corpus for
+a better one over 8%.
+
+A piecewise law would beat both. It would correct ~2.9% on 8% of usage, which is
+why it is filed rather than written.
+
+**Limits:** within-band spread across smoothing widths is 1.8% and 3.0% against a
+3.8% between-band difference — the direction holds at every width tried, the
+magnitude does not. One preset, one note.
