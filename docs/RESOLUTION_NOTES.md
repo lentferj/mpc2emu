@@ -340,6 +340,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§KRZNULLRUN — the double-null does nothing; the rule was removed (CLOSED 2026-09-14)](#krznullrun-the-double-null-does-nothing-the-rule-was-removed-closed-2026-09-14)
 - [§ATKPATH — two capture paths disagree by 28% on identical bytes](#atkpath-two-capture-paths-disagree-by-28-on-identical-bytes)
 - [§E4BRATEMOD — envelope-rate modulation is not representable at byte level](#e4bratemod-envelope-rate-modulation-is-not-representable-at-byte-level)
+- [§MPCVELATK — the MPC has velocity→attack, and we drop it on 35% of keygroups](#mpcvelatk-the-mpc-has-velocityattack-and-we-drop-it-on-35-of-keygroups)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -32780,3 +32781,61 @@ all 43 codes.** Nothing here should reach a writer before that.
 destinations — appear **zero** times in 700,257 cords. Authors modulate
 individual segments, overwhelmingly the attack. **A converter that models
 "envelope rate" as one quantity would be modelling something nobody uses.**
+
+## §MPCVELATK — the MPC has velocity→attack, and we drop it on 35% of keygroups
+
+**Measured 2026-09-14, prompted by Jan asking whether the E4XT's key→attack law
+needs a counterpart on the other machines.** The answer reframes the question.
+
+### The MPC has no key→attack at all
+
+`KeyTrack` in an XPM is a **boolean** — `<KeyTrack>False</KeyTrack>` — the sample
+keytracking flag, not a modulation depth. There is no key→attack parameter in the
+format, so the E4XT law has nothing to map onto here. **That half of the question
+is closed by the format rather than by a measurement.**
+
+### Velocity→attack exists, and the two destinations could not differ more
+
+Across the MPC One expansion corpus, ~450,000 keygroup values each:
+
+| field | non-zero | |
+|---|---|---|
+| `VelocityToVolumeAttack` | **1,014 of 448,050 = 0.23%** | 10 distinct values, ~127 keygroups each — about **eight programs** |
+| `VelocityToFilterAttack` | **159,337 of 450,007 = 35.41%** | |
+
+**So velocity→AMP-attack is not a thing on the MPC** — the format carries it and
+authors do not use it. **Velocity→FILTER-attack is very much a thing**, on more
+than a third of all keygroups.
+
+That is the opposite of the E4XT, where the stock `Velocity→VEnvAtk` template
+default puts a 22% amp-attack routing on most voices (§E4BRATEMOD).
+
+### What we do with it today: nothing
+
+`parsers/xpm_parser.py` reads `FilterAttack` — the envelope **time** — and never
+reads `VelocityToFilterAttack` or `VelocityToVolumeAttack`. The names appear in
+this project only inside `tests/re_banks/` generators, where they are written as
+`0.000000` on purpose, and one of those files says why: they *"colour every
+reading"*. **So it was known to matter for measurement and never wired for
+conversion.**
+
+**The exposure is 35.4% of MPC keygroups, and it is the filter envelope rather
+than the amp envelope** — which is a quieter defect than §E4BRATEMOD's, because a
+filter attack that does not track velocity sounds like a slightly duller
+instrument rather than a wrong one.
+
+### What this does NOT say
+
+The prevalence is a count of non-zero fields, not of audible effect: nothing here
+measures how much a given depth moves the filter attack, and the MPC's own scale
+for the field is not calibrated. **The 35.4% bounds how often the question can
+arise, not how often it matters.**
+
+### The other two machines
+
+- **AKAI** — `V_ATT1..3` exist and s3ked measured them as **routable but inert on
+  the amp envelope**. So the field is there and does nothing we have been able to
+  provoke.
+- **K2000** — has a general cord matrix and the destination list is now decoded
+  from ROM (§KRZNOTCHPOLES's source), so whether an envelope rate is reachable is
+  answerable from the table rather than from a capture. Not yet looked at.

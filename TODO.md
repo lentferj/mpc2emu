@@ -6789,3 +6789,19 @@ all-segments-at-once destinations, appear **zero** times in 700,257 cords.
 Authors modulate individual segments, overwhelmingly the attack. A converter
 modelling "envelope rate" as one quantity would be modelling something nobody
 uses.
+
+## §MPCVELATK — velocity→filter-attack is dropped on 35% of MPC keygroups
+
+**Status:** open, measured, not wired.
+**Blocked on:** nothing technical — a conversion-policy decision, and a scale.
+
+`VelocityToFilterAttack` is non-zero on **159,337 of 450,007** keygroup values in
+the MPC corpus (35.4%); `parsers/xpm_parser.py` never reads it. Its sibling
+`VelocityToVolumeAttack` is non-zero on **0.23%** and can be ignored.
+
+The MPC has **no key→attack parameter at all** (`KeyTrack` is a boolean sample
+flag), so the E4XT key→attack law has nothing to map onto on this side.
+
+Prevalence bounds how often the question arises, not how much it matters: the
+MPC's own scale for the field is uncalibrated. Details in
+`docs/RESOLUTION_NOTES.md` §MPCVELATK.
