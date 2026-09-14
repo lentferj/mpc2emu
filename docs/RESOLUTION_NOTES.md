@@ -32680,6 +32680,58 @@ from an unrelated source, predicted rather than fitted.
 So a cord amount of 1.000 in our model is file byte 127 and SysEx 100%, and the
 median authored envelope-rate cord of **0.110 is file ~14, SysEx 11%**.
 
+### THE LAST LEG IS CLOSED, AND IT IS A REWORK, NOT A FOOTNOTE
+
+eosed measured the modulation's full scale on hardware (P017, flat noise,
+root-matched, `Atk1` rate 72, cord `Key+ → VEnvAtk`):
+
+| amount | note 72 | 80 | 88 | 96 |
+|---|---|---|---|---|
+| 0% | 3.020 | 2.960 | 3.000 | 2.920 s |
+| +100% | 0.040 | 0.020 | 0.020 | 0.020 — **instant at every note** |
+| −100% | 20.5 | 20.5 | 20.5 | 20.5 — **still rising at 20.5 s** |
+
+**Both directions saturate at every note**, including note 72 where `Key+` is only
+0.567 of its own full scale. Index 72 → 0 is 72 bytes = 2304 internal units, and
+`0.567 × full_scale ≥ 2304` gives **full scale ≥ 127 bytes**. A 100% cord covers
+the entire rate range.
+
+**That is a floor, not a fit**, and it holds under any normalisation of `Key+`:
+every alternative makes `Key+` smaller at note 72 and therefore requires a
+*larger* full scale to saturate.
+
+### What it costs the converter
+
+One byte of index is a factor `exp(0.0581)` = **1.0598** in envelope time:
+
+| cord amount | bytes of index | factor in envelope TIME |
+|---|---|---|
+| 0.110 — median authored | 14 | **×2.25** |
+| 0.220 — **the EOS template default** | 28 | **×5.07** |
+| 0.528 — p90 authored | 67 | ×49 |
+
+A 2.033 s attack at rate byte 72 becomes **0.901 s** under a median authored cord
+at full source deflection, and **0.400 s** under the stock `Velocity→VEnvAtk`.
+
+**So this reader currently takes the unmodulated rate byte and drops a routing
+that changes attack time by 2–5× at full source deflection**, on 37.9% of voices
+for authored cords and on most voices for the template default — which is not
+inert, it is the classic harder-hit-is-snappier response and it is audible.
+
+### The sign is the opposite of the firmware reading, and the measurement wins
+
+§127's `index = (field + modulation) >> 5` with a descending table implied
+positive modulation ⇒ slower. **It is faster.** The table direction is confirmed
+independently (`T[0]=65535`, `T[72]=162`, `T[127]=4`, index 0 = instant), so the
+contribution enters negatively somewhere in a routine nobody has read. eosed has
+withdrawn the direction claim; positive `Key+` shortening attacks as pitch rises
+is also the musically expected behaviour.
+
+**Recorded because the firmware reading was right about structure and wrong about
+sign, and only the hardware could tell them apart.** A disassembly gives you the
+shape of a computation; it does not give you what a register held three routines
+earlier.
+
 ### What is STILL open, and it is one leg not two
 
 The **file ↔ SysEx** leg is closed. The **SysEx ↔ internal** leg is not: §127

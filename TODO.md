@@ -6744,10 +6744,18 @@ over SysEx. File byte and SysEx id are one enumeration for all 43 codes. The
 amounts also settled a scale nobody had: the file stores ±127, SysEx reports
 ±100, `round(file * 100/127)` exact on four values including the template
 default, so `cord_byte_to_amount`'s /127 is confirmed correct for the file.
-**Blocked on:** the SysEx ↔ internal leg — the second term's full scale in
-`(field + second term) >> 5`, which lives in a routine nobody has read. Until
-then an amount converts exactly between file and parameter and still cannot be
-turned into bytes of rate, which is what decides footnote vs rework.
+**IT IS A REWORK, NOT A FOOTNOTE.** The last leg closed 2026-09-14: eosed
+measured the modulation's full scale on hardware and it is **at least the whole
+127-byte rate range** (both directions saturate at a note where `Key+` is only
+0.567 of full scale — a floor, not a fit). So the median authored cord of 0.110
+is ~14 bytes = **×2.25 in envelope time**, and the stock `Velocity→VEnvAtk`
+default at 0.220 is ~28 bytes = **×5.07**. This reader takes the unmodulated byte
+and drops that routing on 37.9% of voices for authored cords and on most voices
+for the template default.
+**Blocked on:** a decision about what to do with it. The target formats differ in
+whether they have velocity→attack at all, so this is a conversion-policy question
+before it is a code one. Also note eosed WITHDREW the direction implied by the
+firmware: positive amount is FASTER, not slower.
 
 eosed read the EOS 4.70 envelope segment stepper (§125): the table index is
 `(rate field + a second term) >> 5`, clamped to 0..127 afterwards. **So the
