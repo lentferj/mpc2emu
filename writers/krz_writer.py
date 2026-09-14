@@ -3430,16 +3430,22 @@ def write_krz(bank: Bank, output_path: str,
         _diag(_I, 'KRZ_NULL_STAGE_SPACED',
               f"{_n} envelope stage(s) were given the grid's smallest non-zero "
               f"time (20 ms) so that no two consecutive stages are both empty",
-              # The source's value is NOT carried: a 1 ms release becomes a
-              # 20 ms one. That is a deviation we introduce, so it is reported
-              # even though it is small and usually inaudible.
-              content_lost=True,
+              # **content_lost=False, CORRECTED 2026-09-14 the same day.** This
+              # first shipped as True on the reasoning that "the source's 1 ms
+              # release becomes 20 ms". Both halves were wrong. The 1 ms is lost
+              # at QUANTISATION -- the grid's finest step is 20 ms and time byte
+              # 3 is 0.00 s -- whether or not this rule runs. And the padded
+              # stage is always one the envelope has already reached zero level
+              # in: swept across attack x decay x sustain x release, 615 bumps,
+              # 540 of them on Rel3, and **zero preceded by a non-zero level**.
+              # So the 20 ms extends silence and nothing is carried differently.
+              content_lost=False,
               detail={'stages': _n},
               remedy='the K2000 reads two consecutive empty stages as the end '
                      'of the envelope and loops it back while the key is held '
                      '(§KRZDBLZERO); 20 ms is the shortest non-zero time its '
                      'editor grid can express, so there is nothing finer to use',
-              echo=f"  [INFO] {_n} envelope stage(s) padded to 20 ms — two "
-                   f"empty stages in a row make the K2000 re-cycle the "
-                   f"envelope under sustain.")
+              echo=f"  [INFO] {_n} envelope stage(s) padded to 20 ms of "
+                   f"silence — a precaution against §KRZDBLZERO; inaudible, "
+                   f"since the envelope has already reached zero there.")
 

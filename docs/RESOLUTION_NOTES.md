@@ -32180,6 +32180,48 @@ Each would let the rule be relaxed. None would let it be widened, which is why
 shipping ahead of the measurement is safe: **a bench result can only take stages
 out of the rule's scope, never add them.**
 
+### MEASURED 2026-09-14: the double-null alone does NOT re-cycle
+
+k2kremote, ROM program 199 built from the panel, `Loop: Off`, note held 4 s and
+the capture running 3.5 s past note-off. Two subjects identical but for `Rel2`'s
+time:
+
+| subject | onsets | during hold | after note-off |
+|---|---|---|---|
+| `Rel1 0s/33%  Rel2 0s/0%  Rel3 0s/0%` | 1 | 1 | 0 |
+| `Rel1 0s/33%  Rel2 0.04s/0%  Rel3 0s/0%` | 1 | 1 | 0 |
+
+**The positive control is what makes this a result and not a null.** The same
+detector, on the same envelope, on the same rig an hour earlier, counted **61
+onsets** when `Loop` was `seg1F`. The apparatus demonstrably produces the
+contradicting reading, so a re-cycle would have been seen.
+
+**So the degenerate release shape is not sufficient on its own.** §KRZDBLZERO's
+symptom needs the loop flag — and every §KRZDBLZERO observation was made on
+output from the OLD writer, which set byte 0 to `tb(attack)`, floored to 3,
+which is `seg3F`. **The double-null and the loop flag were confounded in every
+capture the rule was built from.** The fixed writer sets byte 0 to zero
+unconditionally, so on current output the shape looks inert.
+
+**What was NOT tested:** the double-null with a loop active, which cannot occur
+in our output; and this is a panel-built ROM program rather than a converted
+file off a card — the same difference k2kremote flags for §64/§65's
+re-articulation, and the original §KRZDBLZERO subject was a converted program.
+
+**The rule is kept anyway, and the reason is a measurement rather than caution.**
+The padded stage is always one the envelope has already reached zero level in.
+Swept across attack × decay × sustain × release: 615 bumps, 540 of them on
+`Rel3`, and **zero preceded by a non-zero level.** The 20 ms extends silence.
+A precaution that costs nothing audible is worth keeping while the question is
+open on our own file output — but `KRZ_NULL_STAGE_SPACED` was shipped with
+`content_lost: true` and that was wrong twice over: the source's 1 ms is lost at
+quantisation regardless (the grid's finest step is 20 ms), and nothing audible
+changes. Corrected to `false` the same day.
+
+**What would settle it on our own output:** two banks from this writer differing
+only in release, 1 ms and 50 ms, loaded from Gotek and held. That tests the
+files we actually ship rather than a panel reconstruction of them.
+
 ### The bank that would settle it
 
 One purpose-built KRZ, programs differing only in which stages are null, all
