@@ -913,11 +913,40 @@ on its own:
   attack still read 0.060 s at note 16 against 0.020 s at note 64 — **a 3× note-effect
   on a rise that does not exist.**
 
-The two results are consistent rather than contradictory: the artefact needs
-material whose own modulation can stretch, and s3ked's subject was a pure tone
-with none. **So the AKAI reading is evidence that the subject was immune, not
-that the mechanism is absent** — any AKAI note ladder run on real sampled
-material is exposed to it.
+The two results are consistent rather than contradictory — **but not for the
+reason first written here, and the wrong reason would send the next person
+somewhere unsafe.** This paragraph said the artefact needs material whose own
+modulation can stretch, and that s3ked's subject was a pure tone with none.
+eosed's addendum 3 (same day) shows modulation is *not* required: a synthetic
+constant-amplitude tone, nothing to modulate, reproduces the same curve.
+
+**The variable is how many CARRIER CYCLES the window spans:**
+
+| carrier | cycles per 5 ms window | swing of the windowed level |
+|---|---|---|
+| 10.3 Hz | 0.052 | 20.57 dB |
+| 41.2 Hz | 0.206 | 8.32 dB |
+| 164.8 Hz | 0.824 | 1.51 dB |
+| 1046.5 Hz | 5.232 | 0.26 dB |
+
+Below about one cycle the carrier leaks into the envelope and its peaks cross a
+−3 dB threshold early, with no attack in progress at all.
+
+**s3ked's subject was immune because it was HIGH, not because it was pure** —
+1046 Hz is 5.2 cycles per window and 0.26 dB of swing. A pure tone at 41 Hz has
+8.3 dB and is fully exposed. **"Use a clean tone" is the wrong lesson; "span
+enough carrier cycles" is the right one**, and it is machine- and
+material-independent:
+
+> An envelope detector's window must span a fixed number of **carrier cycles**,
+> not a fixed number of milliseconds.
+
+This is also the quantitative account of why our own `ATTAK1` ladder had to be
+re-read. **ATKCAL's carrier is 33 Hz — 0.165 cycles in a 5 ms window**, between
+the first two rows above. The 2026-09-13 reading through that detector ran 17–33%
+short of the same capture read on a Hilbert envelope, which is what an early
+threshold crossing predicts. §234's Hilbert reading is immune by construction:
+it is exact for a single tone and has no window to choose.
 
 What remains true regardless: there is no `ATTAK1` key-follow field, so whatever
 either machine does with note number, **this converter has no parameter to carry
