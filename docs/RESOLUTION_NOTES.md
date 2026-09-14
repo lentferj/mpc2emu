@@ -339,6 +339,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§KRZNOTCHPOLES — `NOTCH FILTER` (code 4) is two-pole (CLOSED 2026-09-14)](#krznotchpoles-notch-filter-code-4-is-two-pole-closed-2026-09-14)
 - [§KRZNULLRUN — the double-null does nothing; the rule was removed (CLOSED 2026-09-14)](#krznullrun-the-double-null-does-nothing-the-rule-was-removed-closed-2026-09-14)
 - [§ATKPATH — two capture paths disagree by 28% on identical bytes](#atkpath-two-capture-paths-disagree-by-28-on-identical-bytes)
+- [§E4BRATEMOD — envelope-rate modulation is not representable at byte level](#e4bratemod-envelope-rate-modulation-is-not-representable-at-byte-level)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -32594,3 +32595,72 @@ not simple latency, and that wants explaining rather than assuming.
 
 Both of the first two are far too small to matter here, and neither had been
 measured before.
+
+## §E4BRATEMOD — envelope-rate modulation is not representable at byte level
+
+**Opened 2026-09-14. Measured on the corpus, NOT acted on, and gated on a check
+that has not been run.**
+
+### What the firmware does
+
+eosed read the EOS 4.70 envelope segment stepper (§125) rather than arguing from
+the table's shape. The index is formed as:
+
+    (rate field + a second term) >> 5      then clamped to 0..127
+
+So **the stored byte is a contribution to a rate, not a rate**. The internal
+resolution is **32× the MIDI byte**, the clamp is applied *after* the addition —
+so saturation is a property of the pair, not of the field — and envelope-rate
+modulation moves in steps no parameter read can see.
+
+### What the corpus does
+
+380 banks, 95,132 voices, 700,257 active modulation cords:
+
+| | cords | share |
+|---|---|---|
+| envelope-rate destinations, all | 102,073 | 14.6% |
+| minus the stock `Velocity→VEnvAtk` @28 in slot 8 | 38,515 | **5.5%** |
+
+**75.1% of all `VEnvAtk` cords are one identical triple** — source `0x0C`,
+amount byte 28 (+0.220), cord slot 8 — and 91.5% sit in slot 8 regardless of
+amount. That is an EOS template default, the same pattern `parsers/e4b_parser.py`
+already documents for the stock `ModWheel→C02Amt` it ships even on voices with no
+LFO. It is also why the median and the p90 of `VEnvAtk` amounts were both exactly
+0.220.
+
+Of the authored remainder: **median amount 0.110 of full scale**, p90 0.528, p99
+0.551, only 18.5% reaching half scale — but present on **37.9% of voices**.
+
+**So the defect shape is "small error on a third of the corpus", not "large error
+on 5%".** That is the kind that does not announce itself.
+
+### What is still unknown
+
+What the modulation's full scale is in internal units. **If a full-scale cord
+spans the whole 0..127 index, 0.110 is ~14 bytes and matters; if it spans a few
+internal steps it is nothing.** That is a firmware question, not a corpus one.
+
+### The check that gates all of it
+
+Our destination codes are E4B **file** bytes at `voice[190 + 4N + 1]`; eosed's
+are **SysEx** destination ids. **Nothing has verified those share a numbering**,
+and eosed raised it against their own evidence — the same mistake made with K2000
+filter types earlier the same day, where a file byte and a parameter id were two
+schemes read as one.
+
+What supports the mapping today is coherence, not a check: two cords set on
+hardware read back as destinations 56 and 57 and are `FilFreq` and `FilRes`, and
+`FilFreq`/`AmpVol` topping a corpus histogram is what a correct mapping predicts.
+**Both are what a wrong mapping with a plausible offset would also produce.**
+
+**Cheap and decisive:** set a cord on a preset whose `.E4B` we hold, read the
+destination back over SysEx, compare against the file byte. **One preset settles
+all 43 codes.** Nothing here should reach a writer before that.
+
+### An informative absence
+
+`VEnvRts` (72), `FEnvRts` (80) and `AEnvRts` (88) — the all-segments-at-once
+destinations — appear **zero** times in 700,257 cords. Authors modulate
+individual segments, overwhelmingly the attack. **A converter that models
+"envelope rate" as one quantity would be modelling something nobody uses.**
