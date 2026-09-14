@@ -707,11 +707,17 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     # No E4B->E4B round trip changes; only third-party banks do.
     #
     # **STILL PENDING HARDWARE CONFIRMATION, AND `ATKCAL` DID NOT PROVIDE IT.**
-    # ATKCAL was captured and analysed 2026-09-11 and settled the AKAI `ATTAK1`
-    # rate law (it has no knee, by design). **This two-segment READ is a
+    # ATKCAL was captured 2026-09-11 and re-read 2026-09-14; it settles the AKAI
+    # `ATTAK1` law (it has no knee, by design). **This two-segment READ is a
     # different claim** -- no converted program built with this formula has been
     # measured, and the volume that would test it needs a KNEE, which ATKCAL
     # deliberately lacks.
+    #
+    # The 2026-09-11 analysis of ATKCAL was itself wrong and shipped a 1.8x
+    # regression to the AKAI writer for three days; see `_AK_ATTAK1_TIME`. The
+    # capture was sound, the reading of it was not. Nothing in THIS function
+    # depended on it -- recorded so that "ATKCAL settled it" is not read here as
+    # a stronger warrant than it is.
     _decay_span = env_level_byte_to_db(pzt[7])
     _rel_span   = max(0.0, ENV_FULL_SPAN_DB - _decay_span)
     # INVERSE OF THE WRITER, INCLUDING ITS ATTACK CORRECTION. The writer divides

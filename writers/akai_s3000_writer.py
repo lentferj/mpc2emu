@@ -350,46 +350,104 @@ _AK_RELSE1_RATE = (23042.3, -0.09754, 45, 99)   # dB/s,  log-space r2 0.99996
 #: section number alone is not a citation; a superseding section can exist and
 #: usually does.
 #:
-#: **REFITTED 2026-09-11 FROM `ATKCAL`, BECAUSE EVERY EARLIER FIT USED A BIASED
-#: DETECTOR.** §31 (0.000150326, 0.11175) and §141 (0.000201173, 0.10844) were
-#: both read with `t_peak`, which is an ARGMAX -- and on a convex rise an argmax
-#: sits far later than a -3 dB threshold crossing, by an amount the curvature
-#: sets. Both ran 1.6-1.9x LONG against the machine, so both encoded attacks
-#: roughly twice as fast as asked.
+#: **REVERTED 2026-09-14 TO §141's LAW, REFIT FROM `ATKCAL` AT THE RIGHT
+#: CONVENTION. The 2026-09-11 refit below was a regression and it shipped.**
 #:
-#: **The DETECTOR is the whole of it. The decaying material biased the argmax
-#: slightly EARLY** (a falling sample subtracts from the rise and brings the
-#: maximum forward), which masked part of the detector's effect rather than
-#: causing it. An earlier version of this note blamed the material and had the
-#: sign backwards.
+#: What that refit claimed: that §31 (0.000150326, 0.11175) and §141
+#: (0.000201173, 0.10844) were both read with an ARGMAX, both ran 1.6-1.9x long
+#: against the machine, and the detector was the whole of it.
 #:
-#: `ATKCAL` removed the bias at the source: a synthesized CONSTANT-AMPLITUDE
-#: sine, so the measured contour IS the envelope and `t_peak` is not merely
-#: biased but degenerate (a plateau has no unique maximum). Read instead at a
-#: stated convention -- 5 ms smoothing / threshold-crossing / -3.0 dB -- over
-#: seven rungs, s3ked, PRGNUM 109-115:
+#: **§141's method was misread.** It measured "time from note-on to 90% of the
+#: plateau on a resident sine held at `SUSTN1` 99" -- a threshold on steady
+#: material at a stated fraction, not an argmax and not decaying subject matter.
+#: The argmax account belongs to §31. Attributing one section's method to
+#: another is what justified replacing a correct law, and the replacement is
+#: the thing that ran 1.7-1.9x long:
+#:
+#:     requested   shipped law -> actual full-swing   §141 law -> actual
+#:       0.10 s          0.174 s   1.74x                  0.101 s   1.01x
+#:       0.50 s          0.878 s   1.76x                  0.512 s   1.02x
+#:       2.00 s          3.581 s   1.79x                  2.086 s   1.04x
+#:       4.00 s          7.633 s   1.91x                  3.990 s   1.00x
+#:
+#: **TWO ERRORS COMPOUNDED, 1.41 x 1.26 = 1.78.**
+#:
+#: *The convention.* `ATKCAL`'s ladder was read at -3.0 dB. `Envelope.attack`
+#: means TIME TO FULL LEVEL (§MPCENV: the MPC fits one curve to Attack, Decay
+#: and Release, and the displayed number is the whole segment -- confirmed
+#: acoustically, -56 dB at the 2.42 s the UI shows). On a linear amplitude ramp
+#: the -3 dB point sits at 0.708 of full, so the two differ by 1.4125.
+#:
+#: *The instrument.* That ladder used a 5 ms RMS window on a 33 Hz tone -- 0.16
+#: of a cycle, so it measured the waveform's instantaneous magnitude and not the
+#: envelope, oscillating with a 30 ms period. On a slow rise a fixed wobble in
+#: level becomes a large error in TIME, worst exactly where the law is least
+#: checkable. Re-read on a Hilbert envelope (exact for a single tone, no window
+#: to choose) the same rungs run 17-33% longer.
+#:
+#: **THE LAW BELOW, s3ked §234, 2026-09-14. Hilbert envelope, line/plateau knee,
+#: seven rungs, PRGNUM 109-115, synthesized constant-amplitude 33 Hz sine:**
 #:
 #:     ATTAK1   60     70     80     85     90     95     99
-#:     seconds  0.085  0.248  0.669  1.095  1.960  3.425  5.305
+#:     seconds  0.141  0.418  1.192  2.059  3.552  6.223  9.629
 #:
-#: Residuals -3.6% to +6.7%. The old docstring's "confirmed against the measured
-#: points (0.320 s at 70 rising to 8.600 s at 99)" is exactly the artefact: the
-#: machine gives 0.248 and 5.305 there, long by 1.29x at 70 and 1.62x at 99 --
-#: a factor that GROWS with attack length, which is the `t_peak` signature and
-#: not something a constant could have absorbed.
+#: Residuals -1.4% to +2.1%, against -3.6% to +6.7% for the thing it replaces:
+#: both shifted AND tighter, which is what a removed systematic looks like.
 #:
-#: A control that could have failed and did not: PRG 116, same ATTAK1 90 across
-#: FIVE keygroups instead of one, measured 1.960 s against PRG 113's 1.960 s.
-#: Keygroup count does not enter the law.
+#: **THE SHAPE IS SETTLED WITHOUT A MODEL, AND THAT IS THE STRONGEST RESULT
+#: HERE.** The same seven rungs read at both conventions give knee/-3 dB =
+#: 1.4156, sd 0.0112, against 1.4125 for a linear amplitude ramp -- 0.22%. A
+#: ratio of two readings of ONE capture cancels the level calibration, the
+#: plateau definition and the rig. It reproduces §31's t50/t90 result from a
+#: different capture, a different detector and a different session.
 #:
-#: **ATTAK1 99 = 5.13 s IS A REAL CEILING** and it only becomes visible once the
-#: inflation is gone -- previously every request arrived 1.8x too large and
-#: saturated the byte earlier. Slower attacks cannot be represented.
+#: **This law is within 2.5-3.8% of §141's across 60..99**, and §141's four
+#: measured t90 points land within 2% of this ladder's 90% on three of four.
+#: §141 was right; it was read wrong.
 #:
-#: Paired with `_E4XT_ATK_SLOWDOWN`, which carried the same bias and cancelled
-#: this one in E4B -> AKAI. See TODO §ATKBIAS. Both were fixed together; either
-#: alone makes that path worse than leaving both wrong.
-_AK_ATTAK1_TIME = (0.00015, 0.10545, 0, 99)   # seconds, s3ked ATKCAL 2026-09-11
+#: **§225's ATKFIX "hardware confirmation" is WITHDRAWN, not rescaled.** It
+#: measured 0.495/2.005/4.350 against 0.50/1.99/4.15 predicted, using the same
+#: 5 ms / -3 dB detector the law had just been fitted to. A law fitted to a
+#: detector reproduces that detector; the test was self-consistency. Two
+#: falsifiers were filed in advance and both passed BECAUSE THEY WERE WRITTEN IN
+#: THE DETECTOR'S CONVENTION TOO. §225 filed the caveat itself ("the two cannot
+#: check each other") and drew the conclusion anyway -- a stated caveat that does
+#: not change the conclusion is decoration.
+#:
+#: A control that could have failed and did not, and survives the refit: PRG
+#: 116, same ATTAK1 90 across FIVE keygroups instead of one, measured identical
+#: to PRG 113's single keygroup. Keygroup count does not enter the law.
+#:
+#: **ATTAK1 99 IS A REAL CEILING**, now 9.48 s by this law (s3ked measure 9.63
+#: there, so the law runs 1.6% short at its far end). Slower attacks cannot be
+#: represented. `_ak_attack_seconds` derives the ceiling from the tuple rather
+#: than hardcoding it, so a future refit moves it automatically.
+#:
+#: **THIS LAW IS THE BEST AVAILABLE, NOT AN EXACT ONE, AND THE GAP IS MEASURED.**
+#: s3ked §236 (2026-09-14) found the SAME `ATTAK1` byte giving a 33% different
+#: attack, of a different shape (convention ratio 1.298, not 1.4125), on a
+#: second program of the same machine in the same session. Eliminated BY
+#: MEASUREMENT and not by argument: material onset, note (0.5% across 48
+#: semitones), plateau level (flat to 0.02 dB), carrier frequency, `V_LOUD`,
+#: decay, velocity routing, velocity itself (0.36% from 80 to 100) and rig
+#: latency. No floor model of any shape fits its three rungs, and it is not even
+#: exponential there (implied k 0.0070 over 40->50 against 0.0596 over 50->60).
+#: **So `ATTAK1` alone does not determine the attack.** This law is fitted to
+#: ATKCAL's programs; what it does elsewhere carries an unquantified error of
+#: order tens of percent. Do not present any constant here as exact.
+#:
+#: `_E4XT_ATK_SLOWDOWN` was moved 1.838 -> 1.0 in the same commit on the
+#: reasoning that both carried one bias and cancelled in E4B -> AKAI.
+#: **DELIBERATELY NOT REVERTED WITH THIS.** The sentence that justified it
+#: compares a full-level intent against a -3 dB measurement while asserting "at
+#: the same convention", and that is false -- but the AKAI argument does not
+#: carry over, because this ramp is linear and the E4XT's is strongly convex
+#: (§ATTACKSHAPE: 28% delivered at its own nominal attack time). eosed's own
+#: audit (§117/§119) puts the convention factor there at ~1.17 as measured on
+#: ONE preset, spread across presets unmeasured -- not 1.4125, which is a
+#: property of a linear ramp and not a constant of the domain. Their
+#: recommendation, accepted: keep 1.0 and correct the recorded reason.
+_AK_ATTAK1_TIME = (0.000213, 0.10811, 0, 99)  # seconds, s3ked §234 2026-09-14
 
 # NOT WIRED, and each for its own reason rather than as a batch:
 #
