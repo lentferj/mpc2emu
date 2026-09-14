@@ -32141,8 +32141,30 @@ attack × decay × sustain × release space contain **every one** of these:
 | two consecutive NO-OP stages (no time, no level change) | `Att2`/`Att3`, after `Att1` ends at 100 |
 
 If any of those were the trigger, every bank this writer has ever made would
-re-cycle under sustain. They do not. **Only "both fields zero, twice in a row"
-survives**, which is what the rule encodes.
+re-cycle under sustain. None is heard to. **Only "both fields zero, twice in a
+row" survives**, which is what the rule encodes.
+
+**THAT INFERENCE IS WEAKER THAN IT READS, and k2kremote showed why hours after
+it was written (2026-09-14).** Measuring the loop-type field directly, `seg3F`
+produced **one onset on a 6 s held note — indistinguishable from `Loop: Off`**.
+Not an anomaly: it loops to the start of attack segment 3, which on that
+envelope ran 0% to 0%, so the loop was active and traversed a span with no level
+change. **A loop can be running and completely silent.**
+
+So "no bank is heard to re-cycle" does not by itself establish "no trigger
+fires". The refutation above holds only under the additional premise that **the
+trigger's loop target is Att1** — which is what §KRZDBLZERO actually observed
+("looping the whole envelope back to Att1"), and from Att1 a re-cycle is audible
+on any envelope that rises at all. Stated rather than assumed, because it is
+load-bearing: if some trigger loops to a later segment instead, it could be
+firing on our output today and nobody would hear it.
+
+The rule is unaffected either way — it is the conservative side — but the
+*confidence* in the three exclusions is conditional, and the six-program bank
+below should read the panel's `Loop` field on every program rather than only
+listening. §KRZDBLZERO's own subjects read `Loop: Off` on the panel, so whatever
+the null pair triggers is probably not that field; recording it per program is
+what would turn "probably" into a fact.
 
 ### What is open
 
@@ -32217,18 +32239,119 @@ bench time that would have closed it before any of the nine were measured.
 `_AK_ATTAK1_TIME` rests entirely on the older path. §235's firmware-table
 comparison rests on that law. If the newer path is right, both move by 28%.
 
-### The discriminating capture
+### The discriminating capture — RUN, and neither model was right
 
-Not "one rung through both paths" — **one SLOW rung through the NEWER path**,
-which is smaller and settles more:
+| rung | older path | additive predicted | multiplicative predicted | **measured** |
+|---|---|---|---|---|
+| 90 | 3.552 | 3.601 | 4.774 | **3.878** |
+| 99 | 9.629 | 9.678 | 12.941 | **10.509** |
 
-| rung | §234, older path | additive +48.5 ms | multiplicative ×1.344 |
+Both miss, in opposite directions, at both rungs (s3ked §238, predictions filed
+in the probe before the capture).
+
+**The residue is cleaner than either model.** Fitting `today = a·yesterday + b`
+on the two slow rungs gives **a = 1.0912, b = +2.2 ms** — a pure factor with no
+offset, and the two rungs agree with each other to 0.1%. That model predicts
+0.1560 at `ATTAK1` 60 against 0.1895 measured, an excess of **+33.5 ms**.
+
+**So there are two faults in the newer path, not one:** a clean multiplicative
+scale across the usable range, and a separate fast-end term of a few tens of ms
+— the same order as that path's unexplained **51.5 ms floor** at `ATTAK1` 0.
+
+### A candidate for the scale that costs no bench time
+
+**48000 / 44100 = 1.0884.** A capture assuming one sample rate while the stream
+runs at the other scales every time multiplicatively with no offset, which is
+exactly the shape measured.
+
+| rung | predicted by 48/44.1 | measured | miss |
 |---|---|---|---|
-| 90 | 3.552 | **3.601** | **4.774** |
-| 99 | 9.629 | 9.678 | 12.941 |
+| 90 | 3.866 | 3.878 | +0.31% |
+| 99 | 10.481 | 10.509 | +0.27% |
 
-32% apart at `ATTAK1` 90 against ±5% repeatability. One program, a few settled
-takes, no reload.
+Same direction at both rungs. That is nine times *today's* take-to-take scatter,
+but today's scatter is the wrong yardstick: **yesterday's rungs are single takes
+whose spread nobody measured.** It is a one-line check in the sender's rate
+handling.
+
+**`12/11 = 1.0909` fits to 0.02% and is named here only to be dismissed.** There
+is no mechanism behind it. Two other resemblances in this same regime already
+dissolved today — 1/24 s against a 27 ms quantiser boundary, and a 0.19 Hz gap
+that was an FFT bin. **A better-fitting ratio with no mechanism loses to a
+worse-fitting one with a plausible one.**
+
+### What to run next
+
+Four captures, not one — a single rung cannot separate a path difference from a
+rung-dependence:
+
+| | `measure.py` | jcap sender |
+|---|---|---|
+| `ATTAK1` 90 | ✓ | ✓ | → isolates the 9.1% scale |
+| `ATTAK1` 60 | ✓ | ✓ | → isolates the fast-end term |
+
+Same session, minutes apart, nothing written, no reload. **If rung 60 agrees
+between the two paths within one session, the 34% was between-session and not
+the sender at all** — worth knowing before a line is changed.
+
+### RESOLVED, same day (s3ked §239)
+
+**JACK runs at 48000 and the newer analysis scripts had `SR = 44100` hardcoded.**
+Every absolute time through that path read **8.8% long**. `measure.py` writes
+WAVs and takes the rate from the file, which is why the older path — the one the
+law rests on — could not make the mistake.
+
+| rung | older path | newer, as read | newer, corrected | vs older |
+|---|---|---|---|---|
+| 90 | 3.5520 | 3.8780 | 3.5629 | +0.31% |
+| 99 | 9.6290 | 10.5090 | 9.6551 | +0.27% |
+| 60 | 0.1410 | 0.1895 | 0.1741 | **+23.5%** |
+
+**The 9.1% is gone and the ladder is confirmed to 0.3% at the slow rungs by an
+independent path in a different session.** §141 and §234 stand. The revert was
+right on the merits and not merely irreversible.
+
+**Confirmed against a value known a priori, not against another capture.** The
+probe carrier was reported as 961 Hz on MIDI note 84. Note 84 is C6 = 1046.50 Hz
+from the note number alone:
+
+    961 x 48000/44100 = 1045.99 Hz      miss against C6: -0.049%
+
+Every other check that day was one measurement against another, where being
+wrong twice reads as agreement. **A measurement whose true value is known in
+advance is worth more than any number of self-consistent captures — and this one
+was sitting in the same capture as the numbers it would have checked, labelled
+as something else.**
+
+**Root cause, which matters more than the constant.** Captures were saved as
+`.npz` arrays carrying no sample rate, and the rate was then supplied from memory
+by a separate script. **The data and the fact needed to interpret it were
+separated, and the fact was then wrong.** That is exactly what
+`docs/calibration.json` exists to prevent one level up — a number in the code and
+its convention in a comment — so it is two instances of one fault, in two
+projects, found independently on the same day.
+
+**Unaffected:** everything reported as a ratio. Repeatability, note-independence,
+plateau flatness, the velocity result, §236's eliminations. The scale cancels.
+
+**Still open, and smaller:** the fast-end term, +23.5% at `ATTAK1` 60 after the
+scale, and that path's floor at `ATTAK1` 0 corrected to 47.3 ms. The
+four-capture design above is still the right test and now has only that one term
+to explain.
+
+### Repeatability is rung-dependent by a factor of a hundred
+
+| rung | takes | spread |
+|---|---|---|
+| 60 | 8 | **±5%** (sd 0.0031 s) |
+| 90 | 4 | 0.03% |
+| 99 | 4 | 0.04% |
+
+Short attacks contain few envelope steps, so a fixed jitter is a larger share of
+them. **"±5% repeatability" quoted flat — which `docs/calibration.json` carried
+for 20 minutes — makes the law look untrustworthy exactly where it is most
+solid.** The figure had travelled without its condition, which is the fault that
+file exists to catch, committed by the file itself on its first day.
 
 ### A third reading already favours the older path
 

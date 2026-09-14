@@ -894,8 +894,36 @@ to a property on the AKAI.
 **The AKAI has no envelope-1 key-follow.** The format carries exactly two
 key-follow fields, `K_FRQ2` and `K_DAR3`; neither touches envelope 1, and
 `K_DAR3` measured inert (spread 1.02×). So a key-dependent amp envelope cannot be
-expressed, and a measured 941 ms of note-dependence in AKAI `t_peak` against
-0.16–0.24 s on the E4XT has no parameter in our control.
+expressed.
+
+**THE 941 ms OF NOTE-DEPENDENCE THIS PARAGRAPH USED TO CITE IS IN DOUBT, AND SO
+IS ITS E4XT COUNTERPART (2026-09-14).** Both were read with a fixed-width
+detector on transposed material, and that combination manufactures a note-effect
+on its own:
+
+- **The AKAI, measured directly.** s3ked swept `ATTAK1` 60 across notes 48 / 72 /
+  96 on a pure-tone subject: **0.19659 / 0.19666 / 0.19757 s — 0.5% across 48
+  semitones.** Roughly 1 ms where this paragraph claimed 941.
+- **The mechanism, on the other machine.** eosed §121 found the E4XT's own
+  1.25×-across-55-semitones to be an artefact and named the cause: **a note
+  ladder plays ONE sample at many rates**, so the material's modulation stretches
+  by `2^((origkey−note)/12)` and a fixed window resolves a different number of
+  sample-periods at every rung. Scaling the detector with the playback rate flattens
+  it (t90 ratio 0.962). The control that settles it: a preset with an **instant**
+  attack still read 0.060 s at note 16 against 0.020 s at note 64 — **a 3× note-effect
+  on a rise that does not exist.**
+
+The two results are consistent rather than contradictory: the artefact needs
+material whose own modulation can stretch, and s3ked's subject was a pure tone
+with none. **So the AKAI reading is evidence that the subject was immune, not
+that the mechanism is absent** — any AKAI note ladder run on real sampled
+material is exposed to it.
+
+What remains true regardless: there is no `ATTAK1` key-follow field, so whatever
+either machine does with note number, **this converter has no parameter to carry
+it with.** The claim that needed the 941 ms was the size of the deficit, and that
+number should not be quoted until it is re-measured with a rate-scaled detector
+and a no-attack control.
 
 **`DECAY1` has no range left at the slow end.** 9.9% of 666 corpus voices saturate
 at the byte ceiling; the worst wants 24.7 units beyond it, an 11.2× shortfall.
