@@ -410,17 +410,6 @@
       ]
     },
     {
-      "code": "KRZ_NULL_STAGE_SPACED",
-      "severity": "info",
-      "content_lost": false,
-      "detail_keys": [
-        "stages"
-      ],
-      "emitted_from": [
-        "writers/krz_writer.py"
-      ]
-    },
-    {
       "code": "KRZ_ROM_ONLY",
       "severity": "info",
       "content_lost": false,

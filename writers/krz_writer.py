@@ -1548,80 +1548,42 @@ def _krz_choke_env(env):
     return env
 
 
-#: Time byte 3 is ZERO seconds: `_env_time_byte` is `steps(seconds) + 3` and
-#: floors there, so bytes 0..2 are unused and 3 is the bottom of the scale.
-_ENV_TIME_ZERO = 3
-
-#: The smallest time the K2000's editor grid can express that is not zero --
-#: one step of `KRZ_ENV_TIME_GRID`'s finest segment, i.e. **20 ms**. There is
-#: no shorter non-zero release this format can hold.
-_ENV_TIME_MIN_NONZERO = 4
-
-#: Stages bumped by `_break_null_runs` in the current bank; drained by
-#: `write_krz` as `KRZ_NULL_STAGE_SPACED`.
-_null_stage_fixes = []
-
-
-def _break_null_runs(enc):
-    """No two consecutive envelope stages may both be (level 0, time 0).
-
-    **§KRZDBLZERO: the K2000 reads two consecutive null stages as the end of the
-    envelope and loops the whole thing back to Att1 while the key is still
-    held**, repeating every ~release seconds. Found on the bench 2026-08-27.
-
-    This function is the general form of a guard that already existed as a
-    SHAPE. `_fill_env` chose a two-leg release specifically so that Rel2 would
-    carry a real non-zero time, and the comment claimed the shape "never hits
-    this". It holds only while `rel` survives the quantiser:
-
-        release 0.001 s ->  Rel2(0, 0.00)  Rel3(0, 0.00)     tripped
-        release 0.030 s ->  Rel2(0, 0.02)  Rel3(0, 0.00)     safe
-
-    The boundary is **26.3 ms**, and it is entirely ours -- `0.5 * 20 ms /
-    (0.2 * 1.9)`: the grid's finest step, `_REL1_TIME_FRAC`'s 20% share, and
-    `KRZ_RELEASE_FACTOR`. Nothing from the machine. **20.3% of the MPC corpus
-    (1387 of 6847 XPMs) carries a keygroup with `VolumeRelease` 0**, and the
-    MPC law maps 0 to 1.005 ms, so the tripped row is the common one.
-
-    **The comment reasoned about `rel` in seconds while the machine sees a
-    quantised byte** -- an invariant that holds in the units you are thinking in
-    and fails in the units you are writing. That is why this is now a pass over
-    all seven pairs and not a fix at Rel2: with `decay` AND `release` both zero
-    the run reappears at Dec1/Rel1, where the release shape has no say at all.
-
-    **WHY THIS TRIGGER AND NOT A BROADER ONE.** Three other readings of
-    §KRZDBLZERO were available, and all three are refuted by output this project
-    has always produced -- 500 of 500 envelopes across the attack x decay x
-    sustain x release space contain every one of these patterns:
-
-        two consecutive ZERO-TIME stages, any level   Att2/Att3 are always (100, 0.00)
-        a single (level 0, time 0) stage              Rel3 is always (0, 0.00)
-        two consecutive NO-OP stages                  Att2/Att3 again, after Att1 ends at 100
-
-    If any of those were the trigger, every bank this writer has ever made would
-    re-cycle, and they do not. Only "both fields zero, twice in a row" survives.
-
-    **WHAT IS STILL OPEN** is whether that is the trigger or merely sufficient
-    for it; see TODO §KRZNULLRUN for the bank that would settle it. This rule is
-    the conservative side of that uncertainty -- a bench result can only relax
-    it, never widen it -- so it is safe to ship ahead of the measurement.
-
-    Spends TIME rather than LEVEL (Jan's call, 2026-09-14). Giving the stage a
-    level of 1 instead would cost nothing audible, but it rests on a guess about
-    which field the firmware actually tests, and we have the symptom only. The
-    second stage of a pair is the one bumped, so a run of three costs one bump
-    rather than two. On the common case -- a short release under a sustain above
-    the knee -- that puts the 20 ms on Rel3, which is already at silence, so it
-    costs nothing audible at all. It is only where the whole tail is null that it
-    lands somewhere a listener could reach.
-    """
-    out = list(enc)
-    for i in range(len(out) - 1):
-        if out[i] == (0, _ENV_TIME_ZERO) and out[i + 1] == (0, _ENV_TIME_ZERO):
-            out[i + 1] = (0, _ENV_TIME_MIN_NONZERO)
-            _null_stage_fixes.append(i + 1)
-    return out
-
+#: **§KRZDBLZERO / §KRZNULLRUN: THE DOUBLE-NULL RULE WAS REMOVED 2026-09-14, THE
+#: DAY IT SHIPPED, AND THE REASON BELONGS WHERE THE CODE WOULD BE.**
+#:
+#: A short release makes `Rel2` and `Rel3` both (level 0, time byte 3 = 0.00 s),
+#: and §KRZDBLZERO reported the K2000 reading two consecutive null stages as the
+#: end of the envelope and looping back to Att1 under sustain. This file padded
+#: one stage of every such pair to 20 ms to avoid that. **It does not happen.**
+#:
+#: Measured twice by k2kremote, each time with a positive control IN THE SAME
+#: RUN -- which is what separates "nothing happened" from "nothing could have
+#: been seen":
+#:
+#:   * panel-built ROM program 199, `Loop: Off`, held 4 s: one onset with and
+#:     without a real time on `Rel2`. Control an hour earlier, same detector and
+#:     rig: 61 onsets at `seg1F`.
+#:   * a bank from THIS writer, loaded off the Gotek, four programs one byte
+#:     apart. The three `Loop: Off` programs agreed to **0.00 dB and 0.00 Hz**;
+#:     the control separated by a factor of **140** in peak-to-median.
+#:
+#: **And the original finding is explained rather than merely contradicted.**
+#: §KRZDBLZERO was found on the bank `tests/re_banks/gen_krz_envgrid_cal.py`
+#: builds, which writes envelope pairs from byte 0 under the pre-2026-08-31
+#: layout -- so its first byte is `_env_time_byte(0.0)` = **3**, which under the
+#: true layout is the LOOP FLAG, and 3 is `seg3F`. Every program in the bank the
+#: rule came from had an active loop nobody knew about, and the double-null and
+#: the loop flag were never separated because byte 0 was not known to be the flag
+#: until four days later.
+#:
+#: `_fill_env` sets byte 0 to zero unconditionally, so no file this writer
+#: produces can contain an active loop at all.
+#:
+#: **Do not re-add the padding without a capture that has a control in it.** It
+#: cost nothing audible -- 615 pads swept across the parameter space, 540 landing
+#: on `Rel3`, none preceded by a non-zero level -- which is why it was safe to
+#: ship while the question was open, and never a reason to keep it once it
+#: closed. Full trace in `docs/RESOLUTION_NOTES.md` §KRZNULLRUN.
 
 def _fill_env(b: bytearray, env) -> None:
     """Write an ADSR Envelope into a 15-byte ENV/ENC segment IN PLACE.
@@ -1752,8 +1714,8 @@ def _fill_env(b: bytearray, env) -> None:
              (0.0, 0)]                                # Rel3
     b[0] = 0   # loop flag -- Off (§KRZENVLOOP byte-layout fix, 2026-08-31)
     o = 1
-    for level, time in _break_null_runs([(lv(l), tb(t)) for t, l in pairs]):
-        b[o] = level; b[o + 1] = time; o += 2
+    for t, l in pairs:
+        b[o] = lv(l); b[o + 1] = tb(t); o += 2
 
 
 #: The K2000 cutoff byte is signed semitones on the standard pitch scale,
@@ -2913,7 +2875,6 @@ def write_krz(bank: Bank, output_path: str,
     to three layers instead, because a program that does not sound on the
     channel it is played on is not a subtler rendering of the preset.
     """
-    _null_stage_fixes.clear()   # per-bank, not per-process
     lost_zones: list = []
     fitted: list = []
     print(f"Writing KRZ: {output_path}")
@@ -3424,28 +3385,3 @@ def write_krz(bank: Bank, output_path: str,
                   f"root; those keys are filled from a neighbouring zone, so "
                   f"they sound the WRONG sample rather than nothing. "
                   f"--max-sample-rate downsamples, which raises the ceiling.")
-
-    if _null_stage_fixes:
-        _n = len(_null_stage_fixes)
-        _diag(_I, 'KRZ_NULL_STAGE_SPACED',
-              f"{_n} envelope stage(s) were given the grid's smallest non-zero "
-              f"time (20 ms) so that no two consecutive stages are both empty",
-              # **content_lost=False, CORRECTED 2026-09-14 the same day.** This
-              # first shipped as True on the reasoning that "the source's 1 ms
-              # release becomes 20 ms". Both halves were wrong. The 1 ms is lost
-              # at QUANTISATION -- the grid's finest step is 20 ms and time byte
-              # 3 is 0.00 s -- whether or not this rule runs. And the padded
-              # stage is always one the envelope has already reached zero level
-              # in: swept across attack x decay x sustain x release, 615 bumps,
-              # 540 of them on Rel3, and **zero preceded by a non-zero level**.
-              # So the 20 ms extends silence and nothing is carried differently.
-              content_lost=False,
-              detail={'stages': _n},
-              remedy='the K2000 reads two consecutive empty stages as the end '
-                     'of the envelope and loops it back while the key is held '
-                     '(§KRZDBLZERO); 20 ms is the shortest non-zero time its '
-                     'editor grid can express, so there is nothing finer to use',
-              echo=f"  [INFO] {_n} envelope stage(s) padded to 20 ms of "
-                   f"silence — a precaution against §KRZDBLZERO; inaudible, "
-                   f"since the envelope has already reached zero there.")
-

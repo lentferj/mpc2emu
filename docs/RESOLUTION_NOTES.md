@@ -337,7 +337,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§FIL2FRGAP — filling the 45–64 hole in the filter-2 corner table](#fil2frgap-filling-the-4564-hole-in-the-filter-2-corner-table)
 - [§NAMEHIST — the one published commit message that still names a preset](#namehist-the-one-published-commit-message-that-still-names-a-preset)
 - [§KRZNOTCHPOLES — `NOTCH FILTER` (code 4) is two-pole (CLOSED 2026-09-14)](#krznotchpoles-notch-filter-code-4-is-two-pole-closed-2026-09-14)
-- [§KRZNULLRUN — is "two consecutive null stages" the trigger, or only sufficient?](#krznullrun-is-two-consecutive-null-stages-the-trigger-or-only-sufficient)
+- [§KRZNULLRUN — the double-null does nothing; the rule was removed (CLOSED 2026-09-14)](#krznullrun-the-double-null-does-nothing-the-rule-was-removed-closed-2026-09-14)
 - [§ATKPATH — two capture paths disagree by 28% on identical bytes](#atkpath-two-capture-paths-disagree-by-28-on-identical-bytes)
 <!-- INDEX:END -->
 
@@ -32212,7 +32212,7 @@ tags; the direct scan written to confirm them was the thing that was wrong.
 `_unknown_f1_blocks` is named for one tag and fed by two, which is what made the
 confirmation look like a refutation.
 
-## §KRZNULLRUN — is "two consecutive null stages" the trigger, or only sufficient?
+## §KRZNULLRUN — the double-null does nothing; the rule was removed (CLOSED 2026-09-14)
 
 **Implemented 2026-09-14 as the conservative reading; the measurement that would
 narrow it has not been made.**
@@ -32273,6 +32273,70 @@ possibilities the evidence does not separate:
 Each would let the rule be relaxed. None would let it be widened, which is why
 shipping ahead of the measurement is safe: **a bench result can only take stages
 out of the rule's scope, never add them.**
+
+### CLOSED: measured on our own file, off media, with a control in the bank
+
+`~/temp/NULLRUN_HWTEST.KRZ`, four programs one byte apart, written to the Gotek
+and loaded at 200–203. Held 20 s, analysed 0.4–10 Hz at 0.054 Hz bins:
+
+| prog | | sustain | mod peak | × median |
+|---|---|---|---|---|
+| 203 | `LOOPPOS` double-null **+ seg1F** | −46.8 dB | 2.378 Hz | **6066** |
+| 200 | `NULLRUN` double-null | −49.7 dB | 9.946 Hz | 43 |
+| 201 | `NULLPAD` Rel3 padded one step | −49.7 dB | — | — |
+| 202 | `RELREAL` real 50 ms release | −49.7 dB | — | — |
+
+**The three `Loop: Off` programs agree to 0.00 dB, and the control separates by a
+factor of 140.** The double-null does nothing — on the panel path and on the file
+path, with a control that fires in both.
+
+**So the rule is removed.** `_break_null_runs`, its constants, its collector and
+`KRZ_NULL_STAGE_SPACED` are gone; the catalogue is back to 41 codes. Two tests in
+`tests/test_krz_writer.py` now assert the shape **is** emitted, so re-adding the
+padding fails loudly rather than passing quietly.
+
+### Three instrument faults on the way, none of them in the machine
+
+**The first pass reported the control as dead.** The onset detector was carried
+over from the panel sweep — rising edge after falling below a gap — but these
+programs sustain at 87%, so a `seg1F` loop modulates a held level instead of
+firing bursts out of silence and the level never falls far enough to re-arm. It
+counted one onset on all four, control included. Caught by four identical peak
+levels: **identical numbers are a smell.**
+
+**A spurious 20.00 Hz appeared in all three `Loop: Off` programs.** Two
+explanations were offered and both were wrong — not the sample's loop (it loops
+at 0.51 Hz, not 50 ms) and not a search-band ceiling (the band ran to 60 Hz).
+It is **block-RMS framing aliasing the carrier**, proved synthetically on a pure
+220 Hz tone with no amplitude modulation at all, where the spurious peak *moves
+with frame length*: 40.00 Hz at 5 ms, 59.83 at 4 ms and at 8 ms. A real feature
+of the audio does not care what frame length you view it through.
+
+**And the bank's own ship guard caught two build bugs before the bench.** The
+padding bypass keyed on call order divided by an assumed two envelopes per preset
+— there is one, since the filter envelope skips `_fill_env` at `filter_type` 0 —
+so it landed on the wrong programs. And PGM 1 and PGM 4 are byte-identical by
+design, so the loop-flag patch could not locate PGM 4 uniquely and the guard
+refused rather than risk flipping PGM 1. **Both would have produced a bench
+session measuring two identical programs.** The guard asserts the shape it is
+supposed to test, not merely that a file was written.
+
+### What the positive control bought, stated plainly
+
+Without PGM 4 the run is three identical readings and no way to separate *nothing
+happened* from *nothing could have been seen* — and the first pass **did** report
+exactly that, so this is not hypothetical. **Build the comparison whose answer you
+already know into the run.**
+
+### Still open, and not ours
+
+`LOOPPOS` re-cycles at 0.4205 s while traversing 0.34 s — an ~80 ms overhead
+against the 39.8–41.7 ms measured on the panel subject, both traversing four
+non-zero stages. The `period = traversal + 41.7 ms` formula matches to a
+millisecond *within* one envelope shape and does not transfer across shapes.
+**That is a fact about the K2000's envelope engine, not about a conversion** —
+this writer sets byte 0 to zero unconditionally, so no file it produces can
+contain an active loop. k2kremote holds it as §68.
 
 ### MEASURED 2026-09-14: the double-null alone does NOT re-cycle
 

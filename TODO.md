@@ -6682,10 +6682,9 @@ NOTCH FILTER only in having a fixed width, which would make both two-pole.
 Existing mapping deliberately not changed. Resolution strategy in
 `docs/RESOLUTION_NOTES.md` §KRZNOTCHPOLES.
 
-## §KRZNULLRUN — the double-null rule is conservative and unmeasured
+## §KRZNULLRUN — CLOSED 2026-09-14, rule removed
 
-**Status:** implemented and shipping; the narrowing measurement is open.
-**Blocked on:** the K2000R, silent since 2026-09-11. No card crossing needed.
+**Status:** closed. Measured twice on hardware with a positive control in each run, the second time on a bank from this writer loaded off the Gotek: the double-null does nothing. `_break_null_runs` and `KRZ_NULL_STAGE_SPACED` removed. The original §KRZDBLZERO finding is explained -- the bank it came from had `seg3F` in byte 0 from the pre-2026-08-31 layout.
 
 `_break_null_runs` forbids two consecutive envelope stages that are both
 (level 0, time 0). Three broader readings of §KRZDBLZERO are already refuted by
