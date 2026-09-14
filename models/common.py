@@ -2911,9 +2911,22 @@ E4B_LFO_VOLUME_FULL_DB = 24.0
 #
 # Source table: ~/temp/k2k_algs/lfo1_rate_table.json
 _KRZ_LFO_RATE_SEGMENTS = ((0, 20, 0.01), (20, 36, 0.05), (36, 126, 0.10),
-                          (126, 176, 0.20), (176, 184, 0.50))
-KRZ_LFO_RATE_BYTE_MAX = 184
-KRZ_LFO_RATE_HZ_MAX = 24.00
+                          (126, 176, 0.20), (176, 186, 0.50))
+#: **186, NOT 184 (corrected 2026-09-14).** 184 is where the WHEEL stops, not
+#: where the FIELD does -- and the two are different because a file can carry a
+#: value the front panel cannot dial. k2kremote read the 256-entry ROM table at
+#: 0x1FB404 and then wrote bytes over SysEx, which the wheel cannot do: the
+#: device displays byte 185 as 24.50 Hz and byte 186 as 25.00 Hz, saturating at
+#: 25.00 for 186..255. Confirmed on hardware.
+#:
+#: The five-segment ladder is unchanged and was right -- those are the table's
+#: own step changes, at bytes 20/36/126/176.
+#:
+#: **The transferable part: a panel ceiling is a property of the CONTROL, and a
+#: converter writes the FIELD.** Clamping at 184 threw away the top 1 Hz for no
+#: reason the format imposes.
+KRZ_LFO_RATE_BYTE_MAX = 186
+KRZ_LFO_RATE_HZ_MAX = 25.00   #: byte 186; 24.00 is where the WHEEL stops
 
 
 def krz_lfo_rate_byte_to_hz(byte: int) -> float:
@@ -3247,8 +3260,35 @@ KRZ_LFO_PITCH_MAX_CENTS = 7200.0
 
 
 def krz_lfo_pitch_byte_to_cents(b: int) -> float:
-    """K2000 CAL[22] LFO1->Pitch depth byte -> cents."""
-    return float(KRZ_LFO_PITCH_CENTS[max(0, min(b, 123))])
+    """K2000 CAL[22] LFO1->Pitch depth byte -> cents. MAGNITUDE; see below.
+
+    **THE FIELD IS SIGNED AND THIS READ IT UNSIGNED UNTIL 2026-09-14.** The ROM
+    table at 0x1FA204 has 256 entries and is symmetric about zero over
+    +/-7200 cents (k2kremote §70, fourteen values checked against the panel).
+    A raw byte >= 128 is a NEGATIVE depth.
+
+    Without the sign extension every negative depth fell past `min(b, 123)` and
+    came back as the table's ceiling -- **7200 cents, which the caller then
+    clamps to FULL one-sided depth.** So a gentle downward vibrato of -10 cents
+    was read as six octaves of it. Measured over 669 corpus files: **415 of 1941
+    LFO1->Pitch routings carry a negative byte, 21.4%, across 87 files**, and
+    every one of them read as maximum positive.
+
+    The magnitude table needed no change -- it was confirmed by the same panel
+    walk: raw 156 is signed -100 and `KRZ_LFO_PITCH_CENTS[100]` is 3300, against
+    k2kremote's measured -3300 ct.
+
+    **THE SIGN IS DROPPED, DELIBERATELY.** `VoiceLayer.lfo1_to_pitch` is a
+    one-sided depth by construction and the KRZ writer tests `> 0.0`, so there is
+    nowhere to put it. For a symmetric LFO shape a negative depth is a phase
+    inversion and inaudible; for a sawtooth it is not. Recorded rather than
+    silently lost -- the magnitude error was catastrophic and is fixed, the sign
+    is second-order and is still open. See `krz_depth_byte_to_cents`, which
+    mirrors on magnitude the same way for the filter depth field, and whose
+    callers DO sign-extend before calling it.
+    """
+    s = b - 256 if b >= 128 else b
+    return float(KRZ_LFO_PITCH_CENTS[max(0, min(abs(s), 123))])
 
 
 def krz_cents_to_lfo_pitch_byte(cents: float) -> int:
