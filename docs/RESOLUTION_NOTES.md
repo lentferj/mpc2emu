@@ -336,6 +336,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§ATKBIAS — fixing the two attack laws](#atkbias-fixing-the-two-attack-laws)
 - [§FIL2FRGAP — filling the 45–64 hole in the filter-2 corner table](#fil2frgap-filling-the-4564-hole-in-the-filter-2-corner-table)
 - [§NAMEHIST — the one published commit message that still names a preset](#namehist-the-one-published-commit-message-that-still-names-a-preset)
+- [§KRZNOTCHPOLES — `NOTCH FILTER` (code 4) may be two-pole, not four](#krznotchpoles-notch-filter-code-4-may-be-two-pole-not-four)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -32080,3 +32081,37 @@ the message.
 
 **Cost of not fixing it:** one preset name is discoverable in public history. The
 tracked tree and every unpushed message are clean, so nothing new is being added.
+
+## §KRZNOTCHPOLES — `NOTCH FILTER` (code 4) may be two-pole, not four
+
+**Raised 2026-09-14 while adding `NOTCH2` (code 36), not yet decided.**
+
+The K2000 Musician's Guide describes **NOTCH2** as *"Two-pole Notch Filter,
+Fixed Width"* and says the only functional difference from **NOTCH FILTER** is
+that NOTCH2's width is fixed at 2.2 octaves. If that is the only difference,
+NOTCH FILTER is also two-pole.
+
+`parsers/krz_parser.py` maps code **4 → XPM 16**, which is BandStop **4-pole**.
+Code 36 was added as **15**, BandStop 2-pole, which is what the Guide supports.
+So the table now says the two-pole variant is 2-pole and the variable-width
+variant is 4-pole, which cannot both be right.
+
+**Why it was left alone.** Adding a missing mapping and changing an existing one
+are different claims. Code 4 converts material today; code 36 converted nothing.
+And the Guide sentence is *about NOTCH2* — it constrains NOTCH only by
+implication, and an implication is not a measurement (see the day's own lesson
+about reads standing in for measurements).
+
+**What would settle it**, cheapest first:
+
+1. The Guide's own entry for NOTCH FILTER, which k2kremote has and I do not —
+   if it states a pole count, this closes with no hardware at all.
+2. The ROM: k2kremote located the dispatch table at `0x1177A4` with the code
+   list at `0x11785C`. If 4 and 36 share a handler they share a pole count.
+3. A capture: one note through each, and count the skirt slope. 12 dB/oct
+   against 24 dB/oct is not a subtle difference.
+
+**Corpus weight:** code 4 appears where NOTCH does; code 36 in 34 files of 668.
+Neither is large, and that is a reason to settle it cheaply rather than a reason
+to leave it — a wrong pole count is inaudible on a notch until it is the only
+thing shaping a sound.

@@ -84,7 +84,7 @@ NUM_VELO_LEVELS = 8    # K2000 velocity buckets (ppp..fff), 16 MIDI values each
 # nearest standard rate within +/-2 Hz (matches ConvertWithMoss's approach).
 _STANDARD_SAMPLE_RATES = (8000, 11025, 16000, 22050, 24000, 32000, 44100,
                           48000, 96000)
-from models.diagnostics import emit as _diag, INFO as _I
+from models.diagnostics import emit as _diag, INFO as _I, WARNING as _W
 
 def _snap_sample_rate(hz: float) -> int:
     for std in _STANDARD_SAMPLE_RATES:
@@ -484,7 +484,23 @@ def _k2_depth_cents(b: int) -> float:
 #: Codes seen in an F1 slot that this reader cannot name. Collected rather
 #: than warned per-occurrence -- a bank can hold hundreds and the useful
 #: report is the SET, summarised once, like the skipped-object [WARN] above.
+#:
+#: **IT WAS COLLECTED AND NEVER REPORTED** until 2026-09-14, and never reset
+#: between files either, so it also accumulated across a batch. The summary the
+#: comment above promises did not exist anywhere in the tree. Now drained by
+#: `parse_krz` as `KRZ_DSP_BLOCK_UNKNOWN`. Worth recording because the comment
+#: read as though the reporting were done: a described mechanism is not a
+#: mechanism, which is the same fault as a stated caveat that changes nothing.
 _unknown_f1_blocks = set()
+
+#: Cutoffs of the LPGATE (code 57) layers seen in the current file. Same
+#: lifecycle as `_unknown_f1_blocks`: reset by `parse_krz`, drained by it.
+_lpgate_layers = []
+
+#: `LPGATE` -- a lowpass whose cutoff the AMPENV scales. Named rather than
+#: written as a bare 57 at its one use, because the constant is the thing that
+#: makes the special case legible.
+_K2_FILTER_LPGATE = 57
 
 
 #: K2000 control-source codes, read off the machine's own editor pages by the
@@ -516,7 +532,21 @@ _K2_CS_FUN4, _K2_CS_BKEYNUM = 119, 99
 _K2_CS_ENV2 = 121
 _K2_CS_LFO1 = 114
 _K2_CS_ATTACK_VEL = 100
-_K2_FILTER_NONE = 62
+#: **NONE IS FIVE CODES, NOT ONE** -- 0, 60, 61, 62, 63 all dispatch to the same
+#: handler and all display as `NONE`. Read out of the K2000 v3.87J ROM by
+#: k2kremote (2026-09-14): the routine at 0x1177A4 linear-searches an ascending
+#: 67-entry code list at 0x11785C and jumps through a table indexed by the
+#: search's DOWN-counting loop register. It agrees with all 65 codes measured on
+#: the instrument, with zero disagreements.
+#:
+#: **THIS READER KNEW ONLY 62, AND OUR OWN WRITER EMITS 60 AND 61** (`_K2_F3_NONE`
+#: and `_K2_F2_NONE` in krz_writer). So a bank this project produced came back
+#: through this parser with its empty filter slots treated as unrecognised
+#: blocks -- 95 files in the 668-file corpus scan. The conversion outcome was
+#: right either way (no filter), but see the F2 resonance guard below, which was
+#: gated on this constant and therefore read a resonance for filters that do not
+#: exist: 272 layers in 22 files.
+_K2_FILTER_NONE = frozenset({0, 60, 61, 62, 63})
 
 # HOB0[0] -> canonical XPM FilterType.  Many-to-one on the write side
 # (_k2_filter_plan in krz_writer.py collapses whole XPM ranges onto one K2000
@@ -550,7 +580,43 @@ _K2_FILTER_TO_XPM = {
     8:  19,   # PARA BASS      \
     9:  19,   # PARA TREBLE     >  parametric EQ family, NOT lowpass variants --
     13: 19,   # PARAMETRIC EQ  /   see the note on _K2_NON_FILTER below
+    # ---- 2026-09-14: six codes this table refused, now named ----------------
+    #
+    # 37 is not an inference. k2kremote's ROM decode shows several NAMES
+    # carrying more than one CODE, all landing on one handler and one string --
+    # NONE has five, PARA BASS has 8 and 10, PARA TREBLE 9 and 11, and LOPAS2
+    # has 37 and 69. We already map 69, so 37 is an IDENTITY. 78 files.
+    #
+    # The other five come from the K2000 Musician's Guide, quoted by k2kremote
+    # (the K2000R has been silent since 2026-09-11, so a printed sentence rather
+    # than a panel reading -- which is the better source anyway):
+    #
+    #   BAND2   "Two-pole Bandpass Filter, Fixed Width" -- differs from
+    #           BANDPASS FILTER only in the width being fixed at 2.2 octaves
+    #   NOTCH2  "Two-pole Notch Filter, Fixed Width", same sentence vs NOTCH
+    #   HIPAS2  "Two-pole Highpass Filter"; the Guide compares it to HIPASS by
+    #           cutoff frequency, so both take one
+    #   LPCLIP  "a one-pole filter, programmed just like LOPASS" -- the x4 is a
+    #           PRE-GAIN, so seg[1] keeps LOPASS's meaning exactly
+    #   LPGATE  "Gated Lowpass Filter": seg[1] is a frequency, but the AMPENV
+    #           scales it. See KRZ_LPGATE_APPROXIMATED -- this is the only one
+    #           of the six where a faithful DECODE still leaves an unfaithful
+    #           RENDER, and it is reported rather than passed off as ordinary.
+    35: 11,   # BAND2  -> Band2,     as code 3 (2-pole bandpass)     41 files
+    36: 15,   # NOTCH2 -> BandStop2  (2-pole; see the note below)    34 files
+    37: 2,    # LOPAS2 -> Low2,      IDENTITY with code 69           78 files
+    52: 7,    # HIPAS2 -> High2                                      21 files
+    57: 1,    # LPGATE -> Low1, approximated; diagnostic emitted     33 files
+    70: 1,    # LPCLIP -> Low1,      "just like LOPASS" (code 15)    31 files
 }
+
+#: **AN INCONSISTENCY THIS EXPOSED AND DID NOT FIX.** Code 4, `NOTCH FILTER`,
+#: maps to XPM 16 = BandStop **4-pole** above. The Guide says NOTCH2 differs
+#: from NOTCH only in having a fixed width, so both are TWO-pole and 4 should
+#: probably be 15. Left alone deliberately: changing an existing mapping is a
+#: different claim from adding a missing one, it moves material that converts
+#: today, and the Guide sentence is about NOTCH2 rather than about NOTCH. In
+#: TODO.md as §KRZNOTCHPOLES.
 
 #: seg[0] codes that are NOT filters at all. A K2000 F-slot holds any DSP block,
 #: and the same byte position names a pitch, width, amplitude or shaper function
@@ -567,6 +633,20 @@ _K2_NON_FILTER = {
     24: 'PCH (LF SIN)',      25: 'PCH (SW+SHP)',      26: 'PCH (SAW+)',
     27: 'PCH (SAW)',         29: 'PCH (SQUARE)',      33: 'PCH (SYNC M)',
     64: 'EVN (2P SHAPER)',
+    # ---- 2026-09-14, NAMED FROM THE ROM rather than guessed ----------------
+    #
+    # These nine were the whole of the "unknown F1 block" list once the six real
+    # filters above were mapped. k2kremote's ROM table names every one, and not
+    # one of them is a filter: oscillators, a panner, two distortion/shaper
+    # blocks. They were already converting to filter-off, which is right -- what
+    # was wrong is that they were reported as codes we could not read.
+    #
+    # **A warning that fires on half the corpus is not a warning.** Leaving them
+    # unknown would have made `KRZ_DSP_BLOCK_UNKNOWN` meaningless on arrival,
+    # and the point of that code is to name blocks nobody has identified yet.
+    20: 'DIST',              23: 'SINE',              28: 'LF SAW',
+    30: 'LF SQR',            31: 'WRAP',              40: 'PANNER',
+    53: 'SW+DST',            71: 'SINE+',             74: 'SHAPE2',
 }
 
 #: ALPASS -- a filter with a corner frequency and NO magnitude response.
@@ -856,11 +936,13 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
                 # for an allpass it is because the frequency is real but must
                 # not become an attenuation downstream. See _K2_ALLPASS.
                 cur.filter_type = 0
-            elif b0 != _K2_FILTER_NONE and b0 not in _K2_FILTER_TO_XPM:
+            elif b0 not in _K2_FILTER_NONE and b0 not in _K2_FILTER_TO_XPM:
                 _unknown_f1_blocks.add(b0)
                 cur.filter_type = 0
-            elif b0 != _K2_FILTER_NONE:
+            elif b0 not in _K2_FILTER_NONE:
                 cur.filter_type = _K2_FILTER_TO_XPM[b0]
+                if b0 == _K2_FILTER_LPGATE:
+                    _lpgate_layers.append(cur.filter_cutoff)
                 # The byte denotes f0; the model carries a -3 dB corner
                 # (2026-09-02). Inverse of the writer's division.
                 hz = krz_cutoff_byte_to_hz(seg[1])
@@ -1139,7 +1221,21 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
         elif tag == HOB_F2_TAG:
             hob[HOB_F2_TAG] = seg
             f1 = hob.get(HOB_F1_TAG)
-            if f1 is not None and f1[0] != _K2_FILTER_NONE:
+            # **GATED ON THE OUTCOME, NOT ON THE CODE (2026-09-14).**
+            #
+            # This used to read `f1[0] != _K2_FILTER_NONE`, i.e. "the F1 code is
+            # not 62". But the F1 branch above reaches "no filter" by FOUR
+            # routes -- a NONE code, an allpass, a non-filter DSP block, and an
+            # unknown code -- and three of them sail past a test on the code. So
+            # a resonance was read from the F2 block for a filter that does not
+            # exist: **272 layers in 22 files** of the 668-file corpus carried a
+            # non-zero resonance on a layer whose filter is off.
+            #
+            # `cur.filter_type` is already set by the F1 branch when this runs,
+            # and it is the decision itself rather than a proxy for it. Adding
+            # the four missing NONE codes to the old test would have fixed one
+            # of the four doors and left the other three open.
+            if f1 is not None and cur.filter_type != 0:
                 b0 = f1[0]
                 if b0 == 51:                       # PARA MID gain, not resonance
                     cur.filter_resonance = max(0.0, min(1.0, (seg[1] - 12) / 12.0))
@@ -1207,6 +1303,10 @@ def parse_krz(path: str) -> Bank:
     warning rather than one line per zone.
     """
     print(f"Parsing KRZ: {path}")
+    # Per-file, not per-process: both of these used to accumulate across a
+    # batch, so a summary would have described the whole run as one bank.
+    _unknown_f1_blocks.clear()
+    _lpgate_layers.clear()
     data = Path(path).read_bytes()
     osize, objs = _read_objects(data)
     pcm_words = (len(data) - osize) // 2
@@ -1592,6 +1692,36 @@ def parse_krz(path: str) -> Bank:
                    f"sample or keymap objects: it references the K2000's ROM "
                    f"soundset, which is not in the file. Nothing to convert — this "
                    f"is the bank's nature, not a read error.")
+    if _unknown_f1_blocks:
+        _codes = sorted(_unknown_f1_blocks)
+        _diag(_W, 'KRZ_DSP_BLOCK_UNKNOWN',
+              f"{len(_codes)} DSP block code(s) in F1 slots that this reader "
+              f"cannot name: {_codes}. Those layers convert with no filter",
+              # A filter the source had is not carried. Whether that is audible
+              # depends on the block -- several of these codes are not filters
+              # at all -- but from here it is a parameter we could not read.
+              content_lost=True,
+              detail={'codes': _codes, 'count': len(_codes)},
+              remedy='report the codes; the K2000 v3.87J ROM names all 67 and '
+                     'the map in this file can be extended',
+              echo=f"  [WARN] {len(_codes)} unknown DSP block code(s) in F1 "
+                   f"slots: {_codes} — those layers convert with no filter.")
+    if _lpgate_layers:
+        _diag(_I, 'KRZ_LPGATE_APPROXIMATED',
+              f"{len(_lpgate_layers)} layer(s) use LPGATE, a lowpass whose "
+              f"cutoff the amp envelope scales. Converted as a static lowpass "
+              f"at the K2000's starting cutoff",
+              # The cutoff IS read correctly; what cannot be carried is that it
+              # moves with the AMPENV. A static filter sharing that number is a
+              # different thing, not a rougher version of the same thing.
+              content_lost=True,
+              detail={'layers': len(_lpgate_layers)},
+              remedy='no target format here has an envelope-scaled cutoff; '
+                     'reproduce it with a filter-envelope amount if the target '
+                     'has one',
+              echo=f"  [INFO] {len(_lpgate_layers)} LPGATE layer(s) converted as "
+                   f"a static lowpass — the K2000 scales that cutoff with the "
+                   f"amp envelope and no target here can.")
     print(f"  {len(presets)} preset(s), {len(samples)} sample(s), "
           f"{n_zones} zone(s) total")
     return bank

@@ -6668,3 +6668,16 @@ distinctive tokens case-insensitively, not full strings, and read every hit:
 one of the useful tokens is also an ordinary English word, and on the last sweep
 six of its hits were exactly that. The token list and the id→name map live in
 `tests/fxpaths_id_map.txt`, which is gitignored.
+
+## §KRZNOTCHPOLES — `NOTCH FILTER` (code 4) may be mapped at the wrong pole count
+
+**Status:** open, undecided, no hardware needed for the first two checks.
+**Blocked on:** the Musician's Guide entry for NOTCH FILTER (k2kremote holds
+the PDF), or the ROM dispatch at `0x1177A4` showing whether codes 4 and 36
+share a handler.
+
+We map code 4 to XPM 16 (BandStop 4-pole) and, since 2026-09-14, code 36
+(`NOTCH2`) to XPM 15 (BandStop 2-pole). The Guide says NOTCH2 differs from
+NOTCH FILTER only in having a fixed width, which would make both two-pole.
+Existing mapping deliberately not changed. Resolution strategy in
+`docs/RESOLUTION_NOTES.md` §KRZNOTCHPOLES.

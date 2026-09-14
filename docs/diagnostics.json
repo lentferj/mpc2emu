@@ -361,6 +361,18 @@
       ]
     },
     {
+      "code": "KRZ_DSP_BLOCK_UNKNOWN",
+      "severity": "warning",
+      "content_lost": true,
+      "detail_keys": [
+        "codes",
+        "count"
+      ],
+      "emitted_from": [
+        "parsers/krz_parser.py"
+      ]
+    },
+    {
       "code": "KRZ_LAYERS_THINNED",
       "severity": "warning",
       "content_lost": "varies",
@@ -372,6 +384,17 @@
       ],
       "emitted_from": [
         "writers/krz_writer.py"
+      ]
+    },
+    {
+      "code": "KRZ_LPGATE_APPROXIMATED",
+      "severity": "info",
+      "content_lost": true,
+      "detail_keys": [
+        "layers"
+      ],
+      "emitted_from": [
+        "parsers/krz_parser.py"
       ]
     },
     {
