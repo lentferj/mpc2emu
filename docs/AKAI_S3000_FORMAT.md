@@ -5,6 +5,27 @@ SPDX-FileCopyrightText: Copyright (C) 2026  mpc2emu contributors
 
 # AKAI S3000 series — disk and file formats
 
+> **Section citations.** **This project never numbers its own sections** — all
+> 299 headings in `docs/RESOLUTION_NOTES.md` are named (`§KRZCOARSE`,
+> `§MODWHEEL`). So **a section reference that is a NUMBER is always a sibling
+> project's**, and must say whose. A named one is always ours.
+>
+> That is stronger than a per-file default, and it is why the rule is stated
+> rather than assumed: `test_citations_resolve` only resolves NAMED sections,
+> so every numbered citation in this repo is unchecked by construction. The
+> sibling ranges also overlap — s3ked's section 139 is a filter-corner
+> measurement while eosed's is a withdrawn cord-scale claim, and on 2026-09-15
+> that collision produced a correction to a citation that was already right.
+> Worse, s3ked's section 18 is a retraction about measuring the wrong program
+> while ours would be a confirmed write path: a reader resolving that one
+> locally lands somewhere actively misleading rather than merely absent.>
+> **k2kremote numbers PER FILE**, so a citation of theirs at 7 or below must name
+> the file: `RESOLUTION_NOTES.md` runs 1..73 and `MAC_FORMAT.md` runs 1..7, and
+> the two share every number in that range. Their §6 is "Name-edit cursor" in one
+> file and "Object lists — not covered" in the other. eosed and s3ked each number
+> across a single file, so theirs need only the project.
+
+
 > **DO NOT PUSH THE `akai-s3000xl` BRANCH UNTIL HARDWARE CONFIRMS IT.**
 > (Jan, 2026-08-05.) Everything here is cross-verified against `akaiutil` and
 > nothing here is verified against an S3000XL. That distinction has already
@@ -1121,3 +1142,225 @@ best available interpretation — not that Akai's ROM agrees. In particular:
   does the same. The old guess was actively bad — `0x00` decodes to the digit
   `0`, so a zeroed zone reads back as a sample named `"000000000000"`.
 - The `??` regions are zero-filled by our writer.
+
+## Modulation matrix: sources, amounts, and two ways to write half of one
+
+**Sixteen `MODS*` sources and sixteen `MODV*` amounts.** A source without its
+amount is silently inert, and so is an amount without its source — our writer has
+carried that warning since 2026-08 and it is the reason this table exists.
+
+| | source | | amount | |
+|---|---|---|---|---|
+| pan position | `MODSPAN1..3` | 76–78 | `MODVPAN1..3` | 89–91 |
+| loudness | `MODSAMP1..2` | 79–80 | `MODVAMP1..2` | 92–93 |
+| LFO1 speed | `MODSLFOT` | 81 | `MODVLFOR` | 94 |
+| **LFO1 depth** | **`MODSLFOL`** | **82** | **`MODVLVOL`** | **95** |
+| LFO1 delay | `MODSLFOD` | 83 | `MODVLFOD` | 96 |
+| filter frequency | `MODSFILT1..3` | 84–86 | `MODVFILT1..3` | **keygroup** 151–153 |
+| pitch | `MODSPITCH` | 87 | `MODVPITCH` | **keygroup** 154 |
+| loudness | `MODSAMP3` | 88 | `MODVAMP3` | **keygroup** 155 |
+| filter 2 frequency | `MODSLFLT2_1..3` | 99–101 | `MODVFLT2_1..3` | **keygroup** 174–176 |
+
+All amounts signed **−50..+50**.
+
+**THE NAME DOES NOT FOLLOW THE SOURCE.** `MODSLFOL`'s amount is `MODVL`**`VOL`**,
+not `MODVLFOL`. Searching the parameter table by symmetry with the source name
+finds nothing, which is exactly how this field came to be recorded as missing.
+
+**THE TRAP: five sources are PROGRAM-level while their amounts are KEYGROUP-level.**
+`MODSFILT1..3`, `MODSPITCH` and `MODSAMP3` live in the program header; their
+amounts live in every keygroup. Write each half once and the program is **routed
+everywhere and audible only in keygroup 0** — which passes a smoke test on a
+one-keygroup program and fails silently on a 31-keygroup drum kit. The LFO trio
+is clean: source and amount are both program-level.
+
+**PROVENANCE.** Offsets, ranges and the source enumeration are **transcribed**
+from Akai's parameter document (s3ked §241's 136-of-269 untested set).
+`MODVFILT1` alone is measured: s3ked §109 (responds, per-keygroup, clamps
+±50) and s3ked §116 (its depth law). **So ±50 is confirmed for one of sixteen and transcribed
+for fifteen.** Cross-check: these source offsets were transcribed independently
+from the IB-304F map into `_PROGRAM_HW_DEFAULTS` and agree with Akai's document
+at **16 of 16** — two transcriptions, not a measurement.
+
+### MEASURED 2026-09-14: the modwheel is UNIPOLAR (s3ked §249)
+
+`MODSFILT1 = 1` (modwheel), small negative `MODVFILT1`, `FILFRQ` mid-range,
+corner captured across the wheel's travel against an **unmodulated baseline**:
+
+    wheel    corner Hz   /baseline   FILFRQ units
+        0         592       1.001         +0.02
+       32         447       0.756         -3.86
+       64         338       0.572         -7.70
+       96         255       0.432        -11.59
+      127         195       0.331        -15.28
+
+    corner(wheel 0) / baseline = 1.001     unipolar predicts 1.000
+                                           bipolar  predicts 3.61
+
+**Unipolar by a factor of 3.6.** At wheel 64 — bipolar's required neutral point
+— the corner is already down 7.70 FILFRQ units; there is no neutral position
+anywhere in the travel. Repeatability 0.2-0.6%, the rejected hypothesis off by
+261%, so this does not rest on the estimator being good. Carried known: baseline
+corner 591 Hz against §139's 588 Hz (1.006x). Null check: amount 0 at wheel 127
+reads 1.002x baseline.
+
+**So the MPC's semantics map directly.** `FILFRQ` (or `LFODEP`) is the
+**wheel-down** value, not the centre of a swing: "the wheel opens the filter" is
+the closed value plus a positive amount. And source 11 `!modwheel` gives the
+inverted gate without needing a negative amount.
+
+Response is linear in FILFRQ units, `-0.12054 x wheel + 0.008`, max residual
+0.027 units over five rungs. **1.914 FILFRQ units per amount unit over full
+wheel travel**, so +/-50 spans +/-96 units -- essentially the whole field.
+
+**THE HAZARD: DO NOT COMPUTE A WHEEL AMOUNT FROM A VELOCITY CALIBRATION.**
+Both s3ked §116 and this run measure ln-Hz per (depth unit x source unit):
+
+    velocity  §116       0.002523
+    modwheel  §249       0.001088
+    ratio                2.319
+
+**Velocity is 2.32x stronger per depth unit than the wheel.** No mechanism is
+offered for the 2.32 and none should be inferred from its being near 7/3.
+
+**s3ked §43/§116 are untouched.** Velocity and key still pivot at 64.56. That rule was
+never wrong -- it was being applied past the source types it was established on,
+which is a different failure from a wrong constant.
+
+### `MWLDEP` adds rather than scales — and the magnitude is deliberately open
+
+**Three consecutive bytes at 36/37/38 all reach LFO1 depth, outside the
+assignable matrix** -- s3ked §248/§252:
+
+| offset | field | source | corpus, 213 programs |
+|---|---|---|---|
+| 36 | `MWLDEP` | modwheel | **non-zero on 213 (100%)**, 202 of them at exactly 30 |
+| 37 | `PRSDEP` | aftertouch | non-zero on 2 (0.9%) |
+| 38 | `VELDEP` | velocity | non-zero on 1 (0.5%) |
+
+All unsigned 0..99. **Only the modwheel path is used in practice**, and 30 is the
+factory value -- our writer emits `p[0x24] = 30` and leaves 37/38 at zero, which
+matches the corpus's dominant pattern on all three. That is right by coincidence
+of the factory value rather than by intent: a source asking for no gating and one
+asking for full gating both get 30. **Corpus: `MWLDEP` is non-zero on 213 of 213 programs, 202 at exactly 30;
+the matrix route is used once.** Our writer already emits 30 there
+(`akai_s3000_writer.py`) -- correct by coincidence of the factory value rather
+than by intent, so a source asking for no gating and one asking for full gating
+both get the default.
+
+**IT ADDS** (s3ked §251, from a leg of the §249 run, no rig needed):
+
+    MWLDEP  0, wheel 0 -> 1.19574      B/A = 0.9998
+    MWLDEP 50, wheel 0 -> 1.19553      ADD predicts 1.000, SCALE predicts 0.495
+
+So `LFODEP` is the wheel-down value on this path exactly as on the assignable
+one, and `wheel_to_lfo` is NOT `MWLDEP/99` of a scaling.
+
+**THE MAGNITUDE IS 1:1** (s3ked §255):
+
+    depth = min(99, LFODEP + MWLDEP * wheel/127)
+
+    write:  LFODEP = D*(1 - Kw),  MWLDEP = D*Kw,  sum clamped at 99
+    read:   D = min(99, LFODEP + MWLDEP),  Kw = MWLDEP / D
+
+**THE PLATEAU SETTLED IT, NOT THE SLOPE.** Two `LFODEP` bases were run for exactly
+this reason:
+
+    LEG A  LFODEP 30, MWLDEP 50 -- 1:1 reaches 80, the clamp out of reach
+      wheel     0    32    64    96   127
+      LFODEP  30.5  43.2  56.1  68.3  79.3      linear to 0.57 units
+                                                rise 49.01 for MWLDEP 50 -> 0.9802/unit
+
+    LEG B  LFODEP 70, MWLDEP 50 -- THE PLATEAU TEST
+      rise over wheel-0     +0.0  +11.1  +19.3  +22.6  +22.6
+      1:1 with clamp at 99  +0.0  +12.6  +25.2  +26.3  +26.3
+      0.5x, no clamp        +0.0   +6.3  +12.6  +18.9  +25.0
+
+**Wheel 96 and 127 read identically, 95.3 and 95.3.** No linear rule puts two equal
+points at the top of a ladder, and leg A shows the same wheel range is linear to
+0.57 units when the clamp is out of reach.
+
+**A 0.5x rule predicts a final 95.0 and the plateau sits at 95.3** -- a third of a
+unit apart, far too close to separate on the endpoint, so only the SHAPE settles it. Leg A's 0.9802 against a true 1.0 is 2%,
+which is the calibration's own accuracy, so the 1:1 is carried by the plateau and
+not by a third digit. This is s3ked §166's rule on its first real test:
+**a designed limit shows up as a plateau in the hardware, not as a tidy figure in
+a document.**
+
+**A RETRACTED EXPLANATION, because it was recorded here as fact.** An earlier
+version of this section said the magnitude was a lower bound of 0.476 with ~0.86
+extrapolated, and blamed the compression on the corner clipping at `FILFRQ` 99.
+**Both mechanisms are refuted by the numbers in the same measurement** (s3ked §255
+checking §251 against its own data): the excursion was 60 +/- 8.3 at baseline and
+60 +/- 12.2 at full wheel, nowhere near 99, and an `LFODEP` clamp would have shown
+1.98x where the measurement read 1.475x.
+
+**AND THE REFUTATION WAS NOT FOUND BY RE-READING §251.** It came out of designing
+the replacement run: picking a smaller `MODVFILT1` required knowing how far the
+corner actually swung, and computing that produced 47.8..72.2. Had the new run not
+needed that figure, the refuted mechanism would still be standing. So the rule is
+not "re-read your own claims", which nobody does, but:
+
+> **When a claim explains why a measurement is LIMITED, require the explanation to
+> predict a number, and check that number against the data already in hand.**
+
+"clipping at `FILFRQ` 99" predicts an excursion reaching 99. The data to refute it
+was in the same section. It cost four lines once anyone asked.
+
+The compression was the INSTRUMENT. Laddering `LFODEP` with the wheel out of the
+experiment entirely gives `wobble = 0.015286*LFODEP + 0.05141`, residual 2.2% of
+full scale, the intercept being the LFO-off floor leaking into the estimate. Read
+as a ratio through the origin that looks 16% compressive; as an affine calibration
+it is good to 2.2%. **So 0.476 and 0.86 were one uncalibrated proxy read two ways,
+not a bound and an extrapolation** -- and the real reason not to believe 0.86 was
+never the clamp, it was that nothing had calibrated the proxy, which would have
+been true with or without a clamp anywhere.
+
+**NOT ESTABLISHED, and a writer that assumes otherwise should say so:**
+
+1. **That `MODVLVOL` shares this polarity.** This measured FILTER FREQUENCY,
+   because a corner can be measured and an LFO depth cannot easily be. Polarity
+   *ought* to belong to the source rather than the destination -- but that is
+   exactly the kind of inference this measurement existed to test, so treat a
+   shared reading as unconfirmed.
+2. **Any `MODV*` range beyond `MODVFILT1`.** Still transcribed.
+
+**A NOTE ON THE FALSIFIER, because the first version did not discriminate.** A
+wheel ladder alone proves nothing: both models predict
+`corner(0) > corner(64) > corner(127)`. The run needs an **unmodulated
+baseline** to compare wheel-0 against. And the amount must be kept SMALL -- a
+large one clamps the bipolar prediction at `FILFRQ` 99 and manufactures
+agreement with unipolar.
+
+### The pre-measurement reasoning, kept for the record
+
+### What a MODV amount does is NOT yet known, and it decides whether a gate is expressible
+
+s3ked §116, the one measured amount, gives
+
+    dest(v, d) = base * exp(k * d * (v - pivot)),  pivot SOLVED at 64.56
+
+a log-domain swing about the **middle** of the source range, not about zero —
+and s3ked §43 found the same pivot for `V_LOUD`, `V_ATT1` and `K_FREQ`. **If that rule
+covers the modwheel, "silent at rest, full depth at full wheel" cannot be
+written at all**: at wheel down the modulation would swing negative rather than
+to zero.
+
+s3ked's argument that it does not cover the wheel, **flagged by them as an
+inference from the table's shape rather than a measurement**: the source
+enumeration is `0 none, 1 modwheel, 2 bend, 3 pressure, 4 external, 5 velocity,
+6 key, 7 LFO1, 8 LFO2, 9 env1, 10 env2, 11 !modwheel, 12 !bend, 13 !external,
+14 env3`. **Exactly the three external continuous controllers have inverted
+twins.** With a signed amount an inverted source is redundant for a BIPOLAR
+source (`!x` is `x` negated) and not redundant for a UNIPOLAR one (`1 − w`
+cannot be reached by negating an amount). The presence of `!modwheel` therefore
+argues that continuous controllers run 0..1 — and all four pivot-at-64 fields
+were driven by velocity or key, sources with no neutral position.
+
+**The falsifier** (s3ked, ready to run): `MODSFILT1 = 1`, `MODVFILT1 = −50`,
+`FILFRQ` mid-range, capture the corner at wheel 0 / 64 / 127. Unipolar leaves
+the corner at `FILFRQ` when the wheel is down and falls as it rises; bipolar
+puts it ABOVE `FILFRQ` at wheel 0, neutral at 64, below at 127. **The
+discriminating rung is wheel 0 with a NEGATIVE amount** — a positive amount does
+not discriminate, because a negative excursion may clamp at zero and read as no
+response under either model.

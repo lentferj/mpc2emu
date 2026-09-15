@@ -43,6 +43,7 @@ from models.common import (
     AKAI_VLOUD_SWING_DB_PER_UNIT, fit_velocity_line, AKAI_KEYFOLLOW_NEG_SCALE,
     VELOCITY_CURVE_DB_LINEAR, VEL_VOL_PIVOT_AKAI,
     AKAI_LFO_DEPTH_CAL_LPTCH,
+    akai_lfo_depth_split, akai_delay_seconds_to_byte,
     akai_01_to_filq,
     KEY_FILTER_OCT_PER_OCT,
     AKAI_FILTER_LAW, AKAI_FILTER_OPEN, AKAI_FILTER_OPEN_HZ, akai_filfrq_to_hz,
@@ -2242,6 +2243,7 @@ _PROGRAM_HW_DEFAULTS = {
 
 def _program_common(name: str, n_keygroups: int, lo_key: int, hi_key: int,
                     lfo1_rate=None, prog_num: int = 0,
+                    lfo1_depth=None, lfo1_wheel=0.0, lfo1_delay=None,
                     midi_channel=None, vel_to_volume_db=None,
                     lfo_to_pan=None, pan_lfo_rate=None) -> bytearray:
     """The 192-byte program common block, filled with the format's own
@@ -2397,7 +2399,55 @@ def _program_common(name: str, n_keygroups: int, lo_key: int, hi_key: int,
     # carries an LFO rate, through the measured linear law. A preset with no
     # LFO data keeps the old default so those conversions stay byte-identical.
     p[0x21] = (akai_lfo_rate_byte(lfo1_rate) if lfo1_rate is not None else 50)
-    p[0x24] = 30                        # modwheel > depth
+    # LFO1 DEPTH AND DELAY -- WRITTEN SINCE 2026-09-15, AND NOTHING WAS BEFORE.
+    #
+    # `p[0x22]` and `p[0x23]` were never assigned. Every program this project
+    # produced had the LFO->pitch routing gate ON (repaired 2026-08-23) and the
+    # DEPTH at zero, so with s3ked §255's measured
+    # `depth = min(99, LFODEP + MWLDEP*wheel/127)` the machine played a fixed
+    # vibrato of 30 at full wheel and none at rest, whatever the source asked.
+    #
+    # It survived every round trip because 206 of 213 real AKAI programs carry
+    # LFODEP 0 -- the loss is one-directional, on the 21.9% of MPC instruments
+    # that state a non-zero `LfoPitch`.
+    #
+    # THE WHEEL SPLIT IS THE MEASURED ONE, not a convention: MWLDEP ADDS, so
+    # LFODEP is the wheel-DOWN depth and MWLDEP is what the wheel brings in.
+    # A source with no gating writes the whole depth into LFODEP and 0 into
+    # MWLDEP -- which CHANGES the old unconditional 30, deliberately: that 30
+    # was the factory value emitted regardless of what the source said, right
+    # by coincidence on a round trip and wrong the moment a source specified.
+    # **`None` AND `0` ARE DIFFERENT SOURCE STATES -- AND THIS FIELD CANNOT
+    # TELL THEM APART.** s3ked raised the distinction and it is correct in
+    # principle: `None` means nothing upstream said anything, `0` means the
+    # source states it has NO vibrato, and a truthiness test folds them. But
+    # `VoiceLayer.lfo1_to_pitch` defaults to **0.0, not None**, so every voice
+    # ever constructed "states" zero and the distinction is not available here.
+    #
+    # Making the test `is not None` therefore wrote `MWLDEP 0` into EVERY
+    # program and broke all three akaiutil byte-for-byte image tests -- the
+    # only independent check this writer has. Caught by running them, not by
+    # reading the change.
+    #
+    # SO: zero is treated as "no vibrato information" and keeps the factory 30.
+    # That is not merely expedient. At rest the conversion is exact either way
+    # (`LFODEP 0` is silence), and 202 of 213 real AKAI programs hold `MWLDEP
+    # 30`, so the wheel behaves the way the machine's own material behaves. What
+    # we cannot currently honour is a source that explicitly says "no vibrato
+    # AND no wheel vibrato" -- and no source format we read can say that yet.
+    #
+    # To do it properly, `lfo1_to_pitch` needs to become `Optional[float]` with
+    # a `None` default, which touches every parser. Filed rather than bodged.
+    if not lfo1_depth:
+        p[0x24] = 30                    # modwheel > depth (the factory value)
+    else:
+        p[0x22], p[0x24] = akai_lfo_depth_split(lfo1_depth, lfo1_wheel)
+    # LFODEL is a SEPARATE parameter from LFODEP, not its second byte, and it
+    # carries the same None-versus-zero question. A source stating a zero delay
+    # has specified; the byte is already 0, so both branches agree here, but the
+    # test is written explicitly so it does not have to be re-derived.
+    if lfo1_delay is not None and lfo1_delay > 0.0:
+        p[0x23] = akai_delay_seconds_to_byte(lfo1_delay)
     p[0x27] = 2                         # bendwheel > pitch
     p[0x2a] = _clamp(n_keygroups, 1, MAX_KEYGROUPS)
     p[0x3e] = 10                        # soft pedal loudness reduction
@@ -2935,6 +2985,21 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
     #
     # Per KEYGROUP, verified: writing keygroup 1 left keygroup 2 untouched, and
     # the field clamps to +-50 on write (90 read back as 50).
+    #
+    # **WHICH WRITE PATH, because it is not a property of the field.** That 90
+    # went into a program inside a DISK IMAGE built by this writer, was loaded
+    # from disc, and the 50 was read off the panel -- this project has no AKAI
+    # parameter-SysEx path at all, so there is no opcode to name. s3ked's §256
+    # later wrote 90 and 166 to each of keygroup 151..155 over the byte-offset
+    # SysEx path and every one read back VERBATIM, surviving a wait, a program
+    # change and sounding the voice. Both stand: the clamp lives on the
+    # disk-load/panel path and not on the byte path, the same split §13a found
+    # for the delete-on-duplicate-name rule.
+    #
+    # For us that is the reassuring half -- our output only ever reaches the
+    # machine through the clamping path -- but it means a READER must clamp
+    # rather than assume, because real material contains values the byte path
+    # let through. See AKAI_MODVAMP_PANEL_RAIL.
     # Depth from the same joint solve as FILFRQ above. The old `_vf * 25` was
     # calibrated to the saturation seen at ONE dark base -- and that base was
     # itself the fault, so the constant was fitted to a symptom.
@@ -3590,7 +3655,18 @@ def build_program(preset, name: str, prog_num: int = 0,
     _pan = next((getattr(v, 'lfo1_to_pan', 0.0) or getattr(v, 'lfo2_to_pan', 0.0)
                  for v in preset.voices
                  if (getattr(v, 'lfo1_to_pan', 0.0) or getattr(v, 'lfo2_to_pan', 0.0))), None)
+    # Truthiness here is correct ONLY because `lfo1_to_pitch` defaults to 0.0
+    # rather than None, so a zero carries no information to preserve. If that
+    # field ever becomes Optional, this and `_program_common`'s guard change
+    # together -- see the note there.
+    _dep = next((v.lfo1_to_pitch for v in preset.voices
+                 if getattr(v, 'lfo1_to_pitch', None)), None)
+    _kw = next((getattr(v, 'wheel_to_lfo', 0.0) or 0.0 for v in preset.voices
+                if getattr(v, 'lfo1_to_pitch', None)), 0.0)
+    _dly = next((v.lfo1_delay for v in preset.voices
+                 if getattr(v, 'lfo1_delay', None) is not None), None)
     out = _program_common(name, len(keygroups), lo, hi, lfo1_rate=_lfo,
+                          lfo1_depth=_dep, lfo1_wheel=_kw, lfo1_delay=_dly,
                           lfo_to_pan=_pan, pan_lfo_rate=_lfo,
                           prog_num=prog_num, midi_channel=midi_channel,
                           vel_to_volume_db=_vvol)

@@ -5,6 +5,27 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 
 # EMU E4B Bank Format — Reverse-Engineered Reference
 
+> **Section citations.** **This project never numbers its own sections** — all
+> 299 headings in `docs/RESOLUTION_NOTES.md` are named (`§KRZCOARSE`,
+> `§MODWHEEL`). So **a section reference that is a NUMBER is always a sibling
+> project's**, and must say whose. A named one is always ours.
+>
+> That is stronger than a per-file default, and it is why the rule is stated
+> rather than assumed: `test_citations_resolve` only resolves NAMED sections,
+> so every numbered citation in this repo is unchecked by construction. The
+> sibling ranges also overlap — s3ked's section 139 is a filter-corner
+> measurement while eosed's is a withdrawn cord-scale claim, and on 2026-09-15
+> that collision produced a correction to a citation that was already right.
+> Worse, s3ked's section 18 is a retraction about measuring the wrong program
+> while ours would be a confirmed write path: a reader resolving that one
+> locally lands somewhere actively misleading rather than merely absent.>
+> **k2kremote numbers PER FILE**, so a citation of theirs at 7 or below must name
+> the file: `RESOLUTION_NOTES.md` runs 1..73 and `MAC_FORMAT.md` runs 1..7, and
+> the two share every number in that range. Their §6 is "Name-edit cursor" in one
+> file and "Object lists — not covered" in the other. eosed and s3ked each number
+> across a single file, so theirs need only the project.
+
+
 This document describes the on-disk layout of `.E4B` bank files for the
 **E-MU Emulator 4 / E4XT / E4K (EOS 4.x)**, as reverse-engineered by the
 mpc2emu project. It covers the **Bank → Preset → Voice → Zone → Sample**
@@ -931,3 +952,114 @@ conversion makes every cord look 27% wrong. State the unit wherever such a
 fixture is stored — this cost an evening's confusion on the day it was found,
 and it was misdiagnosed twice before being measured (once as a writer defect,
 once as an unexplained "0.77 of prediction").
+
+## Cord SOURCE ids — the full table, and why counting the manual's list fails
+
+Transcribed from the EOS SysEx spec (eosed §142) with three ids
+hardware-confirmed. **`0x0F`, `0x1C`-`0x1F` are unused.**
+
+| | | | |
+|---|---|---|---|
+| `0x00` Off | `0x04` XfdRnd | | |
+| `0x08` Key+ | `0x09` Key~ | `0x0A` Vel+ | `0x0B` Vel~ |
+| `0x0C` Vel< | `0x0D` RlsVel | `0x0E` Gate | |
+| `0x10` PitWl | **`0x11` ModWl** | `0x12` Press | `0x13` Pedal |
+| **`0x14` MidiA** | `0x15` MidiB | `0x16` FtSw1 | `0x17` FtSw2 |
+| `0x18` Ft1FF | `0x19` Ft2FF | `0x1A` MidiVl | `0x1B` MidPn |
+| `0x20` MidiC | `0x21` MidiD | `0x22` MidiE | `0x23` MidiF |
+| `0x24` MidiG | `0x25` MidiH | `0x26` Thumb | `0x27` ThmFF |
+| `0x30` KeyGld | | | |
+
+**THE IDS ARE BANKED IN GROUPS OF EIGHT, aligned to multiples of 8, with
+padding at the end of each bank.** Gate ends the `0x08` bank at `0x0E`, `0x0F`
+is unused, and PitWl starts the next at `0x10`. MidPn ends the `0x18` bank at
+`0x1B`, and MidiC starts a fresh bank at `0x20`. The same banking runs through
+the rest of the table — envelopes at `0x48`/`0x50`/`0x58`, LFOs at
+`0x60`/`0x68`, clocks at `0x90`, maths at `0xA0`.
+
+**So a sequential count through the EOS manual's display order DRIFTS at every
+bank boundary**, which is why the manual's list cannot be numbered by position.
+Counting from Key = 8 puts Mod Wheel at `0x10`; the hardware says `0x11`.
+
+**The eight MIDI A–H sources are per-preset** — they are ordinary cord sources
+written into the file. Only **which CC drives each letter** is global, at master
+parameters 208–215 (`MIDIGLO_MIDI_A_CONTROL`..`_H_`), and a preset file cannot
+carry it. The stored value IS the CC number: **0–31 = CC 0–31, 32 = pitch wheel,
+33 = channel pressure, −1 = off**. EOS therefore reaches **CC 0–31 only**;
+anything at CC 32 or above has no home on these sources.
+
+> On the E4K and E-Synth Keyboard the four realtime controller sliders are
+> permanently assigned to MIDI controllers A–D. (EOS 4.0 manual)
+
+So `MidiA` is the first physical slider on a keyboard E-MU, which makes it the
+natural target for a source-machine slider rather than a similarity judgement.
+
+**A NEAR-MISS WORTH KEEPING.** This table was predicted from the manual's list
+order before it was available, and the prediction was right through `0x15` and
+wrong from `0x16`: it put MIDI C and D at `0x16`/`0x17`, **which are `FtSw1` and
+`FtSw2` — foot SWITCHES.** Writing a slider mapping to `0x16` would have put a
+switch into Filter Freq, producing an on/off jump instead of a sweep — the kind
+of wrong that survives a spot check because something does move. The prediction
+was checkable against known anchors exactly where it was right.
+
+**Hardware-confirmed, three independent routes** (eosed): `MidiF` = `0x23` = 35
+— eosed §133 drove CC 26 and got modulation through source 35; a cord Jan set from the
+front panel as "MIDI F (CC 26) → FilFreq" reads back as source 35; and master
+parameter 213 reads 26.
+
+**Cord-amount destinations go further than the spec transcribes.**
+`CORD_DESTINATIONS` documents `C00Amt`..`C03Amt` at 168–171, but eosed §95/§98 measured
+`ModWheel → 176` driving **cord 8**'s amount on hardware, and 168 + 8 = 176. So
+**destination `168 + n` sets cord n's amount** for any n, not just 0–3.
+
+### Factory CC assignments — FROM THE FIRMWARE, not from a machine
+
+Byte-identical in EOS 4.62 (body `0x12dfa2`) and 4.70 (`0x1dcff8`), fifteen
+values matching the fifteen assignment parameters 201–215:
+
+    32  1  33  4  5  6  20  21  22  23  24  25  26  27  28
+
+| param | | factory | Jan's E4XT |
+|---|---|---|---|
+| 201 | Pitch | pitch wheel | pitch wheel |
+| 202 | Mod | CC 1 | CC 1 |
+| 203 | Pressure | chan pressure | chan pressure |
+| 204 | Pedal | CC 4 | CC 3 *(changed)* |
+| 205 | Switch 1 | CC 5 | CC 0 *(changed)* |
+| 206 | Switch 2 | CC 6 | CC 1 *(changed)* |
+| 207 | Thumb | CC 20 | CC 2 *(changed)* |
+| 208–215 | **MIDI A–H** | **CC 21–28** | 21, **7**, 23–28 *(B changed)* |
+
+**This also validates the value encoding from a source with no machine state in
+it**: `32` and `33` sit in the default block exactly where Pitch and Pressure
+are, which is what "32 = pitch wheel, 33 = channel pressure" predicts.
+
+**A READ-BACK FROM ONE MACHINE LOOKS EXACTLY LIKE A FACTORY TABLE.** These were
+first taken off Jan's E4XT and nearly recorded here as defaults. The only thread
+was that one of the eight sat on CC 7 (MIDI Volume) while the other seven ran
+contiguously — a hand edit, and 22 was the hole it left. Had *seven* of eight
+agreed with the factory run, the eighth would have read as a firmware variation
+rather than a user edit. Jan had also moved Pedal, both switches and Thumb onto
+CC 0–3, which the seven-point run could not have revealed.
+
+**For a diagnostic that asks a user to assign a letter: name both values** —
+"assign MIDI A = CC 06 in the Master menu; the factory value is CC 21" — because
+it is a change to a factory value, not a restore.
+
+### CC 6 and RPN/NRPN — no handling found
+
+CC 6 is Data Entry MSB in the MIDI spec, and a device that implements RPN/NRPN
+may consume it. **EOS 4.70 shows no sign of doing so.** RPN and NRPN both require
+recognising a selector pair — 98/99 for NRPN, 100/101 for RPN — and immediate
+compare sites in the disassembly are:
+
+    CC 1   271      CC 98    1  (a 32-bit cmpl, not a controller test)
+    CC 7    53      CC 99    0
+    CC 27   26      CC 100  17  (all 32-bit `cmpl #100`, percentage tests)
+                    CC 101   0
+
+EOS dispatches controllers by comparison — CC 1 alone has 271 sites — so the
+absence of 99 and 101 is meaningful rather than an artefact of table-driven
+dispatch. **Weaker evidence than a hardware sweep**, and a jump-table dispatch
+would leave no compares at all; but a *positive* here would have killed the
+mapping outright and it is not there.

@@ -1362,6 +1362,7 @@ _LFO_SHAPE = {
 }
 _K2_CS_ENV2 = 121      # control-source code for ENV2
 _K2_CS_LFO1 = 114      # control-source code for LFO1
+_K2_CS_MWHEEL = 1      #: MWheel -- the codes ARE MIDI CC numbers (k2kremote §73)
 
 #: THE PANNER, for carrying pan modulation (§PANMOD). Hardware-mapped
 #: 2026-09-06 by k2kremote from a RAM-only SysEx diff, then aligned against a
@@ -2606,8 +2607,40 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
     if voice.lfo1_shape:
         lfo[4] = _LFO_SHAPE.get(voice.lfo1_shape.lower(), 0)  # fallback: Sine
     if getattr(voice, 'lfo1_to_pitch', 0.0) > 0.0:
-        cal[21] = _K2_CS_LFO1                                # source = LFO1
-        cal[22] = _lfo_pitch_depth_byte(voice.lfo1_to_pitch)  # depth (measured)
+        _kw = max(0.0, min(1.0, getattr(voice, 'wheel_to_lfo', 0.0) or 0.0))
+        if _kw <= 0.0:
+            # UNGATED: the Src1 wire, exactly as before. A source with no wheel
+            # gating produces a byte-identical file to what we wrote before
+            # 2026-09-15, which is deliberate -- every existing conversion and
+            # every round-trip test stays put.
+            cal[21] = _K2_CS_LFO1                                # source = LFO1
+            cal[22] = _lfo_pitch_depth_byte(voice.lfo1_to_pitch)  # depth
+        else:
+            # WHEEL-GATED: the Src2 wire, which is the only one on this page
+            # with a depth RANGE and a controller over it.
+            #
+            #   Src2   = LFO1          cal[26]
+            #   MinDpt = D*(1-Kw)      cal[24]   the wheel-down depth
+            #   MaxDpt = D             cal[25]   the full-wheel depth
+            #   DptCtl = MWheel        cal[23]
+            #
+            # HW-MEASURED (k2kremote §73): DptCtl scales LINEARLY between Min
+            # and Max -- wheel 0/64/127 gave +0.99/+1.97/+3.00 st for Min=100 ct
+            # Max=300 ct. So this reproduces the MPC's gate exactly rather than
+            # approximating it: at rest the LFO contributes (1-Kw) of its depth
+            # and reaches full depth only at full wheel.
+            #
+            # `Dpt` (cal[22]) is deliberately left alone -- it belongs to Src1
+            # and is provably not in this wire's arithmetic (changing it 500 ct
+            # to 0 with everything else held moved the reading by nothing).
+            #
+            # All three depth fields share one byte->cents curve, panel-confirmed
+            # at ten bytes, six below 100 cents (k2kremote §74) -- the region
+            # where §KRZLFOPITCH's error hid while its endpoint looked right.
+            cal[26] = _K2_CS_LFO1
+            cal[25] = _lfo_pitch_depth_byte(voice.lfo1_to_pitch)
+            cal[24] = _lfo_pitch_depth_byte(voice.lfo1_to_pitch * (1.0 - _kw))
+            cal[23] = _K2_CS_MWHEEL
 
     return segs
 

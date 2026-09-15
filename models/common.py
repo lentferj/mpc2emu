@@ -1148,6 +1148,85 @@ def akai_lfo_depth_to_pitch(byte: int, l_ptch: int = None,
     return max(0.0, min(1.0, one_sided / LFO_PITCH_FULL_CENTS))
 
 
+def akai_pitch_to_lfo_depth(one_sided_fraction: float, l_ptch: int = None,
+                            waveform: int = None) -> int:
+    """`lfo1_to_pitch` -> the LFODEP byte. Exact inverse of
+    `akai_lfo_depth_to_pitch`.
+
+    **THIS DID NOT EXIST UNTIL 2026-09-15 AND THE WRITER WROTE NOTHING AT ALL
+    INTO LFODEP (program offset 0x22).** Every AKAI program this project has
+    produced carried the LFO->pitch routing gate ON, the modwheel depth at the
+    factory 30, and the depth itself at ZERO -- so with s3ked §255's measured
+    `depth = min(99, LFODEP + MWLDEP*wheel/127)` the result was a FIXED vibrato
+    of 30 at full wheel and none at rest, whatever the source asked for.
+
+    **Corpus: `LfoPitch` is non-zero on 21.9% of MPC instruments (18,102 of
+    82,581), so that is the material whose vibrato depth was being discarded.**
+    The round-trip direction was unaffected -- 206 of 213 real AKAI programs
+    carry LFODEP 0 -- which is why it survived every round-trip check we have.
+
+    Same shape as the routing bug the writer's own comment describes being
+    fixed on 2026-08-23: a source's vibrato carried faithfully to the last byte
+    and then dropped. The routing was repaired; the depth was not.
+    """
+    if l_ptch is None:
+        l_ptch = AKAI_LFO_DEPTH_CAL_LPTCH
+    l_ptch = abs(max(-50, min(50, l_ptch)))
+    if not l_ptch or one_sided_fraction <= 0.0:
+        return 0
+    factor = AKAI_LFO_WAVE_RMS_TO_PEAK.get(waveform, math.sqrt(3.0))
+    rms = one_sided_fraction * LFO_PITCH_FULL_CENTS / factor
+    byte = rms / (AKAI_LFO_RMS_CENTS_PER_PRODUCT * l_ptch)
+    return max(0, min(99, int(round(byte))))
+
+
+def akai_lfo_depth_split(one_sided_fraction: float, wheel_to_lfo: float = 0.0,
+                         l_ptch: int = None, waveform: int = None):
+    """-> (LFODEP, MWLDEP), splitting a depth by how much the wheel gates it.
+
+    s3ked §255, measured: **`depth = min(99, LFODEP + MWLDEP * wheel/127)`** --
+    the modwheel path ADDS rather than scaling, so `LFODEP` is the wheel-DOWN
+    depth and `MWLDEP` is what the wheel brings in on top.
+
+    That maps the model's `wheel_to_lfo` (the FRACTION of the depth that is
+    wheel-gated) with no approximation:
+
+        LFODEP = D*(1 - Kw)     MWLDEP = D*Kw      sum clamped at 99
+
+    **The 1:1 was carried by a PLATEAU, not by a slope.** At LFODEP 70 with
+    MWLDEP 50, wheel 96 and 127 read identically -- and a 0.5x rule predicts a
+    final 95.0 against an observed 95.3, a third of a unit, far too close to
+    separate on the endpoint. Only the shape settles it. See
+    `docs/AKAI_S3000_FORMAT.md`; the earlier "lower bound 0.476, clipping at
+    FILFRQ 99" reading is retracted there, both its mechanisms refuted by the
+    numbers in their own measurement.
+    """
+    total = akai_pitch_to_lfo_depth(one_sided_fraction, l_ptch, waveform)
+    if total <= 0:
+        return 0, 0
+    kw = max(0.0, min(1.0, wheel_to_lfo or 0.0))
+    gated = int(round(total * kw))
+    base = total - gated
+    if base + gated > 99:                 # the machine's own clamp
+        gated = max(0, 99 - base)
+    return base, gated
+
+
+def akai_delay_seconds_to_byte(seconds: float) -> int:
+    """Seconds -> LFODEL. Inverse of `akai_lfo_delay_seconds`'s pole.
+
+        t = NUM * b / (POLE - b)   ->   b = t * POLE / (NUM + t)
+
+    Also never written before 2026-09-15 (program offset 0x23), for the same
+    reason as LFODEP: 206 of 213 real AKAI programs carry 0, so nothing in a
+    round trip ever noticed.
+    """
+    if not seconds or seconds <= 0.0:
+        return 0
+    b = seconds * AKAI_LFO_DELAY_POLE / (AKAI_LFO_DELAY_NUM + seconds)
+    return max(0, min(99, int(round(b))))
+
+
 def akai_lfo_delay_seconds(byte: int) -> float:
     """LFODEL -> seconds. A pole, not a line: it runs away near byte 99."""
     b = max(0, min(99, byte))
