@@ -41,12 +41,13 @@ from typing import Optional
 
 from models.common import (
     AKAI_VLOUD_SWING_DB_PER_UNIT, fit_velocity_line, AKAI_KEYFOLLOW_NEG_SCALE,
+    ENV_CURVE_LINEAR,
     VELOCITY_CURVE_DB_LINEAR, VEL_VOL_PIVOT_AKAI,
     AKAI_LFO_DEPTH_CAL_LPTCH,
-    akai_lfo_depth_split, akai_delay_seconds_to_byte,
     akai_01_to_filq,
     KEY_FILTER_OCT_PER_OCT,
     AKAI_FILTER_LAW, AKAI_FILTER_OPEN, AKAI_FILTER_OPEN_HZ, akai_filfrq_to_hz,
+    akai_lfo_depth_split, akai_delay_seconds_to_byte,
     AKAI_ENV2_ATTACK, AKAI_ENV2_DECAY, AKAI_ENV2_RELEASE,
     AKAI_ENV2_DEPTH_OFFSET, AKAI_ENV2_DEPTH_MAX, akai_lfo2_rate_byte,
     Bank, LoopType, SampleData, safe_filename,
@@ -961,7 +962,8 @@ def akai_env_bytes(env, quiet: bool = False) -> tuple:
         span_decay_db = _AK_SUSTAIN_DB_PER_UNIT * (99 - sus)
         d = _rate_law_value(getattr(env, 'decay', 0.3) or 0.3,
                             span_decay_db, _AK_DECAY1_RATE, default=50,
-                            stage='' if quiet else 'DECAY1')
+                            stage='' if quiet else 'DECAY1',
+                            curve=getattr(env, 'curve', None))
 
     # Release travels from the sustain level down to the floor.
     #
@@ -985,7 +987,8 @@ def akai_env_bytes(env, quiet: bool = False) -> tuple:
         span_rel_db = _AK_SUSTAIN_DB_PER_UNIT * sus
         r = _rate_law_value(getattr(env, 'release', 0.5) or 0.5,
                             span_rel_db, _AK_RELSE1_RATE, default=45,
-                            stage='' if quiet else 'RELSE1')
+                            stage='' if quiet else 'RELSE1',
+                            curve=getattr(env, 'curve', None))
 
     # Attack rises from silence to the peak, so unlike decay and release its
     # span is fixed and it needs no sustain-dependent distance.
@@ -1199,7 +1202,7 @@ def _env_range_echo(key) -> str:
 
 
 def _rate_law_value(seconds: float, span: float, law, default: int,
-                    stage: str = '') -> int:
+                    stage: str = '', curve=None) -> int:
     """Invert `rate = a*exp(b*v)` for a stage covering `span` in `seconds`.
 
     Returns `default` when the span is zero -- a stage with nowhere to travel
@@ -1232,7 +1235,18 @@ def _rate_law_value(seconds: float, span: float, law, default: int,
     a, b, lo, hi = law
     if span <= 0 or seconds <= 0:
         return default
-    rate = span / seconds
+    # THE SPAN IS NOT THE WHOLE STORY WHEN THE SOURCE'S FALL IS CURVED.
+    #
+    # `span / seconds` is the rate that lands on the sustain level at exactly
+    # the right instant, and for a source that is itself linear in dB that is
+    # the complete answer. The MPC is not: it is 10 dB down 44% of the way
+    # through its decay where this machine, asked to cover the same 60.07 dB in
+    # the same time, is 10 dB down at 17%. Endpoint-matched and audibly half
+    # the length. `EnvCurve` carries the source's shape and returns the
+    # straight line closest to it weighted by how loud the note actually is;
+    # for `ENV_CURVE_LINEAR` it returns `span / seconds` exactly, so nothing
+    # changes for a rate-machine source (asserted in the tests).
+    rate = (curve or ENV_CURVE_LINEAR).linear_slew_db_per_s(seconds, span)
     if rate <= 0:
         return default
     v = math.log(rate / a) / b

@@ -3447,6 +3447,168 @@ class ZoneMapping:
     transpose: int = 0          # Semitones; vpar[34] — key remap (keyboard offset)
 
 
+#: HOW A FALLING ENVELOPE STAGE IS CURVED, independent of how long it lasts.
+#:
+#: Two of the machines here are RATE machines: the S3000XL and the K2000 fall
+#: at a constant dB/s, so "the shape" is a straight line and there is nothing
+#: to describe. The MPC is not. Its fall is convex -- it lingers near the top
+#: and then collapses -- and a writer that only knows the stage's DURATION
+#: reproduces the endpoint while getting everything audible in between wrong.
+#:
+#: Carrying the curve is a different fix from carrying the RATE
+#: (`Envelope.release_rate_db_per_s`), and the two are not interchangeable.
+#: That one exists because the machines disagree about where SILENCE is; this
+#: one exists because they disagree about the PATH taken to get there.
+#:
+#: **THE TWO KINDS OF CURVE ARE NOT THE SAME KIND OF OBJECT** and an early
+#: draft of this class tried to make them one, which silently made every
+#: rate-machine envelope 20x too fast. A rate machine's line is defined
+#: RELATIVE to the distance the stage has to travel: its stated seconds mean
+#: "peak to sustain", so halving the distance halves the time. The MPC's curve
+#: is defined in ABSOLUTE dB: it reaches -10 dB 44% of the way through whatever
+#: the sustain is set to. `scales_with_depth` is which one this is, and there
+#: is no default -- a curve that guesses wrong is not detectably wrong, it just
+#: sounds like a different instrument.
+class EnvCurve:
+    """A falling stage's shape: how far down it is, as its time runs out."""
+
+    __slots__ = ('name', 'scales_with_depth', '_t', '_y')
+
+    def __init__(self, name, points, scales_with_depth):
+        #: `points` are (fraction of the stage's stated seconds, y), ascending
+        #: in both and starting at (0.0, 0.0). `y` is dB below peak when
+        #: `scales_with_depth` is False, and a FRACTION of the stage's total
+        #: fall when it is True.
+        self.name = name
+        self.scales_with_depth = bool(scales_with_depth)
+        self._t = [float(t) for t, _ in points]
+        self._y = [float(y) for _, y in points]
+
+    def _interp(self, xs, ys, x):
+        if x <= xs[0]:
+            return ys[0]
+        for i in range(1, len(xs)):
+            if x <= xs[i]:
+                x0, x1 = xs[i - 1], xs[i]
+                if x1 == x0:
+                    return ys[i]
+                return ys[i - 1] + (ys[i] - ys[i - 1]) * (x - x0) / (x1 - x0)
+        return ys[-1]
+
+    def depth_at(self, frac, depth_db):
+        """dB below peak after `frac` of the stage's stated time.
+
+        `depth_db` is how far the stage travels in total -- peak to sustain for
+        a decay, sustain to silence for a release.
+        """
+        y = self._interp(self._t, self._y, max(0.0, frac))
+        if self.scales_with_depth:
+            return y * depth_db
+        return min(y, depth_db)
+
+    def time_to_depth(self, db, depth_db):
+        """Fraction of the stated time at which the fall reaches `db` down."""
+        if db <= 0.0:
+            return 0.0
+        db = min(db, depth_db)
+        if self.scales_with_depth:
+            if depth_db <= 0.0:
+                return 0.0
+            return self._interp(self._y, self._t, db / depth_db)
+        return self._interp(self._y, self._t, db)
+
+    def linear_slew_db_per_s(self, seconds, depth_db):
+        """The dB/s a CONSTANT-RATE machine should use to imitate this curve.
+
+        A rate machine cannot follow a convex path, so this returns the
+        straight line that comes closest **weighted by how loud the note is at
+        each instant**, which is what "sonically closest" actually means: ten
+        dB of error while the note is still loud is a different sound, ten dB
+        of error at -50 dB is two silences.
+
+        For a straight-line curve this is `depth_db / seconds` exactly, so
+        rate-machine sources are untouched -- asserted in the tests, because
+        that identity is the whole reason this is safe to apply everywhere.
+        """
+        if seconds <= 0.0 or depth_db <= 0.0:
+            return 0.0
+        if self.scales_with_depth and len(self._t) == 2:
+            return depth_db / seconds          # the exact answer, no fitting
+        u_end = self.time_to_depth(depth_db, depth_db)
+        if u_end <= 0.0:
+            return 0.0
+        # Weighted least squares through the origin: the best slope in dB per
+        # unit of stated time is sum(w*u*d) / sum(w*u*u). Closed form, so this
+        # costs a short loop rather than a search.
+        n, num, den = 64, 0.0, 0.0
+        for k in range(1, n + 1):
+            u = u_end * k / n
+            d = self.depth_at(u, depth_db)
+            w = 10.0 ** (-d / 20.0)
+            num += w * u * d
+            den += w * u * u
+        if den <= 0.0:
+            return depth_db / seconds
+        return (num / den) / seconds
+
+
+#: A constant dB/s fall -- the S3000XL and the K2000, and the DEFAULT, so that
+#: nothing changes for a source whose machine works that way.
+#:
+#: HARDWARE-MEASURED on the S3000XL, 2026-09-14 (s3ked set the programs, this
+#: session captured and analysed): twenty rungs, DECAY1 40..85 and RELSE1
+#: 45..90, spanning 78x in time. Normalised to t(-40 dB) the fall reaches
+#: 10/20/30 dB at 0.257/0.505/0.753 (decay, 15 rungs) and 0.251/0.501/0.752
+#: (release, 5 rungs, sd 0.000-0.001) against a straight line's
+#: 0.250/0.500/0.750. Checked band by band as well: at DECAY1 85 the slew holds
+#: 5.79-5.85 dB/s from -5 dB to -40, so it is a constant rate rather than a
+#: curve that happens to pass through four points.
+#:
+#: **THOSE THREE FIGURES CARRY THE INSTRUMENT'S OWN BIAS AND THE MACHINE IS
+#: STRAIGHTER THAN THEY LOOK.** Fed a synthetic fall that is exactly linear by
+#: construction, at the five carriers and five slew rates of the real ladder and
+#: with noise AT THE CAPTURES' OWN MEASURED FLOOR (108 dB below peak -- the first
+#: run of this control used 61 dB and overstated the bias, which would have
+#: over-explained the result), the same estimator returns 0.256/0.504/0.753
+#: rather than 0.250/0.500/0.750 -- a first-threshold-crossing is pulled early by
+#: noise, and more so at each deeper threshold. Bias +0.006/+0.004/+0.003 against
+#: a measured excess of +0.007/+0.005/+0.003: the control accounts for it almost
+#: exactly. The measured 0.257/0.505/0.753 is
+#: therefore INDISTINGUISHABLE from a perfectly straight line seen through this
+#: estimator; the apparent excess over 0.250/0.500/0.750 is the detector, not the
+#: sampler. Read the constant as "linear in dB, to the limit of what the rig can
+#: resolve", and do not quote the third decimal as a property of the hardware.
+#:
+#: The bias grows at the fast end (0.271 at 283.7 dB/s, where a rung is only
+#: 144 ms long) for the same reason DECAY1 40 was the worst rung in the rate-law
+#: residuals. That is resolution, not the machine.
+ENV_CURVE_LINEAR = EnvCurve('linear-in-dB', ((0.0, 0.0), (1.0, 1.0)),
+                            scales_with_depth=True)
+
+#: The MPC's amp decay and release. CONVEX: it reaches -10 dB only 44% of the
+#: way through, then falls off a cliff in the last 3%.
+#:
+#: HARDWARE-MEASURED on an MPC One (§MPCENVREL). Re-measured independently
+#: 2026-09-14 from a different capture with an RMS detector at three hop sizes,
+#: restricted to the rungs with enough time resolution: 0.441/0.766/0.932 of
+#: t(-40) against the 0.454/0.773/0.928 already committed.
+#:
+#: **The release shares this curve and this law.** Same capture set: shape
+#: 0.431/0.765/0.926, and VolumeRelease 0.625 gives 0.620 s where VolumeDecay
+#: 0.625 gives 0.625 s -- 0.8% apart. There is no separate release law.
+#:
+#: MEASURED AT SUSTAIN 0 ONLY, which is why this one is `scales_with_depth`
+#: False: a stage that stops early is assumed to walk the same path and be
+#: clamped by the sustain level, rather than rescaling the curve into the
+#: shorter distance. That is the natural reading of a convex envelope and it is
+#: NOT measured -- the ladder that would settle it sweeps VolumeDecay at a
+#: NON-ZERO VolumeSustain, which no capture so far has done.
+ENV_CURVE_MPC = EnvCurve('MPC convex', (
+    (0.0, 0.0), (0.44, 10.0), (0.75, 20.0), (0.90, 30.0), (0.97, 40.0),
+    (1.00, 60.0),
+), scales_with_depth=False)
+
+
 @dataclass
 class Envelope:
     """A 4-stage ADSR envelope: attack/decay/release in seconds, sustain 0.0-1.0.
@@ -3497,6 +3659,22 @@ class Envelope:
     #: sustain, both ends defined, so the seconds are sound there and a rate
     #: would be a second way of saying the same thing (§AKAIRELSPAN).
     decay_rate_db_per_s: Optional[float] = None
+
+    #: The SHAPE of the decay and release falls -- see `EnvCurve`.
+    #:
+    #: Defaults to a straight line in dB, which is what the S3000XL and the
+    #: K2000 actually do (both hardware-measured), so a source read from either
+    #: is described correctly without the reader setting anything. The XPM
+    #: reader sets `ENV_CURVE_MPC`, because the MPC's fall is convex and a
+    #: writer that only sees the DURATION reproduces the endpoint while getting
+    #: the audible part wrong.
+    #:
+    #: One curve covers both stages: on the MPC the release is the same law and
+    #: the same curve as the decay (measured), and on the S3000XL DECAY1 and
+    #: RELSE1 match to within 1% at the same byte value (measured). If a
+    #: machine ever turns up whose two stages differ, this needs to become two
+    #: fields and the writers need to stop sharing one.
+    curve: 'EnvCurve' = ENV_CURVE_LINEAR
 
 
 def _amp_env() -> Envelope:    # amplitude-envelope default
@@ -3818,6 +3996,16 @@ class VoiceLayer:
     def env_release(self): return self.amp_env.release
     @env_release.setter
     def env_release(self, v): self.amp_env.release = v
+
+    #: The amp envelope's SHAPE. Flat accessor like the four above, so a reader
+    #: that builds its voice params as a dict can declare the source machine's
+    #: curve alongside the seconds instead of reaching into `amp_env` after the
+    #: fact -- which is what it would otherwise have to do, and which would run
+    #: after the params have already been deduplicated.
+    @property
+    def amp_env_curve(self): return self.amp_env.curve
+    @amp_env_curve.setter
+    def amp_env_curve(self, v): self.amp_env.curve = v
 
     @property
     def filter_env_attack(self): return self.filter_env.attack

@@ -44,7 +44,9 @@ from models.common import (
     mpc_velsens_swing_db, MPC_VELSENS_PIVOT,
     VELOCITY_CURVE_DB_LINEAR, VELOCITY_CURVE_AMPLITUDE_LINEAR,
     MPC_FILTER_MOD_FULL_CENTS, MPC_KEYTRACK_OCT_PER_OCT,
-    mpc_resonance_to_model)
+    mpc_resonance_to_model,
+    ENV_CURVE_MPC,
+)
 
 
 # MPC LFO <Type> string → canonical E4B shape name (substring match; MPC ships
@@ -1962,6 +1964,21 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
             pdict = dict(
                 env_attack=env_attack, env_decay=env_decay,
                 env_sustain=env_sustain, env_release=env_release,
+                # THE MPC'S AMP FALL IS CONVEX AND THE SECONDS ALONE DO NOT SAY
+                # SO (§MPCENVREL). Every other machine here falls at a constant
+                # dB/s, so a writer handed only a duration lands on the sustain
+                # level at the right instant and is 10 dB down at 17% of the
+                # stage where this instrument is 10 dB down at 44%. Endpoint
+                # right, everything audible wrong.
+                #
+                # AMP ONLY. The filter envelope's shape has never been
+                # measured on this machine -- it was fitted from decay values
+                # read off the firmware's display and confirmed acoustically on
+                # the AMP decay. Declaring the same curve for it would be an
+                # assumption wearing a measurement's clothes, and the filter
+                # stage ends at a cutoff LEVEL rather than at silence, so it is
+                # not even obviously the same question.
+                amp_env_curve=ENV_CURVE_MPC,
                 filter_type=filt_type, filter_cutoff=filt_cutoff,
                 # MEASURED per filter type, and converted to the model's
                 # PEAK-HEIGHT convention rather than passed through as a
