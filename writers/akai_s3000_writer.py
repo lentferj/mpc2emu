@@ -962,7 +962,7 @@ def akai_env_bytes(env, quiet: bool = False) -> tuple:
                   detail={'written': d, 'fit_window': [_lo, _hi]})
     else:
         span_decay_db = _AK_SUSTAIN_DB_PER_UNIT * (99 - sus)
-        d = _rate_law_value(getattr(env, 'decay', 0.3) or 0.3,
+        d = _rate_law_value(_or_default(getattr(env, 'decay', None), 0.3),
                             span_decay_db, _AK_DECAY1_RATE, default=50,
                             stage='' if quiet else 'DECAY1',
                             curve=getattr(env, 'curve', None))
@@ -987,7 +987,7 @@ def akai_env_bytes(env, quiet: bool = False) -> tuple:
         r = int(round(max(0, min(99, math.log(_rate / _a) / _b))))
     else:
         span_rel_db = _AK_SUSTAIN_DB_PER_UNIT * sus
-        r = _rate_law_value(getattr(env, 'release', 0.5) or 0.5,
+        r = _rate_law_value(_or_default(getattr(env, 'release', None), 0.5),
                             span_rel_db, _AK_RELSE1_RATE, default=45,
                             stage='' if quiet else 'RELSE1',
                             curve=getattr(env, 'curve', None))
@@ -1235,8 +1235,24 @@ def _rate_law_value(seconds: float, span: float, law, default: int,
     monotonic-and-approximate beats a plateau.
     """
     a, b, lo, hi = law
-    if span <= 0 or seconds <= 0:
+    if span <= 0 or seconds is None:
         return default
+    if seconds <= 0:
+        # AN AUTHORED ZERO IS NOT A MISSING VALUE. A source that states an
+        # instant decay or release (XPM `VolumeRelease` 0, sfz
+        # `ampeg_release=0`) is asking the note to stop dead, and returning
+        # `default` gave it the factory 45 -- a ~285 dB/s release where it
+        # asked for the fastest the field has. Byte 0 is 23042 dB/s, which is
+        # this field's instant.
+        #
+        # The callers used to write `getattr(env, 'release', 0.5) or 0.5`, so a
+        # real 0.0 never even arrived here; `_or_default` exists in this file
+        # for exactly that distinction and the envelope path did not use it.
+        # Both halves had to change -- fixing only the call site would have
+        # landed the 0.0 on the `seconds <= 0` line above and produced the same
+        # 45 by a different route, which is the shape of half-repair this
+        # file's own §LAWRANGE note warns about.
+        return 0
     # THE SPAN IS NOT THE WHOLE STORY WHEN THE SOURCE'S FALL IS CURVED.
     #
     # `span / seconds` is the rate that lands on the sustain level at exactly
@@ -3873,6 +3889,7 @@ def build_akai_volume(bank: Bank, bank_name: Optional[str] = None,
     #: rename a program merely for matching a sample's name, which nothing
     #: requires -- they are different file types in the directory.
     taken_prog = taken_prog if taken_prog is not None else {}
+    taken_files = set()          # program FILENAMES, a different axis from `taken_prog`
 
     def uniq(stem: str, taken=taken, fallback: str = 'SAMPLE',
              content: Optional[bytes] = None) -> str:
@@ -4176,7 +4193,32 @@ def build_akai_volume(bank: Bank, bank_name: Optional[str] = None,
         for v in preset.voices:
             for z in v.zones:
                 z.sample_name = name_map.get(z.sample_name, z.sample_name)
-        fn = f"{safe_filename((pname or f'PROGRAM{i}').strip().upper(), 'PROGRAM')}.P3"
+        # THE FILENAME NEEDS ITS OWN UNIQUING, because `uniq` above keys on the
+        # AKAI NAME FIELD and `safe_filename` can re-collide names that field
+        # keeps distinct. `#` and `+` are both outside the AKAI charset, so
+        # `F#BASS` and `F+BASS` differ by one byte in the header and both
+        # sanitise to `F_BASS.P3` -- one file, written twice, second wins, and
+        # a program disappears from the volume with nothing said.
+        #
+        # This is the residual half of the collision the note above describes.
+        # That one was fixed by uniquing the NAME, which is necessary (the
+        # machine resolves zones by name) and not sufficient: the two axes
+        # collapse different characters. Same shape as this file's own
+        # §LAWRANGE -- one side repaired, the other left.
+        _stem = safe_filename((pname or f'PROGRAM{i}').strip().upper(), 'PROGRAM')
+        if _stem in taken_files:
+            _base, _n = _stem, 2
+            while _stem in taken_files:
+                # Trim before appending so the suffix cannot push the stem past
+                # the name length; the AKAI's own field is the tighter limit.
+                _suf = str(_n)
+                _stem = _base[:max(1, AKAI_NAME_LEN - len(_suf))] + _suf
+                _n += 1
+            if not quiet:
+                print(f"  note: program filename {_base}.P3 was already taken; "
+                      f"writing {_stem}.P3 so neither program is lost")
+        taken_files.add(_stem)
+        fn = f"{_stem}.P3"
         # PRGNUM 0 IN THE FALLBACK -- CONSIDERED AND REJECTED (§AKAIPRGNUM0).
         # s3ked flagged that a cold-booted S3000XL carries a boot-resident
         # `TEST PROGRAM`/`SINE` at PRGNUM 0, and a first version of this
