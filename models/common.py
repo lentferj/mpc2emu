@@ -1367,6 +1367,23 @@ def akai_filq_to_01(byte: int) -> float:
 #: **Saturation is the CUTOFF BYTE hitting its ceiling, not a cord limit.**
 #: Every saturated point predicts `base + 2.506*amount >= 250.3` and every
 #: unsaturated one `<= 238.1` — clean separation, no overlap.
+#: **ATTACK AND DECAY SHARE ONE RATE LAW** (eosed §144, 2026-09-15, and it fell
+#: out of a run commissioned for something else entirely). The base sweep's
+#: unmodulated times ARE the attack byte->time law, so it measured that without
+#: being asked:
+#:
+#:     byte 26 -> 0.144 s    byte 42 -> 0.368 s
+#:     byte 34 -> 0.208 s    byte 50 -> 0.565 s     d(ln t)/d(byte) = 0.05841
+#:
+#: against the DECAY constant 0.05760 measured over bytes 58-86: **+1.4%**. Two
+#: different envelope segments, two disjoint byte ranges, one law -- consistent
+#: with a single shared rate table read by every segment, which is what the
+#: firmware evidence already suggested.
+#:
+#: Fitting all six bases gives 0.06694 instead, because bytes 10 and 18 are the
+#: resolution-limited rungs -- **the same points that faked base-dependence also
+#: steepen this fit.** One artefact, two victims, and only the explicit validity
+#: gate caught either.
 E4XT_FENV_BYTE_PER_UNIT = 2.506
 E4XT_FENV_SATURATION_BYTE = 250.0   #: above this the cutoff byte is at its end
 
@@ -5217,38 +5234,49 @@ def akai_attack_span_to_vatt1(span) -> int:
 #: goodness of the trend is no evidence at all, and only an impossibility or an
 #: explicit validity gate catches it.
 #:
-#: WHICH OF THEIR TWO NUMBERS THIS USES, AND WHY. §144 reports two runs and
-#: they do not quite agree. Their headline exponent, 0.07064, comes from the
-#: BASE sweep -- four bases at one amount, scatter 4.8%. Their AMOUNT sweep
-#: implies 0.0720 at amount 28 and 0.0722 at amount 50, two rungs agreeing to
-#: 0.3% and using the largest byte shifts. Against their own measured spans:
+#: THE CONSTANT IS QUOTED AT BASE 30, which is what the two reported figures
+#: actually differ by. §144 gives 0.07206 from an amount sweep and 0.07064 from
+#: a base sweep, and my first reading of that was that the runs disagreed by
+#: 3.7% and one had to be chosen. **They do not disagree.** The amount sweep was
+#: taken entirely at base 30; the base sweep brackets it, and interpolating its
+#: bases 26 (7.26) and 34 (7.74) to base 30 gives 7.500 against the amount
+#: sweep's 7.50 -- agreement to 0.02%, which is to say exact.
 #:
-#:     exponent            amount 10   amount 28   amount 50
-#:     0.07064 (base)        -11.5%       -3.6%       -7.3%
-#:     0.07206 (amount)      -10.2%       +0.3%       -0.5%
+#: So 0.07206 is the exponent AT BASE 30 and 0.07064 is the MEAN over bases
+#: 26-50. Both are right and they answer different questions; comparing a
+#: single-base measurement against a multi-base mean is not evidence about
+#: either. For a writer applying this across arbitrary presets the multi-base
+#: mean is marginally the better estimator, but the two are 4% apart in span
+#: and nothing downstream is sensitive at that level. (eosed corrected this
+#: framing; the number was never the issue.)
 #:
-#: The amount sweep is the run that measures the quantity this constant IS --
-#: how span varies with amount -- while the base sweep measures something else
-#: (base-independence) at a single amount, and is the noisier of the two. So
-#: 0.07206 is used. The amount-10 rung is ~10% off under either, and it is the
-#: smallest shift and so the worst-resolved -- the same weakness that made the
-#: denominator artefact bite there.
-#:
-#: **THE REAL UNCERTAINTY IS THE DISAGREEMENT, NOT EITHER FIT.** Amount 28 was
-#: measured in both runs and gave 7.23 and 7.50, 3.7% apart. Nothing here is
-#: better than ~2% in the exponent until that is reconciled, and no conversion
-#: in this project is sensitive at that level.
+#: The amount-10 rung is excluded, and for a sharper reason than "noisiest
+#: point". Its DENOMINATOR -- the unmodulated time at byte 30 -- measured
+#: 0.165 s where the byte->time law interpolates 0.176, 6.1% low, and a small
+#: span amplifies denominator error directly. Corrected, amount 10 gives 0.0766
+#: rather than 0.0829, most of the way to the other two. That matters: it says
+#: the scatter is in the denominator and **the law does not curve at small
+#: amounts**, which "dropped as noisy" would have left open.
 E4XT_ATTACK_SPAN_EXP_PER_PERCENT = 0.07206
 E4XT_ATTACK_CORD_SRC_VEL_LT = 0x0C
 E4XT_ATTACK_CORD_DST_VOLENV_ATK = 0x49
-#: Bytes of destination per percent of cord amount. MEASURED for this
-#: destination (eosed §144): 1.226, i.e. a +100% cord moves 122.6 of the attack
-#: byte's 127 range, 96.6%. That makes a FOURTH case for §143's rule that a
-#: cord spans its destination's range -- AmpVol 99.5%, VEnvDcy 103.3%, FMORPH
-#: 97.5%, VEnvAtk 96.6%, mean 99.2% +/- 2.6% over two ranges and three
-#: parameter families. Used here only for the saturation clamp; the span itself
-#: comes from the measured exponent above.
-E4XT_CORD_BYTES_PER_PERCENT = 1.226
+#: Bytes of destination per percent of cord amount: the span exponent divided
+#: by the ATTACK byte's own rate constant, 0.07206 / 0.05841 = 1.2337, so a
+#: +100% cord moves 123.4 of the attack byte's 127 range -- 97.1%.
+#:
+#: **THE DIVISOR HAS TO COME FROM THE SAME MEASUREMENT.** §144 first reported
+#: 1.226 by dividing through 0.0576, the DECAY constant, measured over a
+#: different byte range; eosed caught it and re-derived from the attack law
+#: measured in that same run. The two rate constants are within 1.4% of each
+#: other, so the error was small -- but borrowing a neighbouring parameter's
+#: constant is exactly the move that produced this project's AKAI rail and KRZ
+#: rail assumptions, and it is worth naming when it happens to be harmless.
+#:
+#: A FOURTH CASE for §143's rule that a cord spans its destination's range:
+#: AmpVol 99.5%, VEnvDcy 103.3%, FMORPH 97.5%, VEnvAtk 97.1% -- four
+#: destinations, two ranges, three parameter families. Used here only for the
+#: saturation clamp; the span comes from the measured exponent above.
+E4XT_CORD_BYTES_PER_PERCENT = 1.2337
 
 #: The EOS template's own amount for this cord, in raw cord bytes. MEASURED
 #: from the corpus, not from a spec: the cord is present on 90.6% of 241,433
@@ -5307,6 +5335,128 @@ def akai_attack_time_at_pivot(seconds_at_127, vatt1_byte) -> float:
     """Inverse of `akai_attack_time_at_velocity_127`."""
     f = akai_attack_time_at_velocity_127(1.0, vatt1_byte)
     return seconds_at_127 / f if f else seconds_at_127
+
+
+#: K2000 `ENVCTL Att VelTrk`: the attack-time law, MEASURED end to end
+#: (k2kremote, 2026-09-15). `Att VelTrk` +8 = the ROM table's 2.000x, User
+#: amplitude envelope, `F4 AMP VelTrk` zeroed so velocity cannot reach loudness,
+#: nominal attack 2000 ms:
+#:
+#:     control (VelTrk 0)   vel   1: 2029.0 ms
+#:                          vel  64: 2030.3 ms
+#:                          vel 127: 2027.7 ms   <- 2.6 ms spread, carried known
+#:     VelTrk +8 (2.000x)   vel   1: 2014.3 ms
+#:                          vel  32: 1697.9 ms
+#:                          vel  64: 1428.3 ms
+#:                          vel  96: 1204.4 ms
+#:                          vel 127: 1013.3 ms
+#:
+#: **THE SPAN IS THE DISPLAYED MULTIPLIER, EXACTLY.** t(1)/t(127) = 1.988
+#: against M = 2.000, 0.6%. So `velocity_to_amp_attack_span` needs no
+#: conversion on this machine at all -- it IS `M`.
+#:
+#: **THE ANCHOR IS VELOCITY 1, and that was worth insisting on.** Taking log2
+#: of t(1)/t(v) against (v-1)/126:
+#:
+#:     vel          32      64      96     127
+#:     log2      0.246   0.496   0.742   0.991
+#:     (v-1)/126 0.246   0.500   0.754   1.000
+#:
+#: Four points to three decimals, so `t(v) = t(1) / M**((v-1)/126)` -- anchored
+#: at the BOTTOM of the range and reaching the full multiplier exactly at 127.
+#: The obvious guess was that a multiplier displayed on a velocity-tracking page
+#: applies at full velocity; it does not.
+#:
+#: **THREE MACHINES, THREE ANCHORS, NO TWO ALIKE** -- K2000 at velocity 1, AKAI
+#: at 64, E4XT's `Vel<` at 127. Anyone assuming an anchor instead of measuring
+#: it would be wrong on two machines of three, and wrong SILENTLY: the routing
+#: still sounds like velocity shaping the attack, with the wrong end of the
+#: keyboard dynamics carrying it. This is why the model carries the pivot beside
+#: the span, and why every conversion re-anchors the TIME even though the span
+#: crosses untouched.
+K2000_ATTACK_VEL_ANCHOR = 1
+
+#: The K2000's ENVCTL multiplier table, all 256 entries, read from firmware ROM
+#: at 0x1FC404 by k2kremote and exported rather than sampled. Indexed by the RAW
+#: byte. Units are thousandths: 1000 = 1.000x, extremes 18 (0.018x) and 50000
+#: (50.000x).
+#:
+#: **TRANSCRIBED, NOT FITTED, AND THAT WAS THE POINT.** It is a preferred-number
+#: series -- roughly E24, 24 steps per decade, which is why +8 doubles and x4
+#: lands on +15 rather than +16 (a doubling is 24*log10(2) = 7.22 steps). But
+#: the rounding is not a rule anyone could reproduce from samples: k2kremote
+#: checked 10**(n/24) against the stored values and it does not agree. Six
+#: sampled points looked like "roughly 7.5 per doubling" and would have yielded
+#: a plausible wrong formula; reading the ROM cost nothing and settles it.
+#:
+#: Six entries independently confirmed against panel diffs before export:
+#: -7 -> 500, 0 -> 1000, +5 -> 1500, +8 -> 2000, +15 -> 4000, +23 -> 8000.
+#:
+#: **IT SATURATES, so only 87 of the 256 entries are distinct.** Bytes 43..127
+#: all read 50.000x and 128..213 all read 0.018x, leaving a usable signed range
+#: of about -42..+42. The inverse below returns the SMALLEST byte reaching a
+#: value, so a round trip cannot climb through the saturated region.
+#:
+#: That range is corroborated from the other end: the KRZ corpus runs -43..+43
+#: over 12,054 programs and never exceeds it, with a pile sitting on +43 (220
+#: programs) -- material stopping exactly where the ROM table rails. A clamp
+#: piling material at its bound, seen once in the firmware and once in the
+#: files, neither derived from the other.
+K2000_ENVCTL_MULTIPLIER_MILLI = (
+    1000, 1100, 1200, 1300, 1400, 1500, 1600, 1800, 2000, 2200, 2500,
+    2700, 3000, 3300, 3600, 4000, 4300, 4700, 5000, 5500, 6100, 6700,
+    7300, 8000, 9000, 10000, 11000, 12000, 13000, 14000, 15000, 16000,
+    18000, 20000, 22000, 25000, 27000, 30000, 33000, 36000, 40000, 43000,
+    47000, 50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000,
+    50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000,
+    50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000,
+    50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000,
+    50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000,
+    50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000,
+    50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000,
+    50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000,
+    50000, 50000, 50000, 50000, 50000, 50000, 18, 18, 18, 18, 18, 18, 18,
+    18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18,
+    18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18,
+    18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18,
+    18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18,
+    18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 20, 22, 25, 27, 30, 33,
+    36, 40, 43, 47, 50, 55, 61, 67, 73, 80, 90, 100, 110, 120, 130, 140,
+    150, 160, 180, 200, 220, 250, 270, 300, 330, 360, 400, 430, 470, 500,
+    550, 610, 670, 730, 800, 900)
+assert len(K2000_ENVCTL_MULTIPLIER_MILLI) == 256
+
+
+def k2000_envctl_byte_to_multiplier(byte: int) -> float:
+    """ENVCTL byte -> rate multiplier. A table lookup; nothing is fitted."""
+    return K2000_ENVCTL_MULTIPLIER_MILLI[int(byte) & 0xFF] / 1000.0
+
+
+def k2000_multiplier_to_envctl_byte(multiplier) -> int:
+    """Rate multiplier -> the ENVCTL raw byte closest to it in LOG terms.
+
+    Log-closest rather than linear-closest because the table is a geometric
+    series: near the top, consecutive entries are thousands apart in absolute
+    terms, so a linear search would quantise the fast half far more coarsely
+    than the slow half while looking correct at both ends.
+    """
+    if not multiplier or multiplier <= 0.0:
+        return 0
+    target = math.log(multiplier)
+    best, berr = 0, None
+    for raw in range(256):
+        e = abs(math.log(K2000_ENVCTL_MULTIPLIER_MILLI[raw] / 1000.0) - target)
+        if berr is None or e < berr:
+            best, berr = raw, e
+    return best
+
+
+def k2000_attack_time_at_velocity(seconds_at_vel_1, multiplier, velocity) -> float:
+    """K2000 attack time at any velocity, from the time at velocity 1."""
+    if not multiplier or multiplier <= 0.0:
+        return seconds_at_vel_1
+    v = max(1, min(127, int(velocity)))
+    return seconds_at_vel_1 / (multiplier ** ((v - 1) / 126.0))
 
 
 def e4xt_attack_span_from_cord(amount_percent, base_byte=None) -> float:

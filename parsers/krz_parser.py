@@ -51,7 +51,8 @@ import struct
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional, Tuple
 
-from models.common import (Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
+from models.common import (
+    k2000_envctl_byte_to_multiplier, K2000_ATTACK_VEL_ANCHOR,Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            LoopType, Envelope, krz_cutoff_byte_to_hz,
                            krz_reson_byte_to_01, krz_env_byte_to_seconds,
                            krz_lfo_rate_byte_to_hz,
@@ -834,6 +835,7 @@ class _KrzLayer:
         #: LFO sits at full depth with the wheel down, which is the model's
         #: default and what an ungated wire means.
         self.wheel_to_lfo = 0.0
+        self.vel_attack_span = None
         # Read from CAL[29] and used only to decide whether the third HOB
         # segment describes a slot the algorithm actually has. Not forwarded to
         # the model -- no output format has anywhere to put it.
@@ -1029,6 +1031,17 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
                 pass          # actual ENV bytes read from ENV_AMP_TAG below
             else:
                 cur.amp_env = False   # sentinel: Natural, decoded ENV must be ignored
+            # ENVCTL `Att VelTrk`, index 4 -- velocity -> amp envelope attack.
+            # The span IS the displayed multiplier (measured t(1)/t(127) = 1.988
+            # against a table 2.000), so this is a ROM-table lookup with nothing
+            # fitted. Anchored at velocity 1, unlike either other machine.
+            #
+            # ONLY IN USER MODE. ENVCTL does not affect the attack of a Natural
+            # amplitude envelope, so reading it from a Natural layer would
+            # report modulation the machine does not apply -- the same class as
+            # the AKAI fields that are set on 45% of keygroups and measure inert.
+            if len(seg) > 4 and seg[4] and seg[1] != 1:
+                cur.vel_attack_span = k2000_envctl_byte_to_multiplier(seg[4])
         elif tag == ENV_AMP_TAG:
             if cur.amp_env is not False:
                 cur.amp_env = _decode_env(seg)
@@ -1759,6 +1772,9 @@ def parse_krz(path: str) -> Bank:
                     lfo2_to_filter=layer.lfo2_to_filter,
                     lfo1_to_pitch=layer.lfo1_to_pitch,
                     wheel_to_lfo=layer.wheel_to_lfo,
+                    velocity_to_amp_attack_span=layer.vel_attack_span,
+                    velocity_to_amp_attack_pivot=(
+                        K2000_ATTACK_VEL_ANCHOR if layer.vel_attack_span else None),
                     lfo1_to_volume=layer.lfo1_to_volume,
                     velocity_to_volume_db=layer.velocity_to_volume_db,
                     velocity_to_volume_pivot=layer.velocity_to_volume_pivot,

@@ -97,6 +97,7 @@ from models.common import (
     KRZ_RES_KEYTRK_PIVOT_KEY, KRZ_RES_KEYTRK_DB_PER_UNIT,
     krz_db_to_level_pct, krz_level_pct_to_db,
     krz_cutoff_byte_to_hz, KRZ_2POLE_F0_TO_3DB, KRZ_4POLE_F0_TO_3DB,
+    k2000_multiplier_to_envctl_byte,
     LFO_VOLUME_MODEL_FULL_DB, KRZ_F4_AMP_SRC1_INDEX,
     KRZ_F4_AMP_DEPTH_INDEX, KRZ_F4_AMP_SRC_LFO1, KRZ_F4_AMP_SRC_LFO2,
     KRZ_F4_AMP_DEPTH_DB_PER_UNIT, KRZ_F4_AMP_DEPTH_CLAMP,
@@ -2316,6 +2317,23 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
 
     # --- amp envelope (always User mode + the source ADSR) ---
     seg(0x20)[1] = 0                                         # AMPENV mode -> User
+    # VELOCITY -> AMP ENVELOPE ATTACK: ENVCTL `Att VelTrk`, ENC(0x20)[4].
+    #
+    # THE SPAN IS THE DISPLAYED MULTIPLIER, with nothing to convert. k2kremote
+    # measured t(1)/t(127) = 1.988 against a table value of 2.000, and the
+    # interpolation `t(v) = t(1) / M**((v-1)/126)` to three decimals at four
+    # velocities, confirmed in both directions. So the model's pivot-free span
+    # IS M and the byte is a ROM-table lookup.
+    #
+    # THE LINE ABOVE IS LOad-BEARING FOR THIS ONE. ENVCTL does not touch the
+    # attack of a NATURAL amplitude envelope, so writing `Att VelTrk` into a
+    # Natural-mode layer would be silently inert. This writer sets User
+    # unconditionally, which is why the field is live here -- but the two lines
+    # have to stay together, and a future change that made the mode conditional
+    # would disable this routing without touching it.
+    _atk_span = getattr(voice, 'velocity_to_amp_attack_span', None)
+    if _atk_span and abs(_atk_span - 1.0) > 1e-9:
+        seg(0x20)[4] = k2000_multiplier_to_envctl_byte(_atk_span)
     _fill_env(seg(0x21), _krz_choke_env(voice.amp_env))
 
     hob_f1 = seg(0x50)
