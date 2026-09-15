@@ -1275,6 +1275,21 @@ def _rate_law_value(seconds: float, span: float, law, default: int,
     # six presets measured on 2026-09-11 came through THIS path instead. A guard
     # added to one of two branches is a guard that does not fire on the material
     # that motivated it, and only running it on that material showed so.
+    # ONE RECORD PER SUBJECT IS THE CONTRACT -- do not aggregate.
+    #
+    # A sixteen-keygroup program at an unplayable rate emits sixteen records
+    # differing only in `subject`, and that looks like a wall of duplicate text
+    # worth collapsing HERE. It is not: VinSamLib's renderer groups on
+    # `(code, body)` with the subject stripped, so those sixteen become one
+    # line reading "16 x ... KG01, KG02, KG03, KG04, and 12 more". The
+    # per-subject records are the INPUT that grouping needs.
+    #
+    # Offered to add a `count` to `detail` on 2026-09-15 and was corrected:
+    # an aggregate would tell the user LESS, because a program saturating in
+    # two different ways currently yields two grouped lines with their own
+    # subject lists, which one merged record cannot express. The wall was a
+    # `len(risks)` print in a throwaway script being read as what the user
+    # sees.
     if stage and (v > 99.0 or v < 0.0):
         _diag(_W, f'AKAI_{stage}_SATURATED',
               f'{stage} needs {v:.1f} for {seconds:.2f} s over {span:.1f} dB, '
