@@ -67,6 +67,7 @@ from models.common import (
     VEL_VOL_PIVOT_AKAI,
     AKAI_MODSAMP_OFFSETS, AKAI_MODVAMP_PROG_OFFSETS,
     AKAI_MODVAMP3_KG_OFFSET, AKAI_MOD_SOURCE_LFO1,
+    AKAI_MODVAMP_PANEL_RAIL,
     Envelope)
 import math
 
@@ -273,6 +274,28 @@ def _u32(data: bytes, off: int) -> int:
 
 def _s8(v: int) -> int:
     return v - 256 if v > 127 else v
+
+
+def _s8_rail(v: int) -> int:
+    """Signed byte, clamped to the MODV panel rail -- what the machine RENDERS.
+
+    The +-50 rail is a property of the PANEL and of the disk-load path, not of
+    the stored byte. s3ked's SysEx byte-offset write puts 90 and 166 into a
+    keygroup and they read back verbatim (their 256), while this project's own
+    measurement of the other path -- a program written into a disk image,
+    loaded, read off the panel -- saw a stored 90 come back as 50 (their 109,
+    measured here). Real third-party material therefore contains values the
+    machine will not play: 174 of them across 52,398 keygroups in the disc
+    corpus, reaching -116 and +127 in fields documented as +-50.
+
+    Read unclamped, a stored -116 in the loudness amount inflates the tremolo
+    depth this parser reports by 2.3x, and an out-of-rail filter amount does the
+    same to the velocity->filter span -- both of which feed conversion output.
+    So the model carries the clamped value, on the same principle as
+    `e4xt_cord_amount_to_cents`: the model describes the sound, not the request.
+    """
+    return max(-AKAI_MODVAMP_PANEL_RAIL,
+               min(AKAI_MODVAMP_PANEL_RAIL, _s8(v)))
 
 
 #: Playback rates the machine actually has. Byte 0x01 selects between them.
@@ -918,9 +941,13 @@ def parse_program_bytes(data: bytes, fallback_name: str = '',
                       if len(kg) > AKAI_FILQ_OFFSET else 0),
             lfo_to_pitch=(_s8(kg[AKAI_LPTCH_OFFSET])
                           if len(kg) > AKAI_LPTCH_OFFSET else 0),
-            mod_amount_amp3=(_s8(kg[AKAI_MODVAMP3_KG_OFFSET])
+            # CLAMPED, not merely sign-converted -- see `_s8_rail`. Both of
+            # these feed conversion output (the tremolo depth below and the
+            # velocity->filter span), so an out-of-rail stored byte would
+            # arrive as a depth the machine never plays.
+            mod_amount_amp3=(_s8_rail(kg[AKAI_MODVAMP3_KG_OFFSET])
                              if len(kg) > AKAI_MODVAMP3_KG_OFFSET else 0),
-            mod_amount_filt1=(_s8(kg[AKAI_MODVFILT1_OFFSET])
+            mod_amount_filt1=(_s8_rail(kg[AKAI_MODVFILT1_OFFSET])
                               if len(kg) > AKAI_MODVFILT1_OFFSET else 0),
             # 255 is off. An S1000 keygroup is 150 bytes and has no offset
             # 160 at all, so a short block reports OFF rather than group 0 --
