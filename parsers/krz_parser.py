@@ -544,6 +544,7 @@ _K2_FILTER_2P_LP_R = 2       # Alg5 2POLE LOWPASS, mirrors krz_writer
 _K2_FILTER_4P_LP_R = 50      # Alg1 4POLE LOPASS W/SEP
 _K2_CS_FUN4, _K2_CS_BKEYNUM = 119, 99
 
+_K2_CS_MWHEEL = 1        #: MWheel -- the codes ARE MIDI CC numbers (k2kremote §73)
 _K2_CS_ENV2 = 121
 _K2_CS_LFO1 = 114
 _K2_CS_ATTACK_VEL = 100
@@ -828,6 +829,11 @@ class _KrzLayer:
         self.lo_key, self.hi_key = 0, 127
         self.lo_vel, self.hi_vel = 0, 127
         self.transpose = 0
+        #: Fraction of the pitch-LFO depth that the modwheel gates, from the
+        #: PITCH page's `DptCtl = MWheel` with `MinDpt < MaxDpt`. 0.0 means the
+        #: LFO sits at full depth with the wheel down, which is the model's
+        #: default and what an ungated wire means.
+        self.wheel_to_lfo = 0.0
         # Read from CAL[29] and used only to decide whether the third HOB
         # segment describes a slot the algorithm actually has. Not forwarded to
         # the model -- no output format has anywhere to put it.
@@ -875,6 +881,56 @@ class _KrzLayer:
         self.filter_env: Optional[Envelope] = None
 
 
+def krz_pitch_lfo_src2(cal: bytes):
+    """CAL -> (Src2's LFO1 pitch depth as a 0..1 fraction, wheel-gate or None).
+
+    Named and exported so the regression test drives THIS code rather than a
+    copy of its arithmetic -- the same precaution as `krz_total_transpose`,
+    taken because the first draft of that test would have passed with its fix
+    reverted.
+
+    DEPTH SEMANTICS, HW-MEASURED (k2kremote §73):
+      * `DptCtl` (cal[23]) scales LINEARLY between `MinDpt` (cal[24]) and
+        `MaxDpt` (cal[25]) -- wheel 0/64/127 gave +0.99/+1.97/+3.00 st for
+        Min=100 ct, Max=300 ct.
+      * With `DptCtl` OFF the wire sits at **MinDpt, not MaxDpt**. 14.2% of
+        corpus layers are DptCtl-off with Min != Max, so reading MaxDpt as the
+        depth would overstate every one of them.
+      * `Dpt` (cal[22]) is NOT in this wire's arithmetic -- changing it from
+        500 ct to 0 with everything else held moved the reading by nothing,
+        which is a held-everything-else difference rather than an endpoint
+        comparison, so no clamping argument rescues the alternative.
+      * All three depth fields share `krz_lfo_pitch_byte_to_cents`,
+        panel-confirmed at ten bytes (k2kremote §74), six below 100 cents --
+        the region where §KRZLFOPITCH's error hid while its endpoint looked
+        right.
+    """
+    if cal[26] != _K2_CS_LFO1:
+        return 0.0, None
+    lo = krz_lfo_pitch_byte_to_cents(cal[24])
+    hi = krz_lfo_pitch_byte_to_cents(cal[25])
+    full = lo if not cal[23] else max(lo, hi)
+    gate = None
+    if cal[23] == _K2_CS_MWHEEL and hi > 0.0 and hi > lo:
+        gate = max(0.0, min(1.0, 1.0 - lo / hi))
+    return full / LFO_PITCH_FULL_CENTS, gate
+
+
+def krz_total_transpose(cal: bytes) -> int:
+    """CAL segment -> total transposition in semitones: `Xpose + Coarse`.
+
+    Named and exported so the regression test exercises THIS code rather than a
+    copy of its arithmetic. The first version of that test reimplemented the sum
+    and would have passed with the parser reverted -- which is the failure this
+    whole fix came out of, one level up.
+    """
+    xpose = cal[1] - 256 if cal[1] >= 128 else cal[1]
+    coarse = (cal[17] - cal[15]) & 0xFF
+    if coarse >= 128:
+        coarse -= 256
+    return xpose + coarse
+
+
 def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]:
     """Return (preset_name, [_KrzLayer, ...]).  Segments before the first LYR
     tag (PGM/FX) are skipped — they carry no per-layer geometry/DSP."""
@@ -896,18 +952,78 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
             continue   # PGM/FX global segments
         if tag == CAL_TAG:
             cur.algorithm = seg[29]
-            t = seg[1]
-            cur.transpose = t - 256 if t >= 128 else t
+            # TOTAL TRANSPOSITION IS TWO FIELDS ADDED, NOT ONE.
+            #
+            # `CAL[1]` is the KEYMAP page's `Xpose`, HW-confirmed by
+            # k2kremote §73: probe 7 into offset 178, KEYMAP page reads 7ST.
+            # The PITCH page carries a SEPARATE `Coarse`, and it is the signed
+            # difference of two bytes -- CAL[17] minus CAL[15], 8-bit.
+            #
+            # We read only Xpose until 2026-09-14, so every layer using Coarse
+            # converted at the wrong pitch, silently and usually by an octave.
+            # **Corpus: Coarse is non-zero on 30.1% of 43,424 layers, >= 12
+            # semitones on 16.4%, and set with Xpose at ZERO on 22.4%** -- the
+            # last group losing the whole transposition. Top values -12 (3,020),
+            # +12 (1,817), +7 (919): musical intervals, not tuning trims.
+            #
+            # THEY ADD, measured (k2kremote §73), pitch read against a (0,0)
+            # capture so the sample's own tuning cancels:
+            #
+            #     Xpose 12 Coarse  0  -> +11.97 st
+            #     Xpose  0 Coarse 12  -> +11.97
+            #     Xpose 12 Coarse 12  -> +23.98      <- additive, not override
+            #     Xpose  7 Coarse  0  ->  +6.99
+            #     Xpose  0 Coarse  7  ->  +7.04
+            #
+            # The two single-field rungs are the carried known: each has to land
+            # on +12 alone or the rig is not measuring pitch and the joint rung
+            # means nothing.
+            #
+            # AND COARSE MUST BE READ AS THE DIFFERENCE. `CAL[17]` alone is
+            # wrong wherever `CAL[15]` is set, which is 5.7% of corpus layers.
+            #
+            # A NOTE ON WHY THIS WAS NOT CAUGHT BY COMPARING THE TWO FIELDS:
+            # across the whole corpus `CAL[1] == Coarse` on 53.6% of layers,
+            # which reads as "mostly agrees". That figure is 94.3% of rows
+            # having BOTH at zero. On the 2,495 rows where `CAL[15]` is actually
+            # live they agree on 3.4%. An agreement rate is meaningless until it
+            # is conditioned on the rows where the field is in play.
+            cur.transpose = krz_total_transpose(seg)
             cur.keymap_id = (seg[11] << 8) | seg[12]   # CAL[11:13] only, see TODO.md
+            # THE PITCH PAGE HAS TWO WIRES AND WE READ ONLY ONE UNTIL
+            # 2026-09-14. `Src1` (seg[21]) with its depth `Dpt` (seg[22]) is the
+            # one below; `Src2` (seg[26]) has its own depth in the MinDpt/MaxDpt
+            # PAIR THAT COMES BEFORE IT (seg[24]/[25]) and is gated by `DptCtl`
+            # (seg[23]). The byte order is not the page order -- the screen reads
+            # Src1, Depth, Src2, DptCtl, MinDpt, MaxDpt (k2kremote §72).
+            #
+            # **Corpus: LFO1 sits on Src1 on 4.6% of 43,424 layers and on Src2 on
+            # 22.6%.** 21.8% have it on Src2 and NOT Src1, 21.4% of those with a
+            # live depth -- their vibrato was dropped entirely. Src2 also carries
+            # MPress on 6,218 layers and LFO2 on 1,743.
+            #
+            # VIA CENTS, not via the byte. `seg[22] / 79.0` treated the byte the
+            # writer happened to stop at as full depth; the field is an index
+            # into a nonlinear cents curve reaching 7200 ct at byte 123, and 79
+            # is merely where 1200 ct lands. Normalising on LFO_PITCH_FULL_CENTS
+            # (1593, E4XT-measured) makes this the inverse of what we write.
+            #
+            # **ALL THREE DEPTH FIELDS SHARE THAT CURVE** -- panel-confirmed at
+            # ten bytes (k2kremote §74), including six below 100 cents, which is
+            # exactly the region where §KRZLFOPITCH's error hid: the endpoint
+            # looked right while small vibratos came out 20x too shallow. Checked
+            # where it failed before, not only where it would look fine.
             if seg[21] == _K2_CS_LFO1:
-                # VIA CENTS, not via the byte. `seg[22] / 79.0` treated the
-                # byte the writer happened to stop at as full depth; the field
-                # is an index into a nonlinear cents curve that reaches
-                # 7200 ct (6 octaves) at byte 123, and 79 is merely where
-                # 1200 ct lands. Normalising on LFO_PITCH_FULL_CENTS (1593,
-                # E4XT-measured) makes this the inverse of what we write.
                 cur.lfo1_to_pitch = min(1.0, krz_lfo_pitch_byte_to_cents(
                     seg[22]) / LFO_PITCH_FULL_CENTS)
+            _p2, _kw = krz_pitch_lfo_src2(seg)
+            if _p2:
+                # Two wires into one destination ADD on the machine; the model
+                # carries a single scalar, so they are summed rather than one
+                # silently winning. Clamped at full scale like the Src1 path.
+                cur.lfo1_to_pitch = min(1.0, cur.lfo1_to_pitch + _p2)
+            if _kw is not None:
+                cur.wheel_to_lfo = _kw
         elif tag == ENC_AMPMODE_TAG:
             if seg[1] != 1:   # 1 = Natural (hardware ignores ENV) -> leave default
                 pass          # actual ENV bytes read from ENV_AMP_TAG below
@@ -1642,6 +1758,7 @@ def parse_krz(path: str) -> Bank:
                     lfo1_to_filter=layer.lfo1_to_filter,
                     lfo2_to_filter=layer.lfo2_to_filter,
                     lfo1_to_pitch=layer.lfo1_to_pitch,
+                    wheel_to_lfo=layer.wheel_to_lfo,
                     lfo1_to_volume=layer.lfo1_to_volume,
                     velocity_to_volume_db=layer.velocity_to_volume_db,
                     velocity_to_volume_pivot=layer.velocity_to_volume_pivot,

@@ -5,6 +5,27 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 
 # Kurzweil K2000 `.KRZ` Bank Format — Reverse-Engineered Reference
 
+> **Section citations.** **This project never numbers its own sections** — all
+> 299 headings in `docs/RESOLUTION_NOTES.md` are named (`§KRZCOARSE`,
+> `§MODWHEEL`). So **a section reference that is a NUMBER is always a sibling
+> project's**, and must say whose. A named one is always ours.
+>
+> That is stronger than a per-file default, and it is why the rule is stated
+> rather than assumed: `test_citations_resolve` only resolves NAMED sections,
+> so every numbered citation in this repo is unchecked by construction. The
+> sibling ranges also overlap — s3ked's section 139 is a filter-corner
+> measurement while eosed's is a withdrawn cord-scale claim, and on 2026-09-15
+> that collision produced a correction to a citation that was already right.
+> Worse, s3ked's section 18 is a retraction about measuring the wrong program
+> while ours would be a confirmed write path: a reader resolving that one
+> locally lands somewhere actively misleading rather than merely absent.>
+> **k2kremote numbers PER FILE**, so a citation of theirs at 7 or below must name
+> the file: `RESOLUTION_NOTES.md` runs 1..73 and `MAC_FORMAT.md` runs 1..7, and
+> the two share every number in that range. Their §6 is "Name-edit cursor" in one
+> file and "Object lists — not covered" in the other. eosed and s3ked each number
+> across a single file, so theirs need only the project.
+
+
 This document describes the on-disk layout of `.KRZ` bank files for the
 **Kurzweil K2000 / K2500 / K2600 (VAST)** samplers, and the SCSI / CD / floppy
 media formats mpc2emu wraps them in, as reverse-engineered by the mpc2emu
@@ -1200,3 +1221,60 @@ who never saw our converter. The `MX10MPC` table could not give this: there,
 every row was our own constant read back. Zero resonance on twelve organ and
 12-string patches is also musically unremarkable, so the value is consistent
 rather than suspicious.
+
+## CAL segment: the KEYMAP and PITCH page field maps
+
+Hardware-read by k2kremote (§72, §73) — one distinctive byte written at a time
+over SysEx, the whole page read back and diffed against an all-zero baseline, so
+a changed cell names the field. **`CAL[k]` is program offset `177 + k`.**
+
+| KEYMAP page | | PITCH page | |
+|---|---|---|---|
+| `CAL[1]` 178 | **Xpose** (keymap transpose) | `CAL[15]`/`[17]` 192/194 | **Coarse** |
+| `CAL[3]` 180 | KeyTrk | `CAL[18]` 195 | Fine |
+| `CAL[4]` 181 | VelTrk | `CAL[19]` 196 | KeyTrk |
+| `CAL[11]`/`[12]` 188/189 | **KeyMap id, high/low** | `CAL[20]` 197 | VelTrk |
+| `CAL[14]` 191 | AltSwitch | `CAL[21]` 198 | Src1 |
+| | | `CAL[22]` 199 | Depth |
+| | | `CAL[23]` 200 | **DptCtl** |
+| | | `CAL[24]`/`[25]` 201/202 | MinDpt / MaxDpt |
+| | | `CAL[26]` 203 | **Src2** |
+| | | `CAL[30]` 207 | FineHz |
+
+`CAL[0]`, `[2]`, `[5..10]`, `[13]`, `[16]`, `[27]`, `[28]`, `[29]` drive nothing
+on either page. **Offset 208 is not part of CAL** — writing 0 there reads back
+`0x50`; it sits between the segment and the F1 block-type byte at 209 and the
+device keeps its own value.
+
+**COARSE IS A DIFFERENCE OF TWO BYTES**, read as 8-bit signed:
+
+    Coarse = (CAL[17] - CAL[15]) & 0xFF, signed
+
+    192=45 194= 0 -> -45ST     192=12 194= 0 -> -12ST     192=45 194=45 -> 0ST
+    192= 0 194=45 -> +45ST     192= 0 194=12 -> +12ST     192=211 194=0 -> +45ST
+
+A parser reading `CAL[17]` alone is wrong wherever `CAL[15]` is set — 5.7% of
+corpus layers.
+
+**THE BYTE ORDER IS NOT THE PAGE ORDER.** The screen reads
+`Src1, Depth, Src2, DptCtl, MinDpt, MaxDpt`; memory reads
+`Src1, Depth, DptCtl, MinDpt, MaxDpt, Src2`. **`DptCtl` gates the `Src2` wire**,
+not `Src1`'s depth, and `Src2` is not followed by its own depth — its depth is
+the MinDpt/MaxDpt pair that comes *before* it. A corpus-only reading of this
+segment produced exactly the wrong structure before the panel read existed.
+
+**The keymap pointer is TWO bytes** at 188/189. Probe 7 at 188 gave
+`999 Not Found`; at 189 it gave `7 Elec Jazz Guitar`. A parser reading 189 alone
+breaks above id 255 — `krz_parser` reads `(seg[11] << 8) | seg[12]` and is
+correct.
+
+**The control-source codes ARE the MIDI CC numbers**, at least through the first
+block — which is why `MWheel` is 1:
+
+    0 OFF   1 MWheel   2 Breath   3 MIDI03   4 Foot   5 PortTim   6 Data
+    7 Volume   8 Balance   9 MIDI09   10 Pan   11 Express   12-15 MIDI12-15
+    16 Ctl A   17 Ctl B      ...      45 Bal Ctl
+
+The unnamed ones are literally `MIDInn`. **So the data-entry slider is CC 6**,
+and the table is shared across pages — `AltSwitch` at 191 took code 7 and
+displayed `Volume`, the same name that code reads in `Src2`.
