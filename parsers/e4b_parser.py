@@ -646,7 +646,7 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     # stage has a nonzero TIME in only ~1-2% of voices (attack2 1.1%, decay2
     # 1.6%, release2 0.2%) — usually negligible — but where decay2's LEVEL
     # differs sharply from decay1's (0.9% of voices, concentrated in one-shot
-    # SFX content — e.g. a "a commercial SFX library the SFX bank" bank's laser/explosion/dialogue
+    # SFX content — e.g. a commercial SFX library's laser/explosion/dialogue
     # hits), decay1 alone reports "holds near-full forever" when the real
     # envelope decays to silence over decay1+decay2's combined time (one
     # measured case: decay1 rate byte 0 = 31ms read as the whole decay, vs.

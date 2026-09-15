@@ -2608,7 +2608,7 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
         #
         # MEASURED DISAGREEMENT 2026-09-07 (k2kremote, panel + audio):
         #     2-pole src  byte 113   machine  8.70 Hz   this law  8.70   ( 0.0%)
-        #     Grater      byte 141   machine 13.00 Hz   this law 11.50   (-11.5%)
+        #     Target      byte 141   machine 13.00 Hz   this law 11.50   (-11.5%)
         # A line through both points is Hz = 0.1536*byte - 8.654; our slope is
         # 0.1000, off by 35%. **The shape is wrong, not the scale** -- exact where
         # it was presumably set and diverging everywhere else, which is what a

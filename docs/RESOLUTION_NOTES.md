@@ -1200,8 +1200,7 @@ spacing almost always leaves a survivor in every band. Fixed by grouping
 the band-group level via `_thin_and_redistribute`, then applying each
 surviving band's (possibly widened) range to every voice in it. Verified
 against the real repro file
-(`.../Kirk.Hunter.Virtuoso.Series.Strings1.E4/KH Violins/B.003-2_8Violins128MB.e4b`,
-preset the 78-voice string preset): 5 → 4 distinct bands at `keep_pct=70` (was 5 → 5).
+(a 128 MB third-party orchestral-strings bank, its 78-voice string preset): 5 → 4 distinct bands at `keep_pct=70` (was 5 → 5).
 Also spot-checked the CR-6 code paths still hold through the new grouping: a
 synthetic overlapping-band case (all `hi_vel=127`, like the real file) kept
 original ranges via the CR-6 guard; a synthetic contiguous 3-band/2-voices-
@@ -25545,10 +25544,10 @@ to −50, so its low-velocity end is buried (2/9 to 8/9 cells clearing against
 Level tracks the writer's per-preset base offset exactly:
 
     preset               base offset   measured v127
-    Oct.Prot. 12Str.       -29.55         -57.0
-    Proteus 12String       -32.54         -63.9
-    Prot. 12Str. Lyr       -29.55         -61.0
-    Fat Prot. B3 Org        +0.00         -18.4
+    12-string, octave      -29.55         -57.0
+    12-string, plain       -32.54         -63.9
+    12-string, layered     -29.55         -61.0
+    tonewheel organ B       +0.00         -18.4
 
 ### Refuted explanation 1 (eosed): wrong cord destination or unapplied slot
 
@@ -25648,11 +25647,11 @@ directions, not inferred from a cancellation.**
 **Per key, in the same window, from our own E4B:**
 
     key   pluck            dB      organ          dB    delta
-     36   A13 12STR1     -7.4      A11 B3 1     -8.7    -1.4
-     48   A13 12STR1     -7.4      A11 B3 1     -8.7    -1.4
-     60   A14 12STR2    -12.1      A11 B3 1     -8.7    +3.4
-     72   A15 12STR3    -11.3      A12 B3 2     -9.8    +1.6
-     84   A16 12STR4    -13.3      A12 B3 2     -9.8    +3.5
+     36   PLUCK-LO-1     -7.4      ORGAN-LO     -8.7    -1.4
+     48   PLUCK-LO-1     -7.4      ORGAN-LO     -8.7    -1.4
+     60   PLUCK-LO-2    -12.1      ORGAN-LO     -8.7    +3.4
+     72   PLUCK-MD-3    -11.3      ORGAN-HI     -9.8    +1.6
+     84   PLUCK-HI-4    -13.3      ORGAN-HI     -9.8    +3.5
 
 **At k36 and k48 the pluck is LOUDER in the file than the organ**, and the
 machine renders it 40 dB quieter. **No file-side candidate remains.** The next
@@ -25661,11 +25660,11 @@ staged as `MXKRSRC.KRZ`.
 
 ### The loop pattern, which is real and explains the DECAY
 
-    A13 12STR1   48132 frames   loop 47723..48131   len   408   99% in
-    A14 12STR2   61093          loop 60684..61092   len   408   99% in
-    A15 12STR3   48679          loop 48577..48678   len   101  100% in
-    A16 12STR4   48750          loop 48699..48749   len    50  100% in
-    A11 B3 1     85569          loop 27502..85568   len 58066   32% in
+    PLUCK-LO-1   48132 frames   loop 47723..48131   len   408   99% in
+    PLUCK-LO-2   61093          loop 60684..61092   len   408   99% in
+    PLUCK-MD-3   48679          loop 48577..48678   len   101  100% in
+    PLUCK-HI-4   48750          loop 48699..48749   len    50  100% in
+    ORGAN-LO     85569          loop 27502..85568   len 58066   32% in
 
 **Every 12-string sample loops 1-9 ms at the very end of itself; the organ loops
 1.3 s from a third of the way in.** So the sustained portion of every pluck zone
@@ -25676,8 +25675,8 @@ explains the decay but not the level at attack.
 ### The wrong-subject error, and it is the one we have a section about
 
 Three of this side's file-side numbers — 8.5 dB whole-sample, 1.9 dB in-window,
-and the first loop analysis — were computed on **`A13 12STR1`, which covers keys
-12-56 and is silent at key 60 where the gap is measured.** `A14 12STR2` sounds
+and the first loop analysis — were computed on **`PLUCK-LO-1`, which covers keys
+12-56 and is silent at key 60 where the gap is measured.** `PLUCK-LO-2` sounds
 there.
 
 **§84 exactly: a check satisfied by the wrong subject.** The zone table was in
@@ -25971,7 +25970,7 @@ swing triggers the pivot trim is affected on the E4B path.
 
 `eosed`'s machine read gave P000's volume byte as **−39**; this side's first
 diff showed **−43**. The diff had picked **v1** (base −32.25) because it was the
-first voice whose zones matched "12STR", and several do. P000 is **v11**:
+first voice whose zones matched "PLUCK-LO", and several do. P000 is **v11**:
 
     v11   base -29.23   vpar[54] = 217 (signed -39)
           the same -39 at zone offsets 299, 321, 365
@@ -27026,8 +27025,8 @@ except here it is our own output rather than a measurement. And the rate is at
 0.08 Hz where the source asks 11.5, so **two fields are needed, not one**:
 `MODVPAN1` and `PANRAT` (byte 93 of a 99 maximum).
 
-**The audible baseline is captured** at `~/temp/panmod/mpc_grater_k60.wav` and
-the 45-cell grid at `grater_grid.wav`: 3.65 dB of balance swing at 11.46 Hz on
+**The audible baseline is captured** at `~/temp/panmod/mpc_target_k60.wav` and
+the 45-cell grid at `target_grid.wav`: 3.65 dB of balance swing at 11.46 Hz on
 the source, against a stationary image on all three targets. That is the "before"
 for a before/after, taken while the loss is still total.
 
@@ -27177,7 +27176,7 @@ parses differently, which is what makes it safe to apply without a corpus sweep.
 
 **Verified on one file of each layout:**
 
-    Grater (nested)     lfo1_to_pan 0.3701  vel_to_pan 0.0551  lfo1_to_pitch 0.0157  rate 11.5015 Hz
+    Target (nested)     lfo1_to_pan 0.3701  vel_to_pan 0.0551  lfo1_to_pitch 0.0157  rate 11.5015 Hz
     P008 (flat layout)  lfo1_to_pan 0.5276  vel_to_pan 0.0     lfo1_to_pitch 0.0787  rate  8.7288 Hz
 
 **The rate is an independent check on the whole path:** 11.5015 Hz from the file
@@ -28190,14 +28189,14 @@ any organ preset**. -22.9 dB floor less 8.3 to 11.4 dB of extrapolation lands
 at -31.2 to -34.3, which is the -29.6 / -32.5 actually written.
 
 **So the split is not by family at all — it is by whether a preset has velocity
-layers.** In this bank the 12-string/Phantasia patches carry them and the organs
+layers.** In this bank the 12-string/sustained pad patches carry them and the organs
 do not, so the two happen to coincide. Any organ patch with velocity layers
 would get the same treatment.
 
 **The source was read off the K2000's panel and carries no such cut — it has
 the opposite intent.** Every organ: OUTPUT Gain 0 dB, F4 AMP Adjust -4 to -7.
-Every 12-string/Phantasia: OUTPUT Gain **12 dB**, Adjust -2 to +6. No overlap in
-either field, both agreeing in sign. The source deliberately favours the Phantasia family
+Every 12-string/sustained pad: OUTPUT Gain **12 dB**, Adjust -2 to +6. No overlap in
+either field, both agreeing in sign. The source deliberately favours the sustained pad family
 by roughly +22 dB; we write it down by ~30.
 
 **And that resolves the loose end about the magnitude.** A faithful trim should
