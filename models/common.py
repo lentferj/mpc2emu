@@ -196,7 +196,38 @@ def nominal_filter_env_cents(fraction: float) -> float:
 #: NOMINAL, same caveat as FILTER_ENV_FULL_CENTS -- it is that number times
 #: the Vel+ source's 2.08-unit span (`E4XT_VEL_SOURCE_UNITS`), so it inherits
 #: the base it was measured from.
-VEL_FILTER_FULL_CENTS = 9120.0       # = 7.6 octaves * 1200
+#:
+#: **IT IS WORSE THAN NOMINAL: 9120 CENTS IS MORE THAN THE E4XT'S FILTER CAN
+#: TRAVEL AT ALL** (eosed §143, 2026-09-15, commissioned to settle exactly
+#: this). Their byte<->Hz law plus the panel's own top reading puts the whole
+#: FMORPH range at about 7829 cents, byte 20 -> 251. So 9120 overshoots the
+#: entire destination by ~1291 cents; it never named a span the machine has.
+#: Every +100% cord in their first run saturated for this reason, and the
+#: saturation guard is the only thing that stopped three confident
+#: base-dependence figures being derived from where a sound card ran out.
+#:
+#: **AND THE QUANTITY IS NOT CONSTANT, so re-measuring cannot fix it.** A cord
+#: adds FMORPH BYTES, not cents: across three bases the same cord spreads 9.5%
+#: in cents and 1.6% in bytes. That is the same result `E4XT_FENV_BYTE_PER_UNIT`
+#: already carries for the filter envelope, now reproduced through the velocity
+#: source. The correct treatment is `e4xt_cents_to_cord_amount` from the voice's
+#: own base -- **which `e4b_writer` already does** (`_cord(...,
+#: E4XT_VEL_SOURCE_UNITS)`, line ~1460). The E4XT write path never reads this
+#: constant.
+#:
+#: **WHAT IS STILL LIVE, AND WHY IT IS THE WRONG AXIS.** One caller remains:
+#: `gig_parser` turns a GIG velocity->cutoff FRACTION into cents with it. That
+#: is a target machine's number being used to state a SOURCE format's meaning
+#: -- the GIG fraction means whatever GigaStudio meant by it, which nobody here
+#: has measured, and an E4XT span cannot supply it. XPM was moved off this onto
+#: its own measured `MPC_FILTER_MOD_FULL_CENTS` on 2026-09-01; the GIG path was
+#: not, because there is nothing measured to move it to.
+#:
+#: Corpus exposure (155 GIG files, 160 voices): velocity->filter is non-zero on
+#: **15 (9.4%)**, cents 215 .. 8976, median 1436, one beyond the E4XT's travel.
+#: A small count, but the error is multiplicative -- every one of the 15 is
+#: scaled by a number that describes nothing. See TODO `GIGVELFILT`.
+VEL_FILTER_FULL_CENTS = 9120.0       # NOT a real span -- see above
 
 
 def nominal_velocity_filter_cents(fraction: float) -> float:
@@ -1311,6 +1342,14 @@ def akai_filq_to_01(byte: int) -> float:
 #: unsaturated points; an independent refit here through their own byte<->Hz
 #: calibration gives 2.480, agreeing to 1.0%.
 #:
+#: **CONFIRMED THROUGH A DIFFERENT SOURCE (eosed §143, 2026-09-15): 2.485 +/-
+#: 0.041**, measured on the VELOCITY cord rather than the filter envelope, six
+#: well-resolved rungs at three base cutoffs. Three derivations -- their
+#: envelope fit 2.506, our refit 2.480, their velocity fit 2.485 -- inside 1%
+#: of each other with different sources and different arithmetic. The same run
+#: re-demonstrated the base-independence the hard way: across three bases the
+#: shift spreads 9.5% in CENTS and 1.6% in BYTES.
+#:
 #: **It does NOT depend on the base cutoff.** Five bases agree to ~2.5% in
 #: BYTES. In OCTAVES the same data looks strongly base-dependent — 0.0917
 #: oct/unit from byte 0 against 0.0542 from byte 100 — and that is entirely an
@@ -2362,6 +2401,22 @@ def hz_to_e4b_cutoff(hz: float) -> float:
 # 48→0.454, 64→1.225.  Log-linear fit (R²=0.96): time_s = 0.0310·e^(0.0581·rate);
 # rate 0 = instant, higher = slower.  Single home for the E4B writer + parser
 # (CR-13 — were duplicated "kept in sync by comment").
+#
+# **THESE ARE THRESHOLD TIMES, NOT FULL-FALL TIMES** (measured 2026-09-14,
+# eosed). The law implies a fall of only ~48 dB, not the ~97.8 dB of
+# `ENV_FULL_SPAN_DB`, and for months that factor of ~2 sat unexplained between
+# this law and the dB/s law below -- one of them had to be wrong. Neither is.
+# Measuring four rate bytes directly at sustain 0 gives slopes within 0.9% of
+# `ENV_RATE_SWEEP` (mean ratio 0.991 +/- 0.016; a halving would need 2.000, i.e.
+# 63 sigma away), and the full-fall TIMES agree with the slopes at all four
+# bytes. So the June timings were taken to a threshold, not to silence:
+#
+#     byte 60  47.92 dB   byte 80  47.82 dB
+#     byte 72  46.77      byte 90  48.99      mean 48.9% of the span
+#
+# **48.9% and wandering, not 50.00% and fixed** -- which is what rules out a
+# 10log/20log slip and leaves "timed until it stopped sounding". The 1% that
+# separates those two stories is the whole diagnosis, so do not round it away.
 ENV_RATE_A = 0.0310
 ENV_RATE_K = 0.0581
 
@@ -2442,6 +2497,42 @@ ENV_RATE_K = 0.0581
 #: exists below for the sustain-PERCENT law and silently shadowed these when
 #: they were first written -- the module defined mine, then redefined the
 #: name 80 lines later, and every reading came out 0 dB. Python said nothing.
+#
+# **CROSS-CHECKED 2026-09-14 AND THE MEASUREMENTS ALL SIT BELOW THESE, NOT
+# AROUND THEM** (eosed, E4XT, four independent sweeps). Kept unchanged anyway --
+# read the last paragraph before touching either number.
+#
+# This pair was fitted over level bytes 80-116. A narrowband detector (2^16 FFT,
+# power over 7 bins, aim recomputed per call, floor taken at the SIGNAL's own
+# bin before the note) reaches 92 dB where a broadband RMS reaches 59, which
+# made bytes 25-127 measurable for the first time:
+#
+#     preset/note   f0        slope     byte 0     r2
+#      P009 / 52    82.76 Hz  0.7592    96.18      0.999952
+#      P012 / 64   327.39     0.7647    96.75      0.999891
+#      P023 / 64   329.59     0.7680    97.17      0.999858
+#      P009 / 52    82.76      0.7599    96.24     0.999939   (repeat)
+#
+#     mean 0.7630 +/- 0.0036, spread 1.15%;  byte-0 mean 96.59 +/- 0.40
+#
+# The spread decomposes: 0.35% across a 4:1 change in carrier frequency on one
+# sample, ~1% across four different samples. So the material contributes and the
+# carrier does not -- which rules out the detector's aim, the first thing a
+# frequency change would have exposed.
+#
+# **FOUR MEASUREMENTS DO NOT BRACKET THESE VALUES, THEY SIT UNDER THEM.** 0.7718
+# is 1.15% above the mean and 0.5% above the highest single measurement; 97.82 is
+# above every measured intercept. That one-sided pattern is the signature of a
+# systematic rather than scatter.
+#
+# WHY THEY ARE UNCHANGED. Everything above shares one signal path -- the E4XT's
+# analog out through one converter, one machine, one evening -- and a systematic
+# in that path moves all four together and looks exactly like this. The practical
+# disagreement is under 1 dB across the whole byte range, and it is smallest at
+# bytes 80-116 where this fit's own data was. **The test that would settle it is
+# a different OUTPUT PATH -- the digital out, or another converter -- not more
+# samples through this one.** Until that exists, changing a constant fitted on
+# one rig to match four measurements from another rig is a lateral move.
 ENV_LEVELBYTE_DB_INTERCEPT = 97.82   #: dB below peak at level byte 0
 ENV_LEVELBYTE_DB_PER_BYTE  = 0.7718  #: dB recovered per level byte
 #: The swept law's own two constants. Everything below is DERIVED from these
@@ -2954,10 +3045,101 @@ LFO_PITCH_FULL_CENTS = 1593.0
 #: hazard was ever letting a hardware fact and an internal unit share a name.
 LFO_VOLUME_MODEL_FULL_DB = 96.0
 
-#: EOS mod-cord amount 100 % -> dB of amplitude swing. **UNMEASURED** -- this
-#: is the one to edit when a MOD_DEPTH_CAL-style E4XT run finally pins it, and
-#: editing it then affects the E4B writer ALONE, which is the entire point of
-#: the split.
+#: EOS mod-cord amount 100 % -> dB of amplitude swing.
+#:
+#: **MEASURED 2026-09-14 (eosed) AND THIS VALUE IS ~4x TOO SMALL -- but it is
+#: also wired to nothing, so do not "fix" it in isolation.** See TODO's
+#: E4B-tremolo row and RESOLUTION_NOTES §E4BTREMOLO: the E4B writer emits no
+#: LFO->AmpVol cord at all, so this constant has no reader. Setting it right
+#: without writing the cord changes nothing; writing the cord without setting it
+#: right ships 4x-wrong tremolo depth on 16.9% of MPC instruments.
+#:
+#: What was measured, unmodulated level 45 dB below the ceiling, depth from a
+#: SINE FIT to the tracked envelope rather than percentiles (percentiles fold
+#: the tracker's own 2.7-3.5 dB scatter into the depth and inflate small ones):
+#:
+#:     amount 25   23.17 dB peak-to-trough      amount 50   47.65 dB
+#:
+#: 0.93-0.95 dB per unit of amount, linear to 3%, extrapolating to ~95 dB at
+#: full amount. Amount 100 clipped and is excluded, so the full-scale figure is
+#: an extrapolation over a 2:1 range.
+#:
+#: **THE SOURCE DECIDES WHERE THE SWING SITS, AND THE JULY ASSERTION WAS WRONG
+#: IN BOTH READINGS.** `lfo_volume_depth_to_amount` asserted a downward-only
+#: swing from 2026-07-28 until 2026-09-01, when it was withdrawn as resting on
+#: nothing. It does not duck down. Both sources give the SAME peak-to-trough
+#: (23.17 vs 23.15 at amount 25) and differ only in centring:
+#:
+#:     Lfo1~ (96)  centres on the unmodulated level  -> costs depth/2 of headroom
+#:     Lfo1+ (97)  centres half a depth ABOVE it     -> costs the WHOLE depth, and
+#:                                                     clips from 45 dB down
+#:
+#: Use `Lfo1~` when the cord is added. `Lfo1+` at amount 50 clipped from an
+#: unmodulated level 45 dB below the ceiling, which is not a corner case.
+#:
+#: **AND THERE IS A CEILING ABOVE THE ENVELOPE.** A cord drives the amp level to
+#: about 8 dB above what sustain 100 reaches and then stops -- four captures at
+#: two sources and two rates all peaked within 0.6 dB of one raw maximum. That
+#: is the headroom budget for any cord into this destination.
+#:
+#: OPEN, AND THE EVENING'S MOST INSTRUCTIVE NEAR-MISS. The question is whether
+#: one "cord full scale" serves every destination. Measured three ways:
+#:
+#:     AmpVol  (LEVEL)  126.4 bytes   direct, no rate calibration in the path
+#:     VEnvDcy (RATE)   132.2 +/- ~5  via a 4-point byte<->dB/s calibration
+#:  eosed §133 (RATE)   132           independent method, a source sweep at 10%
+#:
+#: Both level measurements used a CONSTANT source (`DC`, id 160), so there is no
+#: sine to fit, no period and no detector smearing -- 0.96442 dB per unit,
+#: r2 0.999917 over eight rungs spanning both signs. That one is solid.
+#:
+#: **The rate figure is not, and its r2 hides it.** It passes entirely through
+#: the byte<->dB/s calibration, and the interval slopes between adjacent
+#: calibration points -- all defensible readings of the same four measurements --
+#: give full scales of 125.6, 132.2, 136.2 and 137.0. **The spread is the same
+#: size as the effect**, and it straddles both 127 and 132. So the rate route
+#: supports 132 and cannot exclude 127.
+#:
+#: **So: keep 132 for rate destinations, 126.4 for level ones, and treat the
+#: ~4.6% difference as provisional.** Closing it needs the byte<->dB/s
+#: calibration measured properly -- more rate bytes, slow ones where detector
+#: smearing does not flatten the fall -- not more cord sweeps.
+#:
+#: **RESOLVED 2026-09-15 (eosed §143), and NOT by either of those routes.** The
+#: question could not be settled from these two destinations at all, because
+#: AmpVol and VEnvDcy BOTH have a range of 0..127 -- so "a cord spans its
+#: destination's range" and "a cord is worth a constant ~127 bytes" make
+#: identical predictions here and no amount of re-measuring either one can
+#: separate them. A THIRD destination with a DIFFERENT range does separate
+#: them. FMORPH is 0..255:
+#:
+#:     AmpVol  (level,  0..127)   126.4 of 127  =  99.5%
+#:     VEnvDcy (rate,   0..127)   131.2 of 127  = 103.3%
+#:     FMORPH  (filter, 0..255)   248.5 of 255  =  97.4%
+#:
+#: Mean 100.1% +/- 2.4%. **The constant-bytes reading is dead** -- it predicts
+#: 127 where 248 was measured -- and the destination-range reading is confirmed
+#: on the only case that can discriminate. The rate figure's 4.6% excess is the
+#: byte<->dB/s calibration, exactly as suspected above, not a real difference
+#: between destination kinds.
+#:
+#: This is §139's claim: asserted, withdrawn, then left open. Its CONCLUSION was
+#: right and its REASONING was not, and it is safe now only because of a test
+#: §139 never ran -- measuring a destination whose range is not 127. Keep the
+#: near-miss below anyway: the lesson there is about how the retraction was
+#: argued, and that lesson survives the hypothesis turning out true.
+#:
+#: THE NEAR-MISS, worth more than the numbers. For twenty minutes tonight
+#: eosed's §133 -- its 132 -- was retracted in favour of 127, on the reasoning
+#: that 127
+#: destination's own range, explains saturation neatly, and dissolves its own
+#: "132 slightly exceeds 0..127" curiosity. **The tidy hypothesis was wrong.**
+#: It survived on tidiness while the number underneath it -- a hand-averaged
+#: slope of -0.0565 where a least-squares fit of the same four points gives
+#: -0.05728 -- was arithmetic performed rather than fitted. 1.38% there moved
+#: the answer off 132 and made the retraction look justified. An anomaly that
+#: acquires an explanation stops being an anomaly; so does one dissolved by a
+#: rounder reading, and neither measurement could choose between them.
 E4B_LFO_VOLUME_FULL_DB = 24.0
 
 
@@ -4208,6 +4390,24 @@ def walk_files_deterministic(root):
 #: nothing on the F2 RES page would reveal it. (Also: the manual prints that
 #: page's first field as `Adjust:0ct`; the machine shows `Coarse:0ct`. The
 #: manual is authoritative on structure, not always on labels.)
+#:
+#: **THE UNMEASURED SCOPE WAS CLOSED BY PREVALENCE, NOT BY MEASUREMENT
+#: (2026-09-15).** The highpass, bandpass and notch gradients are still
+#: unmeasured and this constant is still used for them. What changed is that
+#: the cost of being wrong was counted on both sides, and both are ~0.2 %:
+#:
+#:   WRITE side, where the constant is actually consumed -- a ramp reaches a
+#:     non-lowpass Alg-1 filter only when fusion merges >3 voices of DIFFERING
+#:     `filter_resonance`: 20 of 10,003 E4B instruments (0.20 %), 4 of 267 XPM
+#:     (1.50 %). A ceiling, not a count: `_reson_keytrack_fit` throws the ramp
+#:     away unless it beats the flat value by 5 %.
+#:   READ side -- 88 of 43,424 corpus F2 blocks (0.20 %) carry a non-zero
+#:     KeyTrk on a nameable non-lowpass filter; 845 (1.9 %) is the bound if
+#:     every still-unclassified type code turned out to be one.
+#:
+#: So this is an ASSUMPTION HELD BY CHOICE, with the exposure quantified --
+#: not an assumption held by omission. Do not upgrade the comment to
+#: "measured" if someone runs the corpus again; only a K2000R can do that.
 KRZ_RES_KEYTRK_DB_PER_KEY = 1.010
 
 #: Byte encoding for F2 RES KeyTrk: 0.02 dB/key per unit, signed, measured by
@@ -4349,6 +4549,21 @@ KRZ_F4_AMP_DEPTH_CLAMP = 96
 #: as a conservative proxy -- an inference, not a measurement, and flagged as
 #: such because three K2000 rails this week turned out narrower than their
 #: containers. Real trims land in -90..+6, well inside any plausible rail.
+#:
+#: **CORPUS VERDICT (2026-09-15): the NEGATIVE bound is corroborated to the
+#: byte; the POSITIVE one is never exercised.** Histogrammed at index 1 over
+#: 43,424 F4 segments, 92.0 % of them non-zero:
+#:
+#:     observed range   -96 .. +42
+#:     exactly on -96    8 segments      beyond -96   NONE
+#:     within 6 of +96   NONE            largest      +42
+#:
+#: Material reaches -96 and stops there, which is what a clamp looks like from
+#: the outside; nothing comes within fifty of the positive bound, so a wrong
+#: +96 cannot touch any real conversion. Exposure if the negative rail is off
+#: by one step: 8 segments, 0.018 %. A panel read would confirm a bound the
+#: corpus already respects 43,424 times out of 43,424 -- which is why this is
+#: recorded here instead of being queued for the bench.
 KRZ_F4_AMP_ADJUST_INDEX = 1
 KRZ_F4_AMP_ADJUST_DB_PER_UNIT = 1.0
 KRZ_F4_AMP_SRC_LFO2 = 116
@@ -4437,10 +4652,70 @@ KRZ_F4_AMP_SRC_LFO2 = 116
 #: write an AKAI tremolo writer that "normalises" either factor without
 #: deciding, explicitly, which modulation is allowed to move.
 AKAI_LFO_LOUDNESS_DB_PER_PRODUCT = 0.010068
+#: Mod-matrix offsets. **SOURCE: the table in `docs/AKAI_S3000_FORMAT.md`,
+#: transcribed from Akai's own parameter document.** This pointer is here
+#: because its absence cost two rounds of argument on 2026-09-15: the doc
+#: recorded the provenance, this file did not, and an offset that reads as
+#: unsourced is cheap to doubt. If you change an offset here, change it there.
 AKAI_MODSAMP_OFFSETS = (79, 80, 88)
 AKAI_MODVAMP_PROG_OFFSETS = (92, 93)
+
+#: Keygroup offset 155 = `MODVAMP3`, the loudness mod-matrix amount for slot 3.
+#: **TRANSCRIBED from Akai's own parameter document** (see docs/AKAI_S3000_FORMAT.md,
+#: the mod-matrix table) -- not measured, but not unsourced either.
+#:
+#: **A DOUBT WAS RAISED AGAINST THIS OFFSET ON 2026-09-15 AND IS NOW WITHDRAWN.**
+#: Recorded because two of the three arguments were mine and both were wrong in
+#: ways worth keeping:
+#:
+#:   1. "Stored values run -116..+127, past the +-50 rail, so the offset must be
+#:      wrong." **Dead.** s3ked §256 wrote 90 and 166 to each of 151..155 over
+#:      SysEx and every one read back verbatim, surviving a wait, a program
+#:      change and sounding the voice. The rail belongs to the WRITE PATH, not
+#:      the field, so out-of-range stored values need no offset error at all.
+#:   2. "155 does not pile up at +-50 the way its four keygroup neighbours do
+#:      (0.73 % against 4.90-16.69 %), so it is not one of them." **Also dead,
+#:      and it was my second try after the first failed.** s3ked's caveat was
+#:      that a rail-pile rate is a USAGE statistic, not a field property; I
+#:      agreed with that in writing and then did not test it. Testing it kills
+#:      the argument: across the eight PROGRAM-level mod amounts the same rate
+#:      runs 0.00 % to 37.67 %, and `MODVAMP2` -- a loudness amount whose
+#:      identity nobody questions -- has 392 non-zero values and NOT ONE on the
+#:      rail. The narrow 4.9-16.7 % band was an accident of picking four
+#:      neighbours, and 155's rate is unremarkable against the real spread.
+#:   3. (s3ked's) "155 piles at 127 instead, so it is a 0..127 limit field like
+#:      HIVEL." **Dead too, and this one the corpus can settle outright**: a
+#:      0..127 field never sets the high bit, and across 209,592 HIVEL slots
+#:      exactly 0.00 % do. Offset 155 sets it on 0.49 % (257 slots). It is a
+#:      SIGNED field, which is what `MODVAMP3` should be.
+#:
+#: Also tested and rejected: that the out-of-rail values are one library's
+#: authoring tool. Excluding all 17 volumes that contribute one leaves the rate
+#: at 0.45 %, essentially unchanged.
+#:
+#: **What is left is consistent with 155 being MODVAMP3**: a rarely-used field
+#: (2.1 % non-zero, the rarest of the five) with a handful of out-of-rail
+#: stragglers that the write-path finding already explains. Not convicted, and
+#: no longer flagged.
 AKAI_MODVAMP3_KG_OFFSET = 155
+
 AKAI_MOD_SOURCE_LFO1 = 7
+
+#: +-50, the panel rail on the MODV amounts, and it is a PANEL rail rather than
+#: a stored-value invariant -- the byte-offset SysEx write path accepts 90 and
+#: 166 verbatim (s3ked §256). A reader must therefore CLAMP; a reader that
+#: assumes the range is wrong, and real material contains the counterexamples.
+#:
+#: Corroborated over 64 images / 9,465 S3000 programs by material piling up on
+#: the bound: program 92/93 run exactly -50..+50 over 18,930 slots with 77 on
+#: the bound and none past; keygroup 151..154 put 4.9-16.7 % of their non-zero
+#: values on +-50.
+#:
+#: **BUT THE ABSENCE OF A PILE PROVES NOTHING**, which is the lesson from the
+#: withdrawn 155 argument above. The pile rate is driven by how often anyone
+#: pushes THAT parameter to its limit: across the eight program-level amounts it
+#: ranges from 37.67 % (`MODVPAN1`) to 0.00 % (`MODVAMP2`, `MODVLFOD`). So a
+#: pile is evidence the rail is there; a missing pile is evidence of nothing.
 AKAI_MODVAMP_PANEL_RAIL = 50
 
 

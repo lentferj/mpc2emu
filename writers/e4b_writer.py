@@ -680,7 +680,26 @@ _env_db_per_s_to_rate = env_db_per_s_to_rate_byte  #: dB/s -> rate byte
 
 #: Peak-to-silence distance, used only for the RELEASE complement. Taken as the
 #: level law's own value at byte 0, so the two stages are internally consistent
-#: rather than using two different notions of "silence". Inferred, not measured.
+#: rather than using two different notions of "silence".
+#:
+#: **NO LONGER INFERRED — MEASURED 2026-09-14 (eosed).** This line read
+#: "Inferred, not measured" from the day it was written until then, and it was
+#: the most-extrapolated number in the converter: the level law was fitted over
+#: sustain bytes 80-116, where its own edge is 36.1 dB below peak, and this took
+#: that line out to byte 0 at 97.8 -- nearly three times past its data, on 37.8%
+#: of real E-MU voices (and 22.7% sitting at byte 0 exactly).
+#:
+#: A narrowband detector on a tonal source reaches 92 dB where the broadband RMS
+#: used for the original fit reaches 59, which made the bottom of the range
+#: measurable for the first time. Twenty rungs over bytes 25-127:
+#:
+#:     dB below peak = 97.78 - 0.7720 x byte      r2 0.99953
+#:     ours          = 97.82 - 0.7718
+#:
+#: **0.04 dB apart at byte 0**, on a different machine path with a different
+#: source and a different detector, with the measured band extended two and a
+#: half times. See `ENV_LEVELBYTE_DB_INTERCEPT` for the one-sided 1.15% question
+#: that four later sweeps raised and why the constants were NOT changed on it.
 _ENV_FULL_SPAN_DB = env_level_byte_to_db(0)
 
 
@@ -1195,8 +1214,11 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
     # THE RATE BYTE NEEDS THE SPAN. §ENVSPAN, hardware 2026-08-18: the byte is a
     # slew rate and the decay is linear in dB, so a stage's time is its dB
     # distance over that rate. `_fenv_rate` takes a time alone and is therefore
-    # only right at the span its calibration used -- AMP_DECAY_CAL.E4B set
-    # sustain=0 so the decay was audible, i.e. a full fall to silence. Every
+    # only right at the span its calibration used -- and that span is NOT a full
+    # fall to silence, as this comment claimed until 2026-09-14. It is ~48 dB,
+    # measured: see ENV_RATE_A. The claim was never checked and the arithmetic
+    # refutes it, which mattered because anyone repairing the attack path from
+    # here would have used 97.8 and been a factor of two out. Every
     # decay to a non-zero sustain was too fast: 1.5x at sustain byte 80, 15x at
     # byte 122, worst exactly where real presets live.
     #

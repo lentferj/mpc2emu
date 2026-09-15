@@ -344,6 +344,9 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§EOSRATEPIECE — the EOS envelope rate law is piecewise, and ours is one exponential](#eosratepiece-the-eos-envelope-rate-law-is-piecewise-and-ours-is-one-exponential)
 - [§XPMPADMAP — the pad→note map is authoritative (ANSWERED on hardware 2026-09-14)](#xpmpadmap-the-padnote-map-is-authoritative-answered-on-hardware-2026-09-14)
 - [§MPCENVREL — the MPC release law's SECONDS are ~2.8x short; the decay's shape is wrong](#mpcenvrel-the-mpc-release-laws-seconds-are-28x-short-the-decays-shape-is-wrong)
+- [§E4BTREMOLO — the E4B writer has no LFO→AmpVol cord (filed 2026-09-14)](#e4btremolo-the-e4b-writer-has-no-lfoampvol-cord-filed-2026-09-14)
+- [§MODWHEEL — modwheel→depth on every path, and the data-entry fallback (filed 2026-09-14)](#modwheel-modwheeldepth-on-every-path-and-the-data-entry-fallback-filed-2026-09-14)
+- [§KRZCOARSE — the PITCH page's Coarse transposition is never read (filed 2026-09-14)](#krzcoarse-the-pitch-pages-coarse-transposition-is-never-read-filed-2026-09-14)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -8815,7 +8818,7 @@ actually settles it.
 |---|---|---|
 | our parser treats only playback type 2 as unlooped, so the writer must not emit 0 for a one-shot | therefore 0 is the right value for a looped sample | the hardware, which loops mode 0 only in the release |
 | "the ?? regions are zero-filled by our writer" | true of the keygroup span, false of the common one, where 21 bytes carry measured values | reading the writer's actual output |
-| (k2kremote §6) the name-edit cursor is not in any device reply | therefore the parameter cursor is not readable over MIDI | the message table — `0x17` name, `0x16` value, readable all along |
+| (k2kremote RESOLUTION_NOTES §6) the name-edit cursor is not in any device reply | therefore the parameter cursor is not readable over MIDI | the message table — `0x17` name, `0x16` value, readable all along |
 
 In every case the reasoning was sound and the premise was drawn from a document
 that did not cover the case. **A round-trip argument settles a round trip and
@@ -33148,3 +33151,153 @@ release.
 
 `CD4-NOISE2`-class stationary material is the right subject, since it needs no
 division and no assumption about what the sample is doing.
+
+## §E4BTREMOLO — the E4B writer has no LFO→AmpVol cord (filed 2026-09-14)
+
+**What is missing.** `writers/e4b_writer.py`'s `_extra_cords` list writes
+LFO1→Pitch, LFO1→Filter-Freq, LFO1→Filter-Q, LFO1→AmpPan and the LFO2
+equivalents. There is no AmpVol destination in it, and `voice.lfo1_to_volume` /
+`voice.lfo2_to_volume` are never read on the E4B path. The KRZ writer reads both
+(`krz_writer.py:2286-2287`), so the model carries the data and only this writer
+drops it.
+
+**Why it was invisible.** `E4B_LFO_VOLUME_FULL_DB` exists and is documented as
+the constant that sets the depth, which reads as "implemented but uncalibrated".
+It is neither — nothing imports it. A constant can be wired to nothing and still
+look maintained, which is why the provenance audit found this and three months of
+envelope work did not.
+
+**What has to be decided before it can be written.**
+
+1. **Which cord source.** `Lfo1~` (0x60, id 96) is bipolar; `Lfo1+` (id 97) is
+   unipolar. At the same amount they differ by a factor of two in peak-to-trough,
+   so the constant is meaningless until the source is fixed. We write neither
+   today, so this is a free choice rather than a migration.
+2. **Where the swing sits relative to the unmodulated level.** If the peak rises
+   above it, a zone already near full scale can clip and the writer must reserve
+   depth/2 of headroom. `lfo_volume_depth_to_amount` asserted the downward-only
+   reading from 2026-07-28 until 2026-09-01, when the assertion was found to rest
+   on nothing.
+
+**The measurement** (eosed, E4XT, in progress 2026-09-14): one cord at full
+amount, slow rate, reporting trough and peak each relative to the unmodulated
+sustain level as well as their difference, for both sources separately. Two known
+biases both push the measured depth LOW and must be guarded rather than assumed
+away — an envelope tracker whose window is not short against the LFO period
+flattens the extremes toward the mean, and a noise floor adds power to the trough.
+Report the LFO period and cycles-per-window alongside the depth, and quote a lower
+bound when the trough is within 15 dB of the floor.
+
+**Then the code change** is a new entry in `_extra_cords` plus whatever headroom
+reservation (2) turns out to require, with `E4B_LFO_VOLUME_FULL_DB` finally
+carrying a measured value and a citation instead of `UNMEASURED`.
+
+## §MODWHEEL — modwheel→depth on every path, and the data-entry fallback (filed 2026-09-14)
+
+**Semantics to preserve**, from the one path that works. `wheel_to_lfo` (Kw) is
+the FRACTION of the LFO depth that is wheel-gated: at Kw=1 the LFO is silent at
+rest and reaches full depth at full wheel; at Kw=0 it sits at full depth always.
+The E4B writer encodes that as a static cord of `D*(1-Kw)` plus a
+`ModWheel → CordN-Amount` cord of `D*Kw`. Any new writer must reproduce the same
+curve, not merely "route the wheel somewhere".
+
+**K2000 target idiom** (pending the CAL map): `Src2 = LFO1`,
+`MinDpt = D*(1-Kw)`, `MaxDpt = D`, `DptCtl = MWheel`. That maps Kw without
+approximation IF DptCtl scales between Min and Max rather than offsetting from
+Dpt — which is the first thing to check when the panel is next open.
+
+**S3000XL target slot**: `MODSLFOL` (program offset 0x52) is already
+"-> LFO1 depth"; it needs its matching `MODVLFOL` amount. Also unknown: whether
+that amount ADDS to `LFODEP` or SCALES it. If it adds, a fully wheel-gated
+source needs `LFODEP` written at zero with the whole depth in the amount — a
+different write, not a different constant.
+
+### Jan's data-entry rule (2026-09-14)
+
+The K2000's **data-entry slider** (`Data`, control source 6, MIDI 06) is used
+for live sound shaping the way other machines use the wheel. **A KRZ program
+that uses the slider and NOT the wheel should map the slider onto modwheel in
+the target format**, or it converts with no live control at all.
+
+Measured over 11,854 K2000 programs, judged on the four filter wires where the
+field layout is documented (`Src1`=seg[5], `DptCtl`=seg[7], `Src2`=seg[10]):
+
+    uses MWheel only        4874   41.1%
+    uses Data-entry only     937    7.9%   <- the rule recovers these
+    uses BOTH               2861   24.1%   <- keep MWheel; the slider has no second home
+    uses neither            3182   26.8%
+
+So the rule is worth **7.9% of the corpus**, and the "both" case must NOT be
+collapsed -- two sources cannot share one wheel, and the wheel is the one the
+target can actually express.
+
+Where the slider points, when it is used:
+
+    F4 upper wire  Src1 2948    F4 upper wire  DptCtl 772
+    F2 resonance   Src1 2466    F3 (SEP)       DptCtl 649
+    F1 filter freq Src1 1315    F1 filter freq DptCtl 585
+    F3 (SEP)       Src1  945    F2 resonance   DptCtl 370
+
+Note this is mostly `Src1` — the slider drives the filter directly rather than
+gating a depth — so the K2000 READER's job is wider than the writer's: it has to
+recognise "a continuous controller on filter frequency" and not only the
+LFO-depth idiom.
+
+## §KRZCOARSE — the PITCH page's Coarse transposition is never read (filed 2026-09-14)
+
+**What we read.** `krz_parser._parse_program_object` takes
+`cur.transpose = seg[1]` from the CAL segment, sign-extended.
+
+**What the hardware says.** k2kremote §72 wrote one distinctive byte at a time
+over SysEx and read the whole PITCH page back, diffing against an all-zero
+baseline, so a changed cell names the field:
+
+    CAL[15]/[17] Coarse   CAL[18] Fine    CAL[19] KeyTrk   CAL[20] VelTrk
+    CAL[21] Src1          CAL[22] Depth   CAL[23] DptCtl
+    CAL[24] MinDpt        CAL[25] MaxDpt  CAL[26] Src2     CAL[30] FineHz
+
+`CAL[0..14]`, `[16]`, `[27]`, `[28]`, `[29]` drive nothing on that page — so
+`CAL[1]` is not a PITCH-page field at all. And **Coarse is a DIFFERENCE**:
+
+    192=45 194= 0 -> -45ST      192=12 194= 0 -> -12ST      192=45 194=45 -> 0ST
+    192= 0 194=45 -> +45ST      192= 0 194=12 -> +12ST      192=211 194=0 -> 45ST
+
+    Coarse = (CAL[17] - CAL[15]) read as 8-bit signed
+
+**They are different fields.** Overall `CAL[1] == Coarse` on 53.6% of 43,424
+layers — but that is an artefact of 94.3% of rows having `CAL[15] = 0` and both
+values at zero. **Restricted to the 2,495 layers where `CAL[15]` is non-zero,
+they agree on 3.4%.**
+
+**The manual has room for both**: a keymap `Transpose` of ±60 semitones
+(§"Transpose (Xpose)"), and a separate PITCH-page `Coarse Adjust`. `CAL[1]`'s
+corpus range is −64..103, consistent with the former.
+
+### What it costs
+
+    Coarse non-zero                      13083   30.1% of layers
+    |Coarse| >= 12 semitones              7123   16.4%
+    Coarse set AND CAL[1] zero            9744   22.4%   <- whole transposition lost
+    both set                              3339    7.7%
+
+Top values: −12 (3,020), +12 (1,817), +7 (919), +11 (760), +17 (644). Octaves,
+fifths and elevenths — deliberate musical transpositions, not tuning trims.
+
+Separately: **a parser reading `CAL[17]` alone instead of the difference is wrong
+wherever `CAL[15]` is set, which is 5.7% of layers.**
+
+### To resolve
+
+**One panel read from k2kremote settles which field is which**: set the keymap
+`Transpose` and see whether `CAL[1]` moves.
+
+- If `CAL[1]` IS the keymap Transpose, we read that correctly and simply never
+  read Coarse — a missing field, and the fix is additive.
+- If `CAL[1]` is something else, our transpose is wrong as well and the fix is a
+  correction, not an addition.
+
+**Do not guess from the corpus.** That was tried on this same segment three
+hours ago for the DptCtl question and produced a confident, wrong structure:
+`CAL[23]` looked like it gated `CAL[21]` and actually gates `CAL[26]`, because
+the byte order is not the page order. The same segment has already fooled one
+pattern-matching pass tonight.
