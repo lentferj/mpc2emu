@@ -1278,3 +1278,67 @@ block — which is why `MWheel` is 1:
 The unnamed ones are literally `MIDInn`. **So the data-entry slider is CC 6**,
 and the table is shared across pages — `AltSwitch` at 191 took code 7 and
 displayed `Volume`, the same name that code reads in `Src2`.
+
+## Envelope Control (`ENVCTL`) — segment `0x20`
+
+The K2000's per-layer envelope scaling, reverse-engineered by k2kremote
+2026-09-15 (their DUMP-diff, RAM only — panel-set, dumped with the editor open
+so nothing was saved, diffed against baseline, one byte moving per change).
+
+| index | field | | index | field |
+|---|---|---|---|---|
+| `[2]` | Att Adjust | | `[9]`  | Dec Source |
+| `[3]` | Att KeyTrk | | `[10]` | Dec Depth |
+| `[4]` | **Att VelTrk** | | `[11]` | Rel Adjust |
+| `[5]` | Att Source | | `[12]` | Rel KeyTrk |
+| `[6]` | Att Depth  | | `[13]` | Rel Source |
+| `[7]` | Dec Adjust | | `[14]` | Rel Depth |
+| `[8]` | Dec KeyTrk | | | |
+
+**`VelTrk` exists only on the `Att` row** — five bytes for Att against four
+each for Dec and Rel. The manual's "velocity tracking is hard-wired to control
+only the attack sections" is confirmed on the machine: the other two rows show
+that cell blank.
+
+**`1.000x` is byte 0 and is genuinely neutral.** Returning the panel to it
+produced an *empty* diff against baseline — the "is zero really zero" question
+answered by observation rather than inference.
+
+**The scale is the E24 preferred-number series**, read from firmware ROM at
+`0x1FC404`: 256 entries, signed-byte index, thousandths, spanning 0.018x to
+50.000x. 24 steps per decade, so a doubling is 24·log₁₀(2) = 7.22 steps — which
+is why `+8` doubles while `×4` lands on `+15` rather than `+16`. Three sampled
+points had looked like "roughly 7.5 per doubling"; the table says otherwise and
+cost nothing to read.
+
+**Scope: `ENVCTL` is per LAYER and drives the amplitude envelope *and*
+Envelopes 2 and 3 together.** So velocity→amp-attack and velocity→filter-env-
+attack cannot be aimed separately on this machine — one control does both. And
+"with the exception of Impact, `ENVCTL` does not affect the attack sections of
+*natural* envelopes", so a timing rig needs a User amplitude envelope or the
+field reads inert for a reason unrelated to the byte.
+
+Corpus: `Att VelTrk` is non-zero on **1,092 of 12,054 programs (9.1%)**, 44
+distinct values over −43..+43, **86% positive** (hard notes attack faster) —
+the same idiom the AKAI corpus shows at 96% and the E4XT factory cord uses.
+
+### Offsets are addresses inside a layout, not field identities
+
+k2kremote first reported this field as "program-object offset 117". That is
+correct for their scratch program and **not portable**: the segment stream
+before HOB varies with a program's layer count and which FUN/ENC blocks it
+carries, so one field lands in many places. Measured here over 6,575 corpus
+programs, `F2 RES KeyTrk` alone sits at **17 distinct absolute offsets** —
+204 (32.7%), 160 (18.4%), 192, 196, 200, 180, 176, 188 and more.
+
+Record the **segment tag and body index**. Their five earlier offsets convert
+without re-measuring: `199 → 0x40[22]`, `228 → 0x51[3]`, `241 → 0x52[0]`,
+`262/263 → 0x53[5]/[6]`, `117 → 0x20[4]`. This also confirms `CAL[k]` in this
+document is exactly `0x40[k]`.
+
+> The same walk explained something else: bytes k2kremote had twice recorded as
+> "defended by the device" because writes to them were refused are the segment
+> **tag** bytes (`0x50` at 208, `0x51` at 224, `0x20` at 112). A tag byte is not
+> a defended parameter, it is the structure — their read-back guard was
+> correctly catching a corrupted segment header. An anomaly with a
+> plausible-sounding name stops being investigated.

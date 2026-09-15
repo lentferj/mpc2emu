@@ -3117,6 +3117,16 @@ LFO_VOLUME_MODEL_FULL_DB = 96.0
 #:     VEnvDcy (rate,   0..127)   131.2 of 127  = 103.3%
 #:     FMORPH  (filter, 0..255)   248.5 of 255  =  97.4%
 #:
+#: A FOURTH CASE (eosed §144, 2026-09-15) -- Vol-Env ATTACK, 122.6 of its 127
+#: range = 96.6%, measured while confirming the velocity->attack law. Four
+#: destinations now, across two ranges and three parameter families:
+#:
+#:     AmpVol  (level,  0..127)   126.4 of 127  =  99.5%
+#:     VEnvDcy (rate,   0..127)   131.2 of 127  = 103.3%
+#:     FMORPH  (filter, 0..255)   248.5 of 255  =  97.5%
+#:     VEnvAtk (rate,   0..127)   122.6 of 127  =  96.6%
+#:                                        mean 99.2% +/- 2.6%
+#:
 #: Mean 100.1% +/- 2.4%. **The constant-bytes reading is dead** -- it predicts
 #: 127 where 248 was measured -- and the destination-range reading is confirmed
 #: on the only case that can discriminate. The rate figure's 4.6% excess is the
@@ -5168,35 +5178,77 @@ def akai_attack_span_to_vatt1(span) -> int:
 #: DECODED cord `0x69 -> 0x4A` (`Lfo2+ -> VEnvDcy`) sits exactly on Dcy. Two
 #: derivations, one documentary and one measured, agreeing on the offset.
 #:
-#: THE LAW FALLS OUT OF TWO THINGS ALREADY MEASURED, with nothing new assumed:
+#: THE LAW WAS DERIVED FROM TWO MEASURED RESULTS AND HAS NOW BEEN MEASURED
+#: DIRECTLY. It was composed from (a) a cord spans its DESTINATION's range
+#: (eosed §143) and (b) the attack byte is exponential in time with
+#: `ENV_RATE_K`, giving `span = exp(ENV_RATE_K * 1.27 * amount)`. eosed §144
+#: then measured the composite and it came out **4.5% low in the exponent**,
+#: ~8% in span at the amounts that matter:
 #:
-#:   * a cord spans its DESTINATION's range (eosed §143, established on FMORPH
-#:     because it is the one destination whose range is not 127 and so the only
-#:     one that can tell that reading from "a cord is worth ~127 bytes"), so an
-#:     amount of A percent adds `A * 1.27` to the 0..127 attack byte;
-#:   * the attack byte is exponential in time with `ENV_RATE_K` per byte.
+#:     amount   t(vel 1)   t(vel 127)    span     composed prediction
+#:         0      0.165       0.165      1.00           1.00
+#:        10      0.379       0.165      2.29           2.23
+#:        28      1.280       0.171      7.50           7.89
+#:        50      6.293       0.171     36.88          40.00
 #:
-#: Composing them, the SPAN IS INDEPENDENT OF THE BASE ATTACK:
+#: The error decomposes cleanly into the two ingredients, BOTH slightly high:
+#: our `ENV_RATE_K` 0.0581 against their measured 0.0576 (0.9%), and the
+#: 1.27 bytes per amount unit against an implied 1.226 (3.5%). Compounded,
+#: ~9% predicted against ~8% observed. So the composition was sound and each
+#: ingredient was a little generous -- which is the good failure mode for a
+#: derived law, and the reason to replace the product with the measured
+#: composite rather than to re-derive it.
 #:
-#:     span = t(vel 1) / t(vel 127) = exp(ENV_RATE_K * 1.27 * amount_percent)
+#: TWO THINGS THE RUN CONFIRMED RATHER THAN ASSUMED. `t(vel 127)` is constant
+#: across every amount, so `Vel<` really does deliver zero at full velocity and
+#: full source at velocity 1. And base-independence holds: with truncation and
+#: quantisation gated out, four bases give 7.26 / 7.74 / 6.78 / 7.12, mean
+#: 7.23 +/- 0.35 (4.8%), trend -0.41 across the whole range against a scatter
+#: of +/-0.35 -- not resolved.
 #:
-#: verified against the rate law to five digits at several bases. That is worth
-#: stating because the FILTER cord is emphatically NOT base-independent and
-#: needed `e4xt_cents_to_cord_amount` for exactly that reason -- the difference
-#: is that a ratio of times against an exponential byte law cancels the base,
-#: while a span in cents against the filter's byte<->Hz curve does not.
+#: **IT LOOKED FALSE TWICE FIRST, AND BOTH TIMES THE ARTEFACT PUSHED THE SAME
+#: WAY AS THE HYPOTHESIS.** A truncated rise shortens the span at high bases; a
+#: denominator of seven samples lengthens it at low ones. Either alone reads as
+#: base-dependence and together they manufacture a clean monotone trend across
+#: the sweep. eosed would have reported the law refuted from either run. The
+#: tell was impossible rather than statistical -- base 75 gave a LONGER-base
+#: rise measuring SHORTER than base 60, which no monotone rate law permits.
+#: Worth carrying: when an artefact biases toward the hypothesis under test,
+#: goodness of the trend is no evidence at all, and only an impossibility or an
+#: explicit validity gate catches it.
 #:
-#: DIRECTION, which is the easy thing to get backwards here: a higher E4XT rate
-#: byte is SLOWER (49.6 s at 127), and `Vel<` is inverted -- largest at low
-#: velocity. So a POSITIVE amount lengthens the attack of soft notes and leaves
-#: hard ones at the base, giving span > 1. That matches both the factory cord's
-#: own +28 and the idiom the corpus shows: 96% of the AKAI keygroups that set
-#: velocity->attack make hard notes faster, not slower.
+#: WHICH OF THEIR TWO NUMBERS THIS USES, AND WHY. §144 reports two runs and
+#: they do not quite agree. Their headline exponent, 0.07064, comes from the
+#: BASE sweep -- four bases at one amount, scatter 4.8%. Their AMOUNT sweep
+#: implies 0.0720 at amount 28 and 0.0722 at amount 50, two rungs agreeing to
+#: 0.3% and using the largest byte shifts. Against their own measured spans:
+#:
+#:     exponent            amount 10   amount 28   amount 50
+#:     0.07064 (base)        -11.5%       -3.6%       -7.3%
+#:     0.07206 (amount)      -10.2%       +0.3%       -0.5%
+#:
+#: The amount sweep is the run that measures the quantity this constant IS --
+#: how span varies with amount -- while the base sweep measures something else
+#: (base-independence) at a single amount, and is the noisier of the two. So
+#: 0.07206 is used. The amount-10 rung is ~10% off under either, and it is the
+#: smallest shift and so the worst-resolved -- the same weakness that made the
+#: denominator artefact bite there.
+#:
+#: **THE REAL UNCERTAINTY IS THE DISAGREEMENT, NOT EITHER FIT.** Amount 28 was
+#: measured in both runs and gave 7.23 and 7.50, 3.7% apart. Nothing here is
+#: better than ~2% in the exponent until that is reconciled, and no conversion
+#: in this project is sensitive at that level.
+E4XT_ATTACK_SPAN_EXP_PER_PERCENT = 0.07206
 E4XT_ATTACK_CORD_SRC_VEL_LT = 0x0C
 E4XT_ATTACK_CORD_DST_VOLENV_ATK = 0x49
-#: Bytes of destination per percent of cord amount, from the destination's own
-#: 0..127 range (eosed §143's mean 100.1% +/- 2.4% across three destinations).
-E4XT_CORD_BYTES_PER_PERCENT = 127.0 / 100.0
+#: Bytes of destination per percent of cord amount. MEASURED for this
+#: destination (eosed §144): 1.226, i.e. a +100% cord moves 122.6 of the attack
+#: byte's 127 range, 96.6%. That makes a FOURTH case for §143's rule that a
+#: cord spans its destination's range -- AmpVol 99.5%, VEnvDcy 103.3%, FMORPH
+#: 97.5%, VEnvAtk 96.6%, mean 99.2% +/- 2.6% over two ranges and three
+#: parameter families. Used here only for the saturation clamp; the span itself
+#: comes from the measured exponent above.
+E4XT_CORD_BYTES_PER_PERCENT = 1.226
 
 #: The EOS template's own amount for this cord, in raw cord bytes. MEASURED
 #: from the corpus, not from a spec: the cord is present on 90.6% of 241,433
@@ -5269,7 +5321,10 @@ def e4xt_attack_span_from_cord(amount_percent, base_byte=None) -> float:
     added = amount_percent * E4XT_CORD_BYTES_PER_PERCENT
     if base_byte is not None:
         added = max(-base_byte, min(127.0 - base_byte, added))
-    return math.exp(ENV_RATE_K * added)
+        # re-express the clamped byte shift as an amount so the MEASURED
+        # exponent still applies; unclamped this is just amount_percent
+        amount_percent = added / E4XT_CORD_BYTES_PER_PERCENT
+    return math.exp(E4XT_ATTACK_SPAN_EXP_PER_PERCENT * amount_percent)
 
 
 def e4xt_cord_amount_for_attack_span(span, base_byte=None) -> float:
@@ -5281,10 +5336,12 @@ def e4xt_cord_amount_for_attack_span(span, base_byte=None) -> float:
     """
     if not span or span <= 0.0:
         return 0.0
-    added = math.log(span) / ENV_RATE_K
+    amount = math.log(span) / E4XT_ATTACK_SPAN_EXP_PER_PERCENT
     if base_byte is not None:
-        added = max(-base_byte, min(127.0 - base_byte, added))
-    return max(-100.0, min(100.0, added / E4XT_CORD_BYTES_PER_PERCENT))
+        added = max(-base_byte, min(127.0 - base_byte,
+                                    amount * E4XT_CORD_BYTES_PER_PERCENT))
+        amount = added / E4XT_CORD_BYTES_PER_PERCENT
+    return max(-100.0, min(100.0, amount))
 VEL_VOL_PIVOT_KRZ = 127
 
 #: K2000 `F4 AMP VelTrk`, HOB segment 0x53 index 4: dB of velocity swing per
