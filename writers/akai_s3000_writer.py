@@ -48,6 +48,7 @@ from models.common import (
     KEY_FILTER_OCT_PER_OCT,
     AKAI_FILTER_LAW, AKAI_FILTER_OPEN, AKAI_FILTER_OPEN_HZ, akai_filfrq_to_hz,
     akai_lfo_depth_split, akai_delay_seconds_to_byte,
+    akai_attack_span_to_vatt1, VEL_ATTACK_PIVOT_AKAI,
     AKAI_ENV2_ATTACK, AKAI_ENV2_DECAY, AKAI_ENV2_RELEASE,
     AKAI_ENV2_DEPTH_OFFSET, AKAI_ENV2_DEPTH_MAX, akai_lfo2_rate_byte,
     Bank, LoopType, SampleData, safe_filename,
@@ -2645,6 +2646,10 @@ def _filter2_plan(voice):
 _FIL2FR_OFF_DEFAULT = AKAI_FIL2FR_TRANSPARENT
 
 
+#: `V_ATT1`, keygroup byte 16 -- see the parser constant of the same name.
+AKAI_VATT1_OFFSET = 16
+
+
 def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
               voice=None, dead_key_ranges=None, ib304f: bool = False,
               probe: bool = False) -> bytearray:
@@ -3034,6 +3039,26 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
     k[0x0d] = _d                        # amp decay
     k[0x0e] = _s                        # amp sustain
     k[0x0f] = _r                        # amp release
+    # VELOCITY -> ATTACK (`V_ATT1`, keygroup 16). The one envelope-scaling
+    # route on this machine that is both measured and alive -- s3ked's §47
+    # found five of its six neighbours inert, and re-screened them after
+    # catching that the first detector could not have seen a timing change.
+    #
+    # ONLY WHEN THE SOURCE'S PIVOT IS THIS MACHINE'S. A ratio measured against
+    # velocity 127 (the K2000's pivot) means something different against 64,
+    # and converting between the two needs the source's velocity->attack SHAPE,
+    # which nobody has measured on any machine. Writing it anyway would put a
+    # confident number on an unsupported conversion, so a foreign pivot is
+    # dropped and said out loud rather than silently rescaled.
+    _span = getattr(voice, 'velocity_to_amp_attack_span', None) if voice else None
+    if _span and abs(_span - 1.0) > 1e-9:
+        _piv = getattr(voice, 'velocity_to_amp_attack_pivot', None)
+        if _piv == VEL_ATTACK_PIVOT_AKAI:
+            k[AKAI_VATT1_OFFSET] = akai_attack_span_to_vatt1(_span) & 0xFF
+        elif not probe:
+            print(f"  note: velocity->attack pivot {_piv} is not this machine's "
+                  f"{VEL_ATTACK_PIVOT_AKAI}; the routing is dropped rather than "
+                  f"rescaled through an unmeasured shape")
     # ENVELOPE 2 (filter): DECAY2 / SUSTN2 / RELSE2 at doc offsets 21/22/23.
     # DELIBERATELY STILL FIXED, while the amp envelope above now follows the
     # source. These are a SEPARATE parameter set from ATTAK1/DECAY1/RELSE1,

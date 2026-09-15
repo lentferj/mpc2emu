@@ -4124,6 +4124,24 @@ class VoiceLayer:
     #: Velocity at which `velocity_to_volume_db` has no effect. Set together
     #: with the swing or not at all.
     velocity_to_volume_pivot: Optional[int] = None
+
+    #: Attack-time SPAN across the velocity range: the amp envelope's attack
+    #: time at velocity 1 divided by its time at velocity 127. 1.0 (or None)
+    #: means velocity does not touch the attack; 4.0 means a soft note takes
+    #: four times as long to reach full level as a hard one. Greater than 1 is
+    #: the overwhelmingly common case -- 96% of the AKAI corpus keygroups that
+    #: set it make hard notes faster.
+    #:
+    #: PIVOT-FREE ON PURPOSE. The three machines put their no-effect velocity
+    #: in different places, so a depth stated against one machine's pivot needs
+    #: a velocity->attack shape to reach another's -- and no such shape is
+    #: measured anywhere. A span between two velocities every machine has needs
+    #: none. See `akai_vatt1_to_attack_span` for the reasoning in full.
+    velocity_to_amp_attack_span: Optional[float] = None
+    #: The velocity at which the separately-stored `amp_env.attack` TIME
+    #: applies -- 64 on the AKAI, measured. Not needed to interpret the span
+    #: above; needed to interpret the absolute time beside it.
+    velocity_to_amp_attack_pivot: Optional[int] = None
     #: SHAPE of that response: VELOCITY_CURVE_DB_LINEAR (the default, and what
     #: AKAI/K2000/E4XT all measure as) or VELOCITY_CURVE_AMPLITUDE_LINEAR (the
     #: MPC). The span above describes a response completely only for the first
@@ -5041,6 +5059,104 @@ def mpc_velsens_swing_db(sensitivity: float) -> float:
 #: its setting in full downward from the loudest note (k2kremote), the E4XT's
 #: three from E4XT_VEL_PIVOT above.
 VEL_VOL_PIVOT_AKAI = 64
+
+
+# ── Velocity -> AMP ENVELOPE ATTACK ────────────────────────────────────────
+#
+# All three machines scale the attack RATE with velocity and all three spell it
+# differently: the AKAI as a bipolar depth about velocity 64, the E4XT as a mod
+# cord into the Vol-Env Attack destination, the K2000 as a literal multiplier
+# on its ENVCTL page. So the model carries the physical quantity, as it does
+# for `velocity_to_filter_cents`, rather than any one machine's depth number.
+#
+# THE UNIT IS THE FULL VELOCITY SWEEP: attack time at velocity 1 divided by
+# attack time at velocity 127. Greater than 1 means hard notes attack FASTER,
+# which is the common case by a wide margin.
+#
+# **IT IS DELIBERATELY PIVOT-FREE, and the first version of this was not.**
+# Defining it against each machine's own no-effect velocity (64 on the AKAI,
+# 127 for the E4XT's `Vel<`) made the number meaningless without its pivot and
+# made AKAI->E4B unconvertible without a velocity->attack SHAPE that nobody has
+# measured on any machine. The span between two velocities every machine has
+# needs no such shape. Two further things fell out of the change, and both say
+# the unit is right rather than merely convenient:
+#
+#   * it SEPARATES ALL FIVE measured depths, where the pivot-relative ratio
+#     collapsed +25 and +50 onto the same number;
+#   * the machine looks SYMMETRIC in it. Consecutive log10 steps across the
+#     measured depths run -0.398, -2.077, -2.070, -0.398 -- the outer pair
+#     equal to three digits and the inner pair to three. A quantity in which
+#     the hardware's own behaviour comes out symmetric is usually the
+#     hardware's own quantity.
+#
+# The pivot is still carried alongside, because it says at which velocity the
+# separately-stored `amp_env.attack` TIME applies, and the three machines do
+# not agree on that either.
+
+#: Velocity pivot for the AKAI's `V_ATT1`: the authored attack time is what you
+#: hear at velocity 64, not at 0 or 127. MEASURED (s3ked §47): at velocity 64
+#: the rise is 0.535-0.555 s at EVERY depth from -50 to +50. `V_LOUD` pivots on
+#: 64 as well (their §37), so two independent fields agree and this is the
+#: machine's velocity centre rather than one measurement's coincidence.
+VEL_ATTACK_PIVOT_AKAI = 64
+
+#: AKAI `V_ATT1` (keygroup byte 16, -50..+50) -> attack-time SPAN, t(vel 1) /
+#: t(vel 127). MEASURED (s3ked §47), five depths, rise times in seconds:
+#:
+#:     V_ATT1   vel 1     vel 64    vel 127     span = t1/t127
+#:       -50    2.955     0.555     0.010          295.5
+#:       -25    2.955     0.545     0.025          118.2
+#:         0    0.545     0.535     0.550            0.99
+#:       +25    0.025     0.540     2.970            0.0084
+#:       +50    0.010     0.545     2.970            0.0034
+#:
+#: SIGN: positive makes hard notes SLOWER (span < 1), negative faster.
+#:
+#: **A TABLE, NOT A FIT, AND DELIBERATELY SO.** s3ked recorded no law for this
+#: field because the effect is not a simple exponential in (velocity - 64): at
+#: depth 50 the symmetric form predicts 0.100 s at velocity 1 and the machine
+#: gives 0.010 s. Forcing a shape onto that is the error their §29 exists to
+#: prevent, so this interpolates piecewise-linearly in log(span) between the
+#: measured anchors and claims nothing between them beyond monotonicity.
+#:
+#: Note what the span does NOT collapse: BOTH ends stay distinct here, while
+#: the ends saturate when read one-sidedly (-50 and -25 share t(vel 1); +25 and
+#: +50 share t(vel 127)). Measuring across the whole sweep sees a field that
+#: looks saturated from either end alone.
+AKAI_VATT1_SPAN_POINTS = ((-50, 295.5), (-25, 118.2), (0, 1.0),
+                          (25, 0.00842), (50, 0.00337))
+
+
+def akai_vatt1_to_attack_span(byte: int) -> float:
+    """`V_ATT1` -> attack-time span t(vel 1) / t(vel 127)."""
+    b = max(-50, min(50, int(byte)))
+    pts = AKAI_VATT1_SPAN_POINTS
+    if b <= pts[0][0]:
+        return pts[0][1]
+    for (b0, s0), (b1, s1) in zip(pts, pts[1:]):
+        if b <= b1:
+            if b1 == b0:
+                return s1
+            f = (b - b0) / (b1 - b0)
+            return 10.0 ** (math.log10(s0) + f * (math.log10(s1) - math.log10(s0)))
+    return pts[-1][1]
+
+
+def akai_attack_span_to_vatt1(span) -> int:
+    """Attack-time span -> the `V_ATT1` that best reproduces it.
+
+    Monotonic over the whole -50..+50 range in this unit, so unlike the
+    pivot-relative form there is no saturated plateau to disambiguate.
+    """
+    if not span or span <= 0.0:
+        return 0
+    target = math.log10(span)
+    best, berr = 0, None
+    for b in range(-50, 51):
+        e = abs(math.log10(akai_vatt1_to_attack_span(b)) - target)
+        if berr is None or e < berr:
+            best, berr = b, e
+    return best
 VEL_VOL_PIVOT_KRZ = 127
 
 #: K2000 `F4 AMP VelTrk`, HOB segment 0x53 index 4: dB of velocity swing per

@@ -68,6 +68,7 @@ from models.common import (
     AKAI_MODSAMP_OFFSETS, AKAI_MODVAMP_PROG_OFFSETS,
     AKAI_MODVAMP3_KG_OFFSET, AKAI_MOD_SOURCE_LFO1,
     AKAI_MODVAMP_PANEL_RAIL,
+    akai_vatt1_to_attack_span, VEL_ATTACK_PIVOT_AKAI,
     Envelope)
 import math
 
@@ -89,6 +90,12 @@ AKAI_LPTCH_MAX = 50
 #: misattributes an LFO or envelope depth to velocity on any program where
 #: the assignment differs. Read alongside `AKAI_MODSFILT1_OFFSET` and only
 #: trusted as velocity when that byte equals `AKAI_MODSRC_VELOCITY`.
+#: `V_ATT1`, keygroup byte 16: note-on velocity dependence of envelope 1's
+#: attack rate, signed -50..+50 (s3ked's parameter table; the byte offset is
+#: confirmed against our own layout by ATTAK1 at 12 and RELSE1 at 15, which
+#: this parser already reads at 0x0c and 0x0f).
+AKAI_VATT1_OFFSET = 16
+
 AKAI_MODVFILT1_OFFSET = 151
 #: Program-level assignable-source selectors (one per filter-freq mod slot).
 #: Measured on two programs (the reference preset, preset 4) reading identically --
@@ -945,6 +952,14 @@ def parse_program_bytes(data: bytes, fallback_name: str = '',
             # these feed conversion output (the tremolo depth below and the
             # velocity->filter span), so an out-of-rail stored byte would
             # arrive as a depth the machine never plays.
+            # V_ATT1 (keygroup 16): velocity -> envelope-1 attack RATE, the
+            # one envelope-scaling field on this machine that is both measured
+            # and alive. s3ked's §47 found five of its six neighbours inert;
+            # this one responds, and is set on 19.4% of corpus keygroups
+            # across 465 volumes with 73 distinct values, so it is authored
+            # rather than a template leftover.
+            vel_to_attack=(_s8_rail(kg[AKAI_VATT1_OFFSET])
+                           if len(kg) > AKAI_VATT1_OFFSET else 0),
             mod_amount_amp3=(_s8_rail(kg[AKAI_MODVAMP3_KG_OFFSET])
                              if len(kg) > AKAI_MODVAMP3_KG_OFFSET else 0),
             mod_amount_filt1=(_s8_rail(kg[AKAI_MODVFILT1_OFFSET])
@@ -1265,6 +1280,15 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
             voice.lfo1_to_volume = min(1.0, _db / LFO_VOLUME_MODEL_FULL_DB)
             if voice.lfo1_rate is None:
                 voice.lfo1_rate = akai_lfo_rate_hz(prog.get('lfo_rate', 0))
+        # VELOCITY -> AMP ENVELOPE ATTACK. Carried as the attack-TIME ratio at
+        # full velocity against this machine's pivot, not as the raw depth --
+        # the depth only means something beside the AKAI's own scale, and the
+        # pivot travels with it because 64 is not where the other two machines
+        # put theirs.
+        _va = kg.get('vel_to_attack') or 0
+        if _va:
+            voice.velocity_to_amp_attack_span = akai_vatt1_to_attack_span(_va)
+            voice.velocity_to_amp_attack_pivot = VEL_ATTACK_PIVOT_AKAI
         voice.filter_cutoff = _cutoff_of(kg['filter_freq'], prog['is_s3000'])
         # ── IB-304F second filter, when the DATA says it is doing something.
         # `LSI2_ON` alone is not evidence: it reads back 1 with no board fitted,
