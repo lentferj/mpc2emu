@@ -1007,6 +1007,10 @@ def parse_program_bytes(data: bytes, fallback_name: str = '',
         # LFO1, read by nobody until 2026-08-24 (§AKAILFO). The AKAI LFO is
         # per PROGRAM, not per keygroup, so it lands on every voice.
         lfo_rate=data[0x21], lfo_depth=data[0x22], lfo_delay=data[0x23],
+        # MWLDEP (0x24): the share of LFO1 depth the MODWHEEL gates, on top of
+        # the always-on LFODEP above. Read by nobody until 2026-09-15, and the
+        # omission was not small -- see the voice build for the prevalence.
+        lfo_wheel_depth=(data[0x24] if len(data) > 0x24 else 0),
         # LFO1WAVE, byte 97 -- s3ked's §46 hardware measurement (2026-08-12),
         # read by nobody until 2026-08-31. Feeds the RMS->peak factor in
         # `akai_lfo_depth_to_pitch`; see AKAI_LFO_WAVE_RMS_TO_PEAK.
@@ -1193,10 +1197,30 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
         # "the obvious guess and NOT applied" -- that was true before
         # 2026-08-31 and is stale now; corrected here rather than left to
         # mislead the next reader (§AKAILPTCH, TODO.md Space-E entry).
-        if prog.get('lfo_depth') and kg.get('lfo_to_pitch'):
+        # THE MODWHEEL'S SHARE IS PART OF THE DEPTH, and reading LFODEP alone
+        # lost it. `MWLDEP` (0x24) adds to `LFODEP` (0x22) when the wheel is
+        # up, so the program's full vibrato is the SUM and the wheel fraction
+        # is the gated part's share of it -- exactly what the writer splits
+        # apart in `akai_lfo_depth_split`, inverted. The byte->pitch law is
+        # exactly linear in the byte, so the sum is the right thing to convert
+        # and no term needs converting separately.
+        #
+        # THE OMISSION WAS THE COMMON CASE, not an edge one. Over 9,465 S3000
+        # programs on 64 disc volumes: `MWLDEP` is non-zero on 89.2%, takes 43
+        # distinct values with no dominant one (30 at 27.9%, 20 at 16.9%, 9 at
+        # 15.8%), so it is AUTHORED rather than a factory constant left alone.
+        # And **46.5% of programs have LFODEP=0 with MWLDEP>0** -- no always-on
+        # vibrato, wheel-controlled vibrato -- every one of which this reader
+        # reported as having no LFO at all. A further 42.8% have both, and were
+        # under-read by the wheel's share.
+        _dep = prog.get('lfo_depth') or 0
+        _mwl = prog.get('lfo_wheel_depth') or 0
+        _tot = _dep + _mwl
+        if _tot and kg.get('lfo_to_pitch'):
             voice.lfo1_rate = akai_lfo_rate_hz(prog.get('lfo_rate', 0))
             voice.lfo1_to_pitch = akai_lfo_depth_to_pitch(
-                prog['lfo_depth'], kg['lfo_to_pitch'], prog.get('lfo1_wave'))
+                _tot, kg['lfo_to_pitch'], prog.get('lfo1_wave'))
+            voice.wheel_to_lfo = _mwl / _tot
             voice.lfo1_delay = akai_lfo_delay_seconds(prog.get('lfo_delay', 0))
             # WAVEFORM -- carried since 2026-08-31 (§46/§AKAILFOWAVE). Not
             # just the depth factor: the K2000 and E4B writers can select
