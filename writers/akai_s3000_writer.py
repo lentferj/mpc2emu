@@ -49,6 +49,7 @@ from models.common import (
     AKAI_FILTER_LAW, AKAI_FILTER_OPEN, AKAI_FILTER_OPEN_HZ, akai_filfrq_to_hz,
     akai_lfo_depth_split, akai_delay_seconds_to_byte,
     akai_attack_span_to_vatt1, VEL_ATTACK_PIVOT_AKAI,
+    akai_attack_time_at_pivot,
     AKAI_ENV2_ATTACK, AKAI_ENV2_DECAY, AKAI_ENV2_RELEASE,
     AKAI_ENV2_DEPTH_OFFSET, AKAI_ENV2_DEPTH_MAX, akai_lfo2_rate_byte,
     Bank, LoopType, SampleData, safe_filename,
@@ -3031,7 +3032,22 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
     # range each was actually fitted over; values outside it clamp rather than
     # extrapolate.
     _env = getattr(voice, 'amp_env', None) if voice is not None else None
+    # RE-ANCHOR THE ATTACK TIME IF IT CAME FROM ANOTHER MACHINE'S PIVOT.
+    # `amp_env.attack` is the time at the SOURCE machine's no-effect velocity;
+    # ATTAK1 is the time at velocity 64, measured. The E4XT anchors at 127, so
+    # its attack has to be moved before it is encoded or the whole envelope
+    # lands in the wrong place by the size of its own velocity span.
+    #
+    # The span itself is pivot-free and needs no conversion -- that is the
+    # reason for the unit. Only the TIME beside it does.
     if _env is not None:
+        _sp = getattr(voice, 'velocity_to_amp_attack_span', None)
+        _pv = getattr(voice, 'velocity_to_amp_attack_pivot', None)
+        if _sp and _pv is not None and _pv != VEL_ATTACK_PIVOT_AKAI:
+            import copy as _c
+            _env = _c.copy(_env)
+            _env.attack = akai_attack_time_at_pivot(
+                _env.attack, akai_attack_span_to_vatt1(_sp))
         _a, _d, _s, _r = akai_env_bytes(_env, quiet=probe)
     else:
         _a, _d, _s, _r = 0, 50, 99, 45     # the historical defaults
@@ -3052,13 +3068,7 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
     # dropped and said out loud rather than silently rescaled.
     _span = getattr(voice, 'velocity_to_amp_attack_span', None) if voice else None
     if _span and abs(_span - 1.0) > 1e-9:
-        _piv = getattr(voice, 'velocity_to_amp_attack_pivot', None)
-        if _piv == VEL_ATTACK_PIVOT_AKAI:
-            k[AKAI_VATT1_OFFSET] = akai_attack_span_to_vatt1(_span) & 0xFF
-        elif not probe:
-            print(f"  note: velocity->attack pivot {_piv} is not this machine's "
-                  f"{VEL_ATTACK_PIVOT_AKAI}; the routing is dropped rather than "
-                  f"rescaled through an unmeasured shape")
+        k[AKAI_VATT1_OFFSET] = akai_attack_span_to_vatt1(_span) & 0xFF
     # ENVELOPE 2 (filter): DECAY2 / SUSTN2 / RELSE2 at doc offsets 21/22/23.
     # DELIBERATELY STILL FIXED, while the amp envelope above now follows the
     # source. These are a SEPARATE parameter set from ATTAK1/DECAY1/RELSE1,

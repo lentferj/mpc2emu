@@ -38,6 +38,8 @@ import struct
 from pathlib import Path
 from models.common import (
     e4xt_cord_amount_to_cents, E4XT_VEL_SOURCE_UNITS,
+    e4xt_attack_span_from_cord, E4XT_ATTACK_CORD_SRC_VEL_LT,
+    E4XT_ATTACK_CORD_DST_VOLENV_ATK, E4XT_ATTACK_CORD_FACTORY_AMOUNT,
     E4XT_VEL_PIVOT, E4XT_VEL_AMPVOL_DB_PER_PERCENT,
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            env_sustain_from_byte,
@@ -480,6 +482,29 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     # physical ratio (§CORPUSRT).
     filter_keytrack    = filter_amount_to_key_track(
         _cord(_MOD_KEY_TO_CUTOFF_AMT))
+
+    # VELOCITY -> AMP ENVELOPE ATTACK. Scanned rather than read from a fixed
+    # slot: the writer puts it in the first free one, and real banks place it
+    # wherever the author's editor did.
+    #
+    # THE FACTORY AMOUNT IS EXCLUDED, and that is most of them. The EOS
+    # template ships this cord wired at +28 on 90.6% of corpus voices, of which
+    # 91% never move it; reading the default back as an authored routing would
+    # attach a 7.9x velocity->attack span to nine voices in ten that never
+    # asked for one. Only a value the author actually changed is carried.
+    _atk_span = None
+    for _i in range(20):
+        _o = _i * 4
+        if _o + 2 >= len(mod_region):
+            break
+        if (mod_region[_o] == E4XT_ATTACK_CORD_SRC_VEL_LT
+                and mod_region[_o + 1] == E4XT_ATTACK_CORD_DST_VOLENV_ATK):
+            _a = mod_region[_o + 2]
+            _a = _a - 256 if _a > 127 else _a
+            if _a and _a != E4XT_ATTACK_CORD_FACTORY_AMOUNT:
+                _atk_span = e4xt_attack_span_from_cord(
+                    _a * 100.0 / 127.0, pzt[0])
+            break
     # CENTS, from this voice's own corner -- the exact inverse of what
     # e4b_writer wrote. vpar[60] is the base; see `e4xt_cents_to_cord_amount`
     # for why no cents-per-cord constant is right on this machine.
@@ -863,6 +888,8 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
         filter_env_cents  = filter_env_cents,
         filter_keytrack    = filter_keytrack,
         velocity_to_filter_cents = velocity_to_filter_cents,
+        velocity_to_amp_attack_span = _atk_span,
+        velocity_to_amp_attack_pivot = (127 if _atk_span else None),
         velocity_to_volume_db = velocity_to_volume_db,
         velocity_to_volume_pivot = velocity_to_volume_pivot,
         lfo1_rate          = lfo1_rate,

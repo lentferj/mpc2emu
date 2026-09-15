@@ -126,7 +126,13 @@ from models.common import (
                            E4B_MIN_AUDIBLE_DECAY_RATE,
                            e4xt_resonance_byte,
                            env_span_seconds_to_rate,
-                           env_db_per_s_to_rate_byte)
+                           env_db_per_s_to_rate_byte,
+                           e4xt_cord_amount_for_attack_span,
+                           akai_attack_time_at_velocity_127,
+                           akai_attack_span_to_vatt1,
+                           VEL_ATTACK_PIVOT_AKAI,
+                           E4XT_ATTACK_CORD_SRC_VEL_LT,
+                           E4XT_ATTACK_CORD_DST_VOLENV_ATK)
 from processors.loop_renderer import bake_alternating_loop
 from writers.atomic import atomic_write
 
@@ -1230,7 +1236,20 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
     # fix is one measurement, not a new model.
     decay_span = _env_level_db(sus)
     # ATTACK RATE IS SCALED BY A MEASURED CONSTANT. See _E4XT_ATK_SLOWDOWN.
-    pzt[0] = min(127, _fenv_rate(voice.env_attack / _E4XT_ATK_SLOWDOWN))
+    # RE-ANCHOR THE ATTACK TIME IF IT CAME FROM ANOTHER MACHINE'S PIVOT.
+    # `amp_env.attack` is the time at the SOURCE machine's no-effect velocity,
+    # and this slot is the time at 127 (where `Vel<` contributes nothing). An
+    # AKAI's velocity-64 attack dropped in here unchanged is wrong by the same
+    # factor its velocity->attack span carries -- up to two orders of magnitude.
+    # The AKAI conversion is exact rather than assumed: s3ked §47 measured the
+    # rise at velocity 1, 64 AND 127 for every depth.
+    _atk_s = voice.env_attack
+    _p = getattr(voice, 'velocity_to_amp_attack_pivot', None)
+    _sp = getattr(voice, 'velocity_to_amp_attack_span', None)
+    if _sp and _p == VEL_ATTACK_PIVOT_AKAI:
+        _atk_s = akai_attack_time_at_velocity_127(
+            _atk_s, akai_attack_span_to_vatt1(_sp))
+    pzt[0] = min(127, _fenv_rate(_atk_s / _E4XT_ATK_SLOWDOWN))
     pzt[1] = _fenv_level(100.0)                                                  # Atk1 → full
     pzt[2] = 0;                                      pzt[3] = _fenv_level(100.0)  # Atk2 hold full
     # A DECAY TO SILENCE MUST NOT ENCODE TO A RATE THAT IS SILENT.
@@ -1585,6 +1604,26 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
             # VEL_FILTER_FULL_CENTS was FILTER_ENV_FULL_CENTS times 2.08.
             mod[_MOD_VEL_TO_CUTOFF_SRC] = _SRC_VEL_PLUS
             mod[_MOD_VEL_TO_CUTOFF_AMT] = _q(_vel_amt / 100.0)
+        # VELOCITY -> AMP ENVELOPE ATTACK, into a free cord slot.
+        #
+        # `Vel<` is inverted and a higher E4XT attack byte is SLOWER, so a
+        # POSITIVE amount lengthens soft notes and leaves hard ones at the base
+        # -- span > 1, which is the direction 96% of real material uses. The
+        # amount follows from two already-measured things and assumes nothing
+        # new: a cord spans its destination's range, and the attack byte is
+        # exponential in time. See `e4xt_attack_span_from_cord`.
+        #
+        # THE BASE IS PASSED FOR SATURATION ONLY. Unlike the filter cord, the
+        # span does not depend on it -- a ratio of times against an exponential
+        # byte law cancels the base -- but the byte still clamps at 127, so a
+        # large span asked for from an already-slow attack cannot be delivered.
+        _atk_span = getattr(voice, 'velocity_to_amp_attack_span', None)
+        if _atk_span and abs(_atk_span - 1.0) > 1e-9:
+            _atk_amt = e4xt_cord_amount_for_attack_span(_atk_span, pzt[0])
+            if abs(_atk_amt) > 0.01:
+                _extra_cords = list(_extra_cords) + [
+                    (E4XT_ATTACK_CORD_SRC_VEL_LT,
+                     E4XT_ATTACK_CORD_DST_VOLENV_ATK, _atk_amt / 100.0)]
         slot = _LFO_ROUTE_FIRST_FREE_SLOT
         for src, dst, amt in _extra_cords:
             if abs(amt) > 0.01 and slot < 20:

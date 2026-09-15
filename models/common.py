@@ -5157,6 +5157,134 @@ def akai_attack_span_to_vatt1(span) -> int:
         if berr is None or e < berr:
             best, berr = b, e
     return best
+
+
+#: E4XT cord source `Vel<` (0x0C) -> destination Vol-Env Attack (0x49).
+#:
+#: THE DESTINATION ID is not transcribed from a spec. The EOS 4.0 manual lists
+#: the modulation destinations in order -- Amplifier Volume, Amp Pan, Amplifier
+#: Crossfade, Volume Envelope Rates (all), Vol. Env. Atk/Dcy/Release -- which
+#: lands on 0x40/0x41/0x42/0x48/0x49/0x4A/0x4B, and eosed's independently
+#: DECODED cord `0x69 -> 0x4A` (`Lfo2+ -> VEnvDcy`) sits exactly on Dcy. Two
+#: derivations, one documentary and one measured, agreeing on the offset.
+#:
+#: THE LAW FALLS OUT OF TWO THINGS ALREADY MEASURED, with nothing new assumed:
+#:
+#:   * a cord spans its DESTINATION's range (eosed §143, established on FMORPH
+#:     because it is the one destination whose range is not 127 and so the only
+#:     one that can tell that reading from "a cord is worth ~127 bytes"), so an
+#:     amount of A percent adds `A * 1.27` to the 0..127 attack byte;
+#:   * the attack byte is exponential in time with `ENV_RATE_K` per byte.
+#:
+#: Composing them, the SPAN IS INDEPENDENT OF THE BASE ATTACK:
+#:
+#:     span = t(vel 1) / t(vel 127) = exp(ENV_RATE_K * 1.27 * amount_percent)
+#:
+#: verified against the rate law to five digits at several bases. That is worth
+#: stating because the FILTER cord is emphatically NOT base-independent and
+#: needed `e4xt_cents_to_cord_amount` for exactly that reason -- the difference
+#: is that a ratio of times against an exponential byte law cancels the base,
+#: while a span in cents against the filter's byte<->Hz curve does not.
+#:
+#: DIRECTION, which is the easy thing to get backwards here: a higher E4XT rate
+#: byte is SLOWER (49.6 s at 127), and `Vel<` is inverted -- largest at low
+#: velocity. So a POSITIVE amount lengthens the attack of soft notes and leaves
+#: hard ones at the base, giving span > 1. That matches both the factory cord's
+#: own +28 and the idiom the corpus shows: 96% of the AKAI keygroups that set
+#: velocity->attack make hard notes faster, not slower.
+E4XT_ATTACK_CORD_SRC_VEL_LT = 0x0C
+E4XT_ATTACK_CORD_DST_VOLENV_ATK = 0x49
+#: Bytes of destination per percent of cord amount, from the destination's own
+#: 0..127 range (eosed §143's mean 100.1% +/- 2.4% across three destinations).
+E4XT_CORD_BYTES_PER_PERCENT = 127.0 / 100.0
+
+#: The EOS template's own amount for this cord, in raw cord bytes. MEASURED
+#: from the corpus, not from a spec: the cord is present on 90.6% of 241,433
+#: voices and 91% of those sit on this one value, against 48 and 75 distinct
+#: amounts on the neighbouring AmpVol and FilterFreq cords. A field that one
+#: value dominates while its neighbours spread is a default, not a decision --
+#: the same test that identified the AKAI's factory MWLDEP.
+E4XT_ATTACK_CORD_FACTORY_AMOUNT = 28
+
+
+# ── Re-anchoring the attack TIME between machines ──────────────────────────
+#
+# The span is pivot-free and converts exactly. The attack TIME beside it does
+# not: `amp_env.attack` is the time at THIS machine's pivot, and the machines
+# disagree (AKAI 64, E4XT's `Vel<` 127). Carrying the number across unchanged
+# puts an AKAI's velocity-64 attack onto an E4XT's velocity-127 slot, which at
+# a span of 118 is wrong by two orders of magnitude.
+#
+# Both machines can re-anchor from things already measured, so neither needs a
+# new assumption:
+#
+#   AKAI  -- s3ked §47 measured the rise at velocity 1, 64 AND 127 for all five
+#            depths, so t(127)/t(64) is read straight off the bench table.
+#   E4XT  -- the attack byte is exponential in time and `Vel<` falls linearly
+#            with velocity, so t(v) = t(127) * exp(ENV_RATE_K * added * (127-v)
+#            / 127) exactly, with no further measurement.
+#
+# A machine with no such law must keep the time and say so rather than scale it
+# by a plausible guess.
+
+#: t(vel 127) / t(vel 64) for the AKAI, straight off s3ked §47's table -- the
+#: factor that moves an attack time from the AKAI's pivot to velocity 127.
+AKAI_VATT1_ANCHOR_POINTS = ((-50, 0.0180), (-25, 0.0459), (0, 1.0284),
+                            (25, 5.5000), (50, 5.4495))
+
+
+def akai_attack_time_at_velocity_127(seconds_at_pivot, vatt1_byte) -> float:
+    """An AKAI attack time (velocity 64) -> the same envelope at velocity 127."""
+    if not seconds_at_pivot:
+        return seconds_at_pivot
+    b = max(-50, min(50, int(vatt1_byte)))
+    pts = AKAI_VATT1_ANCHOR_POINTS
+    if b <= pts[0][0]:
+        f = pts[0][1]
+    else:
+        f = pts[-1][1]
+        for (b0, f0), (b1, f1) in zip(pts, pts[1:]):
+            if b <= b1:
+                t = (b - b0) / (b1 - b0) if b1 != b0 else 1.0
+                f = 10.0 ** (math.log10(f0) + t * (math.log10(f1) - math.log10(f0)))
+                break
+    return seconds_at_pivot * f
+
+
+def akai_attack_time_at_pivot(seconds_at_127, vatt1_byte) -> float:
+    """Inverse of `akai_attack_time_at_velocity_127`."""
+    f = akai_attack_time_at_velocity_127(1.0, vatt1_byte)
+    return seconds_at_127 / f if f else seconds_at_127
+
+
+def e4xt_attack_span_from_cord(amount_percent, base_byte=None) -> float:
+    """`Vel<` -> Vol-Env-Attack cord amount -> attack-time span.
+
+    `base_byte` is accepted and used ONLY to report saturation: the span itself
+    does not depend on it (see above), but the attack byte clamps at 127, so a
+    large amount from an already-slow base cannot deliver its full span.
+    """
+    if not amount_percent:
+        return 1.0
+    added = amount_percent * E4XT_CORD_BYTES_PER_PERCENT
+    if base_byte is not None:
+        added = max(-base_byte, min(127.0 - base_byte, added))
+    return math.exp(ENV_RATE_K * added)
+
+
+def e4xt_cord_amount_for_attack_span(span, base_byte=None) -> float:
+    """Attack-time span -> `Vel<` cord amount in percent, unrounded.
+
+    UNROUNDED for the same reason `e4xt_cents_to_cord_amount` is: the amount is
+    stored on a byte grid, and rounding here and again at the byte puts two
+    grids in series.
+    """
+    if not span or span <= 0.0:
+        return 0.0
+    added = math.log(span) / ENV_RATE_K
+    if base_byte is not None:
+        added = max(-base_byte, min(127.0 - base_byte, added))
+    return max(-100.0, min(100.0, added / E4XT_CORD_BYTES_PER_PERCENT))
 VEL_VOL_PIVOT_KRZ = 127
 
 #: K2000 `F4 AMP VelTrk`, HOB segment 0x53 index 4: dB of velocity swing per
