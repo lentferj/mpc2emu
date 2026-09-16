@@ -2682,6 +2682,17 @@ _FIL2FR_OFF_DEFAULT = AKAI_FIL2FR_TRANSPARENT
 AKAI_VATT1_OFFSET = 16
 
 
+def _akai_voice_loops(voice) -> bool:
+    """True when any zone of this voice loops -- see the RELSE1 note below."""
+    for z in (getattr(voice, 'zones', None) or []):
+        lt = getattr(z, 'loop_type', None)
+        if lt is None:
+            continue
+        if getattr(lt, 'name', str(lt)).upper() not in ('NONE', 'OFF'):
+            return True
+    return False
+
+
 def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
               voice=None, dead_key_ranges=None, ib304f: bool = False,
               probe: bool = False) -> bytearray:
@@ -3086,6 +3097,32 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
     k[0x0d] = _d                        # amp decay
     k[0x0e] = _s                        # amp sustain
     k[0x0f] = _r                        # amp release
+    # A ONE-SHOT SOURCE IS NOT GATED AT NOTE-OFF, AND THIS MACHINE CANNOT SAY
+    # SO EXACTLY -- so this is a MITIGATION, not the E4B path's clean answer.
+    #
+    # Same defect, same two banks: an MPC `OneShot` program carries a
+    # `VolumeRelease` of 0 that the machine IGNORES, and read literally it
+    # becomes RELSE1 0 -- 23042 dB/s, a 3 ms gate -- on samples 0.92-2.66 s long.
+    # The E4XT fix holds both release segments at FULL LEVEL so the amp never
+    # moves; the AKAI's envelope has no release LEVEL, only a rate, so the same
+    # trick is not available here.
+    #
+    # The best this field can do is its slowest rate: RELSE1 99 is 1.47 dB/s, so
+    # a 2.66 s sample fades 3.9 dB over its whole life instead of being cut in
+    # three milliseconds. Not exact, and honest about it.
+    #
+    # SAFE EITHER WAY, which is why it is worth doing before anyone measures the
+    # machine: if the S3000XL gates a non-looping voice at note-off this repairs
+    # it; if the machine already carries one-shots to their end, the release
+    # never runs and this changes nothing. **What the S3000XL actually does at
+    # note-off on a non-looping sample is NOT measured here** -- nothing in our
+    # notes answers it, and it wants a bench check.
+    #
+    # Guarded on the sample not looping: a looping voice at 1.47 dB/s would ring
+    # for forty seconds after the key is lifted.
+    if (getattr(voice, 'plays_whole_sample', False)
+            and not _akai_voice_loops(voice)):
+        k[0x0f] = 99
     # VELOCITY -> ATTACK (`V_ATT1`, keygroup 16). The one envelope-scaling
     # route on this machine that is both measured and alive -- s3ked's §47
     # found five of its six neighbours inert, and re-screened them after
