@@ -668,6 +668,22 @@ Sample-count reduction (fit modern libraries into vintage memory limits):
                       reductions you have already asked for are counted first
                       and it never thins for bytes that were going to be freed
                       anyway.
+  --chromatic-pads    Lay an MPC DRUM program's pads out chromatically from
+                      MIDI 36 instead of honouring the program's own pad->note
+                      map. That map is the MPC's FACTORY DRUM LAYOUT: all
+                      sixteen values are General MIDI percussion notes arranged
+                      as a kit on the 4x4 grid -- kick and snare on the bottom
+                      rows, toms across the third, cymbals on top -- and the
+                      MPC stamps it on every program whatever the pads hold.
+                      A melodic one-shot kit therefore arrives scattered over
+                      two and a half octaves with gaps, which is faithful and
+                      close to unplayable from a keyboard.
+                      Honouring the map is the DEFAULT, and that was settled by
+                      ear rather than by taste: laying pads out chromatically
+                      put nineteen notes' worth of sound in the wrong place
+                      with exactly one agreement. Use this only when you want a
+                      melodic kit playable on a keyboard and do not need it to
+                      match the MPC.
   --reduce-key-zones PCT        Remove PCT% of per-voice key-zone samples
   --reduce-velocity-layers PCT  Remove PCT% of per-preset velocity-layer voices
                       Both default to 0 (off) and are independent — e.g. set

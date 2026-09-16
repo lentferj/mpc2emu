@@ -1525,7 +1525,8 @@ _MPC3_LFO_SHAPES = {0: 'Sine', 1: 'Triangle', 2: 'Saw Up', 3: 'Saw Down',
 # XPM parser
 # ---------------------------------------------------------------------------
 
-def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
+def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None,
+              chromatic_pads: bool = False) -> Bank:
     """
     Parse an Akai MPC XPM program file and resolve WAV samples.
 
@@ -1719,8 +1720,30 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
             raise ValueError(
                 f"{xpm_path.name} is an MPC {prog_type} program — it carries no "
                 f"sample data, so there is nothing to convert.")
-        pad_notes = _pad_note_map(root) if is_drum else {}
-        if is_drum and not pad_notes:
+        # THE PAD MAP IS THE MPC'S FACTORY DRUM LAYOUT, WHATEVER THE CONTENT.
+        #
+        # All sixteen of its values are General MIDI percussion notes arranged
+        # as a kit on the 4x4 grid -- kick and snare on the bottom rows, toms
+        # descending across the third, cymbals along the top. The MPC stamps it
+        # on every program regardless of what the pads hold, which is why a
+        # piano-chord bank wears a drum layout. Furniture, not a statement.
+        #
+        # Honouring it is FAITHFUL and was settled by ear: laying pads out
+        # chromatically instead put 19 notes' worth of sound in the wrong place
+        # with exactly one agreement, note 40, the single coincidence between
+        # the two layouts (§XPMPADMAP). So faithful stays the default.
+        #
+        # But on a MELODIC one-shot kit played from a keyboard rather than
+        # sixteen pads, that layout is close to useless -- this bank's sixteen
+        # chords land across two and a half octaves with holes at 39, 41, 50 and
+        # everything from 56 to 81. `chromatic_pads` lays them out in pad order
+        # from `_PAD_BASE_NOTE` instead, which is playable and NOT what the MPC
+        # does. It is opt-in for exactly that reason.
+        if chromatic_pads and is_drum:
+            pad_notes = {}
+        else:
+            pad_notes = _pad_note_map(root) if is_drum else {}
+        if is_drum and not pad_notes and not chromatic_pads:
             # Only fires when a drum program genuinely has no usable map --
             # the fallback is then really in use. Every corpus drum program
             # carries one, so in practice this is a third-party or hand-built

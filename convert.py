@@ -741,6 +741,16 @@ def main():
     ap.add_argument('--shrink-report', action='store_true',
         help='With --shrink-to/--shrink-by, print what each preset cost and '
              'which axis paid for it.')
+    ap.add_argument('--chromatic-pads', action='store_true',
+                    help="Lay an MPC DRUM program's pads out chromatically from "
+                         "MIDI 36 instead of honouring the program's own pad->note "
+                         "map. The map is the MPC's factory drum layout -- all 16 "
+                         "values are General MIDI percussion notes arranged as a kit "
+                         "on the 4x4 grid -- and it is stamped on every program "
+                         "whatever the pads hold, so a melodic one-shot kit arrives "
+                         "scattered across two and a half octaves with gaps. Honouring "
+                         "it is faithful and is the DEFAULT; this makes such a kit "
+                         "playable from a keyboard and no longer matches the MPC.")
     ap.add_argument('--reduce-key-zones', type=float, default=0.0, metavar='PCT',
         help='Remove PCT%% of per-voice key-zone samples, spreading '
              'survivors to fill the gaps (0-100)')
@@ -1028,7 +1038,8 @@ def main():
     if not input_path.exists():
         print(f"Error: '{input_path}' not found."); sys.exit(1)
 
-    extra = {'max_presets': args.max_presets, 'max_samples': 512}
+    extra = {'max_presets': args.max_presets, 'max_samples': 512,
+             'chromatic_pads': args.chromatic_pads}
 
     # ── --info mode ───────────────────────────────────────────────────────────
     if args.info:
