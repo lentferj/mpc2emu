@@ -1850,9 +1850,33 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None,
             # our output: `OneShot` on 5,828 instruments, `VolumeADEnvelope` on
             # 1,243). The symptom Jan heard was a 16-pad piano kit where every
             # pad cut off in ~1 ms, samples 0.92-2.66 s long.
-            _ad = _get_text(instrument, 'VolumeADEnvelope', 'False').strip().lower()
+            # **`OneShot` IS THE DISCRIMINATING FLAG; `VolumeADEnvelope` IS NOT.**
+            #
+            # The first version of this read either flag, and that was wrong in
+            # a way no test here could have caught. Measured across the five
+            # banks Jan played on 2026-09-16:
+            #
+            #   bank            type       AD     OneShot   VolumeRelease
+            #   Melodic-Piano   Drum       True   True      0
+            #   909 Defined     Drum       True   True      0
+            #   SY Precious     Keygroup   True   False     0.602
+            #   Lunar Daze      Keygroup   True   ABSENT    0.772  -> 2.849 s
+            #   Sangre          Keygroup   True   ABSENT    0.702
+            #
+            # AD is True on ALL FIVE, so it predicts nothing. Lunar Daze has AD
+            # True, no OneShot, and a 2.849 s release that Jan confirmed by ear
+            # sounds right -- so AD alone cannot mean "the release is ignored",
+            # and gating on it would have held the amp open on three banks whose
+            # releases are correct today. Only the two DRUM banks carry OneShot,
+            # and they are the two with a release of 0.
+            #
+            # This also explains a hypothesis that failed its own control on
+            # 2026-09-14: "AD means the envelope ignores note-off" was tested
+            # against Lunar Daze, found the release honoured, and was dropped.
+            # It was dead for AD and alive for the flag beside it, which nobody
+            # was reading either.
             _os = _get_text(instrument, 'OneShot', 'False').strip().lower()
-            plays_whole = _ad in ('true', '1') or _os in ('true', '1')
+            plays_whole = _os in ('true', '1')
 
             filt_type    = int(  _get_text(instrument, 'FilterType',    '0'))
             # MPC 3's `Cutoff` is a normalised knob, NOT a position on the E4B
