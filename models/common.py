@@ -4169,6 +4169,23 @@ class VoiceLayer:
     #: applies -- 64 on the AKAI, measured. Not needed to interpret the span
     #: above; needed to interpret the absolute time beside it.
     velocity_to_amp_attack_pivot: Optional[int] = None
+
+    #: The source's amp envelope is an ATTACK-DECAY shape that always runs the
+    #: whole sample: the note is not gated at note-off, and the sound's length
+    #: lives in the sample rather than in the envelope.
+    #:
+    #: The MPC spells this two ways at once -- `VolumeADEnvelope` and `OneShot`
+    #: -- and Jan confirmed the behaviour directly (2026-09-16): "the AD curve
+    #: is set up in a way that it always runs the whole sample". On such a
+    #: program `VolumeRelease` is present, is ZERO, and is IGNORED by the
+    #: machine, so converting it literally writes an instant gate and truncates
+    #: every sample at note-off.
+    #:
+    #: A writer must therefore not take its release from the source's release
+    #: on these voices; it has to let the sample finish. Carried on the model
+    #: rather than fixed up in one parser because it is a property of the
+    #: source program, and every target has to answer it.
+    plays_whole_sample: bool = False
     #: SHAPE of that response: VELOCITY_CURVE_DB_LINEAR (the default, and what
     #: AKAI/K2000/E4XT all measure as) or VELOCITY_CURVE_AMPLITUDE_LINEAR (the
     #: MPC). The span above describes a response completely only for the first

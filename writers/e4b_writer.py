@@ -942,6 +942,18 @@ def _env_db_to_level_byte(db_below_peak: float) -> int:
     return lo
 
 
+def _voice_loops(voice) -> bool:
+    """True when any zone of this voice loops, so holding the amp open would
+    leave the voice sounding forever rather than ending with the sample."""
+    for z in (getattr(voice, 'zones', None) or []):
+        lt = getattr(z, 'loop_type', None)
+        if lt is None:
+            continue
+        if getattr(lt, 'name', str(lt)).upper() not in ('NONE', 'OFF'):
+            return True
+    return False
+
+
 def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
                  level_offset_db: float = 0.0,
                  vel_swing_db=None) -> bytes:
@@ -1338,6 +1350,28 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
         _rls = E4B_MIN_AUDIBLE_DECAY_RATE
     pzt[8] = _rls;                                   pzt[9] = _rmid               # Rls1 → the knee
     pzt[10] = _rls2;                                 pzt[11] = _fenv_level(0.0)   # Rls2 → silence
+    # AN AD / ONE-SHOT SOURCE IS NOT GATED AT NOTE-OFF AT ALL.
+    #
+    # Jan, 2026-09-16, on hearing a 16-pad piano kit cut off in ~1 ms: "the AD
+    # curve is set up in a way that it always runs the whole sample". The MPC
+    # program says so twice -- `VolumeADEnvelope` and `OneShot` -- and carries a
+    # `VolumeRelease` of 0 that the machine IGNORES. Read literally, that 0
+    # became release rate byte 0, the instant gate, on samples 0.92-2.66 s long.
+    #
+    # THE FIX IS THE RELEASE LEVEL, NOT THE RELEASE TIME. A long release is a
+    # long FADE: the E4XT release falls ~97.8 dB over its time, so even the
+    # maximum 49.6 s still drops a 2.66 s sample ~5 dB before it ends. Both
+    # release segments therefore TARGET FULL LEVEL: the amp does not move at
+    # note-off and the voice ends when the sample does, which is what the source
+    # means.
+    #
+    # ONLY FOR A SAMPLE THAT ENDS. A looping voice held open this way would
+    # never free, so a sustain loop keeps the ordinary release.
+    if getattr(voice, 'plays_whole_sample', False) and not _voice_loops(voice):
+        pzt[8] = 0
+        pzt[9] = _fenv_level(100.0)
+        pzt[10] = 0
+        pzt[11] = _fenv_level(100.0)
     # Filter-envelope SHAPE — always written (§O, 2026-06-13).  Its depth/sign is
     # the Cord 05 (FilterEnv→FilterFreq) amount in the mod table (set below only
     # when filter_env_cents>0), so at amount 0 the env is inert/inaudible — but

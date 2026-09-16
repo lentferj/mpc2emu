@@ -1815,6 +1815,21 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
             env_decay   = _env('VolumeDecay')
             env_sustain = float(_get_text(instrument, 'VolumeSustain', '1.0'))
             env_release = _env('VolumeRelease')
+            # AD MODE: THE ENVELOPE ALWAYS RUNS THE WHOLE SAMPLE.
+            #
+            # `VolumeADEnvelope` and `OneShot` both say the note is not gated at
+            # note-off and the sound's length lives in the sample. On such a
+            # program `VolumeRelease` is present, is 0, and is IGNORED by the
+            # machine -- so converting it literally wrote an instant gate.
+            #
+            # Neither tag was read by this parser at all (the differential audit
+            # of 2026-09-14 listed both among the 95 fields that cannot change
+            # our output: `OneShot` on 5,828 instruments, `VolumeADEnvelope` on
+            # 1,243). The symptom Jan heard was a 16-pad piano kit where every
+            # pad cut off in ~1 ms, samples 0.92-2.66 s long.
+            _ad = _get_text(instrument, 'VolumeADEnvelope', 'False').strip().lower()
+            _os = _get_text(instrument, 'OneShot', 'False').strip().lower()
+            plays_whole = _ad in ('true', '1') or _os in ('true', '1')
 
             filt_type    = int(  _get_text(instrument, 'FilterType',    '0'))
             # MPC 3's `Cutoff` is a normalised knob, NOT a position on the E4B
@@ -2006,6 +2021,7 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None) -> Bank:
                                           if vel_vol_db is not None else None),
                 velocity_to_volume_requested=vel_vol_requested,
                 velocity_to_volume_curve=vel_vol_curve,
+                plays_whole_sample=plays_whole,
             )
             # MPC 3 second LFO (<LFO2>, emitted only by the JSON converter — an
             # MPC 2.x XML program never has one, so this is inert there).  Routed
