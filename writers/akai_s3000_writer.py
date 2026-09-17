@@ -872,8 +872,18 @@ def akai_lfo_rate_byte(hz: float) -> int:
     return int(round(max(lo, min(hi, (hz - c) / m))))
 
 
-def akai_env_bytes(env, quiet: bool = False) -> tuple:
+def akai_env_bytes(env, quiet: bool = False, hold_release: bool = False) -> tuple:
     """Envelope -> (ATTAK1, DECAY1, SUSTN1, RELSE1).
+
+    `hold_release` marks a voice that plays its whole sample and does not loop.
+    It forces RELSE1 to the field's slowest rate AND owns the diagnostic that
+    says so -- the two live together deliberately. They did not, until
+    2026-09-17: the override was applied by the caller AFTER this function had
+    already recorded `AKAI_RELSE1_SATURATED ... written as 0`, so the file held
+    99 and the warning told the user it held 0. The two ends of the field, and
+    the opposite behaviours. Caught by VinSamLib reading the byte back through
+    our own parser instead of trusting the message, which read perfectly
+    plausibly.
 
     `quiet` suppresses the range diagnostics, for a PROBE render that is never
     written -- `keygroup_count` is a counting function and was emitting
@@ -987,9 +997,13 @@ def akai_env_bytes(env, quiet: bool = False) -> tuple:
         r = int(round(max(0, min(99, math.log(_rate / _a) / _b))))
     else:
         span_rel_db = _AK_SUSTAIN_DB_PER_UNIT * sus
+        # STAGE BLANKED WHEN WE ARE ABOUT TO OVERRIDE. A saturation record
+        # describing a byte that is then replaced is not a partial truth, it
+        # is a false one -- and the replacement is disclosed below, so nothing
+        # goes unreported.
         r = _rate_law_value(_or_default(getattr(env, 'release', None), 0.5),
                             span_rel_db, _AK_RELSE1_RATE, default=45,
-                            stage='' if quiet else 'RELSE1',
+                            stage='' if (quiet or hold_release) else 'RELSE1',
                             curve=getattr(env, 'curve', None))
 
     # Attack rises from silence to the peak, so unlike decay and release its
@@ -1024,6 +1038,47 @@ def akai_env_bytes(env, quiet: bool = False) -> tuple:
                           'attak1': _AK_ATTAK1_TIME[3]},
                   echo=f"    [WARN] {_msg}")
 
+    # ONE-SHOT: HOLD THE RELEASE OPEN, AND SAY SO TRUTHFULLY.
+    #
+    # An MPC `OneShot` program carries a `VolumeRelease` of 0 that the machine
+    # IGNORES; read literally it becomes RELSE1 0 -- 23042 dB/s, a 3 ms gate --
+    # on samples 0.92 to 2.66 s long. The E4XT path holds both release segments
+    # at full level so the amp never moves; this machine's envelope has no
+    # release LEVEL, only a rate, so the best available is the slowest rate.
+    #
+    # THE DISCLOSURE LIVES HERE, BESIDE THE OVERRIDE, and that is the point of
+    # the placement rather than tidiness. It used to sit in the caller, four
+    # hundred lines away and AFTER the saturation record had already been
+    # written, so the file held 99 while the warning said 0.
+    #
+    # NOT SUPPRESSED, though nothing was lost. Silence here is how the original
+    # bug hid for weeks: a release the source asked for HAS been changed, the
+    # machine's behaviour at note-off on a non-looping sample is unmeasured,
+    # and a user comparing against the source deserves to know which of the two
+    # explanations they are hearing. `content_lost=False` is the honest field:
+    # this adds time rather than removing it.
+    if hold_release and r != 99:
+        _was, r = r, 99
+        if not quiet:
+            # Byte -> dB/s is the same law the writer just used; stated once
+            # here rather than given its own helper, since a second copy of an
+            # envelope law is how three of this file's defects happened.
+            _ra, _rb = _AK_RELSE1_RATE[0], _AK_RELSE1_RATE[1]
+            _rel_rate = lambda b: _ra * math.exp(_rb * max(0, b))  # noqa: E731
+            _rel_span_db = _AK_SUSTAIN_DB_PER_UNIT * sus
+            _diag(_W, 'AKAI_ONESHOT_RELEASE_HELD',
+                  f'one-shot source: RELSE1 raised {_was} -> 99 (1.47 dB/s, the '
+                  f'slowest this field holds) so the sample is not gated at '
+                  f'note-off. The source asks for a release this machine would '
+                  f'read as a {_rel_span_db / _rel_rate(_was):.3f} s cut.',
+                  content_lost=False,
+                  remedy='If the S3000XL already carries a non-looping voice to '
+                         'its end, this changes nothing and can be ignored. '
+                         'That behaviour is NOT measured here.',
+                  detail={'was': _was, 'written': 99,
+                          'db_per_s': round(_rel_rate(99), 2),
+                          'was_db_per_s': round(_rel_rate(_was), 1)},
+                  echo='')
     return a, d, sus, r
 
 
@@ -3090,7 +3145,15 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
             _env = _c.copy(_env)
             _env.attack = akai_attack_time_at_pivot(
                 _env.attack, akai_attack_span_to_vatt1(_sp))
-        _a, _d, _s, _r = akai_env_bytes(_env, quiet=probe)
+        # THE ONE-SHOT FLAG GOES IN, RATHER THAN THE BYTE BEING FIXED AFTER.
+        # Deciding here and overriding below is what let the file say 99 while
+        # the diagnostic said 0 (VinSamLib, 2026-09-17): `akai_env_bytes` had
+        # already recorded a saturation warning for a byte that no longer
+        # existed by the time the file was written.
+        _a, _d, _s, _r = akai_env_bytes(
+            _env, quiet=probe,
+            hold_release=(getattr(voice, 'plays_whole_sample', False)
+                          and not _akai_voice_loops(voice)))
     else:
         _a, _d, _s, _r = 0, 50, 99, 45     # the historical defaults
     k[0x0c] = _a                        # amp attack
@@ -3120,9 +3183,13 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
     #
     # Guarded on the sample not looping: a looping voice at 1.47 dB/s would ring
     # for forty seconds after the key is lifted.
-    if (getattr(voice, 'plays_whole_sample', False)
-            and not _akai_voice_loops(voice)):
-        k[0x0f] = 99
+    #
+    # APPLIED INSIDE `akai_env_bytes` VIA `hold_release`, not here. It was here
+    # until 2026-09-17, overwriting `k[0x0f]` after the envelope function had
+    # already emitted `AKAI_RELSE1_SATURATED ... written as 0` -- so the file
+    # held 99 and the warning named the opposite end of the field. A byte and
+    # the statement about that byte have to be produced together or they drift,
+    # and this one drifted silently through two rebuilds.
     # VELOCITY -> ATTACK (`V_ATT1`, keygroup 16). The one envelope-scaling
     # route on this machine that is both measured and alive -- s3ked's §47
     # found five of its six neighbours inert, and re-screened them after

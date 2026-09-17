@@ -182,6 +182,20 @@
       ]
     },
     {
+      "code": "AKAI_ONESHOT_RELEASE_HELD",
+      "severity": "warning",
+      "content_lost": false,
+      "detail_keys": [
+        "db_per_s",
+        "was",
+        "was_db_per_s",
+        "written"
+      ],
+      "emitted_from": [
+        "writers/akai_s3000_writer.py"
+      ]
+    },
+    {
       "code": "AKAI_PROGRAM_PAN_DROPPED",
       "severity": "warning",
       "content_lost": false,
