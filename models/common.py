@@ -898,16 +898,29 @@ AKAI_MUTE_CUT_SECONDS = 0.058
 AKAI_LFO_RATE_HZ_PER_UNIT = 0.11867
 AKAI_LFO_RATE_HZ_OFFSET = -0.04
 
-#: LFO2 (`PANRAT`) is a DIFFERENT law from LFO1 and using LFO1's here is a real
-#: mistake that was made on 2026-09-06: `rate = 0.23708 * PANRAT Hz`, measured
-#: over PANRAT 5..80 at r² 0.999843, **exactly twice LFO1's rate for the same
-#: byte** (ratio 1.998) and forced through the origin — so no offset term.
+#: **LFO2 (`PANRAT`) RUNS AT LFO1's RATE. 0.11913 Hz/unit, ceiling 11.79 Hz at
+#: byte 99.** That is the live law; everything below is how it was established
+#: and what it replaced. READ THE CORRECTION FIRST -- this block used to open
+#: with the refuted figure and only correct it nineteen lines later, which is
+#: how a reader skimming the top came away with the wrong law (see below).
 #:
-#: Consequence worth stating because the wrong law is plausible: LFO1 tops out at
-#: 11.71 Hz where LFO2 reaches **23.47 Hz**, so a rate that looks marginal under
-#: LFO1's law is mid-range under LFO2's. An 11.5 Hz source pan LFO is `PANRAT`
-#: 49, not 97.
 #: HARDWARE-MEASURED 2026-09-06 THROUGH THE PAN DESTINATION (s3ked, §AKAILFO2RATE).
+#:
+#: ~~REFUTED: `rate = 0.23708 * PANRAT Hz`~~, measured over PANRAT 5..80 at
+#: r² 0.999843, "exactly twice LFO1's rate for the same byte" (ratio 1.998).
+#: Wrong by exactly two, for the reason given below. The refuted figure also
+#: implied a 23.47 Hz ceiling and put an 11.5 Hz source pan LFO at `PANRAT` 49;
+#: the real answer is byte 97, near the top of the range rather than mid-scale.
+#:
+#: **THE PROSE OUTLIVED THE CORRECTION BY THREE WEEKS AND COST BENCH TIME.**
+#: The constant was fixed here on 2026-09-06; two comments in
+#: `writers/akai_s3000_writer.py` went on asserting 0.23708 and "twice LFO1's"
+#: until 2026-09-17, one of them telling the reader that using LFO1's law
+#: "puts the sweep at half speed" -- the exact opposite of the truth. s3ked
+#: then re-measured `PANRAT`, got 0.11840 (confirming this constant to 0.6% by
+#: an independent route) and filed a report that our writer emitted double-rate
+#: pans on every program, having read the comment rather than the code.
+#: `tests/test_refuted_constants_stay_marked.py` now guards against it.
 #: Nine PANRAT points 10..99, ~1495 usable frames each at 0.07 Hz resolution,
 #: three interleaved negative controls at 0.66-1.11 dB:
 #:

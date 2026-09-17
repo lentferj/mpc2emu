@@ -2006,11 +2006,20 @@ def _mixdown(pcm: bytes, channels: int) -> bytes:
 #: stood, and the caution recorded in it turned out to be justified — so the
 #: history is kept rather than deleted, but read the correction first.
 #:
-#: `LFO2 rate = 0.23708 * PANRAT Hz` over 5..80, r² 0.999843 — exactly twice
-#: LFO1's rate for the same value (ratio 1.998), forced through the origin.
-#: `PANDEP` gates the depth, `PANDEL` delays the growth, `LFO2WAVE` changes the
-#: shape, and `LFO2TRIG` mode 1 locks phase to note-on. LFO2 is
-#: assignable-matrix source 8 and modulates the filter at 25–99x prominence.
+#: **THE RATE FIGURE IN THIS PARAGRAPH IS REFUTED. See
+#: `AKAI_LFO2_RATE_HZ_PER_UNIT` in models/common.py, which is the live law and
+#: carries the whole history.** Left in place because the surrounding findings
+#: about PANDEP/PANDEL/LFO2WAVE/LFO2TRIG stand, and deleting the sentence would
+#: hide that this file once asserted it.
+#:
+#: ~~`LFO2 rate = 0.23708 * PANRAT Hz`~~ over 5..80, r² 0.999843 — measured
+#: THROUGH THE FILTER, where a bipolar sweep presents TWO brightness excursions
+#: per cycle to a magnitude detector, so the "exactly twice LFO1" was the
+#: detector counting half-cycles. Measured through PAN, where balance is signed,
+#: the rate is **0.11913 Hz/unit — LFO1's own law**. `PANDEP` gates the depth,
+#: `PANDEL` delays the growth, `LFO2WAVE` changes the shape, and `LFO2TRIG`
+#: mode 1 locks phase to note-on. LFO2 is assignable-matrix source 8 and
+#: modulates the filter at 25–99x prominence.
 #:
 #: §39 called five fields inert after testing all five against **the pan
 #: destination — the one broken component**. What is actually dead is a single
@@ -2580,10 +2589,23 @@ def _program_common(name: str, n_keygroups: int, lo_key: int, hi_key: int,
     # control spanning 60 dB, so full scale is about half the static range --
     # consistent with bipolar modulation about centre.
     #
-    # THE RATE IS LFO2's LAW, NOT LFO1's. `PANRAT` is 0.23708 Hz/unit, twice
-    # LFO1's, reaching 23.47 Hz at 99. Using LFO1's law here puts the sweep at
-    # half speed and looks plausible while doing it -- which is exactly the
-    # mistake made while writing this, caught against the note at :1536.
+    # THE RATE IS LFO1's LAW AFTER ALL. `PANRAT` is 0.11913 Hz/unit, the SAME
+    # as LFO1, reaching 11.79 Hz at 99 -- see `AKAI_LFO2_RATE_HZ_PER_UNIT`,
+    # which holds the measurement and the refutation of the old figure.
+    #
+    # **THIS COMMENT ASSERTED THE OPPOSITE UNTIL 2026-09-17, THREE WEEKS AFTER
+    # THE CONSTANT IT DESCRIBES WAS CORRECTED.** It claimed 0.23708 Hz/unit and
+    # "twice LFO1's", which was refuted on 2026-09-06 when the law was measured
+    # through pan instead of through the filter. The CONSTANT was fixed in
+    # models/common.py; this prose was not, and prose in a second file has no
+    # test holding it to the value.
+    #
+    # It cost a peer real bench time: s3ked re-measured `PANRAT` on 2026-09-17,
+    # got 0.11840 -- confirming the live constant to 0.6% by an independent
+    # route -- and reported that our writer was emitting double-rate pans,
+    # because they had read this comment rather than the code. It also nearly
+    # cost a "fix" to a correct implementation from this side. A refuted number
+    # left in a comment is not inert; it is a claim someone will act on.
     if lfo_to_pan:
         p[0x59] = _clamp(int(round(lfo_to_pan * 50)), -50, 50) & 0xFF
         if pan_lfo_rate:
