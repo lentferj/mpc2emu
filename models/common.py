@@ -5076,6 +5076,76 @@ def mpc_resonance_to_model(setting_01: float, filter_type: int = 2) -> float:
 #: quietest point in the grid at -64 dB -- still 31 dB clear of the capture's
 #: floor, so not a floor effect; most likely the machine's own quantisation of
 #: a very small gain. Not chased; nothing depends on it.
+#: MPC LFO -> AMP (tremolo) depth. MEASURED 2026-09-17 on an MPC One, square
+#: LFO at 0.1 Hz into AMP only, every other destination at 0, on the
+#: `XPM_VELSENS` noise subject (sustain 1.0, zero attack/decay/release, so the
+#: envelope holds flat and the LFO is the only thing that can move the level).
+#:
+#:     amplitude = (1 - d/2) + d * lfo        lfo in [-1, +1],  d = depth/127
+#:
+#: A bipolar LFO of half-amplitude `d` whose CENTRE also sinks by `d/2` as depth
+#: rises. Peak-to-peak swing is therefore
+#:
+#:     swing_dB = 20*log10((1 + d/2) / (1 - 1.5*d))
+#:
+#:     AMP    predicted   measured
+#:      32       5.15       5.16
+#:      64      14.20      14.20
+#:      80      27.55      27.58      <- extrapolated from the two above
+#:     127     silence    silence
+#:
+#: **THE 80 POINT IS THE ONE THAT MAKES THIS A LAW.** 32 and 64 fit a
+#: two-parameter form to 0.01 dB, which two points will always do; 80 was
+#: PREDICTED at 27.6 dB from them and came back 27.58. A first guess that the
+#: trough was simply `1 - d` predicted 6.1 dB at AMP 64 and was refuted by
+#: measurement at 14.20.
+#:
+#: **WHY FULL DEPTH IS SILENT, which needed no special pleading.** The trough is
+#: `1 - 1.5d`, so it reaches zero at d = 2/3 -- AMP 84.7 -- and clips there. The
+#: machine going to digital silence at AMP 127 is the same law, not a rail bolted
+#: onto it.
+#:
+#: MEASURED ON A SQUARE LFO DELIBERATELY. A square holds both extremes for half
+#: a cycle, so the depth is the distance between two plateaus; a triangle is at
+#: its extremes for an instant and any smoothing in the envelope detector reads
+#: the swing SHORT. The depth is the machine's; reading it off a triangle would
+#: have measured the detector.
+#:
+#: GATES: zero depth measured FLAT at 0.38 dB; the LFO period was recovered from
+#: every capture and agreed with the dialled 0.1 Hz to 6.9 %; the noise floor was
+#: -95.3 dB against a quietest plateau of -51.0 dB.
+#:
+#: **NOT YET CONVERTIBLE, and the reason is the centre sink.** An E4XT cord into
+#: AmpVol is symmetric about the voice's own level (0.96442 dB per amount unit),
+#: so it can reproduce the SWING but not the 1-2 dB drop in average level that
+#: comes with it -- Lunar Daze's AMP 29 is a 4.58 dB swing whose centre sits
+#: 1.05 dB low. Matching both needs the cord AND a voice-level trim, and which
+#: of the two a listener notices is not established.
+MPC_LFO_AMP_PIVOT_DEPTH = 127          #: the panel's full-scale depth
+MPC_LFO_AMP_CENTRE_SINK = 0.5          #: centre drops by this * d
+MPC_LFO_AMP_SILENT_ABOVE_D = 2.0 / 3.0  #: trough clips to zero at and above
+
+
+def mpc_lfo_amp_swing_db(depth: float) -> float:
+    """MPC AMP depth (0..127 as the panel shows it) -> peak-to-peak dB.
+
+    Returns a very large number where the trough clips to silence; callers that
+    need to know should test `depth / 127 >= MPC_LFO_AMP_SILENT_ABOVE_D`.
+    """
+    d = max(0.0, min(1.0, depth / MPC_LFO_AMP_PIVOT_DEPTH))
+    bot = 1.0 - (1.0 + MPC_LFO_AMP_CENTRE_SINK) * d
+    top = 1.0 + MPC_LFO_AMP_CENTRE_SINK * d
+    if bot <= 0.0:
+        return 120.0
+    return 20.0 * math.log10(top / bot)
+
+
+def mpc_lfo_amp_centre_db(depth: float) -> float:
+    """dB the average level sinks at this depth, relative to unmodulated."""
+    d = max(0.0, min(1.0, depth / MPC_LFO_AMP_PIVOT_DEPTH))
+    return 20.0 * math.log10(max(1e-6, 1.0 - MPC_LFO_AMP_CENTRE_SINK * d))
+
+
 MPC_VELSENS_PIVOT = 127
 
 
