@@ -3205,6 +3205,54 @@ E4B_LFO_VOLUME_FULL_DB = 94.78
 #: identically whatever the zone count, and sits next to the swing it belongs
 #: with so neither can be removed without the other.
 E4B_DC_CORD_FULL_DB = 96.442
+
+#: MPC `LfoPan` depth -> E4XT AmpPan cord amount. **MEASURED 2026-09-17 and
+#: CONFIRMED BY EAR the same evening; it replaces a 1:1 pass-through that was
+#: 8.3x too wide.**
+#:
+#: Jan heard a converted pad's pan sweep come out "quite different" from the
+#: MPC original, with both machines playing the same program at the same
+#: moment -- the only condition in which this could be settled. Measured as the
+#: LFO-frequency component of 20*log10(L/R), per-channel RMS:
+#:
+#:     MPC original (LfoPan 0.6398 = panel 81)      5.11 dB peak-to-peak
+#:     our conversion, cord amount 41              39.21 dB
+#:
+#: THERE WAS NO WRONG CONSTANT TO CORRECT -- there was a missing one. The
+#: writer passed the model's 0..1 pan depth straight into the cord as a
+#: fraction, a convention inherited from how `LfoPitch` is handled and marked
+#: as INFERRED in the source when pan was first written on 2026-09-06. This is
+#: the first measurement of it.
+#:
+#: **A ONE-POINT CALIBRATION, and the honest description of its reach.** One
+#: `LfoPan` value on one program. It fixes the depth this material uses and
+#: says nothing about whether the MPC's own `LfoPan` -> depth law is linear, so
+#: a program at 0.2 or 0.9 is an extrapolation. Vastly better than an
+#: unmeasured inference; not a characterised law.
+#:
+#: **AND THE E4XT SIDE IS DEMONSTRABLY NOT LINEAR HERE, which is why this is a
+#: setting and not a slope.** Three amounts, each repeatable to 0.01 dB over
+#: three separate notes:
+#:
+#:     sysex 4 (5.08 file bytes)   4.52 dB      step +0.64
+#:     sysex 5 (6.35 file bytes)   5.16 dB      step +1.75
+#:     sysex 6 (7.62 file bytes)   6.91 dB
+#:
+#: Uneven by nearly 3x with 0.01 dB repeatability, so the unevenness is real
+#: and not scatter -- most likely the engine's own pan quantisation, since a
+#: cord this small moves the pan byte only a few steps. A two-parameter fit
+#: through two of those points predicted the third 0.55 dB out, 55x the
+#: repeatability. **So do not interpolate between cord amounts at this scale**;
+#: the value below is anchored on the setting that was measured and confirmed.
+#:
+#: WHAT THE WHEEL DOES TO THIS NUMBER. Both captures were taken with the mod
+#: wheel down, so what was matched is at-rest depth against at-rest depth. Our
+#: writer splits a gated cord into a static (1-Kw) half and a wheel half, and
+#: this program has Kw = 0.5 -- so the constant is entangled with that model
+#: being right. It cancels for any Kw only if the MPC also delivers (1-Kw) of
+#: its nominal depth at rest, which is UNVERIFIED. Separating them needs the
+#: MPC measured at a different Kw, or with the wheel raised.
+E4B_LFO_PAN_CORD_SCALE = 0.1563
 E4B_DC_CORD_SRC = 0xA0            #: `DC`, a constant +1 source
 E4B_LFO1_TILDE_SRC = 0x60         #: `Lfo1~`, bipolar about zero
 E4B_AMPVOL_DST = 0x40             #: AmpVol -- the LEVEL destination

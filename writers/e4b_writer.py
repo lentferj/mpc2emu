@@ -111,7 +111,7 @@ from typing import List
 from models.common import (
     e4xt_cents_to_cord_amount, e4xt_cord_saturates, E4XT_VEL_SOURCE_UNITS,
     e4xt_tremolo_cords, LFO_VOLUME_MODEL_FULL_DB, E4B_LFO1_TILDE_SRC,
-    E4B_DC_CORD_SRC, E4B_AMPVOL_DST,
+    E4B_DC_CORD_SRC, E4B_AMPVOL_DST, E4B_LFO_PAN_CORD_SCALE,
     E4XT_VEL_AMPVOL_DB_PER_PERCENT,
     key_track_to_filter_amount,
     e4xt_cutoff_byte_to_position,Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
@@ -1507,8 +1507,18 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
         # E4XT's key-synced triangle rises first and the MPC's falls first, so a
         # triangle LFO's cords are negated to keep them in phase. For pan that
         # means the sweep starts toward the same side as the source.
-        (0x60, 0x41, voice.lfo1_to_pan * _lfo1_sign),       # LFO1 → AmpPan
-        (0x68, 0x41, voice.lfo2_to_pan * _lfo2_sign),       # LFO2 → AmpPan
+        # SCALED, since 2026-09-17. The model's pan depth is device-independent
+        # and this destination needed a calibration that did not exist -- the
+        # depth went in as a raw fraction and came out 8.3x too wide, measured
+        # against the MPC playing the same program at the same moment and
+        # confirmed by ear. See E4B_LFO_PAN_CORD_SCALE.
+        #
+        # APPLIED HERE AND NOT IN THE PARSER, deliberately: `lfo*_to_pan` is
+        # read by the KRZ and AKAI writers too, and scaling it at the reader
+        # would silently change both on the strength of an E4XT measurement
+        # that says nothing about either machine.
+        (0x60, 0x41, voice.lfo1_to_pan * _lfo1_sign * E4B_LFO_PAN_CORD_SCALE),
+        (0x68, 0x41, voice.lfo2_to_pan * _lfo2_sign * E4B_LFO_PAN_CORD_SCALE),
         (E4B_LFO1_TILDE_SRC, E4B_AMPVOL_DST, _trem_lfo),   # LFO1 → AmpVol
         (E4B_DC_CORD_SRC,    E4B_AMPVOL_DST, _trem_dc),    # DC   → AmpVol
         # VELOCITY → PAN IS DELIBERATELY NOT WRITTEN YET. The model carries

@@ -43,6 +43,7 @@ from models.common import (
     E4XT_VEL_PIVOT, E4XT_VEL_AMPVOL_DB_PER_PERCENT,
     E4B_LFO_VOLUME_FULL_DB, E4B_DC_CORD_FULL_DB, E4B_DC_CORD_SRC,
     E4B_LFO1_TILDE_SRC, E4B_AMPVOL_DST, LFO_VOLUME_MODEL_FULL_DB,
+    E4B_LFO_PAN_CORD_SCALE,
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            env_sustain_from_byte,
                            LoopType, Envelope, lfo_rate_byte_to_hz,
@@ -646,8 +647,13 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     lfo2_to_pitch    = _depth('lfo2_to_pitch')
     lfo2_to_filter   = _depth('lfo2_to_filter')
     lfo2_to_filter_q = _depth('lfo2_to_filter_q')
-    lfo1_to_pan      = _depth('lfo1_to_pan')
-    lfo2_to_pan      = _depth('lfo2_to_pan')
+    # INVERSE OF THE WRITER'S SCALE, or the round trip reports a depth 6.4x
+    # smaller than the one that produced the file. Clamped because a preset
+    # made ON the machine can carry a cord amount far past anything our scale
+    # would emit, and the model's field is bounded at +/-1.
+    _pan_unscale = 1.0 / E4B_LFO_PAN_CORD_SCALE
+    lfo1_to_pan = max(-1.0, min(1.0, _depth('lfo1_to_pan') * _pan_unscale))
+    lfo2_to_pan = max(-1.0, min(1.0, _depth('lfo2_to_pan') * _pan_unscale))
     # TREMOLO: the cord carries PEAK-TO-TROUGH dB, the model field carries the
     # ONE-SIDED amplitude over LFO_VOLUME_MODEL_FULL_DB. Halving here is the
     # exact inverse of the doubling in the writer, and getting it wrong in
