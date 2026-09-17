@@ -22154,12 +22154,29 @@ Two instances from one evening, both of which produced clean, analysable,
 entirely wrong captures:
 
 - **A K2000 program change with the wrong bank convention.** MIDI's standard
-  is `bank = id // 128`; the K2000 is **bank-of-100** (`CC0 = id // 100`,
-  `PC = id % 100`, banks to 99). Asking for program 402 the standard way
-  selects **318** — a real program on another bank. It sounds, has a plausible
-  envelope, passes level, passes SNR, and passes a liveness control *because
-  the manipulation genuinely did something, to the wrong program*. Caught only
-  when Jan read the front panel.
+  is `bank = id // 128`; the K2000 is **bank-of-100** (`CC0` *or* `CC32`
+  `= id // 100`, `PC = id % 100`, banks to 99). Asking for program 402 the
+  standard way selects **318** — a real program on another bank. It sounds, has
+  a plausible envelope, passes level, passes SNR, and passes a liveness control
+  *because the manipulation genuinely did something, to the wrong program*.
+  Caught only when Jan read the front panel.
+
+  **Both controller numbers work, established 2026-09-17 BY ASKING THE
+  INSTRUMENT** (k2kremote, SysEx `0x16` read-back of what was actually
+  selected). Two sessions held two different notes — this project's said `CC0`,
+  k2kremote's said `CC32` — and rather than each defending a file, the device
+  was asked and answers to both identically. *The arbiter for a disagreement
+  about a machine is the machine*, and it cost one round of six messages.
+
+  **A THIRD FORM OF THE SAME DEFECT, found the same evening and worse than
+  either:** sending a program change with **no bank select at all**. Our
+  measurement rig did exactly this, and a bare `PC 0` was confirmed to land on
+  `100 Cheeze` — program 0 of whatever bank the machine was sitting on. A sweep
+  staged at 200–205 and addressed as PC 0–5 would have produced six real
+  programs, six clean captures, six passing period controls and one meaningless
+  dataset. Caught while preparing to measure, not after. The rig now sends the
+  bank select *before* the program change and sends nothing when the caller
+  does not supply one, so the omission cannot be silent.
 - **A cached JACK recorder.** A persistent capture client connected its ports
   once at construction, so a device switch moved the MIDI port, the channel
   and the program change but not the audio. An "MPC capture" recorded the
