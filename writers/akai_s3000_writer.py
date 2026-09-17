@@ -39,6 +39,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from models.common import AKAI_LFO_PAN_DEPTH_SCALE
 from models.common import (
     AKAI_VLOUD_SWING_DB_PER_UNIT, fit_velocity_line, AKAI_KEYFOLLOW_NEG_SCALE,
     ENV_CURVE_LINEAR,
@@ -2607,7 +2608,13 @@ def _program_common(name: str, n_keygroups: int, lo_key: int, hi_key: int,
     # cost a "fix" to a correct implementation from this side. A refuted number
     # left in a comment is not inert; it is a claim someone will act on.
     if lfo_to_pan:
-        p[0x59] = _clamp(int(round(lfo_to_pan * 50)), -50, 50) & 0xFF
+        # SCALED, since 2026-09-17. `lfo_to_pan * 50` was a plain fraction of
+        # this machine's rail with nothing behind it -- the identical missing
+        # calibration the E4XT had, and it put a real program on byte 32 where
+        # the measured law is already saturating by byte 20. See
+        # AKAI_LFO_PAN_DEPTH_SCALE for the sweep and the interpolation caveat.
+        p[0x59] = _clamp(int(round(lfo_to_pan * 50 * AKAI_LFO_PAN_DEPTH_SCALE)),
+                         -50, 50) & 0xFF
         if pan_lfo_rate:
             p[0x1d] = akai_lfo2_rate_byte(pan_lfo_rate)
 

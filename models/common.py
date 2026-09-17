@@ -957,8 +957,20 @@ def akai_lfo_rate_hz(byte: int) -> float:
 def akai_lfo2_rate_byte(hz: float) -> int:
     """Desired LFO2 rate in Hz -> the `PANRAT` byte. Inverts the measured law.
 
-    Distinct from `akai_lfo_rate_byte`, which is LFO1's: LFO2 runs at twice the
-    rate for the same byte and has no offset term. Reaches 23.47 Hz at byte 99.
+    **LFO2 runs at LFO1's RATE — 0.11913 Hz/unit, reaching 11.79 Hz at byte
+    99.** See `AKAI_LFO2_RATE_HZ_PER_UNIT`, which holds the measurement.
+
+    **THIS DOCSTRING SAID THE OPPOSITE UNTIL 2026-09-17** — "LFO2 runs at twice
+    the rate for the same byte ... Reaches 23.47 Hz at byte 99" — on the
+    function that performs the conversion, three weeks after the constant it
+    describes was corrected.
+
+    It survived a guard written the same day to catch exactly this, and how it
+    did is the transferable part. **23.47 is 0.23708 x 99: the refuted
+    CONSTANT appears nowhere, only its CONSEQUENCE.** A guard that greps for a
+    refuted value cannot see a figure derived from it, nor the words "twice the
+    rate" that say the same thing without a number at all. Found by s3ked
+    reading the function after I had announced the guard as the fix.
     """
     if not hz or hz <= 0:
         return 0
@@ -3266,6 +3278,43 @@ E4B_DC_CORD_FULL_DB = 96.442
 #: its nominal depth at rest, which is UNVERIFIED. Separating them needs the
 #: MPC measured at a different Kw, or with the wheel raised.
 E4B_LFO_PAN_CORD_SCALE = 0.1563
+
+#: MPC `LfoPan` depth -> AKAI `PANDEP`-matrix amount (`p[0x59]`).
+#: **MEASURED 2026-09-17 (s3ked) — the same missing calibration as the E4XT's,
+#: confirmed on a second machine.**
+#:
+#: Our writer wrote `round(depth * 50)` onto the ±50 rail, a plain fraction with
+#: nothing behind it. For `LfoPan` 0.6398 that is **byte 32**, and the sweep
+#: shows byte 20 is already saturating:
+#:
+#:     byte  2    2.03 dB pp    residual 0.13
+#:     byte  4    4.24 dB       residual 0.24
+#:     byte  6    6.48 dB       residual 0.36
+#:     byte 10   11.61 dB       residual 0.66
+#:     byte 20   25.52 dB       residual 1.96   <- saturation appearing
+#:     byte 50  171    dB       residual 19.9   <- a near-zero denominator,
+#:                                                 not a measurement
+#:
+#: **BRACKETED BY TWO NULLS, taken first and last, both exactly 0.00 dB with a
+#: 0.000 residual** — so there is no drift across the run and the zero is a real
+#: zero rather than a floor. Mono ROM source (L−R correlation +1.0000), so none
+#: of the 0.3-0.5 dB of stereo-image wander that the MPC and E4XT captures both
+#: carried is in these numbers. It is the best-controlled data of the three.
+#:
+#: The MPC target is 5.11 dB, which sits between bytes 4 and 6 at **byte 4.78**.
+#: **Byte 5 is INTERPOLATED, not measured** — said plainly because the E4XT's
+#: response turned out non-smooth at the equivalent scale. This rail is much
+#: better behaved: 1.015 -> 1.060 -> 1.080 dB/byte over 2/4/6, smoothly
+#: expansive, so a one-byte interpolation is far safer here than it was there.
+#: It is still an interpolation.
+#:
+#: The scale below puts `LfoPan` 0.6398 on byte 5. That it matches the E4XT's
+#: 0.1563 to four figures is a COINCIDENCE of two rails needing similar
+#: reduction from the same wrong starting point, not a shared law — do not
+#: refactor them into one constant.
+#:
+#: **NOT HEARD.** The E4XT figure was confirmed by ear; this one has not been.
+AKAI_LFO_PAN_DEPTH_SCALE = 0.1563
 E4B_DC_CORD_SRC = 0xA0            #: `DC`, a constant +1 source
 E4B_LFO1_TILDE_SRC = 0x60         #: `Lfo1~`, bipolar about zero
 E4B_AMPVOL_DST = 0x40             #: AmpVol -- the LEVEL destination
