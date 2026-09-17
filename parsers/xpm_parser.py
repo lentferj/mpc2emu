@@ -46,6 +46,8 @@ from models.common import (
     MPC_FILTER_MOD_FULL_CENTS, MPC_KEYTRACK_OCT_PER_OCT,
     mpc_resonance_to_model,
     ENV_CURVE_MPC,
+    lfo_volume_depth_to_amount, mpc_lfo_amp_swing_db, mpc_lfo_amp_centre_db,
+    MPC_LFO_AMP_PIVOT_DEPTH,
 )
 
 
@@ -1993,13 +1995,30 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None,
             # dropped every negative depth, and pan is the parameter where losing
             # the sign loses half the range.
             lfo_pan    = _lfo_depth('LfoPan')
+            # TREMOLO, read since 2026-09-17 (§MPCLFOAMP). Dropped silently
+            # before that on 19.5% of programs and 26.9% of keygroups across
+            # 1,114 -- the single largest routing this reader was discarding,
+            # and the one Jan heard missing from a converted pad (AMP 29 with
+            # PAN 81, where the pan arrived and the tremolo did not).
+            #
+            # MEASURED, not inferred, and the law is not the obvious one: the
+            # swing is bipolar but NOT centred on the un-modulated level. Its
+            # centre SINKS by half the depth, so the panel's 0..127 buys a
+            # trough falling three times as fast as the peak rises, reaching
+            # actual silence at 85. See `mpc_lfo_amp_swing_db`.
+            #
+            # ABS: the panel dial is 0..127 and the corpus holds no negative
+            # value, but a sign here would invert the LFO's PHASE rather than
+            # its size -- the same reading the AKAI and K2000 readers take.
+            lfo_volume = abs(_lfo_depth('LfoVolume'))
             vel_pan    = max(-1.0, min(1.0, float(_get_text(instrument, 'VelocityToPan', '0.0') or '0.0')))
             lfo_block  = _lfo_el
             # `lfo_pan` joins the activation test: an LFO routed ONLY to pan is a
             # real patch, and leaving it out would keep the EOS default and drop
             # the rate and shape with it.
             lfo_active = (abs(lfo_pitch) > 0.001 or abs(lfo_cutoff) > 0.001
-                          or abs(lfo_pan) > 0.001) and lfo_block is not None
+                          or abs(lfo_pan) > 0.001 or lfo_volume > 0.001
+                          ) and lfo_block is not None
             if lfo_active:
                 lfo_rate_hz = lfo_knob_to_hz(float(_get_text(lfo_block, 'Rate', '0.5')))
                 lfo_shape   = _xpm_lfo_shape(_get_text(lfo_block, 'Type', 'Sine'))
@@ -2094,6 +2113,18 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None,
                     lfo1_to_filter=lfo_cutoff,
                     lfo1_to_pan=lfo_pan,
                     wheel_to_lfo=wheel_to_lfo,
+                    # ONE-SIDED, because that is what the model field means --
+                    # established from its two existing users, not assumed:
+                    # the K2000's `Depth` is the one-sided amplitude in dB
+                    # (measured, +12.08/-11.51 at Depth 12) and the AKAI reader
+                    # stores a one-sided figure. The MPC's law yields a
+                    # PEAK-TO-TROUGH swing, so it is halved here. Getting this
+                    # backwards would have shipped every tremolo at twice its
+                    # depth, silently and on every target.
+                    lfo1_to_volume=lfo_volume_depth_to_amount(
+                        mpc_lfo_amp_swing_db(lfo_volume * MPC_LFO_AMP_PIVOT_DEPTH) / 2.0),
+                    lfo_volume_centre_db=mpc_lfo_amp_centre_db(
+                        lfo_volume * MPC_LFO_AMP_PIVOT_DEPTH),
                 )
             # Velocity->pan needs no LFO block, so it is set unconditionally --
             # gating it on `lfo_active` would drop it on any program that pans by

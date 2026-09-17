@@ -110,6 +110,8 @@ import struct
 from typing import List
 from models.common import (
     e4xt_cents_to_cord_amount, e4xt_cord_saturates, E4XT_VEL_SOURCE_UNITS,
+    e4xt_tremolo_cords, LFO_VOLUME_MODEL_FULL_DB, E4B_LFO1_TILDE_SRC,
+    E4B_DC_CORD_SRC, E4B_AMPVOL_DST,
     E4XT_VEL_AMPVOL_DB_PER_PERCENT,
     key_track_to_filter_amount,
     e4xt_cutoff_byte_to_position,Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
@@ -1462,6 +1464,33 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
     _lfo2_sign = -1.0 if voice.lfo2_shape == 'triangle' else 1.0
     # LFO→Filter/Q (and LFO2→Pitch) have no default cord — they go into free
     # slots (8+) as [src, dst, amount, 0].  src/dst ids hardware-RE'd from B.011.
+    # TREMOLO: TWO CORDS THAT ARE ONE PARAMETER.
+    #
+    # `Lfo1~` -> AmpVol carries the SWING and `DC` -> AmpVol carries the CENTRE
+    # it swings about, and they are built together because a swing at the wrong
+    # average loudness is not a shallower version of the effect -- it is the
+    # effect plus a level error. The MPC's centre sinks with depth (measured
+    # 2026-09-17), which no bipolar cord can express on its own; Jan's call was
+    # to match both (2026-09-17). See `e4xt_tremolo_cords` for which of the
+    # three quantities gives way, and why it is the top.
+    #
+    # `Lfo1~` (0x60) AND NOT `Lfo1+` (0x61), measured: both give the same
+    # peak-to-trough, but `Lfo1+` centres half a depth ABOVE nominal and
+    # clipped at amount 50 from an unmodulated level 45 dB down. `Lfo1~` is
+    # already what every other LFO destination here uses.
+    #
+    # NO TRIANGLE SIGN FLIP. Every other cord above negates a triangle LFO to
+    # match the MPC's falling-first phase, and that is right for a destination
+    # where the direction is audible as direction -- pitch up vs down, pan left
+    # vs right. Loudness is not: a tremolo starting quiet-then-loud rather than
+    # loud-then-quiet is a phase difference on a periodic signal, and inverting
+    # it here would put the swing out of phase with the PAN cord beside it,
+    # which on this material (AMP 29 + PAN 81 on one LFO) is the one
+    # relationship a listener can actually hear.
+    _trem_one_sided = (max(abs(voice.lfo1_to_volume), abs(voice.lfo2_to_volume))
+                       * LFO_VOLUME_MODEL_FULL_DB)
+    _trem_lfo, _trem_dc = e4xt_tremolo_cords(
+        _trem_one_sided, getattr(voice, 'lfo_volume_centre_db', 0.0) or 0.0)
     _extra_cords = [
         (0x60, 0x38, voice.lfo1_to_filter   * _lfo1_sign),  # LFO1 → Filter-Freq
         (0x60, 0x39, voice.lfo1_to_filter_q * _lfo1_sign),  # LFO1 → Filter-Q
@@ -1480,6 +1509,8 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
         # means the sweep starts toward the same side as the source.
         (0x60, 0x41, voice.lfo1_to_pan * _lfo1_sign),       # LFO1 → AmpPan
         (0x68, 0x41, voice.lfo2_to_pan * _lfo2_sign),       # LFO2 → AmpPan
+        (E4B_LFO1_TILDE_SRC, E4B_AMPVOL_DST, _trem_lfo),   # LFO1 → AmpVol
+        (E4B_DC_CORD_SRC,    E4B_AMPVOL_DST, _trem_dc),    # DC   → AmpVol
         # VELOCITY → PAN IS DELIBERATELY NOT WRITTEN YET. The model carries
         # `velocity_to_pan` and the MPC supplies it, but the velocity SOURCE on
         # the E4XT is a triad — `Vel+` 0x0A, `Vel~` 0x0B, `Vel<` 0x0C — differing
@@ -1488,7 +1519,21 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
         # the cost stated, and pan deserves the same treatment rather than
         # inheriting it by accident.
     ]
-    has_extra = any(abs(a) > 0.01 for _, _, a in _extra_cords)
+    # THRESHOLD IS THE ENCODED BYTE, NOT AN ARBITRARY FRACTION -- the same
+    # correction already made for `lfo1_to_pitch` above (§AKAILPTCH), finally
+    # propagated to the shared loop it was never applied to. `> 0.01` drops
+    # everything below 1.27 bytes, so a value encoding to byte 1 -- audible, and
+    # the whole point of that earlier fix -- was still being discarded here.
+    #
+    # It surfaced because the TREMOLO writes a pair: at a shallow depth the
+    # swing cleared 0.01 and its centre offset did not, so the swing arrived
+    # without the level it was supposed to swing about. Measured blast radius
+    # over every non-zero depth in 1,114 corpus programs: **0 cords for
+    # `LfoCutoff` and `LfoPan`, 25 keygroups (0.095%) for `LfoVolume`** -- so
+    # this is a correctness fix with a countable and tiny reach, not a change
+    # of behaviour dressed as one.
+    _survives = lambda a: _q(a) not in (0, 256)
+    has_extra = any(_survives(a) for _, _, a in _extra_cords)
     # FILTER DEPTHS CONVERT THROUGH THE CORNER, FROM THIS VOICE'S OWN BASE.
     #
     # The model states them in cents (2026-08-25) and the cord moves the cutoff
@@ -1660,7 +1705,7 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
                      E4XT_ATTACK_CORD_DST_VOLENV_ATK, _atk_amt / 100.0)]
         slot = _LFO_ROUTE_FIRST_FREE_SLOT
         for src, dst, amt in _extra_cords:
-            if abs(amt) > 0.01 and slot < 20:
+            if _survives(amt) and slot < 20:
                 _set_cord(mod, slot, src, dst, _static(amt))   # CR-18 cord builder
                 lfo_slot = slot
                 slot += 1

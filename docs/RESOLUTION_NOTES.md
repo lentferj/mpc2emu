@@ -344,7 +344,8 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§EOSRATEPIECE — the EOS envelope rate law is piecewise, and ours is one exponential](#eosratepiece-the-eos-envelope-rate-law-is-piecewise-and-ours-is-one-exponential)
 - [§XPMPADMAP — the pad→note map is authoritative (ANSWERED on hardware 2026-09-14)](#xpmpadmap-the-padnote-map-is-authoritative-answered-on-hardware-2026-09-14)
 - [§MPCENVREL — the MPC release law's SECONDS are ~2.8x short; the decay's shape is wrong](#mpcenvrel-the-mpc-release-laws-seconds-are-28x-short-the-decays-shape-is-wrong)
-- [§E4BTREMOLO — the E4B writer has no LFO→AmpVol cord (filed 2026-09-14)](#e4btremolo-the-e4b-writer-has-no-lfoampvol-cord-filed-2026-09-14)
+- [§E4BTREMOLO — the E4B writer has no LFO→AmpVol cord (filed 2026-09-14, RESOLVED 2026-09-17)](#e4btremolo-the-e4b-writer-has-no-lfoampvol-cord-filed-2026-09-14-resolved-2026-09-17)
+- [§MPCLFOAMP — the MPC's tremolo sinks its own centre (MEASURED + BUILT 2026-09-17)](#mpclfoamp-the-mpcs-tremolo-sinks-its-own-centre-measured-built-2026-09-17)
 - [§MODWHEEL — modwheel→depth on every path, and the data-entry fallback (filed 2026-09-14)](#modwheel-modwheeldepth-on-every-path-and-the-data-entry-fallback-filed-2026-09-14)
 - [§KRZCOARSE — the PITCH page's Coarse transposition is never read (filed 2026-09-14)](#krzcoarse-the-pitch-pages-coarse-transposition-is-never-read-filed-2026-09-14)
 <!-- INDEX:END -->
@@ -33151,7 +33152,15 @@ release.
 `CD4-NOISE2`-class stationary material is the right subject, since it needs no
 division and no assumption about what the sample is doing.
 
-## §E4BTREMOLO — the E4B writer has no LFO→AmpVol cord (filed 2026-09-14)
+## §E4BTREMOLO — the E4B writer has no LFO→AmpVol cord (filed 2026-09-14, RESOLVED 2026-09-17)
+
+**RESOLVED 2026-09-17 — see §MPCLFOAMP for what was built, and read this
+note for what it got right and wrong.** Both decisions it listed as
+blocking were answered by measurement: the source is `Lfo1~` (0x60), and
+the swing's placement turned out to be a property of the SOURCE machine
+rather than of EOS — so the question this note framed as "where does the
+swing sit" had a different answer for each input format, which is why it
+could not be settled once for the writer.
 
 **What is missing.** `writers/e4b_writer.py`'s `_extra_cords` list writes
 LFO1→Pitch, LFO1→Filter-Freq, LFO1→Filter-Q, LFO1→AmpPan and the LFO2
@@ -33190,6 +33199,133 @@ bound when the trough is within 15 dB of the floor.
 **Then the code change** is a new entry in `_extra_cords` plus whatever headroom
 reservation (2) turns out to require, with `E4B_LFO_VOLUME_FULL_DB` finally
 carrying a measured value and a citation instead of `UNMEASURED`.
+
+## §MPCLFOAMP — the MPC's tremolo sinks its own centre (MEASURED + BUILT 2026-09-17)
+
+**The measurement.** `XPM_VELSENS.xpm` resident on the MPC One, LFO dialled by
+hand to Square at 0.1 Hz with every destination at 0, then AMP alone moved.
+Captured through the Scarlett pre-EQ tap (`tests/re_banks/measure_xpm_lfo_volume.py`).
+
+| AMP | predicted | measured |
+|---|---|---|
+| 32 | 5.15 dB | 5.16 dB |
+| 64 | 14.20 dB | 14.20 dB |
+| 80 | 27.55 dB | **27.58 dB** (predicted from the other two) |
+| 127 | silence | silence |
+
+**The law.** In amplitude, not dB:
+
+    amplitude = (1 − d/2) + d·lfo        lfo ∈ [−1,+1],  d = AMP/127
+
+So the peak rises by `d/2` while the trough falls by `1.5d`, and **the centre
+sinks by `d/2`**. The trough reaches zero — actual silence — at `d = 2/3`,
+i.e. AMP 85, which is why 127 captured as silence rather than as a large
+number. `mpc_lfo_amp_swing_db` and `mpc_lfo_amp_centre_db`.
+
+**WHAT THE SQUARE COULD NOT TEST, and it is the assumption the conversion rests
+on (raised by Jan 2026-09-17, immediately after the build).** A square LFO only
+ever sits at `lfo = ±1`. It measures the TOP and the BOTTOM and nothing between
+them — so it fixes the two endpoints of the modulation and says nothing about
+how the machine INTERPOLATES between them. `(1 − d/2) + d·lfo` is the
+amplitude-linear reading; a dB-linear law through the same two endpoints fits
+the square captures exactly as well, and they are different laws.
+
+This matters because the CENTRE is a different quantity under each. For a square
+the average amplitude is just the mean of the two plateaus and is measured
+either way. For a **triangle or a sine** — which is what real material uses, and
+what the program that prompted this work uses — the average depends entirely on
+the interpolation:
+
+| AMP | amplitude-linear centre | dB-linear centre | gap |
+|---|---|---|---|
+| 29 | −1.05 dB | −1.35 dB | 0.30 dB |
+| 64 | −2.52 dB | −5.15 dB | **2.63 dB** |
+| 80 | −3.29 dB | −11.40 dB | **8.11 dB** |
+
+So **the centre drop now written into the `DC` cord is MEASURED for a square
+source and INFERRED for every other shape.** A single triangle capture settles
+it, and does so by measuring the centre DIRECTLY rather than deriving it from a
+model: under amplitude-linear the captured dB envelope has curved sides —
+flattened near the peak, cusp-sharp at the trough — while under dB-linear it is
+a straight-sided triangle in dB. AMP 64 is the depth to take it at; the gap is
+2.63 dB there, far outside the 0.38 dB flatness the zero control established.
+Marked here rather than left implicit because the square's own numbers looked
+complete, and the shape question is invisible in them.
+
+**Why a square wave.** A triangle is at its extremes for an instant, so any
+envelope follower with a window long enough to be quiet reads the swing short.
+A square turns depth into a two-plateau problem, and the plateaus are split by
+RANK rather than against a midpoint threshold — a midpoint split cannot
+describe a flat signal, which is exactly what the zero-depth negative control
+is. Gates that ran: zero depth flat to 0.38 dB; the LFO period recovered from
+every capture within 6.9 % of the dialled 0.1 Hz; noise floor −95.3 dB against
+a quietest plateau of −51.0 dB.
+
+**What it means for conversion, and the decision inside it.** A tremolo has a
+top, a centre and a bottom. An E4XT bipolar cord plus a static offset places
+any TWO of them. Jan chose the swing and the centre (2026-09-17), on the
+grounds that the centre is the average loudness heard across the whole note
+while the top is reached only instantaneously.
+
+So the top is what gives, and it always overshoots a little: the cord is
+symmetric in dB while this law is symmetric in AMPLITUDE, and a linear mean
+never sits below a geometric one. Over 26,378 non-zero keygroups in 1,114
+programs the overshoot is **0.23 dB at the median, 3.72 dB at p95, 16.31 dB at
+the deepest**.
+
+**Past the ceiling the SWING gives way and the centre does not**, which is the
+reverse of the first attempt here. 2.41 % of non-zero keygroups ask for
+`d ≥ 2/3`, where the requested swing is unbounded; keeping it there means a
+~95 dB cord whose dB-centre sits 39 dB below nominal — a voice all but
+inaudible between peaks. Keeping the centre gives a 23 dB swing at the right
+average loudness. Which is closer to the original depends on the LFO SHAPE
+(under a square the level is never AT the centre, so a deep swing is the better
+imitation of an on/off pulse), and the rule is deliberately not branched on
+shape: the centre is kept because its failure mode is bounded. **The cost is a
+trough that stays audible where the original goes silent, on 2.41 % of
+keygroups — a real cost, not a rounding.**
+
+**How the two E4B constants were reconciled**, which is the part worth keeping.
+Read as dB-per-BYTE, eosed's sine sweep (0.948) and DC sweep (0.96442) on the
+same destination disagree by a factor of two — one is a bipolar peak-to-trough,
+the other a unipolar static shift. Read as **dB per PERCENT of panel amount**
+they are the same slope to 1.7 %, because the file's ±127 byte is the panel's
+±100 percent (`cord_byte_to_amount`, hardware-confirmed 2026-09-14). The
+clipping observation corroborates it independently: `Lfo1~` at amount 50 costs
+half its swing (23.8 dB) above nominal and did not clip from 45 dB down, while
+`Lfo1+` costs the whole 47.65 and did. Three facts, one arithmetic — either
+measurement alone would have been a number with a plausible label on it.
+
+**Where the centre lives.** A `DC` (source 160) → AmpVol cord at a negative
+amount, **not** `vpar[54]`: that byte's own audio law needed correcting once
+already (§E4BFILTCAL — it delivered half to three-quarters of the attenuation
+asked) and its multi-zone path carries the trim on a different byte
+(§E4BDOUBLETRIM). A cord applies per voice whatever the zone count, and sits
+beside the swing it belongs with.
+
+**Not phase-inverted for a triangle**, unlike every other destination here. The
+triangle flip exists because the E4XT's key-synced triangle rises first and the
+MPC's falls first, which matters where direction is audible AS direction —
+pitch up vs down, pan left vs right. Loudness is not directional, and
+inverting it would put the tremolo out of phase with the PAN cord beside it. On
+the material that prompted this work — one triangle LFO driving AMP 29 and
+PAN 81 together — that relationship is the audible one.
+
+**Corpus weight.** 19.5 % of programs and 26.9 % of keygroups carry a non-zero
+`LfoVolume`; median depth 0.2200 of full scale, which is within a hair of the
+0.2283 (AMP 29) that Jan found missing by ear.
+
+**Still open on the other machines.** The AKAI's centring is measured symmetric
+(0.42 dB of median drift over a 0..49 dB swing) and the K2000's sits slightly
+ABOVE nominal (+0.29 dB at Depth 12, +1.47 at Depth 24), so both readers leave
+`lfo_volume_centre_db` at 0.0 on measured grounds rather than for want of a
+number. **The MPC→AKAI and MPC→KRZ write sides do not yet carry the centre**:
+the K2000 has `F4 AMP Adjust` at 1.0 dB/unit and the AKAI has a program level,
+so both could, and neither has been wired or listened to.
+
+**Not yet confirmed by ear.** The E4B path is built and tested; nobody has
+heard it. `Pad-PRO5 Lunar Daze` keygroup 4 (Tri 0.20 Hz, AMP 29, PAN 81) is
+the listening case, and the pan half of it already converts.
 
 ## §MODWHEEL — modwheel→depth on every path, and the data-entry fallback (filed 2026-09-14)
 

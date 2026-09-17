@@ -3167,7 +3167,101 @@ LFO_VOLUME_MODEL_FULL_DB = 96.0
 #: the answer off 132 and made the retraction look justified. An anomaly that
 #: acquires an explanation stops being an anomaly; so does one dissolved by a
 #: rounder reading, and neither measurement could choose between them.
-E4B_LFO_VOLUME_FULL_DB = 24.0
+#: **CORRECTED 24.0 -> 94.78 on 2026-09-17, and wired to a reader the same
+#: hour** -- the two halves the note above insisted must move together.
+#:
+#: 94.78 is a least-squares slope THROUGH THE ORIGIN over eosed's two sine-fit
+#: rungs (amount 25 -> 23.17 dB, amount 50 -> 47.65 dB peak-to-trough), which
+#: is the right model because amount 0 must give no swing; a free two-point fit
+#: gives 0.979 dB/unit with a -1.31 dB intercept it has no licence to have.
+#:
+#: **UNITS: dB PER PERCENT OF PANEL AMOUNT, and reconciling that is what makes
+#: this value trustworthy.** Read as dB-per-BYTE the sine sweep (0.948) and the
+#: DC sweep (0.96442) would disagree with each other by a factor of two, since
+#: one is a bipolar peak-to-trough and the other a unipolar static shift. Read
+#: as per-percent they are the SAME slope to 1.7 %, because the file's +/-127
+#: byte is the panel's +/-100 percent (`cord_byte_to_amount`, hardware-confirmed
+#: 2026-09-14) -- so a model amount of 1.0 is 100 %, not 127. Two measurements
+#: on one destination by two methods agreeing to 1.7 % is the evidence here;
+#: either one alone would have been a number with a plausible label on it.
+#:
+#: The clipping observation corroborates the peak-to-trough reading
+#: independently: `Lfo1~` at amount 50 costs half its swing (23.8 dB) above
+#: nominal and did not clip from 45 dB down, while `Lfo1+` costs the whole
+#: 47.65 and did. Under the halved reading `Lfo1~` would have cost 46.3 dB and
+#: clipped too. Three facts, one arithmetic.
+E4B_LFO_VOLUME_FULL_DB = 94.78
+
+#: EOS `DC` (source 160) -> AmpVol: dB of STATIC level shift at amount 100 %.
+#:
+#: MEASURED (eosed, 2026-09-15): 0.96442 dB per percent, r2 0.999917 over eight
+#: rungs spanning BOTH SIGNS. A constant source has no period, no sine to fit
+#: and nothing for a detector to smear, which is why this is the cleanest
+#: number on the destination -- and why the tremolo's static half is built on
+#: it rather than on `vpar[54]`, whose own audio law needed correcting once
+#: already (§E4BFILTCAL: the byte the panel displays delivered half to
+#: three-quarters of the attenuation asked) and whose multi-zone path carries
+#: the trim on a DIFFERENT byte (§E4BDOUBLETRIM). A cord applies per voice,
+#: identically whatever the zone count, and sits next to the swing it belongs
+#: with so neither can be removed without the other.
+E4B_DC_CORD_FULL_DB = 96.442
+E4B_DC_CORD_SRC = 0xA0            #: `DC`, a constant +1 source
+E4B_LFO1_TILDE_SRC = 0x60         #: `Lfo1~`, bipolar about zero
+E4B_AMPVOL_DST = 0x40             #: AmpVol -- the LEVEL destination
+
+#: How far a cord can drive the amp level ABOVE what sustain 100 reaches.
+#:
+#: MEASURED (eosed, 2026-09-15): four captures at two sources and two rates all
+#: peaked within 0.6 dB of one raw maximum ~8 dB up, then stopped. This is the
+#: headroom budget for anything written into `E4B_AMPVOL_DST`, and it is a
+#: CEILING rather than a clip in the usual sense -- pushing past it flattens
+#: the peak of the swing, changing the tremolo's shape and not just its size.
+E4B_AMP_CORD_HEADROOM_DB = 8.0
+
+
+def e4xt_tremolo_cords(one_sided_db: float, centre_db: float = 0.0):
+    """Swing + centre -> (`Lfo1~` amount, `DC` amount), both -1..+1 fractions.
+
+    TWO KNOBS, THREE QUANTITIES -- and which one gives is a decision, not an
+    accident. A tremolo has a top, a centre and a bottom; a bipolar cord plus a
+    static offset can place any two of them. Jan chose the swing and the centre
+    (2026-09-17), because the centre is the average loudness a listener hears
+    across the whole note while the top is reached only instantaneously.
+
+    So the top is what gives, and it always overshoots slightly: this cord is
+    symmetric in dB, while the MPC's swing is symmetric in AMPLITUDE, and a
+    linear mean never sits below a geometric one (AM-GM). At the corpus median
+    depth the overshoot is 0.23 dB, at the 95th percentile 3.72 dB, and at the
+    deepest keygroup in 1,114 programs 16.31 dB.
+
+    **WHEN THE CEILING IS REACHED THE SWING GIVES WAY AND THE CENTRE DOES NOT.**
+    This is the opposite of a first attempt here, which kept the swing, and the
+    difference is worth the paragraph. 2.41 % of non-zero keygroups ask for a
+    depth at or past 2/3, where the MPC's trough reaches actual silence and the
+    requested swing is unbounded. Keeping the swing there means keeping a
+    ~95 dB cord, whose dB-centre then sits 39 dB below nominal -- a voice that
+    comes out all but inaudible between peaks. Keeping the CENTRE instead gives
+    a 23 dB swing at the right average loudness.
+
+    Neither is the original, and which is closer depends on the LFO SHAPE, which
+    is why the rule is not branched on it: under a SQUARE the level is never at
+    the centre, so a deep-swing reconstruction is the better imitation of an
+    on/off pulse, while under a sine or triangle the signal spends most of its
+    time near the centre and a 39 dB hole there is simply wrong. The centre is
+    kept because its failure mode is bounded -- a converted voice is never
+    delivered 39 dB quiet -- and because 23 dB down is already perceptually
+    close to gone. The cost is a trough that stays audible where the original
+    goes silent, and it is a real cost, not a rounding.
+    """
+    pp_db = 2.0 * abs(one_sided_db)          # model field is ONE-SIDED
+    # The cord's own rail bounds the swing before headroom does.
+    lfo_frac = max(0.0, min(1.0, pp_db / E4B_LFO_VOLUME_FULL_DB))
+    dc_frac = max(-1.0, min(1.0, centre_db / E4B_DC_CORD_FULL_DB))
+    centre_db = dc_frac * E4B_DC_CORD_FULL_DB          # what the cord can hold
+    # Clamp the SWING so its top lands on the ceiling, keeping the centre.
+    head = max(0.0, E4B_AMP_CORD_HEADROOM_DB - centre_db)
+    lfo_frac = min(lfo_frac, 2.0 * head / E4B_LFO_VOLUME_FULL_DB)
+    return lfo_frac, dc_frac
 
 
 # ── K2000 LFO1 rate byte <-> Hz ────────────────────────────────────────────
@@ -4068,6 +4162,26 @@ class VoiceLayer:
     lfo2_to_filter: float = 0.0      # LFO2 → Filter-Freq (0x68→0x38)
     lfo2_to_filter_q: float = 0.0    # LFO2 → Filter-Q    (0x68→0x39)
     lfo2_to_volume: float = 0.0      # LFO2 → Volume (tremolo); 0.0-1.0 depth
+    #: WHERE THE TREMOLO'S SWING SITS, in dB relative to the un-modulated
+    #: level. 0.0 means "centred on it", which is what every source assumed
+    #: until 2026-09-17 and is right for two of the three machines measured.
+    #:
+    #: `lfo*_to_volume` carries only the swing's SIZE, and for a decade of this
+    #: codebase that was taken to be the whole story. It is not: the MPC's
+    #: LFO→AMP does not swing about the un-modulated level at all. Its centre
+    #: SINKS as the depth grows (measured 2026-09-17, `mpc_lfo_amp_centre_db`),
+    #: so a converter matching the swing alone reproduces the wobble at the
+    #: wrong average loudness -- 1.05 dB too loud at the corpus median depth,
+    #: and over 8 dB too loud at the top of the range.
+    #:
+    #: ONE FIELD FOR BOTH LFOs, deliberately. This is a static level offset;
+    #: two tremolos sink one centre, and their sinks add. A per-LFO field would
+    #: invite a writer to honour one and drop the other, which is the failure
+    #: it exists to prevent. Populated by the XPM reader; the AKAI and K2000
+    #: readers leave it 0.0 because their centring is measured (AKAI symmetric
+    #: to 0.42 dB over a 0..49 dB swing; K2000 slightly ABOVE nominal, +0.29 at
+    #: Depth 12 -- see KRZ_F4_AMP_DEPTH_DB_PER_UNIT) rather than unknown.
+    lfo_volume_centre_db: float = 0.0
     #: PAN MODULATION. Bipolar, -1.0..+1.0, 0.0 = no modulation. SIGNED
     #: DELIBERATELY: pan is left-and-right, so an unsigned path would lose half
     #: the parameter space in the one place it obviously matters -- and
@@ -5141,7 +5255,35 @@ def mpc_lfo_amp_swing_db(depth: float) -> float:
 
 
 def mpc_lfo_amp_centre_db(depth: float) -> float:
-    """dB the average level sinks at this depth, relative to unmodulated."""
+    """dB the average level sinks at this depth, relative to unmodulated.
+
+    **THE INTERPOLATION IS AMPLITUDE-LINEAR, MEASURED ON A TRIANGLE
+    2026-09-17** -- and the gap it closed was opened by Jan minutes after the
+    law was built on, which is the only reason it was closed the same evening.
+
+    A square LFO sits only at `lfo = +/-1`, so the first measurement fixed the
+    TOP and the BOTTOM and said nothing about the path between them; a
+    dB-linear law through those same two endpoints fit every square capture
+    equally well. That is invisible for a square (the average is the mean of
+    two plateaus under either law) and decisive for a TRIANGLE or SINE, where
+    the two disagree by 0.30 dB at depth 29, **2.63 dB at 64 and 8.11 dB at
+    80** -- and triangle is what the material that prompted this work uses.
+
+    Settled by the QUANTILE CURVE of one triangle capture at depth 64, not by
+    its extremes: a ramp spends equal time at every value of its own ramp, so
+    the distribution of the captured dB envelope IS the law. Amplitude-linear
+    fit at **0.214 dB RMS against dB-linear's 0.551** over q=0.05..0.95, two
+    free parameters each so neither is favoured by flexibility, and the
+    discriminator was validated on synthetic data in BOTH directions first --
+    it picks dB-linear when dB-linear is true.
+
+    Two magnitudes cross-check off the same capture, independently of the
+    square: the p05..p95 spread came out **12.32 dB against 12.21 predicted**,
+    and this function's own value **-2.86 dB against -2.52 predicted** at depth
+    64. The centre's 0.34 dB sits in the extrapolation to the trough, where an
+    envelope detector genuinely does smooth; the robust statistic agrees to
+    0.11 dB. The rival law would have put it at -5.15. See §MPCLFOAMP.
+    """
     d = max(0.0, min(1.0, depth / MPC_LFO_AMP_PIVOT_DEPTH))
     return 20.0 * math.log10(max(1e-6, 1.0 - MPC_LFO_AMP_CENTRE_SINK * d))
 
