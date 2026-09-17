@@ -1643,6 +1643,23 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
         Kw = max(0.0, min(1.0, voice.wheel_to_lfo))
         gate = Kw > 0.01
         _static = (lambda d: d * (1.0 - Kw)) if gate else (lambda d: d)
+        # THE WHEEL GATE CARRIES THE REMAINDER, NOT ITS OWN ROUNDING.
+        #
+        # A gated cord is written twice -- a static amount and a ModWheel cord
+        # that adds the rest -- and rounding each half INDEPENDENTLY rounds the
+        # same fraction twice in the same direction, so the pair can land a
+        # whole byte past where a single write would have. Negligible on a deep
+        # routing (pan 81.3 -> -41 + -41 = -82, 0.7 bytes out of 81) and a large
+        # relative error on a shallow one: the tremolo's centre offset wants
+        # -1.053 dB, a single rounding gives -1 byte (-0.759, err 0.29) and the
+        # independent split gives -2 (-1.519, err 0.47).
+        #
+        # Found 2026-09-17 when VinSamLib asked whether +3 and -1 out of 127
+        # were too coarse to hear. They are the STATIC HALVES of +6 and -2, so
+        # the honest answer needed the split explained -- and explaining it
+        # showed the split itself was losing a byte.
+        _sq = lambda a: round(max(-1.0, min(1.0, a)) * 127)          # noqa: E731
+        _remainder = lambda a: (_sq(a) - _sq(_static(a))) / 127.0    # noqa: E731
         # THRESHOLD IS THE ENCODED BYTE, NOT AN ARBITRARY FRACTION.
         # This was `> 0.01`, which was harmless while the AKAI vibrato depth
         # was 6x too large and became a silent dropout the moment that was
@@ -1660,7 +1677,7 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
                 # slot 3 is already ModWheel→C02Amt in the template; set its depth.
                 _set_cord(mod, _MOD_WHEEL_GATE_SLOT, _SRC_MOD_WHEEL,
                           _CORD_AMT_DEST_BASE + _MOD_LFO_TO_PITCH_SLOT,
-                          _lfo1_pitch * Kw)
+                          _remainder(_lfo1_pitch))
         if _q(_fenv_amt / 100.0) not in (0, 256):
             mod[_MOD_FENV_TO_CUTOFF_AMT] = _q(_fenv_amt / 100.0)
         # The model carries oct/oct; the cord carries a fraction of this
@@ -1709,9 +1726,15 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
                 _set_cord(mod, slot, src, dst, _static(amt))   # CR-18 cord builder
                 lfo_slot = slot
                 slot += 1
-                if gate and slot < 20:   # ModWheel → this cord's amount (0xA8+slot)
+                # A ZERO REMAINDER NEEDS NO CORD. On a shallow routing the
+                # static half already carries the whole rounding, so the gate
+                # cord would be an inert entry holding a slot -- and slots are
+                # the scarce resource here (20, shared with the filter, pitch
+                # and attack routings).
+                _rem = _remainder(amt)
+                if gate and slot < 20 and _q(_rem) not in (0, 256):
                     _set_cord(mod, slot, _SRC_MOD_WHEEL,
-                              _CORD_AMT_DEST_BASE + lfo_slot, amt * Kw)
+                              _CORD_AMT_DEST_BASE + lfo_slot, _rem)
                     slot += 1
         mod = bytes(mod)
     else:

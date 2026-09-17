@@ -41,6 +41,8 @@ from models.common import (
     e4xt_attack_span_from_cord, E4XT_ATTACK_CORD_SRC_VEL_LT,
     E4XT_ATTACK_CORD_DST_VOLENV_ATK, E4XT_ATTACK_CORD_FACTORY_AMOUNT,
     E4XT_VEL_PIVOT, E4XT_VEL_AMPVOL_DB_PER_PERCENT,
+    E4B_LFO_VOLUME_FULL_DB, E4B_DC_CORD_FULL_DB, E4B_DC_CORD_SRC,
+    E4B_LFO1_TILDE_SRC, E4B_AMPVOL_DST, LFO_VOLUME_MODEL_FULL_DB,
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            env_sustain_from_byte,
                            LoopType, Envelope, lfo_rate_byte_to_hz,
@@ -570,6 +572,20 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
         ('lfo2_to_pitch',    _MOD_LFO2_TO_PITCH[0],    _MOD_LFO2_TO_PITCH[1],    None),
         ('lfo2_to_filter',   _MOD_LFO2_TO_FILTER[0],   _MOD_LFO2_TO_FILTER[1],   None),
         ('lfo2_to_filter_q', _MOD_LFO2_TO_FILTER_Q[0], _MOD_LFO2_TO_FILTER_Q[1], None),
+        # PAN AND VOLUME, read for the first time 2026-09-17 -- and both were
+        # WRITTEN long before they were read, which is the defect. `lfo*_to_pan`
+        # has been written since 2026-09-06 and `lfo*_to_volume` since tonight;
+        # neither appeared in this table, so a round trip reported 0.0 while the
+        # bytes plainly carried the cord. Found by VinSamLib scanning a built
+        # bank and nearly filing "the fix did not reach the output" on the
+        # strength of it -- the model said zero and the file said otherwise.
+        #
+        # THE COST WAS NOT HYPOTHETICAL. Anything that re-parses an E4B to check
+        # its own work -- a re-bank, a resample, a zone reduction -- silently
+        # dropped the pan LFO of every voice it touched for eleven days.
+        ('lfo1_to_pan',      0x60, 0x41, None),
+        ('lfo2_to_pan',      0x68, 0x41, None),
+        ('lfo1_to_volume',   E4B_LFO1_TILDE_SRC, E4B_AMPVOL_DST, None),
     ]
     _routes = {}   # attr -> (full_depth, static, gate)
     for _attr, _src, _dst, _fixed in _lfo_defs:
@@ -609,9 +625,18 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     # assigned until further down -- ordering, not preference.
     _sign1 = -1.0 if _LFO_SHAPE_NAME.get(pzt[43], 'triangle') == 'triangle' else 1.0
     _sign2 = -1.0 if _LFO_SHAPE_NAME.get(pzt[51], 'triangle') == 'triangle' else 1.0
+    # PAN IS NEGATED, VOLUME IS NOT, and the asymmetry is deliberate on both
+    # sides. The writer negates a triangle LFO's cords to every destination
+    # where direction is audible AS direction -- pitch up vs down, pan left vs
+    # right -- and deliberately does NOT for AmpVol, where inverting would only
+    # shift the tremolo's phase and would put it out of step with the pan cord
+    # beside it. So `lfo1_to_volume` is absent from this map (defaulting to
+    # +1.0) for the same reason it is absent from the writer's sign flip: the
+    # two must agree, or the round trip inverts a depth the writer never did.
     _signs = {'lfo1_to_pitch': _sign1, 'lfo1_to_filter': _sign1,
               'lfo1_to_filter_q': _sign1, 'lfo2_to_pitch': _sign2,
-              'lfo2_to_filter': _sign2, 'lfo2_to_filter_q': _sign2}
+              'lfo2_to_filter': _sign2, 'lfo2_to_filter_q': _sign2,
+              'lfo1_to_pan': _sign1, 'lfo2_to_pan': _sign2}
     _raw_depth = ((lambda a: _routes[a][0]) if _use_full
                   else (lambda a: _routes[a][1]))
     _depth = lambda a: _raw_depth(a) * _signs.get(a, 1.0)     # noqa: E731
@@ -621,6 +646,26 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     lfo2_to_pitch    = _depth('lfo2_to_pitch')
     lfo2_to_filter   = _depth('lfo2_to_filter')
     lfo2_to_filter_q = _depth('lfo2_to_filter_q')
+    lfo1_to_pan      = _depth('lfo1_to_pan')
+    lfo2_to_pan      = _depth('lfo2_to_pan')
+    # TREMOLO: the cord carries PEAK-TO-TROUGH dB, the model field carries the
+    # ONE-SIDED amplitude over LFO_VOLUME_MODEL_FULL_DB. Halving here is the
+    # exact inverse of the doubling in the writer, and getting it wrong in
+    # either direction is invisible -- it just makes every round-tripped
+    # tremolo twice or half as deep as the file says.
+    _trem_pp_db = abs(_depth('lfo1_to_volume')) * E4B_LFO_VOLUME_FULL_DB
+    lfo1_to_volume = min(1.0, (_trem_pp_db / 2.0) / LFO_VOLUME_MODEL_FULL_DB)
+    # AND THE CENTRE IT SWINGS ABOUT, from the `DC` cord beside it. Read here
+    # rather than inferred from the depth: the MPC's sink is d/2 by measurement,
+    # but this reader must handle a file the MACHINE wrote, where a DC cord into
+    # AmpVol is just a level offset and carries no such relationship.
+    _dc_slot = _cord_slot(E4B_DC_CORD_SRC, E4B_AMPVOL_DST)
+    lfo_volume_centre_db = 0.0
+    if _dc_slot >= 0 and _dc_slot * 4 + 2 < len(mod_region):
+        _dc_static = cord_byte_to_amount(mod_region[_dc_slot * 4 + 2])
+        _dc_full = _dc_static + cord_byte_to_amount(_gate_byte(_dc_slot))
+        lfo_volume_centre_db = ((_dc_full if _use_full else _dc_static)
+                                * E4B_DC_CORD_FULL_DB)
 
     # LFO1 (PZT[42:46]) + LFO2 (PZT[50:54]) — hardware-RE'd 2026-06-10 (B.011).
     lfo1_rate      = lfo_rate_byte_to_hz(pzt[42])
@@ -908,6 +953,10 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
         lfo2_to_pitch      = lfo2_to_pitch,
         lfo2_to_filter     = lfo2_to_filter,
         lfo2_to_filter_q   = lfo2_to_filter_q,
+        lfo1_to_pan        = lfo1_to_pan,
+        lfo2_to_pan        = lfo2_to_pan,
+        lfo1_to_volume     = lfo1_to_volume,
+        lfo_volume_centre_db = lfo_volume_centre_db,
         wheel_to_lfo       = wheel_to_lfo,
     )
     consumed = VOICE_FIXED + n_zones * ZONE_ENTRY
