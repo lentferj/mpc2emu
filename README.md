@@ -333,12 +333,30 @@ about; the waveform underneath is the same audio. GitHub plays them inline.
 | **Example 2** — a sustaining synth, 3 s | [`docs/demo/example2-synth.mp4`](docs/demo/example2-synth.mp4) |
 | **Example 3** — a decaying synth (sustain 0), 2 s | [`docs/demo/example3-decay.mp4`](docs/demo/example3-decay.mp4) |
 
+**Example 3's K2000 leg is not yet what this converter writes, and saying so is
+the point of publishing it.** As converted, that program's decay ran at **55 %**
+of the source — a note whose sustain is zero *is* its decay, so it read as
+half-length by ear. The recording above has the K2000's `Dec1` set over SysEx to
+the value the pending fix computes, and it lands at **100 % of the source**,
+closer than either of the other two targets. The measurement is
+[recorded](TODO.md); until `krz_writer` writes that value itself, this leg shows
+the fix rather than the shipping behaviour.
+
 **The levels are matched, and that is not a cosmetic decision.** Louder reads as
 better in any A/B, and at their own settings these machines sit **13.6 dB
 apart** on the same program — an unmatched comparison would rank them by output
 stage rather than by conversion. Each rendering is normalised on the RMS of the
-note *body* (onset + 0.5 s to note-off), excluding the attack transient, so a
-difference in one machine's transient cannot set the level for its whole clip.
+note's **first 0.6 s** (onset + 0.05 to + 0.65 s), which is signal on every
+machine whatever the envelope does and is also the part the ear weights when
+judging how loud a note was.
+
+**That window is the second attempt, and the first one was wrong in a way worth
+recording.** Matching on the note *body* — onset + 0.5 s to note-off — is only
+valid for a sound that sustains. On Example 3 the sustain is zero, so the note
+has decayed to the noise floor long before note-off and the body window
+averaged mostly silence: it matched one machine's **noise** against another's
+**signal**, handed the K2000 +19.8 dB, and left it about 10 dB louder than
+everything else. It was caught by eye in the plot, not by the code.
 
 **Two things the clips do not show, stated rather than hidden:**
 
