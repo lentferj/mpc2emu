@@ -811,8 +811,50 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
         + _stage2_seconds(pzt[2]) * (1.0 - _atk_l1))
     env_decay   = (env_rate_to_span_seconds(_decay_span, pzt[4])
                    + _stage2_seconds(pzt[6]))
-    env_release = (env_rate_to_span_seconds(_rel_span, pzt[8])
-                   + _stage2_seconds(pzt[10]))
+    # RELEASE SEGMENT 1 STOPS AT THE KNEE, NOT AT SILENCE -- so its span is
+    # the distance from SUSTAIN down to `pzt[9]`, not the whole release span.
+    #
+    # This is the same error the attack block above records being fixed on
+    # 2026-09-11, in the same file, one stage over: a statement true of the
+    # stage AS A WHOLE and false of each SEGMENT, which is the unit the rate
+    # bytes act on. `e4b_writer` gives Rls1 only `_r_mid_db` to cover and puts
+    # the rest on Rls2; reading Rls1's rate as if it crossed the full span
+    # over-reports by `_rel_span / _r_mid_db` -- 97.82/29 = 3.37x -- and the
+    # old second term compounded it by taking Rls2's FULL traversal time
+    # instead of its own segment's.
+    #
+    # MEASURED, not inferred: a purpose-built ladder of 0.25/0.5/1/2/4 s
+    # written and read back gave 0.971/1.919/3.974/7.854/15.686 -- a constant
+    # ~3.9x across a 16x range, which is this arithmetic and not a curve.
+    #
+    # WHICH HALF WAS WRONG WAS SETTLED BY THE SOURCE, not by assuming the
+    # writer was right. The MPC's own release, measured on flat noise over
+    # four release lengths (TODO, 2026-09-18), reaches 29 dB down at 0.86R;
+    # this writer reaches it at 0.96R. Slightly SLOW, nowhere near 3.9x fast
+    # -- so the over-report is the reader's. An earlier argument that the
+    # writer must be right because the machine agreed with it was invalid:
+    # that rules out writer-vs-machine disagreement and says nothing about
+    # writer-vs-source.
+    # SCOPED TO WHERE IT IS VERIFIED. The span-aware reading applies only when
+    # the knee is genuinely BELOW the sustain, which is the case this writer
+    # produces whenever sustain > 0 and the one measured against a real ladder.
+    #
+    # AT SUSTAIN 0 THE INFORMATION IS NOT IN THE FILE. The writer clamps the
+    # knee level to silence there (`_env_db_to_level_byte(decay_span + 29)`
+    # with decay_span already the full span), so where the knee actually sat
+    # cannot be recovered, and assuming the full span for segment 1 reproduces
+    # the very over-count this fixes. The previous behaviour is kept for that
+    # case -- not because it is right, but because it does not over-count, and
+    # inventing a knee that was never encoded would be worse.
+    _r_knee_db = env_level_byte_to_db(pzt[9])
+    _r_seg1 = _r_knee_db - _decay_span
+    if _r_seg1 > 0.0:
+        env_release = (env_rate_to_span_seconds(_r_seg1, pzt[8])
+                       + (env_rate_to_span_seconds(max(0.0, _rel_span - _r_seg1),
+                                                   pzt[10]) if pzt[10] else 0.0))
+    else:
+        env_release = (env_rate_to_span_seconds(_rel_span, pzt[8])
+                       + _stage2_seconds(pzt[10]))
     # The amp-envelope sustain byte is dB-law on hardware (§E4BLEVEL), and
     # e4b_writer pre-compensates for that with env_sustain_to_byte. Reading it
     # back through the LINEAR level inverse was not an inverse: a bank written
