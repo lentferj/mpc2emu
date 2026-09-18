@@ -3921,6 +3921,52 @@ KRZ_ENV_TIME_GRID = [(0, 2, 0.02), (2, 5, 0.04), (5, 10, 0.10),
 KRZ_RELEASE_FACTOR = 3.65
 
 
+#: The same correction for the ABOVE-KNEE release branch, which needs its own.
+#:
+#: **ONE FACTOR CANNOT SERVE BOTH BRANCHES, MEASURED 2026-09-18.** `_fill_env`
+#: takes two paths: below the 33 % knee both release legs aim at silence and
+#: Rel1 carries the whole fall; above it, Rel1 fades to the knee and Rel2
+#: finishes. Those map Rel1 to the AUDIBLE fall completely differently, and the
+#: difference is 4.7x:
+#:
+#:     branch        program       Rel1 written   -30 dB fall   ratio
+#:     below-knee    sustain 0.00     2.00 s        0.435 s     0.22
+#:     above-knee    sustain 0.63     1.45 s        1.51  s     1.04
+#:     above-knee    sustain 1.00     8.32 s        8.58  s     1.03
+#:
+#: The two above-knee programs have releases **5.7x apart** and both land within
+#: 4 % of `t(-30 dB) = Rel1`, so that branch has a clean law of its own -- it is
+#: just not the below-knee one. `KRZ_RELEASE_FACTOR` was recalibrated to 3.65 on
+#: the sustain-0 program, which fixed what Jan heard there and made every
+#: SUSTAINING program 2.6x too slow: a 10.4 s tail on a pad.
+#:
+#: **THE OLD 1.9 WAS A COMPROMISE AND THAT NOW MAKES SENSE.** It was fitted on
+#: AlphaPad #200, a sustaining program -- so it was roughly right above the knee
+#: (1.9 against the 1.55 here) and badly wrong below it, which is exactly the
+#: case Jan reported.
+#:
+#: MEASURED AT TWO Rel1 SETTINGS PER PROGRAM, which is what makes this an
+#: interpolation rather than the extrapolation that failed first time. A single
+#: pair (`t(-30) = 1.03 * Rel1`) implied 1.55, and at 1.55 BOTH programs came
+#: back slow -- so the law is affine, not proportional:
+#:
+#:     Lunar Daze   t(-30) = 0.969 * Rel1 + 0.520     needs Rel1 2.870  f 1.259
+#:     SY Precious  t(-30) = 0.964 * Rel1 + 0.112     needs Rel1 0.599  f 1.507
+#:
+#: **The SLOPES agree to 0.5 % and are the machine; the INTERCEPTS do not and
+#: are the program.** Each intercept is almost exactly a quarter of that
+#: program's own Rel2 leg (2.08 s and 0.36 s), which is the leg that finishes
+#: the fall after the knee -- so the offset is real structure, not noise.
+#:
+#: **THE 20 % SPREAD IS THEREFORE IRREDUCIBLE WITH ONE CONSTANT.** Rel2's length
+#: is known at write time, so a future version could solve for Rel1 against the
+#: affine law instead of scaling a total; that is the principled fix and it
+#: needs a third program to confirm the quarter-of-Rel2 relation before anything
+#: is built on it. This mean leaves about +/-9 % either side, against the 2.6x
+#: it replaces.
+KRZ_RELEASE_FACTOR_SUSTAINED = 1.38
+
+
 def krz_env_byte_to_seconds(b: int) -> float:
     """K2000 ENV/ENC time byte -> seconds (inverse of krz_writer._env_time_byte,
     which walks KRZ_ENV_TIME_GRID accumulating steps = seconds/step_size)."""

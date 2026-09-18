@@ -89,7 +89,7 @@ from models.common import KRZ_LFO_PAN_DEPTH_SCALE
 from models.common import (
     Bank, Preset, SampleData, VoiceLayer, LoopType,
     krz_lfo_rate_hz_to_byte,
-    KRZ_ENV_TIME_GRID, KRZ_RELEASE_FACTOR, KRZ_RELEASE_SPAN_DB,
+    KRZ_ENV_TIME_GRID, KRZ_RELEASE_FACTOR, KRZ_RELEASE_FACTOR_SUSTAINED, KRZ_RELEASE_SPAN_DB,
     E4B_CUTOFF_MAX_HZ,
     KEY_FILTER_OCT_PER_OCT,
     krz_cents_to_depth_byte,
@@ -1786,8 +1786,14 @@ def _fill_env(b: bytearray, env, hold_open: bool = False) -> None:
         pairs_rel = [(_ONESHOT_HOLD_S * _REL1_TIME_FRAC, 100),
                      (_ONESHOT_HOLD_S * (1.0 - _REL1_TIME_FRAC), 100)]
     elif sus > _REL_KNEE_PCT:
-        pairs_rel = [(rel * _REL1_TIME_FRAC, _REL_KNEE_PCT),  # Rel1 — fade to the knee
-                    (rel * (1.0 - _REL1_TIME_FRAC), 0)]       # Rel2 — short tail to silence
+        # THIS BRANCH HAS ITS OWN FACTOR -- see KRZ_RELEASE_FACTOR_SUSTAINED.
+        # Rel1 fades to the knee rather than to silence, so the same Rel1 time
+        # buys 4.7x more audible fall here than it does below the knee, and one
+        # factor serving both made every sustaining program 2.6x too slow while
+        # the sustain-0 case was right.
+        _rel_s = rel * (KRZ_RELEASE_FACTOR_SUSTAINED / _KRZ_RELEASE_FACTOR)
+        pairs_rel = [(_rel_s * _REL1_TIME_FRAC, _REL_KNEE_PCT),  # Rel1 — fade to the knee
+                    (_rel_s * (1.0 - _REL1_TIME_FRAC), 0)]       # Rel2 — short tail to silence
     else:
         # REL1 CARRIES THE WHOLE RELEASE HERE, NOT 80 % OF IT.
         #
