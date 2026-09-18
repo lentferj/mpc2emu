@@ -1039,7 +1039,36 @@ def akai_env_bytes(env, quiet: bool = False, hold_release: bool = False) -> tupl
         # 103 and 0.25 dB/s wrote 117, both out of range for the field.
         r = int(round(max(0, min(99, math.log(_rate / _a) / _b))))
     else:
+        # THE RELEASE DOES NOT START AT THE SUSTAIN LEVEL (2026-09-18, Jan by
+        # ear: "like a stick hit", found by shortening the note until the fault
+        # dominated -- at 2 s it is inaudible, at 80 ms it is the whole sound).
+        #
+        # `_AK_SUSTAIN_DB_PER_UNIT * sus` is the distance from the sustain
+        # level down to silence, which is the right span ONLY if the key is
+        # held until the decay has finished. A note released during the decay
+        # is still far above sustain and has that whole distance to travel.
+        #
+        # **AT SUSTAIN 0 THE SPAN COMPUTES TO 0 dB**, `_rate_law_value` takes
+        # its "nowhere to travel" branch and returns the DEFAULT byte, and the
+        # source's release time is discarded entirely. Measured on hardware,
+        # the S3000XL against the MPC playing the same program, fall after
+        # note-off on an 80 ms note:
+        #
+        #     MPC    -12 dB 0.240 s   -24 dB 0.385 s   -40 dB 0.510 s
+        #     AKAI   -12 dB 0.035 s   -24 dB 0.080 s   -40 dB 0.135 s
+        #
+        # RELSE1 45 (the default) is 285.9 dB/s -- 60 dB in 0.210 s. The source
+        # asks 0.547 s, which over the full range is 107.8 dB/s = RELSE1 55, or
+        # 0.557 s. That is the difference between a decaying pad and a
+        # percussive hit.
+        #
+        # SO THE SPAN IS THE FULL RANGE WHEN SUSTAIN CANNOT PROVIDE ONE. A
+        # sustaining patch still uses its own sustain-to-silence distance,
+        # which is both correct and what every program converting well today
+        # already gets; only the degenerate case changes.
         span_rel_db = _AK_SUSTAIN_DB_PER_UNIT * sus
+        if span_rel_db <= 0.0:
+            span_rel_db = _AK_SUSTAIN_DB_PER_UNIT * 99
         # STAGE BLANKED WHEN WE ARE ABOUT TO OVERRIDE. A saturation record
         # describing a byte that is then replaced is not a partial truth, it
         # is a false one -- and the replacement is disclosed below, so nothing

@@ -738,7 +738,38 @@ def _apply_slice(sd: SampleData, slice_start: int, slice_end: int,
         # Case 4: No XPM loop, loop within trim window or no WAV loop.
         # Trim strictly to [slice_start, slice_end] and force one-shot.
         # (e.g. BASSMDACE: SliceLoop=0 and loop_start=0 inside trim → one-shot)
-        if trim_end <= n_frames and (trim_start > 0 or trim_end < n_frames):
+        #
+        # **A FULL-SAMPLE PLACEHOLDER LOOP VETOES THE TRIM (2026-09-18).**
+        # Found by Jan on hardware: a converted pad ended abruptly where the
+        # MPC tapered. One program lost 58 % of its audio -- 60 of its 64
+        # samples cut from 4.600 s to exactly 1.800 s, `SliceEnd` 79380 on
+        # every one -- while the MPC's own panel showed START 0 / END 202859
+        # and played the whole thing.
+        #
+        # The discriminator is the embedded `smpl` loop, and the case that
+        # found it is the one that does NOT fail: `Pad-PRO5 Lunar Daze` has
+        # `SliceEnd` 146696 on a 271744-frame sample and loses nothing,
+        # because its WAVs carry a GENUINE late sustain loop, so Case 3 above
+        # catches it and expands the window back. The broken program's WAVs
+        # carry a placeholder loop spanning the whole file, so `loop_start` is
+        # 0, Case 3's test fails and it falls through to here.
+        #
+        # `_is_full_sample_loop` already encodes what such a loop means: the
+        # MPC ignores it and plays the sample one-shot. The same evidence says
+        # the slice window is not a playback window either -- these are
+        # auto-sampler leftovers travelling together. Case 1 has honoured that
+        # reading since it was written; this branch never learned it.
+        #
+        # NARROW BY CONSTRUCTION: a genuine sustain loop still reaches Case 3,
+        # a real slice on a sample with no placeholder loop still trims here,
+        # and a `SliceEnd` at the sample's own end is a no-op either way (909
+        # writes len-1, SY Precious len-18).
+        _placeholder = (sd.loop_type != LoopType.NO_LOOP
+                        and _is_full_sample_loop(sd.loop_start, sd.loop_end,
+                                                 n_frames))
+        if (not _placeholder
+                and trim_end <= n_frames
+                and (trim_start > 0 or trim_end < n_frames)):
             sd.data = sd.data[trim_start * bytes_per_frame: trim_end * bytes_per_frame]
         sd.loop_type  = LoopType.NO_LOOP
         sd.loop_start = 0
