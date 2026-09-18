@@ -117,15 +117,24 @@ or untested output could overwrite or corrupt data, or be rejected by hardware.
 Always test images on a ZuluSCSI / SCSI2SD / emulator **before** connecting
 irreplaceable equipment.
 
-**Nine fixed defects produced files that are wrong and do not look it** —
-anything converted FROM an E4B with a partial sustain, velocity-layered SFZ
-and WAV folders written to E4B, velocity-layered WAV
-folders, EIII banks from any many-zones-per-layer source,
-stereo sources through the vintage resample profiles, MPC-sourced banks, EMU3
-CD images holding more than 16 banks, multisample `.KRZ` banks, and names
-carrying a `?` where a symbol belonged. All are fixed, none can be repaired in
-place, and nothing warns you about a file you already have: see [Fixed defects
-— check what you built earlier](#fixed-defects--check-what-you-built-earlier).
+**Twenty-one fixed defects produced files that are wrong and do not look it.**
+Among them: every KRZ bank played ~12 dB quiet and with releases up to 1.87×
+too fast; E4B release tails collapsed ~23× too fast; an MPC `SliceEnd` beside a
+placeholder loop threw away **up to 58 % of a program's audio on every output
+format**; WAV-sourced MPC programs came out a semitone sharp; AKAI sustain-0
+releases collapsed to the default; pan-LFO depth was uncalibrated on all three
+targets; and, from earlier, anything converted FROM an E4B with a partial
+sustain, velocity-layered SFZ and WAV folders written to E4B, EIII banks from
+any many-zones-per-layer source, stereo sources through the vintage resample
+profiles, EMU3 CD images holding more than 16 banks, multisample `.KRZ` banks,
+and names carrying a `?` where a symbol belonged.
+
+All are fixed, none can be repaired in place, and nothing warns you about a file
+you already have: see [Fixed defects — check what you built
+earlier](#fixed-defects--check-what-you-built-earlier). **Most of them were
+found by ear on real hardware rather than by a test**, which is why the list
+keeps growing — a converter's output can parse perfectly, round-trip perfectly,
+and still be wrong in a way only a listener catches.
 
 ---
 
@@ -196,7 +205,7 @@ bite.
 
 **The laws are measured, and measurement keeps overturning what looked
 settled** — usually our own earlier fit, which is the point: a law that was
-never checked outside the range it was fitted in is a guess with a graph. Three
+never checked outside the range it was fitted in is a guess with a graph. Five
 that changed what comes out of the box:
 
 - The E4XT reaches full level **1.838× later** than its own attack-rate law
@@ -205,6 +214,18 @@ that changed what comes out of the box:
 - The K2000's LFO rate is a **five-segment ladder, not a line.** The linear fit
   it replaced was exact between bytes 36 and 126 and wrong at both ends: byte
   184 is 24.0 Hz and read as 15.8, and every byte below 27 read as *stopped*.
+- Every K2000 conversion played **12 dB quiet** because the writer subtracted a
+  program-scope gain it had never added — and the reader added the same 12 dB
+  back, so writer and reader were an exact inverse pair and every round trip
+  read correct. **No test could see it**; it took a listener and a panel knob.
+- The MPC's release parameter is the time to **silence**, and the machine gates
+  hard to all-zero samples at exactly that point. Measured on a flat noise
+  program, the curve is self-similar across an 8× range of release length and
+  independent of sustain. Three earlier attempts to fit it on *musical* material
+  produced two wrong answers, because a sample's own decay, a pad's ten-second
+  swell and a filter envelope louder than the sustain all land inside the
+  measurement and none of them make it fail — **material always yields a
+  number.**
 - The AKAI filter corner had been fitted to a **spectral centroid** — the
   average frequency of everything the *source* contains, which sits above the
   corner by a source-dependent amount. That is a **slope** error, not an
@@ -217,6 +238,16 @@ swing about velocity 64, the K2000 about 127. Carrying the swing alone gives a
 patch that is correct at one velocity and wrong everywhere else, so the pivot
 travels with it. The same applies to filter depths in cents rather than
 fractions, and to envelope segments as spans rather than times.
+
+**Modulation travels, not just the static parameters.** The LFO is carried to
+**pitch**, to **amplitude** (tremolo) and to **pan** on all three hardware
+targets, each against a depth scale measured on that machine rather than a
+shared guess — the E4B pan cord turned out **8.3× too wide** when it was finally
+swept. The **mod wheel** is carried to LFO depth on the KRZ and AKAI paths, and
+**velocity → amp-envelope attack** on all three. The MPC's own tremolo law was
+measured and is **asymmetric** — it sinks the centre as well as swinging about
+it — so the conversion carries the swing *and* the centre drop, because carrying
+the depth alone would put the patch at the wrong level before the LFO even moves.
 
 **The sample itself is fair game.** `--auto-loop` finds a seamless sustain
 loop, `--single-cycle` turns a sample into a looped oscillator with the tuning
@@ -336,8 +367,10 @@ cd mpc2emu
 ```bash
 # NOTE: output defaults to --format e4b (EMU E4B). The examples below pass it
 # explicitly; use --format krz (Kurzweil K2000), --format eiii (E-mu Emulator
-# IIIX/ESI), or --format talsmpl (TAL-Sampler) to change it. Note --hda works
-# for e4b + krz + eiii, and --floppy is krz-only.
+# IIIX/ESI), --format akai (AKAI S1000/S3000), or --format talsmpl
+# (TAL-Sampler) to change it. --iso works for e4b + krz + eiii + akai, --hda
+# for e4b + krz + eiii + akai, and --floppy for krz (DOS FAT12) and akai
+# (AKAI-native, not DOS-readable).
 
 # Inspect a file without converting
 python convert.py Piano.sf2 --info
@@ -539,11 +572,14 @@ Output:
 
 ZuluSCSI images:
   --iso               Build CD image(s) for ZuluSCSI  (e4b/eiii → EMU3, krz → K2000 FAT16)
-  --hda               Build SCSI hard disk image (.hda) for ZuluSCSI  (e4b + krz + eiii)
+  --hda               Build SCSI hard disk image (.hda) for ZuluSCSI  (e4b + krz + eiii + akai)
                       e4b/eiii → E4XT EMU-fs/FAT disk (eiii banks share the
                       E4B EOS/EMU-fs disk-image path unchanged — it's
                       bank-content-agnostic); krz → K2000 FAT16 disk
-                      (HW-confirmed — loads from a ZuluSCSI HDx device)
+                      (HW-confirmed — loads from a ZuluSCSI HDx device);
+                      akai → AKAI partitioned disk, one volume per bank
+                      (HW-confirmed — an S3000XL has mounted and played
+                      these repeatedly, 18 volumes off one live card)
   --hda-size MB       Hard disk image size in MB
                       e4b/eiii default: auto — smallest 128 MB step that fits; max 14336
                       krz default: content + ~50% headroom to save onto (FAT16 max ~2047)
@@ -1060,13 +1096,27 @@ from a live K2000R SysEx probe (0 = Sine … 4 = Triangle … 6 = Rising Sawtoot
 
 **LFO → amp** (tremolo) **is** mapped — LFO1 or LFO2 drives the F4 AMP block,
 with the layer's static level trimmed by the depth so the modulation has
-headroom. It is reachable from AKAI, KRZ, SFZ and SF2 sources; the MPC's own
-`.xpm` carries no volume-LFO field, so an MPC conversion never uses it.
+headroom. It is reachable from AKAI, KRZ, SFZ and SF2 sources **and from the
+MPC**: `.xpm` carries `LfoVolume`, and the MPC's tremolo law was measured on
+hardware — it is asymmetric, sinking the *centre* as well as swinging about it,
+so the conversion carries both the swing and the centre drop rather than the
+depth alone.
+
+**LFO → pan is mapped on all three targets**, each against its own measured
+depth scale: an E4B cord to `AmpPan`, the K2000's panner on algorithm 2, and the
+AKAI's pan-modulation amount. The MPC's `LfoPan` is read as the source.
+
+**The mod wheel is carried** to LFO depth on the KRZ and AKAI write paths. On
+the K2000 it is a wheel-gated Src2 wire (`MinDpt` = wheel-down depth, `MaxDpt` =
+full-wheel), so a patch with no wheel assignment still plays at its authored
+depth; on the AKAI it writes `LFODEP` / `LFODEL`, which were previously never
+written at all — every converted program got a flat LFO whatever the source
+asked for.
 
 Still not mapped (honest gaps): **LFO2 rate / shape** (LFO2 is written only as a
 tremolo *source*, never configured), **LFO → filter** (filter wobble — the MPC's
-`LfoCutoff` reaches the E4B and not the K2000), LFO **delay / fade-in /
-tempo-sync**, and the **mod wheel**.
+`LfoCutoff` reaches the E4B and not the K2000), and LFO **delay / fade-in /
+tempo-sync**.
 
 Per-parameter detail for every direction — what each parser reads, what each
 writer emits, and what survives end to end — is in
@@ -1152,6 +1202,10 @@ filter corner.
 | ENV2 filter depth | `octaves = 0.002612 × SUSTN2 × depth` — a **product** | A depth is meaningless without its sustain; the same depth byte at a different `SUSTN2` sweeps a different distance |
 | Mute group (`KGMUTE`, offset 160) | Two keygroups in one group cut each other by **19.1 dB**. `255` is off and `0` is a real group — so a zero-filled header inherits an active mute group for free | Re-modelled as an envelope on the E4B path; see [It re-models behaviour](#it-re-models-behaviour-not-just-parameters) |
 | Velocity → loudness | Rotates about **velocity 64** (the K2000 uses 127), and zero is genuinely neutral — measured at 0.00001 dB per velocity unit | A swing without its pivot is not a comparable quantity. Zero meaning *neutral* lets a program that ignores velocity convert as ignoring it, rather than as a smallest-available amount |
+| Filter 2 (IB-304F) | The optional second filter is **read and written** behind `--akai-ib304f`, with **every mode given its own measured corner curve** rather than one curve offset per mode, and all 32 `FLT2Q` resonance depths measured | The board is a factory option, so writing it blind would break machines that lack it. Rungs 89–94 are recorded as *not fittable* rather than smoothed over |
+| Stereo level | Proportional across the **whole** field range 10–99, to within 0.244 dB — swept rather than extrapolated after 1.76 % of library programs turned out to sit below the old floor of 60 | A law that is only measured over the range your own material happens to use is a guess everywhere else. Reads outside the measured span now say so |
+| Velocity → amp attack | Carried on all three write paths, as a **span plus a pivot** like velocity→loudness | Same lesson as the loudness swing: the amount alone is not a comparable quantity |
+| Filter key-follow | Read and carried — a parameter mpc2emu had never read at all, and it differs on **32.6 % of round-tripped zones** | A third of zones were silently losing their key tracking |
 | Attack (`ATTAK1`) | Time to 90% is measured and holds to 3.3%. The **exponential form is refuted** — `t50/t90` is 0.301 for any exponential, and the measured ratios run 1.5–2.9× above it | The curve shape is still open. The writer fits measured endpoints and assumes nothing about the curve between them, which is why the refutation leaves it standing |
 
 **Still open, and marked as such in the code:** the negative filter key-follow
@@ -1526,7 +1580,8 @@ mpc2emu/
 ├── info_cmd.py                 # --info mode implementation
 ├── test_pipeline.py            # Smoke tests
 ├── models/
-│   └── common.py               # Internal data models (Bank / Preset / Sample)
+│   ├── common.py               # Internal data models (Bank / Preset / Sample) + the measured parameter laws
+│   └── diagnostics.py          # Structured diagnostic codes, so callers stop parsing stdout
 ├── parsers/
 │   ├── registry.py             # Format auto-detection / parser dispatch
 │   ├── xpm_parser.py           # Akai MPC XPM (filter, loops, SMP velocity split)
@@ -1541,11 +1596,17 @@ mpc2emu/
 │   ├── gig_parser.py           # GigaSampler / GigaStudio
 │   ├── e4b_parser.py           # EMU E4B import (inverse of e4b_writer)
 │   ├── krz_parser.py           # Kurzweil KRZ import (inverse of krz_writer)
-│   └── eiii_parser.py          # E-mu Emulator IIIX/ESI/EIII import (inverse of eiii_writer)
+│   ├── eiii_parser.py          # E-mu Emulator IIIX/ESI/EIII import (inverse of eiii_writer)
+│   ├── akai_s3000_parser.py    # AKAI S1000/S3000 program + sample import
+│   └── akai_image_parser.py    # AKAI SCSI disk / CD3000 / floppy image — every volume, no sampler
 ├── writers/
 │   ├── e4b_writer.py           # EMU E4B (FORM size + EMSt; filter, loops, zones)
 │   ├── krz_writer.py           # Kurzweil KRZ
 │   ├── eiii_writer.py          # E-mu Emulator IIIX/ESI
+│   ├── akai_s3000_writer.py    # AKAI S1000/S3000 program + sample (measured scales)
+│   ├── akai_s3000_image.py     # AKAI partitioned disk / CD3000 ISO / AKAI-native floppy
+│   ├── akai_aux_defaults.py    # AKAI header fields the format needs but no source carries
+│   ├── atomic.py               # Write-then-rename, so a failed run leaves no half-file
 │   ├── iso_builder.py          # EMU3 filesystem image for ZuluSCSI CD emulation
 │   ├── hda_builder.py          # SCSI hard disk image (.hda) for ZuluSCSI
 │   ├── fat12.py                # FAT12 floppy image (K2000R Gotek / FlashFloppy)
@@ -1555,6 +1616,7 @@ mpc2emu/
 ├── processors/
 │   ├── resampler.py             # Vintage resampler (EMU E2 / Emax I)
 │   ├── zone_reducer.py          # Key-zone / velocity-layer thinning; velocity-layer split (--split-velocity-layers)
+│   ├── shrink_planner.py        # Picks the thinning that hits a memory target (--shrink-to / --shrink-by)
 │   ├── single_cycle.py          # Single-cycle oscillator extraction + retune (--single-cycle)
 │   ├── auto_loop.py             # Seamless adaptive-length sustain loop (--auto-loop)
 │   ├── start_trim.py            # Adaptive lead-in/silence removal (--trim-start)
@@ -1587,6 +1649,119 @@ already did to files you *have*.
 
 **Newest first** — if you last read this section on a given date, everything
 above that date's entry is new to you.
+
+### If you converted MPC programs before 2026-09-18, check them for truncated samples — a `SliceEnd` beside a placeholder loop threw away up to 58 % of a program's audio
+
+This one is **reader-side, so it reached every output format**, and Jan found it
+by ear on a pad that had lost most of itself.
+
+An MPC `.xpm` instrument can carry a `SliceEnd` alongside its sample. mpc2emu
+honoured it as a trim. On one program that cut 60 of 64 samples from 4.600 s to
+exactly 1.800 s — the `SliceEnd` value was a **placeholder**, sitting beside an
+embedded `smpl` loop that spans the whole file, and the real audio ran well past
+it. The trim is now vetoed when that full-sample loop is present.
+
+The first rule we wrote for this ("a non-zero `SliceEnd` trims") was **falsified
+by the corpus** before it shipped: a program with `SliceEnd` 146696 of 271744
+loses nothing by it. The discriminator is the placeholder loop, not the value.
+Blast radius, measured across the library discs before the fix shipped: of
+**24,147 layers scanned, 12,123 were being trimmed** across 461 programs — but
+the median one was losing **0 %**, its `SliceEnd` sitting at the sample's own
+end. Only **3,542 materially change**, and **1,462 were losing more than half
+their audio**. 2,090 still trim after the fix, which is the check that the field
+has not been silently disabled — a blanket disable was the first proposal, and
+the corpus killed it.
+
+### If you built KRZ banks before 2026-09-18, rebuild them — every conversion played about 12 dB quiet
+
+`KRZ_PROGRAM_BASELINE_DB` subtracted 12 dB from every sample's `volumeAdjust` to
+compensate for program-scope gain that the writer **never added**. The 12 dB
+arrives with the layer template, copied from a ROM program (`Adjust` +6 plus a
+wire `Gain` of 6), and the K2000's own factory programs carry it with their
+samples at `volumeAdjust 0`. So every converted sample was pre-attenuated into a
+program the machine already considers normal.
+
+Measured 14.4 dB below ROM program 199 with the F4-AMP block byte-identical;
+raising `Adjust` by 12 dB on the panel recovered 12.2 of it. Confirmed as a
+population question too: third-party K2000 banks built on their own samples sit
+within a few dB of the ROM programs, so 12 dB low was ours and not the machine's.
+
+**The reader hid it.** `krz_parser` added the same program-scope level back into
+zone volume, so writer and reader were an exact inverse pair and every round trip
+read correct. No test could see it; it took a listener and a panel knob.
+
+### If you built KRZ banks before 2026-09-18, rebuild them — releases ran up to 1.87× too fast, and one-shot programs were cut off at note-off
+
+Three faults in the release path, all audible, all fixed together.
+
+**The two-leg split ate 20 % of the release.** Below the 33 % knee both release
+legs aim at silence, so Rel1 reaches zero on its own and Rel2 never sounds — but
+Rel1 was only given 80 % of the time. **The release factor was one branch's law
+used for both.** The old 1.9 was fitted on a *sustaining* program, so it was
+roughly right above the knee and badly wrong below it; there are now two factors,
+3.65 below the knee and 1.38 above it, because the same Rel1 time buys 4.7× more
+audible fall in one branch than the other. **And a one-shot's ignored release
+became an instant cut** — the third writer with that same fault, after the E4B
+and AKAI versions were already fixed.
+
+Measured against the MPC source with k2kremote driving Rel1 over SysEx on the
+live machine: 30 dB of fall took 0.225 s where the source takes 0.420, and now
+takes 0.435. Confirmed by ear on three programs.
+
+### If you built E4B banks before 2026-09-18, rebuild them — the release tail collapsed about 23× too fast
+
+The two release segments were **sharing** the release time: segment 2 received
+`1 - _ENV_SHAPE_BREAK_TIME`, which is 4 % of the duration for two thirds of the
+fall — roughly 590 dB/s. On a sustaining pad the note tracked the source down to
+−20 dB and then vanished in 0.02 s where the source takes 0.50.
+
+Each segment now takes the whole release time for its own span, and no new
+constant was needed. On the program that exposed it, segment 2 goes from 36.8×
+too fast to 1.47×. **This is a large improvement and not the finished fix** — the
+MPC drops thirty dB in the last nine percent of its release and mpc2emu does not
+follow it there; that residual is a shape problem and is listed in
+[Known Limitations](#known-limitations).
+
+### If you built AKAI banks before 2026-09-18, rebuild them — a sustain-0 release collapsed to the default, and an unsatisfiable velocity-filter floor removed the filter entirely
+
+**The release.** `_AK_SUSTAIN_DB_PER_UNIT * sus` is the distance from the sustain
+level down to silence — the right span only if the key is held until the decay
+has finished. At sustain 0 it computes to 0 dB, the rate law takes its "nowhere
+to travel" branch, and the source's release time is discarded for the default
+byte. Measured against the MPC on the same program, an 80 ms note fell 40 dB in
+0.135 s where the source takes 0.510: a decaying pad rendered as a percussive
+hit. Found only because Jan shortened the note — at 2 s the fault is inaudible.
+
+**The velocity filter.** When the requested floor could not be reached, the
+writer emitted `FILFRQ 99`, which is the filter wide open — so a program asking
+for a *velocity-dependent* filter got no filter at all.
+
+### If you built banks with a pan LFO before 2026-09-18, rebuild them — the depth was uncalibrated on all three targets
+
+`LfoPan` was read and written, but the depth was a guess on every path. Measured
+per target: the E4B cord was **8.3× too wide**, and the AKAI and K2000 scales were
+derived from their own sweeps (`0.1563` for both E4B and AKAI, `0.4377` for the
+K2000 — the most linear of the three, constant to ±0.003 over a 10× range).
+
+The AKAI had a second half to it: the writer had been emitting LFO→pan since
+2026-09-06 and **the reader never read it back**, so a pan-modulated program lost
+its modulation on any AKAI → anything conversion.
+
+### If you converted WAV-based MPC programs before 2026-09-13, rebuild them — a `smpl` pitch fraction of `0xFFFFFFFF` made samples a semitone sharp
+
+A WAV `smpl` chunk carries the root note plus a fractional cents offset. Some
+MPC-exported WAVs write `0xFFFFFFFF` in that field, which is not a fraction but
+a sentinel. Read literally it is very nearly a whole semitone, so every affected
+sample was tuned a semitone sharp — consistently, across the whole program, which
+is exactly the kind of error that sounds like the library rather than the
+converter.
+
+### If you built KRZ banks with a downward vibrato before 2026-09-14, rebuild them — a negative LFO pitch depth read as full scale
+
+The CAL depth field is **signed**. The reader took it unsigned, so any negative
+depth fell past the table's ceiling clamp and came back as **full** depth. A
+gentle downward vibrato of a few cents converted as the maximum the machine can
+produce.
 
 ### If you built KRZ banks with envelopes before 2026-08-31, rebuild them — short-attack envelopes could silently self-loop and retrigger while held
 
@@ -1863,7 +2038,7 @@ unaffected.
 | EMU3 ISO loading from ZuluSCSI CD | ✅ `blks` ceiling-division fix — end-of-file error resolved |
 | KRZ filter type / cutoff / resonance | ✅ mapped from MPC XPM; filter-type + cutoff-Hz HW-verified on a K2000R (incl. band-boost → PARA MID) |
 | KRZ amp + filter envelope from source | ✅ mapped from source ADSR (filter-env / LFO depth calibrations approximate) |
-| KRZ LFO1 vibrato (rate + 26 shapes) | ✅ rate + all 26 shapes (live SysEx probe); LFO2 / filter-wobble / tremolo ❌ not yet |
+| KRZ LFO1 vibrato (rate + 26 shapes) | ✅ rate + all 26 shapes (live SysEx probe); **tremolo (LFO→amp) ✅ mapped**, **LFO→pan ✅ mapped** (measured depth), **mod wheel ✅ carried**; LFO2 rate/shape and filter-wobble ❌ not yet |
 | KRZ ping-pong loops | ✅ K2000 has no ping-pong mode — baked into PCM (bounce spliced in) |
 | KRZ multi-pole filter slopes (6/8-pole, 2-pole HP/notch) | ⚠️ collapse to nearest RE'd slope |
 | KRZ SCSI CD / hard disk (FAT16) / Gotek floppy | ✅ HW-confirmed (CD and HDx hard disk); Gotek FAT12 floppy ✅ |

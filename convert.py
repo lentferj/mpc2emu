@@ -685,10 +685,12 @@ def main():
              'akai → AKAI-native, 800 or 1600 (default 1600 = 1.6 MB); the AKAI '
              'floppy is not DOS-formatted, so a PC will not mount it.')
     ap.add_argument('--hda',  action='store_true',
-        help='Build a ZuluSCSI SCSI hard disk image (.hda). e4b → EMU-fs/FAT '
-             'E4XT disk; krz → K2000 FAT16 disk (HW-confirmed: loads from a '
-             'ZuluSCSI HDx device); akai → AKAI partitioned disk, one volume '
-             'per bank (NOT hardware-confirmed).')
+        help='Build a ZuluSCSI SCSI hard disk image (.hda). e4b and eiii → '
+             'EMU-fs/FAT E4XT disk (EIII banks share the E4B disk path); krz → '
+             'K2000 FAT16 disk (HW-confirmed: loads from a ZuluSCSI HDx '
+             'device); akai → AKAI partitioned disk, one volume per bank '
+             '(HW-confirmed: an S3000XL has mounted and played these '
+             'repeatedly — 18 volumes swept off one live card).')
     ap.add_argument('--hda-size', type=int, default=None, metavar='MB',
         help='HDA image size in MB. e4b default: auto (smallest 128 MB step that '
              'fits; max 14336). krz default: content + ~50%% headroom to save '
