@@ -56,7 +56,8 @@ from models.common import (
                            LoopType, Envelope, krz_cutoff_byte_to_hz,
                            krz_reson_byte_to_01, krz_env_byte_to_seconds,
                            krz_lfo_rate_byte_to_hz,
-                           KRZ_RELEASE_FACTOR, krz_level_pct_to_db,
+                           KRZ_RELEASE_FACTOR, KRZ_RELEASE_FACTOR_SUSTAINED,
+                           krz_level_pct_to_db,
                            KRZ_HOUSE_PROGRAM_GAIN_DB,
                            hz_to_e4b_cutoff,
                            key_track_to_filter_amount,
@@ -820,7 +821,26 @@ def _decode_env(seg: bytes) -> Envelope:
         release += t
         if l <= 0:
             break
-    release /= KRZ_RELEASE_FACTOR
+    # WHICH FACTOR DEPENDS ON WHICH SHAPE THE WRITER USED, and the shape is
+    # readable from the bytes: `krz_writer._fill_env` aims Rel1 at the 33 %
+    # knee when sustain is above it and at SILENCE when it is below, so a
+    # first release segment with a nonzero level IS the above-knee form.
+    #
+    # **THIS IS THE THIRD WRITER/READER INVERSE PAIR BROKEN IN ONE DAY**, after
+    # the program-level baseline and the release split. The writer gained a
+    # second factor (`KRZ_RELEASE_FACTOR_SUSTAINED`, 1.38 against 3.65) and
+    # this line kept inverting everything with the first, so every sustaining
+    # program round-tripped 2.64x SHORT -- exactly the ratio of the two
+    # constants. Caught by VinSamLib re-reading a built bank, not by any test
+    # here: the suite passes either way, because nothing round-trips an
+    # above-knee release through both halves.
+    #
+    # The sum above is also branch-dependent and already correct: below the
+    # knee Rel1's level is 0 so the loop stops after one segment and `release`
+    # is Rel1 alone, which is what that branch writes; above it the loop runs
+    # to Rel2 and collects the whole release, which is what THAT branch writes.
+    release /= (KRZ_RELEASE_FACTOR_SUSTAINED if (rel and rel[0][1] > 0)
+                else KRZ_RELEASE_FACTOR)
 
     return Envelope(attack=attack, decay=decay, sustain=sustain, release=release)
 
