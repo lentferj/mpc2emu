@@ -60,6 +60,7 @@ from models.common import (
     AKAI_FIL2FR_EXTRAP_TOP_UNMEASURED_FROM,
     AKAI_CASCADE_CORNER_RATIO, AKAI_CASCADE_MATCHED_OCTAVES,
     akai_lfo_rate_hz, akai_lfo_depth_to_pitch, akai_lfo_delay_seconds,
+    AKAI_LFO_PAN_DEPTH_SCALE,
     akai_env2_target_hz, E4B_CUTOFF_MAX_HZ, E4XT_FENV_BYTE_PER_UNIT,
     AKAI_ENV2_OCT_PER_UNIT, AKAI_ENV2_FULL_LEVEL, AKAI_FILTER_OPEN_HZ, AKAI_FILTER_FLOOR_HZ,
     key_track_to_filter_amount, AKAI_KEYFOLLOW_NEG_SCALE,
@@ -1026,6 +1027,19 @@ def parse_program_bytes(data: bytes, fallback_name: str = '',
         # the always-on LFODEP above. Read by nobody until 2026-09-15, and the
         # omission was not small -- see the voice build for the prevalence.
         lfo_wheel_depth=(data[0x24] if len(data) > 0x24 else 0),
+        # MODVPAN1 (0x59): LFO1 -> PAN amount, per PROGRAM like the rest of the
+        # AKAI's LFO. **Written since 2026-09-06 and read by nobody until
+        # 2026-09-18** -- the same defect VinSamLib found on the E4B side two
+        # days earlier, in the same shape: the writer emits it, nothing reads it
+        # back, and a re-bank or resample of an AKAI image silently drops the
+        # pan modulation of every program it touches.
+        #
+        # Found while verifying a rebuilt volume byte-for-byte: the image
+        # plainly carried PANDEP 5 and our own parser reported
+        # `lfo1_to_pan = 0.0`. That is the third instance of this family in
+        # three days, which is why the check is now "read the artefact back"
+        # rather than "read the writer".
+        lfo_pan_depth=(_s8_rail(data[0x59]) if len(data) > 0x59 else 0),
         # LFO1WAVE, byte 97 -- s3ked's §46 hardware measurement (2026-08-12),
         # read by nobody until 2026-08-31. Feeds the RMS->peak factor in
         # `akai_lfo_depth_to_pitch`; see AKAI_LFO_WAVE_RMS_TO_PEAK.
@@ -1272,6 +1286,16 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
                 _amp_amt += _amt
         if len(_srcs) > 2 and _srcs[2] == AKAI_MOD_SOURCE_LFO1:
             _amp_amt += kg.get('mod_amount_amp3', 0)
+        # LFO1 -> PAN, undoing the writer's calibration scale so the model
+        # carries the device-independent depth it is defined as. Clamped
+        # because a program made ON the machine can carry a rail value far
+        # past anything our scale would emit.
+        _pan_amt = prog.get('lfo_pan_depth') or 0
+        if _pan_amt:
+            voice.lfo1_to_pan = max(-1.0, min(1.0, (_pan_amt / 50.0)
+                                              / AKAI_LFO_PAN_DEPTH_SCALE))
+            if voice.lfo1_rate is None:
+                voice.lfo1_rate = akai_lfo_rate_hz(prog.get('lfo_rate', 0))
         if _amp_amt and prog.get('lfo_depth'):
             # Sign inverts the LFO's phase, not its size -- see the matching
             # note in krz_parser. The model's depth is a magnitude.
