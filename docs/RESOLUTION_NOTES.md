@@ -346,6 +346,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§MPCENVREL — the MPC release law's SECONDS are ~2.8x short; the decay's shape is wrong](#mpcenvrel-the-mpc-release-laws-seconds-are-28x-short-the-decays-shape-is-wrong)
 - [§E4BTREMOLO — the E4B writer has no LFO→AmpVol cord (filed 2026-09-14, RESOLVED 2026-09-17)](#e4btremolo-the-e4b-writer-has-no-lfoampvol-cord-filed-2026-09-14-resolved-2026-09-17)
 - [§MPCLFOAMP — the MPC's tremolo sinks its own centre (MEASURED + BUILT 2026-09-17)](#mpclfoamp-the-mpcs-tremolo-sinks-its-own-centre-measured-built-2026-09-17)
+- [§XPMSLICEVETO — a placeholder loop means the slice window is not one (2026-09-18)](#xpmsliceveto-a-placeholder-loop-means-the-slice-window-is-not-one-2026-09-18)
 - [§MODWHEEL — modwheel→depth on every path, and the data-entry fallback (filed 2026-09-14)](#modwheel-modwheeldepth-on-every-path-and-the-data-entry-fallback-filed-2026-09-14)
 - [§KRZCOARSE — the PITCH page's Coarse transposition is never read (filed 2026-09-14)](#krzcoarse-the-pitch-pages-coarse-transposition-is-never-read-filed-2026-09-14)
 <!-- INDEX:END -->
@@ -33357,6 +33358,59 @@ same value. See `E4B_LFO_PAN_CORD_SCALE`.
 
 Still unheard on the other targets: the AKAI pan value (measured, on the card),
 and the KRZ pan value (measured, deliberately not built).
+
+## §XPMSLICEVETO — a placeholder loop means the slice window is not one (2026-09-18)
+
+**Found by ear.** A converted pad ended abruptly where the MPC tapered. One
+program lost **58 % of its audio**: 60 of its 64 samples cut from 4.600 s to
+exactly 1.800 s, `SliceEnd` 79380 on every one — while the MPC's own panel
+showed `START 0 / END 202859` and played the whole file.
+
+**The rule is about the embedded `smpl` loop, not about `SliceEnd`, and the
+case that established that is the one that does NOT fail.** `Pad-PRO5 Lunar
+Daze` carries `SliceEnd` 146696 on a 271744-frame sample — 54 % — and loses
+nothing, because its WAVs have a genuine late sustain loop, so `_apply_slice`
+Case 3 (`loop_start >= trim_end`) expands the window back. The broken
+program's WAVs carry a placeholder loop spanning the whole file, so
+`loop_start` is 0, Case 3's test fails, and Case 4 trimmed.
+
+So "a non-zero `SliceEnd` trims" was never the rule. A blanket disable would
+have been wrong in the other direction, and it was my first proposal.
+
+`_is_full_sample_loop` already encodes what a placeholder loop means — the MPC
+ignores it and plays one-shot — and Case 1 has honoured that since it was
+written. Case 4 never learned it. These are auto-sampler leftovers travelling
+together.
+
+**BLAST RADIUS, measured over 24,147 corpus layers before shipping:**
+
+| | |
+|---|---|
+| `SliceEnd` non-zero and < frames | 15,528 in 640 programs |
+| of those, placeholder loop → **vetoed** | 12,123 in 461 programs |
+| of those, Case 3 → never trimmed anyway | 1,315 |
+| of those, **still trimmed** | 2,090 |
+| audio recovered | **7,265 s (~2 h)** |
+
+**Most of the vetoed layers change nothing** — the fraction each was losing has
+a median of **0 %** (their `SliceEnd` sat at the sample's own end). Only
+**3,542 (29.2 %)** lose more than 1 %, and **1,462** were losing more than
+half. The change is concentrated where it matters, and the 2,090 still trimming
+are the check that the field has not been silently disabled.
+
+**LIMIT, stated because the reach is large: hardware confirmation exists on ONE
+program.** The mechanism is sound and pre-existing in Case 1, and 1,462 layers
+losing over half their audio is a large fault to leave standing — but the 3,542
+that materially change rest on a single confirmed case and want a wider listen.
+
+**Method note worth more than the fix.** Both this session and VinSamLib first
+tried matching source samples to output BY NAME and both got a confident
+"nothing is wrong" — the model's `name` is not the XPM's `<SampleName>`, so
+every lookup missed and the arithmetic ran over an empty set. Comparing
+duration MULTISETS needs no matching and cannot fail that way. One of my own
+runs produced deltas that were POSITIVE — output longer than source, which is
+impossible — and that impossibility is the only reason the bad pairing was
+noticed at all.
 
 ## §MODWHEEL — modwheel→depth on every path, and the data-entry fallback (filed 2026-09-14)
 
