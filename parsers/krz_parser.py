@@ -47,6 +47,7 @@ Scope and known lossiness (mirrors docs/KRZ_FORMAT.md §7):
 """
 
 import array
+import math
 import struct
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional, Tuple
@@ -57,7 +58,7 @@ from models.common import (
                            krz_reson_byte_to_01, krz_env_byte_to_seconds,
                            krz_lfo_rate_byte_to_hz,
                            KRZ_RELEASE_FACTOR, KRZ_RELEASE_FACTOR_SUSTAINED,
-                           krz_level_pct_to_db,
+                           krz_level_pct_to_db, krz_db_to_level_pct,
                            KRZ_HOUSE_PROGRAM_GAIN_DB,
                            hz_to_e4b_cutoff,
                            key_track_to_filter_amount,
@@ -821,10 +822,19 @@ def _decode_env(seg: bytes) -> Envelope:
         release += t
         if l <= 0:
             break
-    # WHICH FACTOR DEPENDS ON WHICH SHAPE THE WRITER USED, and the shape is
-    # readable from the bytes: `krz_writer._fill_env` aims Rel1 at the 33 %
-    # knee when sustain is above it and at SILENCE when it is below, so a
-    # first release segment with a nonzero level IS the above-knee form.
+    # WHICH FACTOR DEPENDS ON WHICH BRANCH, AND THE TEST MUST BE THE WRITER'S
+    # OWN -- `sus > 33 %`, not the shape of the bytes.
+    #
+    # Reading the shape instead (a first release segment with a nonzero level)
+    # agrees with the writer on everything THIS project produces, because we
+    # write the shape our sustain selects. It disagrees on foreign files, and
+    # a real one is already in the suite: ROM program 1 "Acoustic Piano" has
+    # Rel1 at level 24 -- a two-leg shape -- with sustain 0. The shape rule
+    # reads it as above-knee while the writer, going by sustain, would write
+    # it back as below-knee, so a K2000 -> K2000 trip on somebody else's bank
+    # would change its release by the ratio of the two constants. Matching the
+    # writer's criterion is what makes the pair an inverse for ANY input, not
+    # just for our own output.
     #
     # **THIS IS THE THIRD WRITER/READER INVERSE PAIR BROKEN IN ONE DAY**, after
     # the program-level baseline and the release split. The writer gained a
@@ -839,7 +849,12 @@ def _decode_env(seg: bytes) -> Envelope:
     # knee Rel1's level is 0 so the loop stops after one segment and `release`
     # is Rel1 alone, which is what that branch writes; above it the loop runs
     # to Rel2 and collects the whole release, which is what THAT branch writes.
-    release /= (KRZ_RELEASE_FACTOR_SUSTAINED if (rel and rel[0][1] > 0)
+    # Same 33 % knee the writer uses (krz_writer._REL_KNEE_PCT); mirrored
+    # rather than imported, because parsers do not import writers here.
+    _REL_KNEE_PCT = 33.0
+    _sus_pct = (krz_db_to_level_pct(20.0 * math.log10(sustain))
+                if sustain > 0.0 else 0.0)
+    release /= (KRZ_RELEASE_FACTOR_SUSTAINED if _sus_pct > _REL_KNEE_PCT
                 else KRZ_RELEASE_FACTOR)
 
     return Envelope(attack=attack, decay=decay, sustain=sustain, release=release)
