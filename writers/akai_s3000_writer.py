@@ -651,6 +651,11 @@ _AKAI_VELFILT_PIVOT = 64.56        # the velocity the field pivots about
 #: = 4.368 cents * (127 - 64.56) / 1200 * 9.76 units-per-octave.
 _AKAI_VELFILT_FILFRQ_PER_UNIT = 2.22
 
+#: The top of FILFRQ. 99 is the field's maximum and reads as BYPASS -- the
+#: measured corner table stops at 95 (8481 Hz) and has no entry for 99 -- so
+#: a floor landing here has not raised the corner, it has removed the filter.
+_AKAI_FILFRQ_MAX = 99
+
 
 def akai_velocity_filter(cutoff_hz: float, vel_min_ct: float,
                          vel_max_ct: float, hi_key=None):
@@ -724,8 +729,45 @@ def akai_velocity_filter(cutoff_hz: float, vel_min_ct: float,
     # scoring 0.830 and 0.940), trading a fixed fault for a new one.
     if hi_key is not None and d_byte > 0:
         top_hz = 440.0 * 2.0 ** ((min(hi_key, 108) - 69) / 12.0)
-        down_ct = d_byte * _AKAI_VELFILT_CENTS * _AKAI_VELFILT_PIVOT
-        f_byte = max(f_byte, akai_filter_byte(top_hz * 2.0 ** (down_ct / 1200.0)))
+        _need = lambda d: akai_filter_byte(                       # noqa: E731
+            top_hz * 2.0 ** ((d * _AKAI_VELFILT_CENTS
+                              * _AKAI_VELFILT_PIVOT) / 1200.0))
+        # A FLOOR THAT CANNOT BE SATISFIED MUST NOT BE HALF-APPLIED
+        # (2026-09-18, Jan by ear: the AKAI came out "quite a bit brighter,
+        # more high freq brizzle" than the source).
+        #
+        # Raising the corner so the sweep's low end clears the fundamentals is
+        # right and is measured. But a source with a deep sweep and a high
+        # `hi_key` needs a floor ABOVE the field: the corner pins at 99, which
+        # reads as BYPASS, and the filter is gone entirely. Two real programs
+        # did exactly that -- 4.2 and 4.0 octaves of velocity->filter with keys
+        # to 127 -- and converted to no filter at all:
+        #
+        #     SY Precious  source 133 Hz at vel 0 -> 2446 at 127   floor: bypass
+        #     Sangre       source 1504 Hz         -> 24167         floor: bypass
+        #
+        # When the floor does not fit, fall back to the PIVOT PLACEMENT, which
+        # is what the source actually asks for: FILFRQ 60 (588 Hz) and 91
+        # (6162 Hz) respectively, both real filters at full depth.
+        #
+        # **AND THE SOURCE'S OWN UNIFORMITY IS THE CHECK.** Those programs carry
+        # one cutoff on every keygroup. The floor tracks `hi_key`, so it wrote
+        # FIVE different corners (54/63/73/82/99) onto a source that asks for
+        # one -- variation the source does not have, which is the same class of
+        # fault the floor exists to prevent, introduced by the cure.
+        #
+        # CONSERVATIVE BY CONSTRUCTION: whenever the floor fits it is applied
+        # exactly as measured, so every program that converts well today is
+        # untouched. Only the case where the alternative is losing the filter
+        # outright takes the other branch.
+        #
+        # **NOT MEASURED.** The 2026-09-05 bench run compared 49 / 79 / 99 at
+        # one depth and never tested a source whose own low end sits below the
+        # fundamentals -- which is what these two are. Reasoned from that
+        # result, not demonstrated by it, and it wants a listen.
+        _floor = _need(d_byte)
+        if _floor < _AKAI_FILFRQ_MAX:
+            f_byte = max(f_byte, _floor)
 
     # TWO SEPARATE LIMITS, AND ONLY ONE OF THEM IS THE FIELD'S RANGE.
     #

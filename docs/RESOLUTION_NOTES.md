@@ -33340,9 +33340,23 @@ number. **The MPC→AKAI and MPC→KRZ write sides do not yet carry the centre**
 the K2000 has `F4 AMP Adjust` at 1.0 dB/unit and the AKAI has a program level,
 so both could, and neither has been wired or listened to.
 
-**Not yet confirmed by ear.** The E4B path is built and tested; nobody has
-heard it. `Pad-PRO5 Lunar Daze` keygroup 4 (Tri 0.20 Hz, AMP 29, PAN 81) is
-the listening case, and the pan half of it already converts.
+**CONFIRMED BY EAR 2026-09-18 (Jan): "emu is fine now - I think those are very
+good conversion results".** `Pad-PRO5 Lunar Daze` keygroup 4 (Tri 0.20 Hz,
+AMP 29, PAN 81) on the rebuilt one-bank disc, against the MPC original.
+
+That is the first time this tremolo had been heard by anyone. It was measured
+on 2026-09-17, tested, round-tripped and written to two discs before a single
+note of it reached a listener — so the confirmation covers the swing, the
+centre sink, AND the phase relationship with the pan cord beside it, which was
+the one judgement flagged here as unsettleable by measurement. The decision not
+to apply the triangle sign flip to AmpVol (while pan does get it) stands.
+
+**The pan calibration was confirmed in the same pass**, having been heard live
+over SysEx the evening before; this is the built-conversion confirmation of the
+same value. See `E4B_LFO_PAN_CORD_SCALE`.
+
+Still unheard on the other targets: the AKAI pan value (measured, on the card),
+and the KRZ pan value (measured, deliberately not built).
 
 ## §MODWHEEL — modwheel→depth on every path, and the data-entry fallback (filed 2026-09-14)
 

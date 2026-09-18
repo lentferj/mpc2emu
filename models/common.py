@@ -5388,6 +5388,17 @@ MPC_LFO_AMP_CENTRE_SINK = 0.5          #: centre drops by this * d
 MPC_LFO_AMP_SILENT_ABOVE_D = 2.0 / 3.0  #: trough clips to zero at and above
 
 
+#: **THE WHOLE LFO->AMP CHAIN IS CONFIRMED BY EAR, 2026-09-18** (Jan, on the
+#: rebuilt one-bank E4B disc): *"emu is fine now - I think those are very good
+#: conversion results"*. Measured 2026-09-17, tested, round-tripped and written
+#: to two discs before a single note of it reached a listener.
+#:
+#: The confirmation covers three things that were separately uncertain: the
+#: swing, the CENTRE SINK (the half no symmetric cord can express, and the half
+#: a "swing only" implementation would have got wrong invisibly), and the
+#: tremolo/pan PHASE RELATIONSHIP -- the deliberate decision NOT to apply the
+#: triangle sign flip to AmpVol while pan does get it, which was recorded at the
+#: time as the one judgement no measurement here could settle.
 def mpc_lfo_amp_swing_db(depth: float) -> float:
     """MPC AMP depth (0..127 as the panel shows it) -> peak-to-peak dB.
 
