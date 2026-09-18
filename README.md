@@ -21,6 +21,10 @@ hardware memory limits. Produces ZuluSCSI-ready CD ISO images, SCSI hard disk
 images, and Gotek floppies for the EMU Emulator 4 / E4XT and Kurzweil K2000
 series.
 
+> **[Hear it](#hear-it)** — one note, three programs, converted to three
+> machines and recorded back off each one. Level-matched, because louder always
+> sounds better.
+
 > **Legal:** [DISCLAIMER.md](DISCLAIMER.md) · [LICENSE](LICENSE)
 
 ---
@@ -309,6 +313,64 @@ K2000. Banks can also be appended to an existing image in place with `--add-to`
 Finally, you can **inspect any input without converting** it (`--info`), and
 there are **no required dependencies** — mpc2emu is pure Python standard
 library (`mtools` is optional, only for one E4B HDA filesystem path).
+
+---
+
+## Hear it
+
+Three programs, converted from the same Akai MPC source to all three hardware
+targets, then **recorded back off each machine**. One note per example, held for
+as long as that sound needs — a pad gets six seconds, a synth whose decay *is*
+the sound gets two.
+
+Each clip runs **source → E4XT → K2000 → S3000XL** in that order. The plot is
+the amplitude envelope in dB, which is what these comparisons are actually
+about; the waveform underneath is the same audio. GitHub plays them inline.
+
+| | |
+|---|---|
+| **Example 1** — a pad, note held 6 s | [`docs/demo/example1-pad.mp4`](docs/demo/example1-pad.mp4) |
+| **Example 2** — a sustaining synth, 3 s | [`docs/demo/example2-synth.mp4`](docs/demo/example2-synth.mp4) |
+| **Example 3** — a decaying synth (sustain 0), 2 s | [`docs/demo/example3-decay.mp4`](docs/demo/example3-decay.mp4) |
+
+**The levels are matched, and that is not a cosmetic decision.** Louder reads as
+better in any A/B, and at their own settings these machines sit **13.6 dB
+apart** on the same program — an unmatched comparison would rank them by output
+stage rather than by conversion. Each rendering is normalised on the RMS of the
+note *body* (onset + 0.5 s to note-off), excluding the attack transient, so a
+difference in one machine's transient cannot set the level for its whole clip.
+
+**Two things the clips do not show, stated rather than hidden:**
+
+- **The matching gain still varies by 8 dB across the three programs on one
+  machine** (−0.8 to +7.2 dB on the K2000) where a pure output-stage offset
+  would shift all three equally. That is an open item, not a demonstration.
+- **An earlier version of these clips had a visible noise plateau** on the
+  quietest machine, which looked exactly like a sustained release tail and was
+  briefly mistaken for one. It was the capture chain: that machine had been
+  recorded at only ~52 dB SNR and then boosted in software. Re-recorded with
+  its output gain raised, the SNR is **63.8 dB** and the plateau is gone. The
+  lesson is in the repo rather than the clips — **fix the capture, do not
+  correct it afterwards.**
+
+**Why these three.** They span the behaviours that break converters: a pad that
+swells for ten seconds, a synth that sustains, and one whose sustain is zero so
+the *decay* is the sound. Every release defect listed under
+[Fixed defects](#fixed-defects--check-what-you-built-earlier) was found on
+material like this.
+
+**A fourth example — a one-shot piano hit — is deliberately absent.** Building
+it found a live defect: `--trim-tail` cut **49 % of that program's samples**,
+because its noise-floor estimate assumes a sample *contains* silence and a short
+one-shot does not, so the estimate lands on still-audible decay and the
+threshold you asked for never applies. It is [recorded as
+open](TODO.md); the example returns when the trim does not eat it.
+
+**One note, dry, unnamed.** The source programs are commercial MPC Expansion
+content, so what is published here is a single note from each with no sample or
+program data — the comparison, not the library. All effects were switched off at
+the source: a delay left running on the pad added **741 ms** of tail and made an
+earlier measurement round worthless, which is its own argument for checking.
 
 ---
 
