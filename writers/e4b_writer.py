@@ -924,6 +924,41 @@ _E4XT_ATK_SLOWDOWN = 1.0
 #: depth that matters.
 _ENV_SHAPE_KNEE_DB    = 29.0   #: depth segment 1 reaches
 _ENV_SHAPE_BREAK_TIME = 0.96   #: share of the TIME segment 1 is given
+
+#: **THE TWO RELEASE SEGMENTS DO NOT SHARE THE RELEASE TIME.** Each takes the
+#: whole of it for its own span -- which is why there is no third constant
+#: here, and why `_ENV_SHAPE_BREAK_TIME` now governs only segment 1.
+#:
+#: Giving segment 2 the leftover `1 - _ENV_SHAPE_BREAK_TIME` meant **4 % of the
+#: duration for two thirds of the fall**, about 590 dB/s: on a sustaining pad
+#: the note tracked the source down to -20 dB and then vanished in 0.02 s where
+#: the source takes 0.50 s. A tail collapsing 23x too fast.
+#:
+#: The MPC's release is CONVEX, which `xpm_parser` §MPCENVREL recorded long
+#: before anyone here could measure it, and which this rediscovered the hard
+#: way. Measured on the source (20 s hold so the pad actually settles -- at 4 s
+#: it is still swelling and the reference drifts 13 dB; sustain ripple 0.71 dB,
+#: two reps agreeing to 0.02 s):
+#:
+#:     first 20 dB    9.78 dB/s
+#:     -20 to -60    25.24 dB/s
+#:
+#: Confirmed from the target side by eosed driving the E4XT directly: the byte
+#: this formulation selects measures **25.40 dB/s against the source's 25.24**,
+#: r2 0.9984. Two independent measurements, one of the source and one of the
+#: instrument, landing within one byte of each other.
+#:
+#: **THE KNEE STAYS AT 29.0, TESTED RATHER THAN ASSUMED.** The obvious next
+#: move was to shallow it toward the MPC's own break near -20 dB. eosed
+#: measured that and it is WORSE -- mean error 9.2 % against 7.8 %, and below
+#: -30 dB 7.2 % against 2.8 % -- because a shallower knee starts the fast
+#: segment sooner and the whole tail arrives early. The depth and the two rates
+#: are a matched set and moving one alone made the pair worse.
+#:
+#: **ONE PROGRAM**, a sustaining pad. That is the same exposure that made the
+#: K2000's release factor right on its calibration program and 2.6x wrong on
+#: the next one. Nothing here establishes that the MPC's convexity is uniform
+#: across its release range.
 #: A shallow fall still splits proportionally, so a decay to a sustain only a
 #: few dB down does not spend 96% of its time covering a knee it never reaches.
 _ENV_SHAPE_MAX_FRAC   = 0.48
@@ -1340,8 +1375,11 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
         _rmid = _fenv_level(0.0)
     elif voice.env_release > 0.0 and rel_span > 1.0:
         _rls = _env_span_rate(_r_mid_db, _ENV_SHAPE_BREAK_TIME * voice.env_release)
-        _rls2 = _env_span_rate(rel_span - _r_mid_db,
-                               (1.0 - _ENV_SHAPE_BREAK_TIME) * voice.env_release)
+        # SEGMENT 2 TAKES THE WHOLE RELEASE TIME FOR ITS OWN SPAN, not the
+        # leftover sliver. See the note on the shape constants above: the two
+        # segments do not share the duration, and splitting it gave segment 2
+        # four percent of the time for two thirds of the fall.
+        _rls2 = _env_span_rate(rel_span - _r_mid_db, voice.env_release)
         _rmid = _env_db_to_level_byte(decay_span + _r_mid_db)
     else:
         _rls = _env_span_rate(rel_span, voice.env_release)
