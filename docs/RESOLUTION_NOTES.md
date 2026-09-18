@@ -20842,7 +20842,7 @@ that confound rather than by oversight.
 **The gap.** `akai_lfo_depth_to_pitch`'s RMS-to-one-sided-peak conversion
 hardcoded `sqrt(3.0)` (the triangle-wave factor) regardless of the source
 program's actual LFO1 shape, and program byte 97 (`LFO1WAVE`) was never
-read at all. Flagged during the the reference preset vibrato investigation as "real,
+read at all. Flagged during the reference preset vibrato investigation as "real,
 smaller effect, not fixed" (TODO.md) before being fixed tonight, in
 parallel with the still-open depth-curve question.
 
@@ -21112,7 +21112,7 @@ the sideband tool's harmonic-neighbour band-selection makes (which is
 exactly the shape of the tool's own refusal: a required integration band
 reaching an unexpected neighbouring harmonic). Not confirmed either way --
 this is a real, independently-worth-fixing bug regardless of whether it
-turns out to be the the reference preset answer, and the next hardware step (does note
+turns out to be the reference preset answer, and the next hardware step (does note
 48 actually sound an octave low on the currently-loaded, unfixed build) is
 what will show whether the two are connected.
 
@@ -21168,7 +21168,7 @@ Same shape of refusal as every failed the reference preset measurement tonight, 
 
 **Reframes both of tonight's earlier notes/30 results.** Note 30's continued failure after both §KRZCOARSETUNE fixes landed was never a second, unaddressed zone/keygroup bug (there is only one zone here) -- it is the SAME general effect, since note 30 requires -18 semitones of real auto-transpose. Note 48 measured clean specifically BECAUSE it happens to sit at the zone's own root, once the tuning fixes got that root landing correctly there. One finding explains both results.
 
-**Scope: far-reaching, not a the reference preset-specific or AKAI-specific issue.** This affects every LFO-pitch-modulated K2000 program this project has ever measured or will ever write, any time a note is played away from its own sample's root key -- which is the normal case for any multisample keymap with fewer zones than keys. It is a property of the K2000R itself, not of anything this project's writer does or fails to do.
+**Scope: far-reaching, not a reference-preset-specific or AKAI-specific issue.** This affects every LFO-pitch-modulated K2000 program this project has ever measured or will ever write, any time a note is played away from its own sample's root key -- which is the normal case for any multisample keymap with fewer zones than keys. It is a property of the K2000R itself, not of anything this project's writer does or fails to do.
 
 **What is NOT yet known.** The mechanism (does the LFO's cents-modulation somehow scale with the magnitude of live key-tracking transposition? Is it a fixed-point/interpolation-precision artifact in the K2000's own DSP engine when two independent pitch operations stack? Something else entirely) is unidentified. Whether the distortion is monotonic in `|note - root|`, whether it depends on shift DIRECTION (up vs down), and whether there is any usable compensation law are all open -- only two points exist so far (0 semitones: correct; -6 semitones: broken), nowhere near enough to fit or even characterise a curve. **No compensation should be attempted from two points** -- the same discipline this project has already been burned by breaking, and re-learned, more than once tonight.
 
@@ -21206,7 +21206,7 @@ Same shape of refusal as every failed the reference preset measurement tonight, 
 
 **Result, 2026-08-31, TWO findings bigger than the question asked -- both flagged by k2kremote as "what was measured," not claimed as understood mechanism.** Att3=1.00s, Dec1%%=30, held 5s:
 
-1. **Sustain still does not hold, even here.** One attack/decay arc over 0-1.25s, then the level collapses to 0.1-0.9% of peak (indistinguishable from this rig's noise floor) and stays flat for the remaining ~4.6s -- no 30% plateau anywhere. Rules out "sustain works normally, only overridden during the fast re-cycle" -- **this is a real, separate problem with how a sustain level translates to a held level on this K2000 layer, independent of the flutter bug entirely, and potentially affects every sustaining K2000 patch this project has ever converted, not just choke-style short envelopes.** Genuinely bigger in scope than the the reference preset investigation this grew out of.
+1. **Sustain still does not hold, even here.** One attack/decay arc over 0-1.25s, then the level collapses to 0.1-0.9% of peak (indistinguishable from this rig's noise floor) and stays flat for the remaining ~4.6s -- no 30% plateau anywhere. Rules out "sustain works normally, only overridden during the fast re-cycle" -- **this is a real, separate problem with how a sustain level translates to a held level on this K2000 layer, independent of the flutter bug entirely, and potentially affects every sustaining K2000 patch this project has ever converted, not just choke-style short envelopes.** Genuinely bigger in scope than the reference preset investigation this grew out of.
 2. **The re-cycle itself does not extrapolate the way the short-T formula suggests.** At T=1.0s the envelope fires ONCE, then goes flat for the rest of the hold -- it does NOT keep re-cycling roughly every ~1.04s the way `period = T + 41.7ms` (fit from three much shorter T values) would predict for continuous retriggering. A real boundary/threshold effect at longer T, separate from the sustain question, not yet understood.
 
 **Discriminator run, 2026-08-31, same afternoon -- s3ked's suspicion was correct about WHICH finding was the artifact, but the two split: one dissolved, one is now confirmed cleaner than before.** k2kremote's explanation: the T=1.0s/5s-hold capture's onset-detection found a spurious first-crossing at t=4.135s absolute instead of the real note-on near 0.4s, so "collapses at 1.275s and stays flat" was simply note-off at 5.4s arriving on schedule. **Root-caused directly, not just inferred, per s3ked's follow-up request:** the audio at t=4.135s is a real acoustic event (a genuine attack transient), and the capture's total file length (10.069s) ran nearly 2x the requested ~5.9s -- almost exactly the ~4.1s gap accounts for itself as excess leading silence before the real note. That one-off capture script created a fresh MIDI/JACK client per call rather than using this project's established persistent-recorder pattern (the exact client-churn issue that pattern exists to avoid) -- a capture-pipeline artifact, not a detection-script logic bug and not real K2000 envelope behavior. Confirmed, not merely plausible. Every substantive envelope finding tonight was built on the corrected 8s capture or other independently-verified captures, so nothing else changes -- this closes out where that one number came from.
@@ -21444,7 +21444,7 @@ The capture needed a different shape from the attack test, since the release onl
 
 **What v12 will NOT fix, stated so it is not read as failure.** The AKAI's choke is at full level at 4 ms and 23 dB down at 12 ms; a straight dB-linear segment over the K2000's minimum 20 ms step cannot be both, and the grid offers no step between 0 and 20 ms. **That 20 ms step is now audio-verified, not merely click-mapped** (2026-09-01): displayed 0.020 s measures ~21 ms and 0.040 s measures ~42 ms, resolved by moving the test to note 96 where ~42 waveform cycles fit inside a 20 ms decay instead of the under-3 cycles available at note 48. So the unreachability is a measured property of the machine rather than an inference from its display. The shape stays unreachable — only *where we sit on it* is adjustable. If more attack sharpness is wanted, s3ked mapped the continuous lever: raising the stage-1 target to −12…−16 dB more than halves the attack-window error again at the cost of lingering (−12 dB: attack-window 1.8 dB, but 12 ms error +15.9 dB). That is a by-ear tuning decision, not a correctness one, and should only be reached for if prediction 2 lands and Jan still wants more.
 
-**Bench state at the end of the session (2026-09-01, 00:10), so the next reader knows what is on the box.** K2000R in ProgramMode, no editor open, nothing mid-edit, no live connection held. The sawtooth calibration rig lived entirely in ROM #199's *unsaved* edit buffer and was discarded on exit, so no scratch objects are resident. RAM holds only the the reference preset build family — 200s (v9), 400s (v8), 500s (v9), 600s (v10) — leaving a free bank for v12 whenever the card is swapped.
+**Bench state at the end of the session (2026-09-01, 00:10), so the next reader knows what is on the box.** K2000R in ProgramMode, no editor open, nothing mid-edit, no live connection held. The sawtooth calibration rig lived entirely in ROM #199's *unsaved* edit buffer and was discarded on exit, so no scratch objects are resident. RAM holds only the reference preset build family — 200s (v9), 400s (v8), 500s (v9), 600s (v10) — leaving a free bank for v12 whenever the card is swapped.
 
 **RESULT (2026-09-01, v13). Prediction 1 confirmed on the bench; prediction 3 holds; prediction 2 awaits Jan's ears.**
 
@@ -33082,15 +33082,15 @@ evening.** Separating them is the finding:
 
 | stage | asks | measures | |
 |---|---|---|---|
-| decay (`Sangre`, sustain 0) | 3.351 s | 2.94 s | 13% short — roughly right |
-| release (`SY Precious`) | 0.497 s | ~1.4 s | **2.8× wrong — not a shape at all** |
+| decay (`the sustain-0 synth`, sustain 0) | 3.351 s | 2.94 s | 13% short — roughly right |
+| release (`the sustaining synth`) | 0.497 s | ~1.4 s | **2.8× wrong — not a shape at all** |
 
 **No curve correction closes a factor of 3.8, and a shape error cannot be
 asymmetric between two fields that share one law.**
 
 ### The decay: right time, wrong shape
 
-`Sangre`, note 60, held 4 s, against the linear-in-dB slew `e4b_writer` produces:
+`the sustain-0 synth`, note 60, held 4 s, against the linear-in-dB slew `e4b_writer` produces:
 
 ```
    t      measured   our line   MPC louder by
@@ -33112,7 +33112,7 @@ would have proved only that the path was deterministic.
 
 ### The release: the seconds are simply wrong
 
-`SY Precious`, material divided out (its keygroup at note 60 is rooted at 60, so
+`the sustaining synth`, material divided out (its keygroup at note 60 is rooted at 60, so
 no time-warp is needed):
 
 ```
@@ -33140,7 +33140,7 @@ someone finally played it.
 
 - `Precious` correlates **+0.883** with its own source contour and matches it to
   0.2 dB for the first second — the capture is the program it is claimed to be.
-- `Sangre` against `Precious` correlates **+0.560** — the two MIDI channels are
+- `the sustain-0 synth` against `Precious` correlates **+0.560** — the two MIDI channels are
   genuinely separating, and one patch is not being measured twice.
 
 This forecloses the failure the K2000R bank-of-100 note describes: a rig that
@@ -33148,7 +33148,7 @@ sounds fine and measures the wrong instrument.
 
 ### The material trap, which did not fire but will
 
-`SY Precious`'s source is **not flat** — 16.6 dB of variation over 0–5 s — and it
+the sustaining synth's source is **not flat** — 16.6 dB of variation over 0–5 s — and it
 loops from 3.812 s. The division was valid anyway, because the loop does not wrap
 before 9.71 s so file time equals note time throughout the window. **The check
 retired a doubt rather than catching an error, and those are worth separating: a
@@ -33342,7 +33342,7 @@ the K2000 has `F4 AMP Adjust` at 1.0 dB/unit and the AKAI has a program level,
 so both could, and neither has been wired or listened to.
 
 **CONFIRMED BY EAR 2026-09-18 (Jan): "emu is fine now - I think those are very
-good conversion results".** `Pad-PRO5 Lunar Daze` keygroup 4 (Tri 0.20 Hz,
+good conversion results".** `the pad` keygroup 4 (Tri 0.20 Hz,
 AMP 29, PAN 81) on the rebuilt one-bank disc, against the MPC original.
 
 That is the first time this tremolo had been heard by anyone. It was measured
