@@ -1789,8 +1789,28 @@ def _fill_env(b: bytearray, env, hold_open: bool = False) -> None:
         pairs_rel = [(rel * _REL1_TIME_FRAC, _REL_KNEE_PCT),  # Rel1 — fade to the knee
                     (rel * (1.0 - _REL1_TIME_FRAC), 0)]       # Rel2 — short tail to silence
     else:
-        pairs_rel = [(rel * _REL1_TIME_FRAC, 0),              # Rel1 — fade toward silence
-                    (rel * (1.0 - _REL1_TIME_FRAC), 0)]       # Rel2 — nonzero time, same target
+        # REL1 CARRIES THE WHOLE RELEASE HERE, NOT 80 % OF IT.
+        #
+        # The 80/20 split belongs to the branch above, where Rel1 fades to the
+        # knee and Rel2 genuinely finishes the fall -- there the two legs share
+        # the time because they share the work. In THIS branch both legs aim at
+        # silence, so Rel1 reaches 0 on its own and **Rel2 never sounds**: the
+        # note is over before it starts. Giving Rel1 only 80 % of the time
+        # therefore made every below-knee release 1.25x too fast, silently,
+        # because the nominal total still read correctly in the file.
+        #
+        # MEASURED, K2000R 2026-09-18, on a sustain-0 program: nominal release
+        # 1.040 s, Rel1 0.832 s, predicted 99.37/0.832 = 119.4 dB/s against
+        # 122.3 dB/s captured -- 2.4 %. That agreement is what identifies Rel1
+        # alone as the segment setting the rate.
+        #
+        # Rel2 keeps a real nonzero TIME (§KRZENVLOOP): a stage with time AND
+        # level both zero, followed by Rel3's own (0, 0), reads as two
+        # consecutive null stages and loops the envelope back to Att1 while the
+        # key is held. Its duration is inaudible -- it starts at silence -- so
+        # it costs nothing to leave it at the old fraction.
+        pairs_rel = [(rel, 0),                                # Rel1 — the whole fall
+                    (rel * (1.0 - _REL1_TIME_FRAC), 0)]       # Rel2 — nonzero time only
     pairs = [(env.attack, 100),                      # Att1 — ramp to full
              (0.0, 100),                             # Att2
              (0.0, 100),                             # Att3

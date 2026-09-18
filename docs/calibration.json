@@ -286,17 +286,17 @@
     {
       "name": "KRZ_RELEASE_FACTOR",
       "module": "models.common",
-      "value": 1.9,
-      "quantity": "correction from the shared MPC value->seconds curve to the K2000's displayed release",
+      "value": 3.65,
+      "quantity": "multiplier from the source's release SECONDS to the K2000 Rel1 time that reproduces the source's audible release",
       "machine": "Kurzweil K2000R",
-      "convention": "the K2000's DISPLAYED release time",
-      "method": "one pair: 2.63 s displayed against 1.39 s from the curve",
-      "subject": "AlphaPad #200",
-      "measured_by": null,
+      "convention": "the time written to AMPENV Rel1, which since 2026-09-18 carries the WHOLE release when sustain is below the 33% knee (Rel2 never sounds there, so the old 80/20 split made every such release 1.25x fast)",
+      "method": "one metric for all three machines: seconds from note-off to fall 30 dB below the note-off level, note 60 velocity 127, 0.4 s hold so note-off lands near the peak. MPC One 0.420 s, AKAI S3000XL 0.420 s, K2000 at the old Rel1 0.840 s gave 0.225 s (1.87x fast) and at Rel1 2.000 s gave 0.410-0.435 s over three captures. k2kremote drove Rel1 over SysEx while this session captured, so the curve was walked on the instrument rather than inferred from rebuilds. 2.000 / 0.5475 = 3.65.",
+      "subject": "a 2-layer MPC synth program, sustain 0, decay 3.35 s, release 547 ms; the SAME source WAVs on all three machines, which is what makes the cross-machine comparison fair",
+      "measured_by": "mpc2emu + k2kremote",
       "section": null,
-      "date": null,
-      "known_limits": "ONE OBSERVATION, ONE PROGRAM. 'roughly constant' is asserted in the source comment and is not measured across the range.",
-      "detector": "read off the machine's display against a curve value; one program."
+      "date": "2026-09-18",
+      "known_limits": "ONE PROGRAM, CONFIRMED BY EAR ON IT (Jan: 'sounds pretty good and close'). The factor is a CALIBRATION, not a law: the arithmetic (KRZ_RELEASE_SPAN_DB / MPC_RELEASE_SPAN_DB on the source seconds) asks for 1.420 s and the machine wants 2.03 -- a 1.43x that is NOT explained. Ruled out on hardware: Dec1 (tripled, the fall moved 3.7%) and the K2000's own release (k2kremote measured it clean and linear on a decay-free subject, +0.066 dB/s intercept against slews of 20-200). Remaining candidate is the samples' own decay -- and MPC_RELEASE_SPAN_DB is contaminated by the same samples, so two contaminated numbers on opposite sides produce a factor that looks like a machine constant and is not one. Replace it by re-measuring the MPC span on a decay-free subject over several release settings.",
+      "detector": "envelope walked at 5 ms hops, onset detected from the floor rather than taken from the MIDI schedule -- this rig runs ~0.7 s of latency and a schedule-derived window measures silence plus attack, which cost three rounds and 13 dB of apparent jitter before it was caught."
     },
     {
       "name": "KRZ_2POLE_F0_TO_3DB",

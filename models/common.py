@@ -2631,6 +2631,46 @@ def env_rate_byte_to_db_per_s(rate_byte: int) -> float:
 KRZ_RELEASE_SPAN_DB = 99.37
 
 
+#: MPC amp-envelope RELEASE SPAN, in dB -- the fall its release TIME measures.
+#:
+#: MEASURED ON HARDWARE 2026-09-18 (MPC One, FX off, a program whose release
+#: reads 547 ms on the panel), because a release time is meaningless without
+#: the span it crosses and every writer here was matching SECONDS across
+#: machines that disagree about where silence is. That is the same defect the
+#: AKAI writer records one format over ("made every AKAI-sourced release
+#: 1.6-4x too fast") and it had this path 1.77x too fast on the K2000.
+#:
+#: **IT IS A RATE, AND THAT IS THE PART THAT WAS WORTH MEASURING TWICE.** A
+#: release that is a fixed TIME TO SILENCE cannot be converted to a rate
+#: machine at all -- its effective dB/s depends on how loud the note was when
+#: released. Two captures with note-off levels 15 dB apart settled it:
+#:
+#:     note-off -29.72 dBFS   ->  69.0 dB/s
+#:     note-off -44.68 dBFS   ->  70.8 dB/s      2.6 % apart
+#:
+#: A fixed-time release would have differed by the same 15 dB. So the MPC
+#: holds a rate, the conversion is exact, and 69.9 * 0.5475 s = 38.3 dB.
+#:
+#: **IT IS A CHORD, NOT A TANGENT, AND THAT IS DELIBERATE.** §MPCENVREL in
+#: `xpm_parser` records that this machine's amp fall is CONVEX -- it is 10 dB
+#: down at 44 % of a stage where a constant-rate machine is 10 dB down at
+#: 17 %. A straight-line dB/s fit across a bend is a chord (the same trap
+#: `KRZ_RELEASE_SPAN_DB` above documents for the K2000's own fast setting), so
+#: this figure is the average slope over the fall's FIRST 40 dB, not an
+#: instantaneous rate. That window is chosen because it is the audible part:
+#: below it the note is already gone. A target whose release is linear in dB
+#: therefore matches the MPC where it can be heard and diverges where it
+#: cannot, which is the right way round.
+#:
+#: **ONE RELEASE SETTING, TWO LEVELS.** The rate-vs-time question is settled;
+#: that the SPAN is the same at other release settings is the ordinary
+#: assumption that a parameter means one thing throughout, not a measurement.
+#: Confirming it needs one more capture at a different release time on the
+#: same program -- worth doing before this constant is trusted far from
+#: 547 ms.
+MPC_RELEASE_SPAN_DB = 38.3
+
+
 def env_db_per_s_to_rate_byte(db_per_s: float) -> int:
     """A slew rate in dB/s -> the EOS rate byte that produces it.
 
@@ -3832,10 +3872,53 @@ def krz_cents_to_lfo_pitch_byte(cents: float) -> int:
 KRZ_ENV_TIME_GRID = [(0, 2, 0.02), (2, 5, 0.04), (5, 10, 0.10),
                      (10, 15, 0.50), (15, 25, 1.0), (25, 60, 5.0)]
 
-# KRZ-only release-time correction (krz_writer._KRZ_RELEASE_FACTOR): the shared
-# MPC value->seconds curve under-reads the K2000's displayed release by this
-# roughly-constant factor (2.63 s displayed / 1.39 s curve, AlphaPad #200).
-KRZ_RELEASE_FACTOR = 1.9
+#: KRZ-only release-time correction (`krz_writer._KRZ_RELEASE_FACTOR`).
+#:
+#: **RECALIBRATED 2026-09-18 ON HARDWARE, 1.9 -> 3.65, AND CONFIRMED BY EAR.**
+#: The old 1.9 came from comparing this machine's DISPLAYED release against
+#: another machine's curve (2.63 s displayed / 1.39 s curve) -- two conversions
+#: of an unmeasured span rather than one measurement of a real one. It left
+#: every MPC-sourced release on the K2000 running fast: Jan heard it as "the
+#: release on KRZ Sangre is too short compared to all 3 other versions".
+#:
+#: MEASURED against the source and a known-good sibling, one metric for all
+#: three (seconds from note-off to fall 30 dB below the note-off level, which
+#: is comparable across machines in a way that per-capture curve fits are not):
+#:
+#:     MPC One (the source)        0.420 s
+#:     AKAI S3000XL                0.420 s     <- matches the source exactly
+#:     K2000, Rel1 0.840 (old)     0.225 s     1.87x too fast
+#:     K2000, Rel1 2.000           0.410-0.435 s, three captures
+#:
+#: k2kremote drove Rel1 over SysEx while this session captured, so the curve
+#: was walked on the real instrument rather than inferred from a rebuild.
+#: 2.000 s / 0.5475 s of source release = **3.65**.
+#:
+#: **THIS IS A CALIBRATION, NOT A LAW, AND THE HONEST SCOPE IS NARROW.** The
+#: arithmetic says 1.420 s (`KRZ_RELEASE_SPAN_DB / MPC_RELEASE_SPAN_DB` applied
+#: to the source seconds) and the machine wants 2.03 -- a factor of 1.43 that
+#: is NOT explained. Ruled out on hardware: Dec1 (tripled it, the fall moved
+#: 3.7 %) and the K2000's own release, which k2kremote measured as clean and
+#: linear on a decay-free subject (+0.066 dB/s intercept against slews of
+#: 20-200). The remaining candidate is the samples' own decay -- and
+#: `MPC_RELEASE_SPAN_DB` is contaminated by exactly the same samples, since it
+#: too was measured on this program. Two contaminated numbers on opposite
+#: sides produce a factor that LOOKS like a machine constant and is not one.
+#:
+#: **Why ship it anyway:** this is precisely how the AKAI path got right. Its
+#: seconds law is empirically calibrated against MPC material, carries the same
+#: kind of baked-in factor, and is the target that matches the source exactly.
+#: An empirical fit to the real thing beats a derivation from two half-measured
+#: spans -- see the back-out recorded at `MPC_RELEASE_SPAN_DB`, where carrying
+#: the "principled" rate would have moved a hardware-confirmed AKAI byte.
+#:
+#: **What would replace it:** re-measure the MPC's release span the way the
+#: K2000's was measured -- a decay-free subject, several release settings,
+#: regress slew against 1/T and check the intercept. That makes
+#: `MPC_RELEASE_SPAN_DB` the envelope's span rather than this program's, and
+#: the conversion should then need no factor at all. Until then this number is
+#: calibrated on ONE program and validated by ear on it.
+KRZ_RELEASE_FACTOR = 3.65
 
 
 def krz_env_byte_to_seconds(b: int) -> float:
@@ -4502,6 +4585,15 @@ class VoiceLayer:
     def env_release(self): return self.amp_env.release
     @env_release.setter
     def env_release(self, v): self.amp_env.release = v
+
+    #: The amp envelope's RELEASE RATE in dB/s. Flat accessor for the same
+    #: reason as the shape below: a reader that knows its machine's release
+    #: SPAN can state the rate alongside the seconds, and the rate is the
+    #: quantity that survives the trip to a machine with a different span.
+    @property
+    def amp_env_release_rate(self): return self.amp_env.release_rate_db_per_s
+    @amp_env_release_rate.setter
+    def amp_env_release_rate(self, v): self.amp_env.release_rate_db_per_s = v
 
     #: The amp envelope's SHAPE. Flat accessor like the four above, so a reader
     #: that builds its voice params as a dict can declare the source machine's
