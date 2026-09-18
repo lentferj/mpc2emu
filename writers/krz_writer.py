@@ -85,6 +85,7 @@ import math
 import struct
 from typing import List, Tuple
 
+from models.common import KRZ_LFO_PAN_DEPTH_SCALE
 from models.common import (
     Bank, Preset, SampleData, VoiceLayer, LoopType,
     krz_lfo_rate_hz_to_byte,
@@ -2383,7 +2384,13 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
             # static offset is a different parameter the source does not state.
             _f3 = seg(0x52)
             _f3[_K2_PAN_SRC1]  = _K2_CS_LFO1
-            _f3[_K2_PAN_DEPTH] = max(-50, min(50, int(round(_pan_depth * 50)))) & 0xFF
+            # SCALED, since 2026-09-18 -- `_pan_depth * 50` was a raw fraction
+            # of this machine's rail with nothing behind it, putting a real
+            # program on byte 32 against a measured target of 14. The law is
+            # 0.372 dB/byte, linear to +/-0.003 over a 10x range. See
+            # KRZ_LFO_PAN_DEPTH_SCALE.
+            _f3[_K2_PAN_DEPTH] = max(-50, min(50, int(round(
+                _pan_depth * 50 * KRZ_LFO_PAN_DEPTH_SCALE)))) & 0xFF
             # SPREAD THE TWO WIRES, or none of the above is audible (§K2PANWIRES).
             # Musician's Guide p284: PANNER "converts a single wire at its input
             # into a double wire at its output" and "by itself the PANNER doesn't

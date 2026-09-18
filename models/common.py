@@ -3315,6 +3315,44 @@ E4B_LFO_PAN_CORD_SCALE = 0.1563
 #:
 #: **NOT HEARD.** The E4XT figure was confirmed by ear; this one has not been.
 AKAI_LFO_PAN_DEPTH_SCALE = 0.1563
+
+#: MPC `LfoPan` depth -> K2000 PANNER depth (HOB `0x52`, `_K2_PAN_DEPTH`).
+#: **MEASURED 2026-09-18 (k2kremote ladder, our capture). The third and last of
+#: the three targets that carried this uncalibrated.**
+#:
+#: `round(depth * 50)` onto the +/-50 rail, same missing calibration as the
+#: other two. For `LfoPan` 0.6398 that is byte 32; the measured law puts the
+#: MPC's 5.11 dB at byte 14.
+#:
+#: **THE CLEANEST OF THE THREE SWEEPS.** Mono ROM sine (keymap 163), LFO1 at
+#: byte 20 = 0.20 Hz, recovered at 0.201 Hz on every point:
+#:
+#:     byte  2   0.75 dB pp   resid 0.01    0.376 dB/byte
+#:     byte  4   1.50 dB      resid 0.03    0.374
+#:     byte  6   2.23 dB      resid 0.04    0.372
+#:     byte 10   3.69 dB      resid 0.08    0.369
+#:     byte 20   7.45 dB      resid 0.21    0.372
+#:     byte 50  35.08 dB      resid 8.08    <- saturated
+#:
+#: **0.372 dB/byte, constant to +/-0.003 over a 10x range of the parameter.**
+#: This machine is genuinely linear where the E4XT was not (steps of 0.64 then
+#: 1.75 dB at the equivalent scale) and the AKAI only nearly was, so byte 14 is
+#: an interpolation this law actually supports rather than one it tolerates.
+#:
+#: **AND THE SWEEP EXISTS ONLY BECAUSE THE PANNER'S OUTPUT WIRES WERE SPREAD.**
+#: The first ladder measured 0.01 dB at every depth -- see §K2PANWIRES in
+#: krz_writer, which our own writer has honoured since 2026-09-06: a K2000
+#: PANNER doubles its wire and does NOT itself pan, so with both wires centred
+#: they sum and the block is inaudible however hard it is driven. Two sessions
+#: attributed that to a mono capture path; Jan asked whether the OUTPUT page
+#: had been checked, which is the question that separated the explanations.
+#:
+#: NOT the same constant as the other two, which confirms that
+#: E4B_LFO_PAN_CORD_SCALE and AKAI_LFO_PAN_DEPTH_SCALE matching at 0.1563 was a
+#: coincidence of two rails needing similar reduction, not a shared law.
+#:
+#: **NOT HEARD.** Only the E4XT figure has been confirmed by ear.
+KRZ_LFO_PAN_DEPTH_SCALE = 0.4377
 E4B_DC_CORD_SRC = 0xA0            #: `DC`, a constant +1 source
 E4B_LFO1_TILDE_SRC = 0x60         #: `Lfo1~`, bipolar about zero
 E4B_AMPVOL_DST = 0x40             #: AmpVol -- the LEVEL destination
