@@ -1496,6 +1496,11 @@ def _vel_byte(lo_vel: int, hi_vel: int) -> int:
 # `_lvl_byte_amp`.
 _REL_KNEE_PCT   = 33.0    # Rel1 target, DISPLAYED percent (~-24.8 dB, measured)
 _REL1_TIME_FRAC = 0.8     # fraction of the release time spent reaching the knee
+#: How long a one-shot's release holds the amp open. Any value past the
+#: longest sample does the same job; 40 s is inside the time byte's own
+#: ceiling (it saturates near 60 s) so the encoding is exact rather than
+#: clamped, and nothing in this material comes near it.
+_ONESHOT_HOLD_S = 40.0
 
 # KRZ-only release-time correction.  The shared MPC value→seconds curve
 # (_xpm_env_to_seconds, fit in §18 to audio time-to-−40 dB) under-reads the MPC's
@@ -1588,7 +1593,7 @@ def _krz_choke_env(env):
 #: ship while the question was open, and never a reason to keep it once it
 #: closed. Full trace in `docs/RESOLUTION_NOTES.md` §KRZNULLRUN.
 
-def _fill_env(b: bytearray, env) -> None:
+def _fill_env(b: bytearray, env, hold_open: bool = False) -> None:
     """Write an ADSR Envelope into a 15-byte ENV/ENC segment IN PLACE.
 
     TRUE K2000 layout (§KRZENVLOOP, HW-confirmed 2026-08-31 — see TODO.md /
@@ -1704,7 +1709,31 @@ def _fill_env(b: bytearray, env) -> None:
     # only Rel3 is ever a genuine (0, 0). Keeping the same 80/20 time split
     # here — both legs now aimed at 0 instead of one at the knee — reproduces
     # that same "one zero-zero stage, not two" shape and stays monotonic.
-    if sus > _REL_KNEE_PCT:
+    if hold_open:
+        # A ONE-SHOT'S IGNORED RELEASE MUST NOT BECOME AN INSTANT CUT.
+        # Third writer with this fault, found by Jan on hardware 2026-09-18
+        # after the E4B and AKAI versions were already fixed: an MPC `OneShot`
+        # program carries a `VolumeRelease` the machine IGNORES, and read
+        # literally it becomes release 0 -- the note is gated off at note-off
+        # instead of playing to the end of its sample.
+        #
+        # The K2000's envelope is (time, level) like the E4XT's, so the E4B
+        # answer applies: hold both release legs at FULL LEVEL and the amp
+        # never moves at note-off. The AKAI needed a different trick only
+        # because its envelope has a rate and no release level.
+        #
+        # NOT A VOICE LEAK: the sample does not loop (that is the guard at the
+        # call site), so playback ends at the sample's end and frees the voice
+        # regardless of how long the envelope would have held.
+        #
+        # BOTH LEGS CARRY A NONZERO TIME, deliberately -- §KRZENVLOOP: a stage
+        # with time AND level both zero, followed by Rel3's own (0, 0), reads
+        # to the K2000 as two consecutive null stages and makes it LOOP the
+        # whole envelope back to Att1 while the key is held. Level 100 already
+        # avoids that, and keeping real times avoids it twice over.
+        pairs_rel = [(_ONESHOT_HOLD_S * _REL1_TIME_FRAC, 100),
+                     (_ONESHOT_HOLD_S * (1.0 - _REL1_TIME_FRAC), 100)]
+    elif sus > _REL_KNEE_PCT:
         pairs_rel = [(rel * _REL1_TIME_FRAC, _REL_KNEE_PCT),  # Rel1 — fade to the knee
                     (rel * (1.0 - _REL1_TIME_FRAC), 0)]       # Rel2 — short tail to silence
     else:
@@ -2117,15 +2146,24 @@ def _preset_layers(layers, samples_by_name):
             cal[12] = kid & 0xFF
         else:
             _sw, _lv, _r = fits[id(voice)]
+            # ONE-SHOT decided HERE, because this is where the samples are.
+            # `plays_whole_sample` alone is not enough: a looping voice held
+            # open would ring until the key is released, so the sample must
+            # also not loop -- the same guard the E4B and AKAI writers use.
+            _os = getattr(voice, 'plays_whole_sample', False) and not any(
+                (samples_by_name.get(z.sample_name) is not None
+                 and samples_by_name[z.sample_name].loop_type != LoopType.NO_LOOP)
+                for z in voice.zones)
             segs = _patch_layer(voice, kid,
                                 _voice_is_stereo(voice, samples_by_name),
                                 level_offset_db=_lv - shift,
-                                vel_swing_db=_sw)
+                                vel_swing_db=_sw, one_shot=_os)
         yield voice, kid, segs
 
 
 def _patch_layer(voice, keymap_id: int, stereo: bool = False,
-                 level_offset_db: float = 0.0, vel_swing_db=None):
+                 level_offset_db: float = 0.0, vel_swing_db=None,
+                 one_shot: bool = False):
     """Return a patched copy of the template layer segments for one voice."""
     segs = [(tag, bytearray(data)) for tag, data in _TPL_LAYER]
     by = {}
@@ -2335,7 +2373,10 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
     _atk_span = getattr(voice, 'velocity_to_amp_attack_span', None)
     if _atk_span and abs(_atk_span - 1.0) > 1e-9:
         seg(0x20)[4] = k2000_multiplier_to_envctl_byte(_atk_span)
-    _fill_env(seg(0x21), _krz_choke_env(voice.amp_env))
+    # ONE-SHOT GUARD AT THE CALL SITE, because only here is the voice in scope.
+    # Guarded on the sample NOT looping: holding a looping voice open would
+    # ring until the key is released and the sample would never stop itself.
+    _fill_env(seg(0x21), _krz_choke_env(voice.amp_env), hold_open=one_shot)
 
     hob_f1 = seg(0x50)
     hob_f2 = seg(0x51)
