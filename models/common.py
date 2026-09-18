@@ -2671,6 +2671,83 @@ KRZ_RELEASE_SPAN_DB = 99.37
 MPC_RELEASE_SPAN_DB = 38.3
 
 
+#: MPC amp DECAY shape -- dB below peak -> fraction of the decay time, MEASURED.
+#:
+#: **THE STAGE NOBODY CONVERTED.** `krz_writer` writes `(env.decay, sus)` with
+#: no span conversion at all, where the release now has two measured ones. Jan
+#: heard it on a sustain-0 program: the source falls 30 dB in 1.53 s and our
+#: K2000 conversion in 0.80 s. Three separate release investigations the same
+#: evening all used sustain-0 material and none of them found it, because every
+#: release protocol measures the fall AFTER note-off -- and at sustain 0 the
+#: decay falls BEFORE it, inside the part of the capture they all discard as
+#: "the held note".
+#:
+#: **MEASURED ON NOISE, which is what makes these numbers attributable.** The
+#: earlier route inferred the MPC's decay span by subtracting a sample's own
+#: decay out of a real program's fall, and produced 18.7 dB and a 5.3x factor.
+#: A flat noise sample (steady to 0.34 dB over its length) deletes that term:
+#: what falls is the envelope and nothing else. Five decay times, 0.5 to 6.0 s,
+#: a 12x range, one note, MPC on MIDI channel 10:
+#:
+#:     drop     D=0.5   D=1.0   D=2.0   D=3.35   D=6.0    mean     sd
+#:     -10 dB   0.450   0.435   0.420   0.410    0.413    0.4256   0.0150
+#:     -20 dB   0.760   0.750   0.735   0.736    0.723    0.7408   0.0128
+#:     -30 dB   0.910   0.905   0.903   0.894    0.900    0.9023   0.0054
+#:     -40 dB   0.970   0.965   0.968   0.967    0.968    0.9674   0.0016
+#:     -50 dB   0.990   0.990   0.990   0.988    0.989    0.9894   0.0009
+#:     -60 dB   1.000   0.995   0.998   0.997    0.997    0.9972   0.0016
+#:
+#: **SELF-SIMILAR ACROSS 12x**, and tightest exactly where it is used. The
+#: envelope reaches -60 dB at the programmed decay time and gates to all-zero
+#: samples there, the same way this machine's release does.
+#:
+#: **THE MECHANISM IS CURVE SHAPE, NOT SUSTAIN GATING**, and that distinction
+#: is why there is a table here rather than a scalar. The MPC's decay
+#: ACCELERATES (30 dB down at 0.90 of the stage); the K2000's is dB-LINEAR
+#: (30 dB down at 0.30 of it). Shape only matters when the span is large, so
+#: ONE mechanism reproduces both observations with no special case: at
+#: sustain 0 the span is the whole range and the conversion is 3x out, while at
+#: sustain 0.63 the span is 4 dB and the times already agree -- the 0.99x that
+#: was measured with no conversion at all.
+#:
+#: **THE CONTROL WAS DECLARED BEFORE THE CAPTURE AND COULD HAVE KILLED IT.**
+#: Two programs differing ONLY in sustain, same 2.000 s decay: sustain 0 falls
+#: 60 dB in 1.995 s, sustain 0.63 falls 4.4 dB and then sits flat for 3 s. The
+#: plateau lands at -4.4 dB against 20*log10(0.63) = -4.01, so the decay ends
+#: on the sustain level and the endpoint is confirmed directly rather than
+#: assumed.
+#:
+#: **NOT YET WIRED INTO ANY WRITER.** Matching at -30 dB against the K2000's
+#: 99.37 dB span asks for `Dec1 = 2.99 * decay`, from two independent routes --
+#: envelope-to-envelope on noise, and the real program with the sample term
+#: measured by DIFFERENCE (9.69 dB/s), which predicts the 0.80 s actually
+#: captured and gets 0.764 without having been fitted to it. What is NOT
+#: settled is whether the K2000's `Dec1` is a time-to-target or a rate
+#: (§CORPUSRT calls that machine "a rate machine"): a scalar is only correct
+#: under the first reading, and under the second it would break every
+#: sustaining program the release work just fixed. One controlled capture
+#: decides it -- `Dec1` fixed, target LEVEL varied.
+MPC_DECAY_SHAPE = {
+    10: 0.4256,
+    20: 0.7408,
+    30: 0.9023,
+    40: 0.9674,
+    50: 0.9894,
+    60: 0.9972,
+}
+
+#: The depth the decay conversion matches at, when one has to be chosen.
+#:
+#: A single scalar cannot match an accelerating curve to a linear one at every
+#: depth -- the same conversion is 4.23x at -10 dB, 3.68x at -20, 2.99x at -30
+#: and 2.40x at -40. -30 dB is chosen for two reasons: it is the metric the
+#: release calibration already uses ("seconds to fall 30 dB"), so the two
+#: stages stay comparable, and it is where this table is steadiest (sd 0.0054
+#: against 0.0150 at -10 dB, where the curve is shallow and the crossing is
+#: least sharp).
+MPC_DECAY_MATCH_DB = 30
+
+
 def env_db_per_s_to_rate_byte(db_per_s: float) -> int:
     """A slew rate in dB/s -> the EOS rate byte that produces it.
 
