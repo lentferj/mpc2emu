@@ -2626,7 +2626,7 @@ Validate on `the detuned-stack split preset`: 12 samples should keep distinct, r
 wheel scales the LFO's modulation amount. At 100% the LFO is fully wheel-gated
 (no modulation at rest). `xpm_parser` never reads it; `e4b_writer` writes
 LFO→Pitch/Filter/Vol cords at their full static amount → the E4XT applies the LFO
-continuously at full depth (Jan: "too much LFO→Pitch" on `Bass-MS20 Antima Acoustik`,
+continuously at full depth (Jan: "too much LFO→Pitch" on an MS-20 bass patch,
 which has `KeygroupWheelToLfo=1.0`).
 
 ### EOS mechanism — cord-amount modulation
@@ -2765,7 +2765,7 @@ Re-run the MS20 patch: expect 1 voice with 15 zones at kg36-38…kg78-84, roots
 
 ### Validation
 
-- `Bass-MS20 Antima-Patch 2c.xpm` → tuned chromatically, no aliasing.
+- the MS-20 bass patch → tuned chromatically, no aliasing.
 - F9 Disco Rhds / DX7 Advent → non-transpose layers unchanged (diff the voice
   `non_transpose` flags before/after).
 - Spot-check a few of the 168 flagged files by ear on hardware.
@@ -2959,7 +2959,7 @@ only approximate the massed-unison character. Worth a note to Jan when fixing.
 
 ## Fixed (un-gated) LFO→Filter on MS-20 patches — pending aural check
 
-`Bass-MS20 Antima-Patch 2c` (FEATUREDEMO_02 P003) plays LFO1→Filter at a fixed +42
+`FEATUREDEMO_02 P003` (an MS-20 bass patch) plays LFO1→Filter at a fixed +42
 (33%).  **Verified faithful:** source `KeygroupWheelToLfo=0.0`, `LfoCutoff=0.33`,
 `LfoPitch=0`.  No code change unless Jan's by-ears check picks one of:
 
@@ -3151,7 +3151,7 @@ measurements in `docs/re_procedures/xpm_envelope.md` alongside the decay data.
 MPC FilterType **19–22 = Band Boost** (parametric peak: full signal + a boosted
 band).  Both writers send it to a **bandpass**, which removes the out-of-band signal
 instead of boosting in-band → thin/hollow.  See TODO "Band-Boost (BB) filters map to
-BANDPASS".  Symptom source: `K2KFEATDEMO` #204 **Bass-MS20 Antima-Patch 2c** (FilterType=19,
+BANDPASS".  Symptom source: `K2KFEATDEMO` #204, an MS-20 bass patch (FilterType=19,
 Cutoff=0.27, Reson=0.65).
 
 ### E4B — ready patch (no HW needed)
@@ -3195,7 +3195,7 @@ BB 19–22 now map to **Algorithm 2 PARA MID** (parametric band boost), RE'd via
 
 Wired in `_k2_filter_plan` (BB → `(2, 51, 16, 40)`) and `_patch_layer`
 (HOB0[1]=`_cutoff_byte(cutoff)`, HOB1[1]=`+12..+24 dB` from resonance).  Verified
-end-to-end on #204 Bass-MS20 Antima-Patch (FilterType=19 → ALG2/51/AMP+20 dB).  Full
+end-to-end on #204, an MS-20 bass patch (FilterType=19 → ALG2/51/AMP+20 dB).  Full
 procedure + capture table: `docs/re_procedures/krz_paramid.md`.  Later refinement:
 measure the MPC's actual BB gain law to calibrate the dB depth (FRQ already exact).
 
@@ -20227,7 +20227,7 @@ rounds the semitone byte up by exactly one — `493.88 Hz -> 523.25 Hz`.
 
 **The fold is correct for the case it was written for.** The comment at the
 site records it, and it is hardware-checked: on an MPC source a high
-VelocityToFilter means the cutoff opens at playing velocity (Jan, on Bass-MS20 Antima:
+VelocityToFilter means the cutoff opens at playing velocity (Jan, on an MS-20 bass patch:
 VelToFilter 127 → filter ~open), and rendering that as a K2000 VelTrk sweep
 starting from the K2000's 16 Hz floor would **mute softly-played notes the MPC
 keeps audible**. Baking it into a static cutoff is the right trade for a source
@@ -23613,10 +23613,10 @@ step Jan's bench economics say to batch. Map in `matrix_v4/SLOTMAP_e4b.json`.
 **The AKAI volume refines the diagnosis and refutes my first reading of it.**
 I initially called the E4B bank a stale build, on the timestamps. It is not:
 
-    target  built     has Keys-VP Rico Key has LD TUBE PIPE usable rows
-    e4b     21:10:29        no                yes               10
-    krz     21:13:44        no                yes               10
-    akai    21:13           YES               no                11 of 11
+    target  built     has program A  has program B  usable rows
+    e4b     21:10:29        no             yes            10
+    krz     21:13:44        no             yes            10
+    akai    21:13           YES            no             11 of 11
 
 The AKAI volume and the KRZ bank were built within the same minute from
 **different source lists**, so this is not a clock problem — one build run
@@ -25357,8 +25357,8 @@ From the file side: our XPM reader truncates a long sample name by keeping the
 differs only in the suffix. **The cut lands wherever `maxlen` falls, which is
 often mid-word:**
 
-    'LD Vintage Acid -000-036-c1'  ->  ' Acid-000-036-c1'   <-- LEADING SPACE
-                                       -> AKAI field ' ACID-000-03'
+    'Slow Analog Pad -000-036-c1'  ->  ' Pad -000-036-c1'   <-- LEADING SPACE
+                                       -> AKAI field ' PAD -000-03'
 
 **Both the sample header and the program's zone reference carried the space
 identically**, so the volume was internally consistent and no cross-check
@@ -25455,11 +25455,11 @@ check: 176 expected, 181 found.
 **Measured by `eosed`, 2026-09-06.** MATRIX5 → MATRIX6, eleven programs, refit
 pipeline on both sides, matched by program name.
 
-    P001 Lead-PRO5 Lollip  0.31     P007 LD Fluty Loops    0.01
-    P003 LD Retro Powder   0.92     P008 Bass-MS20 Antima  0.05
-    P004 LD Vintage Acid   0.02     P009 Keys-VP Rico Key  0.08
-    P005 Keys-MS20 Biting  0.03     P010 LD Casiopaya 9    0.11
-    P006 Bass-Dark-The Po  0.04     P000 PD Tapemaker      floored both
+    P001  0.31     P007  0.01
+    P003  0.92     P008  0.05
+    P004  0.02     P009  0.08
+    P005  0.03     P010  0.11
+    P006  0.04     P000  floored both
 
 **Nothing over 1 dB**, and the largest (0.92) is the row that moved 0.96 between
 MATRIX4 and MATRIX5 — a known-variable row, not a MATRIX6 effect. The drum kit
@@ -25468,7 +25468,7 @@ is unchanged across all sixteen keys: **worst 0.05 dB, median 0.02.**
 **This was the predicted outcome and that is what makes it useful.** The E4B
 path was touched only by the XPM sparse-layer fix, whose effect on E4B/AKAI is
 audibly neutral — same samples on the same keys, only the voice assignment
-swapped, all voices carrying identical parameters. `Bass-Dark-The Po` at **0.04 dB**
+swapped, all voices carrying identical parameters. `P006` at **0.04 dB**
 confirms by measurement what had been an argument.
 
 ### The near-miss, which is the reusable part
@@ -25714,7 +25714,7 @@ redone, the two sides were not discussing the same object.
 (MATRIX6), eleven programs matched by name.
 
     ceiling fix        WORKS, and CORRECTLY   k84 -75.74 -> -2.99 dBFS
-    drum-program flag  WORKS                  Lead-PRO5 Lollip plays on ch9, 45/45
+    drum-program flag  WORKS                  P001 plays on ch9, 45/45
     headroom fix       not visible as LEVEL   +0.17 dB median = rig offset
     wrong sample       NOT fixed, RELOCATED   keys 59-63 -> keys 70-74
 
@@ -25742,11 +25742,11 @@ recorded) at first appeared to find it: two programs gaining **~7 dB** of
 high-frequency tilt, seven flat. **That result is RETRACTED.** Broken down per
 key it evaporates:
 
-    LD Retro Powder k36 +21.86  k48 +0.04  k60 +0.03  k72 +0.02  k84 +13.75
-    PD Tapemaker k36  +1.08  k48 +6.80  k60 +10.77 k72 +9.45  k84  +8.20
+    P003 k36 +21.86  k48 +0.04  k60 +0.03  k72 +0.02  k84 +13.75
+    P000 k36  +1.08  k48 +6.80  k60 +10.77 k72 +9.45  k84  +8.20
 
-`LD Retro Powder` is **+0.02 to +0.04 dB on three of five keys** — its +7.14 is
-two outlier keys averaged with three nulls. `PD Tapemaker` is the quiet program:
+`P003` is **+0.02 to +0.04 dB on three of five keys** — its +7.14 is
+two outlier keys averaged with three nulls. `P000` is the quiet program:
 its raw band deltas at k60 run −52.9, +33.2, −24.6, +32.1, +16.1, −16.4 dB,
 which is not spectrum but noise realisation near the floor.
 
@@ -25801,16 +25801,16 @@ This is a limitation by construction, not a gap in one run.
 
 ### RETRACTED: the three odd keys, and the repeatability bound behind them
 
-`Bass-Dark-The Po` k88, `LD Retro Powder` k36 and k84 were recorded here as an
+`P006` k88, `P003` k36 and k84 were recorded here as an
 unexplained pattern. **All three fail to reproduce.** Re-measured with their
 neighbours, three repeats, under the same CC7=60 attenuation as the original
 pass:
 
-    Bass-Dark-The Po k86 -21.37  k87 -22.28  k88 -21.91  k89 -23.27  k90 -23.91
-      original pass:             k87 -21.32  k88 -30.22  k89 -23.24
+    P006 k86 -21.37  k87 -22.28  k88 -21.91  k89 -23.27  k90 -23.91
+      original pass:  k87 -21.32  k88 -30.22  k89 -23.24
 
-    LD Retro Powder k35 -35.80  k36 -36.00  k37 -35.90
-                     k83 -36.20  k84 -35.93  k85 -35.96
+    P003 k35 -35.80  k36 -36.00  k37 -35.90
+         k83 -36.20  k84 -35.93  k85 -35.96
 
 **k88 reads −21.91 where it read −30.22. The 8 dB dip is gone.** The other two
 sit within 0.2 dB of their neighbours, sd 0.03-0.11 dB across three repeats.
@@ -25828,8 +25828,8 @@ cell once.**
 **So a single-cell difference on this material is not a finding until it
 repeats.** Retroactively that covers:
 
-* **k88, and `LD Retro Powder` k36 / k84** — one capture each, all retracted
-* the **+2.70 dB "control move"** on `Bass-Dark-The Po` k72 from 2026-09-05, already
+* **k88, and `P003` k36 / k84** — one capture each, all retracted
+* the **+2.70 dB "control move"** on `P006` k72 from 2026-09-05, already
   described as inside that note's own spread across six runs — now with a
   mechanism rather than an observation
 * **the whole +7.14 dB "HF gain"**: two outlier keys out of five, each measured
@@ -25850,7 +25850,7 @@ of measurements behind them, and mark anything resting on one capture as such.
 ### What stands from the run
 
     ceiling fix        WORKS, and correctly    k84 right pitch, right level
-    drum-program flag  WORKS                   Lead-PRO5 Lollip on ch9, 45/45
+    drum-program flag  WORKS                   P001 on ch9, 45/45
     headroom fix       NO measurable effect    level or spectrum
     wrong sample       moved, now fixed 1e5e338 (needs a card write to verify)
     key 85             invisible to this rig by construction
@@ -33138,9 +33138,9 @@ someone finally played it.
 
 ### Identity checks, which the day earned
 
-- `Precious` correlates **+0.883** with its own source contour and matches it to
+- the sustaining synth correlates **+0.883** with its own source contour and matches it to
   0.2 dB for the first second — the capture is the program it is claimed to be.
-- `the sustain-0 synth` against `Precious` correlates **+0.560** — the two MIDI channels are
+- the sustain-0 synth against the sustaining synth correlates **+0.560** — the two MIDI channels are
   genuinely separating, and one patch is not being measured twice.
 
 This forecloses the failure the K2000R bank-of-100 note describes: a rig that
@@ -33367,8 +33367,8 @@ exactly 1.800 s, `SliceEnd` 79380 on every one — while the MPC's own panel
 showed `START 0 / END 202859` and played the whole file.
 
 **The rule is about the embedded `smpl` loop, not about `SliceEnd`, and the
-case that established that is the one that does NOT fail.** `Pad-PRO5 Lunar
-Daze` carries `SliceEnd` 146696 on a 271744-frame sample — 54 % — and loses
+case that established that is the one that does NOT fail.** The pad preset
+carries `SliceEnd` 146696 on a 271744-frame sample — 54 % — and loses
 nothing, because its WAVs have a genuine late sustain loop, so `_apply_slice`
 Case 3 (`loop_start >= trim_end`) expands the window back. The broken
 program's WAVs carry a placeholder loop spanning the whole file, so

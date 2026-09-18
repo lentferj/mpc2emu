@@ -747,7 +747,7 @@ def _apply_slice(sd: SampleData, slice_start: int, slice_end: int,
         # and played the whole thing.
         #
         # The discriminator is the embedded `smpl` loop, and the case that
-        # found it is the one that does NOT fail: `Pad-PRO5 Lunar Daze` has
+        # found it is the one that does NOT fail: the pad preset has
         # `SliceEnd` 146696 on a 271744-frame sample and loses nothing,
         # because its WAVs carry a GENUINE late sustain loop, so Case 3 above
         # catches it and expands the window back. The broken program's WAVs
@@ -763,7 +763,7 @@ def _apply_slice(sd: SampleData, slice_start: int, slice_end: int,
         # NARROW BY CONSTRUCTION: a genuine sustain loop still reaches Case 3,
         # a real slice on a sample with no placeholder loop still trims here,
         # and a `SliceEnd` at the sample's own end is a no-op either way (909
-        # writes len-1, SY Precious len-18).
+        # writes len-1, the sustaining synth len-18).
         _placeholder = (sd.loop_type != LoopType.NO_LOOP
                         and _is_full_sample_loop(sd.loop_start, sd.loop_end,
                                                  n_frames))
@@ -1889,14 +1889,14 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None,
             # a way no test here could have caught. Measured across the five
             # banks Jan played on 2026-09-16:
             #
-            #   bank            type       AD     OneShot   VolumeRelease
-            #   Melodic-Piano   Drum       True   True      0
-            #   909 Defined     Drum       True   True      0
-            #   SY Precious     Keygroup   True   False     0.602
-            #   Lunar Daze      Keygroup   True   ABSENT    0.772  -> 2.849 s
-            #   Sangre          Keygroup   True   ABSENT    0.702
+            #   bank               type       AD     OneShot   VolumeRelease
+            #   one-shot piano     Drum       True   True      0
+            #   drum-machine kit   Drum       True   True      0
+            #   sustaining synth   Keygroup   True   False     0.602
+            #   the pad            Keygroup   True   ABSENT    0.772  -> 2.849 s
+            #   sustain-0 synth    Keygroup   True   ABSENT    0.702
             #
-            # AD is True on ALL FIVE, so it predicts nothing. Lunar Daze has AD
+            # AD is True on ALL FIVE, so it predicts nothing. The pad has AD
             # True, no OneShot, and a 2.849 s release that Jan confirmed by ear
             # sounds right -- so AD alone cannot mean "the release is ignored",
             # and gating on it would have held the amp open on three banks whose
@@ -1905,7 +1905,7 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None,
             #
             # This also explains a hypothesis that failed its own control on
             # 2026-09-14: "AD means the envelope ignores note-off" was tested
-            # against Lunar Daze, found the release honoured, and was dropped.
+            # against the pad, found the release honoured, and was dropped.
             # It was dead for AD and alive for the flag beside it, which nobody
             # was reading either.
             _os = _get_text(instrument, 'OneShot', 'False').strip().lower()

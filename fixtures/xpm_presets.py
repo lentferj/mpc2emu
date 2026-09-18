@@ -83,7 +83,7 @@ def _xpm(path: str, name: str,
 def looped_pad_a_tail_trim_cuts(directory: str, n_zones: int = 5) -> str:
     """Sustained, looped samples whose loops reach into the trimmed tail.
 
-    **Reproduces:** `MPC Prophet/Pad-PRO5 Lunar Daze.xpm` on Jan's volume --
+    **Reproduces:** the pad preset on Jan's volume --
     16 looped samples, **15 loops dropped** by a tail trim, and one sample on a
     sibling preset cut by 63%. Nothing reached the user: the drop was announced
     with a bare `print`, and VinSamLib surface diagnostic records.

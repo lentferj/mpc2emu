@@ -743,8 +743,8 @@ def akai_velocity_filter(cutoff_hz: float, vel_min_ct: float,
         # did exactly that -- 4.2 and 4.0 octaves of velocity->filter with keys
         # to 127 -- and converted to no filter at all:
         #
-        #     SY Precious  source 133 Hz at vel 0 -> 2446 at 127   floor: bypass
-        #     Sangre       source 1504 Hz         -> 24167         floor: bypass
+        #     sustaining synth  source 133 Hz at vel 0 -> 2446 at 127  floor: bypass
+        #     sustain-0 synth   source 1504 Hz         -> 24167        floor: bypass
         #
         # When the floor does not fit, fall back to the PIVOT PLACEMENT, which
         # is what the source actually asks for: FILFRQ 60 (588 Hz) and 91

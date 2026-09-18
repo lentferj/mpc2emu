@@ -381,10 +381,10 @@ class _BlockWriter:
 #: control that settled it -- play the machine's own ROM programs, to rule out
 #: the instrument and the rig:
 #:
-#:     K2000 ROM 150   -21.4 dBFS      MPC Sangre    -23.0 dBFS
-#:     K2000 ROM 1     -23.9           AKAI Sangre   -20.3
+#:     K2000 ROM 150   -21.4 dBFS      MPC source     -23.0 dBFS
+#:     K2000 ROM 1     -23.9           AKAI version   -20.3
 #:     K2000 ROM 199   -24.8
-#:     our Sangre      -39.1           <- 14.4 dB below ROM 199
+#:     ours            -39.1           <- 14.4 dB below ROM 199
 #:
 #: The ROM programs sit right alongside the other two machines, so the K2000,
 #: the hardware gain and the rig were all fine. The deficit was ours.
@@ -400,8 +400,8 @@ class _BlockWriter:
 #: **CONFIRMED BY THE ONLY TEST THAT COULD SETTLE IT**, Jan raising the gain on
 #: the machine while the same note was captured:
 #:
-#:     Sangre before          -24.5 dBFS   (52 dB above floor, repeatable 0.1)
-#:     Sangre after +12 dB    -12.3        (interpolated to the same velocity)
+#:     ours before            -24.5 dBFS   (52 dB above floor, repeatable 0.1)
+#:     ours after +12 dB      -12.3        (interpolated to the same velocity)
 #:     ROM 199 reference      -10.1
 #:
 #: +12.2 dB recovered, landing 1.3 dB from the machine's own program.

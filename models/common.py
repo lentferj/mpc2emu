@@ -3879,7 +3879,8 @@ KRZ_ENV_TIME_GRID = [(0, 2, 0.02), (2, 5, 0.04), (5, 10, 0.10),
 #: another machine's curve (2.63 s displayed / 1.39 s curve) -- two conversions
 #: of an unmeasured span rather than one measurement of a real one. It left
 #: every MPC-sourced release on the K2000 running fast: Jan heard it as "the
-#: release on KRZ Sangre is too short compared to all 3 other versions".
+#: release on the KRZ sustain-0 synth is too short compared to all 3 other
+#: versions".
 #:
 #: MEASURED against the source and a known-good sibling, one metric for all
 #: three (seconds from note-off to fall 30 dB below the note-off level, which
@@ -3950,8 +3951,8 @@ KRZ_RELEASE_FACTOR = 3.65
 #: pair (`t(-30) = 1.03 * Rel1`) implied 1.55, and at 1.55 BOTH programs came
 #: back slow -- so the law is affine, not proportional:
 #:
-#:     Lunar Daze   t(-30) = 0.969 * Rel1 + 0.520     needs Rel1 2.870  f 1.259
-#:     SY Precious  t(-30) = 0.964 * Rel1 + 0.112     needs Rel1 0.599  f 1.507
+#:     the pad           t(-30) = 0.969*Rel1 + 0.520   needs Rel1 2.870  f 1.259
+#:     sustaining synth  t(-30) = 0.964*Rel1 + 0.112   needs Rel1 0.599  f 1.507
 #:
 #: **The SLOPES agree to 0.5 % and are the machine; the INTERCEPTS do not and
 #: are the program.** Each intercept is almost exactly a quarter of that
@@ -5543,7 +5544,7 @@ def mpc_resonance_to_model(setting_01: float, filter_type: int = 2) -> float:
 #: **NOT YET CONVERTIBLE, and the reason is the centre sink.** An E4XT cord into
 #: AmpVol is symmetric about the voice's own level (0.96442 dB per amount unit),
 #: so it can reproduce the SWING but not the 1-2 dB drop in average level that
-#: comes with it -- Lunar Daze's AMP 29 is a 4.58 dB swing whose centre sits
+#: comes with it -- the pad's AMP 29 is a 4.58 dB swing whose centre sits
 #: 1.05 dB low. Matching both needs the cord AND a voice-level trim, and which
 #: of the two a listener notices is not established.
 MPC_LFO_AMP_PIVOT_DEPTH = 127          #: the panel's full-scale depth
