@@ -57,6 +57,7 @@ from models.common import (
                            krz_reson_byte_to_01, krz_env_byte_to_seconds,
                            krz_lfo_rate_byte_to_hz,
                            KRZ_RELEASE_FACTOR, krz_level_pct_to_db,
+                           KRZ_HOUSE_PROGRAM_GAIN_DB,
                            hz_to_e4b_cutoff,
                            key_track_to_filter_amount,
                            krz_depth_byte_to_cents, KRZ_DEPTH_MAX_CENTS,
@@ -1305,14 +1306,15 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
             _adj = seg[1] - 256 if seg[1] > 127 else seg[1]
             _gain_byte = seg[13]
             if 0 <= _gain_byte <= 5:
-                cur.program_gain_db = _adj + (5 - _gain_byte) * 6.0
+                cur.program_gain_db = (_adj + (5 - _gain_byte) * 6.0
+                                       - KRZ_HOUSE_PROGRAM_GAIN_DB)
             else:
                 # ~1% of a 1303-program corpus holds an out-of-range value here,
                 # and they are the SAME block type as the rest, so block type
                 # does not separate them. Whatever they are, decoding one as
                 # gain could invent up to 30 dB -- so take the Adjust alone and
                 # leave the unidentified byte out.
-                cur.program_gain_db = float(_adj)
+                cur.program_gain_db = float(_adj) - KRZ_HOUSE_PROGRAM_GAIN_DB
             # PAN IS NOT IN THIS NIBBLE. Do not put it back (§KRZPANNIBBLE).
             #
             # This read `(seg[14] >> 4)` as a signed -7..+7 pan until 2026-09-06.

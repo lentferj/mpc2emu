@@ -4892,6 +4892,31 @@ KRZ_F4_AMP_ADJUST_INDEX = 1
 KRZ_F4_AMP_ADJUST_DB_PER_UNIT = 1.0
 KRZ_F4_AMP_SRC_LFO2 = 116
 
+#: PROGRAM-SCOPE GAIN THE K2000 TREATS AS ITS HOUSE LEVEL.
+#:
+#: The F4-AMP block carries two program-scope level fields: `Adjust` at [1],
+#: a signed byte at 1 dB/unit, and the wire `Gain` at [13], a DESCENDING
+#: six-step enum where `dB = (5 - byte) * 6`. Our shipping layer template --
+#: copied from a ROM program -- holds `Adjust 6` and `Gain byte 4`, i.e.
+#: 6 + 6 = **12 dB**, and the ROM programs measured on the bench hold the
+#: same. Twelve dB above an all-zero program is therefore not a boost: it is
+#: where the machine's own factory material sits, and where a converted
+#: program has to sit to arrive at the same level as the E4XT, the AKAI and
+#: the MPC.
+#:
+#: SO THIS IS A REFERENCE, NOT A CORRECTION. `krz_parser` reports
+#: `program_gain_db` RELATIVE to it, so a stock program reads 0 dB of boost
+#: and a genuinely hot one reads only the part that is really extra. That
+#: keeps the reader an exact inverse of a writer that no longer
+#: pre-attenuates its samples (`KRZ_PROGRAM_BASELINE_DB`), which is the
+#: property two round-trip tests caught us breaking when only the writer
+#: half was changed.
+#:
+#: MEASURED, not inferred: with the F4 block byte-identical to ROM 199's, a
+#: converted program played 14.4 dB below it, and Jan's +12 dB on the panel
+#: recovered 12.2 of that, landing 1.3 dB away.
+KRZ_HOUSE_PROGRAM_GAIN_DB = 12.0
+
 
 #: AKAI S3000XL LFO1 -> LOUDNESS (tremolo). Loudness is a mod-matrix
 #: destination with three slots: sources in program bytes MODSAMP1/2/3

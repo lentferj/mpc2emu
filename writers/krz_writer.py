@@ -369,9 +369,61 @@ class _BlockWriter:
 # Sample object  (KSample + Soundfilehead + Envelopes)
 # ---------------------------------------------------------------------------
 
-#: Program-scope level this writer always emits: `Adjust` +6 dB plus `Gain`
-#: 6 dB. Subtracted from the per-sample gain so the total is written once.
-KRZ_PROGRAM_BASELINE_DB = 12.0
+#: ~~Program-scope level this writer always emits: `Adjust` +6 dB plus `Gain`
+#: 6 dB. Subtracted from the per-sample gain so the total is written once.~~
+#:
+#: **REFUTED AND SET TO ZERO 2026-09-18, ON HARDWARE. It was never OUR gain to
+#: compensate for, and subtracting it made every KRZ conversion this project
+#: has ever produced ~12 dB quiet.**
+#:
+#: Jan, listening: the K2000's output was "significantly lower than on the other
+#: samplers or the MPC" at identical hardware settings. He then suggested the
+#: control that settled it -- play the machine's own ROM programs, to rule out
+#: the instrument and the rig:
+#:
+#:     K2000 ROM 150   -21.4 dBFS      MPC Sangre    -23.0 dBFS
+#:     K2000 ROM 1     -23.9           AKAI Sangre   -20.3
+#:     K2000 ROM 199   -24.8
+#:     our Sangre      -39.1           <- 14.4 dB below ROM 199
+#:
+#: The ROM programs sit right alongside the other two machines, so the K2000,
+#: the hardware gain and the rig were all fine. The deficit was ours.
+#:
+#: **WHY THE SUBTRACTION WAS WRONG.** `_TPL_LAYER` is copied from ROM program
+#: 199, and our F4 segment is byte-identical to it -- `Adjust +6` included. So
+#: that +6 is not gain this writer ADDS, it is the donor program's own baseline,
+#: and ROM 199's samples compensate for nothing: the K2000 Musician's Guide
+#: prints that exact page, captioned as the settings for Default program 199,
+#: showing `VolumeAdjust: 0.0dB`. We were subtracting a level that was already
+#: part of the reference, and double-counting it away.
+#:
+#: **CONFIRMED BY THE ONLY TEST THAT COULD SETTLE IT**, Jan raising the gain on
+#: the machine while the same note was captured:
+#:
+#:     Sangre before          -24.5 dBFS   (52 dB above floor, repeatable 0.1)
+#:     Sangre after +12 dB    -12.3        (interpolated to the same velocity)
+#:     ROM 199 reference      -10.1
+#:
+#: +12.2 dB recovered, landing 1.3 dB from the machine's own program.
+#:
+#: AN EARLIER VERSION OF THIS COMMENT BLAMED THE 1.3 dB RESIDUAL on the
+#: template's gain bytes "reading +4/+4". That was a misread: `[13]` is not a
+#: dB value but a DESCENDING six-step enum, `dB = (5 - byte) * 6`, so the
+#: template's `4` is 6 dB and `Adjust 6` is 6 dB -- 12 dB exactly, as the
+#: paragraph above assumed. The residual is unexplained and 1.3 dB, which is
+#: inside the spread of an interpolated-velocity comparison; it is not an
+#: arithmetic error in this constant.
+#:
+#: THE READER IS THE OTHER HALF OF THIS. `krz_parser` adds the program-scope
+#: level into zone volume, so zeroing this without touching the reader makes
+#: every KRZ->KRZ trip 12 dB louder than the last. The reader now reports that
+#: level relative to `KRZ_HOUSE_PROGRAM_GAIN_DB`, which is what keeps the pair
+#: exact. Change one, check the other.
+#:
+#: Kept as a named constant rather than deleted: the quantity is real, and a
+#: future writer that genuinely adds program-scope gain of its own would want
+#: exactly this hook. It is the ATTRIBUTION that was wrong, not the arithmetic.
+KRZ_PROGRAM_BASELINE_DB = 0.0
 
 
 def _vol_adjust_byte(volume_db: float) -> int:
