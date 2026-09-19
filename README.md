@@ -323,30 +323,29 @@ targets, then **recorded back off each machine**. One note per example, held for
 as long as that sound needs — a pad gets six seconds, a synth whose decay *is*
 the sound gets two.
 
-Each runs **source → E4XT → K2000 → S3000XL** in that order. The picture is the
-amplitude envelope in dB, which is what these comparisons are actually about —
-a raw waveform would show four identically full-height blocks, because the
-levels are matched.
+Each runs **source → E4XT → K2000 → S3000XL** in that order.
 
-**The plots below are the part GitHub renders.** The `.mp4` beside each one is
-the same comparison with the audio and a moving playhead, and **GitHub will not
-play it** — not on this page, and not on the file's own page, which offers only
-a *View raw* link. GitHub plays video uploaded as an attachment to an issue or
-a pull request; video committed to a repository gets no player. **To hear these,
-clone the repository and open `docs/demo/`** — that is the one route that
-reliably works.
+Each clip plays below, with audio. The picture is the amplitude envelope in dB
+with a playhead moving across it — which is what these comparisons are actually
+about, since a raw waveform would show four identically full-height blocks,
+because the levels are matched.
 
-**Example 1** — a pad, note held 6 s · [`example1-pad.mp4`](docs/demo/example1-pad.mp4) — with audio
+The players are GitHub attachment uploads, which is the only form GitHub gives
+a player to; a video committed to a repository gets none, on any page. The same
+clips are in [`docs/demo/`](docs/demo) as files, along with the envelope plots
+as PNGs, so nothing here depends on that storage outliving the repository.
 
-![Example 1 — a pad, one note held 6 s, compared across four machines](docs/demo/example1-pad.png)
+**Example 1** — a pad, note held 6 s
 
-**Example 2** — a sustaining synth, note held 3 s · [`example2-synth.mp4`](docs/demo/example2-synth.mp4) — with audio
+https://github.com/user-attachments/assets/76c20436-1ba8-44fb-b6ae-336cafe01895
 
-![Example 2 — a sustaining synth, one note held 3 s, compared across four machines](docs/demo/example2-synth.png)
+**Example 2** — a sustaining synth, note held 3 s
 
-**Example 3** — a decaying synth (sustain 0), note held 2 s · [`example3-decay.mp4`](docs/demo/example3-decay.mp4) — with audio
+https://github.com/user-attachments/assets/f49a7093-be2b-404e-ae2d-62c334bacd85
 
-![Example 3 — a decaying synth with sustain 0, one note held 2 s, compared across four machines](docs/demo/example3-decay.png)
+**Example 3** — a decaying synth (sustain 0), note held 2 s
+
+https://github.com/user-attachments/assets/86101a14-5609-4419-a1e6-46217c161a93
 
 **Example 3 is the one that found a defect.** As converted, that program's decay
 ran at **55 %** of the source — a note whose sustain is zero *is* its decay, so
