@@ -326,20 +326,24 @@ the sound gets two.
 Each runs **source → E4XT → K2000 → S3000XL** in that order. The picture is the
 amplitude envelope in dB, which is what these comparisons are actually about —
 a raw waveform would show four identically full-height blocks, because the
-levels are matched. **The plots below render here; the `.mp4` beside each one
-is the same thing with the audio and a moving playhead, and GitHub plays it
-when you click through.** (A video committed to a repository does not play
-inside a README — only files uploaded through GitHub's own web UI do that.)
+levels are matched.
 
-**Example 1** — a pad, note held 6 s · [clip with audio](docs/demo/example1-pad.mp4)
+**The plots below are the part GitHub renders. The `.mp4` beside each one is
+the same comparison with the audio and a moving playhead — it will not play on
+this page or on its own file page, because GitHub only plays video uploaded as
+an attachment to an issue or a pull request, never video committed to a
+repository. Clicking it downloads it.** Getting the sound means fetching the
+file, or cloning the repository and opening `docs/demo/`.
+
+**Example 1** — a pad, note held 6 s · [`example1-pad.mp4`](docs/demo/example1-pad.mp4) — download, with audio
 
 ![Example 1 — a pad, one note held 6 s, compared across four machines](docs/demo/example1-pad.png)
 
-**Example 2** — a sustaining synth, note held 3 s · [clip with audio](docs/demo/example2-synth.mp4)
+**Example 2** — a sustaining synth, note held 3 s · [`example2-synth.mp4`](docs/demo/example2-synth.mp4) — download, with audio
 
 ![Example 2 — a sustaining synth, one note held 3 s, compared across four machines](docs/demo/example2-synth.png)
 
-**Example 3** — a decaying synth (sustain 0), note held 2 s · [clip with audio](docs/demo/example3-decay.mp4)
+**Example 3** — a decaying synth (sustain 0), note held 2 s · [`example3-decay.mp4`](docs/demo/example3-decay.mp4) — download, with audio
 
 ![Example 3 — a decaying synth with sustain 0, one note held 2 s, compared across four machines](docs/demo/example3-decay.png)
 
@@ -391,13 +395,6 @@ swells for ten seconds, a synth that sustains, and one whose sustain is zero so
 the *decay* is the sound. Every release defect listed under
 [Fixed defects](#fixed-defects--check-what-you-built-earlier) was found on
 material like this.
-
-**A fourth example — a one-shot piano hit — is deliberately absent.** Building
-it found a live defect: `--trim-tail` cut **49 % of that program's samples**,
-because its noise-floor estimate assumes a sample *contains* silence and a short
-one-shot does not, so the estimate lands on still-audible decay and the
-threshold you asked for never applies. It is [recorded as
-open](TODO.md); the example returns when the trim does not eat it.
 
 **One note, dry, unnamed.** The source programs are commercial MPC Expansion
 content, so what is published here is a single note from each with no sample or
