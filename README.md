@@ -329,22 +329,22 @@ a raw waveform would show four identically full-height blocks, because the
 levels are matched.
 
 **The plots below are the part GitHub renders.** The `.mp4` beside each one is
-the same comparison with the audio and a moving playhead. **GitHub will not
-play it** — neither on this page nor on the file's own page, which offers only
-a *View raw* link: GitHub plays video uploaded as an attachment to an issue or
-a pull request, never video committed to a repository. The links below carry
-`?raw=1` so they fetch the file directly rather than landing on that page.
-Cloning the repository and opening `docs/demo/` works too.
+the same comparison with the audio and a moving playhead, and **GitHub will not
+play it** — not on this page, and not on the file's own page, which offers only
+a *View raw* link. GitHub plays video uploaded as an attachment to an issue or
+a pull request; video committed to a repository gets no player. **To hear these,
+clone the repository and open `docs/demo/`** — that is the one route that
+reliably works.
 
-**Example 1** — a pad, note held 6 s · [`example1-pad.mp4`](docs/demo/example1-pad.mp4?raw=1) — the file itself, with audio
+**Example 1** — a pad, note held 6 s · [`example1-pad.mp4`](docs/demo/example1-pad.mp4) — with audio
 
 ![Example 1 — a pad, one note held 6 s, compared across four machines](docs/demo/example1-pad.png)
 
-**Example 2** — a sustaining synth, note held 3 s · [`example2-synth.mp4`](docs/demo/example2-synth.mp4?raw=1) — the file itself, with audio
+**Example 2** — a sustaining synth, note held 3 s · [`example2-synth.mp4`](docs/demo/example2-synth.mp4) — with audio
 
 ![Example 2 — a sustaining synth, one note held 3 s, compared across four machines](docs/demo/example2-synth.png)
 
-**Example 3** — a decaying synth (sustain 0), note held 2 s · [`example3-decay.mp4`](docs/demo/example3-decay.mp4?raw=1) — the file itself, with audio
+**Example 3** — a decaying synth (sustain 0), note held 2 s · [`example3-decay.mp4`](docs/demo/example3-decay.mp4) — with audio
 
 ![Example 3 — a decaying synth with sustain 0, one note held 2 s, compared across four machines](docs/demo/example3-decay.png)
 
