@@ -33614,6 +33614,22 @@ From 35–55 % of source to 94–100 %. On the README program the K2000 is now t
 closest of the three targets — E4XT 94.6 %, AKAI 98.6 %, K2000 100.0 % (read
 that as "within the measurement's resolution": a 5 ms hop carries ±0.4 %).
 
+### End to end on the program the defect was found on
+
+Jan supplied the source after the fix landed, so the one gap the commit flagged
+is closed: the writer was run on the actual program and its output compared
+against the value hardware-measured at 100 % of source.
+
+    preset 0, layer 0   Dec1 13500 ms   vs 13500 on the box   +0.0 %
+    preset 0, layer 1   Dec1 13000 ms   vs 13500              -3.7 %  (99.3 % of source)
+    preset 1, layer 0   Dec1   300 ms   UNTOUCHED -- sustain 0.800
+
+**Layer 0 reproduces the hardware-validated value exactly.** Layer 1 is the one
+that sounds at note 60, where the box was measured; it gets a different answer
+because it carries a different sample, which is the per-layer solve doing what
+it is for rather than a discrepancy. The third row is the gate: an
+auto-generated orphan preset at sustain 0.8 keeps its own unconverted decay.
+
 ### The rule that cost a prediction
 
 > **A sample's contour measured off the file is not the contour the instrument
