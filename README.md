@@ -323,24 +323,39 @@ targets, then **recorded back off each machine**. One note per example, held for
 as long as that sound needs — a pad gets six seconds, a synth whose decay *is*
 the sound gets two.
 
-Each clip runs **source → E4XT → K2000 → S3000XL** in that order. The plot is
-the amplitude envelope in dB, which is what these comparisons are actually
-about; the waveform underneath is the same audio. GitHub plays them inline.
+Each runs **source → E4XT → K2000 → S3000XL** in that order. The picture is the
+amplitude envelope in dB, which is what these comparisons are actually about —
+a raw waveform would show four identically full-height blocks, because the
+levels are matched. **The plots below render here; the `.mp4` beside each one
+is the same thing with the audio and a moving playhead, and GitHub plays it
+when you click through.** (A video committed to a repository does not play
+inside a README — only files uploaded through GitHub's own web UI do that.)
 
-| | |
-|---|---|
-| **Example 1** — a pad, note held 6 s | [`docs/demo/example1-pad.mp4`](docs/demo/example1-pad.mp4) |
-| **Example 2** — a sustaining synth, 3 s | [`docs/demo/example2-synth.mp4`](docs/demo/example2-synth.mp4) |
-| **Example 3** — a decaying synth (sustain 0), 2 s | [`docs/demo/example3-decay.mp4`](docs/demo/example3-decay.mp4) |
+**Example 1** — a pad, note held 6 s · [clip with audio](docs/demo/example1-pad.mp4)
 
-**Example 3's K2000 leg is not yet what this converter writes, and saying so is
-the point of publishing it.** As converted, that program's decay ran at **55 %**
-of the source — a note whose sustain is zero *is* its decay, so it read as
-half-length by ear. The recording above has the K2000's `Dec1` set over SysEx to
-the value the pending fix computes, and it lands at **100 % of the source**,
-closer than either of the other two targets. The measurement is
-[recorded](TODO.md); until `krz_writer` writes that value itself, this leg shows
-the fix rather than the shipping behaviour.
+![Example 1 — a pad, one note held 6 s, compared across four machines](docs/demo/example1-pad.png)
+
+**Example 2** — a sustaining synth, note held 3 s · [clip with audio](docs/demo/example2-synth.mp4)
+
+![Example 2 — a sustaining synth, one note held 3 s, compared across four machines](docs/demo/example2-synth.png)
+
+**Example 3** — a decaying synth (sustain 0), note held 2 s · [clip with audio](docs/demo/example3-decay.mp4)
+
+![Example 3 — a decaying synth with sustain 0, one note held 2 s, compared across four machines](docs/demo/example3-decay.png)
+
+**Example 3 is the one that found a defect.** As converted, that program's decay
+ran at **55 %** of the source — a note whose sustain is zero *is* its decay, so
+it read as half-length by ear. The cause was a stage nothing converted: `Dec1`
+was written as the source's seconds, and the two machines do not agree about how
+far a decay falls. It is [fixed](docs/RESOLUTION_NOTES.md), and the K2000 now
+lands at **100 % of the source** — closer than either of the other two targets.
+
+The K2000 leg in the recording above was captured with `Dec1` set over SysEx to
+the value the fix computes, one commit before the writer emitted it itself. The
+writer now produces that same value from the sample data, confirmed on the real
+program; **the clip will be re-shot from a freshly converted bank**, and until
+it is, that leg is a hand-set value rather than a round trip through the
+converter.
 
 **The levels are matched, and that is not a cosmetic decision.** Louder reads as
 better in any A/B, and at their own settings these machines sit **13.6 dB
