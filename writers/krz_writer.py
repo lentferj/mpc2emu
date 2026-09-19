@@ -103,6 +103,7 @@ from models.common import (
     KRZ_F4_AMP_DEPTH_INDEX, KRZ_F4_AMP_SRC_LFO1, KRZ_F4_AMP_SRC_LFO2,
     KRZ_F4_AMP_DEPTH_DB_PER_UNIT, KRZ_F4_AMP_DEPTH_CLAMP,
     KRZ_F4_AMP_ADJUST_INDEX, KRZ_F4_AMP_ADJUST_DB_PER_UNIT,
+    krz_sustain0_decay_seconds,
     velocity_pivot_offset_db, velocity_pivot_preset_shift,
     fit_velocity_line, VELOCITY_CURVE_DB_LINEAR,
     VEL_VOL_PIVOT_KRZ,
@@ -1645,7 +1646,79 @@ def _krz_choke_env(env):
 #: ship while the question was open, and never a reason to keep it once it
 #: closed. Full trace in `docs/RESOLUTION_NOTES.md` §KRZNULLRUN.
 
-def _fill_env(b: bytearray, env, hold_open: bool = False) -> None:
+#: How far a SAMPLE's own level has fallen, in dB, `t` seconds after note-on.
+#:
+#: Needed because the K2000's `Dec1` for a sustain-0 program cannot be a fixed
+#: multiple of the source decay -- the MPC's decay is convex and the K2000's is
+#: dB-linear, so where they are matched depends on how much of the fall the
+#: SAMPLE is doing. Measured on two programs built to differ in nothing else,
+#: a flat sample wanted 2.99x and a decaying one 3.52x. See
+#: `models.common.krz_sustain0_decay_seconds`.
+#:
+#: **A SAMPLE'S CONTOUR OFF THE FILE IS NOT THE CONTOUR THE INSTRUMENT PLAYS.**
+#: Transposition resamples it, so every rate in dB/s scales with the playback
+#: ratio -- a zone played an octave above its root decays twice as fast in
+#: seconds. Reading a contour at native rate and using it to predict a
+#: transposed note is what made one prediction 5.8 % wrong on 2026-09-19 while
+#: the same model was good to 1 % where the contour came from the right rate.
+#: `rate_ratio` is that correction and it is not optional.
+#:
+#: A LOOPED SAMPLE DOES NOT DECAY PAST ITS LOOP. The curve is therefore frozen
+#: at the loop point: beyond it the instrument is repeating material that is
+#: not getting quieter, whatever the tail of the file does.
+def _sample_fall_curve(sd, rate_ratio: float = 1.0, hop: float = 0.010):
+    """Return f(t) -> dB fallen, or None if this sample does not decay."""
+    if sd is None or not getattr(sd, 'data', None):
+        return None
+    sr = getattr(sd, 'sample_rate', 0) or 0
+    ch = getattr(sd, 'channels', 1) or 1
+    if sr <= 0:
+        return None
+    raw = sd.data
+    a = array.array('h')
+    try:
+        a.frombytes(raw[:len(raw) // 2 * 2])
+    except Exception:
+        return None
+    n = len(a) // ch
+    if getattr(sd, 'loop_type', None) not in (None, LoopType.NO_LOOP):
+        ls = int(getattr(sd, 'loop_start', 0) or 0)
+        if 0 < ls < n:
+            n = ls
+    h = max(1, int(hop * sr))
+    if n < 4 * h:
+        return None
+    env = []
+    for i in range(0, n - h, h):
+        seg = a[i * ch:(i + h) * ch]
+        if not seg:
+            break
+        pwr = sum(float(v) * v for v in seg) / len(seg)
+        env.append((i / sr, 20.0 * math.log10(math.sqrt(pwr) / 32768.0 + 1e-12)))
+    if len(env) < 4:
+        return None
+    peak = max(v for _, v in env)
+    onset = next(t for t, v in env if v >= peak - 3.0)
+    pts = []
+    for d in (2.5, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0):
+        t = next((t - onset for t, v in env if t > onset and v <= peak - d), None)
+        if t is None:
+            break
+        pts.append((t / max(rate_ratio, 1e-6), d))
+    if not pts:
+        return None            # never falls 2.5 dB: a sustaining sample
+    def f(t, _pts=tuple(pts)):
+        if t <= _pts[0][0]:
+            return _pts[0][1] * t / _pts[0][0]
+        for (t0, d0), (t1, d1) in zip(_pts, _pts[1:]):
+            if t <= t1:
+                return d0 + (d1 - d0) * (t - t0) / (t1 - t0)
+        return _pts[-1][1]
+    return f
+
+
+def _fill_env(b: bytearray, env, hold_open: bool = False,
+              decay_override: float = None) -> None:
     """Write an ADSR Envelope into a 15-byte ENV/ENC segment IN PLACE.
 
     TRUE K2000 layout (§KRZENVLOOP, HW-confirmed 2026-08-31 — see TODO.md /
@@ -1817,10 +1890,17 @@ def _fill_env(b: bytearray, env, hold_open: bool = False) -> None:
         # it costs nothing to leave it at the old fraction.
         pairs_rel = [(rel, 0),                                # Rel1 — the whole fall
                     (rel * (1.0 - _REL1_TIME_FRAC), 0)]       # Rel2 — nonzero time only
+    # DEC1 IS NOT THE SOURCE'S SECONDS WHEN SUSTAIN IS 0 (§KRZDECSPAN).
+    # It ends at silence there, so it crosses the K2000's whole ~99 dB span
+    # where the MPC's crosses its own, and the seconds are not comparable --
+    # the same seconds-vs-span error the release carried one stage over. Above
+    # sustain 0 the stage ends on a level both machines agree about and the
+    # worst measured disagreement is 1.6 dB, so nothing is applied there.
+    _dec = env.decay if decay_override is None else decay_override
     pairs = [(env.attack, 100),                      # Att1 — ramp to full
              (0.0, 100),                             # Att2
              (0.0, 100),                             # Att3
-             (env.decay, sus)] + pairs_rel + [        # Dec1 — decay to sustain
+             (_dec, sus)] + pairs_rel + [        # Dec1 — decay to sustain
              (0.0, 0)]                                # Rel3
     b[0] = 0   # loop flag -- Off (§KRZENVLOOP byte-layout fix, 2026-08-31)
     o = 1
@@ -2232,16 +2312,38 @@ def _preset_layers(layers, samples_by_name):
                 (samples_by_name.get(z.sample_name) is not None
                  and samples_by_name[z.sample_name].loop_type != LoopType.NO_LOOP)
                 for z in voice.zones)
+            # DEC1 AT SUSTAIN 0 IS SOLVED PER LAYER, NOT SCALED (§KRZDECSPAN).
+            # Decided HERE for the same reason one-shot is: this is where the
+            # samples are, and the answer depends on the sample. A layer whose
+            # sample does not decay wants 2.99x the source decay; one whose
+            # sample falls ~5 dB/s wants 3.52x. Measured on a pair built to
+            # differ in nothing else.
+            _dec_s = None
+            _ae = getattr(voice, 'amp_env', None)
+            if (_ae is not None and getattr(_ae, 'sustain', 1.0) == 0.0
+                    and getattr(_ae, 'decay', 0.0) > 0.0 and voice.zones):
+                _lo_k, _hi_k, _, _ = _voice_key_vel_range(voice)
+                _ctr = (_lo_k + _hi_k) // 2
+                # The zone that actually sounds at the layer's centre, because
+                # that is the transposition the listener hears most of.
+                _z = next((z for z in voice.zones
+                           if z.lo_key <= _ctr <= z.hi_key),
+                          voice.zones[len(voice.zones) // 2])
+                _ratio = 2.0 ** ((_ctr - getattr(_z, 'root_key', 60)) / 12.0)
+                _curve = _sample_fall_curve(samples_by_name.get(_z.sample_name),
+                                            _ratio)
+                _dec_s = krz_sustain0_decay_seconds(_ae.decay, _curve)
             segs = _patch_layer(voice, kid,
                                 _voice_is_stereo(voice, samples_by_name),
                                 level_offset_db=_lv - shift,
-                                vel_swing_db=_sw, one_shot=_os)
+                                vel_swing_db=_sw, one_shot=_os,
+                                decay_override_s=_dec_s)
         yield voice, kid, segs
 
 
 def _patch_layer(voice, keymap_id: int, stereo: bool = False,
                  level_offset_db: float = 0.0, vel_swing_db=None,
-                 one_shot: bool = False):
+                 one_shot: bool = False, decay_override_s: float = None):
     """Return a patched copy of the template layer segments for one voice."""
     segs = [(tag, bytearray(data)) for tag, data in _TPL_LAYER]
     by = {}
@@ -2454,7 +2556,8 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
     # ONE-SHOT GUARD AT THE CALL SITE, because only here is the voice in scope.
     # Guarded on the sample NOT looping: holding a looping voice open would
     # ring until the key is released and the sample would never stop itself.
-    _fill_env(seg(0x21), _krz_choke_env(voice.amp_env), hold_open=one_shot)
+    _fill_env(seg(0x21), _krz_choke_env(voice.amp_env), hold_open=one_shot,
+              decay_override=decay_override_s)
 
     hob_f1 = seg(0x50)
     hob_f2 = seg(0x51)

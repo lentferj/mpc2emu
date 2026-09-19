@@ -2704,11 +2704,25 @@ MPC_RELEASE_SPAN_DB = 38.3
 #: **THE MECHANISM IS CURVE SHAPE, NOT SUSTAIN GATING**, and that distinction
 #: is why there is a table here rather than a scalar. The MPC's decay
 #: ACCELERATES (30 dB down at 0.90 of the stage); the K2000's is dB-LINEAR
-#: (30 dB down at 0.30 of it). Shape only matters when the span is large, so
-#: ONE mechanism reproduces both observations with no special case: at
-#: sustain 0 the span is the whole range and the conversion is 3x out, while at
-#: sustain 0.63 the span is 4 dB and the times already agree -- the 0.99x that
-#: was measured with no conversion at all.
+#: (30 dB down at 0.30 of it). Both machines cross the span they are given in
+#: the stage time they are given -- the K2000's `Dec1` is a TIME-TO-TARGET and
+#: not a rate, measured 2026-09-19 with `Dec1` held at 4000 ms while the target
+#: LEVEL was varied (target 50 % crossed 18.18 dB in 4.380 s; a rate machine
+#: would have taken 0.72 s). So the ENDPOINTS already agree at `Dec1 = decay`,
+#: and what diverges is the PATH: at a 99 dB span the K2000 is 30 dB down at
+#: 0.30 of the stage where the MPC is still sounding, and a note whose decay is
+#: the sound reads as three times too short. At a small span the two paths have
+#: no room to differ, and the correction tends to 1.0.
+#:
+#: **WHAT IS MEASURED IS THE SUSTAIN-0 END, AND ONLY THAT.** An earlier note --
+#: including the first version of this docstring -- cited "sustain 0.63 ->
+#: K2000 0.99x, correct" as showing the decay is already right above zero. IT
+#: DOES NOT. At sustain 0.63 the envelope's span is about 4 dB, so that program
+#: cannot fall 30 dB from its envelope while held; the rest of that fall is the
+#: SAMPLE's own decay, which both machines play identically. The 0.99x mostly
+#: reports that the samples match. There is currently NO hardware measurement
+#: of the decay conversion at intermediate sustain in either direction, so the
+#: span-dependent middle of this law is arithmetic and not evidence.
 #:
 #: **THE CONTROL WAS DECLARED BEFORE THE CAPTURE AND COULD HAVE KILLED IT.**
 #: Two programs differing ONLY in sustain, same 2.000 s decay: sustain 0 falls
@@ -2746,6 +2760,87 @@ MPC_DECAY_SHAPE = {
 #: against 0.0150 at -10 dB, where the curve is shallow and the crossing is
 #: least sharp).
 MPC_DECAY_MATCH_DB = 30
+
+
+def mpc_decay_fall_db(t: float, decay_s: float) -> float:
+    """How far an MPC amp decay has fallen, in dB, `t` seconds after note-on.
+
+    Inverts `MPC_DECAY_SHAPE`, which is measured the other way round (dB ->
+    fraction of the decay stage). Anchored at (0, 0) and clamped at the deepest
+    measured point, because past -60 dB the stage has gated to silence and the
+    question stops having an answer.
+    """
+    if decay_s <= 0.0 or t <= 0.0:
+        return 0.0
+    u = t / decay_s
+    pts = sorted((frac, float(db)) for db, frac in MPC_DECAY_SHAPE.items())
+    if u <= pts[0][0]:
+        return pts[0][1] * u / pts[0][0]
+    for (u0, d0), (u1, d1) in zip(pts, pts[1:]):
+        if u <= u1:
+            return d0 + (d1 - d0) * (u - u0) / (u1 - u0)
+    return pts[-1][1]
+
+
+def krz_sustain0_decay_seconds(decay_s: float, sample_fall_db=None,
+                               span_db: float = None) -> float:
+    """The K2000 `Dec1` TIME that reproduces an MPC decay when sustain is 0.
+
+    **THERE IS NO CONSTANT FACTOR HERE, AND THAT IS THE WHOLE POINT.** The MPC's
+    decay is CONVEX and the K2000's is dB-LINEAR, so the two can only be matched
+    at one depth, and where that depth falls in time depends on how much of the
+    fall the SAMPLE is doing. Measured 2026-09-19 on two programs built to
+    differ in nothing but their sample:
+
+        DECFLAT  a sample that never falls 5 dB   needs Dec1 = 2.99 * decay
+        DECFALL  a sample decaying ~5 dB/s        needs Dec1 = 3.52 * decay
+
+    Identical envelopes, 18 % apart. A constant would have had to give the same
+    answer for both. Applying each program's own figure took them from 35 % and
+    36 % of the source to 99 % and 94 %.
+
+    This also retires a number that moved all evening. Fitted against one
+    program the factor read 2.99, then 3.49, 3.76, 3.97 as points accumulated --
+    not an estimate converging badly, but one tracking how much of each fall its
+    sample was doing. **2.99 was correct, for noise, which is the material it
+    was measured on.**
+
+    `sample_fall_db` is a callable giving the SAMPLE's own fall in dB at time t,
+    already scaled for playback rate. Passing None (or a sample that does not
+    decay) gives 2.99 * decay, which is the noise case and is where the law was
+    first measured.
+    """
+    if span_db is None:
+        span_db = KRZ_RELEASE_SPAN_DB
+    if decay_s <= 0.0:
+        return decay_s
+    target = float(MPC_DECAY_MATCH_DB)
+    fall = sample_fall_db or (lambda t: 0.0)
+
+    # Where does the SOURCE's combined fall (envelope + sample) reach the match
+    # depth? Bisection rather than algebra: both terms are measured tables.
+    lo, hi = 1e-4, max(decay_s * 4.0, 1.0)
+    if mpc_decay_fall_db(hi, decay_s) + fall(hi) < target:
+        return decay_s * (MPC_DECAY_SHAPE[MPC_DECAY_MATCH_DB]
+                          * span_db / target)
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        if mpc_decay_fall_db(mid, decay_s) + fall(mid) < target:
+            lo = mid
+        else:
+            hi = mid
+    t_match = hi
+
+    # At that instant the sample has supplied `fall(t_match)`; the K2000's
+    # envelope must supply the rest, dB-linearly over its own span.
+    env_db = target - fall(t_match)
+    if env_db <= 0.1:
+        # The sample alone outruns the match depth, so the envelope has no work
+        # to do and solving for it is ill-conditioned. Fall back to the
+        # envelope-only answer rather than emit an arbitrarily long stage.
+        return decay_s * (MPC_DECAY_SHAPE[MPC_DECAY_MATCH_DB]
+                          * span_db / target)
+    return span_db * t_match / env_db
 
 
 def env_db_per_s_to_rate_byte(db_per_s: float) -> int:

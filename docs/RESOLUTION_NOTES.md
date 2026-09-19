@@ -349,6 +349,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§XPMSLICEVETO — a placeholder loop means the slice window is not one (2026-09-18)](#xpmsliceveto-a-placeholder-loop-means-the-slice-window-is-not-one-2026-09-18)
 - [§MODWHEEL — modwheel→depth on every path, and the data-entry fallback (filed 2026-09-14)](#modwheel-modwheeldepth-on-every-path-and-the-data-entry-fallback-filed-2026-09-14)
 - [§KRZCOARSE — the PITCH page's Coarse transposition is never read (filed 2026-09-14)](#krzcoarse-the-pitch-pages-coarse-transposition-is-never-read-filed-2026-09-14)
+- [§KRZDECSPAN — the decay at sustain 0, and why no constant could work (2026-09-19)](#krzdecspan-the-decay-at-sustain-0-and-why-no-constant-could-work-2026-09-19)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -33521,3 +33522,125 @@ hours ago for the DptCtl question and produced a confident, wrong structure:
 `CAL[23]` looked like it gated `CAL[21]` and actually gates `CAL[26]`, because
 the byte order is not the page order. The same segment has already fooled one
 pattern-matching pass tonight.
+
+---
+
+## §KRZDECSPAN — the decay at sustain 0, and why no constant could work (2026-09-19)
+
+**Found by Jan, by ear and then by eye on a demo plot:** *"the K2000 is also too
+short again"* — on the README's Example 3, a program whose sustain is **0**, so
+what falls during the held note is the **decay**, not the release. Every release
+protocol in this project measures the fall *after* note-off; at sustain 0 the
+decay falls *before* it, inside the stretch all of them discard as "the held
+note". Three separate release investigations the same evening used sustain-0
+material and none of them found it.
+
+`krz_writer` wrote `(env.decay, sus)` — the source's seconds, unconverted —
+where the release already had two measured span conversions.
+
+### The MPC side, measured on noise
+
+A flat noise sample (steady to **0.34 dB** across its length) removes the
+sample's own decay from the reading, so what falls is the envelope and nothing
+else. Five decay times over a **12×** range:
+
+    drop     D=0.5   D=1.0   D=2.0   D=3.35   D=6.0    mean     sd
+    -10 dB   0.450   0.435   0.420   0.410    0.413    0.4256   0.0150
+    -20 dB   0.760   0.750   0.735   0.736    0.723    0.7408   0.0128
+    -30 dB   0.910   0.905   0.903   0.894    0.900    0.9023   0.0054
+    -60 dB   1.000   0.995   0.998   0.997    0.997    0.9972   0.0016
+
+Self-similar, tightest where it is used, gating to silence at the stage end.
+This is `MPC_DECAY_SHAPE`.
+
+### The K2000 side: `Dec1` is a TIME-TO-TARGET, not a rate
+
+Measured by holding `Dec1` at 4000 ms and varying the target **level**, so any
+difference between readings is a difference in span with no line fitted
+(k2kremote drove, this session captured):
+
+    target   span    slope        time to reach target
+     50 %   18.18 dB  4.504 dB/s        4.036 s
+     25 %   27.96     7.015            3.986
+      0 %   99.37    25.167   r2 0.9997 3.948
+
+**3.95–4.04 s against a nominal 4000 ms across a 5.5× range of span.** A rate
+machine would have taken 0.72 s at 50 %. Multiplying each slope by the nominal
+4.0 s recovers the span independently — 18.02, 28.06, 100.67 dB — the last being
+the first direct check of `KRZ_RELEASE_SPAN_DB` (99.37) by a route sharing
+nothing with its original measurement.
+
+**A measurement trap worth keeping:** the first two points were read with a
+"settles within 0.5 dB of its plateau" criterion and gave 4.380 and 4.590 s,
+implying a spurious `Dec1 + 0.021·span` law. The criterion fires late as an
+envelope approaches its plateau asymptotically, and it does so *more* at larger
+span. Fitting the straight part instead — a window that never visits the noise
+floor — dissolved the residual entirely. k2kremote predicted exactly this
+before the capture, including that it would push toward confirming the
+residual.
+
+### There is no constant factor, and that is the finding
+
+The MPC's decay is **convex**; the K2000's is **dB-linear**. Two different
+shapes can be matched at one depth only, and *where that depth falls in time*
+depends on how much of the fall the **sample** is doing. Tested on a pair built
+to differ in nothing else — one envelope (decay 2.000 s, sustain 0), two
+samples:
+
+    program    MPC t(-30)   K2000 as converted   Dec1 needed   FACTOR
+    DECFLAT      1.805s          0.640s             5.98 s      2.99
+    DECFALL      1.370s          0.495s             7.04 s      3.52
+
+**A constant required those two to be equal. They are 18 % apart.** Every
+number was declared before the captures; the MPC DECFLAT row came back at
+1.805 s against a declared 1.805, an envelope law measured on noise
+reproducing exactly on a sample it had never seen.
+
+This retires a figure that moved all evening. Fitted against one program the
+factor read **2.99 → 3.49 → 3.76 → 3.97** as points accumulated. It was not an
+estimate converging badly; it was tracking how much of each fall that program's
+sample was doing. **2.99 was correct — for noise, the material it was measured
+on.**
+
+### Confirmation on hardware
+
+Each program set to its own solved `Dec1`:
+
+    900 DECFALL  Dec1 7000 ms   declared 1.365   measured 1.290   source 1.370
+    901 DECFLAT  Dec1 6000 ms   declared 1.811   measured 1.780   source 1.805
+    304 (README) Dec1 13500 ms  declared 1.391   measured 1.385   source 1.385
+
+From 35–55 % of source to 94–100 %. On the README program the K2000 is now the
+closest of the three targets — E4XT 94.6 %, AKAI 98.6 %, K2000 100.0 % (read
+that as "within the measurement's resolution": a 5 ms hop carries ±0.4 %).
+
+### The rule that cost a prediction
+
+> **A sample's contour measured off the file is not the contour the instrument
+> plays.** Transposition resamples it, so every rate in dB/s scales with the
+> playback ratio.
+
+Program 900's prediction was **5.8 %** wrong where the same model was good to
+**0.3 % and 1.1 %** on 304 — the difference being that 304's contour came from
+its own playback and 900's from the WAV at native rate on a transposed note.
+The model was not what was wrong; its input was. `_sample_fall_curve` takes a
+`rate_ratio` for this reason and it is not optional.
+
+### Scope, and why the middle is left alone
+
+The correction applies at **sustain 0 only**. Above it the stage ends on a level
+both machines agree about, and a sustain sweep at fixed decay (six levels,
+2.9–20.3 dB of span) puts the worst disagreement at **1.6 dB** — a large ratio
+error across a small span is a small error. Corpus prevalence, which is what
+makes the remaining gap closeable rather than open: across **722 programs and
+90311 keygroup envelopes**, sustain 0 is **4.10 %** and appears in 106 programs,
+while the unmeasured band `0 < sustain < 0.10` is **0.15 %** — about one
+envelope in 670.
+
+**Also corrected here:** an earlier note cited "sustain 0.63 → K2000 0.99×,
+correct" as evidence the decay was already right above zero. It is not evidence
+of that. At sustain 0.63 the envelope spans ~4 dB, so that program cannot fall
+30 dB from its envelope while held — the rest is the sample, which both machines
+play identically. The 0.99× mostly reports that the samples match. Two rows that
+measured different quantities read as a gated trend, which is where the name
+"sustain-gated" came from.
