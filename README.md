@@ -102,7 +102,12 @@ Stripe, so bank and tax details are never handed to the person paying.
   [`docs/RESOLUTION_NOTES.md`](docs/RESOLUTION_NOTES.md) — retractions
   included, because a finding that was withdrawn is as useful as one that
   stood. If any of it is wrong in a way that is still costing someone time,
-  saying so improves the record.
+  saying so improves the record. That file is 33,000 lines and hard to read
+  as one document, so it is also published a section at a time in the
+  **[wiki](https://github.com/lentferj/mpc2emu/wiki)** —
+  [Start here](https://github.com/lentferj/mpc2emu/wiki/Start-here) picks out
+  a dozen worth reading first. The pages are generated from the file, so the
+  file stays the source of truth and the wiki cannot drift from it.
 
 ---
 
