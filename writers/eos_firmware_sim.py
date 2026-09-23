@@ -283,6 +283,19 @@ def eos_akai_mod_source(selector: int) -> int:
 # as `0x4430c` belonging elsewhere**, and the difference is what took two
 # sessions and a hardware import to establish. What *does* reach it is open.
 #
+# ✅ **Narrowed again the same evening, with a readback rather than a
+# prediction.** `eosed`'s `f40aa23`: an S3000 program with `0x13 = 0` and
+# `0x1b = -50`, imported from CD-ROM, reads back `Key+ -> FEnvRls AMT = -38`.
+# That is `clamp(-50, -50, 50) * 48/50 = -48` stored and `-48 * 100/127` on
+# the wire -- **both constants derived here independently and neither fitted
+# to that measurement**, so it is a prediction the device confirmed rather
+# than a curve through it.
+#
+# The open question is therefore not *which disc*: CD-ROM S3000 import is
+# now measured and it reaches the orchestrator arm. **Whatever reaches the
+# descriptor-driven arm is a different kind of TRANSFER, not a different
+# kind of disc** -- a smaller search space than "some import somewhere".
+#
 # ⚠ **AND THIS COMMENT SURVIVED ITS OWN CORRECTION.** The error was retracted
 # to `eosed` in a message, recorded in `docs/FIRMWARE_IMPORT_ROUTINES.md`, and
 # left standing here — and this project then told them *"our module never
