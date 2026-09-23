@@ -7858,3 +7858,55 @@ lower rail and reading back the byte. Costs nothing and settles it.
 and it surfaced only because that sibling went to check their own provenance
 after we described our own result as a near-miss rather than a pass.*
 
+## CI: nothing in this repo is exercised by anything but one machine
+
+**Status:** open, two steps, **both deferred to Jan 2026-09-23.** Not started.
+
+`mpc2emu` has no `.github/workflows` at all, and `tests/` is gitignored by
+policy (`.gitignore:18` — local test data, hardcoded paths, not
+distributable). So the whole safety net — the refuted-constants test, the
+citation resolver, the struck-section guard, the lookahead checks — exists in
+exactly one working tree and runs when exactly one person runs it. **A clone
+is not merely unprotected; there is no configuration in which it becomes
+protected.**
+
+Raised by `s3ked-95`, who hit the failure class this cannot catch: a test
+module did a bare `import numpy`, their `dev` extra deliberately excludes
+numpy, and **it passed locally** because that bench's venv has numpy installed
+for its own analysis work. CI caught it within the hour. *A local pass was
+never evidence about a clean install.*
+
+### Measured here before proposing anything
+
+    shipping code, non-stdlib imports   none, except docs/re_procedures/
+                                        hw_measure.py (jack, numpy, rtmidi)
+    packaging metadata                  NONE -- no pyproject.toml, so
+                                        `pip install -e ".[dev]"` is not
+                                        possible today
+    test modules                        89
+    portable (no absolute local path)   71
+    reference /home/lentferj/...        18, of which only 7 guard with a skip
+
+### Step 1 — no policy change needed
+
+A workflow on a clean checkout with a bare Python that imports every tracked
+module, asserts the shipping code is **stdlib-only** (a standing project rule
+currently enforced by nobody), and runs `compileall` — which would have caught
+the unterminated docstring committed in this branch's history before the suite
+did.
+
+⚠ `docs/re_procedures/hw_measure.py` is tracked and imports three external
+packages, so an import-everything check needs it excluded explicitly. That is
+the kind of exception that quietly grows, and it should be a named list rather
+than a pattern.
+
+### Step 2 — changes the ignore policy, so Jan's call
+
+Track the 71 portable test modules and keep the 18 local-path ones ignored.
+**Blocked on:** the 11 unguarded modules need `skipUnless` guards first, which
+is mechanical.
+
+*The ignore rule is right about those 18 and over-broad about the other 71 —
+that is the whole of the disagreement, and it is a policy question rather than
+a defect.*
+
