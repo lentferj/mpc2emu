@@ -7,8 +7,20 @@ SPDX-FileCopyrightText: Copyright (C) 2026  mpc2emu contributors
 
 ## Goal
 
-Settle three laws so `octave_shift`, stereo `LEVEL` and program `PAN` can be
-applied instead of reported. Each is **one measurement**; together they are one
+Settle three laws for `octave_shift`, stereo `LEVEL` and program `PAN`.
+
+**CORRECTED 2026-09-20:** this said all three "can be applied instead of
+reported". That is true of `octave_shift` and program `PAN`, and **false of
+stereo `LEVEL`, which the parser has been applying all along** through a plain
+amplitude-ratio law, `20*log10(level/99)`, summed into every zone volume. What
+is unapplied there is CWM's measured program-loudness law, which disagrees with
+the ratio law by about 5 dB at the commonest non-default value (90: -0.83 dB
+against -5.8 dB). So Measurement 2 below is not "can we apply it" but "which of
+two laws already in play is right" — and the wrong one is shipping today.
+
+Caught by eosed reading our parser source from outside while documenting EOS's
+importer. A claim corrected in prose while the code went on doing the other
+thing. Each is **one measurement**; together they are one
 short session and **no card swap**.
 
 > **Field writes go through `PHEADER` (`0x28`), read back with `RPHEADER`

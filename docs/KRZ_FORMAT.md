@@ -171,6 +171,20 @@ the whole block to a 4-byte boundary before computing `blocksize`.
 | 38 | `T_SAMPLE`  | `0x9800 + id` | ✅ one per sample |
 | 28 | `T_FX` (Studio/effects) | `0x7000 + id` | ❌ — programs use ROM effects |
 
+> **The K2000's RAM object types are these plus 96** (k2kremote, from the
+> v3.87J ROM, 2026-09-21): the firmware's `create_object(132, …)` is a
+> program, 133 a keymap, **134 a sample** — `36/37/38 + 96`, exactly, on all
+> three. Their vendored enum calls 134 `Soundblock`; it is this object.
+>
+> That matters for anyone reading the firmware against a file: the ROM's
+> importer resolves a source sample reference to an already-imported object
+> with `find_object(134, id)` and then reads **`body[12]`, which is
+> `Soundfilehead.rootkey`** — the 12-byte `KSample` header ends there and the
+> first per-channel header begins. Confirmed on real objects rather than from
+> this table: `AKAICORNERS.KRZ` ids 200/202/204 read `body[12]` = 48/60/72
+> (C3/C4/C5, a three-way multisample) with `body[13] = 0x70`, the documented
+> playable-RAM-sample flag.
+
 > **Hash decode for high type codes — cross-implementation discrepancy.** mpc2emu
 > only reads/writes types 36/37/38, which all set the `0x8000` bit, so it decodes
 > the hash unconditionally as `type = hash >> 10`, `id = hash & 0x3FF`. KurzFiler
@@ -327,11 +341,94 @@ voice. Body layout after the object name:
 | Offset | Size | Field | Value |
 |---|---|---|---|
 | `0:2`   | 2 | `sampleId`     | default sample id (0 for multi-sample keymaps; the per-entry ids carry the mapping) |
-| `2:4`   | 2 | `method`       | **`0x0013`** (`KEYMAP_METHOD`) = per-entry `2-byte tuning \| 2-byte sampleID \| 1-byte subSample`. This is what the K2000 itself writes on save. **Full bitfield** (each bit adds one per-entry field, in this order): `0x10` tuning i16 · `0x08` tuning i8 · `0x04` volumeAdjust i8 · `0x02` sampleID i16 · `0x01` subSample u8. `entrySize` is the sum of the selected field widths. With `0x02` **clear** the keymap is *compacted* — every entry uses the header `sampleId` and carries no per-entry id. mpc2emu always writes `0x13` (i16 tuning + i16 id + u8 subSample = 5 bytes); it does not read/write i8-tuning, per-entry-volume, or compacted keymaps. |
+| `2:4`   | 2 | `method`       | **`0x0013`** (`KEYMAP_METHOD`) = per-entry `2-byte tuning \| 2-byte sampleID \| 1-byte subSample`. This is what the K2000 itself writes on save. **Full bitfield** (each bit adds one per-entry field, in this order): `0x10` tuning i16 · `0x08` tuning i8 · `0x04` volumeAdjust i8 · `0x02` sampleID i16 · `0x01` subSample u8. `entrySize` is the sum of the selected field widths — **except that `0x10` and `0x08` are treated as MUTUALLY EXCLUSIVE by `_parse_keymap_object` (`if 0x10 … elif 0x08`), while this sentence reads as additive.** No method observed in any corpus sets both bits, so nothing distinguishes the two readings; the parser's is what ships. With `0x02` **clear** the keymap is *compacted* — every entry uses the header `sampleId` and carries no per-entry id. ~~mpc2emu always writes `0x13` … it does not read/write i8-tuning, per-entry-volume, or compacted keymaps.~~ **STALE, corrected 2026-09-21.** The writer emits `0x13` by default **and `0x17` (per-entry `volumeAdjust`) under §KRZSHAREDGAIN** — a variant whose calibration k2kremote measured on the panel (0.5 dB per click, ±63.5 dB rails). The **parser has always decoded every variant** (`_parse_keymap_object` recomputes `entrySize` from the method bits), including compacted and i8-tuning forms. What remains true: this writer never emits i8-tuning or compacted keymaps. |
 | `4:6`   | 2 | `basePitch`    | **`0`** — matches every real production soundset (an earlier `ceil(1200·log2(96000/sr))` guess was wrong). |
 | `6:8`   | 2 | `centsPerEntry`| `100` (one semitone per key) |
 | `8:10`  | 2 | `entriesPerVel`| `NUM_KEYS − 1 = 127` |
 | `10:12` | 2 | `entrySize`    | `5` (`KEYMAP_ENTRY_SIZE` = 2 + 2 + 1) |
+
+**The method bitfield, checked against third-party banks 2026-09-21.**
+
+> ⚠ **THE FIRST VERSION OF THIS SECTION SAID "207 files, 1514 keymaps, most of
+> them third-party" AND THAT WAS WRONG.** 207 files de-duplicate to **154**
+> (kurzfiler and kurzfiler-ng ship the same fixtures), and **1140 of the ~1156
+> keymaps are files this project wrote** — so "1514 of 1514" was our writer
+> agreeing with itself. Rows counted as observations, in the same week this
+> project wrote that rule down twice. The corrected evidence is below and it is
+> about **a dozen keymaps**.
+
+The split that cannot lie is **a method our writer cannot emit** (anything but
+`0x13` and `0x17`). Those files are provably not ours:
+
+    LFOSET2.KRZ            0x03 x2, 0x01 x1
+    MXKRSRC.KRZ            0x0b x1, 0x0f x1, 0x03 x1
+    OBERHEIM.KRZ           0x0f x1
+    PADS__PADS_ROM.KRZ     0x05 x2, 0x11 x2, 0x17 x1
+    PADS__SYNSTR1.KRZ      0x03 x1
+    SYNTHS__OBERHEIM.KRZ   0x03 x2
+
+**Independently reproduced (k2kremote, 2026-09-21):** a second implementation
+of `Method2Size`, written from the bitfield *description* rather than from this
+project's code and run over a partly disjoint `.KRZ` collection, gives seven
+methods and **zero mismatches**, with the same five exotic methods in banks no
+converter in this family produced (`OBERHEIM.KRZ`, `PADS__PADS_ROM.KRZ`,
+`PADS__SYNSTR1.KRZ`, `SYNTHS__OBERHEIM.KRZ`, `MXKR.KRZ`) — including the same
+lone third-party `0x17`. **Twenty-seven keymaps neither writer can produce,
+across seven methods, from two implementations and two corpora.** That is the
+claim worth quoting; the `0x13`/`0x17` totals in either table are still mostly
+mpc2emu's own output.
+
+**Seven of the eight methods are attested in real third-party banks** —
+`0x01`, `0x03`, `0x05`, `0x0b`, `0x0f`, `0x11`, `0x17` — and every one stores
+an `entrySize` equal to its own `Method2Size`. Roughly a dozen independent
+observations across seven variants from six banks, and they establish the
+bitfield precisely because the exotic methods appear ONLY outside our output.
+**HARDWARE-CONFIRMED 2026-09-21: the K2000's own Roland importer writes
+`0x17`.** A Roland patch imported on a K2000R and dumped over SysEx gives
+`method = 0x0017`, `entrySize = 6`, object 796 bytes = 28 + 128×6
+(k2kremote). So the 6-byte per-entry-volume form is not a corner of the
+format — it is what the machine's own importer produces, which is the second
+half of the correction to this section's stale sentence: that sentence was
+wrong about this writer *and* about the K2000.
+
+**`0x17` is attested in exactly one third-party keymap** (`PADS__PADS_ROM`);
+the other 59 counted below are our own `KEYMAP_METHOD_VOL`.
+
+Counts over everything on this machine, ours included:
+
+| method | `Method2Size` | fields | keymaps |
+|---|---|---|---|
+| `0x13` | 5 | tuning i16 + sampleID i16 + subSample u8 | 1400 |
+| `0x17` | 6 | tuning i16 + **volumeAdjust i8** + sampleID i16 + subSample u8 | 60 |
+| `0x03` | 3 | sampleID i16 + subSample u8 | 25 |
+| `0x01` | 1 | subSample u8 | 11 |
+| `0x0f` | 5 | tuning i8 + volumeAdjust i8 + sampleID i16 + subSample u8 | 8 |
+| `0x0b` | 4 | tuning i8 + sampleID i16 + subSample u8 | 6 |
+| `0x05` | 2 | volumeAdjust i8 + subSample u8 | 2 |
+| `0x11` | 3 | tuning i16 + subSample u8 | 2 |
+
+**Every observed method's stored `entrySize` equals its own `Method2Size` —
+1514 for 1514, no exceptions.** Until now the bitfield was documented from
+KurzFiler and exercised only against our own writer, which emits `0x13` (and
+`0x17` under §KRZSHAREDGAIN); seven of these eight variants have never been
+produced here. **`0x01` is the K2000's own "New Keymap" ROM prototype
+(`0x1888E4`, found by k2kremote in the v3.87J ROM) and it is a real format
+variant in the wild, not a stub.**
+
+mpc2emu reads a keymap by its declared `entrySize`, so the six other variants
+parse; it has no way to *write* the i8-tuning forms, and a bank containing one
+round-trips into `0x13`.
+
+**Three header fields never vary** — `basePitch = 0`, `centsPerEntry = 100`,
+`entriesPerVel = 127` — across everything here **including the third-party
+banks listed above**, which is the half of that claim worth stating; so there
+is no compact fewer-than-128-entry keymap in the wild, and our writer's three constants are
+now corpus-backed rather than assumed. Object size follows from the method:
+
+    objsize = 28 (header) + 128 * entrySize + ~24 (trailer/name)
+
+    entrySize 1 -> 172        entrySize 5 -> 688 / 692 / 696
+    entrySize 3 -> 428 / 440  entrySize 6 -> 820 / 824
 | `12:28` | 16 | `Level[8]`     | `(8 − j)·2` for `j` in 0..7 — the single-velocity-level encoding; a reader decodes it back to a single level spanning all 8 velocity buckets |
 
 > **`Level[8]` is the format's native velocity-zone mechanism, and mpc2emu does
@@ -352,6 +449,99 @@ voice. Body layout after the object name:
 | Offset | Size | Field | Notes |
 |---|---|---|---|
 | `0:2` | 2 | `tuning`   | BE **i16** cents — a **constant per-zone fine offset** `100·(R_sample − R_zone) + fine_tune`, usually 0. The K2000 already transposes each key from the sample rootkey + `centsPerEntry`; the tuning field must **not** re-encode the per-key shift (the old `100·(root−12−key)` double-counted it and drove high keys to −72 semitones → silent). A constant offset means mpc2emu assumes **100 % chromatic key-tracking**; the field can also express *partial* tracking per key as `round((keyTracking − 1)·(note − R_sample)·100) + fine_tune` (KurzFiler/CWM form) — a drum map cancels tracking entirely with `keyTracking = 0`. Not yet mapped (see TODO). |
+
+**The K2000's own Roland importer writes the construction this writer once
+shipped by mistake** (k2kremote, v3.87J ROM, 2026-09-21):
+`entry.tuning = record_cents + (root − 12 − i) × 100`, which with
+`centsPerEntry = 100` cancels the machine's own per-key transposition exactly
+and gives a **fixed-pitch map** — every key sounding its sample at the
+sample's own root.
+
+> ⚠ **CORRECTED WITHIN THE HOUR, 2026-09-21.** The paragraph below first
+> called `PSCOLD`/`PSCNEW` a before/after pair of our own bug fix. They are
+> not: both were written on 2026-09-05 at the same minute, to the same byte
+> size, from MPC `.xpm` sources in `~/temp/lanefix/src`, by code that already
+> had the fix — an A/B of a different change. **Both files contain a keymap
+> with the construction**, at different ids (`PSCOLD` km 200, `PSCNEW`
+> km 201, the latter one sample across all 128 keys), and in both it is
+> **deliberate**: the source is a drum kit, and cancelling key-tracking is the
+> correct rendering of a fixed-pitch pad. The same idiom was found in real
+> third-party soundsets on 2026-07-27 (see `_zone_entry`'s ceiling comment),
+> so the machine plainly supports it.
+>
+> **CONFIRMED FROM THE SOURCE, not inferred from the filename:** the kit's
+> `.xpm` carries `<KeyTrack>False</KeyTrack>` on **all 512 layers**, with every
+> keygroup spanning 0..127. The MPC states "do not track the keyboard"; the
+> KRZ format expresses that only by cancelling key-tracking with the per-entry
+> tuning ramp. So the construction is the K2000's idiom for an explicit source
+> flag, and both importers gate it the same way — ours on `<KeyTrack>` (with
+> `IgnoreBaseNote`), the **K2000's Roland importer on a byte of the partial**
+> at `record[+18 + 2z] ← src[2]`, which when set skips the root-key lookup and
+> the `(A − 12 − I) × 100` term entirely (k2kremote, `0x16A85C`/`0x16A872`,
+> 2026-09-21). Neither applies it unconditionally.>
+> **The two conventions are OPPOSITE, measured on both sides — a trap for
+> anyone porting between them.** Ours: `<KeyTrack>False</KeyTrack>` means do
+> not track, so the flag SET means cancel. Roland's: k2kremote measured the
+> gate across **three discs and ~32 000 zones** (2026-09-21) and value `8`
+> **skips** the cancellation — set means DO track. The prevalence confirms it
+> independently of the ROM: an all-pitched orchestral library asks for fixed
+> pitch on **0 of 4676 zones**, a disc whose volume names are full of kits on
+> about half. On the disc the gate is `sub[2]` of a 16-byte zone sub-record
+> inside a 128-byte patch record (16 bytes of name + four sub-records), which
+> reaches the in-memory record at `+18 + 2z`.
+>
+> This project predicted the polarities would match, from the analogy, and
+> said to measure it anyway. The prediction lost. **Two formats agreeing on a
+> convention is a coincidence until it is measured.**
+>
+> **What our old bug did was apply it to EVERY entry, including pitched
+> material** — that is what drove high keys to −72 semitones and silence. The
+> construction is not the defect; misapplying it to a pitched multisample is.
+> The numbers below are real and were measured; the *provenance* sentence was
+> wrong.
+
+**The construction is on disk here in two banks, and it is deliberate in both.** Scanning 1130 i16-tuning keymaps on this machine for the
+signature (same sample id, tuning falling exactly 100 per key) finds one
+keymap, in a before/after pair of our own output:
+
+    PSCOLD_01.KRZ   tuning +2300 .. -9200   108/128 entries have
+                                            tuning == (root - key) * 100
+    PSCNEW_01.KRZ   tuning   -10 ..  +490     8/128 (root == key coincidences)
+
+`PSCOLD` entry 0: key 12, sample root 35, tuning **+2300** = `(35 − 12 − 0)
+× 100`. The firmware's formula, byte for byte — written deliberately here for
+a drum kit.
+
+**On a K2000R it does not flatten — it goes SILENT at high keys** (the
+measurement recorded in `_vel_byte`'s neighbour below: "drove high keys to
+−72 semitones → silent"). The cancellation is exact in arithmetic and
+unreachable in the engine: the tuning FIELD itself runs to −9200 cents, and
+the machine will not deliver a −92-semitone per-entry tuning. So the
+construction works near a zone's root — which is why a **drum kit**, where
+root == key and tuning ≈ 0, is unaffected — and fails far from it, which is
+exactly where an 88-key multisample import lives.
+
+**The K2000's importer leaves a DANGLING sample id in its leading entries**
+(k2kremote, 2026-09-21): entries 0-8 of both imported keymaps hold
+`tuning +4352, vol −44, sample 16582` — one invalid id, identical across all
+nine, with entry 9 zeroed, so it is not a boundary copy. Keys 12-20 of an
+imported kit therefore point at an object that does not exist.
+
+**`_build_keymap_entries` will not emit that state.** It ends with a two-pass
+fill — forward from each mapped entry into later holes, then backward into
+leading ones — so no entry ever carries a sample id that is not a live
+object, and the `_SID_OFF` comment names the stakes ("would make every entry
+look non-empty and silently disable the hole-fill below"). The fill is
+deliberate and predates this exchange.
+
+**Its stated REASON was wrong, and the machine says so.** That comment called
+the fill "the delete-lockup guard" — a safety measure against a fault.
+Measured on a K2000R 2026-09-21, scripted and again by hand: **a keymap entry
+naming a nonexistent object is simply IGNORED.** Nine such keys silent, the
+control key beside them sounding, no hang, with a 2–3 s-class SysEx poll
+running against that state throughout. So the fill buys a **quality**
+difference, not a safety one: an entry that inherits its neighbour's sample
+plays something musical where a dead id plays nothing.
 
 > ⚠ **Entry index is NOT the key — entry `i` sounds at key `i + 12`**
 > (HW-confirmed 2026-08-02). `note = 12 + round((basePitch + i·centsPerEntry)/100)`,

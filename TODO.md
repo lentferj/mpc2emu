@@ -10,6 +10,14 @@ one you need back by hand (`~/.local/bin/mididings -f ~/mididings_k2000r.py &`)
 and confirm with `ps -ef | grep mididings_k2000r` before trusting any capture.
 See [[reference_mididings_configs]] -- these files are channel filtering only,
 so restarting one changes nothing about how notes are shaped.
+| **`KRZ_FORMAT.md` §3.1 says `Soundfilehead.flags` is `0x70` or `0xF0`; the corpus holds five more values** | *(2026-09-21, found while testing a firmware prediction against the corpus)* **Status: OPEN, documentation only — our writer is unaffected.** Scanned **11 798 `Soundfilehead` headers across 333 distinct `.KRZ` files**:<br><br>`0x70` 5347 · `0xF0` 3693 · **`0x04` 1716** · **`0x00` 1006** · **`0x72` 20** · `0x01` 6 · `0xF4` 2 · `0x02` 2 · `0x06` 2 · `0x80`/`0x05`/`0x84` 1 each<br><br>**`0x70`/`0xF0` is what mpc2emu WRITES and what the doc describes. It is not what the corpus contains.** `0x04` and `0x00` — 2722 headers, 23 % of the corpus — carry neither the `0x40` needsLoad bit nor the `0x10|0x20` playback-enable pair. **The obvious reading is ROM samples, which need no loading** — plausible, untested, and *not* what §3.1 currently implies. **`0x72` is `0x70` plus bit 1**, on 20 headers; bit 1 is unexplained on our side.<br><br>⚠ **AND THE K2000 ITSELF EMITS A FIFTH VALUE.** 14 type-134 bodies dumped over SysEx from banks Jan imported from a Roland disc all carry **`0xB0`** — `0xF0` without the `0x40` needsLoad bit, i.e. one-shot and already resident after the import. **So this is not a third-party-bank problem.** An earlier version of this entry said "concentrate in a handful of third-party banks", which implies the device is the well-behaved case. **It is not: a reader assuming `0x70`/`0xF0` mis-handles the K2000's own output.**<br><br>**Why it matters: the reader, not the writer.** A reader that assumes `0x70`/`0xF0` mis-handles a quarter of the corpus *and* every Roland import the device produces. **Blocked on: nothing** — it needs a paragraph in §3.1 saying what the corpus actually holds, and a check of whether `0x04`/`0x00` headers are ROM-referencing. |
+| **`samplePeriod` rounds where the K2000's own importer truncates** | *(2026-09-21, found by checking our corpus-fitted formula against the ROM)* **Status: OPEN, one-line fix, but it changes written bytes so it needs a decision.** `_compute_sample_period` writes `round(1e9 / rate)`. The K2000's Roland importer computes `a0@(28) = 1000000000 / rate` in **integer division** at `0x169DE2` — truncation, not rounding.<br><br>**Divergence on three of the six rates the firmware knows:** 44100 → we write 22676, it writes 22675; 24000 → 41667 vs 41666; 15000 → 66667 vs 66666. The other three agree exactly.<br><br>**Irrelevant to playback** — 1 ns on a ~22 µs period is 4×10⁻⁵ of a semitone — and **visible in any byte-diff against a K2000's own import**, which is how the E4B and KRZ writers have been validated all along.<br><br>**CONFIRMED ON DEVICE OUTPUT 2026-09-21 23:22** — not only in the instruction stream. `k2kremote` read back 19 sample objects from a live **AKAI** import on the K2000R: `samplePeriod = 22675` on all nineteen, where `round(1e9/44100) = 22676`. *This morning's Roland imports could not have shown it — they were all rate code 0, one of the three rates where round and truncate agree. These are rate code 1, which discriminates.* The same truncation therefore holds on **both** import arms, so it is the divisor's behaviour and not one parser's.<br><br>**Blocked on: a decision, not information.** Matching the device means truncating; our value is arguably *more* correct. Jan's standing rule for formats he cannot check by ear is that matching the device is the definition of correct, which argues for truncation — but our own writer's output is already hardware-confirmed with rounding, so changing it invalidates nothing and re-opens nothing. Strategy in `docs/RESOLUTION_NOTES.md` §KRZSAMPPERIOD. |
+| **`maxPitch` omits the fine-tune term the K2000 includes** | *(2026-09-21, from a live AKAI import read back by `k2kremote`)* **Status: OPEN, one-line fix, measured not inferred.** `_compute_max_pitch` writes `round(100*rootkey + 1200*log2(48000/rate))`. The K2000's own importer writes `round(100*rootkey + 1200*log2(48000/rate) - fine_tune)`.<br><br>**17 of 19 exact against AKAI ground truth; 2 disagree by exactly +2 and are UNEXPLAINED.** Seventeen samples land on the predicted `maxPitch` to the unit. `SOP.SAX F 3` (root 65, fine −16) predicts 6663 and reads **6665**; `SOP.SAX D 5` (root 87, fine +28) predicts 8819 and reads **8821**. Same magnitude, same sign — a pattern, not noise. Not rounding: the raw AKAI tune units are −41 and +71 (÷2.56 = −16.0156 and +27.7344 cents), and neither round nor truncate reaches the observed values. Nothing distinguishes those two samples in their headers — same rate, same 0x16/0x18, same structure as the other seventeen.<br><br>⚠ **THIS ROW FIRST SAID "exact on 3 of 3" AND THAT WAS MY ARITHMETIC ERROR.** `D 5` was never exact. The peer reported `maxPitch − 100·root = 121`, i.e. **8821**; I read it as 8819, matched it to my own prediction and wrote *"Exact"* — while in the same breath filing the observation that *a 2-cent residual is exactly the size that gets explained instead of chased.* It was chased away one sentence later, by me. Caught by `k2kremote` re-checking a number I had declared settled.<br><br>**The two exceptions stay live.** 17 of 19 with two open cases is a stronger result than 19 of 19 reached by adjusting two fine tunes to fit.<br><br>**The minus sign is forced, not a convention.** `maxPitch` is the pitch at which the sample, transposed up, hits the 48 kHz ceiling; a sample carrying a −68 cent correction plays at a lower rate for a given key and can go 68 cents higher before hitting it. So there is no sign inversion to justify and our AKAI parser's sign is right.<br><br>**Affects the ceiling, not playback pitch** — but it is a written byte that differs from the device's on every fine-tuned sample, which is precisely the class of difference our byte-diff validation exists to catch. |
+| **`key_track_to_filter_amount` saturates at 1.0 oct/oct, and EOS's own importer does not** | *(2026-09-22, from an E4XT read-back)* **Status: OPEN, material identified, one load from measuring.** Our keyfollow conversion clips at `1.0` oct/oct = AKAI `K_FREQ 12`. `eosed` read EOS's own AKAI import back off the E4XT and its Key→FilFreq cord is **linear through that point** — `kf 4 → 6`, `5 → 8`, `12 → 18`, i.e. `round(kf × 96/64)` with no knee.<br><br>**This code already fixed one saturation and left another.** Its own comment says the previous limit *"threw away every value past K_FREQ 9 — and real material reaches −30 and +40"*. The corpus reaches **twice** the current knee.<br><br>**The SCALE is a separate question and is NOT what this row is about** — for AKAI this project deliberately keeps its own hardware-measured laws over the firmware's tables, and EOS's linear byte map is not evidence about what an S3000XL does. *Clipping at half the observed range is a defect under either scale.*<br><br>**What settles the knee:** `PPG.2.3 4B` on the disc already in the E4XT's CD3 slot carries `kf = −24` **and** `+24` in one program. It is not in RAM — only 6 of that disc's 13 programs are — so it needs the rest of the bank loaded and no card change. |
+| **`merge_akai_stereo_pairs` can name a merged sample after one that already exists** | *(2026-09-22, /code-review)* **Status: OPEN, no caller trips it today.** `krz_writer.py:3281` sets `m.name = base[:16]`, and the rebuilt list keeps every still-referenced mono sample. An AKAI disc shipping `STRINGS` beside `STRINGS-L`/`STRINGS-R` therefore yields two samples with the same name, and `write_krz`'s `samples_by_name` map (line 2310) is keyed by name — one silently shadows the other and zones resolve to the wrong audio. Same hazard if `X-L/X-R` and `X_L/X_R` reduce to one base.<br><br>**Fix:** uniquify the merged name against the existing sample names before assigning it. |
+| **`write_krz` mutates the `Bank` it is given** | *(2026-09-22, /code-review)* **Status: OPEN, safe for today's single caller.** `merge_akai_stereo_pairs(bank)` at `krz_writer.py:3315` rewrites `voice.zones`, zeroes `zone.pan` and replaces `bank.samples`, dropping every sample no zone references. `convert.py` writes one format per run and does not touch the bank afterwards, so nothing is wrong today — but it makes `write_krz` non-idempotent and unsafe for any caller writing the same bank twice or to two formats, which includes tests and the `tests/re_banks/` scripts.<br><br>**Fix:** operate on a `copy.deepcopy` of the zones and samples, or document the mutation on `write_krz` so a second caller cannot be surprised by it. |
+| **Which of E4B zone-entry `[7]`/`[8]` is the LOW velocity fade** | *(2026-09-21, raised by eosed's Roland hardware session; **narrowed the same evening**)* **Status: SEMANTICS SETTLED, BYTE ORDER STILL [S].**<br><br>**What is now confirmed.** The pair is **per-edge**. eosed's Roland import produced a four-zone velocity stack; the SysEx dump was decoded independently here from `preset009.bin` and every **outer** edge carries 0 while every **internal** edge carries 7 — including both middle zones carrying 7 on *both* sides, which our 18 mirrored corpus pairs structurally could never show.<br><br>**What is still open.** That dump is **ascending** (`vlow, vlowfade, vhigh, vhighfade`) and our entry is **nested** (`[6]` low, `[7]`/`[8]` fades, `[9]` high), so the measurement does not land on a byte index by itself. The bridge is EOS's Roland zone builder writing `partial+10` (= `vhighfade`) to zone `6` = entry `[8]` under the `zone_base+2` pointer convention — **so `[8]` is the high fade and the table is right** — but that convention is inferred from the *Ensoniq* builder, not read in the Roland one.<br><br>**Blocked on: an E4B FILE from that import.** A SysEx preset dump cannot settle a byte order in the file format. The bank is already loaded on the E4XT, so this is a bank save and a parse of `entry[6..9]` on the bottom zone — a non-zero `[7]` there would mean our table is backwards. Procedure and both pre-registered outcomes in `docs/RESOLUTION_NOTES.md` §E4BVELFADEROLE.<br><br>**Why it matters:** we write 0 to both bytes, so our own output is unaffected. Reading someone else's bank is not — getting the roles backwards inverts which zone of a crossfaded pair fades in. |
+| ~~**EOS's Roland volume-import silently yields a fraction of the material**~~ **WITHDRAWN 2026-09-21 — there is no silent loss (§EOSROLVOLSEL)** | *(filed and retracted the same evening)* **There is no volume-level import at all — the finding described an operation that does not exist.** The E4XT's Load dialogue offers `Drive` / `Folder` / `Bank`, where **`Bank` is a chooser pre-filled with the first entry and `Load` acts on the selected bank**. Every load is bank-level; there was never a wider scope to narrow from. (Panel photograph, Jan, 2026-09-21.) **EOS `Folder` = Roland Volume, EOS `Bank` = Roland Performance, EOS preset = Roland Patch** — and the browser's top list shows Folders, which is why "bank" meant two different levels all session. Confirmed by name — performance 122 lists exactly `E-Guitar 1`, `E-Guitar 2`, and those are exactly the two presets the volume-level load produced; the union of all three performances is the ten. Nothing is discarded, which is also why there was no error and no resource pressure.<br><br>**The scope sentence this item demanded — "converting volume-by-volume loses material invisibly" — is FALSE and must not be published.**<br><br>**Kept visible rather than deleted, for the failure mode.** A performance's patch-id list resolved **1-based when it is 0-based** made the two loaded presets appear to come from two *different* performances, so the correct explanation looked refuted before it was raised. **An off-by-one that produces a wrong value gets caught when something downstream disagrees; this one agreed with everything and its only effect was to exclude the right answer from the candidate space.** This project's own disc reading disagreed with it and said so — that disagreement was the signal, and neither side treated it as one at the time. |
 | ~~**KRZ DECAY runs too fast at sustain 0 -- the release fix's twin, in the stage nobody converted**~~ **FIXED + HARDWARE-CONFIRMED 2026-09-19 (§KRZDECSPAN)** | *(2026-09-19)* **There is no constant factor, and that is the finding.** The MPC's decay is CONVEX and the K2000's is dB-LINEAR, so they can be matched at one depth only, and where that depth falls in time depends on how much of the fall the SAMPLE is doing. Tested on a pair built to differ in nothing else -- one envelope (decay 2.000 s, sustain 0), two samples: a flat sample needed `Dec1 = 2.99 x decay`, a decaying one **3.52x**, 18 % apart. A constant required them to be equal.<br><br>**Both sides measured on noise.** The MPC decay reaches -30 dB at **0.9023 x decay** (five decay times over a 12x range, sd 0.0054) and gates to silence at the stage end -- `MPC_DECAY_SHAPE`. The K2000's `Dec1` is a TIME-TO-TARGET, not a rate: held at 4000 ms with the target LEVEL varied it crossed 18.18 / 27.96 / 99.37 dB in 4.036 / 3.986 / 3.948 s, and the slopes recover the span independently at 18.02 / 28.06 / **100.67 dB** against `KRZ_RELEASE_SPAN_DB` 99.37.<br><br>**CONFIRMED ON HARDWARE, each program at its own solved value:** 900 DECFALL 7000 ms -> 1.290 s (source 1.370), 901 DECFLAT 6000 ms -> 1.780 (source 1.805), 304 the README example 13500 ms -> **1.385 (source 1.385)**. From 35-55 % of source to 94-100 %; on the README program the K2000 is now the closest of the three targets (E4XT 94.6, AKAI 98.6, K2000 100.0).<br><br>**Implemented per layer, not as a constant:** `_sample_fall_curve` measures the sample's own contour from the PCM the writer is about to emit, scaled by the playback ratio, and `krz_sustain0_decay_seconds` solves `Dec1` against the measured MPC law. Writer output against the hardware-validated values: DECFLAT 6000 ms vs 6000 (**exact**), DECFALL 6600 vs 7000 (-5.7 %).<br><br>**SCOPED TO SUSTAIN 0, on a measurement rather than an assumption.** A sustain sweep at fixed decay (six levels, 2.9-20.3 dB of span) puts the worst disagreement above sustain 0 at **1.6 dB** -- a large ratio error across a small span is a small error. Corpus: sustain 0 is **4.10 %** of 90311 envelopes across 722 programs; the unmeasured band `0 < sustain < 0.10` is **0.15 %**, one envelope in 670.<br><br>**Open, small:** the solve is ill-conditioned when the sample supplies most of the fall -- the envelope term is then a small difference of two larger numbers, which is where the -5.7 % on DECFALL comes from. Bounded by the 94-100 % achieved, not chased.<br><br>**The rule that cost a prediction:** a sample's contour measured off the FILE is not the contour the instrument plays -- transposition resamples it, so every dB/s scales with the playback ratio. 5.8 % wrong on 900 where the same model was good to 1 % on 304. | *(2026-09-18, found by Jan by eye and ear on a demo clip: "K2000 is also too short again")* The program has **sustain 0**, so what falls during the held note is the DECAY, not the release -- and the release is what we spent the evening fixing.<br><br>&nbsp;&nbsp;`time to -30 dB    source 1.53 s   E4XT 1.38   AKAI 1.39   K2000 0.80`<br><br>E4XT and AKAI land within 10 % of the source; the K2000 is at **52 %**. The encoded value is not the problem -- the KRZ holds decay **3.36 s** against the source's 3.3508, correct to 0.3 %.<br><br>**IT IS THE SAME SECONDS-VS-SPAN ERROR AS THE RELEASE.** The source's 3.3508 s decay reaches -30 dB at 1.53 s, implying a span of **65.7 dB**; we write those seconds to a K2000 whose decay time crosses **99.37 dB**, so the same number buys a much steeper fall. Predicted 30 dB in 1.01 s against 0.80 measured.<br><br>**AND IT IS SUSTAIN-GATED, WHICH IS WHY IT SURVIVED THE EVENING.** eosed argued explicitly that the decay needs no span conversion because *"it ends at the sustain level, which both machines agree on, so its seconds are sound"*. **That is correct for sustain > 0 and false at sustain 0**, where the decay ends at SILENCE and inherits the release's problem exactly. Measured across the three demo programs:<br><br>&nbsp;&nbsp;`sustain 0.00 -> K2000 0.52x  WRONG`<br>&nbsp;&nbsp;`sustain 0.63 -> K2000 0.99x  correct`<br>&nbsp;&nbsp;`sustain 1.00 -> never falls 30 dB while held, not measurable`<br><br>**MECHANISM CLOSED 2026-09-19, and Jan's question is what closed it.** Asked *"why should the sample differ from all other conversion results?"* — and it does not. That one sentence killed the line this session and k2kremote were both pursuing: a sample contour cannot explain a difference between machines PLAYING THE SAME SAMPLES. (The KRZ samples are trimmed to 85 %, but that cut lands at 3.91 s, far past the 0.81 s being measured.)<br><br>**Subtract the sample's shared contribution and the envelope rates separate cleanly.** A `Dec1` sweep (3.36 / 5.0 / 7.0 / 13.0 s giving 0.81 / 1.01 / 1.14 / 1.40 s) fits `30/t30 = rate_sample + 99.37/Dec1`, putting the sample alone at **13.76 dB/s**:<br><br>&nbsp;&nbsp;`machine   t30     total    ENVELOPE ALONE`<br>&nbsp;&nbsp;`MPC      1.55   19.35        5.59 dB/s`<br>&nbsp;&nbsp;`E4XT     1.38   21.74        7.98`<br>&nbsp;&nbsp;`AKAI     1.39   21.58        7.82`<br>&nbsp;&nbsp;`K2000    0.81   37.04       23.28   <- 4.2x the source`<br><br>**And the span arithmetic lands on the same number from the other direction.** The MPC's 3.3508 s decay produces 5.59 dB/s, so **its decay time spans ~18.7 dB**; we write those seconds to a K2000 whose decay spans 99.37 dB. **99.37 / 18.7 = 5.3x** — exactly what the empirical sweep asked for (~17.8 s of `Dec1` for the 1.55 s target). Two independent routes, one answer.<br><br>**NOT IMPLEMENTED, deliberately.** 5.3x rests on ONE program, ONE sample, and a model whose own residual drifts (the implied sample rate runs 7.5 -> 13.8 across the sweep rather than holding constant, so the envelope term `99.37/Dec1` is approximate). Writing it now would repeat the release factor's exact mistake: right on its calibration program, 2.6x wrong on the next. **What is established is the mechanism and the method, not the constant.**<br><br>**Status: OPEN, nothing changed.** The fix is the one already applied to the release -- convert through the RATE rather than the seconds -- but applied to `Dec1` only when sustain is 0. `KRZ_RELEASE_FACTOR`'s two-branch structure is the precedent and probably the shape of it. **Do not simply reuse the release factor**: it was calibrated on a release, and a decay starting from peak is a different measurement.<br><br>**Method note.** Three separate release investigations tonight all used sustain-0 material and none of them caught this, because every one of them measured the fall AFTER note-off. The decay at sustain 0 falls BEFORE note-off, in the part of the capture every release protocol discards as 'the held note'. |
 | **`--trim-tail` CUTS AUDIBLE AUDIO and its threshold is INERT on any sample without trailing silence** | *(2026-09-18, found by Jan by ear on a demo clip: the source note sounds 1.21 s and all three conversions ~0.60 s)* **A fourth audio-loss defect, and the widest so far.**<br><br>**Ruled out first, at Jan's instruction:** it is NOT a key->sample mix-up between the pad map and the chromatic conversion. The bank's sample is the LEADING portion of the parsed sample, **99.2 % sample-identical** over the overlap, so it is a genuine truncation. The parser is also clean -- it reads 1.207 s, exactly matching the source WAV.<br><br>**THE THRESHOLD DOES NOTHING.** Cut point measured across a 100 dB range of `thresh_db`:<br><br>&nbsp;&nbsp;`-20 / -30 / -40 / -50 / -64 / -72 / -90 / -120 dB  ->  27134 frames, EVERY TIME`<br><br>**ROOT CAUSE.** `_signal_threshold` returns `max(peak-relative, floor + 6 dB)` by design, so the requested level only bites when it is set ABOVE the sample's own noise floor. But `_windowed_ms` estimates that floor as the **10th-percentile window energy** (`_FLOOR_PERCENTILE = 0.10`), which assumes the sample *contains* roughly that much silence. On a 1.2 s piano hit that decays but never reaches silence within its own length, the 10th percentile is **still signal** -- measured at **-11.4 dB below peak**. The threshold becomes -5.4 dB below peak, the requested -64 never gets a look in, and the cut lands where the source is only **-8.5 dB below its own peak**.<br><br>**BLAST RADIUS: the inverse of what the feature is for.** `--trim-tail` was built for autosampler captures with long dead tails -- those DO contain silence, the percentile finds a real floor, and it works as designed. **Every other kind of sample** -- short one-shots, already-trimmed library content, sustained tones -- reports a floor that is actually signal and gets cut into. On this one program it removed **49 % of the sample** and **10.3 s across 15 of 16 samples**.<br><br>**Status: OPEN, nothing changed.** The fix is not a different percentile -- it is that a floor estimate needs a *validity test*. If the 10th percentile is not far below the peak, the sample does not contain enough silence to estimate a floor from, and the peak-relative threshold should be used alone. A cheap check: refuse the floor term when `floor` is within ~40 dB of `peak`. **Needs a corpus sweep before it ships** -- the same discipline as the SliceEnd veto, whose first rule was falsified by the corpus.<br><br>**Why nothing caught it.** The trim reports what it did (*'trimmed 15/16 samples, removed ~10.3 s'*) and that output looks like success. A feature that announces its own damage in the vocabulary of achievement is invisible. It took a listener comparing a source against a conversion. |
 | **THE MPC's RELEASE LAW, MEASURED ON FLAT NOISE -- the number three program-by-program fits failed to find** | *(2026-09-18 evening, Jan's suggestion: "us a noise program for verification?")* **This supersedes every release figure derived from musical material tonight.**<br><br>**The law.** Depth reached, as a fraction of the release parameter R, measured on a flat-top noise program (attack 0, decay 0, sustain full, `~/temp/rel_cal/`):<br><br>&nbsp;&nbsp;`-10 dB  0.39R     -30 dB  0.86R     -50 dB  0.95R`<br>&nbsp;&nbsp;`-20 dB  0.70R     -40 dB  0.92R     -60 dB  0.95R     SILENT  1.00R`<br><br>**R IS THE TIME TO SILENCE** -- the MPC gates hard to all-zero samples at exactly t=R and stays there. Verified at 1.0R and still silent at 1.5R.<br><br>**SELF-SIMILAR.** Four release lengths **8x apart** (0.25 / 0.5 / 1.0 / 2.0 s) agree to a maximum spread of **0.02R** at every threshold; reps identical to the millisecond. eosed confirmed scale-invariance across the full 16x on the target side (five entries within 0.7 dB).<br><br>**SUSTAIN-INDEPENDENT.** Same program at sustain 127 and 80 (= 0.63, confirmed: the level fell 4.02 dB against 4.03 predicted): every threshold moved by one 10 ms hop, uniformly. **The curve translates; it does not change shape.** The E4XT's does change shape with sustain, so the two machines differ in kind.<br><br>**THE DEFECT THIS EXPOSES, and no time constant fixes it.** Our writer gives segment 1 `0.96R` to reach 29 dB. **The MPC is 29 dB down at 0.86R and 60 dB down at 0.95R -- thirty dB in the last nine percent of R.** eosed measured the same gap from the other side: we track within ~4 dB through the first half, then the MPC plunges and we are 36 dB behind at 0.75R. Scaling the time would drag the first half too far down to fix the second. **It is a SHAPE problem, and `_ENV_SHAPE_KNEE_DB` / `_r_mid_db` are the terms, not `_ENV_SHAPE_BREAK_TIME`.**<br><br>**THE ENVELOPE LAW IS CONFIRMED FROM THE PANEL.** `seconds = 0.001005 * exp(10.3022 * v)` inverted to generate a 0.500 s release read back as **499 ms** on the MPC's own display (0.2 %), and attack 1.1 ms against the law's 1.005 ms floor.<br><br>**AND THE PAD HAD A DELAY ON IT, which retro-invalidates every pad number below -20 dB.** *(Jan, after rehearsing the rebuilt bank: "there was also a delay active on the pad's original, that threw me off a bit")* Checked against the noise law, and it is not a judgement call:<br><br>&nbsp;&nbsp;`drop     pad       noise law   excess`<br>&nbsp;&nbsp;`-10 dB      0.36R        0.39R     -0.03R`<br>&nbsp;&nbsp;`-20 dB      0.72R        0.70R     +0.02R`<br>&nbsp;&nbsp;`-30 dB      0.91R        0.86R     +0.05R`<br>&nbsp;&nbsp;`-40 dB      1.04R        0.92R     +0.12R`<br>&nbsp;&nbsp;`-50 dB      1.17R        0.95R     +0.22R`<br>&nbsp;&nbsp;`-60 dB      1.27R        0.95R     +0.32R`<br><br>**It matches the law to -20 dB and then runs away, and it is still sounding 781 ms PAST 1.00R — the point at which the MPC gates to all-zero samples.** An envelope that gates cannot produce sound after it gates, so the tail below -20 dB is not the release at all. **RETRACTED on that basis: the "E4B is 0.75x too fast" figure**, which was measured on the pad at -30 dB and was chasing delay repeats rather than an envelope. The shape defect above is NOT affected — it was derived from the noise law, as was eosed's -36 dB-at-0.75R comparison.<br><br>**The general form is worse than 'check for effects'.** The delay did not make the measurement fail; it made it succeed, smoothly, with a plausible convex curve that agreed with the dry signal for the first 20 dB and diverged only where nobody was looking. **A contaminated reading that agrees with the clean one over part of its range is more dangerous than one that disagrees everywhere**, because the agreement certifies it. The gate is what exposed it: a hard physical boundary the signal should not be able to cross. Without a source that gates, this was undetectable.<br><br>**Why noise and not music.** Every wrong release number today came from material: a pad that swells for 10 s so a 4 s hold never settles, a sample's own decay mixed into the fall, a filter envelope making the attack louder than the sustain. On noise the sustain ripples 1.0 dB and reps repeat to the millisecond. **the sustaining synth's 1.5x is now explicitly ABANDONED as unexplained** rather than explained -- it came from a musical program before the protocol settled, and two separate explanations for it have since failed. |
@@ -297,6 +305,325 @@ reasoning. What is actually **open**, grouped by what unblocks it:
 | item | note |
 |------|------|
 | **The ~2 dB gain-dataset anomaly** | key, velocity and transposition all measured flat. Isolated to one early measurement that four later independent runs contradict. Recorded in case it recurs |
+
+---
+
+## The E4B voice key/velocity WINDOW is folded into the zones and cannot be recovered (OPEN 2026-09-20)
+
+**Status:** open, no defect observed, raised by VinSamLib while auditing
+§E4BWINDOWOFF.
+
+An E4B voice has its own key and velocity window, and each of its zones has
+one. Our parser intersects them at read time —
+`lo_key = max(voice_key_lo, entry[2])` — so `VoiceLayer` carries no window of
+its own and the two sources arrive indistinguishable. A voice window of
+(36,84) around a zone at (0,127), and a voice window of (0,127) around a zone
+at (36,84), parse to the same model; only the second survives our writer as
+the author wrote it.
+
+Consequences: an external consumer cannot cross-check its own byte reads
+against our parsed values (VinSamLib's comparison ran 0/0 for exactly this
+reason), and a machine-authored bank whose structure lives in the voice window
+loses that structure on a round trip even though every note still sounds in
+the right place.
+
+*Fix strategy:* carry the raw pair on `VoiceLayer` — not a convenience derived
+back from the zones, which would only check our own folding against itself.
+Nothing depends on it today, so it is worth doing only alongside a reason.
+Evidence and the offset audit: `docs/RESOLUTION_NOTES.md` §E4BWINDOWOFF.
+
+---
+
+## Zone velocity/key CROSSFADE is read as two full-level zones (OPEN 2026-09-21)
+
+**Status:** open, identified tonight, no defect in our own output.
+
+E4B zone-entry bytes `[3]`,`[4]` (key fade) and `[7]`,`[8]` (velocity fade)
+were "zero everywhere, unidentified" until eosed's decompile of EOS's
+**Ensoniq** importer named them; its zone builder writes the same eleven
+fields our 22-byte entry already had, at the same places, once the `+2` is
+applied. See `docs/E4B_FORMAT.md` §4.5.
+
+`[7]`/`[8]` are non-zero on **36 corpus zones**, in mirrored pairs over one
+key range and the full velocity span (`[7]=80,[8]=0` against `[7]=0,[8]=80`) —
+a velocity crossfade, 18 pairs.
+
+**We write zero to all four**, since no source format in the pipeline states a
+zone crossfade, so our round trips are unaffected. **Reading someone else's is
+not:** a crossfaded pair arrives as two zones at full level over the same
+range, which is a doubling where the author wrote a blend. It will also be
+written back that way by any E4B→E4B path.
+
+*Fix strategy:* `ZoneMapping` has nowhere to carry a fade. Adding one is only
+worth it alongside a writer that can emit it and a source that states it —
+otherwise the honest minimum is to WARN on read when a zone carries a non-zero
+fade, so a conversion says what it dropped instead of silently doubling.
+`[3]`/`[4]` rest on the firmware trace alone; no corpus zone exercises them.
+
+---
+
+## The E4XT byte→Hz cutoff law: two hardware sweeps disagree about its SHAPE (OPEN 2026-09-20)
+
+**Status:** open, nothing changed. This sits underneath the
+`KEY_FILTER_OCT_PER_OCT` item below and may be its cause.
+
+`_E4XT_CUTOFF_TABLE` (17 points, E4XT 2026-07-31, white noise through
+`hw_measure.py`, interpolated in log-frequency) against eosed's sweep of the
+same bytes on 2026-09-20:
+
+    byte    ours      theirs(-12 dB)   ratio
+     80     396.4       618.5          1.560
+    120     681.9      1175.4          1.724
+    147     984.3      1820.0          1.849
+    180    1232.0      3156.9          2.562
+    200    1770.0      4612.3          2.606
+
+    slope over bytes 80..200:  theirs 0.02416 oct/byte, ours 0.01799 (0.745x)
+
+**The ratio climbs monotonically, so a -3 dB vs -12 dB convention cannot
+explain it** — that is a constant 1.391 for a 4-pole. Two white-noise hardware
+measurements disagree about the law's shape.
+
+**A suspicion about OUR data specifically, stated as testable rather than
+believed:** our table's top (bytes 217-255: 2691 … 24163 Hz) comes from a
+separate raw-byte sweep after a single exponential "badly underestimated the
+top". That is the region where eosed reports the passband tilt collapsing. A
+corner estimator with little tilt left can run away as easily as compress, and
+a runaway reads as acceleration. It predicts their tilt metric at bytes
+217-255 is below any threshold at which a corner is meaningful.
+
+**Prevalence — and it is why this is not a corner case.** Cutoff byte over
+whole populations, counting voices:
+
+    population                voices    >=217    >=217 but NOT 255
+    our AKAI conversions          41    95.1%        53.6%
+    EOS's own AKAI import      2 800    41.9%        40.4%
+    third-party, off HD0       2 134    54.8%         5.1%
+
+Byte 255 is a deliberate wide-open and its exact Hz hardly matters, which is
+why the third-party figure collapses to 5.1%. Ours does not: **53.6% of our
+AKAI-converted voices carry a CHOSEN byte in the region where eosed's tilt
+extrapolation leaves 22 dB or less**, 22 of 41 at byte 245; EOS's importer
+concentrates at 221. So the calibration is least trustworthy exactly where
+both writers aim, and the third-party material the July table was validated
+against almost never goes there outside the wide-open case.
+
+**Tilt, measured 80-200 and extrapolated (eosed 2026-09-20):** 73.3 dB at byte
+80, 65.3 at 147, 44.9 at 180, 31.6 at 200, linear at -0.620 dB/byte over
+140-200 → 21.7 at 217, 7.4 at 240, **0.0 near byte 252** — the exact byte our
+table records as 21.5 kHz. "The curve accelerates hard at the top" and "the
+estimator ran out of signal" predict the same data, and neither sweep
+separates them.
+
+### MEASURED 2026-09-21 00:02 (eosed, KTPOLAR `CTRL 0`, RAM only)
+
+    byte   corner Hz   tilt dB
+     200     4509.2      31.7
+     210     5589.2      25.3
+     217     6843.1      20.7
+     221     7450.8      17.4
+     230     9563.1      12.0     unusable
+     240    15436.9       5.6     unusable
+     245    19946.2       2.8     unusable
+     250        -          0.8    no corner in the band
+     255        -         -0.2    no corner in the band
+
+**Both sweeps were right about their own data and wrong about the shape.**
+The law genuinely accelerates — 0.02384 oct/byte over 80-200 against 0.03508
+over 200-221, +47%, quadratic r2 0.999 over the 11 points with tilt >= 15 dB —
+so the July "a single exponential badly underestimates the top" is confirmed,
+by evidence July's own top points could not supply. eosed withdraws their
+"6.12 octaves full range", which extrapolated a local slope across a bend.
+
+**What stays open is narrower and worse: what byte 245 MEANS.** At 2.8 dB of
+tilt there is no corner in the band, so no noise-source estimate there is
+meaningful — July's 21.5 kHz and tonight's 19946 Hz alike.
+
+### The defect this exposes is not the uncertainty, it is the COLLAPSE
+
+Our table maps everything above ~2 kHz into bytes 206-255:
+
+    2000 Hz -> byte 205.9      8000 Hz -> byte 245.7     20000 Hz -> byte 251.6
+    4000 Hz -> byte 232.5     12000 Hz -> byte 249.2     24000 Hz -> byte 254.8
+
+and on the source side of a 13-program AKAI disc (205 keygroups):
+
+    FILFRQ 99 (wide open)   153 kg (74.6%)  -> our 20000 Hz -> byte 252
+    FILFRQ 93 (a real filter) 20 kg ( 9.8%) -> our  7643 Hz -> byte 245
+
+**Six bytes apart, both inside the dead zone.** A source that says "rolled off
+at 7.6 kHz" and a source that says "no filter" become the same E4XT setting.
+On eosed's usable-band curve 7643 Hz is reached at byte ~222, where the tilt
+is still 17 dB — so the machine can express that difference and we are not
+asking it to.
+
+### The convention question, answered from the code (2026-09-21 00:05)
+
+`hw_measure.corner_frequency(..., drop_db=3.0, ref_lo=100.0, ref_hi=500.0)` —
+**our table is −3 dB CORNERS against a 100-500 Hz reference band.** eosed's
+sweep reports −12 dB points. In one convention (their 1.391 Butterworth
+factor, their caveat attached):
+
+    byte      ours (corner)   theirs (implied corner)   we are
+    206           2000 Hz           ~3523 Hz            0.82 oct LOW
+    245           8000 Hz          ~14340 Hz            0.84 oct LOW
+
+**We under-state the frequency of every byte, so the writer picks too HIGH a
+byte for a requested frequency: ask 2000 Hz, get ~3523 Hz.** Output brighter
+than the source asked, by ~0.8 octave through the reliable middle.
+
+**The collapse above shrinks accordingly and is corrected here rather than
+rewritten:** FILFRQ 93 wants byte ~232 on eosed's curve, not the ~222 first
+recorded — a 13-byte error, not 24 — and at 232 their tilt is ~11 dB, below
+their own 15 dB bar. "The machine can express that difference and we are not
+asking it to" is **withdrawn as overstated**; whether it can is marginal.
+
+**Suspicion now points at OUR estimator, and not from deference.** −12 dB sits
+on a 4-pole's asymptote; −3 dB sits in the knee, where passband tilt or a
+little resonance moves it far. `corner_frequency`'s own comments record two
+such failures (a 545 Hz corner from a spectrum 1.7 dB down; a 502 Hz corner
+from a filter wide open). And the 100-500 Hz reference band is the divisor: if
+it is not flat, every corner shifts *together* — which is the signature seen, a
+near-constant 0.8 octave rather than a spreading error.
+
+*Free test, no rig time:* re-run `corner_frequency(f, mag, drop_db=3.0,
+ref_lo=100, ref_hi=500)` over eosed's existing spectra. Same captures, both
+estimators. ~2000 Hz under ours and ~3523 under theirs at byte 206 → the
+disagreement is entirely estimator and neither machine measurement is wrong.
+~3500 under both → the July table is wrong and gets rebuilt.
+
+*The listening test is gated on that*, not on the convention: if our table is
+right for FILFRQ 93 a null result would say nothing.
+
+### THE ESTIMATOR TEST WAS RUN — 2026-09-21, no rig time
+
+Our July extractor over eosed's own sweep captures (§E4XTKEYPOL for the full
+write-up):
+
+- at **matched convention the two rigs agree** (our −12 dB readings reproduce
+  theirs to a few percent), so no pipeline disagreement ever existed;
+- the **−12/−3 ratio is not constant** — 1.22 at byte 80 climbing to ~2.05
+  above byte 180 — so **the 1.391 Butterworth conversion is refuted** and every
+  cross-convention figure quoted in this file is void, **including "we are 0.82
+  octave low", which is retracted**;
+- at matched convention the table reads **0.27 octave low** (median
+  `table/measured` = 0.830, sd 0.051 over 13 points spanning 4.5x in
+  frequency) — a scale error of about **1.20x**, not 1.76x;
+- our own −3 dB estimator **quantises** on the keytrack captures (1/6-octave
+  smoothing against a 0.39-0.48 octave signal), so eosed's −12 dB polarity
+  result stands and ours cannot challenge it.
+
+**The low sweep landed too (bytes 20-70, eosed, 01:26), and it turns the open
+item from a question into a specification:**
+
+    bytes 20-100 : table/measured median 0.916  (0.13 octave low)
+    bytes 120-200: 0.866                        (0.21 octave low)
+    all fourteen : 0.892                        (0.17 octave low, sd 0.041)
+
+Two independent −3 dB extractors agree to **2.4%** from byte 100 up, so that
+bias is real. At byte 80 they differ by **11.5%** — and that corner (~450 Hz)
+is **inside our extractor's 100-500 Hz reference band**, the exact failure
+`corner_frequency`'s own comments warn about. **Every table point below about
+byte 100 was measured in that configuration**, which indicts the July table's
+lower half specifically and probably explains the walk (band overlap biases a
+reading high, and the ratio sits highest at the bottom).
+
+**So the rebuild now has a method rather than a wish:** divide by a wide-open
+capture (`reference=`) instead of trusting a fixed band, and move
+`ref_lo`/`ref_hi` down for low settings. Both are changes to the extraction,
+not more captures — eosed's sweep is already in that form, which is how it
+reached byte 20.
+
+**Still not licensed from this data alone**: one bank, one evening, and the
+top of the range unmeasurable with noise (§155's tilt collapse). The rebuild
+wants the flat-to-20 kHz source AND the corrected method.
+
+*Also blocked on:* a cutoff-law measurement above byte ~225 with an instrument
+that still has energy there — a swept sine, or a source flat past 20 kHz. A better
+estimator cannot help; the input is not present. Once bytes 225-255 have real
+frequencies, the table is rebuilt and both the collapse and the
+`KEY_FILTER_OCT_PER_OCT` disagreement below are re-derived from it.
+
+*Audible check available now, no rig time:* an AKAI program with FILFRQ ~93
+against its conversion. If they sound equally bright, the collapse is real.
+
+Also fixed in passing: `docs/E4B_FORMAT.md` said `0`≈57 Hz … `255`=20 kHz,
+"exponential curve". The code has said 133 Hz … 24163 Hz from a measured table
+since July; the doc line was never what the writer used.
+
+---
+
+## `KEY_FILTER_OCT_PER_OCT` — 0.713 against 0.581 measured, and both have provenance (OPEN 2026-09-20)
+
+**Status:** open, nothing changed in the code. Affects the WRITE side only.
+
+The §E4XTKEYPOL run gives a full-scale key-tracking slope of **0.581 oct/oct**
+from three amounts agreeing to 0.4% (0.5827 / 0.5807 / 0.5804). The shipping
+constant is **0.713**.
+
+The old number is not a guess. Measured 2026-06-12 as 71.3 cents/semitone over
+C2-C4 at r=0.9994, **and** independently predicted at 0.7125 from the `0x38`
+LFO->Filter sensitivity (3.8 octaves per 100%) times full-keyboard
+normalisation (0.1875) — a sensitivity that measurement never saw. It is this
+project's own worked example of a law earning trust by predicting something it
+was not fitted to.
+
+**Consequence if 0.581 is right:** `key_track_to_filter_amount` divides by
+0.713, so every key-tracking cord written since June is ~18% small. The READ
+side is unaffected in practice — the polarity result that came from the same
+run is a ratio, so a common scale error cancels.
+
+*Blocked on:* one measurement that can refute one of the two, not a third
+careful run of the same kind. The cheapest discriminator is the 2026-06-12
+method repeated on tonight's bank — slope in cents/semitone over C2-C4 at a
+LOW base corner so a full-scale amount stays in band — since the two
+derivations differ in span (2 octaves vs 4), in amount (100% vs 25%) and in
+estimator. Two loose ends from the same run may bear on it: the amount-64
+point is 11% off the other three (the key-84 capture, not the pair), and the
+writer asked for a 1000 Hz corner while the control measured 1820.0 Hz.
+
+Full numbers and both provenances: `docs/RESOLUTION_NOTES.md` §E4XTKEYPOL.
+
+---
+
+## E4B mod cords were read at a slot number, not searched — FIXED 2026-09-20 (§E4BCORDSLOT)
+
+**Status:** the indexing defect is FIXED and covered by
+`tests/test_e4b_parser_cord_search.py` (3 of its 4 tests fail against the old
+reads). One assumption inside the fix is OPEN.
+
+Four reads — LFO1→Pitch, Velocity→Cutoff, FilterEnv→Cutoff and Key→Cutoff —
+took the amount byte from the slot **our own writer's template** puts that cord
+in. No other machine owes us that layout. Over 49 banks read off HD0 (2530
+voices) the parsed value changes on 12.4% / 2.5% / 9.7% / 2.7% of voices once
+the cord is searched for by `(src, dst)`; over EOS's own AKAI import of 369
+programs, on **52–95%**. It also manufactured a finding: a median "EOS filter
+key-tracking" of 0.118 oct/oct was this parser reading EOS's *velocity*→cutoff
+amount (21) through the key-tracking law — 21/127 × 0.713 = 0.118.
+
+**SETTLED ON HARDWARE 2026-09-20 23:50 (§E4XTKEYPOL): `Key~` IS the same
+depth as `Key+`.** Measured on the loaded KTPOLAR bank, control flat at
+1820.0 Hz across all three keys: `Key~/Key+ = 0.997` at amount 32, and `Key~`
+pivots at key 60 on all three amounts independently. A bipolar mapping would
+have covered twice the octaves. The family read needs no scale factor and the
+1666 HD0 voices carrying `Key~` are read correctly today.
+
+The original question, kept for the record:
+The fix accepts a source's whole polarity family for one read, because the
+three velocity forms were measured (eosed, 2026-09-01) to differ only in pivot
+— Vel+ at 0, Vel< at 127, Vel~ at 89.4 — and to share one span. The two KEY
+forms are **assumed** to behave the same way and that is not measured. It
+matters in practice: the E4XT's own default table ships `Key~` (0x09) where
+ours ships `Key+` (0x08), so this assumption is load-bearing for 1666 of 2530
+HD0 voices.
+
+*Blocked on:* one E4XT SysEx read or a short sweep — plant the same amount as
+Key+ and as Key~ on one voice, measure cutoff at two keys an octave apart, and
+compare the slopes. If the spans differ, the family read needs a per-form
+scale and §E4BCORDSLOT's note becomes a law.
+
+Fix strategy and the full measurement: `docs/RESOLUTION_NOTES.md`
+§E4BCORDSLOT.
 
 ---
 
@@ -6935,3 +7262,599 @@ both of tonight's subjects ask 3.351 s, outside §MPCENV's 0-2.42 s acoustic
 window, so even the decay's 13% may be an extrapolation edge. Stationary
 material (CD4-NOISE2 class) so no division is needed. Details and the identity
 checks in `docs/RESOLUTION_NOTES.md` §MPCENVREL.
+
+## E4XT plays past the sample end above +45 semitones from the zone root
+
+**Status:** measured and localised, root cause not yet separated from a
+possible hardware ceiling. Heard by Jan on SCI-FI STING and CAVERN TUBE2
+(bank `MPC5 E4B.e4b`), reproduced on the bench: both presets are clean at
++45 semitones and free-run into neighbouring sample RAM at +46, for nine
+seconds and more. Sample length does not matter (13.9 s and 5.9 s behave
+identically); gate length and envelope phase do not matter; the root note
+held for 16 s stops correctly.
+
+**Blocked on:** one A/B bank on the E4XT — same PCM, one preset with our
+current sample headers and one with the factory convention (`loop_end =
+end - 10`, `options |= 0x18`, `playback_rate = 1`, `loop_start_r = 12`),
+both played at note 106. Needs the E4XT card in the PC and Jan at the
+instrument.
+
+**How to fix:** `docs/RESOLUTION_NOTES.md` §E4BXPOSE.
+
+## AKAI->E4B: four presets still wrong after the tune and rate fixes
+
+**Status:** open. The first preset-by-preset A/B of this path against the
+S3000XL (2026-09-20) found two systematic defects, both now fixed
+(`docs/RESOLUTION_NOTES.md` §E4BCOARSESPLIT, §AKAISSRATE). Four of Jan's
+reports are NOT explained by either:
+
+- `SOLDANO 12 B` -- "plays the samples way to slow". Coarse tunes are all 0,
+  rates are consistent, fine tunes survive. No file-level defect found.
+- `CS PIANO-L` -- "isn't even close". Clean on both axes. An earlier guess
+  that it was the filter has no supporting evidence.
+- `LG PRC MENU1`, `LATIN PERC 2` -- "key->sample are so shifted". Key ranges
+  were compared source-against-built and are IDENTICAL, so it is not mapping
+  in our file.
+
+**Blocked on:** for the two percussion menus, one line from Jan on what
+"shifted" means -- a different instrument on the same key, or the same
+instrument at a sliding pitch. The second would point at `non_transpose`,
+which `e4b_writer` writes (vpar[38]) but the AKAI parser never sets.
+
+**How to fix:** `docs/RESOLUTION_NOTES.md` §E4BCOARSESPLIT, closing section.
+
+## AKAI `--iso` writes a volume type no real AKAI CD-ROM uses
+
+**Status:** open, cause identified, writer deliberately unchanged. Discs built
+with `build_akai_hd_image(cdrom=True)` use volume type 0x07 and put the first
+volume at block 6; two real AKAI CD-ROMs use 0x03/0x01 at block 3. The E4XT
+reports "no folders exist" for ours. `cdrom=False, size_mb=60` matches a real
+disc and is what is on the card.
+
+**Census done, and it retracted the premise:** across 21 local ISOs / 301
+volumes the types are 0x01 x204, 0x03 x71, **0x07 x26** — so 0x07 is real and
+in use, not an invention. The "no folders exist" result is also confounded:
+the replacement disc only appeared after a POWER CYCLE of the E4XT, which the
+0x07 disc never got. There is currently no evidence against 0x07.
+
+**Blocked on:** re-running the 0x07 disc WITH a power cycle
+(`XX_CD3-MPC5_AKAI_SRC-type07-BAD.iso` is still parked on the card), and
+explaining why EOS lists only the 6 `.P3` programs of 13 from an 0x03 volume.
+
+**How to fix:** `docs/RESOLUTION_NOTES.md` §AKAICDTYPE.
+
+## E4B amp decay: RESOLVED 2026-09-20, with a named residual
+
+**Status:** fixed on the READ side (`e4b_parser` was over-reading Dcy1 by the
+ratio of the full decay span to the knee span). Settled on hardware: eosed read
+the E4XT's own amp envelope for five presets and the machine agreed with the
+model to within 11 per cent, 49-72 per cent away from what the parser said.
+Round trip now median 0.976x, 40 of 46 voices within 5 per cent, was median
+3.26x with 0 of 20. See §E4BAMPDECAY.
+
+**Residual, still open:** six voices in two programs read 1.19-1.63x, all
+sustain 0 with long decays, where distinct model times collapse onto the same
+rate byte (5.233 s and 6.363 s both read back 8.531 s). That is rate-byte
+quantisation at coarse steps, a different defect from the span error.
+
+**Superseded description below, kept for the record:** reproducible offline,
+no hardware needed. Model ->
+`write_e4b` -> `parse_e4b` inflates `env_decay` by a median **3.26x** (20 of 20
+voices, none preserved within 2 per cent). Our writer and our parser disagree
+about the field. Found in the first bulk A/B against EOS's own AKAI importer
+(359 programs, 2731 zones, 1122 voices), where our amp decay ran 5.23x EOS's.
+
+**Blocked on:** deciding WHICH side is wrong. The AKAI/E4B envelope spans
+(60.07 dB vs 97.82 dB) are the first suspect -- the hazard §AKAIRELSPAN fixed
+for the release -- but 1.63 is not 3.26, so a constant that happens to land is
+not the fix.
+
+**How to fix:** `docs/RESOLUTION_NOTES.md` §E4BAMPDECAY. A round-trip assertion
+on `env_decay` belongs in the suite with the fix; it would have caught this.
+
+## AKAI->E4B filter envelope: we write none where EOS writes ~797 cents
+
+**Status:** open. Over 1122 voices `filter_env_cents` is **0** on our median
+voice and 797 on EOS's. Ours follows the documented rule that ENV2 depth 0
+means no filter envelope (§144); EOS writes a sweep regardless.
+`filter_cutoff` also runs 1.88x brighter than EOS's (4552 Hz vs 2419 Hz).
+
+**Not a defect yet** -- one of us adds movement the source lacks, or one drops
+movement it has, and nothing here says which.
+
+**Blocked on:** Jan comparing a swept program on the AKAI against both columns.
+
+**Resonance is NOT part of this:** identical to EOS on all 1122 voices.
+
+## AKAI effects are read by nothing (today's A/B was NOT affected)
+
+**Status:** open. Jan, 2026-09-20: `SCI-FI STING` has FX enabled on the
+S3000XL -- Reverb EQ, **LONG HALL**. We do not read that at all:
+
+- the AKAI parser has no FX field of any kind; `grep` for fx/effect/reverb in
+  `parsers/akai_s3000_parser.py` returns only comments about refusing `.X`
+  files
+- `models/common.py` has no FX/reverb concept for a voice or preset to carry
+- `parsers/registry.py` explicitly REFUSES `.X` effects files (correctly --
+  they open with a program's block id and were being read as phantom programs)
+- the extracted source in `~/temp/ten_programs/` contains **no `.X` files at
+  all**, so even the assignment is not in the material we convert from
+
+So every AKAI -> E4B conversion is dry, and EOS's own importer is dry too
+(`EMSt` byte-identical to our default, 0 of 1366 bytes differing).
+
+**TODAY'S MEASUREMENTS ARE NOT AFFECTED, and this was VERIFIED rather than
+assumed.** I first wrote here that the day's A/B work had compared a wet
+S3000XL against a dry E4XT. Wrong twice over. FX is OFF in the multi, and Jan
+then ran the negative control that settles it independently of any setting:
+**"Mute all" on the Effects page did not change the sound.** A setting says
+what should be routed; muting everything and hearing no difference says what
+WAS. The programs carry an assignment (`SCI-FI STING`: Reverb EQ, LONG HALL)
+and none of it was reaching the output. Pitch results were never at risk
+either way (reverb does not transpose), but the EL-BASS filter judgement --
+"the Akai has quite a bit more Q and it comes in earlier" -- WOULD have been
+confounded, and is not. It stays a filter question.
+
+The gap is therefore about conversion fidelity, not about the bench data: a
+program that DOES sound through its effects on the source machine converts to
+something we never even warn about.
+
+**Blocked on:** the offset in the program header that names the effect, which
+we have never located. The `.X` format itself is characterised (s3ked §88:
+header record with a 12-character name at offset 3, then 128-byte preset
+entries), so the missing piece is the program's POINTER into it, not the file.
+
+**Minimum useful fix, short of converting effects:** read the assignment and
+emit a diagnostic naming the effect that was dropped. A user comparing against
+the source machine needs to know the reverb is not coming.
+
+**WHEN THIS IS BUILT, READ THIS FIRST — eosed, 2026-09-20.** They mapped the
+E4XT's Preset FX fields from the 4.70 firmware and found a defect on their own
+side that is exactly the trap an FX implementation walks into:
+
+  **Their committed FX algorithm tables were OFF BY ONE, and had been naming
+  the wrong effect for every preset.** The tables were transcribed from the
+  manual's printed effect list, which starts at the first real effect. The wire
+  encoding reserves value 0 for "Master Effect A"/"Master Effect B" -- inherit
+  from the master setting. **Printed position is not wire value.**
+
+      preset      panel            byte   old table       new table
+      P001 FX A   Cavern             25   Concert 9   x   Cavern      ok
+      P001 FX B   Delay Stereo 2     20   Panning Dly x   Delay St 2  ok
+      P002 FX A   Spacious Hall      19   Bright Hall x   Spacious H  ok
+
+  Six for six on the new tables, zero for six on the old. **It never looked
+  wrong because every value it returned was a real effect name** -- just the
+  neighbouring one. There is no corrupt-looking output to notice.
+
+  Two more things to carry in from that work:
+  - **Use the firmware POINTER table, not the string pool.** They disagree from
+    index 18 up (Delay=18, Delay Stereo=19, Delay Stereo 2=20, Panning
+    Delay=21), and pool order gives a third, different wrong answer.
+  - Ranges are firmware-version-specific: FX B algorithm is 0..32 on EOS 4.70,
+    and the 0..27 in the 4.00 spec stops exactly at "Vibrato", rejecting the
+    five distortion algorithms above it.
+
+  We have no FX concept at all, so there is no stale range here to fix today --
+  but any reader we write would have inherited the printed-list numbering.
+
+## Our E4B rate bytes land in the region where our own rate law diverges
+
+**Status:** open, measured both sides, fix available. eosed's decay-ladder
+sweep (CD4-DCYLADDER, 2026-09-20) measured the E4XT envelope rate law over
+bytes 32-127 and found the law we ship is sound to ~1% across 32-102 and then
+diverges: 1.095x at byte 110, 1.185x at 118, **1.78x at 127**. A range limit,
+not a scale factor -- the ratio is flat at 0.983 +/- 0.012 below 102.
+
+eosed asked what fraction of the corpus sits up there, expecting the answer to
+be "leave it". Non-zero rate bytes across all six envelope stages:
+
+    FACTORY, 141 banks        n=29878     >110  0.32%   >118 0.02%   =127 0.00%
+    EOS's own AKAI import     n= 6248     >110  0.00%   >118 0.00%   =127 0.00%
+    OURS, converted from AKAI n= 3126     >110 13.82%   >118 4.77%   =127 1.79%
+
+**We go there a seventh of the time. Nobody else goes there at all.** Byte 118
+is our second commonest non-zero rate byte. The 1.79% at exactly 127 are pinned
+at the field maximum, so they have lost ORDERING as well as accuracy -- two
+different requested times encode to the same byte.
+
+**This is the same finding as §AKAIDECAYDEF, not a separate one.** We compute
+decay seconds over the sustain-dependent full span (~60 dB at sustain 0) where
+EOS uses a fixed ~30 dB. Longer time -> slower rate -> higher byte. The span
+convention is what walks us into the divergent region, which is exactly why
+EOS's import never lands there. One choice, two consequences.
+
+**How to fix, with the bounds that matter:** eosed's measured law is
+`ln(dB/s) = -0.0001222 b^2 - 0.040902 b + 6.8135`, valid over **bytes 32-127
+ONLY**, and it should be quoted as **+/-16% worst case** (worst residual
+-16.1% at byte 127, +10.6% at 118, typical ~6%) rather than as r2 0.998042 --
+an r2 in log space over 12 points hides a bad rung. Overlap validated: bytes
+48-86 reproduce the law we already ship to 1.7% mean.
+
+**DO NOT EXTRAPOLATE IT BELOW 32.** Measured there: **-48% at byte 8**, -46%
+at 16, -15% at 24, +8% at 32. The law is piecewise with a knee somewhere in
+24-32, and three points on one side of an unlocated knee is not a fit. An
+earlier version of this entry said "with your 32-102 law as the fix", which was
+wrong on both ends.
+
+That fast end is NOT a corner case. Non-zero rate bytes below 32:
+
+    FACTORY, 141 banks     14.55%
+    OURS from AKAI         15.39%   (10.20% below byte 25)
+    EOS's own AKAI import  51.04%   (byte 4 alone is 18% of its non-zero bytes)
+
+**So this bites the READ path too.** Every comparison run on 2026-09-20 parsed
+EOS's saved bank -- 6248 rate bytes, half below 32 -- through our own
+byte->seconds law, which nothing has ever validated down there. §AKAIDECAYDEF
+does not depend on it (that ratio was flat against the DECAY byte and our side
+barely goes below 32), but absolute seconds quoted for EOS's bank are
+unvalidated in that range.
+
+**Blocked on:** a second ladder at bytes 8-36, dense around 24-32 where the
+knee sits. Size the rungs from the rig's TIME RESOLUTION, not from the byte
+range -- three rungs of the first ladder were unmeasurable because I chose
+bytes to cover "below 44" and never checked the resulting decay against what
+the rig can resolve. eosed recovered them with overlapping windows at hop W/4,
+which should be the design rather than the rescue.
+
+**Not done tonight because it is a WRITE-path change** and every bank on the
+card was built with the current law. Doing it means rebuilding CD1 and
+re-listening, and Jan has confirmed by ear only the two fixes that are already
+in. Also worth checking first whether the saturation at 127 should be a
+diagnostic in its own right -- a requested decay that cannot be expressed is
+something the user should be told about, independently of which law encodes it.
+
+**Testing caveat for whoever takes it:** validating against the factory corpus
+alone would say this does not matter. It is only our own output that goes
+there.
+
+---
+
+# External code review — GLM-5.3-Flash (2026-09-20)
+
+## VERIFICATION PASS (2026-09-20 evening) — every finding checked at its site
+
+Jan: "Don't take them for granted, review, confirm, fix." Done. **Six of ten
+findings are real and four are fixed; three of ER-9's four dead-code claims do
+not survive checking.**
+
+| finding | verdict | action |
+|---|---|---|
+| ER-1 duplicate `_ak_attack_seconds` | **REAL** | FIXED — shadowing def removed, rationale merged |
+| ER-2 duplicate test name | **REAL**, consequence not | FIXED — bodies were BYTE-IDENTICAL, so nothing was being skipped; duplicate removed |
+| ER-3 private copy of the cutoff law | **REAL, and worse** | FIXED — the copy had NO CALLERS anywhere; deleted rather than replaced by an import |
+| ER-4 VinSamLib contract list | **REAL, incomplete** | VinSamLib supplied 7 more names they consume; all 14 now asserted by a test on their side |
+| ER-5 `SYNC_BPM` process-global | **REAL** | FIXED — `parse_xpm(..., sync_bpm=None)`, global kept as fallback |
+| ER-6 mtools doc drift | **REAL** | FIXED — no code path uses mtools; README (2 places) and `convert.py` help corrected |
+| ER-7 god module / private names | real, architectural | deferred, not attempted tonight |
+| ER-8 `xpm_parser` as utility library | real, architectural | deferred |
+| ER-9 dead code | **3 of 4 REFUTED** | see below |
+| ER-10 `main()` length | real, architectural | deferred |
+
+**ER-9 in detail, because three of its four claims are wrong:**
+
+- `cap_voices_by_coverage` — **NOT dead.** Two live call sites
+  (`sfz_parser:538`, `xpm_parser:2504`). It returns early only because
+  `MAX_VOICES_PER_PRESET = None`; that is a feature with its switch off, not
+  dead code, and deleting it removes the ability to turn it on.
+- `_LFO_RATE_A/B/C` — **NOT deletable.** `test_law_consistency` does not merely
+  "assert they are unused": it asserts the live law DISAGREES with them by more
+  than 0.2 at three bytes, so a revert to the old log-quadratic fit fails
+  loudly. Its docstring says so — "kept only so their failure stays legible".
+  Deleting the constants deletes the regression guard.
+- `e4xt_cord_saturates` — **NOT dead.** Called in `e4b_writer._cord()` at
+  :1603, under a comment recording that 36.5% of nonzero filter depths in 60
+  real banks saturate. The review inherited "dead code that reads like a guard"
+  from our own TODO; **our TODO was wrong and the review repeated it.**
+- `write_talsmpl` living in `parsers/talsmpl_parser.py` — **stands.** A real
+  layering smell, not fixed tonight.
+
+**The general shape:** the review is good and its sharpest finding (ER-1) was
+real. Its weakest section is the one where it quoted our own notes back to us
+rather than checking the code — which is the same failure mode as a number
+travelling without its provenance.
+
+
+
+**Status:** open, findings only — no code changed. A full read of the tree,
+cross-checked against VinSamLib's integration (it imports this checkout
+in process through a bridge; its side of the audit is recorded in
+VinSamLib/TODO.md, same date). Every finding below was verified against the
+current checkout first-hand, not transcribed from a summary.
+
+## ER-1 — `_ak_attack_seconds` is defined twice; the second definition shadows the first
+
+**Status:** open, no runtime defect today, latent trap.
+
+`writers/akai_s3000_writer.py:1244` defines the clamped variant ("Exact
+inverse of `akai_attack_byte`'s law", clamped into the fit range with
+`max(lo, min(hi, byte))`). `writers/akai_s3000_writer.py:1321` defines the
+SAME module-level name again, unclamped ("derived so the ceiling is DERIVED
+rather than written down"). Both are top-level defs, so the last binding
+wins for every call site regardless of source order: the name as imported is
+the UNCLAMPED one and the clamped variant is dead code.
+
+Both existing call sites happen to be insensitive: line 1134 feeds
+`_AK_ATTAK1_TIME[3]` (the ceiling byte, where clamp and no-clamp agree), and
+line 1218 (`attack=_ak_attack_seconds(atk)` in `akai_env_from_bytes`) runs
+on bytes read from files, which sit in range. So nothing is wrong at
+runtime — but the clamp the first docstring promises does not execute, and
+the next caller outside the fit range gets silent extrapolation. Two
+same-named functions in one module is also exactly how a parser/writer
+inverse pair breaks; the module's own comment at ~1200 says it: a second
+copy of the arithmetic is how that happens.
+
+**Minimum fix:** rename the second definition (e.g.
+`_ak_attack_seconds_from_law`) or delete it and point the ceiling diagnostic
+at the clamped one — at the ceiling byte the two are identical, so the
+"derived, not hardcoded" property survives.
+
+## ER-2 — duplicate test name; one test body never runs
+
+`tests/test_krz_writer.py:688` and `:808` both define
+`test_velocity_split_layers_thin_instead_of_becoming_a_drum_program`. The
+second replaces the first at import time; pytest collects one test. If the
+two bodies assert different things, half the assertion work is silently
+skipped. Merge or rename.
+
+## ER-3 — the EIII writer keeps a private copy of the E4B cutoff-position law
+
+`writers/eiii_writer.py:287` re-implements `_e4b_cutoff_position_to_hz`
+against local constants `_E4B_CUTOFF_MIN_HZ = 57.0` /
+`_E4B_CUTOFF_MAX_HZ = 20000.0`, while `models/common.py:293-294` and the
+public `e4b_cutoff_position_to_hz` at `:361` hold the same law (same values
+today). The comment above the local copy argues EIII has nothing to do with
+EOS — true for the CONTAINER, but the position→Hz law is shared arithmetic,
+and this project's own rule is that a second copy is how pairs drift. Import
+from models.common.
+
+## ER-4 — VinSamLib-facing interfaces: deep audit (external consumer contract)
+
+VinSamLib imports this checkout in process and calls it directly. Every
+interface it uses was checked against this checkout on 2026-09-20; all
+signatures match. The load-bearing ones, for whoever refactors next:
+
+- `start_trim.trim_start_bank` / `tail_trim.trim_tail_bank`: called with
+  `thresh_db=`, `fade_ms=`, `drop_full_loop=` explicitly on every call.
+  Renaming `drop_full_loop` breaks their conversion path with a TypeError at
+  user runtime.
+- `zone_reducer.reduce_bank(bank, key_zone_pct, velocity_layer_pct)` —
+  positional. `zone_reducer.explode_velocity_layers(bank)`.
+- `resampler.resample_bank(bank, profile_name, bandpass=, restore_level=)`
+  and `resample_to_rate(sample, dst_rate, verbose=False)`.
+- `shrink_planner.shrink_bank(bank, target_bytes=, by_pct=)`.
+- `krz_writer.write_krz(..., faithful_layers=, drum_program=)` and
+  `build_akai_volume(..., ib304f=)` — probed via `__code__.co_varnames`
+  before use, so ADDING kwargs is safe for them; renaming is loud.
+- `akai_writer.snap_bank_to_playback_rates(bank)` — dict contract: the
+  consumer reads `snapped`/`failed` counts and refuses the write on any
+  `failed`. Keep those keys.
+- `parsers.registry.PARSERS` and its normalised
+  `callable(path, wav_dir, **kw) -> Bank` shape — SF2/SFZ/EXS24/GIG/TAL all
+  route through it, with `max_samples`/`max_presets` passed explicitly
+  because the defaults truncate silently. Keep the normalisation contract.
+- `models.diagnostics`: risk records are keyed on `code` (published
+  contract), and `content_lost` is read as a required attribute.
+- Private names VinSamLib reaches into BY DESIGN (it prefers a loud break to
+  a copied rule that drifts): `xpm_parser._safe_name` /
+  `_unique_sample_name` / `_prefers_tail`, `bank_splitter._VOICES_PER_NOTE`
+  and the `_MAX_SAMPLES_PER_BANK` / `_MAX_PRESETS_PER_BANK` ceilings,
+  `akai_s3000_image._plan_partitions` plus the layout constants
+  (`PARTHEAD_BLKS`, `CDINFO_BLKS`, `PART_MAX_BLOCKS`, `VOLDIR_HD_BLKS`,
+  `HD_BLOCK`, `ROOTDIR_ENTRIES`, `MAX_PARTITIONS`), the `writers.fat12/16/32`
+  classes, `iso_builder.emu_hdd_append`, `hda_builder.fat_hda_append`.
+  Treat these as a de-facto public contract: renaming any of them is a
+  cross-repo break, not an internal cleanup.
+
+Two small upstream changes would harden the interface for the one external
+consumer that exists:
+
+1. **Give `parse_xpm` an `lfo_sync_bpm` parameter** (same point as ER-5).
+2. **A supported capability probe** (e.g. a module-level `CAPABILITIES`
+   mapping or a `writer_capabilities()` helper) would replace the three
+   `co_varnames` probes and the getattr-with-fallback dance with one
+   supported mechanism, and would make old-checkout behaviour explicit
+   rather than inferred from function signatures.
+
+## ER-5 — `xpm_parser.SYNC_BPM` is process-global configuration
+
+**Status:** open. `parsers/xpm_parser.py:95` holds `SYNC_BPM = 120.0` as a
+module global read inside the parse path. convert.py sets it and leaves it
+set. VinSamLib has no parameter to set it with, so it mutates the global
+around each `parse_xpm` call and restores it in a `finally` — correct against
+leaks, but the guard is `prev is not None`: if this module ever renames or
+drops `SYNC_BPM`, a requested tempo is SILENTLY ignored (no error, no
+diagnostic; tempo-synced LFO rates just come out at 120 BPM's assumptions).
+Fix: make it a `parse_xpm(..., sync_bpm=None)` parameter with the global as
+fallback, so both convert.py and external consumers set a value instead of
+module state.
+
+## ER-6 — mtools documentation drift
+
+`writers/fat16.py` documents the mtools dependency as fully removed, but
+CLAUDE.md/README still describe mtools as optional for one E4B HDA
+filesystem path, and `convert.py`'s `--hda-fs fat` help text still says
+"(needs the `mtools` package)". Three sources disagree; the code is the
+truth. Doc-only fix.
+
+## ER-7 — `models/common.py` is a 6.5k-line god module, and private names cross module boundaries
+
+Everything imports it (parsers, writers, processors, convert, tools, and the
+external consumer); it mixes the model dataclasses, every calibration law
+for every target, and stereo/mono audio conversion in one file. Related:
+`processors/resampler.py`'s `_pcm_to_float` / `_float_to_pcm` are imported
+across module boundaries by `start_trim`, `auto_loop` and `single_cycle`,
+and `start_trim` imports `_frame_energy` / `_windowed_ms` /
+`_signal_threshold` from `tail_trim`. Underscore names crossing modules make
+refactoring hazardous and blur where the public API ends. Suggestion: a
+shared `processors/pcm.py` with public names, and longer term a split of
+common into model / per-target laws / audio helpers.
+
+## ER-8 — `xpm_parser` is a de-facto utility library
+
+Eight other parsers import `load_wav`, `_safe_name`, `_read_smpl_root`,
+`_read_aiff_base_note` from it — several of them private — and the external
+consumer reaches into `_safe_name` / `_unique_sample_name` /
+`_prefers_tail` with graceful-absence fallbacks. A `parsers/audio_io.py`
+(WAV/AIFF loading, `smpl` chunk, name helpers) with public names would make
+the contract explicit and let consumers stop guessing at presence.
+
+## ER-9 — dead and near-dead code worth a sweep
+
+- `models.common.cap_voices_by_coverage` — documented no-op passthrough;
+  `MAX_VOICES_PER_PRESET = None`.
+- `_LFO_RATE_A/B/C` three-point fit constants — kept after the table fix;
+  `test_law_consistency` asserts they are unused. Deletable.
+- `e4xt_cord_saturates` — TODO already calls it "dead code that reads like a
+  guard" for velocity cords.
+- `parsers/talsmpl_parser.py` contains the format's WRITER
+  (`write_talsmpl`) — a layering smell; convert.py imports a writer from
+  parsers/.
+
+## ER-10 — minor
+
+- `convert.py`'s `main()` spans roughly lines 585-1671. The
+  `--max-sample-rate` downsample loop is inline there, which is why VinSamLib
+  had to re-derive it against `resampler.resample_to_rate` — extracting the
+  pipeline steps into functions would remove one consumer-side
+  reimplementation that can drift.
+- `convert.py:551` lazy local import of `KRZ_PLAYBACK_CEILING_HZ` inside
+  main().
+- The name-sanitizer trio (`models.common.safe_filename`,
+  `xpm_parser._safe_name`, `single_cycle._safe_filename`) persists; the
+  `safe_filename` docstring already warns against picking the wrong one, but
+  the trap is still armed.
+
+## ~~AKAI LFO2 is never read~~ ✅ **OFFSET FOUND AND READ — 2026-09-23**
+
+**Program byte `0x1d` is the LFO2 rate.** [C: 363/363 differential against
+EOS's own import]
+
+Found by pairing every preset of `B030-AKAIIMPORT-full.E4B` with its source
+program **by name** — 361/361 matched, so the disc is identified rather than
+assumed — and asking which program byte predicts EOS's `lfo2_rate`. **Of the
+104 bytes tested, exactly one does**, mapping its 11 values one-to-one onto
+EOS's 11 rates.
+
+`lfo2_rate` is now set wherever `lfo1_rate` is, verified at parity (505 of 935
+voices carry neither, 430 carry both).
+
+⚠ **The OFFSET is confirmed; the rate LAW is not.** Feeding `0x1d` through
+`akai_lfo_rate_hz` reproduces EOS's stored rate byte on **6 of 11** values and
+is one or two low on the rest — so LFO1's curve is close to EOS's LFO2 curve
+and is not it. Using it is deliberate under this project's rule that *EOS is a
+starting point for a field we DROP, never an arbiter for one we convert*.
+Closing that gap needs an S3000XL LFO2 rate sweep, which is the same shape as
+the LFO1 measurement already in `s3ked`.
+
+⚠ **And EOS routes LFO2 nowhere** — `lfo2_to_pitch/filter/volume/pan` are all
+zero across 2800 imported voices. So reading the rate is necessary and not
+sufficient; the routing lives in the AKAI mod matrix (`MODSFILT` = 8 selects
+LFO2) and the reference disc never exercises it, being `(5, 3, 10)` on all 369
+programs. **A disc with `MODSFILT` = 8 would settle it**, and the corpus sweep
+that found the enum spread can find one.
+
+## ~~EOS←AKAI: the seven program-level mod slots~~ ✅ **CLOSED 2026-09-23**
+
+**They were already modelled.** The blocker was unreal twice over.
+
+First the register identity — resolved by an external review and verified
+here: the seven blocks read the orchestrator's staging struct `fp@(-68)`,
+which the header converter fills, so the amounts were never "out of reach".
+
+Then, reading the arithmetic at the seven amount write sites to implement
+them, the answer turned out to be **already in the module**:
+
+    firmware  amt <- fp@(-104..-101,-107..-105)  = raw[92,93,89,90,91,94,95]
+              scales 0x4b,0x4b,0x30,0x30,0x30,0x19,0x30 = 75,75,48,48,48,25,48
+    module    EOS_AKAI_PROGRAM_MOD_SLOTS -- identical set, verified byte for byte
+
+`eos_akai_program_cords` has been emitting all seven correctly since they were
+first read. **The open item was describing work that had already been done**,
+and two sessions carried it as blocked.
+
+⚠ *Worth the note: the TODO said "blocked on the remaining amount fields",
+which read as a fact about the firmware and was a fact about our reading of
+our own code.* Checking the module against the firmware took one comparison;
+nobody ran it because the entry asserted the gap.
+
+**Unchanged:** the cord pass overall is 20 modelled, 11 located-but-
+unmodelled, 23 write sites. Closing this closes the seven slots, not the pass.
+
+## ~~EOS←AKAI firmware simulation: not yet wired~~ ✅ **WIRED — verified 2026-09-23**
+
+**Status:** DONE, and this row was stale for hours while three sources
+disagreed. An external review (`~/temp/cr_20260923_0009.txt`) found the
+contract saying `implemented` while this file and the status table both said
+"not wired".
+
+The wiring is all present and was verified at its sites: the parser branch
+(`akai_s3000_parser.py`), the four registry lambdas, the writer's raw-override
+hooks (`e4b_writer.py:1869` voice, `:2061` preset header), and
+`simulate_akai_preset` emitting both.
+
+⚠ **This mattered because VinSamLib keys its whole device-match UI off the
+contract** — a reader trusting this file would have concluded the E4B arm
+could not be selected when it could.
+
+**What remains is the cord inventory, not the wiring.**
+
+## AKAI loop points are frame-quantised; the field has 16 bits of fraction
+
+**Status:** open, found 2026-09-23 by s3ked from a rig read plus the firmware.
+
+`LLNGTH1` is **32.16 fixed point** — a 32-bit frame count at `0x2c` and a
+16-bit FRACTION at `0x2a`, and the firmware at `0x15BA2` adds the fraction's
+overflow into the frame count with carry propagation (`add [si+0x2c],bp` /
+`adcw $0x0,[si+0x2e]`), which admits no other reading.
+
+Our writer is **correct but lossy**: it writes `0` into the fraction and the
+frame count into the integer half. Confirmed against the corpus here —
+decoding 6209 looped samples on six discs, the 32.16 reading puts the loop
+inside its own sample **6209/6209** where plain-48-bit manages 11.
+
+⚠ **The fraction is load-bearing, not padding.** A ROM `SINE` reads
+`168.5620` frames. A single-cycle waveform needs sub-frame loop precision to
+hold pitch, which is *why* the field carries 16 bits of it — so every
+single-cycle loop this converter writes lands on a frame boundary and is
+detuned by up to half a frame of period.
+
+**Blocked on:** a decision about where sub-frame loop points would come from.
+`SampleData.loop_start`/`loop_end` are integer frames throughout the model, so
+this is a model change rather than a writer fix, and it only pays on
+`--single-cycle` material.
+
+⚠ **And a direction error worth keeping:** this project first reported that a
+naive writer would produce a loop *65536× too long*. It is too **short** —
+`44100` written at the field start gives fraction 44100 and integer 0, i.e.
+0.67 frames. The error came from reasoning about what OUR writer would do
+under the wrong premise rather than what a naive one does under the right one.
+
+## KRZ Soundfilehead `volumeAdjust`: is the low rail −64.0 or −63.5?
+
+**Status:** open, needs one panel sweep. No hardware time yet spent on it.
+
+`_vol_adjust_byte` clamps to `[-128, 127]`, i.e. it can emit `0x80` = −64.0 dB.
+**That rail was never measured.** k2kremote's §37 asserted it beside a block
+headed *"Measured on the panel"* and retracted it on 2026-09-23: the sweep in
+that block is the keymap **range** field, and nobody has driven the sample
+editor's.
+
+⚠ **CORRECTED within the hour: the value is DOCUMENTED, just not measured.**
+The K2600 manual's Sample Editor table at 15-11 gives both Volume Adjust
+fields as **−64.0 to 63.5 dB** and gives the keymap field no numeric range.
+k2kremote's first retraction said "no basis", which was too strong in our
+favour; unmeasured is the accurate word.
+
+⚠ **Not tightened to ±127.** `-128` is the documented value, so moving on no
+measurement would be strictly worse than staying. But this instrument has
+diverged from its manual before — which is why the keymap range was
+*"established by experiment rather than from the manual's wording"*.
+
+**Blocked on:** one sweep of a sample's volume page on the K2000, driving the
+lower rail and reading back the byte. Costs nothing and settles it.
+
+*Worth noting how it arrived: we inherited it by trusting a sibling's note,
+and it surfaced only because that sibling went to check their own provenance
+after we described our own result as a near-miss rather than a pass.*
+

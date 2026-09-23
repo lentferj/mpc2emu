@@ -317,7 +317,7 @@ K2000. Banks can also be appended to an existing image in place with `--add-to`
 
 Finally, you can **inspect any input without converting** it (`--info`), and
 there are **no required dependencies** — mpc2emu is pure Python standard
-library (`mtools` is optional, only for one E4B HDA filesystem path).
+library.
 
 ---
 
@@ -567,6 +567,14 @@ Output:
                       channel.  (A K2000 keymap holds one sample per key with no
                       per-key velocity zones, so every velocity band costs a
                       layer and only three are playable on a normal channel.)
+  --firmware-sim      Reproduce what the SAMPLER'S OWN disk importer writes,
+                      byte for byte, instead of converting.  **Deliberately
+                      worse output**: it exists so a bank can be diffed
+                      against a real device import, and any difference is a
+                      defect in our reading of the firmware, not a matter of
+                      taste.  AKAI sources only, `--format e4b` or `krz`;
+                      every other combination is **refused**, not silently
+                      converted the normal way.
   --krz-faithful      KRZ: keep every layer even when that exceeds the K2000's
                       3-layer limit for a *regular* program.  A program with
                       more than three SPLIT layers is a **drum program** and
@@ -682,9 +690,8 @@ ZuluSCSI images:
                       krz default: content + ~50% headroom to save onto (FAT16 max ~2047)
   --hda-fs FS         E4B/EIII HDA filesystem: fat | emu  (default: fat; ignored for krz)
                       fat — FAT16 image in EOS's native layout (MBR partition
-                            at LBA 63, 32 KB clusters), read by EOS 4.7+ (needs
-                            the `mtools` package); banks B.NNN-NAME.E4B in the
-                            root.  Use >=512 MB.
+                            at LBA 63, 32 KB clusters), read by EOS 4.7+;
+                            banks B.NNN-NAME.E4B in the root.  Use >=512 MB.
                       emu — native EMU-fs (EMU3), read by all EOS versions
                             (incl. <=4.62 which lacks FAT).  Proper disk-sized
                             image (honours --hda-size) with free space; cluster
@@ -1262,6 +1269,56 @@ Two flags override it when you know the target channel:
 | Flag | Effect |
 |---|---|
 | `--krz-faithful` | Keep **every** layer. Makes it a drum program, playable only on a drum channel. |
+
+### `--firmware-sim` — “convert as the firmware would”
+
+**This is not a quality setting and it is not a faster conversion.** It
+reproduces, byte for byte, what the sampler's own disk importer would have
+written from the same source — which on every path measured so far is
+*worse* than what this converter produces, because the firmware drops most of
+what the source carries.
+
+Its value is that a bank built this way can be **diffed against a real device
+import**, and any difference is a defect in this project's reading of the
+firmware. Used as a conversion it will disappoint; used as an instrument it is
+the only way to check a firmware law without a logic analyser.
+
+| source → target | status |
+|---|---|
+| AKAI → E4B (EOS 4.7) | implemented — 20 cords modelled, 11 located but not modelled |
+| AKAI → KRZ (K2000 v3.87J) | implemented — the device writes 5 fields and the template carries the rest |
+| Roland → E4B, Roland → KRZ | not implemented |
+| Ensoniq → KRZ | not implemented |
+| Ensoniq → E4B | blocked — the laws are known, the struct they describe cannot be located |
+
+**Two modes, and only AKAI has both.**
+
+| | |
+|---|---|
+| *convert as good as possible* | mpc2emu's own conversion — the default |
+| *convert as the firmware would* | `--firmware-sim` |
+
+**For Ensoniq and Roland sources only the second exists**, and that is a fact
+about what is knowable rather than missing effort: everything this project
+knows about those disc formats was read out of EOS's own import routines, so
+`eps_parser` and `roland_s7xx_parser` extract **no filter, envelope or LFO
+fields at all**. There is no better conversion to offer — an "as good as
+possible" mode would differ only in the writer's defaults, which converts
+nothing.
+
+AKAI is the exception: its reader carries filter, envelope, LFO and velocity
+laws measured on a real S3000XL, every one of which the samplers' own
+importers discard. That is the one source where the two modes are genuinely
+different products.
+
+**Unimplemented combinations are refused, never silently converted normally.**
+A user who asked for a device-faithful import and received an ordinary
+conversion could not tell from the output, and would then diff it against
+hardware and conclude the firmware read was wrong.
+
+`docs/FIRMWARE_IMPORT_ROUTINES.md` carries the evidence for every law, and
+`docs/firmware_sim_contract.json` is the generated, test-asserted machine
+copy of the table above.
 | `--krz-drum-program` | Allow a split preset over three layers to be written as a drum program deliberately — up to the K2000 maximum of **32**; beyond that is clamped. |
 
 The converter prints a `[layers]` line per preset saying which path it took (and,

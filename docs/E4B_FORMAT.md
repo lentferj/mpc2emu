@@ -191,7 +191,8 @@ Fixed 82-byte header followed by N variable-length voice blocks, packed
 | `18`    | 1  | `0x00`       | null |
 | `19`    | 1  | `0x52`       | constant (always observed as `0x52`) |
 | `20:22` | 2  | `num_voices` | BE u16 — **must** equal the number of voice blocks that follow |
-| `22:28` | 6  | —            | zero |
+| `22:27` | 5  | —            | zero |
+| `27`    | 1  | **unknown**  | zero in every hardware-saved and factory bank; **non-zero in every preset EOS's AKAI importer writes** — see note below |
 | `28`    | 1  | `volume`     | `0x78` (=120) is mpc2emu's default master volume |
 | `29:41` | 12 | —            | zero |
 | `41`    | 1  | multi-voice flag | `0x04` when `num_voices > 1` (confirmed from hardware + commercial string-library banks) |
@@ -200,8 +201,144 @@ Fixed 82-byte header followed by N variable-length voice blocks, packed
 | `44:52` | 8  | —            | zero |
 | `52:56` | 4  | constant     | `0x52 0x23 0x00 0x7E` |
 | `56:60` | 4  | MIDI routing | `0xFF 0xFF 0xFF 0xFF` = any note / any channel |
-| `60:82` | 22 | —            | zero |
+| `60:76` | 16 | **FX block** | per-preset effects, in SysEx id 6-21 order — see [§3.2](#32-preset-fx-block-6076) |
+| `76:82` | 6  | —            | zero |
 | `82+`   | …  | voice blocks | one per `VoiceLayer`, see §4 |
+
+### 3.2 Preset FX block (`60:76`)
+
+**This region was documented as "zero" until 2026-09-20**, because mpc2emu
+writes nothing here and the banks first used to derive the layout happened to
+leave it zero. It is the per-preset effects block, mapped by eosed from the EOS
+4.70 firmware and validated on hardware:
+
+| Offset | Field | Range |
+|---|---|---|
+| `60` | `FX_A_ALGORITHM` | 0..44 |
+| `61` | FX A `Decay Time` | |
+| `62` | FX A `HF Damping` | |
+| `63` | FX A `FxB==>FxA` | routing amount, B's output into A |
+| `64:68` | `FX_A_AMT_0..3` | sends: Main, Sub 1, Sub 2, Sub 3 |
+| `68` | `FX_B_ALGORITHM` | **0..32 on EOS 4.70**; the 4.00 spec's 0..27 stops at "Vibrato" and rejects the five distortion algorithms |
+| `69` | FX B `Feedback` | |
+| `70` | FX B `LFO Rate` | |
+| `71` | FX B `Delay Time` | |
+| `72:76` | `FX_B_AMT_0..3` | sends |
+
+**Algorithm 0 is not "no effect" — it is `Master Effect A`/`Master Effect B`,
+meaning inherit the master setting.** So an all-zero FX block is a valid,
+meaningful state and not missing data. A printed effect list starts at the
+first real effect, so **printed position is not wire value**: eosed's tables
+were off by one from exactly that cause and named the neighbouring effect for
+every preset, which never looked wrong because every answer was a real effect
+name. Read the firmware POINTER table rather than the string pool — they
+disagree from index 18 up.
+
+**How much of this is actually evidenced — read this before relying on any
+single field.** The layout was first reported as "validated by falsification
+over 1184 preset headers, 704 non-zero blocks, zero range violations". eosed
+withdrew that count the same evening: the 704 rows contain **6 DISTINCT
+blocks**, from **2 independent sources** (three contributing banks, two of them
+the same bank round-tripped), and 690 of the 704 are one bank's default effect
+copied over and over. **The count was of rows when the evidence is in distinct
+rows.**
+
+Headroom actually exercised — a limit the data never approached was never
+tested:
+
+| field | limit | max seen | headroom | distinct n |
+|---|---|---|---|---|
+| `FX_A_ALGORITHM` | 44 | 20 | 45% | 704 rows / 6 blocks |
+| `FX_A` Decay Time | 90 | 60 | 67% | as above |
+| `FX_A` HF Damping | 127 | **120** | **94%** | as above |
+| `FX_A` FxB==>FxA | 127 | 33 | 26% | **n=1** |
+| `FX_A_AMT_0` Main | 100 | 11 | 11% | 702 rows |
+| `FX_A_AMT_1..3` Sub | 100 | 0 | 0% | **n=0** |
+| `FX_B_ALGORITHM` | 32 | 24 | 75% | 704 rows / 6 blocks |
+| `FX_B` Feedback | 127 | 48 | 38% | n=10 |
+| `FX_B` LFO Rate | 127 | 24 | 19% | 704 rows |
+| `FX_B` Delay Time | 127 | 66 | 52% | n=9 |
+| `FX_B_AMT_0` Main | 100 | 10 | 10% | n=9 |
+| `FX_B_AMT_1..3` Sub | 100 | 0 | 0% | **n=0** |
+
+**Six of the sixteen positions — every Sub 1-3 send — are non-zero NOWHERE in
+the corpus. Their placement is layout symmetry, INFERRED, not observed.**
+`FX_A` FxB==>FxA rests on a single preset.
+
+Two results do carry independently:
+
+- **`FX_A` HF Damping reaching 120 against a limit of 127** is the one tight
+  range result, and it is exactly the byte that could NOT sit in the Decay Time
+  slot, whose limit is 90. That pins the A-side parameter ORDER without relying
+  on any label.
+- **A machine-to-file link.** Preset 14 of a bank resident in an E4XT read over
+  SysEx as FX B algorithm 24, parameters 24, 3, 50. One of the six distinct
+  file blocks carries `24 24 3 50` at bytes `68:71` — four bytes, same order,
+  different bank. A common factory FX B setting appearing identically in a file
+  read and a SysEx read corroborates the B-half layout better than the range
+  test did.
+
+**Independent confirmation of the index-0 reading, from a different
+mechanism.** The six-value panel comparison above is all from one bank, so a
+second line was wanted. Querying the MASTER FX parameter ranges from the device
+(SysEx ids 228-243) gives:
+
+    228  MASTER_FX_A_ALGORITHM   device 1..44
+    236  MASTER_FX_B_ALGORITHM   device 1..32
+    the other 14 master FX ids agree with the spec exactly, defaults included
+
+The stale maximum on 236 is the same off-by-one written in a second place.
+**The MINIMUM is the finding: both master algorithm fields start at 1, not 0.**
+That is exactly what "index 0 = inherit the master effect" predicts — the
+master block cannot select "inherit from myself". Had index 0 been `Room 1` as
+the printed-list tables claimed, there is no reason for the master to exclude a
+plain reverb. Different mechanism (a range request, not a panel read),
+different parameter block, same answer.
+
+**If we ever model master FX: the minimum is 1 for both algorithm fields, and
+0 is preset-only.**
+
+**Do NOT convert an FX `Decay Time` byte to seconds.** The firmware's RFX-32
+plug-in area carries parameter descriptions, and the reverb one reads "Reverb
+decay time, in **arbitrary units**". That area also contains a `%#3.1f sec`
+format string, which is the kind of thing that makes a seconds conversion look
+supported. RFX is a different effects engine whose algorithm list only partly
+overlaps this block, so neither the descriptor nor the format string documents
+the preset FX field — but the warning is the useful part either way.
+
+**What does NOT depend on any of this:** the finding that all 363 presets
+written by EOS's AKAI importer have an all-zero FX block, and the byte-27
+refutation built on it. Those are statements about zeros, and zero is zero
+wherever the block sits — they need the block's OFFSETS right, not each field
+inside it validated.
+
+mpc2emu writes this region as zero, which is legal and means "inherit master".
+
+### Byte `[27]`, and what it is not
+
+Non-zero in every preset written by EOS's AKAI importer and zero everywhere
+else:
+
+    EOS AKAI import          363 presets   byte 27 in 239..250, mode 241
+    hardware-saved commercial 10 presets   byte 27 = 0
+    large factory bank       347 presets   byte 27 = 0
+
+**It is not the FX field.** The FX block is `60:76` and it is identically zero
+in precisely the banks where byte 27 is non-zero — so the importer neither maps
+FX nor invents it, while writing something else here.
+
+It is also **not generated by the save path**: a bank of ours with byte 27 = 0
+was loaded into an E4XT and saved straight back, and every preset-header byte
+round-tripped unchanged. So whatever writes 239-250 is the importer.
+
+It tracks nothing structural — cross-tabbed against `num_voices` it scatters
+(241 appears on voice counts 1..30, 242 on 1..40). **Open hypothesis:** read
+SIGNED it lands in -17..0 across all 1184 headers, which would fit a per-preset
+gain trim the importer derives from the AKAI source, and `E4_PRESET_VOLUME`
+(SysEx id 1) is signed dB over -96..10. Weak on its own — the corpus only
+exercises -17..0. One read settles it: select a preset whose byte 27 is 249
+(-7) and read id 1. Reads -7, it is the volume; reads 0, the hypothesis is
+dead.
 
 The two "multi-voice flag" bytes (`[41]`/`[43]`) are set together whenever a
 preset has more than one voice; their individual semantics are not fully
@@ -262,7 +399,7 @@ multi-voice banks:
 | `55`    | pan                 | **signed** byte, `−64`=full-L … `0`=centre … `+63`=full-R. Hardware-confirmed 2026-07-26 via a 7-voice differential save (`B.012 "Vce VolPan"`): front-panel Pan `+63/−64/+32/−32` → this byte exactly, every other voice/zone byte unchanged. **Only meaningful for a single-zone voice** — see [§4.5](#45-secondary-zone-table--zone-entry-22-bytes) |
 | `57`    | Amp Envelope Depth       | `E4_VOICE_VOLENV_DEPTH` (id 68), `0–16` raw = **−96 dB to −48 dB in 3 dB steps** (per the EOS manual, p.340: "maximum amount of attenuation from the amplifier envelope generator"). Directly relevant to `docs/RESOLUTION_NOTES.md` §E4BLEVEL (the amp-envelope sustain dB-law finding) — this is the field that sets the depth of that dB range; mpc2emu's writer never touches it, so it stays at whatever the source/template carries (commonly `0` = −96 dB, matching the calibration measurement) |
 | `58`    | VCF filter type     | see [§4.4](#44-filter-type-mapping-xpm--e4b) |
-| `60`    | VCF cutoff          | `0`≈57 Hz … `255`=20 kHz, exponential curve |
+| `60`    | VCF cutoff          | measured TABLE, not a curve: 133 Hz at `0` … 24163 Hz at `255` (`_E4XT_CUTOFF_TABLE`, E4XT 2026-07-31). **The old "57 Hz … 20 kHz exponential" here was never what the writer used**, and a second hardware sweep (eosed 2026-09-20) disagrees with the table's SHAPE — see RESOLUTION_NOTES §E4XTKEYPOL |
 | `61`    | VCF Q / resonance   | `0`–`127`, linear. **Also aliases `E4_VOICE_FKEY_XFORM`** (live id 84, "meaning varies by filter type" per eosed's own notes) — confirmed by diff: baseline `0` (matching `filter_resonance=0.0`) became the test value after editing `FKEY_XFORM` remotely |
 | `62`    | Filter Gen Param 1  | `E4_VOICE_FILT_GEN_PARM1` (id 85) |
 | `63`    | Filter Gen Param 2  | id 86 |
@@ -563,8 +700,151 @@ Each entry maps a key/velocity range to a sample.
 | `14`    | 1 | `root_key`   | MIDI note — playback root, overrides the sample's own root note |
 | `15`    | 1 | `volume`     | Signed byte, dB. **Multi-zone voices only** — see below |
 | `16`    | 1 | `pan`        | Signed byte, −64..+63. **Multi-zone voices only** — see below |
+| `3`,`4` | 1+1 | `key fade`   | Low/high key CROSSFADE. Zero in all 10 142 corpus zones; identified from firmware, not seen in the wild — see below |
+| `7`,`8` | 1+1 | `vel fade`   | Low/high velocity CROSSFADE. **Non-zero on 36 corpus zones**, in mirrored pairs — see below |
 
-All other bytes are zero in mpc2emu's output.
+All other bytes (`0`, `1`, `17`, `19`, `20`, `21`) are zero in mpc2emu's
+output **and in all 10 142 zone entries of the third-party corpus** — which
+makes them unidentified, not unused. A byte nobody writes looks exactly like
+a byte that does not exist.
+
+**The four fade bytes, and how they were pinned (2026-09-21).** eosed
+decompiled EOS's **Ensoniq** importer — a different importer from the AKAI one,
+sharing none of its primitives — and its zone builder writes, relative to a
+zone pointer that is `zone_base + 2`: key low at `+0`, "key low fade" at
+`+1,+2`, key high at `+3`, velocity low at `+4`, "velocity fade" at `+5,+6`,
+velocity high at `+7`, sample index at `+8:10`, fine tune at `+10:12`
+(discarded), root key at `+12`, volume at `+13`, pan at `+14`.
+
+**Add the +2 and every one of those lands on a field this table already had,
+in the right place** — including the two pairs it did not. Two implementations
+that never saw each other: a firmware trace and a 10 142-entry corpus.
+
+The corpus then supplies what the trace could not. `[7]`/`[8]` are non-zero on
+**36 zones of one bank**, and they come in mirrored pairs over the same key
+range and the same full velocity span:
+
+    (lo_key  0, hi_key  40)   lo_vel 0, [7]= 0, [8]=80, hi_vel 127
+    (lo_key  0, hi_key  40)   lo_vel 0, [7]=80, [8]= 0, hi_vel 127
+    (lo_key 41, hi_key  46)   lo_vel 0, [7]=80, [8]= 0, hi_vel 127
+    (lo_key 41, hi_key  46)   lo_vel 0, [7]= 0, [8]=80, hi_vel 127
+
+Two samples over one range, one fading in as the other fades out: **a velocity
+crossfade**, which is the only reading that explains the mirroring. 18 such
+pairs.
+
+> ## ✅ `[C]` RESOLVED 2026-09-21 — `[7]` is the LOW fade, `[8]` the HIGH
+>
+> **Two independent routes, and they agree.** The EOS Roland zone builder was
+> read in full at `0x171434`:
+>
+>     17148c:  a3@(7)  -> a5@(4)      a3 = the PARTIAL
+>     171492:  a3@(8)  -> a5@(5)
+>     171498:  a3@(9)  -> a5@(7)      <- crossed
+>     17149e:  a3@(10) -> a5@(6)      <- crossed
+>
+> With `partial+7 = vlow` and `partial+9 = vhigh` measured on hardware, and
+> this table's `[6] = lo_vel` / `[9] = hi_vel`, the destinations resolve:
+>
+>     entry[6] = partial+7   lo_vel
+>     entry[7] = partial+8   LOW  fade
+>     entry[8] = partial+10  HIGH fade
+>     entry[9] = partial+9   hi_vel
+>
+> **This table was right.** It agrees with the asymmetric velocity stack
+> measured off the E4XT, by a route that shares no evidence with it.
+>
+> > **And the `zone_base + 2` convention is now READ rather than inferred.**
+> > `a5@(4)` must be `entry[6]` and `a5@(7)` must be `entry[9]`; **both
+> > require `a5 = entry + 2`**, independently. That was the single inferred
+> > step in the bridge this document flagged, **for the Roland builder
+> > specifically** rather than carried over from the Ensoniq one.
+>
+> **The key quartet resolves the same way** — `entry[2..5]` from
+> `patch+12..15` — and is nested identically: **low, fade, fade, high**,
+> while Roland stores both quartets *ascending*. **So the "crossing" is the
+> nesting transform**, now instruction-stream confirmed rather than argued,
+> and an importer writing them in source order would be the broken one.
+
+> ~~**[?] WHICH of `[7]`/`[8]` is the LOW fade is NOT established here, and
+> this evidence structurally cannot establish it.**~~ *(Superseded above —
+> kept because the reasoning was right: mirrored pairs genuinely cannot
+> decide it, and it took a destination-side read to settle.)*
+>
+> **[?] WHICH of `[7]`/`[8]` is the LOW fade is NOT established here, and this
+> evidence structurally cannot establish it.** Every pair contains both
+> orderings — that is what mirroring means — so the corpus proves the two
+> bytes are a crossfade pair and says nothing about their roles. The
+> low/high labelling in the table above is **inference from position**, on
+> the nesting pattern below. *Anyone needing the distinction should treat it
+> as open.*
+>
+> **The asymmetric case now EXISTS, and it decides the semantics — but not
+> yet the byte order.** eosed's Roland import produced a four-zone velocity
+> stack, dumped over SysEx and **decoded independently here** from
+> `preset009.bin` (14-bit word stream, zone blocks at word 188 stride 13).
+> Read in the dump's own ascending order — `vlow, vlowfade, vhigh,
+> vhighfade`, parameter ids 49–52:
+>
+>     zone 0      1,  0,  78,  7
+>     zone 1     73,  7,  93,  7
+>     zone 2     88,  7, 108,  7
+>     zone 3    103,  7, 127,  0
+>
+> **Every outer edge carries 0 and every internal edge carries 7**, at both
+> ends of the stack and on both middle zones. `[C]` — **the pair is per-edge**,
+> and the two middle zones carrying 7 on *both* sides are the part 18 mirrored
+> corpus pairs could never have shown.
+>
+> **[S] What that makes of `[7]`/`[8]`.** The SysEx dump is **ascending** and
+> this table is **nested**, so the measurement does not land on a byte index
+> by itself. The bridge is EOS's Roland zone builder: it writes `partial+10`
+> (now measured as `vhighfade`) to zone `6`, which under the `zone_base + 2`
+> pointer convention is entry `[8]`. **So `[8]` is the HIGH fade and `[7]` the
+> LOW fade — this table is right** — but the convention is inferred from the
+> *Ensoniq* builder rather than read in the Roland one, so it stays `[S]`.
+>
+> **What would make it `[C]`: an E4B FILE from that import.** A SysEx preset
+> dump cannot settle a byte order in the file format. The bank is already
+> loaded on the E4XT; saving it to disc and parsing entry `[6..9]` of the
+> bottom zone ends the question — non-zero `[7]` there would mean this table
+> is backwards.
+
+**The nesting pattern, which is why the fades sit between the endpoints.**
+E-MU stores every range as `[low, fade, fade, high]`, at three independent
+places in this format:
+
+| | low | fades | high |
+|---|---|---|---|
+| zone entry, key | `[2]` | `[3]`,`[4]` | `[5]` |
+| zone entry, velocity | `[6]` | `[7]`,`[8]` | `[9]` |
+| voice window, key | `vpar[14]` | `vpar[15]`,`vpar[16]` | `vpar[17]` |
+
+**A source format that stores the four ASCENDING must therefore cross its
+last two on the way in.** Roland does (`partial+7` vlow, `+8` vlowfade, `+9`
+vhigh, `+10` vhighfade), and EOS's Roland importer writing its third source
+field to the fourth destination slot is **the transform, not a defect** — a
+reading that cost one cross-project round trip to establish, because the
+firmware note recorded the destination offsets relative to a zone pointer at
+`zone_base + 2` while this table indexes from the entry. `[3]`/`[4]` are zero everywhere in the corpus, so their identification
+rests on the firmware alone — but a **second** importer writes them.
+EOS's **Roland** importer fills the key-fade pair from `patch+13`/`patch+14`
+while the Ensoniq one zeroes it, so **a Roland-sourced bank is where non-zero
+values in `[3]`/`[4]` would be found**, and no such bank exists on this side
+yet. Two independent traces placing the same pair at the same offsets is
+worth more than one; it is still not a corpus check.
+
+**A free confirmation of `[12:14]` from the same trace.** Roland's importer
+computes fine tune as `(partial[6] * 64 + 32) / 100` — round-half-up on a
+divide by 100, i.e. `round(cents * 0.64)`. Roland stores ±50 cents, so a
+half-semitone is 32 units and **the E4 fine-tune unit is 1/64 semitone**,
+which is what this table has said since it was decoded from the commercial
+library CD-ROMs. Different importer, different source format, same unit.
+
+**mpc2emu writes zero to all four** — no source format in the pipeline states
+a zone crossfade — so a bank we write and read back is unaffected. What is
+affected is reading someone else's: a crossfaded pair currently arrives as two
+zones at full level over the same range.
 
 **`[12:14]`/`[15]`/`[16]` are the zone's ABSOLUTE fine-tune/volume/pan, used
 only when a voice has MULTIPLE sample zones — not a delta on top of the
