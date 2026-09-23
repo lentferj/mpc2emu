@@ -149,6 +149,20 @@ AKAI_VATT1_OFFSET = 16
 #: number to settle a disagreement that did not exist. The shared numerator
 #: is what made it look like one.
 #:
+#: ✅ **AND THE DROP DOES NOT HAPPEN ON ANY DISC ROUTE — measured.**
+#: `eosed`, 2026-09-23, their `f40aa23`: an S3000 program with `0x13 = 0` and
+#: `0x1b = -50`, imported from CD-ROM on the E4XT, **receives its cord** --
+#: readback `Key+ -> FEnvRls AMT = -38`, which is `clamp(-50)*48/50 = -48`
+#: stored and `-48 * 100/127` on the wire. The CD-ROM S3000 route reaches the
+#: orchestrator arm, not `A3S1`, so the gate mismatch is never exercised by a
+#: disc import. The open question is now a different kind of TRANSFER, not a
+#: different kind of disc.
+#:
+#: That answer sat unread in their readback for four hours. It needed two
+#: facts already held on opposite sides -- which programs carry the pattern
+#: (here) and which presets had been read back (there) -- and neither of us
+#: crossed them until a disagreement about probe ranking forced it.
+#:
 #: ⚠ **The 51 are two populations, and only one can reach the arm.**
 #: Located here 2026-09-23 and split by generation (file extension, type byte
 #: and block length all agreeing):

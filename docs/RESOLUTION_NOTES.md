@@ -35142,9 +35142,9 @@ rescaler and one guard:
 | `0x12` | RlsVel → VEnvRls | 48 | 28 (1.0%) | thin |
 | `0x18` | Vel+ → FEnvAtk | 48 | 12 (0.4%) | thin |
 | `0x19` | Vel+ → FEnvRls | 48 | 12 (0.4%) | thin |
-| `0x13` | Key+ → VEnvRls | 48 | **0** | **none** |
-| `0x1a` | RlsVel → FEnvRls | 48 | **0** | **none** |
-| `0x1b` | Key+ → FEnvRls | 48 | **0** | **none** |
+| `0x13` | Key+ → VEnvRls | 48 | ~~**0**~~ **892 (1.29%)** | corpus, 2026-09-23 |
+| `0x1a` | RlsVel → FEnvRls | 48 | **0 of 69 062** | exhaustive negative |
+| `0x1b` | Key+ → FEnvRls | 48 | ~~**0**~~ **51 (0.074%)** | corpus + **HW** |
 
 **We carry TWO of the nine, not one** — the first count here said one and was
 wrong. `0x08` is `filter_keyfollow`, and **`0x10` is `vel_to_attack`**
@@ -35158,6 +35158,45 @@ gap.
 3.1% of keygroups, `0x12` 1.0%, `0x18` and `0x19` 0.4% each, and `0x13`,
 `0x1a`, `0x1b` never. Worth doing, worth doing cheaply, and not worth bench
 time on its own.
+
+> ⚠ **THE THREE "never" CELLS ABOVE WERE WRONG AND ARE STRUCK, 2026-09-23.**
+> Left visible rather than rewritten, because the sentence is quoted
+> elsewhere and a silent edit makes the quotations look invented.
+>
+> The counts came from **one 2690-keygroup reference disc**, and `eosed`
+> independently recorded zero on theirs. Each of us read the other's zero as
+> corroboration. **Two samples agreeing on a negative measured nothing:** at
+> 0.074 % two corpora of a few thousand keygroups will both return zero and
+> *agree*. The honest form was always "0 of 2690".
+>
+> Measured since, 21 discs / 10 933 programs / 69 062 keygroups:
+>
+>     0x13  892 keygroups  1.29 %     -- "never" was wrong by 892
+>     0x1b   51 keygroups  0.074 %    -- wrong by 51
+>     0x1a    0 of 69 062             -- the only real negative of the three
+>
+> `0x1a` survives as an **exhaustive** negative rather than a sampled one,
+> which is a different claim from the one this table originally made about
+> all three.
+>
+> **And the drop it implied does not happen.** A firmware arm (`0x44958`,
+> descriptor `A3S1`) gates `0x1b` on `0x13` instead of on itself, which would
+> silently lose the cord on all 51. `eosed` measured it on the E4XT
+> (2026-09-23, their `f40aa23`): an S3000 program with `0x13 = 0` and
+> `0x1b = -50`, imported from CD-ROM, **receives its cord** -- readback
+> `Key+ -> FEnvRls AMT = -38`, which is `clamp(-50)*48/50 = -48` stored and
+> `-48*100/127` on the wire. So the **CD-ROM S3000 route reaches the
+> orchestrator arm, not `A3S1`**, and the mismatch is not exercised by any
+> disc import. Whatever reaches the descriptor-driven arm is a different
+> kind of *transfer*, not a different kind of disc.
+>
+> Our writer emits per-byte and is unaffected either way -- but the reason to
+> record this is that a "silently lost on 51 keygroups" impact claim was
+> live for a day on a code read alone, and the measurement retired it.
+>
+> The 51 split by generation: **18 S3000 / 33 S1000**, and `A3S1` is the
+> S3000 arm, so only 18 could ever have reached it. See
+> `parsers/akai_s3000_parser.py` and `tests/_local/env_cord_drop_ids.md`.
 
 ### The AKAI source offsets ARE file offsets — unlike Ensoniq's
 
