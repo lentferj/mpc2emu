@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "schema_rule": "Additive changes keep this number; a removed or re-meant key bumps it. Read any key you know while schema == the number you were written against; refuse rather than guess when it is higher.",
-  "note": "Generated from the source by tools/firmware_sim_contract.py. Consumers key on (source, target); `status` and `reason` are display strings and are part of the contract.",
+  "note": "Generated from the source by tools/firmware_sim_contract.py and asserted against it by the mpc2emu test suite. NOTE: that generator and that test are NOT in the repository (tools/ and tests/ are gitignored), so a consumer can read this file but cannot regenerate or diff it -- treat it as ASSERTED BY mpc2emu, not as independently verifiable. Consumers key on (source, target); `status` and `reason` are display strings and are part of the contract.",
   "modes": {
     "firmware": "convert as the firmware would",
     "best": "convert as good as possible"
