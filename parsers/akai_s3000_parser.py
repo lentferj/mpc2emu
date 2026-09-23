@@ -126,10 +126,52 @@ AKAI_VATT1_OFFSET = 16
 #: IT.** Both were recorded zero — on `eosed`'s 2690-keygroup reference disc
 #: and on this project's 13-program ISO — and each of us read the other's zero
 #: as corroboration. Across **21 discs, 10 933 programs, 69 062 keygroups**
-#: measured here (matching `eosed`'s independent sweep exactly):
+#: measured here:
 #:
 #:     0x13 != 0 and 0x1b == 0      892 keygroups   1.29 %
 #:     0x13 == 0 and 0x1b != 0       51 keygroups   0.074 %
+#:
+#: ⚠ **Same counts, two populations -- state which one before quoting a
+#: percentage.** This line said "matching `eosed`'s independent sweep
+#: exactly", which is true of the COUNTS and false of the POPULATIONS, and a
+#: cross-project review quoting their figure (`51 of 70 872 keygroups across
+#: 24 disc images`) beside ours made two correct sweeps look contradictory.
+#: Reconciled with them 2026-09-23 (their 6ca5ce6): their 24 images are these
+#: 21 plus the three ISOs authored in this project, which carry 99 programs /
+#: 1 810 keygroups and contribute **zero of both classes** --
+#:
+#:     24 discs  11 032 prog  70 872 kg   everything scanned      0.072 %
+#:    -3 discs       99 prog   1 810 kg   the authored ISOs, 0/0
+#:    =21 discs  10 933 prog  69 062 kg   commercial only         0.074 %
+#:
+#: Both percentages are right and they answer different questions. Neither
+#: denominator was a slip, and "correcting" either would have broken a true
+#: number to settle a disagreement that did not exist. The shared numerator
+#: is what made it look like one.
+#:
+#: ⚠ **The 51 are two populations, and only one can reach the arm.**
+#: Located here 2026-09-23 and split by generation (file extension, type byte
+#: and block length all agreeing):
+#:
+#:     S3000  .P3  block 0xc0    18 keygroups  10 programs  ONE disc
+#:     S1000  .P1  block 0x96    33 keygroups  11 programs  four other discs
+#:
+#: `0x44958` -- the arm that gates `0x1b` on the wrong byte -- lives in the
+#: **S3000** descriptor `A3S1`, so an S1000 program cannot reach it however
+#: many damaged keygroups it carries. The two heaviest programs (13 and 11
+#: keygroups, all at +50 and -50) are both `.P1`, which makes them the
+#: strongest probes by count and the weakest by relevance. Ranking candidates
+#: on the quantity that was measured rather than the one that decides the
+#: question is how that nearly went out as a recommendation.
+#:
+#: Within a program it is all keygroups or one, never a scatter -- an
+#: authoring habit (filter-env key tracking set, amp-env left at zero), and
+#: the two generations are two separate habits that happen to share a byte.
+#:
+#: Locations: `~/temp/envcord/` (scan + JSON), ids resolved in
+#: `tests/_local/env_cord_drop_ids.md`. The scan reads the RAW keygroup slice,
+#: because this model's `env_cords` dict has already applied the truthiness
+#: guard the whole question is about.
 #:
 #: with dropped amounts `-50, -30, -26, -20, -5, -3, -1, 20, 24, 50` — several
 #: at full scale, so not rounding dust.
