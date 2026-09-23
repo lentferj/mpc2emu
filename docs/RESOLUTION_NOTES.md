@@ -371,6 +371,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [~~§EOSROLVOLSEL — EOS's Roland volume-import selection rule~~ CLOSED, WITHDRAWN](#eosrolvolsel-eoss-roland-volume-import-selection-rule-closed-withdrawn)
 - [§EOSROLVOLSEL — EOS's Roland volume-import selection rule *(superseded)*](#eosrolvolsel-eoss-roland-volume-import-selection-rule-superseded)
 - [§KRZSAMPPERIOD — round vs truncate in `samplePeriod`](#krzsampperiod-round-vs-truncate-in-sampleperiod)
+- [§RELSCAN — the release name scan, and why it is a program with mutated tests (2026-09-23)](#relscan-the-release-name-scan-and-why-it-is-a-program-with-mutated-tests-2026-09-23)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -35993,3 +35994,89 @@ byte-diff a K2000 import will otherwise file it as a bug.
 **Do not "fix" it silently.** A one-unit change in a field this project has
 hardware-confirmed is exactly the kind of edit that looks like a typo
 correction in a diff and is not.
+
+## §RELSCAN — the release name scan, and why it is a program with mutated tests (2026-09-23)
+
+**The rule was enforced by nobody.** The project rule is that no commercial
+library, vendor, volume or preset name appears in a tracked file or a commit
+message: ids are used instead, and the id→name map stays out of the repository
+(`tests/_local/disc_name_map.md`, `tests/_local/env_cord_drop_ids.md`).
+
+Before the `fw-only-imports` squash the rule was checked by hand, once, and
+reported clean. The invocation was
+
+    git ls-files -z | xargs -0 command grep -nE '...' 2>/dev/null
+
+and it **read zero files**. `command` is a shell builtin, so `xargs` had
+nothing to exec:
+
+    xargs: command: Datei oder Verzeichnis nicht gefunden      exit 127
+
+with the stderr that said so redirected away. It printed nothing and returned
+cleanly, and the empty result was reported as evidence — to a peer, and
+earlier to Jan as part of "safe for public release".
+
+What makes it worse than an ordinary slip: `command grep` is the documented
+workaround for this machine's `grep` being `ugrep --ignore-files`, which
+silently skips gitignored paths and once hid all of `tests/`. **The workaround
+for one silent undercount produced a different silent undercount in the same
+direction, and was then used to issue a clean bill.** A workaround carries a
+reason, and a reason is what stops anyone looking.
+
+### The three legs, each separately necessary
+
+    count the files     catches a search that READ NOTHING
+    assert a control    catches a pattern that COULD NEVER HIT
+    print every hit     catches a pattern that HITS EVERYTHING
+
+The second is `eosed`'s refinement and it is strictly better than the first
+alone: a file count can be perfectly healthy while a regex with a bad escape
+matches nothing anywhere in the corpus.
+
+The third is not the minor one, and it is the leg neither project had.
+Re-verifying this claim by hand produced **816 hits, then 11, then 3** — every
+one an artefact of the pattern rather than the corpus (`ROM)` split out of
+"(AKAI S3000 CD-ROM)"; `vel samp` matching "le*vel samp*levolume"). **The
+control passed on all three runs**, because the machinery was fine and the
+pattern was wrong. For a release scan a false positive does not fail safe: it
+reads as "commercial names found the night before a push".
+
+### Two refusals the tool owes its operator
+
+- **The terms file may not be tracked.** A checked-in list of commercial names
+  *is* the violation. `--terms` takes a path and `tools/relscan.py` refuses any
+  path `git ls-files` knows.
+- **It scans bytes, not decoded text**, over `git ls-files` plus a commit
+  range — a captured binary embeds names in its payload, and a name can ship
+  in a message having never reached a file.
+
+Exit codes are `0` clean / `1` hits / `2` **unsound**, and an unsound run can
+never exit 0. Hits and unsoundness need opposite responses: hits are read, an
+unsound run is re-run.
+
+### A guard that has never been made to fail is a comment
+
+`s3ked-95` built the same tool the same night and mutated their own nine tests.
+**Two proved nothing, and both were the ones standing in for this project's
+failure.** Their fixture for the word-boundary artefact was
+`levelsamplevolume` — no space in it — so a two-word term could not have
+matched it on any setting, and deleting the anchors left every test green. The
+transcription had read the emphasis markers in "le*vel samp*levolume" as the
+word break.
+
+The generalisation: **one string cannot isolate two edges.** `vel samp` inside
+`level samplevolume` is excluded by *both* boundaries at once, so that fixture
+tests neither. Each anchor needs a fixture where only it excludes the match:
+
+    'a level samp follows'      leading  \b excludes (trailing is satisfied)
+    'the vel samplevolume …'    trailing \b excludes (leading is satisfied)
+
+`tests/test_relscan.py` keeps the two-edge fixture, named, as a test of the
+test — so nobody reintroduces it believing it covers the artefact.
+
+**Nine mutations, nine caught** (2026-09-23): the tracked-terms refusal, the
+unread-file refusal, the file control, the commit-range control, the empty-term
+refusal, each word boundary independently, byte-vs-text reading, and the
+printing of hits. All fourteen tests passed on the first run, which is exactly
+the state this section exists to distrust.
+
