@@ -114,6 +114,7 @@ from models.common import (
     E4B_DC_CORD_SRC, E4B_AMPVOL_DST, E4B_LFO_PAN_CORD_SCALE,
     E4XT_VEL_AMPVOL_DB_PER_PERCENT,
     key_track_to_filter_amount,
+    e4xt_max_transpose_semitones,
     e4xt_cutoff_byte_to_position,Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            LoopType, lfo_rate_hz_to_byte,
                            env_seconds_to_rate, env_rate_to_seconds,
@@ -809,6 +810,20 @@ _MOD_KEY_TO_CUTOFF_AMT  = 26   # slot 6: Key → Filter-Freq ("Cord 06")
 # would centre on vel 64 and darken softer notes below base — wrong semantics;
 # Vel< only ever subtracts, the original bug.)
 _SRC_VEL_PLUS = 0x0A
+
+#: §AKAICORDGAP — model routing name -> (E4 source id, E4 destination id).
+#: Both columns are the literal `moveq #N` operands from EOS's own AKAI
+#: importer (eosed, 2026-09-21), NOT inferred from a block: `VEnvAtk` is 0x49
+#: and `VEnvRls` is 0x4B, so reading the envelope destinations as a contiguous
+#: run would put the release one byte low and silently write to the wrong
+#: stage. `VEnvAtk = 0x49` is independently confirmed here -- it is the
+#: destination this writer has used for the velocity->attack cord since it was
+#: hardware-RE'd.
+_MOD_SRC_ID = {'key': 0x08, 'velocity': 0x0A, 'release_velocity': 0x0D}
+_MOD_DST_ID = {'amp_env_attack':     0x49,    # VEnvAtk
+               'amp_env_release':    0x4B,    # VEnvRls
+               'filter_env_attack':  0x51,    # FEnvAtk
+               'filter_env_release': 0x53}    # FEnvRls
 
 # Mod-wheel→LFO-depth gating (KeygroupWheelToLfo), RE'd 2026-06-13 from
 # B.013-RE_SUITE CrdAmt.E4B.  ModWheel source = 0x11; the "Cord N Amount"
@@ -1529,6 +1544,23 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
                        * LFO_VOLUME_MODEL_FULL_DB)
     _trem_lfo, _trem_dc = e4xt_tremolo_cords(
         _trem_one_sided, getattr(voice, 'lfo_volume_centre_db', 0.0) or 0.0)
+    # §AKAICORDGAP: routings with no measured law, carried in the reference
+    # implementation's own units and written straight out. A source that never
+    # states them contributes nothing here, which is every source but AKAI.
+    _model_cords = []
+    for _r in getattr(voice, 'mod_routings', None) or []:
+        _s_id = _MOD_SRC_ID.get(_r.source)
+        _d_id = _MOD_DST_ID.get(_r.dest)
+        if _s_id is None or _d_id is None:
+            print(f"    [WARN] mod routing {_r.source}->{_r.dest} has no E4B "
+                  f"mapping; dropped (origin {_r.origin or 'unknown'})")
+            continue
+        _model_cords.append((_s_id, _d_id, _r.amount))
+
+    # `_model_cords` IS NOT IN THIS LIST, DELIBERATELY (2026-09-22). It used
+    # to be prepended here, and that was wrong twice over -- see the ungated
+    # write after the loop below. Everything in `_extra_cords` is an LFO (or
+    # the attack) routing, which is what the mod-wheel gate is about.
     _extra_cords = [
         (0x60, 0x38, voice.lfo1_to_filter   * _lfo1_sign),  # LFO1 → Filter-Freq
         (0x60, 0x39, voice.lfo1_to_filter_q * _lfo1_sign),  # LFO1 → Filter-Q
@@ -1581,7 +1613,8 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
     # this is a correctness fix with a countable and tiny reach, not a change
     # of behaviour dressed as one.
     _survives = lambda a: _q(a) not in (0, 256)
-    has_extra = any(_survives(a) for _, _, a in _extra_cords)
+    has_extra = any(_survives(a)
+                    for _, _, a in list(_extra_cords) + _model_cords)
     # FILTER DEPTHS CONVERT THROUGH THE CORNER, FROM THIS VOICE'S OWN BASE.
     #
     # The model states them in cents (2026-08-25) and the cord moves the cutoff
@@ -1784,14 +1817,109 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
                     _set_cord(mod, slot, _SRC_MOD_WHEEL,
                               _CORD_AMT_DEST_BASE + lfo_slot, _rem)
                     slot += 1
+
+        # THE MODEL'S OWN MOD ROUTINGS GO IN UNGATED, AND AFTER THE LFOs.
+        # They were prepended into `_extra_cords` until 2026-09-22, which put
+        # them through the mod-wheel gate and gave them slot priority. Both
+        # were wrong, and the first silently:
+        #
+        #   * `_static(amt) = amt * (1 - Kw)` with `Kw = voice.wheel_to_lfo`.
+        #     The AKAI parser sets that as `MWLDEP / (LFODEP + MWLDEP)`, and
+        #     by its own measurement 46.5% of programs have `LFODEP == 0,
+        #     MWLDEP > 0` -- i.e. `Kw == 1.0`. So on nearly half of AKAI
+        #     sources every model cord was written with amount ZERO and its
+        #     whole depth moved onto a ModWheel cord. A velocity -> amp-env
+        #     release routing is not an LFO depth and must not be scaled by
+        #     how much of the vibrato the wheel owns; it simply did nothing
+        #     until the wheel was raised.
+        #   * 12 free slots, and a gated cord costs two. Seven env-cord rows
+        #     plus wheel vibrato filled them before `lfo1_to_filter`,
+        #     `lfo*_to_pan` and the tremolo pair were reached, and those were
+        #     dropped with no diagnostic. LFO routings are hardware-calibrated
+        #     here; the model cords are carried through. The calibrated ones
+        #     go first.
+        #
+        # Found by /code-review 2026-09-22, confirmed by reading `_static`,
+        # `_remainder` and the parser's own `wheel_to_lfo` definition.
+        for src, dst, amt in _model_cords:
+            if not _survives(amt):
+                continue
+            if slot >= 20:
+                print(f"    [WARN] mod routing {hex(src)}->{hex(dst)} dropped: "
+                      f"all 12 free cord slots are taken by LFO routings")
+                continue
+            _set_cord(mod, slot, src, dst, amt)
+            slot += 1
         mod = bytes(mod)
     else:
         mod = bytes(80)
+    # ── firmware-simulation overrides ──────────────────────────────────────
+    #
+    # ⚠ **THIS IS NOT A TWEAK LAYER.** `voice.firmware_raw` is present only in
+    # firmware-simulation mode, where the caller has already built this voice
+    # from a NEUTRAL `VoiceLayer` — zones and sample references and nothing
+    # else — precisely so that the fields the device does not write cannot
+    # inherit this project's own laws. Applying these overrides on top of a
+    # normally-converted voice would produce a hybrid that is neither our
+    # conversion nor the device's, and whose diff against hardware would mean
+    # nothing. See `writers/eos_firmware_sim.py` for the contract.
+    #
+    # Applied LAST, after every normal field, so the manifest in that module
+    # is the complete list of what differs from a neutral voice.
+    _raw = voice.firmware_raw
+    if _raw:
+        for _off, _val in _raw.get('vpar', {}).items():
+            vpar[_off] = _val & 0xFF
+        for _off, _val in _raw.get('pzt', {}).items():
+            pzt[_off] = _val & 0xFF
+        _cords = _raw.get('cords')
+        if _cords is not None:
+            # The device packs cords densely from slot 0 in encounter order
+            # and leaves the rest zero; it does not start from a template.
+            mod = bytearray(80)
+            for _slot, (_s, _d, _a) in enumerate(_cords[:20]):
+                mod[_slot * 4]     = _s & 0xFF
+                mod[_slot * 4 + 1] = _d & 0xFF
+                mod[_slot * 4 + 2] = _a & 0xFF
+                mod[_slot * 4 + 3] = 0
+            mod = bytes(mod)
+
     fixed = (bytes(vpar)
              + bytes(pzt)
              + bytes(16)
              + mod
              + bytes(14))
+
+    # ── firmware simulation: a whole-voice template ────────────────────────
+    #
+    # The AKAI path overrides individual fields because EOS converts many of
+    # them. The FOREIGN paths (Roland, Ensoniq) are the opposite case: the
+    # device writes one fixed 284-byte voice and varies only eight bytes, so
+    # the faithful thing is to lay down the measured block and let the caller
+    # place those eight. See `EOS_FOREIGN_VOICE_TEMPLATE`.
+    #
+    # `vpar[2:5]` stay the WRITER'S: the trailer offset and zone count depend
+    # on the zone table built above, and a template carries whatever the
+    # measured voices happened to have. Copying them would produce a bank
+    # whose navigation is a different bank's.
+    if _raw and _raw.get('voice_fixed') is not None:
+        _tpl = bytearray(_raw['voice_fixed'])
+        if len(_tpl) != VOICE_FIXED:
+            raise ValueError(f"voice_fixed must be {VOICE_FIXED} bytes, "
+                             f"got {len(_tpl)}")
+        # THE WRITER KEEPS THE BYTES THE DEVICE VARIES. The template is the
+        # device's constant part; the eight varying bytes are the structure
+        # and the five converted fields, and `_build_voice` has already
+        # computed every one of them from the zones -- including EOS's own
+        # voice-level-vs-zone-level rule, which this writer implements
+        # independently and which the device turns out to share.
+        #
+        # Overriding them from the caller was tried and was wrong: it wrote
+        # voice-level volume and pan unconditionally, where both EOS and this
+        # writer leave them zero on a multi-zone voice.
+        for _k in _raw.get('voice_keep', ()):
+            _tpl[_k] = fixed[_k]
+        fixed = bytes(_tpl)
 
     return fixed + bytes(zones_raw)
 
@@ -1841,6 +1969,52 @@ def _split_by_velocity(voice: VoiceLayer):
     return out
 
 
+def _split_by_coarse_tune(voice):
+    """A voice whose zones disagree on coarse tune -> one voice per value.
+
+    E4B has NO per-zone storage for coarse tune or transpose -- unlike
+    fine_tune/volume/pan, which every zone entry carries in full. `_voice_body`
+    therefore has to pick one representative for the whole voice, and until
+    2026-09-20 it took `next(z.coarse_tune for z in voice.zones if
+    z.coarse_tune)` -- the first NON-ZERO value -- and every other zone in that
+    voice silently inherited it.
+
+    That is not a rounding error, it is the multisample's key mapping. AKAI
+    programs routinely carry the whole mapping in per-zone tune against one
+    common root: `SMOOTH SAX 1` is eleven zones, ALL rooted at 60, with coarse
+    tunes -24 -21 -17 -14 -11 -7 -4 0 +5 +8 +12. Zone 0 holds +12, so all
+    eleven played at +12.
+
+    MEASURED on Jan's two machines, same program on both, 2026-09-20. Against
+    equal temperament the S3000XL is within 0.06 semitones on every cleanly
+    measured note; the E4XT was off by exactly (12 - the zone's own coarse
+    tune) on nine of eleven notes -- 0 semitones at the bottom of the keyboard
+    growing to +36 at the top. Not a transposition: a stretched keyboard, which
+    is why it was hard to name by ear.
+
+    Same shape as `_split_by_velocity` above, and applied after it. Zone order
+    is preserved within each group, and a voice whose zones already agree is
+    returned unchanged -- so output for every source that did not hit this bug
+    is byte-identical.
+    """
+    keys = []
+    for zone in voice.zones:
+        key = (getattr(zone, 'coarse_tune', 0) or 0,
+               getattr(zone, 'transpose', 0) or 0)
+        if key not in keys:
+            keys.append(key)
+    if len(keys) <= 1:
+        return [voice]
+    out = []
+    for key in keys:
+        clone = copy.copy(voice)
+        clone.zones = [z for z in voice.zones
+                       if (getattr(z, 'coarse_tune', 0) or 0,
+                           getattr(z, 'transpose', 0) or 0) == key]
+        out.append(clone)
+    return out
+
+
 def _build_preset_body(preset: Preset, preset_idx: int,
                        sample_name_to_idx: dict) -> bytes:
     # Velocity switches at the voice, so a voice holding several windows must
@@ -1861,7 +2035,24 @@ def _build_preset_body(preset: Preset, preset_idx: int,
                   echo=f"  [INFO] preset '{preset.name}': a voice carries "
                        f"{len(split)} velocity windows — split into {len(split)} "
                        f"voices, since E4B switches velocity per voice")
-        voices.extend(split)
+        for sv in split:
+            tuned = _split_by_coarse_tune(sv)
+            if len(tuned) > 1:
+                _diag(_I, 'E4B_COARSE_TUNE_SPLIT',
+                      f"a voice whose zones carry {len(tuned)} different "
+                      f"coarse tunes was split into {len(tuned)} voices; E4B "
+                      f"stores coarse tune per voice, not per zone",
+                      subject=preset.name,
+                      content_lost=False,
+                      detail={'tunes': len(tuned),
+                              'voices_added': len(tuned) - 1,
+                              'values': sorted({(getattr(z, 'coarse_tune', 0) or 0)
+                                                for z in sv.zones})},
+                      echo=f"  [INFO] preset '{preset.name}': a voice carries "
+                           f"{len(tuned)} different coarse tunes — split into "
+                           f"{len(tuned)} voices, since E4B stores coarse tune "
+                           f"per voice")
+            voices.extend(tuned)
     num_voices = len(voices)
     hdr = bytearray(PRES_HDR)
 
@@ -1870,6 +2061,21 @@ def _build_preset_body(preset: Preset, preset_idx: int,
     hdr[18]   = 0x00                             # [18]   null
     hdr[19]   = 0x52                             # [19]   constant
     struct.pack_into('>H', hdr, 20, num_voices)  # [20-21] num_voices
+    # [27] PRESET VOLUME, signed dB, range -96..+10.
+    #
+    # Left at zero on every bank this project wrote until 2026-09-20, because
+    # the field was documented as "zero" -- it reads zero in hardware-saved and
+    # factory banks, and we write zero, so nothing ever contradicted it. What
+    # showed otherwise is that EOS's own AKAI importer writes it on EVERY
+    # preset (239..250 across a library disc) while writing zero in the FX
+    # block eight bytes away, which is how it was first mistaken for an FX
+    # field (§AKAICDTYPE's sibling error).
+    #
+    # The E4XT's save path PRESERVES what we write here -- a bank of ours with
+    # byte 27 = 0 was loaded and saved straight back and every preset-header
+    # byte round-tripped -- so a zero is our choice, not the machine's.
+    _pvol = int(getattr(preset, 'volume', 0) or 0)
+    hdr[27] = max(-96, min(10, _pvol)) & 0xFF
     hdr[28]   = 0x78                             # [28]   volume 120
     if num_voices > 1:
         hdr[41] = 0x04                           # [41]   multi-voice flag (confirmed B.025 + a commercial string library)
@@ -1878,6 +2084,15 @@ def _build_preset_body(preset: Preset, preset_idx: int,
     hdr[52], hdr[53], hdr[54], hdr[55] = 0x52, 0x23, 0x00, 0x7E
     # [56-59] MIDI any-note/any-channel
     hdr[56] = hdr[57] = hdr[58] = hdr[59] = 0xFF
+
+    # ── firmware-simulation preset-header overrides ────────────────────────
+    # See the note in `_build_voice`: present only in simulation mode, applied
+    # last, and the manifest in `writers/eos_firmware_sim.py` is the complete
+    # list of what the device writes here.
+    _praw = preset.firmware_raw
+    if _praw:
+        for _off, _val in _praw.get('hdr', {}).items():
+            hdr[_off] = _val & 0xFF
 
     # VELOCITY-PIVOT OFFSET. We write the source's swing as `Vel+`, which
     # BOOSTS from velocity 0 (see `E4XT_VEL_PIVOT['Vel+']` passed below); a
@@ -1974,6 +2189,67 @@ def write_e4b(bank: Bank, output_path: str) -> None:
 
     # sample name → 1-based index (E3S1 indices start at 1)
     sample_name_to_idx = {s.name: (i + 1) for i, s in enumerate(samples)}
+
+    # ── playback-rate ceiling (§E4BXPOSE) ─────────────────────────────────
+    # Above an absolute playback rate the E4XT voice runs off the end of its
+    # own sample into neighbouring sample RAM and keeps going. Nothing in the
+    # file prevents it -- four header variants over identical PCM (12-byte
+    # guard, option bits 0x38, both, neither) were ALL broken at the same note,
+    # so it is not the sample header and there is nothing to fix in the data.
+    #
+    # It is not a limit in semitones either, though it looks like one on 44.1
+    # kHz material: a 22050 Hz sample gets a full extra octave. Warn per zone
+    # against the zone's OWN sample rate, and name the highest key that is
+    # actually safe, because that is the number the user needs.
+    _rate_of = {s.name: getattr(s, 'sample_rate', 0) for s in samples}
+    _over = {}
+    for _p in bank.presets:
+        for _v in _p.voices:
+            for _z in _v.zones:
+                _sr = _rate_of.get(_z.sample_name)
+                if not _sr:
+                    continue
+                _shift = ((getattr(_z, 'coarse_tune', 0) or 0)
+                          + (getattr(_z, 'fine_tune', 0) or 0) / 100.0)
+                _top = _z.root_key - _shift + e4xt_max_transpose_semitones(_sr)
+                _safe = int(math.ceil(_top)) - 1
+                if _z.hi_key > _safe:
+                    _cur = _over.get(_p.name)
+                    _n = (_cur[4] if _cur else 0) + 1
+                    if _cur is None or _z.hi_key - _safe > _cur[0]:
+                        _over[_p.name] = (_z.hi_key - _safe, _z, _safe, _sr, _n)
+                    else:
+                        _over[_p.name] = _cur[:4] + (_n,)
+    # ONE RECORD PER PRESET, naming its WORST zone -- not one per zone. A
+    # 40-zone program produces one finding, so a consumer that collapses
+    # identical messages keeps working (VinSamLib's warning box shows
+    # "4 x zone keys 0-127 ..." when four presets agree).
+    #
+    # `zones_over` is why that is safe to act on: `highest_safe_key` is exact
+    # for the zone named in the SAME record -- computed from that zone's own
+    # root, coarse and fine tune, which the coarse-tune split preserves -- but
+    # OTHER zones of the same preset may also exceed, with their own different
+    # safe keys, and they are not named here. A UI offering "narrow this zone
+    # to N" needs to know whether that finishes the job or leaves siblings.
+    for _pname, (_excess, _z, _safe, _sr, _nover) in _over.items():
+        _diag(_W, 'E4B_ZONE_ABOVE_PLAYBACK_CEILING',
+              f"zone keys {_z.lo_key}-{_z.hi_key} (sample '{_z.sample_name}', "
+              f"{_sr} Hz, root {_z.root_key}) can be played up to {_excess} "
+              f"key(s) above the E4XT's playback-rate ceiling; the highest key "
+              f"that plays correctly is {_safe}. Above it the voice runs past "
+              f"the end of the sample into neighbouring sample RAM",
+              subject=_pname,
+              content_lost=False,
+              detail={'lo_key': _z.lo_key, 'hi_key': _z.hi_key,
+                      'highest_safe_key': _safe, 'sample_rate': _sr,
+                      'root_key': _z.root_key, 'keys_over': _excess,
+                      'zones_over': _nover},
+              remedy='narrow the zone to end at the highest safe key, or '
+                     'resample the sample lower. The ceiling is an absolute '
+                     'playback rate, so halving the sample rate buys a full '
+                     'octave of extra range',
+              echo=f"  [WARN] preset '{_pname}': zone {_z.lo_key}-{_z.hi_key} "
+                   f"plays past the E4XT's rate ceiling above key {_safe}")
 
     # ── build raw chunk bodies ────────────────────────────────────────────
     e4ma_body    = _build_e4ma()

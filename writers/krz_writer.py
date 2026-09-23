@@ -219,10 +219,28 @@ def _pack_segment(tag: int, data: bytes) -> bytes:
 
 
 def _compute_sample_period(sample_rate: int) -> int:
-    return round(1_000_000_000.0 / sample_rate)
+    # TRUNCATE, because the K2000 truncates. The ROM computes this at
+    # 0x169E32 (`movel #1000000000,%d0` / rate in d1 / `jsr 0x18352c` /
+    # `movel %d0,%a0@(28)`) and the divide helper's rounding mode was never
+    # read -- but the DEVICE'S OWN OUTPUT settles it without needing to:
+    # 19 sample objects read back off a K2000R after an AKAI import all carry
+    # `samplePeriod = 22675`, where `round(1e9/44100) = 22675.74 -> 22676`
+    # (k2kremote, 2026-09-21).
+    #
+    # 44100 / 24000 / 15000 are the three rates of the six where round and
+    # truncate differ; the other three agree. Those three imports were rate
+    # code 1 -- the earlier Roland imports were all code 0, one of the rates
+    # where the two agree, which is why they could not have shown this.
+    #
+    # Jan's decision 2026-09-22: match the device. The difference is 1 ns on a
+    # ~22 us period (4e-5 of a semitone, inaudible); what it buys is a clean
+    # byte-diff against a device-written file, which is how this writer is
+    # validated.
+    return int(1_000_000_000 // int(sample_rate))
 
 
-def _compute_max_pitch(sample_rate: int, root_note: int) -> int:
+def _compute_max_pitch(sample_rate: int, root_note: int,
+                       fine_tune: int = 0) -> int:
     # THE STORED maxPitch FIELD.  Reverse-engineered from real third-party
     # soundsets (soundset 002): maxPitch = 100*root + 1200*log2(48000/sr)
     # (sr=30 kHz → +814, sr=15 kHz → +2014, both confirmed).
@@ -237,8 +255,16 @@ def _compute_max_pitch(sample_rate: int, root_note: int) -> int:
     # So this function still writes the field the way every real soundset
     # writes it, and _compute_playback_ceiling() below -- NOT this -- decides
     # how far a zone may extend.
+    # THE FINE TUNE IS PART OF IT, AND IT IS SUBTRACTED -- measured on the
+    # device 2026-09-21, 17 of 19 sample objects exact with no residual after
+    # an AKAI import (k2kremote; two outliers disagree by exactly +2 and are
+    # unexplained, see TODO.md). The sign is forced by what the field means
+    # rather than being a convention to look up: a sample carrying a -68 cent
+    # correction plays at a lower rate for a given key, so it can be
+    # transposed 68 cents HIGHER before hitting the ceiling.
     return int(round(
         100 * root_note + 1200.0 * math.log(48000.0 / sample_rate, 2)
+        - (fine_tune or 0)
     ))
 
 
@@ -430,7 +456,42 @@ KRZ_PROGRAM_BASELINE_DB = 0.0
 def _vol_adjust_byte(volume_db: float) -> int:
     """Soundfilehead.volumeAdjust encoding: a signed i8 in 0.5 dB steps
     (the "Volume Adjust" MISC-page parameter, K2600 manual range −64.0..+63.5 dB).
-    0 dB → 0 (no change), so unity-gain samples are byte-identical to before."""
+    0 dB → 0 (no change), so unity-gain samples are byte-identical to before.
+
+    ⚠ **THREE DIFFERENT `volumeAdjust` FIELDS EXIST AND THIS IS ONLY ONE.**
+    k2kremote, 2026-09-23:
+
+        Soundfilehead volumeAdjust   per SAMPLE      <- this one
+        F4 AMP Adjust                per LAYER
+        Keymap range VolumeAdjust    per KEY RANGE
+
+    All three step 0.5 dB per unit — that step is **measured** (k2kremote's
+    panel sweep, 2026-09-01). **The rails are not.**
+
+    ⚠ **THE `-128` BELOW IS DOCUMENTED BUT NOT MEASURED.** The K2600 manual's
+    Sample Editor table at 15-11 gives `Volume Adjust` and `Alternative Volume
+    Adjust` as **−64.0 to 63.5 dB**, and gives the keymap field no numeric
+    range at all. So the value has a source — it is the manual's.
+
+    What it does not have is a driven rail. k2kremote first asserted it beside
+    a block headed *"Measured on the panel"* (that sweep is the keymap field),
+    retracted it as baseless, then corrected the retraction: baseless was too
+    strong, undocumented was wrong, **unmeasured is right**. And this
+    instrument has diverged from its own manual before — which is why their
+    §37 says the keymap range was *"established by experiment rather than from
+    the manual's wording"* about the very field it measured.
+
+    The keymap-range field's `−127..+127` IS measured, both rails driven
+    deliberately, and the panel never produces `0x80` there.
+
+    **So this clamp may emit a byte the panel cannot produce.** Left at
+    `-128`: it is the documented value, so moving to `-127` on no measurement
+    would be strictly worse than staying. One panel sweep settles it.
+
+    *This converter does not write the keymap-range field at all*, so the
+    hazard has no path here — which is luck rather than care, and is recorded
+    so that adding one later does not inherit this clamp.
+    """
     return max(-128, min(127, round(volume_db * 2)))
 
 
@@ -450,7 +511,8 @@ def _write_sample_object(f, sample: SampleData, obj_id: int,
     loop_start_w = sample.loop_start
     loop_end_w   = sample.loop_end if sample.loop_end > 0 else num_words - 1
     period       = _compute_sample_period(sample.sample_rate)
-    max_pitch    = _compute_max_pitch(sample.sample_rate, sample.root_note)
+    max_pitch    = _compute_max_pitch(sample.sample_rate, sample.root_note,
+                                      getattr(sample, 'fine_tune', 0))
 
     looped = sample.loop_type != LoopType.NO_LOOP
 
@@ -788,7 +850,25 @@ def _build_keymap_entries(voice: VoiceLayer,
     # when the 0x17 form is in use -- so its offset within the entry is not a
     # constant. Getting this wrong would read the tuning's low byte as half a
     # sample id, making every entry look non-empty and silently disabling the
-    # hole-fill below, which is the delete-lockup guard.
+    # hole-fill below.
+    #
+    # **THE HOLE-FILL'S JUSTIFICATION IS NOT WHAT THIS COMMENT USED TO SAY.**
+    # It called the fill "the delete-lockup guard", i.e. a safety measure
+    # against a machine fault. Measured on a K2000R 2026-09-21 (k2kremote,
+    # with Jan listening): a keymap entry pointing at a NONEXISTENT object is
+    # simply ignored -- nine such keys played silent, the control key beside
+    # them sounded, and the instrument never hung, with a 2-3 s-class SysEx
+    # poll running against that state throughout. **Both halves confirmed
+    # twice**: once from the scripted sequence and once by Jan playing the
+    # keys by hand, which depends on none of the script's assumptions about
+    # MIDI channel, note timing or ordering -- the scripted run produced ONE
+    # sound and read it as the control because the ordering implied it, and
+    # that reading was right, which is the case nobody re-checks. The K2000's own Roland
+    # importer ships nine of them at the bottom of every imported kit.
+    #
+    # So the fill buys a QUALITY difference, not a safety one, and that is the
+    # better argument for it: an entry that inherits its neighbour's sample
+    # plays something musical where a dead id plays nothing at all.
     _SID_OFF = 3 if _use_vol else 2
     def _sid(off):
         return (entries[off + _SID_OFF] << 8) | entries[off + _SID_OFF + 1]
@@ -1497,6 +1577,15 @@ def _vel_byte(lo_vel: int, hi_vel: int) -> int:
     stored INVERTED (7−mark).  So a full-range layer (ppp…fff) is 0, which is why
     every factory layer reads 0 and the field was invisible in static files.
 
+    **CONFIRMED VERBATIM IN THE K2000 FIRMWARE, 2026-09-21** (k2kremote, v3.87J
+    ROM at `0x164C66`), from a derivation that never saw this one:
+
+        negb %d0 / addqb #7,%d0      ; 7 - hi      <- the inversion
+        lslb #3,%d1 / orb %d1,%d0    ; (lo << 3) | (7 - hi)
+
+    A panel diff on a real K2000R in June and a disassembly of the firmware
+    that established the convention, agreeing byte for byte.
+
     LO_MARK ROUNDS DOWN, NOT TO NEAREST (2026-08-30, §KRZVELBOUND). A note
     played AT EXACTLY a mark's own first-defining velocity is not reliable on
     real hardware: an AKAI velocity-split layer with lo_vel=100 -- which
@@ -1510,7 +1599,20 @@ def _vel_byte(lo_vel: int, hi_vel: int) -> int:
     a step below the nearest edge instead of on it, same principle as this
     project's key-zone/velocity-layer widening elsewhere: prefer a layer
     that starts a few velocity units early over one that can silently drop
-    the exact value it was built to include. `hi_mark` uses the mirror
+    the exact value it was built to include.
+
+    **AND THE K2000'S OWN AKAI IMPORTER ROUNDS THE OTHER WAY** -- `0x164C66`
+    does `if src[89] & 0x0F: lo += 1`, rounding the low mark UP on any
+    remainder, then clamps to 7 and to `hi`. So the reference implementation
+    places boundaries exactly where the hardware test above measured a
+    dropout, and **this writer deliberately does not match it**. A machine's
+    own behaviour is the thing to match only until you know why it does it;
+    here there is a measurement saying the other direction is right, which
+    beats matching the firmware. (Whether the K2000's importer audibly ships
+    that dropout is untested -- it needs an AKAI program imported on the
+    machine, which is on the rig list.)
+
+    `hi_mark` uses the mirror
     (ceil()) for the same reason on the top edge, untested on hardware but
     the same mechanism applies by symmetry.
     """
@@ -2271,7 +2373,7 @@ def _voice_is_stereo(voice, samples_by_name: dict) -> bool:
                for z in voice.zones)
 
 
-def _preset_layers(layers, samples_by_name):
+def _preset_layers(layers, samples_by_name, firmware_sim: bool = False):
     """Yield `(voice, keymap_id, segments)` for one preset's layers.
 
     Pulled out of `write_krz` so the VELOCITY-PIVOT SHIFT below is reachable
@@ -2337,14 +2439,78 @@ def _preset_layers(layers, samples_by_name):
                                 _voice_is_stereo(voice, samples_by_name),
                                 level_offset_db=_lv - shift,
                                 vel_swing_db=_sw, one_shot=_os,
-                                decay_override_s=_dec_s)
+                                decay_override_s=_dec_s,
+                                firmware_sim=firmware_sim)
         yield voice, kid, segs
+
+
+#: ✅ **What the K2000's own AKAI importer writes into a program, and nothing
+#: else.** Measured on the machine, not traced: 84 programs across two disc
+#: forms — S3000 and S1000, melodic, drum, mono, stereo and velocity-split —
+#: diffed byte for byte against the ROM template Program 199. The full record
+#: is the topic numbered O6 in `docs/FIRMWARE_IMPORT_ROUTINES.md`.
+#:
+#:     lyr[5]          the packed velocity window, when the source restricts it
+#:     lyr[8] bit 0x20 the stereo marker
+#:     CAL[11:13]      the keymap id
+#:     CAL[7:9]        the SECOND keymap id, stereo sources only
+#:     0x53[2]/[14]    the +-7 pan pair, stereo sources only
+#:     program header  the layer count
+#:
+#: **NOT the layer key range.** `lyr[3]`/`lyr[4]` never appeared in any of the
+#: 84 diffs — the keymap carries the key mapping and the layer does not
+#: duplicate it. *This reader would not have guessed that, and it is the kind
+#: of thing a simulation gets wrong by being reasonable.*
+FIRMWARE_WRITES_K2000_AKAI = ('lyr5_velocity', 'lyr8_stereo', 'cal_keymap_ids',
+                              'pan_pair_stereo', 'layer_count')
+
+#: ✅ **The K2000's ROLAND import writes the SAME set as its AKAI one.**
+#: Measured over **164 layers across twelve banks the K2000 itself produced**
+#: from a Roland disc: `lyr[5]`, `lyr[8]`, `cal[7,8,11,12]` and the
+#: `0x53[2]/[14]` pan pair vary; everything else is constant. One importer
+#: front-end, two source readers — which is what the shared `0x50xxx` helper
+#: cluster on the EOS side looked like too.
+FIRMWARE_WRITES_K2000_ROLAND = FIRMWARE_WRITES_K2000_AKAI
+
+#: ⚠ **The K2000's ENSONIQ import writes a DIFFERENT set, and the difference
+#: is the interesting part.** Measured over 56 layers of a bank the K2000
+#: produced from an Ensoniq source:
+#:
+#:     lyr[3], lyr[4]   the layer KEY RANGE   <- AKAI and Roland never write these
+#:     cal[12]          the keymap id, low byte only (no stereo second slot)
+#:     0x53[14]         one pan nibble, not the +-7 pair
+#:
+#: **`lyr[5]` does not vary at all**, so the velocity window that both other
+#: arms carry is absent here. *A simulation that assumed one K2000 import
+#: behaviour would write the wrong field on every Ensoniq layer* — and the
+#: AKAI finding ("the firmware does not write the layer key range") is true
+#: of the AKAI arm and false of this one.
+FIRMWARE_WRITES_K2000_ENSONIQ = ('lyr34_key_range', 'cal_keymap_id_low',
+                                 'pan_nibble', 'layer_count')
+
+#: Accepted values for `_patch_layer(firmware_sim=...)`. `True` means AKAI,
+#: for the callers that predate the other two.
+FIRMWARE_SIM_SOURCES = ('akai', 'roland', 'ensoniq')
 
 
 def _patch_layer(voice, keymap_id: int, stereo: bool = False,
                  level_offset_db: float = 0.0, vel_swing_db=None,
-                 one_shot: bool = False, decay_override_s: float = None):
-    """Return a patched copy of the template layer segments for one voice."""
+                 one_shot: bool = False, decay_override_s: float = None,
+                 firmware_sim: bool = False):
+    """Return a patched copy of the template layer segments for one voice.
+
+    `firmware_sim` writes **only what the K2000's own importer writes** — see
+    `FIRMWARE_WRITES_K2000_AKAI`. It is not a "simpler" conversion: it is a
+    deliberately worse one, whose value is that a bank built with it can be
+    diffed against a real device import and any difference is a defect in this
+    project's reading of the firmware.
+
+    **It must never fall back to this project's own laws for a field whose
+    firmware behaviour is unknown** — that is the one thing that would make
+    the simulation a lie rather than a measurement. Where the firmware's
+    behaviour is not established the template's value stands, because the
+    template is what the firmware itself leaves there.
+    """
     segs = [(tag, bytearray(data)) for tag, data in _TPL_LAYER]
     by = {}
     for i, (tag, data) in enumerate(segs):
@@ -2354,10 +2520,25 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
         return by[tag][n][1]
 
     lo_k, hi_k, lo_v, hi_v = _voice_key_vel_range(voice)
+    # `firmware_sim` names WHICH import is being reproduced: the three differ.
+    _fw = 'akai' if firmware_sim is True else (firmware_sim or None)
+    if _fw is not None and _fw not in FIRMWARE_SIM_SOURCES:
+        raise ValueError(f"firmware_sim must be one of {FIRMWARE_SIM_SOURCES} "
+                         f"or a bool, got {firmware_sim!r}")
     lyr = seg(0x09)
-    lyr[3], lyr[4] = lo_k & 0x7F, hi_k & 0x7F
-    lyr[5] = _vel_byte(lo_v, hi_v)   # packed LoVel/HiVel (0–7 marks; see _vel_byte)
-    lyr[6] = 0x7F                    # Enable = ON (NOT hiVel — that was the gating bug)
+    if not firmware_sim or _fw == 'ensoniq':
+        # THE FIRMWARE DOES NOT WRITE THESE. `lyr[3]`/`lyr[4]` never appeared
+        # in any of the 84 measured diffs against Program 199 -- the keymap
+        # carries the key mapping and the layer does not duplicate it. This
+        # project writes them because a written range is more robust than an
+        # implied one, and that is a deliberate divergence, not the firmware.
+        lyr[3], lyr[4] = lo_k & 0x7F, hi_k & 0x7F
+    if _fw != 'ensoniq':
+        # The Ensoniq arm does not write a velocity window -- `lyr[5]` is
+        # constant across all 56 measured layers while `lyr[3]`/`lyr[4]` vary.
+        lyr[5] = _vel_byte(lo_v, hi_v)   # packed LoVel/HiVel (see _vel_byte)
+    if not firmware_sim:
+        lyr[6] = 0x7F                # Enable = ON (NOT hiVel — the gating bug)
     # Bit 0x20 of LYR[8] is the layer's stereo flag; the low bits carry other
     # per-layer settings and are left as the template has them.  Corpus-checked
     # 2026-08-01 over 7,608 real layers: set on 86.4% of layers whose keymap is
@@ -2446,6 +2627,19 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
         step = max(-7, min(7, round(pan * 7)))
         hob = seg(0x53)
         hob[14] = ((step & 0x0F) << 4) | (hob[14] & 0x0F)
+
+    if firmware_sim:
+        # STOP HERE. Everything below this line is filter, envelopes, LFO,
+        # level and velocity tracking -- and the K2000's own AKAI importer
+        # writes NONE of it. 84 programs measured against Program 199 and the
+        # diff never left the set in `FIRMWARE_WRITES_K2000_AKAI`.
+        #
+        # Returning the template's own values here is not a shortcut: the
+        # template IS what the firmware leaves in those fields, so this is
+        # the simulation being accurate rather than being lazy. A fallback to
+        # this project's laws would make the output look better and stop it
+        # being a measurement of anything.
+        return segs
 
     # --- velocity -> volume (AMP VelTrk) -----------------------------------
     #
@@ -2894,7 +3088,8 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
 
 def _write_program_object(f, preset: Preset, prog_id: int,
                            voice_keymaps: list,
-                           samples_by_name: dict = None) -> None:
+                           samples_by_name: dict = None,
+                           firmware_sim: bool = False) -> None:
     """Clone the #199 template and patch per-voice values (filter, envelopes,
     LFO).  One layer per voice (CR-1)."""
     layers = voice_keymaps or [(None, prog_id)]
@@ -2910,7 +3105,8 @@ def _write_program_object(f, preset: Preset, prog_id: int,
             d[1] = n
         f.write(_pack_segment(tag, bytes(d)))
 
-    for voice, kid, segs in _preset_layers(layers, samples_by_name):
+    for voice, kid, segs in _preset_layers(layers, samples_by_name,
+                                           firmware_sim=firmware_sim):
         for tag, data in segs:
             f.write(_pack_segment(tag, bytes(data)))
 
@@ -3145,9 +3341,124 @@ def _voices_stacked(voices) -> bool:
 # Main writer
 # ---------------------------------------------------------------------------
 
+#: AKAI stores a stereo sample as TWO MONO SAMPLES on the same key.
+#:
+#: `SCI-FI STI-L` and `SCI-FI STI-R`, identical key range, identical velocity
+#: band, pan hard left and hard right. The E4B path reproduces that as two
+#: panned zones and it sounds correct. **The K2000 cannot: a keymap holds one
+#: sample per key per layer, so the second zone has nowhere to go, and the
+#: writer dropped it.** The program then plays MONO -- right channel only,
+#: with the left half not merely unreferenced but absent from the file -- and
+#: no diagnostic fired.
+#:
+#: Measured over 8232 programs on 20 AKAI discs: **36.7 % of programs affected,
+#: 15.4 % of all zones lost.** Found 2026-09-20 chasing why `drum_program` did
+#: not rescue two kits; VinSamLib confirmed it independently on two melodic
+#: programs picked for unrelated reasons, and confirmed the left half is gone
+#: from the written file.
+#:
+#: The fix is not more layers -- `drum_program` makes no difference, because
+#: the collision is inside ONE layer. It is to recognise the pair for what it
+#: is and write the one stereo sample the K2000 already supports (two
+#: Soundfileheads over a planar block, corpus-verified on 533 real stereo
+#: samples). Conservative by construction: everything must match -- the name
+#: apart from its suffix, the key range, the velocity band, the frame count,
+#: and both halves must be mono -- or the pair is left alone.
+_LR_SUFFIXES = (('-L', '-R'), ('_L', '_R'), (' L', ' R'))
+
+
+def _stereo_base_name(name: str):
+    """('SCI-FI STI-L', 'L') for a left half, else (None, None)."""
+    n = (name or '').rstrip()
+    for l_suf, r_suf in _LR_SUFFIXES:
+        if n.upper().endswith(l_suf):
+            return n[:-len(l_suf)].rstrip(), 'L'
+        if n.upper().endswith(r_suf):
+            return n[:-len(r_suf)].rstrip(), 'R'
+    return None, None
+
+
+def _interleave_lr(left: bytes, right: bytes) -> bytes:
+    """Two mono 16-bit LE buffers -> one interleaved stereo buffer."""
+    a = array.array('h'); a.frombytes(left[:len(left) // 2 * 2])
+    b = array.array('h'); b.frombytes(right[:len(right) // 2 * 2])
+    n = min(len(a), len(b))
+    out = array.array('h', bytes(4 * n))
+    out[0::2] = a[:n]
+    out[1::2] = b[:n]
+    return out.tobytes()
+
+
+def merge_akai_stereo_pairs(bank):
+    """Fold `-L`/`-R` zone pairs into one stereo zone. Returns the count."""
+    by_name = {s.name: s for s in bank.samples}
+    merged_samples, n = {}, 0
+    for preset in bank.presets:
+        for voice in preset.voices:
+            zones = list(voice.zones)
+            used = set()
+            out = []
+            for i, z in enumerate(zones):
+                if i in used:
+                    continue
+                base, side = _stereo_base_name(z.sample_name)
+                partner = None
+                if base is not None:
+                    for j in range(i + 1, len(zones)):
+                        if j in used:
+                            continue
+                        w = zones[j]
+                        b2, s2 = _stereo_base_name(w.sample_name)
+                        if b2 != base or s2 == side or s2 is None:
+                            continue
+                        if (w.lo_key, w.hi_key, w.lo_vel, w.hi_vel) != \
+                           (z.lo_key, z.hi_key, z.lo_vel, z.hi_vel):
+                            continue
+                        sl, sr = by_name.get(z.sample_name), by_name.get(w.sample_name)
+                        if sl is None or sr is None:
+                            continue
+                        if (getattr(sl, 'channels', 1) != 1
+                                or getattr(sr, 'channels', 1) != 1):
+                            continue
+                        if len(sl.data or b'') != len(sr.data or b''):
+                            continue
+                        partner = (j, w)
+                        break
+                if partner is None:
+                    out.append(z)
+                    continue
+                j, w = partner
+                used.add(j)
+                lz, rz = (z, w) if side == 'L' else (w, z)
+                sl, sr = by_name[lz.sample_name], by_name[rz.sample_name]
+                key = (base, lz.sample_name, rz.sample_name)
+                if key not in merged_samples:
+                    m = copy.copy(sl)
+                    m.name = base[:16]
+                    m.channels = 2
+                    m.data = _interleave_lr(sl.data, sr.data)
+                    merged_samples[key] = m
+                m = merged_samples[key]
+                nz = copy.copy(z)
+                nz.sample_name = m.name
+                # the pair's hard pan IS the stereo image; a merged stereo
+                # sample carries it in the sample, so the zone returns to centre
+                if hasattr(nz, 'pan'):
+                    nz.pan = 0.0
+                out.append(nz)
+                n += 1
+            voice.zones = out
+    if merged_samples:
+        live = {z.sample_name for p in bank.presets for v in p.voices for z in v.zones}
+        bank.samples = [s for s in bank.samples if s.name in live] + \
+            [m for m in merged_samples.values() if m.name in live]
+    return n
+
+
 def write_krz(bank: Bank, output_path: str,
               faithful_layers: bool = False,
-              drum_program: bool = False) -> None:
+              drum_program: bool = False,
+              firmware_sim: bool = False) -> None:
     """Serialize a Bank to a Kurzweil .KRZ file.
 
     `faithful_layers` keeps every layer even when that makes the program a
@@ -3158,6 +3469,9 @@ def write_krz(bank: Bank, output_path: str,
     lost_zones: list = []
     fitted: list = []
     print(f"Writing KRZ: {output_path}")
+    _n_lr = merge_akai_stereo_pairs(bank)
+    if _n_lr:
+        print(f"  Merged {_n_lr} AKAI -L/-R zone pair(s) into stereo samples")
     print(f"  {len(bank.presets)} preset(s), {len(bank.samples)} sample(s)")
 
     # CR-11c: bake ping-pong (ALTERNATING) loops into PCM as forward loops, the
@@ -3572,7 +3886,7 @@ def write_krz(bank: Bank, output_path: str,
         for pi, preset in enumerate(bank.presets):
             pid = base_id + pi
             _write_program_object(f, preset, pid, preset_keymaps[pi],
-                                  samples_by_name)
+                                  samples_by_name, firmware_sim=firmware_sim)
             print(f"  Program [{pid}] '{preset.name}': "
                   f"{len(preset_keymaps[pi])} layer(s)")
 

@@ -1000,6 +1000,80 @@ _E4XT_Q_TABLE = [
 #: than assumed, since a ringing filter puts energy in the capture BEFORE the
 #: note is sent.
 E4XT_Q_MAX_BYTE = 112
+
+#: The E4XT stops playing a sample correctly above an absolute playback rate,
+#: and above it the voice runs off the end of its own sample into neighbouring
+#: sample RAM and keeps going -- nine seconds and more of other samples
+#: (§E4BXPOSE). It is NOT a limit in semitones: that is only how it looks on
+#: 44.1 kHz material.
+#:
+#: MEASURED 2026-09-20 on Jan's E4XT, one bank of four presets over IDENTICAL
+#: PCM, differing only in zone root key and declared sample rate:
+#:
+#:     root 48, 44100 Hz   clean to +45, broken at +46   (note 94)
+#:     root 60, 44100 Hz   clean to +45, broken at +46   (note 106)
+#:     root 72, 44100 Hz   clean to +45, broken at +46   (note 118)
+#:     root 60, 22050 Hz   clean to +57, broken at +58   (note 118)
+#:
+#: Root-relative, and the 22050 Hz sample gets a full extra octave. All four
+#: points are one absolute rate: the ceiling lies in **(593 337, 628 618] Hz**.
+#:
+#: 625 000 is the fitted value inside that bracket, being 39062.5 Hz (2.5 MHz /
+#: 64, an E-MU rate) times a phase increment saturating at 16 -- four integer
+#: bits. That mechanism is a HYPOTHESIS that fits; the bracket is the
+#: measurement. Both rates tested differ by exactly an octave, so they give the
+#: same bracket twice -- narrowing it needs a rate that is not a power-of-two
+#: multiple. A 30000 Hz sample breaks at root+53 if the ceiling is 625 000 and
+#: at root+52 if it is at the bracket's low end; that is the experiment.
+E4XT_MAX_PLAYBACK_RATE_HZ = 625000.0
+
+#: AKAI program loudness (program byte 0x19, 0..99) -> E4B preset volume in dB.
+#:
+#: NOT a fit and not an inference: this is EOS's own arithmetic, read out of the
+#: 4.70 firmware by eosed at `0x2f6f8` (§AKAIIMPORTVOL). The routine is called
+#: as f(akai_byte, 99) and is a clamp, a scale and a clamp:
+#:
+#:     d7 = clamp(byte, 0, 99)
+#:     d7 = ((d7 - 99) * 8) / 10        signed, TRUNCATING toward zero
+#:     return clamp(d7, -96, +10)
+#:
+#: -96..+10 is exactly `E4_PRESET_VOLUME`'s range, which is the corroboration
+#: that the destination is the volume field rather than something that merely
+#: fits in a byte.
+#:
+#: VALIDATED against the corpus independently of the decompile: over 361
+#: programs of a real S3000 library disc, this law applied to program byte 0x19
+#: reproduces EOS's preset-header byte 27 for EVERY program, 9 distinct values.
+#: The decompile gave the formula; the corpus gave the source offset and the
+#: agreement. Neither alone would have been enough — a byte that "lands in a
+#: plausible range" proves little, which is why the earlier signed-gain-trim
+#: reading of this field was recorded as a hypothesis rather than a finding.
+#:
+#: Truncation toward zero is deliberate and is what the firmware does: Python's
+#: `//` floors, which differs for negatives, so `int()` is used.
+def akai_program_loudness_to_e4b_db(byte: int) -> int:
+    """AKAI program loudness 0..99 -> E4B preset volume, signed dB."""
+    d = max(0, min(99, int(byte)))
+    return max(-96, min(10, int((d - 99) * 8 / 10)))
+
+
+#: The bracket the measurement actually establishes, for anyone re-deriving it.
+E4XT_MAX_PLAYBACK_RATE_BRACKET_HZ = (593337.0, 628618.0)
+
+
+def e4xt_max_transpose_semitones(sample_rate_hz: float) -> float:
+    """How far above its own pitch a sample can be played before it runs on.
+
+    Returns semitones, unrounded -- the caller decides whether a zone's top key
+    crosses it. A sample at the ceiling rate exactly is already broken, so a
+    key is safe while its transposition is STRICTLY below this.
+    """
+    import math as _m
+    if not sample_rate_hz or sample_rate_hz <= 0:
+        return float('inf')
+    return 12.0 * _m.log2(E4XT_MAX_PLAYBACK_RATE_HZ / float(sample_rate_hz))
+
+
 E4XT_Q_MAX_DB = 17.84
 
 
@@ -4167,6 +4241,26 @@ class SampleData:
     root_note: int = 60         # MIDI note, 60 = C4
     fine_tune: int = 0          # Cents, -100..+100
 
+    #: The rate the SOURCE FILE DECLARED, when that differs from `sample_rate`.
+    #:
+    #: `sample_rate` answers **what will the machine do**: for AKAI material an
+    #: unplayable declared rate resolves to the rate the loader actually uses
+    #: (§AKAISSRATE, measured on both machines). That is the right quantity for
+    #: a converter, and it is the wrong quantity for a librarian describing the
+    #: file on disc.
+    #:
+    #: VinSamLib reads the same discs and reports what the file says. On
+    #: 2026-09-20 their cross-reader test began failing on 30 of 483 samples --
+    #: 40000 Hz here against 44100 from us -- and the gap is exactly
+    #: 1200*log2(40000/44100) = -169 cents, i.e. **two readers reporting
+    #: different QUANTITIES rather than different values.** Neither was wrong.
+    #:
+    #: So both are carried. `None` when the file's declared rate is the one in
+    #: use, which is the overwhelming majority; set only where they diverge, so
+    #: a consumer can tell "the file said X, the machine will do Y" from "the
+    #: file said Y".
+    declared_sample_rate: Optional[int] = None
+
 
 @dataclass
 class ZoneMapping:
@@ -4475,6 +4569,65 @@ VELOCITY_CURVE_AMPLITUDE_LINEAR = 'amplitude-linear'
 VELOCITY_FIT_RANGE = (32, 127)
 
 
+#: §AKAICORDGAP — a modulation routing this pipeline carries but has no
+#: dedicated model field for, because there is no measured law behind it.
+#:
+#: These come from EOS's own AKAI importer (decompiled by eosed, 2026-09-20):
+#: nine AKAI keygroup bytes become nine E4 patch cords through ONE rescaler and
+#: ONE guard, with no time arithmetic anywhere. Two of the nine already have
+#: real model fields with measured laws (`filter_keytrack` and
+#: `velocity_to_amp_attack_span`); the other seven have nothing to be measured
+#: against, so they are carried in the reference implementation's own units —
+#: a fraction of the target machine's full cord range — and labelled as such.
+#:
+#: **`amount` is NOT a physical quantity.** It is "what EOS would have
+#: written", −1.0..+1.0. A writer that knows a measured law for this routing
+#: should prefer the law; a writer that does not should pass this through.
+@dataclass
+class ModRouting:
+    source: str          # 'key' | 'velocity' | 'release_velocity'
+    dest: str            # 'amp_env_attack' | 'amp_env_release' |
+                         # 'filter_env_attack' | 'filter_env_release'
+    amount: float        # −1.0..+1.0, fraction of full cord range
+    origin: str = ''     # provenance, e.g. 'akai:kg0x11'
+
+
+#: The rescaler EOS applies to every one of the nine, stated as arithmetic
+#: rather than fitted: `round(clamp(v, -50, 50) * scale / 50)` into a signed
+#: cord-amount byte, **round-half-up** (`0x2f6b4` doubles, adds 1 when
+#: positive, then shifts — which matters at scale 48, where exact halves
+#: occur). `scale` is 96 for the key→cutoff cord and 48 for the other eight.
+#:
+#: THE GUARD IS PART OF THE LAW: an AKAI byte of zero writes NO CORD AT ALL,
+#: and EOS does not even advance its slot cursor. Writing a zero-amount cord
+#: instead would be inert on the machine but would differ byte-for-byte, and
+#: on this disc 92.5% of keygroups take that branch.
+AKAI_CORD_SCALE_DEFAULT = 48
+AKAI_CORD_SCALE_KEYTRACK = 96
+AKAI_CORD_RAIL = 50
+
+
+def akai_mod_depth_to_cord_amount(value: int,
+                                  scale: int = AKAI_CORD_SCALE_DEFAULT) -> float:
+    """AKAI ±50 modulation depth → E4 cord amount as a fraction (−1..+1).
+
+    The caller is responsible for the guard: a `value` of 0 means *no cord*,
+    which is not the same as a cord of amount 0.
+    """
+    v = max(-AKAI_CORD_RAIL, min(AKAI_CORD_RAIL, int(value)))
+    # `0x2f6b4` verbatim: (2c * 2*scale) / (2*hi), then +1, then >>1 -- which
+    # is round-half-up, not truncation. Mirrored for negatives (the ROM's own
+    # shift is arithmetic; symmetry is assumed and the corpus cannot test it,
+    # since a negative AKAI depth is rare and EOS's output for one has not
+    # been read back).
+    num = abs(2 * v) * (2 * scale)
+    den = 2 * AKAI_CORD_RAIL
+    byte = ((num // den) + 1) >> 1
+    if v < 0:
+        byte = -byte
+    return max(-1.0, min(1.0, byte / 127.0))
+
+
 @dataclass
 class VoiceLayer:
     """
@@ -4482,6 +4635,19 @@ class VoiceLayer:
     E4B calls this a 'Voice'; MPC calls it a 'Layer'.
     """
     zones: List[ZoneMapping] = field(default_factory=list)
+    #: ⚠ **Raw target-format byte overrides, firmware-SIMULATION mode only.**
+    #:
+    #: `None` on every ordinary conversion. When set, the voice was built
+    #: NEUTRAL on purpose — zones and sample references and nothing else — and
+    #: this dict carries what the sampler's own importer writes, applied last
+    #: by the writer. See `writers/eos_firmware_sim.py`.
+    #:
+    #: It is declared here rather than attached dynamically so the model is
+    #: the single list of what a voice can carry: a `getattr(v, 'firmware_raw',
+    #: None)` against an undeclared field silently returns the default
+    #: forever, which is what `test_no_getattr_default_hides_a_misspelled_
+    #: model_field` exists to catch. It caught this.
+    firmware_raw: Optional[dict] = None
     # Amplitude + filter envelopes (CR-18: one Envelope type, used twice).  The
     # flat env_*/filter_env_* names below are kept as properties for back-compat.
     amp_env: Envelope = field(default_factory=_amp_env)
@@ -4784,6 +4950,11 @@ class VoiceLayer:
     # FX
     chorus_amount: float = 0.0   # 0.0-1.0 (E4B vpar[42], 100% -> 127); 0 = off
 
+    #: §AKAICORDGAP: modulation routings with no measured law, carried in the
+    #: reference implementation's units. Empty for every source that does not
+    #: state them. See `ModRouting`.
+    mod_routings: List['ModRouting'] = field(default_factory=list)
+
     # ── back-compat flat accessors → the two Envelope objects (CR-18) ─────────
     @property
     def env_attack(self): return self.amp_env.attack
@@ -4853,6 +5024,9 @@ class Preset:
     name: str                               # Max 16 chars
     program_number: int = 0                 # MIDI program 0..127
     voices: List[VoiceLayer] = field(default_factory=list)
+    #: ⚠ **Raw preset-header byte overrides, firmware-SIMULATION mode only.**
+    #: `None` on every ordinary conversion — see `VoiceLayer.firmware_raw`.
+    firmware_raw: Optional[dict] = None
     # Global preset settings
     volume: float = 0.0                     # dB
     pan: float = 0.0                        # -1.0..+1.0
@@ -4892,6 +5066,16 @@ class Bank:
     name: str = "UNTITLED"
     presets: List[Preset] = field(default_factory=list)
     samples: List[SampleData] = field(default_factory=list)
+    #: ⚠ **Which sampler's import a writer should reproduce, or None.**
+    #:
+    #: Set only in firmware-simulation mode, and only by a reader that knows
+    #: the source format — `.iso` is claimed by three samplers, so the CLI
+    #: cannot tell and the writer must be told rather than guess. The K2000
+    #: writes a *different* field set for each of the three (its Ensoniq arm
+    #: writes the layer key range where its AKAI and Roland arms write the
+    #: velocity window), so a writer that assumed one behaviour would put the
+    #: right value in the wrong field on every layer of two of them.
+    firmware_sim_source: Optional[str] = None
 
     def find_sample(self, name: str) -> Optional[SampleData]:
         for s in self.samples:

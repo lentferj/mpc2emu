@@ -1,0 +1,204 @@
+{
+  "schema": 1,
+  "note": "Generated from the source by tools/firmware_sim_contract.py. Consumers key on (source, target); `status` and `reason` are display strings and are part of the contract.",
+  "modes": {
+    "firmware": "convert as the firmware would",
+    "best": "convert as good as possible"
+  },
+  "what_this_mode_is": "Reproduces what the sampler's own disk importer writes, byte for byte, instead of converting. It is DELIBERATELY LOWER FIDELITY than an ordinary conversion: its purpose is that a bank can be diffed against a real device import, and any difference is a defect in mpc2emu's reading of the firmware. Presenting it as a quality or speed option would mislead.",
+  "cli": {
+    "flag": "--firmware-sim",
+    "source_extensions": [
+      ".a3p",
+      ".hda",
+      ".img",
+      ".iso",
+      ".p1",
+      ".p3",
+      ".s3p"
+    ],
+    "target_formats": [
+      "e4b",
+      "krz"
+    ],
+    "unimplemented_combinations_are": "refused",
+    "input_shapes_verified": [
+      "disk_image",
+      "program_file"
+    ],
+    "refusal_note": "An unimplemented source/target is rejected with a non-zero exit, never converted normally. `.iso` is claimed by three samplers, so the final check happens once the disc format is known, not from the extension."
+  },
+  "eps_variants": {
+    "suffixes": [
+      "00",
+      "0*",
+      "*0",
+      "**"
+    ],
+    "presets_per_instrument": 4,
+    "ordering": "one consecutive run per instrument, in variant order",
+    "names_are_not_unique": true
+  },
+  "paths": [
+    {
+      "source": "akai",
+      "target": "krz",
+      "modes_differ_in_output": true,
+      "device": "Kurzweil K2000 v3.87J",
+      "status": "implemented",
+      "reason": null,
+      "writes": [
+        "lyr5_velocity",
+        "lyr8_stereo",
+        "cal_keymap_ids",
+        "pan_pair_stereo",
+        "layer_count"
+      ],
+      "modelled_cords": null,
+      "located_not_modelled": null,
+      "input_shapes": [
+        "disk_image",
+        "program_file"
+      ],
+      "modes_offered": [
+        "firmware",
+        "best"
+      ],
+      "best_mode_adds": [
+        "filter cutoff and resonance",
+        "filter and amplitude envelopes",
+        "LFO rate, depth, shape and delay",
+        "velocity to volume, filter and attack"
+      ],
+      "caveats": [
+        "The device converts almost nothing: it clones template Program 199 and writes five fields. Everything else in the output is the template, which is what the firmware itself leaves there.",
+        "The simulation is WRITER-side here, because the K2000 imports by cloning a template rather than by converting parameters. The source is still parsed neutrally, so no mpc2emu law reaches the output."
+      ]
+    },
+    {
+      "source": "akai",
+      "target": "e4b",
+      "modes_differ_in_output": true,
+      "device": "E-MU E4XT, EOS 4.7",
+      "status": "implemented",
+      "reason": null,
+      "writes": [
+        "preset_volume",
+        "amp_envelope",
+        "cords",
+        "transpose_clamp"
+      ],
+      "modelled_cords": 21,
+      "located_not_modelled": 11,
+      "cord_write_sites_in_firmware": 23,
+      "caveats": [
+        "11 modulation cords are located in the firmware but not reproduced, so a simulated voice can be missing up to that many routings.",
+        "EOS merges identical velocity zones pairwise, so a simulated voice index does not match a source keygroup index on material that has duplicates."
+      ],
+      "input_shapes": [
+        "disk_image",
+        "program_file"
+      ],
+      "modes_offered": [
+        "firmware",
+        "best"
+      ],
+      "best_mode_adds": [
+        "filter cutoff and resonance",
+        "filter and amplitude envelopes",
+        "LFO rate, depth, shape and delay",
+        "velocity to volume, filter and attack"
+      ],
+      "not_modelled": [
+        "eleven_located_inline_cords"
+      ],
+      "known_gaps": [
+        "located_not_modelled_cords",
+        "zone_dedup",
+        "header26_transpose"
+      ]
+    },
+    {
+      "source": "roland",
+      "target": "e4b",
+      "device": "E-MU E4XT, EOS 4.7",
+      "modes_offered": [
+        "firmware"
+      ],
+      "modes_differ_in_output": false,
+      "best_mode_adds": [],
+      "status": "implemented",
+      "reason": null,
+      "input_shapes": [
+        "disk_image"
+      ],
+      "verified_against_device": "ROLTEST.e4b, written by the E4XT from ROL-B (25/25 preset names matched, so the disc is identified rather than assumed): 25 of 25 voices match byte for byte across all 284 bytes.",
+      "modelled_cords": null,
+      "located_not_modelled": null,
+      "caveats": []
+    },
+    {
+      "source": "roland",
+      "target": "krz",
+      "device": "Kurzweil K2000 v3.87J",
+      "modes_offered": [
+        "firmware",
+        "best"
+      ],
+      "modes_differ_in_output": true,
+      "best_mode_adds": [],
+      "input_shapes": [
+        "disk_image"
+      ],
+      "status": "implemented",
+      "verified_against_device": "Twelve banks the K2000 itself produced from a Roland disc, 164 layers: lyr[5], lyr[8], cal[7,8,11,12] and the 0x53[2]/[14] pan pair vary and nothing else does. Our simulation writes that set and no byte outside it.",
+      "reason": null,
+      "open_elsewhere": "O5 key-split join",
+      "modelled_cords": null,
+      "located_not_modelled": null,
+      "caveats": []
+    },
+    {
+      "source": "ensoniq",
+      "target": "krz",
+      "device": "Kurzweil K2000 v3.87J",
+      "modes_offered": [
+        "firmware",
+        "best"
+      ],
+      "modes_differ_in_output": true,
+      "best_mode_adds": [],
+      "input_shapes": [
+        "disk_image"
+      ],
+      "status": "implemented",
+      "verified_against_device": "A bank the K2000 produced from an Ensoniq source, 56 layers: lyr[3]/lyr[4] (the KEY RANGE), cal[12] and 0x53[14] vary. lyr[5] does NOT -- this arm writes no velocity window, unlike the AKAI and Roland arms. cal[11] is constant only because every keymap id on that bank fits in one byte.",
+      "reason": null,
+      "caveats_extra": [
+        "This arm writes the layer KEY RANGE where the AKAI and Roland arms write the velocity window, so a consumer must not assume one K2000 import behaviour."
+      ],
+      "modelled_cords": null,
+      "located_not_modelled": null,
+      "caveats": []
+    },
+    {
+      "source": "ensoniq",
+      "target": "e4b",
+      "device": "E-MU E4XT, EOS 4.7",
+      "modes_offered": [
+        "firmware"
+      ],
+      "modes_differ_in_output": false,
+      "best_mode_adds": [],
+      "status": "implemented",
+      "input_shapes": [
+        "disk_image"
+      ],
+      "verified_against_device": "EPSTEST.e4b, written by the E4XT from an EPS CD (24/24 preset names matched): all 41 voices match on the 276-byte template and on velocity floor and coarse tune; volume and pan 40/41; zone COUNT 31/41. The residual is zone de-duplication -- EOS merges identical velocity zones and we do not, so we emit MORE zones on all 10 mismatches and never fewer.",
+      "caveats": [],
+      "reason_historical": "The importer exists and is located (EOS 4.7 carries \"Scanning Ensoniq device\", \"Ensoniq Instrument\" and an EPS wavesample placeholder). mpc2emu already applies EOS's own volume table and pan law here, so an ordinary conversion is already faithful in those fields. What is NOT established is what EOS omits -- and a simulation whose only content is a plausible silence would certify nothing.",
+      "modelled_cords": null,
+      "located_not_modelled": null
+    }
+  ]
+}

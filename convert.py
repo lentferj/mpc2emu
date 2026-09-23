@@ -317,6 +317,23 @@ def fit_oversized_presets(source_banks: List[Bank], fmt: str,
 def parse_all_sources(files: List[Path], wav_dir: Optional[str],
                       extra_kwargs: dict) -> List[Bank]:
     banks = []
+    # ⚠ REFUSE, DO NOT IGNORE. `--firmware-sim` names a specific sampler's
+    # specific importer; on a source it has not been implemented for, quietly
+    # falling back to this project's own conversion would hand the user output
+    # they cannot distinguish from a device-faithful import -- and which they
+    # would then diff against hardware and read as a firmware-reading defect.
+    if extra_kwargs.get('firmware_sim'):
+        from parsers.registry import FIRMWARE_SIM_EXTS
+        bad = sorted({p.suffix.lower() for p in files
+                      if p.suffix.lower() in PARSERS
+                      and p.suffix.lower() not in FIRMWARE_SIM_EXTS})
+        if bad:
+            print(f"Error: --firmware-sim is not implemented for "
+                  f"{', '.join(bad)} sources. It reproduces a sampler's own "
+                  f"disk importer, and only the AKAI import has been read "
+                  f"from firmware so far. Re-run without --firmware-sim for a "
+                  f"normal conversion.")
+            sys.exit(2)
     for p in files:
         ext = p.suffix.lower()
         parser = PARSERS.get(ext)
@@ -610,6 +627,20 @@ def main():
              'three layers so it plays on any channel, and prints which '
              'velocity bands it dropped. Turn this on when you are converting '
              'an actual drum kit and know the target channel.')
+    ap.add_argument('--firmware-sim', action='store_true',
+                    help="CONVERT AS THE FIRMWARE WOULD: reproduce what the "
+                         "sampler's own disk importer writes, instead of "
+                         "converting as well as possible. Deliberately lower "
+                         "fidelity -- it exists so a bank can be diffed "
+                         "against a real device import, and any difference is "
+                         "a defect in our reading of the firmware. Meaningful "
+                         "for AKAI sources only: for Ensoniq and Roland discs "
+                         "there is no second mode to choose between, because "
+                         "everything this project knows about those formats "
+                         "came from the firmware in the first place -- their "
+                         "readers extract no filter, envelope or LFO fields "
+                         "at all. Unimplemented combinations are refused, "
+                         "never silently converted the normal way.")
     ap.add_argument('--krz-faithful', action='store_true',
         help='KRZ: keep every layer even when that exceeds the K2000\'s '
              '3-layer limit for a REGULAR program. A program with more than '
@@ -697,7 +728,7 @@ def main():
              'onto (FAT16 max ~2047). akai default: content + 25%% (max 511 — '
              'AKAI block numbers are 16-bit).')
     ap.add_argument('--hda-fs', choices=['fat', 'emu'], default='fat',
-        help="E4B HDA filesystem: 'fat' (EOS 4.7+, default; needs mtools) or "
+        help="E4B HDA filesystem: 'fat' (EOS 4.7+, default) or "
              "'emu' (native EMU-fs, all EOS versions). Ignored for krz (K2000 "
              "is always FAT16).")
     ap.add_argument('--add-to', metavar='IMAGE',
@@ -1040,8 +1071,17 @@ def main():
     if not input_path.exists():
         print(f"Error: '{input_path}' not found."); sys.exit(1)
 
+    if args.firmware_sim:
+        from parsers.registry import FIRMWARE_SIM_FORMATS
+        if args.format not in FIRMWARE_SIM_FORMATS:
+            print(f"Error: --firmware-sim has no simulation for "
+                  f"--format {args.format}. Implemented targets: "
+                  f"{', '.join(sorted(FIRMWARE_SIM_FORMATS))}.")
+            sys.exit(2)
     extra = {'max_presets': args.max_presets, 'max_samples': 512,
-             'chromatic_pads': args.chromatic_pads}
+             'chromatic_pads': args.chromatic_pads,
+             'firmware_sim': args.firmware_sim,
+             'firmware_sim_target': args.format if args.firmware_sim else None}
 
     # ── --info mode ───────────────────────────────────────────────────────────
     if args.info:
@@ -1523,7 +1563,11 @@ def main():
             else:
                 write_krz(bank, out_path,
                           faithful_layers=args.krz_faithful,
-                          drum_program=args.krz_drum_program)
+                          drum_program=args.krz_drum_program,
+                          # The READER names the source; `.iso` is claimed by
+                          # three samplers and the CLI cannot tell them apart.
+                          firmware_sim=(bank.firmware_sim_source or 'akai')
+                          if args.firmware_sim else False)
             out_paths.append(out_path)
         except Exception as e:
             print(f"  [ERROR] {bank.name}{ext}: {e}")
