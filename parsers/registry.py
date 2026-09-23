@@ -29,6 +29,8 @@ from parsers.krz_parser      import parse_krz
 from parsers.eiii_parser     import parse_eiii
 from parsers.akai_s3000_parser import parse_akai_program, parse_akai_sample
 from parsers.akai_image_parser import is_akai_image, parse_akai_image
+from parsers.eps_parser       import is_eps_image, parse_eps_image
+from parsers.roland_s7xx_parser import is_roland_image, parse_roland_image
 
 
 def _refuse_aux(p, what):
@@ -39,16 +41,96 @@ def _refuse_aux(p, what):
         f"reference and nothing reads them.")
 
 
+def _accepted(fn, kw: dict) -> dict:
+    """The subset of `kw` that `fn` actually declares.
+
+    Blind `**kw` forwarding to a reader with a fixed signature is a
+    `TypeError`; silently dropping everything is a no-op the caller cannot
+    see. This does neither — it passes what the reader takes, and the caller's
+    other options are refused explicitly above rather than vanishing.
+    """
+    import inspect
+    sig = inspect.signature(fn).parameters
+    if any(q.kind is inspect.Parameter.VAR_KEYWORD for q in sig.values()):
+        return dict(kw)
+    return {k: v for k, v in kw.items() if k in sig}
+
+
+def _dispatch_disk_image(p, w, kw, fallback):
+    """Identify a disk image and hand it to the right reader.
+
+    Ordered by how strong each test is, because none of these formats has a
+    magic string a reader can rely on:
+
+      AKAI    partition-header magic -- the only real magic here
+      EPS     decodes the root directory in block 2
+      Roland  no header at all; checks that the FIXED record base holds
+              plausible records, which is the weakest test of the three and
+              so goes last
+
+    A weaker test must never be offered a disc a stronger one can identify.
+
+    **One dispatcher for every disk-image extension.** `.iso`, `.img` and
+    `.hda` are the same question asked about the same bytes; when they each
+    had their own answer, two of the three only knew about AKAI.
+
+    ⚠ **`**kw` USED TO BE SWALLOWED HERE**, so every option the caller passed
+    -- `max_presets`, `limit`, `firmware_sim` -- was a silent no-op for image
+    inputs while working everywhere else. Found by VinSamLib 2026-09-22,
+    measured rather than reasoned about. Accepting a keyword and dropping it
+    is worse than rejecting it: the caller has no signal at all.
+    """
+    if is_akai_image(str(p)):
+        return parse_akai_image(str(p), w, **kw)
+    # ⚠ **THIS USED TO REFUSE `firmware_sim` FOR EVERYTHING BUT AKAI**, when
+    # AKAI was the only implemented source. All three are implemented now, so
+    # the refusal moved rather than vanished: each reader takes
+    # `firmware_sim_target` and refuses a TARGET it has no simulation for,
+    # because only the reader knows the source and only the caller knows the
+    # target. Flagged as stale by VinSamLib 2026-09-23 -- a comment describing
+    # a check that is gone sends a reader looking for it.
+    if is_eps_image(str(p)):
+        return parse_eps_image(str(p), w, **_accepted(parse_eps_image, kw))
+    if is_roland_image(str(p)):
+        return parse_roland_image(str(p), w, **_accepted(parse_roland_image, kw))
+    return fallback()
+
+
+def _parse_iso(p, w, **kw):
+    """`.iso` — a CD-ROM image from any of the three samplers."""
+    # The fallback keeps the old error path: parse_akai_image says plainly
+    # what it could not read, which is more useful than "unrecognised".
+    return _dispatch_disk_image(
+        p, w, kw, fallback=lambda: parse_akai_image(str(p), w, **kw))
+
+
 def _parse_img(p, w, **kw):
     """`.img` is claimed by more than one format, so dispatch on content.
 
+    ⚠ **THIS USED TO TRY AKAI AND NOTHING ELSE**, so a Roland or Ensoniq
+    HARD-DISK image fell through to the MPC60 reader and failed, while the
+    same disc as `.iso` read fine. The three-way identification already
+    existed — it was wired to one extension. *A dispatcher that is right
+    about which formats exist and wrong about where to apply it fails in a
+    way that looks like a missing reader.*
+
     An AKAI floppy or hard-disk image is identified by its partition-header
     magic (or the 0xFF marker in a floppy header), neither of which an MPC60
-    disk image carries.
+    disk image carries; MPC60 stays the fallback because it has no test of
+    its own.
     """
-    if is_akai_image(str(p)):
-        return parse_akai_image(str(p), w)
-    return parse_mpc60_img(str(p))
+    return _dispatch_disk_image(p, w, kw, fallback=lambda: parse_mpc60_img(str(p)))
+
+
+def _parse_hda(p, w, **kw):
+    """`.hda` — an EMU/AKAI hard-disk image, dispatched on content.
+
+    Same three-way test as `.iso`. The fallback stays AKAI so an unreadable
+    image still produces `parse_akai_image`'s own diagnosis rather than a
+    generic one.
+    """
+    return _dispatch_disk_image(
+        p, w, kw, fallback=lambda: parse_akai_image(str(p), w, **kw))
 
 
 PARSERS = {
@@ -83,20 +165,24 @@ PARSERS = {
     # file-type byte from `.<letter><generation>` (s=sample, p=program;
     # 3=S3000, 1=S1000), and it REFUSES anything else -- verified by having it
     # import our output. `.a3s`/`.a3p` is what several extraction tools emit.
-    '.a3p':     lambda p, w, **kw: parse_akai_program(str(p), w),
+    '.a3p':     lambda p, w, **kw: parse_akai_program(
+                    str(p), w, firmware_sim=kw.get('firmware_sim', False)),
     '.a3s':     lambda p, w, **kw: parse_akai_sample(str(p)),
-    '.s3p':     lambda p, w, **kw: parse_akai_program(str(p), w),
+    '.s3p':     lambda p, w, **kw: parse_akai_program(
+                    str(p), w, firmware_sim=kw.get('firmware_sim', False)),
     '.s3s':     lambda p, w, **kw: parse_akai_sample(str(p)),
-    '.p3':      lambda p, w, **kw: parse_akai_program(str(p), w),
+    '.p3':      lambda p, w, **kw: parse_akai_program(
+                    str(p), w, firmware_sim=kw.get('firmware_sim', False)),
     '.s3':      lambda p, w, **kw: parse_akai_sample(str(p)),
-    '.p1':      lambda p, w, **kw: parse_akai_program(str(p), w),
+    '.p1':      lambda p, w, **kw: parse_akai_program(
+                    str(p), w, firmware_sim=kw.get('firmware_sim', False)),
     '.s1':      lambda p, w, **kw: parse_akai_sample(str(p)),
     # AKAI disk images: an S3000 hard disk (SCSI/ZuluSCSI), a CD3000 CD-ROM
     # or a floppy.  `.img` is shared with the MPC60 and sniffs on content
     # (above); `.hda` and `.iso` are only produced as AKAI media by anything
     # we can read back, and `parse_akai_image` says so plainly if they are not.
-    '.hda':     lambda p, w, **kw: parse_akai_image(str(p), w),
-    '.iso':     lambda p, w, **kw: parse_akai_image(str(p), w),
+    '.hda':     _parse_hda,
+    '.iso':     _parse_iso,
     # AKAI auxiliary types carry no sample data, and they must not fall
     # through to a caller that decides "program or sample" by trying parsers:
     # an effects file opens with the same block id a program does, so 90 `.X`
@@ -111,3 +197,21 @@ PARSERS = {
 }
 
 INPUT_EXTS = set(PARSERS.keys())
+
+#: ⚠ **Source extensions for which `--firmware-sim` is actually implemented.**
+#:
+#: The flag reproduces a specific sampler's specific importer, so it is
+#: meaningful only for source/target pairs whose firmware has been read. Any
+#: other combination must be **refused**, never silently converted the normal
+#: way: a user who asks for a device-faithful import and receives this
+#: project's own conversion has no way to tell from the output, and would
+#: then diff it against hardware and conclude the firmware read is wrong.
+FIRMWARE_SIM_EXTS = frozenset({
+    '.a3p', '.s3p', '.p3', '.p1',      # AKAI program files
+    '.iso', '.img', '.hda',            # disk images -- the actual format is
+                                       # identified at parse time, and a
+                                       # non-AKAI disc is refused there
+})
+
+#: Target formats with a firmware simulation behind them.
+FIRMWARE_SIM_FORMATS = frozenset({'e4b', 'krz'})

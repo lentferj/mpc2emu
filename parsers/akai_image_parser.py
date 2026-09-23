@@ -488,11 +488,31 @@ def parse_akai_image(path: str, wav_dir: Optional[str] = None, **kw) -> Bank:
             if prog is None:
                 print(f"    [WARN] unreadable program: {fname}")
                 continue
-            preset = build_preset_from_program(
-                prog, load, bank,
-                fallback_name=fname.rsplit('.', 1)[0],
-                cache=cache, taken=taken, quiet=True,
-                missing_out=unresolved)
+            if kw.get('firmware_sim'):
+                # ⚠ NOT a conversion option. This reproduces what EOS's own
+                # AKAI importer would have written and is deliberately worse
+                # than the branch below -- see writers/eos_firmware_sim.py.
+                # The samples still have to be resolved and loaded, so that
+                # loop is shared; only the PRESET is built differently.
+                from writers.eos_firmware_sim import simulate_akai_preset
+                preset = simulate_akai_preset(
+                    raw, is_s3000, fname.rsplit('.', 1)[0], n_prog)
+                if preset.voices:
+                    for _v in preset.voices:
+                        for _z in _v.zones:
+                            if _z.sample_name not in taken:
+                                _sd = load(_z.sample_name)
+                                if _sd is not None:
+                                    bank.samples.append(_sd)
+                                    taken.add(_z.sample_name)
+                else:
+                    preset = None
+            else:
+                preset = build_preset_from_program(
+                    prog, load, bank,
+                    fallback_name=fname.rsplit('.', 1)[0],
+                    cache=cache, taken=taken, quiet=True,
+                    missing_out=unresolved)
             if preset is None:
                 print(f"    [WARN] {fname}: no keygroup resolved to a sample")
                 continue
