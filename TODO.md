@@ -7900,6 +7900,43 @@ packages, so an import-everything check needs it excluded explicitly. That is
 the kind of exception that quietly grows, and it should be a named list rather
 than a pattern.
 
+### `tools/` is in the same position as `tests/`, and one case is load-bearing
+
+Found 2026-09-23 while committing `relscan`: **`tools/` is gitignored too**
+(`.gitignore:22`), 12 scripts on disk, **0 tracked**. Six of them are named in
+tracked documents, so a reader is pointed at files that are not there.
+
+One of those six is not merely inconvenient:
+
+    docs/firmware_sim_contract.json  is TRACKED and its own `note` says
+    "Generated from the source by tools/firmware_sim_contract.py"
+
+— and that generator is invisible to the consumer. The contract's whole claim
+is *"generated so it cannot drift from the code"*, and the generator, plus the
+test that asserts `on_disk == build()`, exist only in this working tree.
+**VinSamLib can read the artifact and has no way to reproduce or verify it.**
+
+    tools/firmware_sim_contract.py   generates a TRACKED artifact a sibling consumes
+    tools/relscan.py                 enforces the no-commercial-names release rule
+    tools/reindex_notes.py           maintains the notes index a tracked test asserts
+    tools/krz_to_krz_check.py        cited 3x in tracked docs
+    tools/krz_corpus_check.py        cited 2x
+    tools/matrix_measure.py / matrix_score.py   cited 1x each
+
+(`tools/check_krz_banks.py`, also cited in TODO.md, is **VinSamLib's** and
+correctly attributed there — not one of ours, and not a dangling reference.)
+
+**Status:** open, deferred with the two CI steps above. Same policy question,
+and the honest framing is that these scripts do not have the hardcoded-local
+-path problem that justifies ignoring `tests/`: `relscan.py` and
+`firmware_sim_contract.py` take their paths as arguments and import only the
+stdlib plus this project. The ignore rule is right about the batch/analysis
+scripts and over-broad about the ones a tracked document depends on.
+
+⚠ Whatever is decided, the asymmetry to fix first is the cheap one: either
+track the generator, or stop the tracked artifact from citing a path nobody
+can follow.
+
 ### Step 2 — changes the ignore policy, so Jan's call
 
 Track the 71 portable test modules and keep the 18 local-path ones ignored.
