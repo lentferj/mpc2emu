@@ -72,6 +72,15 @@
       ]
     },
     {
+      "code": "AKAI_FILTER2_DROPPED_UNDER_SWEEP",
+      "severity": "info",
+      "content_lost": true,
+      "detail_keys": [],
+      "emitted_from": [
+        "parsers/akai_s3000_parser.py"
+      ]
+    },
+    {
       "code": "AKAI_FILTER2_PARTIAL",
       "severity": "info",
       "content_lost": true,
@@ -273,12 +282,69 @@
       ]
     },
     {
+      "code": "AKAI_VOLUME_OVER_PROGRAM_CEILING",
+      "severity": "warning",
+      "content_lost": false,
+      "detail_keys": [],
+      "emitted_from": [
+        "writers/akai_s3000_writer.py"
+      ]
+    },
+    {
+      "code": "AKAI_VOLUME_OVER_SAMPLE_CEILING",
+      "severity": "warning",
+      "content_lost": false,
+      "detail_keys": [],
+      "emitted_from": [
+        "writers/akai_s3000_writer.py"
+      ]
+    },
+    {
+      "code": "AKAI_VOLUME_OVER_SAMPLE_RAM",
+      "severity": "warning",
+      "content_lost": false,
+      "detail_keys": [],
+      "emitted_from": [
+        "writers/akai_s3000_writer.py"
+      ]
+    },
+    {
+      "code": "E4B_COARSE_TUNE_SPLIT",
+      "severity": "info",
+      "content_lost": false,
+      "detail_keys": [
+        "tunes",
+        "values",
+        "voices_added"
+      ],
+      "emitted_from": [
+        "writers/e4b_writer.py"
+      ]
+    },
+    {
       "code": "E4B_VELOCITY_SPLIT",
       "severity": "info",
       "content_lost": false,
       "detail_keys": [
         "voices_added",
         "windows"
+      ],
+      "emitted_from": [
+        "writers/e4b_writer.py"
+      ]
+    },
+    {
+      "code": "E4B_ZONE_ABOVE_PLAYBACK_CEILING",
+      "severity": "warning",
+      "content_lost": false,
+      "detail_keys": [
+        "hi_key",
+        "highest_safe_key",
+        "keys_over",
+        "lo_key",
+        "root_key",
+        "sample_rate",
+        "zones_over"
       ],
       "emitted_from": [
         "writers/e4b_writer.py"

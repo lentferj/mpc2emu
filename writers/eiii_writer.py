@@ -272,21 +272,24 @@ _PANORAMA = [
     88, 90, 92, 93, 95, 96, 98, 100,
 ]
 
-# E4B cutoff position (0.0-1.0, ZoneMapping-adjacent VoiceLayer.filter_cutoff
-# domain) <-> Hz, exponential 57 Hz - 20 kHz.  Inverse of models.common's
-# hz_to_e4b_cutoff — reused here only to decode the *shared* internal-model
-# convention (VoiceLayer.filter_cutoff is always stored in this position
-# form, regardless of target format), not because EIII's own cutoff curve
-# has anything to do with E4B/EOS.
-_E4B_CUTOFF_MIN_HZ = 57.0
-_E4B_CUTOFF_MAX_HZ = 20000.0
+# ER-3 (external review, 2026-09-20): this file carried a PRIVATE COPY of the
+# E4B cutoff position->Hz law -- `_E4B_CUTOFF_MIN_HZ = 57.0`,
+# `_E4B_CUTOFF_MAX_HZ = 20000.0` and `_e4b_cutoff_position_to_hz` -- alongside
+# `models.common`'s public `e4b_cutoff_position_to_hz` holding the identical
+# arithmetic. The review said to import from `models.common` instead, on this
+# project's own rule that a second copy is how a pair drifts.
+#
+# Checking it before acting found something the review did not: **the private
+# copy had no callers anywhere in the tree.** Not a duplicated law in use, a
+# duplicated law in waiting -- which is the same hazard with nobody yet
+# exposed to it. So it is DELETED rather than replaced by an import; an import
+# nothing calls is still a line for someone to copy.
+#
+# `e4b_cutoff_position_to_hz` in `models.common` is the one home. Verified not
+# to be among the private names VinSamLib consumes across the repo boundary.
 
 from models.diagnostics import (emit as _diag, WARNING as _W,
                                 INFO as _I)
-
-def _e4b_cutoff_position_to_hz(position: float) -> float:
-    position = max(0.0, min(1.0, position))
-    return _E4B_CUTOFF_MIN_HZ * (_E4B_CUTOFF_MAX_HZ / _E4B_CUTOFF_MIN_HZ) ** position
 
 
 # ---------------------------------------------------------------------------

@@ -75,7 +75,6 @@ PRES_HDR    = 82
 VOICE_FIXED = 284
 ZONE_ENTRY  = 22
 VOICE_MOD_OFF = 190           # modulation cord table at voice[190:270]
-_MOD_LFO_TO_PITCH_AMT   = 10  # slot 2: LFO1 → Pitch ("Cord 02")
 _MOD_LFO_TO_PITCH_SLOT  = 2   #   …its cord slot (gate dest = 0xA8 + 2)
 # Mod-wheel→LFO-depth gate (inverse of e4b_writer): ModWheel source = 0x11,
 # Cord-N-Amount dest = 0xA8 + N.  The EOS template ships a default
@@ -84,7 +83,6 @@ _MOD_LFO_TO_PITCH_SLOT  = 2   #   …its cord slot (gate dest = 0xA8 + 2)
 _SRC_MOD_WHEEL          = 0x11
 _CORD_AMT_DEST_BASE     = 0xA8
 _MOD_WHEEL_GATE_DEFAULT = 16
-_MOD_VEL_TO_CUTOFF_AMT  = 18  # slot 4: Velocity → Filter-Freq ("Cord 04")
 #: Velocity sources and the AmpVol destination, for the velocity→volume read.
 #: The three sources differ ONLY in their pivot (measured, eosed 2026-09-01):
 #: Vel+ pivots at velocity 0, Vel< at 127, and Vel~ at 89.4 -- NOT at 64,
@@ -92,8 +90,13 @@ _MOD_VEL_TO_CUTOFF_AMT  = 18  # slot 4: Velocity → Filter-Freq ("Cord 04")
 #: twice it, so it is not `2*Vel+ - 1` either.
 _SRC_VEL_PLUS, _SRC_VEL_TILDE, _SRC_VEL_LESS = 0x0A, 0x0B, 0x0C
 _DST_AMP_VOL = 0x40
-_MOD_FENV_TO_CUTOFF_AMT = 22  # slot 5: FilterEnv → Filter-Freq ("Cord 05")
-_MOD_KEY_TO_CUTOFF_AMT  = 26  # slot 6: Key → Filter-Freq ("Cord 06")
+#: Filter-Freq cord sources. The KEY pair is the same source in its two
+#: polarity forms -- the E4XT ships Key~ at the template slot and our writer
+#: ships Key+, and a reader that knows only one of them reads whichever the
+#: other machine wrote as "no key tracking at all".
+_SRC_KEY_PLUS, _SRC_KEY_TILDE = 0x08, 0x09
+_SRC_FILTER_ENV  = 0x50
+_DST_FILTER_FREQ = 0x38
 # (src, dst) of LFO routings written into free cord slots (mirror of writer).
 _MOD_LFO1_TO_FILTER   = (0x60, 0x38)
 _MOD_LFO1_TO_FILTER_Q = (0x60, 0x39)
@@ -476,15 +479,71 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
 
     # Mod cords into Filter-Freq (voice[190:270]).  Each cord amount is a signed
     # byte → ±1.0.  The filter-env SHAPE is at PZT[14:26] but its depth/sign is
-    # the FilterEnv→FilterFreq cord ("Cord 05", mod offset 22).
+    # the FilterEnv→FilterFreq cord.
+    #
+    # §E4BCORDSLOT -- FOUND BY (src, dst), NEVER AT A SLOT NUMBER. These three
+    # reads took the byte our own writer's template puts the cord at, and the
+    # machine's own files do not honour that layout: the E4XT ships Key~ where
+    # we ship Key+, and EOS's AKAI importer packs the table in a different
+    # order again. Measured 2026-09-20 over 49 banks read off HD0 (2530
+    # voices), counting only voices where the value actually CHANGES once the
+    # cord is searched for instead of indexed:
+    #
+    #     LFO1→Pitch    12.4%   median |Δ| 8 amount counts, max 127
+    #     FEnv→Cutoff    9.7%   median |Δ| 10
+    #     Key→Cutoff     2.7%   median |Δ| 89
+    #     Vel→Cutoff     2.5%   median |Δ| 127
+    #
+    # and over EOS's own AKAI import of 369 programs (2800 voices) **52-95%
+    # per read**, which is how a median "EOS keytrack" of 0.118 oct/oct came
+    # out of a bank whose slot 6 holds Vel+→Cutoff: amount 21 read as a key
+    # cord is 21/127 × 0.713 = 0.118. The comparison was measuring our own
+    # indexing error.
+    #
+    # The same trap was found and fixed for velocity→volume (2026-09-01) and
+    # for the LFO routings (2026-09-17), each time with a comment saying this
+    # reader must handle the machine's files and not only its own. These are
+    # the reads that were left behind both times.
     fenv_raw = pzt[14:26]
     mod_region = data[VOICE_MOD_OFF:VOICE_MOD_OFF + 80] if len(data) >= VOICE_MOD_OFF + 27 else b''
-    _cord = lambda off: (cord_byte_to_amount(mod_region[off]) if mod_region else 0.0)
-    cord_amt = mod_region[_MOD_FENV_TO_CUTOFF_AMT] if mod_region else 0
+
+    def _cord_slot(src, dst):
+        """Slot index of the first cord `src`→`dst`, or -1."""
+        for s in range(20):
+            o = s * 4
+            if o + 1 < len(mod_region) and mod_region[o] == src and mod_region[o + 1] == dst:
+                return s
+        return -1
+
+    def _cord_amount_byte(dst, *sources):
+        """Raw amount byte of the first cord into `dst` from any of `sources`.
+
+        POLARITY IS A PIVOT, NOT A SCALE -- so a family may share one read.
+        The three velocity forms were measured (eosed, 2026-09-01) to differ
+        only in where they pivot (Vel+ at 0, Vel< at 127, Vel~ at 89.4) and to
+        share one span. **The two KEY forms were MEASURED on 2026-09-20 and do
+        too** (§E4XTKEYPOL): on a purpose-built bank, `Key~/Key+ = 0.997` at
+        equal amount over four octaves of key, with `Key~` pivoting at key 60
+        on all three amounts independently. A bipolar `Key~` would have
+        covered twice the octaves. This line said "ASSUMED ... not measured"
+        for the twelve hours between writing the family read and measuring it;
+        a caveat that outlives its measurement makes correct code look
+        untrustworthy to the next reader.
+
+        The model carries no pivot either way, so what accepting the family
+        loses is the base offset, never the depth.
+        """
+        for _s in sources:
+            _slot = _cord_slot(_s, dst)
+            if _slot >= 0 and _slot * 4 + 2 < len(mod_region):
+                return mod_region[_slot * 4 + 2]
+        return 0
+
+    cord_amt = _cord_amount_byte(_DST_FILTER_FREQ, _SRC_FILTER_ENV)
     # The cord amount is this MACHINE's fraction; the model carries the
     # physical ratio (§CORPUSRT).
-    filter_keytrack    = filter_amount_to_key_track(
-        _cord(_MOD_KEY_TO_CUTOFF_AMT))
+    filter_keytrack    = filter_amount_to_key_track(cord_byte_to_amount(
+        _cord_amount_byte(_DST_FILTER_FREQ, _SRC_KEY_PLUS, _SRC_KEY_TILDE)))
 
     # VELOCITY -> AMP ENVELOPE ATTACK. Scanned rather than read from a fixed
     # slot: the writer puts it in the first free one, and real banks place it
@@ -512,20 +571,15 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     # e4b_writer wrote. vpar[60] is the base; see `e4xt_cents_to_cord_amount`
     # for why no cents-per-cord constant is right on this machine.
     velocity_to_filter_cents = e4xt_cord_amount_to_cents(
-        vpar[60], _cord(_MOD_VEL_TO_CUTOFF_AMT) * 100.0,
+        vpar[60], cord_byte_to_amount(_cord_amount_byte(
+            _DST_FILTER_FREQ, _SRC_VEL_PLUS, _SRC_VEL_TILDE,
+            _SRC_VEL_LESS)) * 100.0,
         source_units=E4XT_VEL_SOURCE_UNITS)
     # LFO→dest cords + mod-wheel→LFO-depth gate reconstruction (inverse of
     # e4b_writer: each LFO cord depth D is split into static D*(1-Kw) + a
     # ModWheel→CordN-Amount cord of D*Kw).  Recover the full depth (static+gate)
     # and the common wheel ratio Kw.  LFO1→Pitch is at the fixed slot 2; the
     # other routings live in free slots, found by (src, dst).
-    def _cord_slot(src, dst):
-        for s in range(20):
-            o = s * 4
-            if o + 1 < len(mod_region) and mod_region[o] == src and mod_region[o + 1] == dst:
-                return s
-        return -1
-
     def _gate_byte(slot):
         """Raw amount byte of the ModWheel→CordN-Amount gate for cord `slot`."""
         if slot < 0:
@@ -567,7 +621,10 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
 
     # (attr, src, dst, fixed_slot-or-None) for every LFO routing
     _lfo_defs = [
-        ('lfo1_to_pitch',    0x60, 0x30, _MOD_LFO_TO_PITCH_SLOT),
+        # §E4BCORDSLOT: searched like every other routing. The template slot
+        # held PitchWheel→Pitch (0x10→0x30) on 222 of 2530 HD0 voices, read
+        # back as an LFO pitch depth the voice does not have.
+        ('lfo1_to_pitch',    0x60, 0x30, None),
         ('lfo1_to_filter',   _MOD_LFO1_TO_FILTER[0],   _MOD_LFO1_TO_FILTER[1],   None),
         ('lfo1_to_filter_q', _MOD_LFO1_TO_FILTER_Q[0], _MOD_LFO1_TO_FILTER_Q[1], None),
         ('lfo2_to_pitch',    _MOD_LFO2_TO_PITCH[0],    _MOD_LFO2_TO_PITCH[1],    None),
@@ -809,8 +866,48 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     env_attack  = _E4XT_ATK_SLOWDOWN * (
         _fenv_rate_inv(pzt[0]) * _atk_l1
         + _stage2_seconds(pzt[2]) * (1.0 - _atk_l1))
-    env_decay   = (env_rate_to_span_seconds(_decay_span, pzt[4])
-                   + _stage2_seconds(pzt[6]))
+    # DCY1 STOPS AT THE KNEE, NOT AT THE SUSTAIN -- the same error the release
+    # block below records being fixed on 2026-09-11, one stage over, and left
+    # here. `e4b_writer` gives Dcy1 only `_d_mid_db` to cover (min(29 dB, 0.48
+    # of the decay span)) and puts the remainder on Dcy2; reading Dcy1's rate
+    # as if it crossed the whole way to sustain over-reports by
+    # `_decay_span / _d_mid_db`, and the old second term compounded it by
+    # taking Dcy2's full traversal instead of its own segment's.
+    #
+    # SETTLED ON HARDWARE, and it settled which half was wrong. A model ->
+    # write_e4b -> parse_e4b round trip inflated `env_decay` by a median 3.26x
+    # with 0 of 20 voices preserved, so the two were not inverses -- but that
+    # alone does not say which one to move. eosed read the E4XT's OWN amp
+    # envelope for five presets of a bank built by this writer (names asserted
+    # on selection) and the machine agreed with the MODEL to within 11%, while
+    # sitting 49-72% away from what this parser reported. The writer's bytes
+    # are right; this reading of them was not.
+    #
+    # Unlike the release at sustain 0, the knee IS recoverable here: the writer
+    # stores its level in `pzt[5]`, so no constant needs importing and a file
+    # from another writer is read on its own terms.
+    # SCOPED TO WHERE IT IS VERIFIED, exactly as the release fix below is. The
+    # span-aware reading applies only where Dcy1 genuinely stops PART WAY down
+    # -- the shape this writer produces. A `pzt[5]` at full level is a PLATEAU
+    # (Dcy1 holds the peak and Dcy2 carries the whole fall), which is a real
+    # corpus shape and a different envelope; splitting it here would re-read
+    # Dcy2's span as the full traverse and inflate it, which is the very
+    # over-count this fixes. That case keeps the previous behaviour.
+    #
+    # `pzt[4] > 0` is the other half of the same scoping. Rate byte 0 is the
+    # deliberate "no time" encoding, not the rate curve's floor, so a Dcy1 with
+    # rate 0 has NO first segment however its level byte reads -- the real
+    # corpus SFX voice that motivated the two-stage sum carries rate 0 with
+    # level 126, a hair below full, and must not be split.
+    _d_knee_db = env_level_byte_to_db(pzt[5])
+    _d_seg2    = _decay_span - _d_knee_db
+    if _d_seg2 > 0.0 and _d_knee_db > 0.0 and pzt[4] > 0:
+        env_decay = (env_rate_to_span_seconds(_d_knee_db, pzt[4])
+                     + env_rate_to_span_seconds(_d_seg2, pzt[6]))
+    else:
+        # One segment, or a knee at/below the sustain: nothing to split.
+        env_decay = (env_rate_to_span_seconds(_decay_span, pzt[4])
+                     + _stage2_seconds(pzt[6]))
     # RELEASE SEGMENT 1 STOPS AT THE KNEE, NOT AT SILENCE -- so its span is
     # the distance from SUSTAIN down to `pzt[9]`, not the whole release span.
     #

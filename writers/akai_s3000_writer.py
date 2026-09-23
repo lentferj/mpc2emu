@@ -291,7 +291,44 @@ _AK_FILTER_SUPERSEDED = (6.4597, 0.07100, 44, 92)    # Hz -- see AKAI_FILTER_LAW
 # set -- so a stale constant cannot silently survive; it inverts.
 #
 #   rate = a * exp(b * value),  time = span / rate
-_AK_DECAY1_RATE = (23525.6, -0.09776, 45, 85)   # dB/s,            r2 0.99998
+# DECAY1's WINDOW IS NOW 25..90, MEASURED (s3ked, 2026-09-20). The constant did
+# not move: a fresh sweep of bytes 20..99 -- one source, one estimator, per-curve
+# r2 0.997-0.999 -- fits 0.09728 against the 0.09776 here, 0.49% apart, and
+# observed/predicted is FLAT across 25..90 (median 1.0101, min 0.9931, max
+# 1.0396). Byte 30 came in at 1.021 on 71 windows; it carries 42% of a real
+# library disc and until tonight was read fifteen bytes below the fit's floor.
+#
+# It also settled a conflict this file was silently on one side of. s3ked §118
+# re-measured the same field over 40..99 and got 0.08781 -- 10% away, on the
+# worst r2 of its three fields -- and concluded "all three reproduce". If that
+# exponent were right, observed/predicted would have to DRIFT (1.382 at byte 30
+# down to 0.761 at 90). It does not, so it is not an exponent. §118's estimator
+# lesson stands; its replacement number does not.
+#
+# TWO MEASURED ANOMALIES, and the instrument has been CLEARED of both.
+# Byte 96 reads 10.8% high on the best r2 of the run; byte 20 reads -28.8% at
+# r2 0.948, the only fit under 0.99.
+#
+# The first account of byte 20 was wrong and is corrected here rather than
+# quietly replaced. It said: "61.8 dB passes in ~18 ms, which is the estimator
+# running out of room, not the machine." Plausible, mechanical, untested.
+# s3ked then ran the control -- white noise with an EXACT exponential envelope
+# at each rate the machine produced, through the identical window/floor/fit
+# path -- and it refutes that: across the ladder the estimator's own error is
+# median 0.12%, max 1.17%, nothing past 2%. At byte 20's own rate, 2370 dB/s,
+# it recovers -0.67% at r2 0.99906. A 6 ms attack ramp overlapping the fit
+# still gives -0.77%. Byte 96's rate recovers +0.16%.
+#
+# So neither resolution nor attack overlap explains either point. **Cause
+# unknown, and recorded as unknown.** Both are stronger claims than when they
+# were artefacts-in-waiting, because the apparatus is no longer a candidate.
+#
+# The control also changes what backs the law. Reproducing §30 to 0.49% is
+# agreement between two MEASUREMENTS, where a shared bias is invisible; the
+# constructed signal adds an independent route to ground truth. Everything
+# except bytes 20 and 96 is now backed both ways. ABOVE 90 REMAINS
+# EXTRAPOLATION regardless.
+_AK_DECAY1_RATE = (23525.6, -0.09776, 25, 90)   # dB/s,  r2 0.99989 over 25..99
 # RELSE1 REFITTED 2026-08-24 (s3ked), 11 points, log-space r2 0.99996. The
 # constants barely move -- the VALUE of the run is the RANGE: **validated
 # 45..99 where it was 55..70**, so the 8.7% of corpus keygroups above the old
@@ -1205,7 +1242,28 @@ def akai_env_from_bytes(atk: int, dec: int, sus: int, rel: int):
 
 
 def _ak_attack_seconds(byte: int) -> float:
-    """ATTAK1 -> seconds. Exact inverse of `akai_attack_byte`'s law."""
+    """ATTAK1 -> seconds. Exact inverse of `akai_attack_byte`'s law.
+
+    Clamped into the fit range, which for this law is the whole valid field
+    (0..99), so the clamp only bites on a byte that could not have come from a
+    real program.
+
+    **THIS NAME WAS DEFINED TWICE until 2026-09-20** (ER-1, external review):
+    a second, UNCLAMPED top-level def about eighty lines below shadowed this
+    one, so the clamp this docstring promises never executed and the variant
+    described here was dead code. Nothing was wrong at runtime -- the two agree
+    across 0..99 and both call sites are in range -- but two same-named
+    functions in one module is precisely how an inverse pair drifts apart, and
+    this module's own comment at ~1200 says so about a second copy of the
+    arithmetic.
+
+    The deleted definition existed to keep the attack CEILING derived rather
+    than written down: a refit of `_AK_ATTAK1_TIME` moves it, and a hardcoded
+    5.13 s would quietly stop being true (the 2026-09-11 refit moved it from
+    9.25 s to 5.13 s). That property is kept, not lost -- the ceiling call site
+    passes `_AK_ATTAK1_TIME[3]`, the clamp is a no-op at exactly that byte, and
+    so the ceiling is still read off the law.
+    """
     a, b, lo, hi = _AK_ATTAK1_TIME
     return a * math.exp(b * max(lo, min(hi, byte)))
 
@@ -1279,17 +1337,6 @@ def _akai_sustain_fraction(byte: int) -> float:
     if byte <= 0:
         return 0.0
     return (_first_reaching(byte) + _first_reaching(byte + 1)) / 2.0
-
-
-def _ak_attack_seconds(byte: int) -> float:
-    """ATTAK1 -> seconds, from the law itself.
-
-    Exists so the ceiling in the diagnostic is DERIVED rather than written down:
-    a refit of `_AK_ATTAK1_TIME` moves the ceiling, and a hardcoded 5.13 would
-    quietly stop being true. The 2026-09-11 refit moved it from 9.25 s to 5.13 s.
-    """
-    a, b, _, _ = _AK_ATTAK1_TIME
-    return a * math.exp(b * byte)
 
 
 def akai_attack_byte(seconds: float) -> int:
@@ -4055,6 +4102,58 @@ def _check_stereo_halves(prog: bytes, fn: str, stereo_right: dict,
     return sorted(seen)
 
 
+#: 32 MB is the WHOLE FAMILY's ceiling, not a model's -- an S1000, S3000, S3200
+#: or S3000XL all stop there and no expansion goes further (Jan, 2026-09-20:
+#: "32MB, which already is the absolute max possible"). A volume larger than
+#: this cannot be fully loaded by ANY machine that can read it.
+#:
+#: **It half-loads rather than refusing**: one warning on the panel, then
+#: keygroups pointing at samples that never arrived, playing silence. So a
+#: volume over the ceiling is not a large volume, it is a broken one, and the
+#: failure looks like a conversion defect rather than a capacity limit.
+#:
+#: Found 2026-09-20 building an A/B volume of ten programs: 38.8 MB, 1.15x
+#: over, and nothing in this writer said so. The disk image refused it for
+#: lack of contiguous space, which was luck -- a roomier card would have
+#: written a volume that could never load.
+AKAI_MAX_VOLUME_BYTES = 32 * 1024 * 1024
+
+#: THE RESIDENT OBJECT TABLE, read out of the S3000XL's own OS (s3ked §258,
+#: 2026-09-20, OS v2.0 image): **1006 entries of 192 bytes at linear 0x90000**,
+#: ending at 0xBF280 immediately below the ROM base. Byte 0 of each entry is
+#: the block type -- 1 program, 2 keygroup, 3 sample, 0 free -- the same
+#: identifiers s3ked reads over SysEx, so the taxonomy has two independent
+#: sources. `--akai-max-objects 1006` was a measured default until this; now it
+#: has a primary one.
+#:
+#: **TWO OF THE THREE TYPES HAVE A SEPARATE CEILING, AND NEITHER IS VISIBLE IN
+#: THE POOL.** The firmware keeps a counter per type at 0x72F4 (programs) and
+#: 0x72F6 (samples) and compares each against a BYTE before creating another:
+#:
+#:     samples  vs 0xFF  ->  no 256th resident sample   (6 sites)
+#:     programs vs 0xFE  ->  no 255th resident program  (4 sites)
+#:
+#: **Keygroups have no global counter at all**, so nothing caps them
+#: separately -- which is why a volume can carry 205 of them without trouble.
+#:
+#: FOUND THE EXPENSIVE WAY. A 13-program volume was refused by the machine
+#: with **533 free of the 1006 pool** and 31 % memory free. Its cost is
+#: 13 + 205 + 271 = 489, so the pool had 44 entries spare and the refusal made
+#: no sense from anything either the LCD or this writer could show. The load
+#: screen prints programs and samples and omits keygroups -- which turns out to
+#: be exactly the set of counters the firmware keeps.
+#:
+#: The number that fired was **271 distinct samples against the 255 ceiling**.
+AKAI_MAX_RESIDENT_SAMPLES = 255
+AKAI_MAX_RESIDENT_PROGRAMS = 254
+
+#: The whole table, shared by all three types. A volume within it can still be
+#: refused when something else is already resident, so this is a build-time
+#: bound and not a guarantee: 489 entries fit 1006 and did not fit the 533 that
+#: machine had free. Report the cost; the operator owns the comparison.
+AKAI_MAX_RESIDENT_OBJECTS = 1006
+
+
 def build_akai_volume(bank: Bank, bank_name: Optional[str] = None,
                       quiet: bool = False,
                       taken: Optional[set] = None,
@@ -4514,6 +4613,60 @@ def build_akai_volume(bank: Bank, bank_name: Optional[str] = None,
         # instrument's own type-0 volumes carry them.
         from writers.akai_aux_defaults import AUX_FILES
         files.extend((name, bytes(data)) for name, data in AUX_FILES)
+
+    # THE MACHINE'S CEILING, CHECKED WHERE THE VOLUME IS FINISHED.
+    # Sample files are what occupy sample RAM; programs are objects and cost
+    # PRAM instead, which is a separate budget the disk-image layer reports.
+    _n_smp = sum(1 for n, d in files if n.upper().endswith(('.S3', '.S1')))
+    _n_prg = sum(1 for n, d in files if n.upper().endswith(('.P3', '.P1')))
+    _subject = bank_name or getattr(bank, 'name', None)
+    if _n_smp > AKAI_MAX_RESIDENT_SAMPLES:
+        _m = (f"volume holds {_n_smp} samples, over the "
+              f"{AKAI_MAX_RESIDENT_SAMPLES}-sample ceiling every S1000/S3000 "
+              f"machine enforces (OS counter at 0x72F6 compared against a "
+              f"BYTE). It will be REFUSED with 'TOO MANY PROGS./KEYGROUPS/"
+              f"SAMPLES' however much memory and object pool are free. "
+              f"Individual programs still load; the whole volume does not. "
+              f"Split it across volumes.")
+        # see the note on AKAI_VOLUME_OVER_SAMPLE_RAM: fits/does-not-fit, not
+        # lossy. The file is complete.
+        _diag(_W, 'AKAI_VOLUME_OVER_SAMPLE_CEILING', _m, content_lost=False,
+              subject=_subject)
+        if not quiet:
+            print(f"  [WARN] {_m}")
+    if _n_prg > AKAI_MAX_RESIDENT_PROGRAMS:
+        _m = (f"volume holds {_n_prg} programs, over the "
+              f"{AKAI_MAX_RESIDENT_PROGRAMS}-program ceiling (counter at "
+              f"0x72F4 compared against 0xFE). Same refusal, same "
+              f"independence from free memory. Individual programs still "
+              f"load; the whole volume does not.")
+        _diag(_W, 'AKAI_VOLUME_OVER_PROGRAM_CEILING', _m, content_lost=False,
+              subject=_subject)
+        if not quiet:
+            print(f"  [WARN] {_m}")
+    _pcm = sum(len(d) for n, d in files if n.upper().endswith(('.S3', '.S1')))
+    if _pcm > AKAI_MAX_VOLUME_BYTES:
+        _msg = (f"volume holds {_pcm / 1048576:.1f} MB of samples, over the "
+                f"{AKAI_MAX_VOLUME_BYTES // 1048576} MB ceiling of every "
+                f"S1000/S3000-family machine by "
+                f"{_pcm / AKAI_MAX_VOLUME_BYTES:.2f}x. It will HALF-LOAD: one "
+                f"warning on the panel, then keygroups pointing at samples "
+                f"that never arrived, playing silence. Individual programs "
+                f"still load; the whole volume does not. Split it across "
+                f"volumes.")
+        # NOT content_lost. VinSamLib's test, and it matches this project's own
+        # definition ("whether musical content WAS ACTUALLY LOST" -- past
+        # tense, about the artefact): would the missing thing come back if the
+        # same volume were rebuilt tomorrow with the same options? For a rate
+        # snap, no -- the band is gone from the file. Here, yes: the volume is
+        # complete and byte-identical, and what changed is which machine can
+        # hold it. That is the fits/does-not-fit axis, not the lossy one.
+        # The CONSEQUENCE is missing audio on the instrument, and the message
+        # says so explicitly rather than the flag reaching for it.
+        _diag(_W, 'AKAI_VOLUME_OVER_SAMPLE_RAM', _msg, content_lost=False,
+              subject=bank_name or getattr(bank, 'name', None))
+        if not quiet:
+            print(f"  [WARN] {_msg}")
 
     return files
 

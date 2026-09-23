@@ -1559,7 +1559,8 @@ _MPC3_LFO_SHAPES = {0: 'Sine', 1: 'Triangle', 2: 'Saw Up', 3: 'Saw Down',
 # ---------------------------------------------------------------------------
 
 def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None,
-              chromatic_pads: bool = False) -> Bank:
+              chromatic_pads: bool = False,
+              sync_bpm: Optional[float] = None) -> Bank:
     """
     Parse an Akai MPC XPM program file and resolve WAV samples.
 
@@ -2066,7 +2067,25 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None,
                 # project, not the XPM, so reproduce the division's speed as a fixed
                 # rate at a 120 BPM reference (see _mpc_sync_hz).
                 if lfo_sync_div:
-                    _synced_hz = _mpc_sync_hz(lfo_sync_div)
+                    # `sync_bpm` PARAMETER, falling back to the module global
+                    # (ER-5, external review 2026-09-20). The tempo lives in
+                    # the MPC PROJECT, not the XPM, so it has to come from the
+                    # caller; it used to come ONLY from `SYNC_BPM`, which
+                    # convert.py sets and leaves set.
+                    #
+                    # That made a process global the single channel for a
+                    # per-call value, and VinSamLib -- which has no parameter
+                    # to set -- mutated it around each call and restored it in
+                    # a `finally`. Their guard was `prev is not None`, so if
+                    # this module ever renamed or dropped `SYNC_BPM` a
+                    # requested tempo would be SILENTLY ignored and every
+                    # synced LFO would come out at 120 BPM's assumptions with
+                    # no error and no diagnostic. They have since made that
+                    # case raise; this removes the need for it.
+                    #
+                    # The global stays as the fallback so convert.py and every
+                    # existing caller behave identically.
+                    _synced_hz = _mpc_sync_hz(lfo_sync_div, sync_bpm)
                     if _synced_hz is not None:
                         lfo_rate_hz = _synced_hz
 

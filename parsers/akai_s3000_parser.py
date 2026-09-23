@@ -41,6 +41,7 @@ from typing import Optional
 from models.diagnostics import emit as _diag, WARNING as _W, INFO as _I
 from models.common import (
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType,
+    ModRouting, akai_mod_depth_to_cord_amount,
     akai_filfrq_to_hz, hz_to_e4b_cutoff, AKAI_FILTER_LAW, AKAI_FILTER_OPEN,
     AKAI_ENV2_ATTACK, AKAI_ENV2_DECAY, AKAI_ENV2_RELEASE,
     AKAI_ENV2_DEPTH_OFFSET, AKAI_ENV2_DEPTH_MAX, akai_env2_stage_seconds,
@@ -60,6 +61,7 @@ from models.common import (
     AKAI_FIL2FR_EXTRAP_TOP_UNMEASURED_FROM,
     AKAI_CASCADE_CORNER_RATIO, AKAI_CASCADE_MATCHED_OCTAVES,
     akai_lfo_rate_hz, akai_lfo_depth_to_pitch, akai_lfo_delay_seconds,
+    akai_program_loudness_to_e4b_db,
     AKAI_LFO_PAN_DEPTH_SCALE,
     akai_env2_target_hz, E4B_CUTOFF_MAX_HZ, E4XT_FENV_BYTE_PER_UNIT,
     AKAI_ENV2_OCT_PER_UNIT, AKAI_ENV2_FULL_LEVEL, AKAI_FILTER_OPEN_HZ, AKAI_FILTER_FLOOR_HZ,
@@ -97,6 +99,63 @@ AKAI_LPTCH_MAX = 50
 #: this parser already reads at 0x0c and 0x0f).
 AKAI_VATT1_OFFSET = 16
 
+#: §AKAICORDGAP — the seven envelope-modulation bytes EOS's AKAI importer
+#: converts and this project dropped. Two blocks of four, each sitting
+#: immediately after one of the two envelope blocks this parser already reads
+#: (`0x0c-0x0f` amp, `0x14-0x17` env2), in the same order both times — which is
+#: the relation that identified them, not the individual offsets.
+#:
+#:     (kg byte, model source, model destination, non-zero count)
+#:
+#: **THE COUNTS ARE eosed's REFERENCE DISC (2690 keygroups), NOT OURS, AND ONE
+#: OF THEM IS CONTRADICTED HERE.** On the 13-program AKAI source ISO in this
+#: project's own material, `0x13` is **-5 on 17 of 205 keygroups (8.3%)** —
+#: every keygroup of one program — where that disc has it zero everywhere. A
+#: prevalence without its corpus is not a measurement; these are quoted with
+#: theirs, and ours disagrees on the row EOS's output can never exercise.
+#: `0x10` is `vel_to_attack` above and is NOT repeated here; it has a measured
+#: span law of its own (`akai_vatt1_to_attack_span`) and that is better than a
+#: rescaled cord amount.
+#:
+#: **`0x13` and `0x1b` are read as KEY -> RELEASE on EOS's authority.** Some
+#: AKAI documentation names the fourth byte of each block a key->DECAY
+#: dependence. `0x13` was settled on hardware (`O7`): the E4XT writes a
+#: `Key+ -> 0x4B VEnvRls` cord, not a decay one.
+#:
+#: ⚠ **THE "never" ANNOTATIONS BELOW WERE WRONG, AND TWO CORPORA AGREED ON
+#: IT.** Both were recorded zero — on `eosed`'s 2690-keygroup reference disc
+#: and on this project's 13-program ISO — and each of us read the other's zero
+#: as corroboration. Across **21 discs, 10 933 programs, 69 062 keygroups**
+#: measured here (matching `eosed`'s independent sweep exactly):
+#:
+#:     0x13 != 0 and 0x1b == 0      892 keygroups   1.29 %
+#:     0x13 == 0 and 0x1b != 0       51 keygroups   0.074 %
+#:
+#: with dropped amounts `-50, -30, -26, -20, -5, -3, -1, 20, 24, 50` — several
+#: at full scale, so not rounding dust.
+#:
+#: **TWO SAMPLES AGREEING ON A NEGATIVE MEASURED NOTHING.** At 0.074 %, two
+#: independent corpora of a few thousand keygroups will both return zero and
+#: *agree*, and the agreement feels like confirmation. The honest form was
+#: always "0 of 2690", never "never" — and the comment below already said the
+#: counts were *theirs*, which is precisely the caution that should have
+#: stopped anyone writing the stronger word.
+#:
+#: The `0x13` row is the one that held: this project recorded -5 on 17 of 205
+#: keygroups against their disc's zero and flagged the disagreement rather
+#: than deferring. 892 corpus-wide says the small sample was right and the
+#: bigger one was unrepresentative.
+
+AKAI_ENV_CORD_BYTES = (
+    (0x11, 'velocity',         'amp_env_release',     84),    # 3.1 %
+    (0x12, 'release_velocity', 'amp_env_release',     28),    # 1.0 %
+    (0x13, 'key',              'amp_env_release',      0),    # 1.29 % corpus
+    (0x18, 'velocity',         'filter_env_attack',   12),    # 0.4 %
+    (0x19, 'velocity',         'filter_env_release',  12),    # 0.4 %
+    (0x1a, 'release_velocity', 'filter_env_release',   0),    # 0 of 2690 only
+    (0x1b, 'key',              'filter_env_release',   0),    # 0.074 % corpus
+)
+
 AKAI_MODVFILT1_OFFSET = 151
 #: Program-level assignable-source selectors (one per filter-freq mod slot).
 #: Measured on two programs (the reference preset, preset 4) reading identically --
@@ -122,6 +181,32 @@ AKAI_KGMUTE_OFF = 255
 #: shape ("consistent with a sine or trapezoid, not resolved") until Jan
 #: named it from the S3000XL manual itself (flitemedia.com S3000XL.PDF p.80,
 #: 2026-08-31): **3=random**. See `models.common.AKAI_LFO_WAVE_RMS_TO_PEAK`.
+#: ✅ **Program byte `0x1d` is the LFO2 RATE.** [C: 363/363 differential
+#: against EOS's own import]
+#:
+#: Found by pairing every preset of `B030-AKAIIMPORT-full.E4B` — the E4XT's
+#: own conversion — with its source program by name (361/361 matched, so the
+#: disc is identified, not assumed) and asking which program byte predicts
+#: EOS's `lfo2_rate`. **Of the 104 bytes tested, exactly one does**: `0x1d`,
+#: with its 11 distinct values mapping one-to-one onto EOS's 11 distinct
+#: rates.
+#:
+#: ⚠ **The OFFSET is confirmed; the rate LAW is not.** Feeding `0x1d` through
+#: `akai_lfo_rate_hz` — the law measured for LFO1 — reproduces EOS's stored
+#: rate byte on **6 of 11** values and is one or two bytes low on the rest.
+#: So LFO1's curve is close to EOS's LFO2 curve and is not it. Using it here
+#: is deliberate under this project's own rule — *EOS is a starting point for
+#: a field we DROP ENTIRELY, never an arbiter for one we already convert* —
+#: and LFO2 was dropped on all 1144 voices until now.
+#:
+#: ⚠ **And EOS routes LFO2 nowhere.** Across 2800 imported voices
+#: `lfo2_to_pitch`, `_to_filter`, `_to_volume` and `_to_pan` are all zero, so
+#: EOS writes a rate for an LFO that modulates nothing. Reading the rate is
+#: therefore necessary and not sufficient; the routing lives in the AKAI mod
+#: matrix (`MODSFILT` = 8 selects LFO2), which the reference disc never
+#: exercises — all 369 of its programs are `(5, 3, 10)`.
+AKAI_LFO2RATE_OFFSET = 0x1d
+
 AKAI_LFO1WAVE_OFFSET = 97
 
 # LFO -> LOUDNESS (tremolo) offsets live in models.common with the law they
@@ -384,6 +469,22 @@ def _playback_rate(data: bytes, s3000: bool) -> int:
                   detail={'declared_rate': declared, 'played_rate': index,
                           'cents': round(_cents, 1),
                           'playable': list(_AKAI_PLAYBACK_RATES)})
+        # MEASURED 2026-09-20 -- this is the disc test the docstring above was
+        # blocked on, and it says prefer the index. `LIVE KIT 4` keygroup
+        # 72-88 plays LVBASSL4.S1, whose header declares 30000 Hz with the
+        # index at 44100 and carries SHTUNO -6.668 semitones -- exactly the
+        # -6.67 that cancels 44100/30000. Note 79 on the S3000XL measured
+        # **48.93 Hz** against 48.94 Hz predicted for a 44100 playback (0.4
+        # cents), and 33.30 Hz for an honoured 30000. The same note on the
+        # E4XT, built from the declared rate, measured 34.58 Hz -- 6.0
+        # semitones flat, which is what Jan heard as "far deeper".
+        #
+        # Narrow on purpose: ONLY an unplayable declared rate resolves to the
+        # index here. The plain 22050/44100 contradiction stays on `declared`,
+        # because that is the case the docstring counts at 1503 of 35 990 `.S1`
+        # reads and NOTHING has measured it. One rate was tested; one rate
+        # moves.
+        return index
     if s3000:
         return index
     return declared or index
@@ -513,6 +614,14 @@ _XPM_HIGH1 = 6      # ONE pole -- the highpass tap measures +6.1 dB/oct
 _XPM_HIGH2 = 7      # kept for reference; NOT what this machine's HP tap is
 _XPM_BAND2, _XPM_BAND4 = 11, 12
 _XPM_BANDSTOP2 = 15
+
+#: ENV2 depth at which the sweep is worth protecting from a shape change.
+#: 26 units is 7500 cents on the program that found this; anything with a real
+#: sweep is dominated by where the corner GOES, not where it starts.
+_FILT_SWEEP_KEEPS_LOWPASS = 4
+
+_XPM_FILTER_NAME = {1: 'Low1', 2: 'Low2', 3: 'Low4', 6: 'High1', 7: 'High2',
+                    11: 'Band2', 12: 'Band4', 15: 'BandStop2', 19: 'BandBoost2'}
 _XPM_BANDBOOST2 = 19
 
 #: An EQ shallower than this is not doing audible work. The measured depth
@@ -526,7 +635,21 @@ _FLT2_CASCADE_OCTAVES = 1.0
 
 
 def _combine_akai_filters(kg, s3000):
-    """The two series filters -> ONE model filter. Returns (type, hz, note).
+    """The two series filters -> ONE model filter.
+
+    Returns `(type, hz, note, filter1_in_circuit)` or None.
+
+    **THE FOURTH ELEMENT WAS ALWAYS READ AND NEVER RETURNED.** The caller in
+    `build_preset_from_program` has tested `_f2[3]` since the filter-2
+    resonance fix went in, against a 3-tuple -- so every AKAI program with an
+    active, non-EQ second filter raised `IndexError` and took the whole disc
+    read down with it. It hid because the three discs it fires on were read as
+    "unsupported" rather than as a crash: two commercial CD-ROMs and, found
+    2026-09-20, Jan's own live S3000XL card image.
+
+    `filter1_in_circuit` is `f1 is not None`, i.e. filter 1's corner is not
+    wide open -- which is exactly the question the caller was asking: when
+    filter 1 is out of circuit, filter 2's resonance is the only one there is.
 
     **The model has one filter and an IB-304F machine has two in series**, so
     something is always lost here; the job is to lose the least audible part
@@ -586,12 +709,12 @@ def _combine_akai_filters(kg, s3000):
 
     if mode == AKAI_FLT2MODE_LP:
         if f1 is None:
-            return (_XPM_LOW2, f2, None)
+            return (_XPM_LOW2, f2, None, f1 is not None)
         _sep = abs(math.log2(f1 / f2))
         near = _sep <= _FLT2_CASCADE_OCTAVES
         if not near:
             return (_XPM_LOW2, min(f1, f2),
-                    'second lowpass an octave clear of the first')
+                    'second lowpass an octave clear of the first', f1 is not None)
         # THE PAIR'S CORNER IS NOT EITHER SECTION'S. Two matched 2-pole
         # sections put the -3 dB point at 0.841 of their common corner --
         # measured, and 16% away from the obvious answer. `filter_cutoff` is
@@ -603,23 +726,26 @@ def _combine_akai_filters(kg, s3000):
         # measured and interpolating it would be invention. Between the two
         # regimes the answer is the lower corner, understating by at most 16%.
         if _sep <= AKAI_CASCADE_MATCHED_OCTAVES:
-            return (_XPM_LOW4, min(f1, f2) * AKAI_CASCADE_CORNER_RATIO, None)
-        return (_XPM_LOW4, min(f1, f2), None)
+            return (_XPM_LOW4, min(f1, f2) * AKAI_CASCADE_CORNER_RATIO, None,
+                    f1 is not None)
+        return (_XPM_LOW4, min(f1, f2), None, f1 is not None)
 
     if mode == AKAI_FLT2MODE_HP:
         if f1 is None:
-            return (_XPM_HIGH1, f2, None)
+            return (_XPM_HIGH1, f2, None, f1 is not None)
         if f2 >= f1:
             # Both corners fight: the highpass opens above where the lowpass
             # has already closed. The machine passes very little; the model
             # cannot say that, so keep the highpass and flag it.
-            return (_XPM_HIGH1, f2, 'highpass above the lowpass corner')
+            return (_XPM_HIGH1, f2, 'highpass above the lowpass corner',
+                    f1 is not None)
         # A real bandpass, geometric centre -- the single frequency the model
         # can hold that is equidistant from both edges in octaves.
-        return (_XPM_BAND4, math.sqrt(f1 * f2), None)
+        return (_XPM_BAND4, math.sqrt(f1 * f2), None, f1 is not None)
 
     if mode == AKAI_FLT2MODE_BP:
-        return (_XPM_BAND4 if f1 is not None else _XPM_BAND2, f2, None)
+        return (_XPM_BAND4 if f1 is not None else _XPM_BAND2, f2, None,
+                f1 is not None)
 
     if mode != AKAI_FLT2MODE_EQ:
         # OUT OF RANGE. Found by scanning the library discs: 10 of 8583 S3000
@@ -638,9 +764,10 @@ def _combine_akai_filters(kg, s3000):
     # Keep whichever is doing the audible work: if the lowpass corner sits
     # BELOW the band, the band is above the passband and inaudible.
     if f1 is not None and f1 < f2:
-        return (_XPM_LOW2, f1, 'parametric band above the lowpass corner')
+        return (_XPM_LOW2, f1, 'parametric band above the lowpass corner',
+                f1 is not None)
     kind = _XPM_BANDBOOST2 if akai_flt2q_is_boost(q) else _XPM_BANDSTOP2
-    return (kind, f2, None if f1 is None else 'lowpass corner')
+    return (kind, f2, None if f1 is None else 'lowpass corner', f1 is not None)
 
 
 def _cutoff_of(filfrq: int, s3000: bool) -> float:
@@ -749,6 +876,16 @@ def parse_sample_bytes(data: bytes, fallback_name: str = '',
     play_type = data[0x13]
     n_samples = _u32(data, 0x1a)
     rate = _playback_rate(data, s3000)
+    # WHAT THE FILE SAYS, alongside what the machine will do. `rate` above is
+    # the resolved one: an unplayable declared rate becomes the rate the loader
+    # actually uses (§AKAISSRATE). That is right for a converter and wrong for
+    # anyone describing the file on disc, and VinSamLib is the second kind of
+    # reader -- their cross-reader test began failing on 30 of 483 samples the
+    # day this landed, 40000 Hz against our 44100, a gap of exactly
+    # 1200*log2(40000/44100) = -169 cents. Two readers reporting different
+    # QUANTITIES, not different values, which is this project's own recurring
+    # lesson arriving through an interface.
+    _declared = _u16(data, 0x8a)
 
     # pitch offset: a 16-bit signed fixed-point SEMITONE value, low byte first
     # -- 0x15 is the whole semitone and 0x14 the /256 fraction. So the field is
@@ -796,6 +933,10 @@ def parse_sample_bytes(data: bytes, fallback_name: str = '',
     if _tune_semis:
         sd.root_note = max(0, min(127, sd.root_note - _tune_semis))
     sd.fine_tune = int(round(fine))
+    # Only where they diverge; None otherwise, so a consumer can tell
+    # "the file said X, the machine will do Y" from "the file said Y".
+    if _declared and _declared != sd.sample_rate:
+        sd.declared_sample_rate = _declared
 
     # playback type 2 is the only one that means "no loop"; the others all
     # sustain in some form. Loop 1 is the one that matters -- the remaining
@@ -961,6 +1102,13 @@ def parse_program_bytes(data: bytes, fallback_name: str = '',
             # rather than a template leftover.
             vel_to_attack=(_s8_rail(kg[AKAI_VATT1_OFFSET])
                            if len(kg) > AKAI_VATT1_OFFSET else 0),
+            #: §AKAICORDGAP: raw AKAI depths, railed like every other MODV
+            #: field. Converted to cord amounts at build time, not here --
+            #: the rail is a property of the machine, the rescaler is a
+            #: property of the target.
+            env_cords={_b: _s8_rail(kg[_b])
+                       for _b, _s, _d, _n in AKAI_ENV_CORD_BYTES
+                       if len(kg) > _b and kg[_b]},
             mod_amount_amp3=(_s8_rail(kg[AKAI_MODVAMP3_KG_OFFSET])
                              if len(kg) > AKAI_MODVAMP3_KG_OFFSET else 0),
             mod_amount_filt1=(_s8_rail(kg[AKAI_MODVFILT1_OFFSET])
@@ -1001,11 +1149,26 @@ def parse_program_bytes(data: bytes, fallback_name: str = '',
         # a converter that ignores it renders those too loud. Pointed out by
         # ConvertWithMoss PR #400.
         #
-        # CARRIED, NOT YET APPLIED: whether it follows the measured program
-        # loudness law (dB = 0.642719*x - 87.63) is CWM's assumption, not our
-        # measurement, and at the commonest non-default value (90) that law
-        # would mean 5.8 dB. Applying an unverified law is worse than the
-        # honest drop; the drop is now REPORTED instead. See TODO.
+        # STEREO LEVEL IS APPLIED, and this comment used to say it was not.
+        #
+        # It read "CARRIED, NOT YET APPLIED ... the drop is now REPORTED
+        # instead", which is true of ONE law and false of the field. What is
+        # not applied is CWM's measured program-loudness law
+        # (dB = 0.642719*x - 87.63), which at the commonest non-default value
+        # 90 would mean -5.8 dB and remains their assumption rather than our
+        # measurement. What IS applied, unconditionally, is a plain
+        # AMPLITUDE-RATIO law, `20*log10(level/99)`, added into every zone's
+        # volume -- -0.83 dB at that same value 90.
+        #
+        # So the field is converted, through an assumed law, while the comment
+        # claimed it was dropped. Caught 2026-09-20 by eosed reading this
+        # source from outside; `docs/re_procedures/akai_program_scope_laws.md`
+        # still states the goal as making stereo LEVEL "applied instead of
+        # reported", which is stale in the same direction.
+        #
+        # STILL OPEN, and one measurement settles it: the ratio law and CWM's
+        # loudness law disagree by 5 dB at the commonest value. Neither has
+        # been measured on an S3000XL. See that procedure's Measurement 2.
         stereo_level=data[0x17],
         loudness=data[0x19],
         # V_LOUD, byte 0x1a ("velocity > loudness") -- read by nobody until
@@ -1045,6 +1208,10 @@ def parse_program_bytes(data: bytes, fallback_name: str = '',
         # `akai_lfo_depth_to_pitch`; see AKAI_LFO_WAVE_RMS_TO_PEAK.
         lfo1_wave=(data[AKAI_LFO1WAVE_OFFSET]
                    if len(data) > AKAI_LFO1WAVE_OFFSET else None),
+        # LFO2 rate -- see AKAI_LFO2RATE_OFFSET. Read since 2026-09-23; it
+        # was dropped on every voice before that.
+        lfo2_rate_byte=(data[AKAI_LFO2RATE_OFFSET]
+                        if len(data) > AKAI_LFO2RATE_OFFSET else 0),
         # LFO -> loudness slots (§AKAILFOAMP).
         mod_src_amp=tuple(data[o] if len(data) > o else None
                           for o in AKAI_MODSAMP_OFFSETS),
@@ -1189,9 +1356,35 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
     # (unique, and within 0..127) is the right gate and needs no new rule.
     preset = Preset(name=(_pname[:16] if _pname else _safe_name(fallback_name)),
                     program_number=prog['midi_program'])
+    # PROGRAM LOUDNESS (byte 0x19) -> the preset's own volume, in dB.
+    #
+    # Read by the parser since 2026-09-08 and carried to NOBODY: `Preset.volume`
+    # existed, nothing populated it, and the E4B writer left preset-header byte
+    # 27 at zero on every bank we have ever written. So a program the sound
+    # designer turned down came out at full level.
+    #
+    # Found by the differential Jan proposed (§EOSDIFFGAP): instead of asking
+    # how well we AGREE with EOS's importer on what we both convert, ask which
+    # fields it carries information in where we write a constant. This was one.
+    # The conversion is EOS's own, read out of the firmware rather than fitted
+    # -- see `akai_program_loudness_to_e4b_db` -- and reproduces EOS's byte 27
+    # on all 361 programs of a library disc.
+    #
+    # NOT a double-application: the zone volumes below carry `loudness` (the
+    # per-zone VLOUD) plus `_stereo_level_db` (program byte 0x17). This is
+    # program byte 0x19, a third field, applied at the preset where it belongs.
+    preset.volume = akai_program_loudness_to_e4b_db(prog.get('loudness', 99))
     missing: set = set()
 
     _kg_of_voice = []
+    # ONE WARNING PER PROGRAM PER BYTE, and the set is a LOCAL. It used to be
+    # a module-global dict keyed by `id(prog)` and never cleared: `prog` dicts
+    # are freed between programs and CPython reuses addresses, so a later
+    # program could inherit an earlier one's "already warned" set and have the
+    # very warning this code exists to emit suppressed. It also grew one entry
+    # per program for the life of the process -- 361 on a single disc.
+    # (/code-review, 2026-09-22.)
+    _unverified_warned = set()
     for kg in prog['keygroups']:
         voice = VoiceLayer()
         # The AKAI filter is 12 dB/octave -- the service manual's own
@@ -1247,6 +1440,9 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
         _tot = _dep + _mwl
         if _tot and kg.get('lfo_to_pitch'):
             voice.lfo1_rate = akai_lfo_rate_hz(prog.get('lfo_rate', 0))
+            _l2 = prog.get('lfo2_rate_byte', 0)
+            if _l2:
+                voice.lfo2_rate = akai_lfo_rate_hz(_l2)
             voice.lfo1_to_pitch = akai_lfo_depth_to_pitch(
                 _tot, kg['lfo_to_pitch'], prog.get('lfo1_wave'))
             voice.wheel_to_lfo = _mwl / _tot
@@ -1296,6 +1492,9 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
                                               / AKAI_LFO_PAN_DEPTH_SCALE))
             if voice.lfo1_rate is None:
                 voice.lfo1_rate = akai_lfo_rate_hz(prog.get('lfo_rate', 0))
+            _l2 = prog.get('lfo2_rate_byte', 0)
+            if _l2:
+                voice.lfo2_rate = akai_lfo_rate_hz(_l2)
         if _amp_amt and prog.get('lfo_depth'):
             # Sign inverts the LFO's phase, not its size -- see the matching
             # note in krz_parser. The model's depth is a magnitude.
@@ -1304,6 +1503,9 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
             voice.lfo1_to_volume = min(1.0, _db / LFO_VOLUME_MODEL_FULL_DB)
             if voice.lfo1_rate is None:
                 voice.lfo1_rate = akai_lfo_rate_hz(prog.get('lfo_rate', 0))
+            _l2 = prog.get('lfo2_rate_byte', 0)
+            if _l2:
+                voice.lfo2_rate = akai_lfo_rate_hz(_l2)
         # VELOCITY -> AMP ENVELOPE ATTACK. Carried as the attack-TIME ratio at
         # full velocity against this machine's pivot, not as the raw depth --
         # the depth only means something beside the AKAI's own scale, and the
@@ -1313,12 +1515,96 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
         if _va:
             voice.velocity_to_amp_attack_span = akai_vatt1_to_attack_span(_va)
             voice.velocity_to_amp_attack_pivot = VEL_ATTACK_PIVOT_AKAI
+        # `_unverified_warned` is created once per program above, so the same
+        # byte warns once and not once per keygroup: S7 carries the
+        # same value on all 17 of its keygroups and 17 identical lines would
+        # train a reader to skip them.
+        # §AKAICORDGAP — THE SEVEN ROUTINGS WE DROPPED, implemented 1:1 with
+        # EOS's own AKAI importer (eosed's decompilation, 2026-09-20/21).
+        #
+        # WHY 1:1 AND NOT A LAW. There is no measured law to prefer here: the
+        # source states a depth, the reference implementation converts it with
+        # a constant, and nothing on either machine has been measured against
+        # it. `vel_to_attack` above is the opposite case and stays on its own
+        # measured span law -- the rule this project keeps is that EOS is a
+        # starting point for a field we DROP and not an arbiter for a field we
+        # already convert (§EOSDIFFGAP).
+        #
+        # THE GUARD IS THE LAW'S OTHER HALF. A zero AKAI byte means NO CORD --
+        # not a cord of zero depth -- so `env_cords` only carries non-zero
+        # entries and an absent one emits nothing. 92.5% of the reference
+        # disc's keygroups take that branch.
+        for _b, _src, _dst, _prev in AKAI_ENV_CORD_BYTES:
+            _v = (kg.get('env_cords') or {}).get(_b)
+            if not _v:
+                continue
+            voice.mod_routings.append(ModRouting(
+                source=_src, dest=_dst,
+                amount=akai_mod_depth_to_cord_amount(_v),
+                origin='akai:kg%#04x' % _b))
+            # ROWS WHOSE DESTINATION IS THIN, SAID OUT LOUD WHEN THEY FIRE.
+            #
+            # ⚠ **`0x13` IS NO LONGER ONE OF THEM** -- `O7` settled it on the
+            # E4XT: the device writes `Key+ -> 0x4B VEnvRls`, not a decay
+            # routing. `0x1a` and `0x1b` remain unverified DESTINATIONS.
+            #
+            # ⚠ And "zero across every keygroup" was corrected 2026-09-23:
+            # they are zero on the 2690-keygroup disc EOS's importer was read
+            # against, and NOT corpus-wide -- `0x13` fires on 1.29 % of 69 062
+            # keygroups and `0x1b` on 0.074 %. Two small corpora agreeing on a
+            # negative measured nothing; see `AKAI_ENV_CORD_BYTES`.
+            #
+            # AKAI documentation names the fourth byte of each envelope block
+            # a key->DECAY dependence, which is not where EOS routes it. We
+            # write EOS's reading because it is the better evidence; a
+            # conversion that does so should say so rather than let an
+            # unverified routing pass silently.
+            if not _prev and _b not in _unverified_warned:
+                _unverified_warned.add(_b)
+                print(f"    [WARN] {prog.get('name', '?')}: writing "
+                      f"{_src}->{_dst} from AKAI keygroup byte {_b:#04x} "
+                      f"(depth {_v}) — this routing's DESTINATION is "
+                      f"unverified: it is absent from the disc EOS's "
+                      f"importer was read against, and the AKAI field may "
+                      f"mean key->decay instead")
         voice.filter_cutoff = _cutoff_of(kg['filter_freq'], prog['is_s3000'])
         # ── IB-304F second filter, when the DATA says it is doing something.
         # `LSI2_ON` alone is not evidence: it reads back 1 with no board fitted,
         # so `_combine_akai_filters` returns None for a filter 2 that is set but
         # inert -- about 60% of the keygroups that have the flag on. §AKAIFIL2.
         _f2 = _combine_akai_filters(kg, prog['is_s3000'])
+        # THE SWEPT FILTER IS THE ONE THAT CARRIES THE SOUND (§AKAIFIL2SWEEP).
+        #
+        # Filter 1 is a lowpass and ENV2 sweeps IT. Filter 2 is static. When
+        # the two are combined into the model's single filter, a lowpass plus
+        # a highpass becomes a BANDPASS -- and a bandpass swept six octaves is
+        # not a lowpass swept six octaves, it is a narrow band sliding up
+        # through the instrument.
+        #
+        # Found by Jan on hardware 2026-09-20, listening: a piano converted to
+        # the E4XT was "not even close". Its keygroup 0 is FILFRQ 36 (103 Hz)
+        # with ENV2 depth 26 = **7500 cents**, so the real patch is a dark
+        # lowpass opened to ~7.9 kHz by the envelope -- an ordinary piano. We
+        # were writing a 67 Hz 4-pole BANDPASS and sweeping that instead.
+        #
+        # The static highpass here sits at 43 Hz and removes almost nothing.
+        # So when filter 1 is swept and filter 2 is not, keep filter 1's SHAPE
+        # and say filter 2 was dropped. Losing a 43 Hz corner is a smaller lie
+        # than turning the instrument into a bandpass.
+        #
+        # Scoped narrowly: only when the combine CHANGED the shape away from a
+        # lowpass, and only when there is a real sweep to protect.
+        if _f2 is not None and _f2[0] not in (_XPM_LOW2, _XPM_LOW4):
+            _sweep = abs(kg.get('env2_depth', 0) or 0)
+            if _sweep >= _FILT_SWEEP_KEEPS_LOWPASS:
+                _diag(_I, 'AKAI_FILTER2_DROPPED_UNDER_SWEEP',
+                      f'filter 2 would make this a '
+                      f'{_XPM_FILTER_NAME.get(_f2[0], _f2[0])}, but ENV2 '
+                      f'sweeps filter 1 by {_sweep} units -- keeping the swept '
+                      f'lowpass, whose shape the envelope is shaping, and '
+                      f'dropping filter 2',
+                      content_lost=True, subject=preset.name)
+                _f2 = None
         if _f2 is not None:
             # RESONANCE FROM THE FILTER THAT IS SHAPING. `filter_resonance` came
             # from FILQ -- filter 1's -- unconditionally, so whenever filter 2
@@ -1355,7 +1641,7 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
                           '1-pole pair) -- the value describes another filter',
                           content_lost=True, subject=preset.name,
                           remedy='measure bandpass resonance in its own right')
-            _ftype, _fhz, _dropped = _f2
+            _ftype, _fhz, _dropped, _f1_in_circuit = _f2
             voice.filter_type = _ftype
             voice.filter_cutoff = _fhz
             _fr = kg.get('fil2fr', AKAI_FILTER_OPEN)
@@ -1559,8 +1845,17 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
             sd = cache[src]
             if sd is None:
                 continue
+            # `sd.fine_tune` is the sub-semitone remainder of the SAMPLE's own
+            # SHTUNO: `parse_sample_bytes` puts the whole semitones on
+            # `sd.root_note` and leaves the rest here. Until 2026-09-20 no
+            # writer read it (only the resampler carried it along), so every
+            # AKAI sample's sub-semitone tune was dropped on every output path.
+            # It has to be added to the zone, because `root_key` below is
+            # already the semitone-shifted root and the two halves only
+            # reconstruct SHTUNO together.
             _cents = int(round((kg['tune'] + z['tune']) * 100.0
-                               / AKAI_TUNE_UNITS_PER_SEMITONE))
+                               / AKAI_TUNE_UNITS_PER_SEMITONE
+                               + (sd.fine_tune or 0)))
             # Truncate toward zero so `fine` keeps the sign of the whole
             # value: -1250 cents is -12 semitones and -50 cents, not -13 and
             # +50.
@@ -1924,8 +2219,22 @@ def _refuse_wrong_type(p: Path, allowed: set, what: str) -> None:
             f"extension rather than its contents.")
 
 
-def parse_akai_program(path: str, sample_dir: Optional[str] = None) -> Bank:
-    """Read an AKAI program file (and the samples it names) into a Bank."""
+def parse_akai_program(path: str, sample_dir: Optional[str] = None,
+                       firmware_sim: bool = False, **_kw) -> Bank:
+    """Read an AKAI program file (and the samples it names) into a Bank.
+
+    `firmware_sim` builds the preset the way **EOS's own AKAI importer**
+    would have — see `writers/eos_firmware_sim.py`. It is deliberately worse
+    output and exists to be diffed against a real device import.
+
+    ⚠ **THIS PARAMETER WAS MISSING UNTIL 2026-09-22**, and the four registry
+    lambdas that call this function swallowed `**kw`, so `--firmware-sim`
+    passed both CLI guards and then produced a **byte-identical ordinary
+    conversion** — exit 0, no warning. Found by VinSamLib, measured with
+    `cmp`, on the one input shape the disc-based end-to-end check could not
+    reach. *A guard that is right about which combinations are unsupported
+    cannot help when the supported one is hollow.*
+    """
     p = Path(path).resolve()
     _refuse_wrong_type(p, _PROGRAM_EXTS, 'program')
     sdir = Path(sample_dir).resolve() if sample_dir else p.parent
@@ -1946,7 +2255,29 @@ def parse_akai_program(path: str, sample_dir: Optional[str] = None) -> Bank:
         f = _find_sample(name, sdir)
         return f.read_bytes() if f else None
 
-    preset = build_preset_from_program(prog, _lookup, bank, fallback_name=p.stem)
+    if firmware_sim:
+        from writers.eos_firmware_sim import simulate_akai_preset
+        preset = simulate_akai_preset(p.read_bytes(), prog['is_s3000'], p.stem)
+        if not preset.voices:
+            preset = None
+        else:
+            # Samples still have to be found and loaded; only the PRESET is
+            # built differently.
+            _taken = {sd.name for sd in bank.samples}
+            for _v in preset.voices:
+                for _z in _v.zones:
+                    if _z.sample_name in _taken:
+                        continue
+                    _raw = _lookup(_z.sample_name)
+                    if _raw is None:
+                        continue
+                    _sd = parse_sample_bytes(_raw, fallback_name=_z.sample_name)
+                    if _sd is not None:
+                        bank.samples.append(_sd)
+                        _taken.add(_sd.name)
+    else:
+        preset = build_preset_from_program(prog, _lookup, bank,
+                                           fallback_name=p.stem)
     if preset is None:
         raise ValueError(
             f"{p.name} declares {len(prog['keygroups'])} keygroup(s) but none "

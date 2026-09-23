@@ -41,9 +41,10 @@ Scope and known lossiness (mirrors docs/KRZ_FORMAT.md §7):
     back as one interleaved 2-channel SampleData. Note that numHeaders > 1
     alone does NOT mean stereo — real files also use multi-header objects
     for groups of MONO samples at different rootkeys.
-  - The keymap entry tuning field's partial-key-tracking form and the
-    per-entry volAdj unit are not confirmed against hardware — decoded but
-    flagged inline (see docs/KRZ_FORMAT.md §3.2).
+  - The keymap entry tuning field's partial-key-tracking form is not confirmed
+    against hardware — decoded but flagged inline (see docs/KRZ_FORMAT.md §3.2).
+    The per-entry volAdj unit IS confirmed: 0.5 dB per unit, panel-measured by
+    k2kremote 2026-09-01, rails ±63.5 dB.
 """
 
 import array
@@ -352,9 +353,53 @@ def _parse_keymap_object(data: bytes, obj: dict) -> dict:
     for j, addr in enumerate(table_addr):
         addr_to_levels.setdefault(addr, []).append(j)
 
+    # THE HEADER LIES ABOUT THE BODY, and the instrument is what proves it.
+    #
+    # `entriesPerVel` is 127 on every keymap ever measured -- ours, the
+    # corpus's, and the K2000's own -- but the OBJECT is not always big enough
+    # to hold 128 entries. A K2000 that imports a Roland disc writes keymaps of
+    # 156, 412 and 668 bytes whose headers all declare 796 (k2kremote, seven
+    # imports on a K2000R, 2026-09-21). Trusting `entriesPerVel + 1` there
+    # reads **640 bytes past the object** and fabricates zones out of whatever
+    # object follows it in the file -- silently, because `unpack_from` only
+    # raises at the end of the FILE, not at the end of the object.
+    #
+    # No bank in this project's 1156-keymap corpus does it, so this cannot be
+    # found by reading banks we have; it is produced by the machine, on
+    # exactly the material a user would hand us (import on the K2000, save,
+    # convert). Object size is the only truth about the entry count.
+    # THE END IS MEASURED FROM `after`, NOT FROM `body`. An object spans
+    # `after - 4 .. after - 4 + objsize`, and `body = after + 4 + ofs`
+    # (the name field), so `body + objsize` overshoots the real end by
+    # `ofs + 8` -- about 26-32 bytes for a normal 16-character name. That
+    # is enough to fabricate up to 26 entries out of the NEXT object when
+    # `entry_size` is 1, which is exactly what this bound exists to
+    # prevent. `walk_program` had the right expression all along; this
+    # now matches it.
+    # NO FALLBACK. The first version of this guard kept
+    # `obj['body'] + objsize` as an else-branch for hand-built dicts -- which
+    # is the same conflation the guard exists to prevent, still reachable by
+    # any fixture that forgets `after`, i.e. exactly the fixture class that
+    # let the wrong expression ship in the first place. A guard whose job is
+    # "never read past an object's real extent" must not have a path that
+    # does. (/code-review, 2026-09-22.)
+    try:
+        obj_end = obj['after'] + obj['objsize'] - 4
+    except KeyError as exc:
+        raise KeyError(
+            "_parse_keymap_object needs obj['after'] and obj['objsize'] to "
+            "bound the entry table; an object spans after-4 .. "
+            "after-4+objsize and `body` is past its start"
+        ) from exc
+    _truncated = []
+
     def _decode_table(addr: int, table_size: int) -> List[_KrzEntry]:
+        room = max(0, (obj_end - addr) // entry_size) if obj_end > addr else 0
+        count = min(num_keys, room)
+        if count < num_keys:
+            _truncated.append((addr, count))
         entries = []
-        for k in range(num_keys):
+        for k in range(count):
             p = addr + k * entry_size
             tuning = vol_adj = sample_id = 0
             sub_sample = 1
@@ -380,6 +425,13 @@ def _parse_keymap_object(data: bytes, obj: dict) -> dict:
         vel_lo = max(0, min(levels) * 16)
         vel_hi = max(levels) * 16 + 15
         tables.append((vel_lo, vel_hi, _decode_table(addr, table_size)))
+
+    if _truncated:
+        _worst = min(c for _a, c in _truncated)
+        print(f"    [WARN] keymap {obj['id']} '{obj['name']}': header declares "
+              f"{num_keys} entries of {entry_size} bytes but the object holds "
+              f"{obj.get('objsize', 0)}; read {_worst} and stopped at the object "
+              f"end rather than past it (the K2000's own importer writes these)")
 
     return dict(id=obj['id'], name=obj['name'], header_sample_id=header_sid,
                base_pitch=base_pitch, cents_per_entry=cents_per_entry,
@@ -1772,7 +1824,15 @@ def parse_krz(path: str) -> Bank:
                                + layer.program_gain_db)
                 if entry.vol_adj:
                     v = entry.vol_adj - 256 if entry.vol_adj >= 128 else entry.vol_adj
-                    zone_volume += v / 2.0   # unit unverified, see docs/KRZ_FORMAT.md §3.2
+                    # 0.5 dB per unit, and this is MEASURED, not assumed:
+                    # k2kremote swept the panel 2026-09-01 -- exactly 0.5 dB
+                    # per click, symmetric, rails -63.5..+63.5 dB (bytes
+                    # -127..+127; 0x80 is the one value the panel cannot
+                    # produce). The writer's KEYMAP_METHOD_VOL comment has
+                    # carried that measurement since; this line said "unit
+                    # unverified" until 2026-09-21, so the same repository
+                    # held the evidence and the disclaimer at once.
+                    zone_volume += v / 2.0
                 zones.append(ZoneMapping(
                     sample_name=sd.name, lo_key=lo_key, hi_key=hi_key,
                     lo_vel=lo_vel, hi_vel=hi_vel, root_key=root_key,

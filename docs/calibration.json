@@ -90,20 +90,20 @@
       "value": [
         23525.6,
         -0.09776,
-        45,
-        85
+        25,
+        90
       ],
       "quantity": "DECAY1 byte -> dB/s",
       "machine": "AKAI S3000XL",
       "convention": "a RATE over a span, not a duration",
-      "method": null,
-      "subject": null,
+      "method": "dB-slope fit across the whole decay, per-curve r2 reported rather than aggregated. NOT a threshold crossing: on a noise source the amplitude fluctuation lives inside the crossing, which is what made s3ked §118's noise sweeps non-monotonic. Estimator validated against a CONSTRUCTED signal of known exponential decay through the identical path, not only against a prior measurement -- agreement between two measurements hides a shared bias.",
+      "subject": "looped white noise, characterised BEFORE anything was fitted: 76.1 dB usable span, 1.25 dB wobble p5-p95, 0.37 dB per window",
       "measured_by": "s3ked",
-      "section": null,
-      "date": null,
-      "known_limits": "Fitted 45..85.",
-      "provenance_gap": true,
-      "detector": "not recorded."
+      "section": "s3ked §30, re-validated and re-bounded 2026-09-20",
+      "date": "2026-09-20",
+      "known_limits": "MEASURED 25..90; fit over 25..99 gives 0.09728 against the 0.09776 carried here, 0.49% apart, r2 0.99989 on 16 points. observed/predicted is FLAT across 25..90 (median 1.0101, min 0.9931, max 1.0396), which is what rules out an exponent error rather than the level agreeing. ABOVE 90 IS EXTRAPOLATION. TWO ANOMALIES, INSTRUMENT CLEARED OF BOTH: byte 96 reads +10.8% and byte 20 reads -28.8% (r2 0.948). An earlier version of this field said byte 20 was 'the estimator running out of room'; that was untested and is REFUTED -- a control of white noise with an exact exponential envelope through the identical fit path recovers byte 20's rate to -0.67% (r2 0.99906) and byte 96's to +0.16%, with estimator error across the ladder median 0.12%, max 1.17%. A 6 ms attack ramp still gives -0.77%. Cause of both anomalies UNKNOWN and recorded as unknown. SUPERSEDES the 45..85 window this entry carried, under which byte 30 -- 42% of a real library disc -- was read by extrapolation. s3ked §118's rival exponent 0.08781 is withdrawn: it would require observed/predicted to drift 1.382 at byte 30 to 0.761 at 90, and it does not. §118's ESTIMATOR lesson stands; its number does not.",
+      "provenance_gap": false,
+      "detector": "audio capture on the S3000XL, played note asserted to be a zone root before any curve was fitted -- an off-list note still sounds, transposed, at a plausible level"
     },
     {
       "name": "AKAI_FILTER_LAW",
