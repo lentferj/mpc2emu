@@ -683,8 +683,42 @@ EOS_AKAI_EMITTER_CALLS = 12       #: bsrw 0x46370
 #:     0x46706 src 12  dst 168+%d5  amt %a5@(58)
 #:     0x46c48 src 10  dst 52
 #:
-#: ✅ **THE "STAGING" WAS NOT STAGING — traced 2026-09-24.** The amounts come
-#: straight from the **AKAI program common block**. In `0x4647c`:
+#: ⚠⚠ **THE PARAGRAPH BELOW IS WRONG AND IS LEFT STANDING. Committed
+#: ef7e864, refuted 2026-09-24 the same night, by this file's own seven-slot
+#: table.** Struck rather than deleted because it was pushed, quoted to
+#: `s3ked` and acted on there.
+#:
+#: It claimed the eleven amounts are program-FILE bytes 32/46/47/48/56/57/58,
+#: on the strength of the caller reading `%a3@(24/25/26)` = pan / loudness /
+#: vel_loudness. **That anchor is in the CALLER, on the caller's `%a3`.** The
+#: step from there to "so the callee's `%a5` displacements are file offsets"
+#: was never checked, and the table twenty lines above already refutes it:
+#:
+#:     %a5@(33) -> raw[92]   %a5@(38) -> raw[89]   %a5@(50) -> raw[94]
+#:     %a5@(34) -> raw[93]   %a5@(39) -> raw[90]   %a5@(51) -> raw[95]
+#:                           %a5@(40) -> raw[91]
+#:
+#:     shifts: +59, +59, +51, +51, +51, +44, +44   -- THREE different shifts
+#:
+#: A copied buffer gives **one** shift. Three means `%a5` points at a parsed,
+#: REORDERED form, so an operand displacement is not a file offset and there
+#: IS staging after all — exactly what the paragraph said there was not.
+#:
+#: The corpus says the same thing independently (3 456 programs, 6 discs):
+#: raw[84..88] are 8-13 distinct values, 100 % <= 14, dominated by 5/8/10 —
+#: enum selectors. raw[89..95] span and carry negatives. Displacements
+#: 50/51/53/54, which the wrong reading would map to real program bytes, are
+#: **0 on 100 % of 3 456 programs**. Nothing at 33..54 has the shape.
+#:
+#: **So the eleven cords' SOURCES, DESTINATIONS, gates and arithmetic stand —
+#: those are read off the instruction stream — and every claim about WHICH
+#: AKAI BYTE feeds them is withdrawn.** `s3ked` was asked to name eight
+#: program-block offsets that were not program-block offsets; told, and the
+#: question retracted. Modelling still needs the staging map, which is what
+#: the note said before this attempted to remove it.
+#:
+#: ~~✅ **THE "STAGING" WAS NOT STAGING — traced 2026-09-24.** The amounts come
+#: straight from the **AKAI program common block**.~~ In `0x4647c`:
 #:
 #:     0x46488  moveal %a1,%a4      -> the E4 VOICE; cords at voice+188,
 #:                                    24 slots x 4, cleared by the memset at
@@ -692,10 +726,14 @@ EOS_AKAI_EMITTER_CALLS = 12       #: bsrw 0x46370
 #:     0x4648a  moveal %a0,%a5      -> caller's %a3 = the PROGRAM COMMON BLOCK
 #:     0x4648e  moveal %fp@(8),%a3  -> caller's %a4 = the raw AKAI KEYGROUP
 #:
-#: Identified, not guessed: the caller reads `%a5@(24/25/26)`, which this
+#: ~~Identified, not guessed: the caller reads `%a5@(24/25/26)`, which this
 #: project decodes as `pan` / `loudness` / `vel_loudness` at `0x18/0x19/0x1a`
-#: — three consecutive hits — and the known cords read `%a3@(27)`, keygroup
-#: `0x1b`, the byte measured on the E4XT the same evening.
+#: — three consecutive hits~~ — **and that anchor is in the CALLER, on a
+#: different register, and does not transfer.** Three consecutive hits made it
+#: feel settled; what it settled was the caller's `%a3`, not the callee's
+#: `%a5`. The keygroup half DOES hold: the known cords read `%a3@(27)`,
+#: keygroup `0x1b`, the byte measured on the E4XT the same evening, and the
+#: keygroup reads are direct.
 #:
 #: ⚠ **`%a5` names two different objects in this one function.** It is
 #: reassigned to the cord slot at `0x46b74` (`lea %a4@(0,%d7:l:4),%a5`), which
