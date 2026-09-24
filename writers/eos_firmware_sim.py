@@ -467,7 +467,7 @@ EOS_AKAI_GATE_SRC = 80
 #: this module already carries; their AMOUNT is a rescale of one program byte.
 #: All seven identical in shape, three distinct scales:
 #:
-#:     slot   src        amount     AKAI program byte   scale
+#:     slot   operand    operand    AKAI program byte   scale
 #:       1    %a5@(33)   %a5@(36)   raw[92]                75
 #:       2    %a5@(34)   %a5@(37)   raw[93]                75
 #:       3    %a5@(38)   %a5@(41)   raw[89]                48
@@ -475,6 +475,31 @@ EOS_AKAI_GATE_SRC = 80
 #:       5    %a5@(40)   %a5@(43)   raw[91]                48
 #:       6    %a5@(50)   %a5@(53)   raw[94]                25
 #:       7    %a5@(51)   %a5@(54)   raw[95]                48
+#:
+#: ⚠ **THE TWO RIGHT-HAND COLUMNS DO NOT DESCRIBE THE SAME POINTER, and
+#: reading the table as if they did is what produced the retracted
+#: `d[N]`-are-file-offsets claim (ef7e864 / 585b9df).** Checked 2026-09-24:
+#:
+#:     disp    33  34  38  39  40  50  51
+#:     file    92  93  89  90  91  94  95
+#:     base   +59 +59 +51 +51 +51 +44 +44   <- THREE different bases
+#:
+#: One register at one point has one base. **The file column is the sound
+#: one**: it comes from the frame-relative chain against `%fp@(-196)`, and
+#: `fp + 196` reproduces every one of the seven exactly --
+#:
+#:     -104 -103 -107 -106 -105 -102 -101   ->   92 93 89 90 91 94 95
+#:
+#: -- which holds because `0x4771c` copies the 192-byte program block
+#: verbatim, so buffer index == file offset. Seven of seven, self-consistent,
+#: and independent of whatever `%a5` is.
+#:
+#: **So `EOS_AKAI_PROGRAM_MOD_SLOTS` below is fine** -- it ships the file
+#: column. What is wrong is the `%a5@(...)` column standing beside it with no
+#: label: those are displacements into a DIFFERENT object, in the function at
+#: `0x4647c`, and the two were tabulated together as though one implied the
+#: other. That is also why the eleven unmodelled cords' `d[N]` displacements
+#: could not be read as file offsets: same table, same conflation.
 #:
 #:     amount = eos_rescale(raw_byte, -50, +50, scale)
 #:
