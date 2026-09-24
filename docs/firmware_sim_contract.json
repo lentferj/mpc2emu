@@ -20,7 +20,9 @@
       "firmware",
       "best"
     ],
-    "enforcement": "refused with a non-zero exit, after parsing",
+    "enforcement": "refused with a non-zero exit",
+    "enforced_in_mpc2emu": "after parsing, because our CLI sees only a filename and .iso is claimed by three samplers",
+    "consumers_may_enforce_earlier": "yes -- if you already know the source format, refuse the pair before reading anything; the rule is the pair, not the moment it is checked",
     "why": "These readers extract no filter, envelope, LFO or velocity values -- everything known about the format came from the samplers own importers -- so only a target whose hardware imports the same disc can check the result.",
     "lifts_when": "an independent RE of the source format lands, or one of the other targets gains an importer for these discs"
   },
