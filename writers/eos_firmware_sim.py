@@ -943,8 +943,14 @@ def simulate_akai_preset(program_raw: bytes, s3000: bool, name: str,
 #:   so voice *i* is not keygroup *i* on a source that has duplicates;
 #: * `header[26]` transpose, read from the code as a clamped copy but written
 #:   zero on all 363 presets of the reference disc, so nothing exercises it.
-#: ✅ `zone_dedup` is **[C] with a method as of 2026-09-24 — and its
-#: DESCRIPTION is refuted.** See §AKAIZONEMERGE. The loop is at `0x4765c`
+#: ⚠ `zone_dedup` is **[?] — a loop is located, and it does NOT predict the
+#: device's output.** See §AKAIZONEMERGE. Labelled [C] for about an hour on
+#: 2026-09-24 and retracted the same day: tested against EOS's own import
+#: (`B030-AKAIIMPORT-full.E4B`, 333 paired presets, 193 voices with 2+
+#: enabled zones) the predicate scores **42%** against **56%** for assuming
+#: no merge at all, inventing 69 merges that did not happen while catching 48
+#: of the 85 that did. Locating a mechanism is not confirming it governs the
+#: behaviour, and the refuting data had been on this disk for four days. The loop is at `0x4765c`
 #: (inner scan) with the skip at `0x47614` and the consume-mark at `0x4768e`;
 #: the predicate is `0x2f8a0`, which compares **exactly two fields**:
 #:

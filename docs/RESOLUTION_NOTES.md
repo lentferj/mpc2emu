@@ -373,7 +373,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§KRZSAMPPERIOD — round vs truncate in `samplePeriod`](#krzsampperiod-round-vs-truncate-in-sampleperiod)
 - [§RELSCAN — the release name scan, and why it is a program with mutated tests (2026-09-23)](#relscan-the-release-name-scan-and-why-it-is-a-program-with-mutated-tests-2026-09-23)
 - [§EPSZONERESID — the EOS←Ensoniq zone residual is not de-duplication](#epszoneresid-the-eosensoniq-zone-residual-is-not-de-duplication)
-- [§AKAIZONEMERGE — the merge loop, located; "identical velocity zones" refuted](#akaizonemerge-the-merge-loop-located-identical-velocity-zones-refuted)
+- [§AKAIZONEMERGE — a merge loop located, and it does NOT predict EOS's output](#akaizonemerge-a-merge-loop-located-and-it-does-not-predict-eoss-output)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -36173,7 +36173,7 @@ zones and the claim has its own evidence. **The error was applying a
 measurement from one arm to another that looked similar**, and repeating it in
 the other direction would be the same mistake.
 
-## §AKAIZONEMERGE — the merge loop, located; "identical velocity zones" refuted
+## §AKAIZONEMERGE — a merge loop located, and it does NOT predict EOS's output
 
 **Located in EOS 4.7 on 2026-09-24, no hardware involved.** The claim that
 "EOS compares velocity zones pairwise and merges identical ones" had been
@@ -36277,17 +36277,58 @@ So this is not a tidy-up of redundant duplicates. On a velocity-split keygroup
 is the ordinary way to build one — **the two layers meet the predicate and one
 of them is dropped.**
 
-### What this changes
+### ⚠⚠ TESTED AGAINST EOS'S OWN IMPORT — AND IT FAILS
 
-`EOS_AKAI_SIM_KNOWN_GAPS` keeps `zone_dedup`, and it is now `[C]` with a
-method: loop located, predicate read, prevalence measured. The description
-must not survive: it is **not** "identical velocity zones", it is *equal
-coarse tune and equal filter-frequency offset, velocity range unread*.
+**Jan asked whether a device import was already sitting offline. It was**, and
+the test that settles this needed no hardware and no new capture:
+`~/temp/B030-AKAIIMPORT-full.E4B` is EOS's own conversion of an AKAI disc,
+dumped off the machine, 363 presets. 333 presets pair to their source program
+by name and voice count; 2 433 voices compare.
 
-Implementing it is a separate decision from documenting it, and the
-prevalence is the reason to be careful rather than quick: it fires on 62% of
-multi-zone keygroups, so a simulation that starts merging will change a great
-deal of output at once. The check that it is right is a device import of a
-program with two enabled zones that agree on those two fields and differ on
-everything else — which is 11 007 candidates in this corpus, not a hunt.
+    ALL voices                        predicate 95.3 %   no-merge 96.4 %
+    voices with 2+ ENABLED zones (193, the only ones that discriminate):
+                                      predicate 42.0 %   no-merge 56.0 %
 
+**The predicate is worse than assuming no merge happens at all.** The
+confusion is not a near miss:
+
+    enabled  predicate  device   count
+       2         1        2        69   device did NOT merge; predicate would
+       2         1        1        48   device DID merge; predicate agrees
+       2         2        1        37   device merged; predicate says no
+       2         2        2        33   neither merged; agree
+       3         1        3         4   device did NOT merge
+       3         2        3         2   device did NOT merge
+
+The device merges on 85 of 193 (44%). The predicate identifies 48 of those and
+invents 69 that did not happen.
+
+### So what is actually established
+
+**[C] The loop exists and was read correctly.** `0x4765c`…`0x4768e`, the flag
+array, the skip at `0x47614`, the comparison at `0x2f8a0` reading `zone[0x0e]`
+and `zone[0x11]`. None of that is in doubt; it is on the page.
+
+**[?] Whether it governs THIS import path is now open, and the evidence says
+probably not.** Possibilities, none tested:
+
+* the loop is reached from a different caller than the AKAI disc import;
+* the comparison is gated by a condition upstream that this reading skipped;
+* `voice[4]` is not the zone count in a device-written bank (it is what we
+  read for the Ensoniq comparison, where it behaved);
+* EOS's notion of an *enabled* zone differs from the one used here — velocity
+  `lo <= hi` and a non-blank name. The 37 cases where the device wrote one
+  zone and both models say two fit that shape exactly.
+
+### The lesson, which is the durable part
+
+**Locating a mechanism in the firmware is not the same as confirming it
+governs the behaviour.** The `[C]` label went on for "loop located, predicate
+read, prevalence measured" — three real things, none of which is *the output
+agreeing*. The data that refutes it had been on this disk since 2026-09-20 and
+is named two hundred lines up in this project's own evidence table. Nobody
+thought to run it until the question was asked out loud.
+
+The same corpus prevalence that looked like impact — 62% of multi-zone
+keygroups contain a merging pair — is precisely why the predicate scores
+badly: it fires almost everywhere, and the device does not.
