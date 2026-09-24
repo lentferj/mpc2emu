@@ -36357,6 +36357,43 @@ tightened:
 **The zone-count discrepancy was manufactured by a scratch script diverging
 from the project's own documented rule.** It was never in the converter.
 
+### ⚠ Both sides carried a wrong claim, and they corroborated each other
+
+The first version of this section said *"eosed's firmware reading is
+unaffected and stands"*. That is too generous and it hides how the error
+compounded. `eosed` corrected it (their `faacec9`): `docs/AKAI_IMPORT.md:490`
+had carried, published, since before this investigation —
+
+> ~~**EOS merges identical velocity zones.** `0x2fe78` compares two zones and
+> the duplicate is flagged out, so an AKAI keygroup with four identical zones
+> becomes one E4 zone rather than four.~~
+
+— wrong on the behaviour, and wrong on the address: `0x2fe78` takes two
+*names*, classifies the first, and on class 0 compares ten characters then
+requires `'-'`,`'R'` in the second. It is the **stereo partner matcher**, and
+its callers `0x45744`/`0x47fa0` are not in the zone loop at all.
+
+**So a wrong claim on their side and a wrong model on ours had been agreeing
+with each other.** Their doc said EOS merges; our model predicted merges; and
+the agreement read as corroboration for a day. That is worse than either
+alone — two independent-looking sources are the strongest evidence there is,
+and these were not independent, they were both downstream of the same
+unexamined idea.
+
+### Each side held the other constant
+
+`eosed`'s own note on the residual is the structural half: their list of
+remaining candidates was *"the 4-zone bound and `0x2f8a0`'s contents"* — both
+firmware. **They never proposed our enabled-zone definition, because they were
+treating the measurement side as fixed and looking only at their own.** That
+is exactly symmetric to this project's analysis script never being checked
+against its own parser.
+
+So the advice that resolved it — *go back to the comparison* — was right for a
+reason its author had wrong. And the reason their readings never needed
+correcting is not that they were more careful: **nothing was testing them.** A
+ROM reading no corpus touches is stable the way an unfindable bug is quiet.
+
 ### What that does and does not say about the merge loop
 
 `eosed`'s firmware reading stands and is not affected: the loop at `0x4765c`,
