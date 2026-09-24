@@ -5507,6 +5507,32 @@ AKAI_LFO_LOUDNESS_DB_PER_PRODUCT = 0.010068
 #: because its absence cost two rounds of argument on 2026-09-15: the doc
 #: recorded the provenance, this file did not, and an offset that reads as
 #: unsourced is cheap to doubt. If you change an offset here, change it there.
+#: The three PAN slots of the AKAI program's modulation matrix: selector
+#: bytes and their amounts. **Unread by this project until 2026-09-24**, which
+#: is why an ordinary AKAI conversion emitted no pan modulation at all while
+#: the firmware simulation emitted `Lfo2+ -> AmpPan` on 1 257 of 2 813 voices
+#: (§AKAISIMEXTRA).
+#:
+#: **Used on 39.2 % of 10 933 library programs** -- twice as often as the
+#: dedicated `lfo_pan_depth` at `0x59` that this reader already carried
+#: (19.0 %). Slots active per program: 3 661 have one, 613 two, 16 all three.
+#:
+#: The pairing (76,89) (77,90) (78,91) is the firmware's own, from
+#: `EOS_AKAI_PROGRAM_MOD_SLOTS`, whose amp rows (79,92) (80,93) match
+#: `AKAI_MODSAMP_OFFSETS`/`AKAI_MODVAMP_PROG_OFFSETS` below exactly -- two
+#: independently derived tables agreeing on the neighbouring family.
+AKAI_MODSPAN_OFFSETS = (76, 77, 78)
+AKAI_MODVPAN_PROG_OFFSETS = (89, 90, 91)
+
+#: AKAI modulation-matrix selector -> what it names, for the sources this
+#: project can express. From the firmware table at `0x48ab0`, E4XT-confirmed.
+#: Selectors naming sources with no dedicated model field are absent on
+#: purpose: a routing this project cannot carry is better dropped visibly
+#: than mapped onto the nearest thing that fits.
+AKAI_MOD_SOURCE_VELOCITY = 5
+AKAI_MOD_SOURCE_KEY = 6
+AKAI_MOD_SOURCE_LFO2 = 8
+
 AKAI_MODSAMP_OFFSETS = (79, 80, 88)
 AKAI_MODVAMP_PROG_OFFSETS = (92, 93)
 

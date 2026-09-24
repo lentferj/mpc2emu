@@ -123,8 +123,10 @@
         "firmware",
         "best"
       ],
+      "firmware_mode_adds_closed": [
+        "LFO/velocity/key to pan -- the ordinary path now reads the same mod-matrix slots the firmware does"
+      ],
       "firmware_mode_adds": [
-        "LFO2 to pan (auto-pan) -- the ordinary conversion emits no pan modulation at all",
         "pressure to filter cutoff and to amp volume",
         "key to amp volume"
       ],

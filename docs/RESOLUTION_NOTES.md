@@ -379,6 +379,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIATKRECHECK — the ATTAK1 law re-measured on our own rig, 7 points](#akaiatkrecheck-the-attak1-law-re-measured-on-our-own-rig-7-points)
 - [§AKAIF2DEPTH — MODVFLT2_3 is ~216 cents per unit, and the law is in CENTS](#akaif2depth-modvflt2_3-is-216-cents-per-unit-and-the-law-is-in-cents)
 - [§AKAISIMEXTRA — what the FIRMWARE simulation carries that the ordinary path does not](#akaisimextra-what-the-firmware-simulation-carries-that-the-ordinary-path-does-not)
+- [§AKAIPANMATRIX — the pan mod matrix, wired into the measured path](#akaipanmatrix-the-pan-mod-matrix-wired-into-the-measured-path)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -36792,4 +36793,75 @@ simulation sets `hdr[27]` on 400/400 presets and the ordinary path never does
 sets a preset volume on **400 of 400**. §AKAIIMPORTVOL's *"the preset volume
 EOS writes and we never did"* has since been addressed, and quoting it as
 current was reading a fixed item as an open one.
+
+## §AKAIPANMATRIX — the pan mod matrix, wired into the measured path
+
+**Jan, 2026-09-24: copy the routings the simulation carries onto the measured
+path rather than dropping them.** Done, and the framing changed on the way:
+**most of it was not "unmeasured", it was unread.**
+
+### What was missing
+
+The AKAI program carries a modulation matrix of selector/amount pairs. This
+project read the filter slots (84/85/86) and some amp slots (79/80/88 with
+92/93) and **never read the three PAN slots — selectors 76/77/78, amounts
+89/90/91.** That is why an ordinary conversion emitted no pan modulation at
+all while the firmware simulation emitted `Lfo2+ -> AmpPan` on 1 257 voices.
+
+    10 933 AKAI programs
+      at least one ACTIVE pan slot            4 290   39.2 %
+      the dedicated lfo_pan_depth at 0x59     2 073   19.0 %   (already read)
+
+**The matrix we ignored is used on twice as many programs as the field we
+already had.** Everything needed downstream existed: `VoiceLayer` already
+carried `lfo1_to_pan`, `lfo2_to_pan`, `velocity_to_pan`, `key_to_pan`, and
+`e4b_writer` already emitted `(0x60, 0x41)` and `(0x68, 0x41)`. The gap was
+one reader.
+
+After: **1 293 voices carry `Lfo2~ -> AmpPan` and 152 carry `Lfo1~`**, where
+before there were none.
+
+### ⚠ The overwrite Jan asked about, and it was real
+
+Asked directly whether the LFO1/LFO2 mapping had conflicts or masking. Two,
+both found by looking:
+
+**1. Summing `0x59` with a slot naming LFO1 doubles the depth.** 293 programs
+carry both, and on **273 of them (93 %) the two amounts are IDENTICAL** — so
+`0x59` mirrors the matrix slot rather than contributing beside it. The first
+version of this change accumulated them. Now the slot is authoritative
+(it is what EOS reads) and `0x59` applies only where no slot names LFO1. The
+20 programs where they differ go to the slot for the same reason and are the
+case to re-open if pan depth ever looks wrong.
+
+**2. `lfo2_rate` was gated by an unrelated field.** It reached the model only
+as a side effect of `0x59` being non-zero, so which voices carried an LFO2
+rate depended on whether the program happened to use pan depth. Reading the
+matrix removed that gating: `None` count is now **0 of 935** on the reference
+disc for both LFO rates.
+
+### A test whose number moved, and whose REASON was wrong
+
+`test_lfo2_is_now_read_wherever_lfo1_is` asserted 10 distinct LFO2 rates,
+explained as *"our law collapses two of the 11 byte values onto one Hz"*.
+**It does not.** `akai_lfo_rate_hz` over bytes 0..99 gives **100 distinct Hz,
+zero collisions** — nothing was being collapsed. The 10 was a property of
+*which voices carried a rate*, i.e. the gating above, not of the arithmetic.
+
+With the gating gone the count is **11 — which is agreement**: the same test's
+own note records the disc carrying 11 distinct `0x1d` values and EOS
+producing 11 rates. The assertion and its reason are both corrected.
+
+**An assertion with a false reason is worse than a bare number**, because the
+reason survives review.
+
+### What is and is not measured here
+
+* **[C] The routing.** Which source a selector names comes from the firmware
+  table at `0x48ab0`, E4XT-confirmed. Emitting the cord reads the program.
+* **[S] The scale.** Dividing the ±50 amount by 50 is EOS's own scaling
+  (48/50 on these slots) adopted as ours — a hardware-derived reference for
+  this source on this target, **not a measurement against the AKAI**.
+* **KRZ deliberately untouched.** The K2000 imports no AKAI mod matrix, so
+  there is no reference there and the same constants would be an invention.
 

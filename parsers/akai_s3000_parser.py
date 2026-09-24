@@ -69,6 +69,8 @@ from models.common import (
     AKAI_LFO_LOUDNESS_DB_PER_PRODUCT, LFO_VOLUME_MODEL_FULL_DB,
     VEL_VOL_PIVOT_AKAI,
     AKAI_MODSAMP_OFFSETS, AKAI_MODVAMP_PROG_OFFSETS,
+    AKAI_MODSPAN_OFFSETS, AKAI_MODVPAN_PROG_OFFSETS,
+    AKAI_MOD_SOURCE_VELOCITY, AKAI_MOD_SOURCE_KEY, AKAI_MOD_SOURCE_LFO2,
     AKAI_MODVAMP3_KG_OFFSET, AKAI_MOD_SOURCE_LFO1,
     AKAI_MODVAMP_PANEL_RAIL,
     akai_vatt1_to_attack_span, VEL_ATTACK_PIVOT_AKAI,
@@ -1273,6 +1275,12 @@ def parse_program_bytes(data: bytes, fallback_name: str = '',
                           for o in AKAI_MODSAMP_OFFSETS),
         mod_amt_amp=tuple(_s8(data[o]) if len(data) > o else 0
                           for o in AKAI_MODVAMP_PROG_OFFSETS),
+        # LFO/velocity/key -> PAN slots (§AKAISIMEXTRA). Read since
+        # 2026-09-24; before that an ordinary conversion dropped every one.
+        mod_src_pan=tuple(data[o] if len(data) > o else None
+                          for o in AKAI_MODSPAN_OFFSETS),
+        mod_amt_pan=tuple(_s8(data[o]) if len(data) > o else 0
+                          for o in AKAI_MODVPAN_PROG_OFFSETS),
         keygroups=keygroups,
     )
 
@@ -1543,7 +1551,19 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
         # because a program made ON the machine can carry a rail value far
         # past anything our scale would emit.
         _pan_amt = prog.get('lfo_pan_depth') or 0
-        if _pan_amt:
+        # ⚠ **DO NOT ADD THIS TO A SLOT THAT ALSO NAMES LFO1.** Measured
+        # 2026-09-24 over 10 933 programs: 293 carry both, and on **273 of
+        # them (93 %) the two amounts are IDENTICAL** -- so `0x59` mirrors the
+        # matrix slot rather than contributing beside it, and summing them
+        # would double the depth. The slot is authoritative because it is
+        # what EOS itself reads; `0x59` applies only where no slot names LFO1.
+        # The 20 programs where they differ are left to the slot for the same
+        # reason, and are the case to re-examine if pan depth ever looks wrong.
+        _slot_has_lfo1 = any(
+            _s == AKAI_MOD_SOURCE_LFO1 and _a
+            for _s, _a in zip(prog.get('mod_src_pan') or (),
+                              prog.get('mod_amt_pan') or ()))
+        if _pan_amt and not _slot_has_lfo1:
             voice.lfo1_to_pan = max(-1.0, min(1.0, (_pan_amt / 50.0)
                                               / AKAI_LFO_PAN_DEPTH_SCALE))
             if voice.lfo1_rate is None:
@@ -1551,6 +1571,52 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
             _l2 = prog.get('lfo2_rate_byte', 0)
             if _l2:
                 voice.lfo2_rate = akai_lfo_rate_hz(_l2)
+        # ── PAN modulation matrix (§AKAISIMEXTRA, wired 2026-09-24) ────────
+        # Three selector/amount slots the AKAI carries and this reader
+        # ignored, so an ordinary conversion emitted NO pan modulation at all
+        # while the firmware simulation emitted it on 1257 of 2813 voices.
+        # Active on 39.2 % of 10 933 library programs.
+        #
+        # ⚠ **The ROUTING is read; the SCALE is [S].** Which source a
+        # selector names comes from the firmware table at 0x48ab0,
+        # E4XT-confirmed, so emitting the cord is reading the program rather
+        # than guessing. Dividing the +-50 amount by 50 to reach this model's
+        # device-independent depth is EOS's own scaling (48/50 on these three
+        # slots) adopted as ours -- a hardware-derived reference for this
+        # source on this target, NOT a measurement against the AKAI. Do not
+        # promote it without one.
+        #
+        # Slots ACCUMULATE, as the amp slots above do, and they add to the
+        # dedicated `lfo_pan_depth` rather than replacing it: a program may
+        # carry both, and the machine sums them.
+        _pan_srcs = prog.get('mod_src_pan') or ()
+        _pan_amts = prog.get('mod_amt_pan') or ()
+        _pan_add = {}
+        for _i, _amt in enumerate(_pan_amts):
+            if not _amt or _i >= len(_pan_srcs):
+                continue
+            _sel = _pan_srcs[_i]
+            _field = {AKAI_MOD_SOURCE_LFO1: 'lfo1_to_pan',
+                      AKAI_MOD_SOURCE_LFO2: 'lfo2_to_pan',
+                      AKAI_MOD_SOURCE_VELOCITY: 'velocity_to_pan',
+                      AKAI_MOD_SOURCE_KEY: 'key_to_pan'}.get(_sel)
+            if _field:          # a source with no field is dropped VISIBLY
+                _pan_add[_field] = _pan_add.get(_field, 0.0) + _amt / 50.0
+        for _field, _add in _pan_add.items():
+            # Slots accumulate with each other -- two may name one source and
+            # the machine sums them, as the amp slots above do -- but they do
+            # NOT accumulate with `0x59`, which the guard above has already
+            # excluded for any source a slot names.
+            _cur = getattr(voice, _field, 0.0) or 0.0
+            setattr(voice, _field, max(-1.0, min(1.0, _cur + _add)))
+        if _pan_add.get('lfo2_to_pan') and voice.lfo2_rate is None:
+            _l2b = prog.get('lfo2_rate_byte', 0)
+            if _l2b:
+                voice.lfo2_rate = akai_lfo_rate_hz(_l2b)
+        if (_pan_add.get('lfo1_to_pan') or _pan_add.get('lfo2_to_pan')) \
+                and voice.lfo1_rate is None:
+            voice.lfo1_rate = akai_lfo_rate_hz(prog.get('lfo_rate', 0))
+
         if _amp_amt and prog.get('lfo_depth'):
             # Sign inverts the LFO's phase, not its size -- see the matching
             # note in krz_parser. The model's depth is a magnitude.
