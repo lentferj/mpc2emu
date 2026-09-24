@@ -950,7 +950,27 @@ def simulate_akai_preset(program_raw: bytes, s3000: bool, name: str,
 #: enabled zones) the predicate scores **42%** against **56%** for assuming
 #: no merge at all, inventing 69 merges that did not happen while catching 48
 #: of the 85 that did. Locating a mechanism is not confirming it governs the
-#: behaviour, and the refuting data had been on this disk for four days. The loop is at `0x4765c`
+#: behaviour, and the refuting data had been on this disk for four days.
+#:
+#: ℹ **Narrowed the same evening with `eosed`'s ROM reading.** The name
+#: lookup at `0x2faf0` SELECTS the partner zone — it classifies
+#: `name[10:12]` as `-L`/`-R`/neither and compares 10 characters for the
+#: first two, 12 otherwise — and `0x2f8a0` is the safety check on the pair,
+#: not the criterion. Scored against the device import, 193 voices:
+#:
+#:     no-merge                     56.0 %      stereo -L/-R   56.0 %
+#:     tune+filter alone            42.0 %      NAME equal     67.9 %
+#:     NAME + tune+filter           72.0 %   <- best, and matches the
+#:                                              firmware's structure
+#:
+#: The `-L`/`-R` branch never fires on this corpus, so it reduces to the
+#: class-2 branch: compare 12 characters = full name equality. All 37 voices
+#: where the device merged and tune+filter said no carry two zones with the
+#: SAME sample name.
+#:
+#: ⚠ Still not a law: 54 of 193 wrong. The two gates at `0x475f4`/`0x47606`
+#: and `0x4762a`, which branch on the name class before the comparison is
+#: reached, are the next thing to read. The loop is at `0x4765c`
 #: (inner scan) with the skip at `0x47614` and the consume-mark at `0x4768e`;
 #: the predicate is `0x2f8a0`, which compares **exactly two fields**:
 #:

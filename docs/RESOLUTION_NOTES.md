@@ -36320,6 +36320,57 @@ probably not.** Possibilities, none tested:
   `lo <= hi` and a non-blank name. The 37 cases where the device wrote one
   zone and both models say two fit that shape exactly.
 
+### eosed's reading, tested — and it is CORROBORATED, not refuted
+
+`eosed` answered the three questions from the ROM (their message, 2026-09-24):
+
+* **`0x475b4` is on the disc-import path** — one caller,
+  `0x47fea in 0x47f08 <- 0x489c0 in 0x48934`, the AKAI orchestrator. No
+  escape hatch; the loop runs on the path `B030-AKAIIMPORT-full.E4B` came
+  from, so the refutation above stands on its own terms.
+* **Two gates were walked past**, at `0x475f4`/`0x47606` and `0x4762a`.
+* **`0x2faf0` classifies the zone's 12-char sample name**: `name[10:12]`
+  `"-L"` → 0, `"-R"` → 1, else 2. `0x2fd54`/`0x2fdf8` then compare **10
+  characters for class 0/1 and 12 otherwise** — strip the suffix, match the
+  stem.
+
+So their structural reading is that the **name lookup selects the partner**
+and `0x2f8a0`'s tune+filter compare is a *safety check that the pair really
+matches* — not the merge criterion. That explains precisely why reading
+`0x2f8a0` as the criterion produced a predicate worse than the null model.
+
+**Five predicates against EOS's own import, 193 voices with 2+ enabled zones:**
+
+    no-merge                     108   56.0 %
+    tune+filter  (0x2f8a0 alone)  81   42.0 %
+    stereo -L/-R pairing         108   56.0 %
+    NAME equal                   131   67.9 %
+    NAME + tune+filter           139   72.0 %   <- best
+    NAME stem10                  126   65.3 %
+
+**The `-L`/`-R` model never fires on this corpus** — there are no such names in
+it — so it scores identically to no-merge. That is not a refutation of the
+classifier: with class 2 the compare length is **12**, i.e. full-name
+equality, which is exactly the branch this material takes and exactly what the
+data prefers. **One mechanism, two branches; this corpus only exercises the
+second.**
+
+The decisive evidence is the 37 voices where the device merged and
+tune+filter said it should not: **all 37 carry two zones with the *same*
+sample name** (`'E1 STN' | 'E1 STN'`). Name identity is the selector.
+
+### Where that leaves it
+
+`NAME + tune+filter` at 72% against a 56% null is a real improvement and
+matches the firmware's structure, but **54 of 193 are still wrong** — 42 where
+the model merges and the device did not, 20 the other way. So the selector is
+identified and the gating is not: the two skipped gates at `0x475f4`/`0x47606`
+and `0x4762a` are the obvious candidates, since both branch on the name class
+before the comparison is ever reached.
+
+**Not implemented.** A 72% model is a better description than a 42% one and
+still not a law.
+
 ### The lesson, which is the durable part
 
 **Locating a mechanism in the firmware is not the same as confirming it
