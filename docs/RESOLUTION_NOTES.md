@@ -378,6 +378,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIZONEDROP — nothing merges (HW), and a dropped zone WIDENS its survivor](#akaizonedrop-nothing-merges-hw-and-a-dropped-zone-widens-its-survivor)
 - [§AKAIATKRECHECK — the ATTAK1 law re-measured on our own rig, 7 points](#akaiatkrecheck-the-attak1-law-re-measured-on-our-own-rig-7-points)
 - [§AKAIF2DEPTH — MODVFLT2_3 is ~216 cents per unit, and the law is in CENTS](#akaif2depth-modvflt2_3-is-216-cents-per-unit-and-the-law-is-in-cents)
+- [§AKAISIMEXTRA — what the FIRMWARE simulation carries that the ordinary path does not](#akaisimextra-what-the-firmware-simulation-carries-that-the-ordinary-path-does-not)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -36730,4 +36731,65 @@ A systematic that scales with the byte rather than a constant offset. This is
 a different region from §FIL2FRGAP's 19-byte hole (which reads ~18 % **low**),
 so it is a separate observation and not that one seen again. **Not acted on:
 three points, one note, one machine.**
+
+## §AKAISIMEXTRA — what the FIRMWARE simulation carries that the ordinary path does not
+
+**Jan's question, 2026-09-24:** the contract states the asymmetry one way only
+— *"best mode adds filter, envelope, LFO and velocity laws the importer
+discards"*. Does the **simulation** carry anything the ordinary conversion
+does not?
+
+**Yes, and the largest is auto-pan.** 400 AKAI programs, 2 813 voices, both
+paths through the real writer, cords compared by **(src, dst)** rather than by
+slot — because slot alignment is meaningless here, as this project's own
+contract says.
+
+    THE SIMULATION EMITS, THE ORDINARY PATH DOES NOT
+      Lfo2+ -> AmpPan           1257 voices      <- auto-pan
+      Press -> FilterFreq        306
+      Press -> AmpVol            292
+      Key~  -> AmpVol            255
+      Vel~  -> CordAmt slot3     234
+      DC    -> CordAmt slot3     234
+
+    THE ORDINARY PATH EMITS, THE SIMULATION DOES NOT
+      FtSw1 -> 0x08             1528
+      PitWl -> Pitch            1528
+      ModWl -> CordAmt slot2    1528
+      Lfo1~ -> Pitch            1528
+      Vel+  -> AmpVol           1528
+      Key+  -> FilterFreq       1155
+      Vel<  -> AmpEnvAtk         889
+
+**`Lfo2+ -> AmpPan` on 1 257 of 2 813 voices is the finding.** Our ordinary
+conversion emits no pan modulation at all, which lines up with two open items
+— *"TARGET carries NO pan modulation on ANY of the three cards"* and
+*"Dynamic panning: the K2000 has it, and so do both targets"*.
+
+⚠ **Neither path is a superset, and one apparent difference is deliberate.**
+`Vel+ -> AmpEnvAtk` (sim, 889) against `Vel< -> AmpEnvAtk` (ordinary, 889) is
+the same routing at the same count: this project uses `Vel<` with an explicit
+pivot where EOS uses `Vel+`, recorded as a deliberate choice, not a gap.
+
+### Two instrument errors in reaching this, both mine
+
+**1. Comparing by byte offset conflated a template with a conversion.** The
+first pass listed voice bytes where the simulation is non-zero and the
+ordinary path is zero, and read them as extra coverage. Checking whether each
+value *varies with the source* split them:
+
+    [ 60] FX_A_ALGORITHM   1 distinct value (255)   TEMPLATE CONSTANT
+    [129] [131] [152]      1 distinct value each    TEMPLATE CONSTANT
+    [110] [116] [117] [118]  20-55 distinct         varies
+
+and the varying ones turned out to appear in **both** directions — they are
+two paths writing different envelope values, not one covering a field the
+other leaves empty.
+
+**2. The preset-volume claim was backwards.** The first pass reported that the
+simulation sets `hdr[27]` on 400/400 presets and the ordinary path never does
+— because it only ever inspected the simulation's side. The ordinary path
+sets a preset volume on **400 of 400**. §AKAIIMPORTVOL's *"the preset volume
+EOS writes and we never did"* has since been addressed, and quoting it as
+current was reading a fixed item as an open one.
 
