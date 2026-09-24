@@ -584,10 +584,14 @@ so the two are not confused]: `MODVLFOD 0x60`, `PANDEL 0x1f`, `LFODEL 0x23` — 
 two octaves is silently narrowed.
 
 **Zone de-duplication.** EOS compares velocity zones pairwise and merges
-matching ones, so voice *i* ≠ keygroup *i*. **[?]** — a loop is located and
-its predicate read, **and it does not predict the device's output**
-(§AKAIZONEMERGE: 42% against 56% for assuming no merge, on EOS's own import).
-Labelled `[C]` for an hour on 2026-09-24 and retracted the same day.
+matching ones. **[C] — and it changes nothing on this material.**
+§AKAIZONEMERGE: scored against EOS's own AKAI conversion with this project's
+own parser, **one E4 zone per enabled velocity zone whose sample is loaded**
+reproduces the device count on **2 438 of 2 438 voices** with no merge
+applied. The loop is real (`0x4765c`, classifier `0x2faf0`, arena gate
+`0x2fdf8`) and exists for `-L`/`-R` stereo pairs, which this corpus has none
+of. The zone-count "gap" it was invented to explain was an analysis script
+not applying this project's own `hi_vel == 0` rule.
 
 ⚠ **"identical" was wrong and is the part to unlearn.** The comparison at
 `0x2f8a0` reads **only** the coarse tune (`zone[0x0e:0x10]`, semitone part)

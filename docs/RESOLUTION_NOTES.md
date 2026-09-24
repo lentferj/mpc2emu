@@ -373,7 +373,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§KRZSAMPPERIOD — round vs truncate in `samplePeriod`](#krzsampperiod-round-vs-truncate-in-sampleperiod)
 - [§RELSCAN — the release name scan, and why it is a program with mutated tests (2026-09-23)](#relscan-the-release-name-scan-and-why-it-is-a-program-with-mutated-tests-2026-09-23)
 - [§EPSZONERESID — the EOS←Ensoniq zone residual is not de-duplication](#epszoneresid-the-eosensoniq-zone-residual-is-not-de-duplication)
-- [§AKAIZONEMERGE — a merge loop located, and it does NOT predict EOS's output](#akaizonemerge-a-merge-loop-located-and-it-does-not-predict-eoss-output)
+- [§AKAIZONEMERGE — RESOLVED: there is no zone-count gap, and there never was](#akaizonemerge-resolved-there-is-no-zone-count-gap-and-there-never-was)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -36173,7 +36173,7 @@ zones and the claim has its own evidence. **The error was applying a
 measurement from one arm to another that looked similar**, and repeating it in
 the other direction would be the same mistake.
 
-## §AKAIZONEMERGE — a merge loop located, and it does NOT predict EOS's output
+## §AKAIZONEMERGE — RESOLVED: there is no zone-count gap, and there never was
 
 **Located in EOS 4.7 on 2026-09-24, no hardware involved.** The claim that
 "EOS compares velocity zones pairwise and merges identical ones" had been
@@ -36320,86 +36320,62 @@ probably not.** Possibilities, none tested:
   `lo <= hi` and a non-blank name. The 37 cases where the device wrote one
   zone and both models say two fit that shape exactly.
 
-### eosed's reading, tested — and it is CORROBORATED, not refuted
+### ✅ RESOLVED — 2 438 of 2 438 voices, exactly, with NO merging
 
-`eosed` answered the three questions from the ROM (their message, 2026-09-24):
+Scored against `B030-AKAIIMPORT-full.E4B`, EOS's own AKAI conversion, using
+**this project's own parser** rather than the scratch script's hand-rolled
+rule:
 
-* **`0x475b4` is on the disc-import path** — one caller,
-  `0x47fea in 0x47f08 <- 0x489c0 in 0x48934`, the AKAI orchestrator. No
-  escape hatch; the loop runs on the path `B030-AKAIIMPORT-full.E4B` came
-  from, so the refutation above stands on its own terms.
-* **Two gates were walked past**, at `0x475f4`/`0x47606` and `0x4762a`.
-* **`0x2faf0` classifies the zone's 12-char sample name**: `name[10:12]`
-  `"-L"` → 0, `"-R"` → 1, else 2. `0x2fd54`/`0x2fdf8` then compare **10
-  characters for class 0/1 and 12 otherwise** — strip the suffix, match the
-  stem.
+    model: the zones `_zone_of` returns, minus those whose sample is not
+           present in the volume's arena, NO MERGE APPLIED
 
-So their structural reading is that the **name lookup selects the partner**
-and `0x2f8a0`'s tune+filter compare is a *safety check that the pair really
-matches* — not the merge criterion. That explains precisely why reading
-`0x2f8a0` as the criterion produced a predicate worse than the null model.
+    334 presets paired, 2 438 voices compared
+    correct: 2 438   (100.00 %)   residual: none
 
-**Five predicates against EOS's own import, 193 voices with 2+ enabled zones:**
+**EOS writes one E4 zone per enabled AKAI velocity zone whose sample is
+loaded.** That is the whole rule.
 
-    no-merge                     108   56.0 %
-    tune+filter  (0x2f8a0 alone)  81   42.0 %
-    stereo -L/-R pairing         108   56.0 %
-    NAME equal                   131   67.9 %
-    NAME + tune+filter           139   72.0 %   <- best
-    NAME stem10                  126   65.3 %
+### Where the "gap" came from, which is the finding
 
-**The `-L`/`-R` model never fires on this corpus** — there are no such names in
-it — so it scores identically to no-merge. That is not a refutation of the
-classifier: with class 2 the compare length is **12**, i.e. full-name
-equality, which is exactly the branch this material takes and exactly what the
-data prefers. **One mechanism, two branches; this corpus only exercises the
-second.**
+`_zone_of` has always dropped a zone whose `hi_vel` is 0 or whose range is
+inverted, with a corpus measurement and a paragraph of reasoning attached:
 
-The decisive evidence is the 37 voices where the device merged and
-tune+filter said it should not: **all 37 carry two zones with the *same*
-sample name** (`'E1 STN' | 'E1 STN'`). Name identity is the selector.
+> *MIDI velocity 0 is note-off, so **any zone whose hi_vel is 0 can never be
+> selected**, inverted or not. […] Trusting the name alone invents up to three
+> phantom zones per keygroup: 65% of one disc's zones, 67% of another's.*
 
-### The arena gate, tested — eosed's prediction confirmed
+**The analysis script for this investigation did not use `_zone_of`.** It
+re-implemented the test as `lo > hi` and omitted `hi_vel == 0`, so it counted
+phantom zones the shipped parser has never counted — and every "the device
+merged" case was one of those phantoms. Scoring the ladder as the definition
+tightened:
 
-`eosed` then read `0x2fdf8` (their `802bda2`): it searches the **loaded sample
-arena** (`0x13d32c`, up to 1 000 objects) for a sample whose name matches at
-the class-selected length, and for class 2 returns true **iff such a sample
-exists**. A false return skips the zone at `0x47636`. **The gate is sample
-existence, not a zone property.** Their prediction: restrict to zones whose
-name resolves to a sample in the same volume and the false merges should fall.
+    enabled = lo<=hi only (the scratch rule)  n=193   best merge model 78.8 %
+    enabled = ... and hi > 0                  n=112   NO-MERGE          96.4 %
+    the shipped parser's own rule, all voices n=2438  NO-MERGE         100.00 %
 
-    model                                   predicts the device's zone count
-    ----------------------------------------------------------------------
-    no-merge, ungated                         108   56.0 %
-    tune+filter alone (0x2f8a0 as criterion)   81   42.0 %
-    NAME + tune+filter, ungated               139   72.0 %
-    no-merge, arena-gated                     121   62.7 %
-    NAME only, arena-gated                    144   74.6 %
-    NAME + tune+filter, ARENA-GATED           152   78.8 %   <- best
+**The zone-count discrepancy was manufactured by a scratch script diverging
+from the project's own documented rule.** It was never in the converter.
 
-**Confirmed: the false merges fall from 42 to 15.** The gate drops 15 zones
-across the compared set and buys nearly seven points.
+### What that does and does not say about the merge loop
 
-⚠ **The first run of this said 42.5% — worse than ungated — and it was my
-lookup, not the gate.** `AkaiVolume.samples()` already strips the filename
-extension; I stripped it again and compared against an UNSTRIPPED zone name,
-so `'E1 1 F.BASS'` missed `'E1 1 F'` and **40.9% of zones failed to resolve**.
-A control asking *"do zone names resolve at all?"* caught it before the
-negative was reported. Without that control this would have gone out as
-"eosed's gate is refuted", which is the same error as the `[C]` label two
-hours earlier, in the opposite direction.
+`eosed`'s firmware reading stands and is not affected: the loop at `0x4765c`,
+the name classifier at `0x2faf0` with its 10-vs-12 length split, the arena
+gate at `0x2fdf8`, and the suffix-versus-stereo-flag check at `0x2fd54` are
+all real and were read correctly. **What is now measured is that none of it
+changes the zone COUNT on any of 2 438 voices of this material** — the
+corpus carries no `-L`/`-R` names, which is the branch the merge exists for.
 
-### What is still unexplained: 41 of 193
+So `zone_dedup` is **not a gap in the simulation** and the caveat naming it
+comes out. A disc with stereo pairs would exercise the other branch, and
+until one is read the merge is a located mechanism with no observed effect.
 
-    enabled  gated  model  device  count
-       2       2      2      1       26   device merged, model did not
-       2       2      1      2       15   model merged, device did not
+### Two corrections this retires
 
-Both directions remain, roughly balanced, so it is not a single missing
-condition biased one way. The other gate `0x2fd54` at `0x47606` is unread, and
-`sample@(28)` / `sample@(32)` — which `eosed` reads as gating the `-L` and
-`-R` classes and marks suggested — are untested here because this corpus has
-no `-L`/`-R` names.
+* the prevalence figure — *"62% of multi-zone keygroups contain a merging
+  pair"* — counted the same phantom zones and means nothing;
+* the claim that the simulation emits more zones than the device. It does
+  not. It matches exactly.
 
 ### The lesson, which is the durable part
 

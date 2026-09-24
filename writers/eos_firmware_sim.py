@@ -943,75 +943,27 @@ def simulate_akai_preset(program_raw: bytes, s3000: bool, name: str,
 #:   so voice *i* is not keygroup *i* on a source that has duplicates;
 #: * `header[26]` transpose, read from the code as a clamped copy but written
 #:   zero on all 363 presets of the reference disc, so nothing exercises it.
-#: ⚠ `zone_dedup` is **[?] — a loop is located, and it does NOT predict the
-#: device's output.** See §AKAIZONEMERGE. Labelled [C] for about an hour on
-#: 2026-09-24 and retracted the same day: tested against EOS's own import
-#: (`B030-AKAIIMPORT-full.E4B`, 333 paired presets, 193 voices with 2+
-#: enabled zones) the predicate scores **42%** against **56%** for assuming
-#: no merge at all, inventing 69 merges that did not happen while catching 48
-#: of the 85 that did. Locating a mechanism is not confirming it governs the
-#: behaviour, and the refuting data had been on this disk for four days.
+#: ✅ **`zone_dedup` is NOT a gap — resolved 2026-09-24, §AKAIZONEMERGE.**
+#: Scored against EOS's own AKAI conversion using this project's own parser:
+#: the zones `_zone_of` returns, minus those whose sample is absent from the
+#: volume's arena, **with no merge applied**, reproduce the device's zone
+#: count on **2 438 of 2 438 voices, exactly**. EOS writes one E4 zone per
+#: enabled AKAI velocity zone whose sample is loaded. That is the rule.
 #:
-#: ℹ **Narrowed the same evening with `eosed`'s ROM reading.** The name
-#: lookup at `0x2faf0` SELECTS the partner zone — it classifies
-#: `name[10:12]` as `-L`/`-R`/neither and compares 10 characters for the
-#: first two, 12 otherwise — and `0x2f8a0` is the safety check on the pair,
-#: not the criterion. Scored against the device import, 193 voices:
+#: ⚠ **The "gap" was a scratch script diverging from `_zone_of`.** The
+#: analysis re-implemented the enabled test as `lo > hi` and omitted
+#: `hi_vel == 0`, which the parser has always dropped with a corpus
+#: measurement behind it — so it counted phantom zones and every apparent
+#: merge was one. Tightening the definition ran 78.8% -> 96.4% -> 100.00%.
 #:
-#:     no-merge                     56.0 %      stereo -L/-R   56.0 %
-#:     tune+filter alone            42.0 %      NAME equal     67.9 %
-#:     NAME + tune+filter           72.0 %   <- best, and matches the
-#:                                              firmware's structure
-#:
-#: The `-L`/`-R` branch never fires on this corpus, so it reduces to the
-#: class-2 branch: compare 12 characters = full name equality. All 37 voices
-#: where the device merged and tune+filter said no carry two zones with the
-#: SAME sample name.
-#:
-#: ✅ **The gate at `0x4762a` (`0x2fdf8`) is confirmed too**: it searches the
-#: loaded sample arena for a name matching at the class-selected length and,
-#: for class 2, returns true iff such a sample EXISTS — so a zone naming an
-#: absent sample is skipped outright. Arena-gating the model takes it from
-#: 72.0% to **78.8%**, and the false merges fall from 42 to 15.
-#:
-#: ⚠ Still not a law: **41 of 193 wrong**, 26 where the device merged and the
-#: model did not and 15 the other way — balanced, so not one missing
-#: condition. `0x2fd54` at `0x47606` is unread.
-#:
-#: ⚠ The first run of the gate test said 42.5%, WORSE than ungated, and that
-#: was the lookup: `AkaiVolume.samples()` already strips the extension and it
-#: was being stripped twice, so 40.9% of zones failed to resolve. A control
-#: asking whether names resolved at all caught it before the negative was
-#: reported. The loop is at `0x4765c`
-#: (inner scan) with the skip at `0x47614` and the consume-mark at `0x4768e`;
-#: the predicate is `0x2f8a0`, which compares **exactly two fields**:
-#:
-#:     zone[0x0e:0x10]  signed tune word -> (hi<<6 + lo/4) / 64, i.e. the
-#:                      SEMITONE part; the fine byte cannot reach the result
-#:     zone[0x11]       filter frequency offset, exact
-#:
-#: ✅ **Proven, not assumed.** The record sits at `kg + 0x22 + index*24` --
-#: the documented raw velocity-zone offsets -- and the two fields are the
-#: documented tune and filter-frequency offsets. An earlier version of this
-#: note called the base `+22` and hedged the field identification: objdump
-#: prints a BRIEF-extension displacement in **hex** and a `(d16,An)` one in
-#: **decimal**, so `%a3@(22,%d0:l)` is `0x22 = 34`, not 22. Verified by
-#: assembling known displacements and disassembling them.
-#:
-#: **It never reads the velocity range at [12]/[13].** So "merges identical
-#: VELOCITY zones" names the one field the comparison ignores. Two zones over
-#: different velocity spans playing different samples are merged when their
-#: coarse tune and filter offset agree — which is how an ordinary
-#: velocity-split keygroup is built.
-#:
-#: Prevalence, enabled zones only: **62% of the 9 851 multi-zone keygroups**
-#: in 8 discs contain a merging pair; of 17 404 such pairs, 63% play a
-#: different sample and 53% span a different velocity range.
-#:
-#: Still not implemented, and the prevalence is the reason to be deliberate
-#: rather than quick: it fires on most multi-zone keygroups, so switching it
-#: on changes a great deal of output at once.
-EOS_AKAI_SIM_KNOWN_GAPS = ('located_not_modelled_cords', 'zone_dedup',
+#: `eosed`'s firmware reading is unaffected and stands: the loop at
+#: `0x4765c`, the name classifier at `0x2faf0` with its 10-vs-12 length
+#: split, the arena gate at `0x2fdf8` and the stereo-flag check at
+#: `0x2fd54`. What is measured is that **none of it changes the zone count
+#: on this material**, which carries no `-L`/`-R` names — the branch the
+#: merge exists for. A stereo disc would exercise it; until then it is a
+#: located mechanism with no observed effect.
+EOS_AKAI_SIM_KNOWN_GAPS = ('located_not_modelled_cords',
                            'header26_transpose')
 
 
