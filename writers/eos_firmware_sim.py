@@ -808,8 +808,32 @@ EOS_AKAI_EMITTER_CALLS = 12       #: bsrw 0x46370
 #: was last assigned is NOT established, so the source field is unidentified
 #: and this one stays out even when the other ten are named.
 #:
-#: ℹ **Where the staging object comes from — traced one more hop,
-#: 2026-09-24, and stopping there deliberately.** The chain is
+#: ✅ **SOLVED 2026-09-24 — see §AKAICORDSTAGE.** The struct is
+#: `%fp@(-68)` in the AKAI orchestrator, filled by `0x47778` from the
+#: 192-byte block it reads into its own `%fp@(-196)`, so **source offset =
+#: displacement + 196**:
+#:
+#:     d[ 7] <- pgm[0x61] LFO1 waveform, via table[0x48b88]={0,2,3,255}
+#:     d[32] <- pgm[0x1a] vel_loudness       rescale(v,-50,50,77)
+#:     d[46] <- pgm[0x27] pitch-bend range   clamp 0..24
+#:     d[47] <- pgm[0x28] pressure->pitch    clamp +-12
+#:     d[48] <- pgm[0x22] LFO depth          rescale(v,0,99,32)
+#:     d[56] <- pgm[0x24] MWLDEP  modwheel   rescale(v,0,99,32)
+#:     d[57] <- pgm[0x25] PRSDEP  aftertouch rescale(v,0,99,32)
+#:     d[58] <- pgm[0x26] VELDEP  velocity   rescale(v,0,99,32)
+#:
+#: `MWLDEP`/`PRSDEP`/`VELDEP` are this project's own format-doc names for
+#: modwheel/aftertouch/velocity, and EOS pairs them with sources **ModWl
+#: (17), Press (18), Vel< (12)** — three for three, in order, which is what
+#: identifies the struct.
+#:
+#: Verified against `B030-AKAIIMPORT-full.E4B`, 333 presets: `d[32]`,
+#: `d[47]`, `d[56]`, `d[57]`, `d[58]` agree with the device on **100%** of
+#: presets (predicted cord present exactly when the byte is non-zero).
+#: `d[46]` 75% and `d[48]` 4%, both one-directional (byte set, cord absent),
+#: so their emission is gated by something not in the mapping.
+#:
+#: ℹ **The original trace, kept because the chain is the reusable part.**
 #:
 #:     0x4647c   %a5 := %a0        <- caller's %a3
 #:     0x46da8   %a3 := %a1        <- ITS caller's value

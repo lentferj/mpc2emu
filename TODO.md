@@ -7974,7 +7974,7 @@ Two further things came out of mutating it:
   also exactly when that path's `best_mode_adds` and `modes_offered` need
   revisiting.
 
-## EOS←AKAI: the eleven cords need the object `%d2` points at
+## ~~EOS←AKAI: the eleven cords need the object `%d2` points at~~ ✅ **STAGING MAP SOLVED 2026-09-24**
 
 **Status:** open, narrowed 2026-09-24. Sources, destinations, gates and amount
 expressions are all read off the instruction stream and are solid. What is
@@ -7989,8 +7989,17 @@ further:
     0x46da8   %a3 := %a1     its caller's value
     0x475b4   %a1 := %d2     at 0x4763e, just before bsrw 0x46da8
 
-**Next: establish what `%d2` holds at `0x4763e`.** Then the displacement map
-falls out and all eleven become modellable.
+**Done.** The struct is `%fp@(-68)` in the AKAI orchestrator, filled by
+`0x47778` from the 192-byte block at its own `%fp@(-196)`, so **source offset
+= displacement + 196**. All eight displacements map to named AKAI program
+bytes, and five of seven testable mappings agree with EOS's own import on
+**100%** of 333 presets. Full table and the verification in §AKAICORDSTAGE.
+
+**What remains before implementing:** `d[46]` (bend range) agrees on 75% and
+`d[48]` (LFO depth) on 4%, both one-directional — byte set, cord absent — so
+their emission is gated by something the mapping does not carry. Modelling
+the five exact ones is available now; the other two need that gate found
+first, or they will emit cords the device does not.
 
 ⚠ Stopped at a named register rather than guessing the object. The previous
 attempt asserted an identification from a three-hit anchor in the CALLER and

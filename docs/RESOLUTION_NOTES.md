@@ -374,6 +374,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§RELSCAN — the release name scan, and why it is a program with mutated tests (2026-09-23)](#relscan-the-release-name-scan-and-why-it-is-a-program-with-mutated-tests-2026-09-23)
 - [§EPSZONERESID — the EOS←Ensoniq zone residual is not de-duplication](#epszoneresid-the-eosensoniq-zone-residual-is-not-de-duplication)
 - [§AKAIZONEMERGE — RESOLVED: there is no zone-count gap, and there never was](#akaizonemerge-resolved-there-is-no-zone-count-gap-and-there-never-was)
+- [§AKAICORDSTAGE — the eleven cords' staging map, and what it maps to](#akaicordstage-the-eleven-cords-staging-map-and-what-it-maps-to)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -36426,3 +36427,79 @@ thought to run it until the question was asked out loud.
 The same corpus prevalence that looked like impact — 62% of multi-zone
 keygroups contain a merging pair — is precisely why the predicate scores
 badly: it fires almost everywhere, and the device does not.
+
+## §AKAICORDSTAGE — the eleven cords' staging map, and what it maps to
+
+**Solved 2026-09-24, offline.** The eleven located-but-unmodelled EOS←AKAI
+cords read displacements into a staging struct whose identity had been open
+since the path was written, and wrongly claimed to be the program file in
+`ef7e864` (retracted `585b9df`).
+
+### The chain
+
+    0x4647c   %a5 := %a0            <- 0x46da8's %a3
+    0x46da8   %a3 := %a1            <- 0x475b4's %d2
+    0x475b4   %d2 := %a1  (0x475c2) <- 0x47f08's %a2
+    0x47f08   %a2 := %a0  (0x47f1e) <- the orchestrator's &%fp@(-68)
+    0x48934   lea %fp@(-68),%a0     at 0x489b4
+
+So the struct is **`%fp@(-68)` in the AKAI orchestrator**, and it is filled by
+`0x47778` — the same function the orchestrator hands that pointer at
+`0x4899e`, which reads the 192-byte block into its own `%fp@(-196)` and then
+writes 42 fields into the caller's struct. **Buffer base is `fp-196`, so
+source offset = displacement + 196.**
+
+### The map
+
+    staged   from      program byte                      how
+    d[ 7] <- fp@(-99)  0x61 = 97  LFO1 waveform          table[0x48b88] =
+                                                         {0,2,3,255}, idx 0..3
+    d[32] <- fp@(-170) 0x1a = 26  vel_loudness           rescale(v,-50,50,77)
+    d[46] <- fp@(-157) 0x27 = 39  pitch-bend range       clamp 0..24, 0x2f7bc
+    d[47] <- fp@(-156) 0x28 = 40  pressure -> pitch      clamp +-12, 0x2f7bc
+    d[48] <- fp@(-162) 0x22 = 34  LFO depth              rescale(v,0,99,32)
+    d[56] <- fp@(-160) 0x24 = 36  MWLDEP  (modwheel)     rescale(v,0,99,32)
+    d[57] <- fp@(-159) 0x25 = 37  PRSDEP  (aftertouch)   rescale(v,0,99,32)
+    d[58] <- fp@(-158) 0x26 = 38  VELDEP  (velocity)     rescale(v,0,99,32)
+
+**The names at 36/37/38 are this project's own format doc**, which lists
+`MWLDEP` / `PRSDEP` / `VELDEP` as modwheel / aftertouch / velocity. The cord
+sources EOS pairs them with are **ModWl (17), Press (18), Vel< (12)** — three
+for three, in order. That is not a coincidence, and it is what identifies the
+whole struct.
+
+The picture is coherent throughout: `d[46]` is a bend range clamped to 0..24
+semitones driving `PitWl -> Pitch`; `d[48]` is LFO depth driving
+`LFO1 -> Pitch`, i.e. vibrato; and `d[56]/[57]/[58]` drive **cord-amount**
+destinations (`168 + slot`), so wheel, aftertouch and velocity each modulate
+the vibrato cord's depth. `d[7]` is the LFO waveform, and it selects `Lfo1~`
+(96) against `Lfo1+` (97) — bipolar shape against unipolar.
+
+### Verified against EOS's own import
+
+`B030-AKAIIMPORT-full.E4B`, 333 presets paired by name and keygroup count.
+For each mapping: is the predicted `(src, dst)` present in the bank exactly
+when the mapped program byte is non-zero?
+
+    d[32] vel_loudness -> Vel~   -> AmpVol        333 / 333   100 %
+    d[47] pressure     -> Press  -> Pitch         333 / 333   100 %  (all-zero)
+    d[56] MWLDEP       -> ModWl  -> cord amount   332 / 333   100 %
+    d[57] PRSDEP       -> Press  -> cord amount   333 / 333   100 %
+    d[58] VELDEP       -> Vel<   -> cord amount   333 / 333   100 %
+    d[46] bend range   -> PitWl  -> Pitch         249 / 333    75 %
+    d[48] LFO depth    -> Lfo1   -> Pitch          14 / 333     4 %
+
+**Five of seven are exact.** `d[46]` and `d[48]` are not, and the residual is
+one-directional in both — the byte is non-zero and the cord is absent — which
+says the emission is gated by something these mappings do not carry, not that
+the mapping is wrong.
+
+⚠ **A harness note that nearly produced a clean, entirely wrong negative.**
+The first run read the device's cord table at **voice+188**, where the
+*firmware* writes it. The **file** layout puts the mod section at `[190:270]`,
+20 slots of 4 — this project's own `e4b_parser` has it right. Reading at 188
+reported *"cord absent"* on every predicted pair, i.e. 0 % agreement across
+the board, which looks exactly like a refuted hypothesis. Same class as the
+zone investigation: **a scratch harness disagreeing with the shipped reader
+in one constant.**
+
