@@ -786,6 +786,11 @@ def parse_eps_image(path: str, wav_dir: Optional[str] = None,
                 bank.presets.append(Preset(
                     name=f"{inst['name'][:13]}{EPS_VARIANT_SUFFIX[v]}"[:16],
                     voices=voices))
+    # Set in BOTH modes: the source/target restriction
+    # (`EXTERNALLY_VERIFIABLE_ONLY`) applies to ordinary
+    # conversions too, so the tag cannot live inside the
+    # simulation branch.
+    bank.source_format = 'ensoniq'
     if firmware_sim:
         # ⚠ **TWO DIFFERENT SIMULATIONS, AND ONLY ONE IS HERE.**
         # For an E4B target this rebuilds each preset the way EOS

@@ -1071,8 +1071,8 @@ def main():
     if not input_path.exists():
         print(f"Error: '{input_path}' not found."); sys.exit(1)
 
+    from parsers.registry import FIRMWARE_SIM_FORMATS
     if args.firmware_sim:
-        from parsers.registry import FIRMWARE_SIM_FORMATS
         if args.format not in FIRMWARE_SIM_FORMATS:
             print(f"Error: --firmware-sim has no simulation for "
                   f"--format {args.format}. Implemented targets: "
@@ -1153,6 +1153,23 @@ def main():
         source_banks = parse_all_sources(input_files, args.wav_dir, extra)
     if not source_banks:
         print("No banks could be parsed. Aborting."); sys.exit(1)
+
+    # ── Sources that can only be written where something can CHECK the result ──
+    # Jan's rule, 2026-09-24. Everything this project knows about the EPS/ASR
+    # and S-7xx disc formats came from reading the samplers' own importers, so
+    # those readers extract no filter, envelope, LFO or velocity fields at all
+    # and every program parameter in the output is our writer's default. On
+    # e4b/krz that is checkable -- a real E4XT and a real K2000 import the same
+    # discs, and our output has been diffed against theirs. On talsmpl/eiii/akai
+    # no importer exists, so nothing outside this project could ever check it.
+    # Refused rather than shipped unverifiable, and refused in BOTH modes.
+    from parsers.registry import unverifiable_target_error
+    _refusal = unverifiable_target_error(
+        (b.source_format for b in source_banks), args.format)
+    if _refusal:
+        print(_refusal)
+        sys.exit(2)
+
     print(f"\n  Parsed {len(source_banks)} bank(s).")
     _n_synced = sum(1 for b in source_banks for p in b.presets for v in p.voices
                     if getattr(v, 'lfo1_sync_division', None))

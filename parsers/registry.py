@@ -215,3 +215,55 @@ FIRMWARE_SIM_EXTS = frozenset({
 
 #: Target formats with a firmware simulation behind them.
 FIRMWARE_SIM_FORMATS = frozenset({'e4b', 'krz'})
+
+#: Sources this project can read but has **no independent knowledge of**, so a
+#: conversion of theirs is only trustworthy where something outside this
+#: project can check it.
+#:
+#: **Jan's rule, 2026-09-24: Ensoniq and Roland convert to KRZ and E4B only.**
+#:
+#: Everything mpc2emu knows about the EPS/ASR and S-7xx disc formats came from
+#: reading the samplers' own import routines. `eps_parser` and
+#: `roland_s7xx_parser` therefore extract **no** filter, cutoff, envelope, LFO
+#: or velocity fields at all -- verified by source scan, and asserted in
+#: `tests/test_firmware_sim_contract.py`. Every program parameter in the
+#: output is our writer's default, not the source's value.
+#:
+#: That is fine for `e4b` and `krz`, because a real E4XT and a real K2000
+#: import those same discs, so our output can be diffed byte-for-byte against
+#: what the hardware writes -- and has been. **For `talsmpl`, `eiii` and
+#: `akai` no such importer exists**, so nothing outside this project could
+#: ever check the result. It would be a conversion built from an empty
+#: parameter set with no reference anywhere, which is a guess wearing the
+#: shape of an output file.
+#:
+#: ⚠ Not a statement about effort or difficulty. Those targets are refused
+#: **because the verification does not exist**, and they become available the
+#: day either an independent RE of the source format lands (so there is
+#: something real to convert) or one of those machines gains an importer for
+#: these discs (so there is something to check against). AKAI as a SOURCE is
+#: unaffected: its parser carries hardware-calibrated laws and an S3000XL is
+#: on the bench.
+EXTERNALLY_VERIFIABLE_ONLY = frozenset({'ensoniq', 'roland'})
+
+
+def unverifiable_target_error(source_formats, target):
+    """-> the refusal message for this (sources, target), or None to allow.
+
+    A function rather than an inline check in `convert.py` so the rule can be
+    tested without a disc image and without driving the CLI.
+    """
+    bad = sorted({f for f in source_formats if f in EXTERNALLY_VERIFIABLE_ONLY})
+    if not bad or target in FIRMWARE_SIM_FORMATS:
+        return None
+    allowed = ' and '.join(sorted(FIRMWARE_SIM_FORMATS))
+    return (
+        f"Error: a {'/'.join(bad)} source converts to {allowed} only, not "
+        f"--format {target}.\n"
+        f"  Everything this project knows about that disc format came from "
+        f"the E4XT's and K2000's own import routines, so the reader extracts "
+        f"no filter, envelope or LFO values -- every program parameter would "
+        f"be this writer's default.\n"
+        f"  Those two targets can be diffed against what the hardware itself "
+        f"writes. For --format {target} no importer exists, so nothing "
+        f"outside this project could check the result.")

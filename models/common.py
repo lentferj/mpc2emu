@@ -5075,6 +5075,12 @@ class Bank:
     #: writes the layer key range where its AKAI and Roland arms write the
     #: velocity window), so a writer that assumed one behaviour would put the
     #: right value in the wrong field on every layer of two of them.
+    #: The source FORMAT this bank was read from, set unconditionally by the
+    #: readers that have one. Distinct from `firmware_sim_source`, which says
+    #: which import to reproduce and is only set in simulation mode -- this
+    #: one has to be present in ordinary conversions too, because the
+    #: source/target restriction applies to both.
+    source_format: Optional[str] = None
     firmware_sim_source: Optional[str] = None
 
     def find_sample(self, name: str) -> Optional[SampleData]:

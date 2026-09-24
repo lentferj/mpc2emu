@@ -389,6 +389,11 @@ def parse_roland_image(path: str, wav_dir: Optional[str] = None,
             if zones:
                 bank.presets.append(Preset(name=part['name'][:16],
                                            voices=[VoiceLayer(zones=zones)]))
+    # Set in BOTH modes: the source/target restriction
+    # (`EXTERNALLY_VERIFIABLE_ONLY`) applies to ordinary
+    # conversions too, so the tag cannot live inside the
+    # simulation branch.
+    bank.source_format = 'roland'
     if firmware_sim:
         # ⚠ **TWO DIFFERENT SIMULATIONS, AND ONLY ONE IS HERE.**
         # For an E4B target this rebuilds each preset the way EOS

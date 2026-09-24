@@ -7,6 +7,23 @@
     "best": "convert as good as possible"
   },
   "what_this_mode_is": "Reproduces what the sampler's own disk importer writes, byte for byte, instead of converting. It is DELIBERATELY LOWER FIDELITY than an ordinary conversion: its purpose is that a bank can be diffed against a real device import, and any difference is a defect in mpc2emu's reading of the firmware. Presenting it as a quality or speed option would mislead.",
+  "source_target_restriction": {
+    "sources": [
+      "ensoniq",
+      "roland"
+    ],
+    "allowed_targets": [
+      "e4b",
+      "krz"
+    ],
+    "applies_to": [
+      "firmware",
+      "best"
+    ],
+    "enforcement": "refused with a non-zero exit, after parsing",
+    "why": "These readers extract no filter, envelope, LFO or velocity values -- everything known about the format came from the samplers own importers -- so only a target whose hardware imports the same disc can check the result.",
+    "lifts_when": "an independent RE of the source format lands, or one of the other targets gains an importer for these discs"
+  },
   "cli": {
     "flag": "--firmware-sim",
     "source_extensions": [

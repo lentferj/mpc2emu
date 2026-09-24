@@ -1311,6 +1311,29 @@ laws measured on a real S3000XL, every one of which the samplers' own
 importers discard. That is the one source where the two modes are genuinely
 different products.
 
+### Ensoniq and Roland sources convert to `krz` and `e4b` only
+
+Refused for `talsmpl`, `eiii` and `akai`, with a non-zero exit, **in ordinary
+conversion as well as with `--firmware-sim`.**
+
+The reason is the paragraph above carried one step further. If every program
+parameter in the output is this writer's default rather than the source's
+value, the only thing that can tell you the conversion is right is a machine
+that imports the same disc and can be diffed against it. **A real E4XT and a
+real K2000 do**, and our output has been compared with theirs byte for byte.
+No sampler imports an EPS or S-7xx disc *and* writes `talsmpl`, `eiii` or
+`akai`, so for those targets nothing outside this project could ever check
+the result — it would be a conversion built from an empty parameter set with
+no reference in the world.
+
+So this is a limit on what can be *justified*, not on what can be produced.
+It lifts the day either an independent reverse-engineering of the source
+format lands — giving something real to convert — or one of those machines
+gains an importer for these discs, giving something to check against.
+
+AKAI as a **source** is deliberately unaffected and writes every target: its
+parameters are measured, and the instrument that settles them is on the bench.
+
 **Unimplemented combinations are refused, never silently converted normally.**
 A user who asked for a device-faithful import and received an ordinary
 conversion could not tell from the output, and would then diff it against
