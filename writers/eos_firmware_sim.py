@@ -968,9 +968,21 @@ def simulate_akai_preset(program_raw: bytes, s3000: bool, name: str,
 #: where the device merged and tune+filter said no carry two zones with the
 #: SAME sample name.
 #:
-#: ⚠ Still not a law: 54 of 193 wrong. The two gates at `0x475f4`/`0x47606`
-#: and `0x4762a`, which branch on the name class before the comparison is
-#: reached, are the next thing to read. The loop is at `0x4765c`
+#: ✅ **The gate at `0x4762a` (`0x2fdf8`) is confirmed too**: it searches the
+#: loaded sample arena for a name matching at the class-selected length and,
+#: for class 2, returns true iff such a sample EXISTS — so a zone naming an
+#: absent sample is skipped outright. Arena-gating the model takes it from
+#: 72.0% to **78.8%**, and the false merges fall from 42 to 15.
+#:
+#: ⚠ Still not a law: **41 of 193 wrong**, 26 where the device merged and the
+#: model did not and 15 the other way — balanced, so not one missing
+#: condition. `0x2fd54` at `0x47606` is unread.
+#:
+#: ⚠ The first run of the gate test said 42.5%, WORSE than ungated, and that
+#: was the lookup: `AkaiVolume.samples()` already strips the extension and it
+#: was being stripped twice, so 40.9% of zones failed to resolve. A control
+#: asking whether names resolved at all caught it before the negative was
+#: reported. The loop is at `0x4765c`
 #: (inner scan) with the skip at `0x47614` and the consume-mark at `0x4768e`;
 #: the predicate is `0x2f8a0`, which compares **exactly two fields**:
 #:

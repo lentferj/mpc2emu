@@ -36359,17 +36359,47 @@ The decisive evidence is the 37 voices where the device merged and
 tune+filter said it should not: **all 37 carry two zones with the *same*
 sample name** (`'E1 STN' | 'E1 STN'`). Name identity is the selector.
 
-### Where that leaves it
+### The arena gate, tested — eosed's prediction confirmed
 
-`NAME + tune+filter` at 72% against a 56% null is a real improvement and
-matches the firmware's structure, but **54 of 193 are still wrong** — 42 where
-the model merges and the device did not, 20 the other way. So the selector is
-identified and the gating is not: the two skipped gates at `0x475f4`/`0x47606`
-and `0x4762a` are the obvious candidates, since both branch on the name class
-before the comparison is ever reached.
+`eosed` then read `0x2fdf8` (their `802bda2`): it searches the **loaded sample
+arena** (`0x13d32c`, up to 1 000 objects) for a sample whose name matches at
+the class-selected length, and for class 2 returns true **iff such a sample
+exists**. A false return skips the zone at `0x47636`. **The gate is sample
+existence, not a zone property.** Their prediction: restrict to zones whose
+name resolves to a sample in the same volume and the false merges should fall.
 
-**Not implemented.** A 72% model is a better description than a 42% one and
-still not a law.
+    model                                   predicts the device's zone count
+    ----------------------------------------------------------------------
+    no-merge, ungated                         108   56.0 %
+    tune+filter alone (0x2f8a0 as criterion)   81   42.0 %
+    NAME + tune+filter, ungated               139   72.0 %
+    no-merge, arena-gated                     121   62.7 %
+    NAME only, arena-gated                    144   74.6 %
+    NAME + tune+filter, ARENA-GATED           152   78.8 %   <- best
+
+**Confirmed: the false merges fall from 42 to 15.** The gate drops 15 zones
+across the compared set and buys nearly seven points.
+
+⚠ **The first run of this said 42.5% — worse than ungated — and it was my
+lookup, not the gate.** `AkaiVolume.samples()` already strips the filename
+extension; I stripped it again and compared against an UNSTRIPPED zone name,
+so `'E1 1 F.BASS'` missed `'E1 1 F'` and **40.9% of zones failed to resolve**.
+A control asking *"do zone names resolve at all?"* caught it before the
+negative was reported. Without that control this would have gone out as
+"eosed's gate is refuted", which is the same error as the `[C]` label two
+hours earlier, in the opposite direction.
+
+### What is still unexplained: 41 of 193
+
+    enabled  gated  model  device  count
+       2       2      2      1       26   device merged, model did not
+       2       2      1      2       15   model merged, device did not
+
+Both directions remain, roughly balanced, so it is not a single missing
+condition biased one way. The other gate `0x2fd54` at `0x47606` is unread, and
+`sample@(28)` / `sample@(32)` — which `eosed` reads as gating the `-L` and
+`-R` classes and marks suggested — are untested here because this corpus has
+no `-L`/`-R` names.
 
 ### The lesson, which is the durable part
 
