@@ -691,7 +691,7 @@ the comparison render and stays silent.
 `keygroup_count` threads the flag too, since the count is board-dependent, and
 a test asserts budget and file agree for **both** flag states.
 
-## Pole count vs resting corner — measurement volume BUILT, awaiting a crossing (2026-09-11)
+## Pole count vs resting corner — MEASURED 2026-09-24, consistent with a pole count but not decisive
 
 The cross-machine difference is **−6.40 dB/oct**, a *slope*, so it is a pole count
 or a resting corner — a horizontal corner offset cannot make a slope. The static
@@ -727,8 +727,50 @@ The corners are printed from the **written bytes** rather than predicted. 119 an
 by 1/`AKAI_CASCADE_CORNER_RATIO` so the *pair* lands on target — that is the
 behaviour under test, not an error.
 
-**Status:** built and verified. **Blocked on:** a card crossing, riding with
-`ATKCAL`; neither justifies a dedicated swap.
+**MEASURED 2026-09-24.** Volume loaded on the S3000XL, four captures at note
+36, hold 6 s, `system:capture_13`, analysed per the spec above (harmonic
+amplitudes differenced against 117, fitted against log frequency).
+
+    program                     slope        n    band
+    118  Low 2, 198 Hz         -11.86     36    440-2420 Hz     predicted -12
+    119  Low 4, 246+252 Hz     -21.80      8    550- 935 Hz     predicted -24
+    120  Low 4, 473+476 Hz     -20.00     14    990-1705 Hz     predicted -24
+
+    119 vs 120 difference: -1.80 dB/oct
+
+**118 confirms the 2-pole model outright** -- 36 harmonics over 2.4 octaves,
+-11.86 against a predicted -12.
+
+**119 and 120 agree within 1.8 dB/oct, so the pole-count explanation of the
+-6.40 dB/oct survives** -- a corner-independent slope is what a pole count
+predicts and what a resting corner cannot produce.
+
+⚠ **But the comparison the test hinges on is at the edge of what this capture
+supports, and that is a property of the measurement rather than the filter.**
+A 4-pole at ~250 Hz is ~100 dB down by 1 kHz and falls into the capture's
+noise floor within about an octave, so 119's fit rests on **8 harmonics over
+0.8 octaves**. Changing the analysis window from 3.0 s to 5.2 s moved the
+119-vs-120 difference from -3.23 to -1.80 dB/oct -- across the 3 dB line I had
+set in advance. A result that moves that much with the window is not settled.
+
+Both cascades also read ~2-4 dB/oct shallower than the ideal -24, which is
+consistent with the wide knee already documented for this family
+(§AKAIFIL2POLES: filter 1 is within 1 dB of its asymptote one octave up,
+filter 2 still 1.4 dB short three octaves up) rather than with a missing pole.
+
+**Status:** open but much narrower. **Blocked on:** dynamic range, not bench
+time. ~12 dB more level (the 119/120 captures peaked at -16.5/-15.4 dBFS)
+would buy roughly one more octave of usable harmonics and make the 119/120
+comparison decisive. The material is on the card at id 2 and can be re-run
+without another build.
+
+⚠ **A trap this measurement walked into, recorded because the first answer
+looked clean:** the initial fit reported POSITIVE slopes (+2.95 dB/oct on a
+low-pass). The filtered captures hit the noise floor above ~1.7 kHz, and past
+that the reference-difference is floor-minus-reference, which RISES as the
+reference falls. The floor guard was checking the REFERENCE's level and not
+the filtered capture's -- **the guard was on the wrong side**, and a low-pass
+with a rising skirt is the only reason it was caught.
 
 ## TD1/TD2 — the non-saturating envelope test (OPEN 2026-09-11, material on the card)
 
