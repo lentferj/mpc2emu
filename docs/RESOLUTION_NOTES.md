@@ -36117,14 +36117,52 @@ The 20 zones we emit that have no device counterpart at the same key range are
 spread over 8 presets, with roots both inside and outside their own key range,
 so no single geometric rule covers them.
 
-### ⚠ [S] Leading hypothesis, NOT established
+### Three hypotheses tested and refuted, 2026-09-24
 
-`eps_parser._resolve` maps a wavesample to a sample name through four
-fallbacks, the last of which is *the first sample sharing a root key*. That
-can collapse distinct wavesamples onto one name, which would explain both the
-flat usage and a zone count that drifts from the device's. **It is a
-RESOLUTION question, not a zone-merging one** — and "fixing" the residual by
-merging zones would build the refuted mechanism into the code.
+**1. `_resolve`'s weakest fallback.** The leading suspicion was that
+`eps_parser._resolve`'s last branch — *the first sample sharing a root key* —
+collapses distinct wavesamples. The parser was instrumented to tag every
+resolution with the branch that produced it:
+
+    whole disc:  name 4160   pointer 9476   same_root 228   range 176
+
+    of the 172 zones in the 24 compared presets:
+                                    absent   present
+      resolved by name + pointer         1       123
+      resolved by pointer only          19        29
+      resolved by range                  0         0
+      resolved by same_root              0         0
+
+**`same_root` fires 228 times on the disc and NOT ONCE in this material.** The
+hypothesis is dead, and it was the one the note led with.
+
+**2. One zone per sample within a voice.** A zone whose sample was already
+used by an earlier zone in the same voice is absent **0 times of 12**. The
+device is not collapsing repeated samples.
+
+**3. The same thing across the preset.** A key range already used by an
+earlier voice is absent 8 of 66 (12%), against 12 of 106 (12%) for
+first-seen ranges. No signal at all.
+
+### The one real signal: unnamed wavesamples
+
+    resolved by name + pointer   1 absent of 124    0.8 %
+    resolved by POINTER ONLY    19 absent of  48   40   %
+
+A wavesample resolved by pointer alone is one with **no `sample_name` of its
+own** — an alias, sharing audio with another wavesample, which is why its
+pointer signature matches. Those are ~50× more likely to have no counterpart
+in the device's bank.
+
+That also fits the sample counts from the other direction: we resolve aliases
+onto the sample they share (26 distinct), while the device imported 33 — it
+appears to treat an alias as its own object rather than a reference.
+
+⚠ **This is a correlate, not a mechanism.** 29 of the 48 pointer-only zones
+*are* present, so "alias" alone does not decide it. The next cut is what
+separates those 29 from the 19, and it should be run before anything is
+implemented — three mechanisms that fit part of this residual have now been
+refuted, two of them tonight.
 
 ### What must not be inferred from this
 

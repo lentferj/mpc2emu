@@ -7991,13 +7991,29 @@ Measured: **ours 175 zones over 26 distinct samples, device 152 over 33.** The
 device imported MORE wavesamples and emitted FEWER zones -- the opposite shape
 from a merge.
 
-**Next step, and it is a different investigation from the one the old note
-implied:** `eps_parser._resolve` maps a wavesample to a sample name through
-four fallbacks, the last being *the first sample sharing a root key*. That can
-collapse distinct wavesamples onto one name, which would explain our flat
-usage (samples 1..22 referenced exactly 7 times each, against the device's
-1..10). Instrument `_resolve` to report which fallback fired per zone, and
-check whether the 20 unmatched zones are exactly the fallback cases.
+**That next step is done, 2026-09-24, and it refuted the hypothesis.**
+`_resolve` was instrumented to tag every resolution with the branch that
+produced it. The weak `same_root` fallback fires **228 times on the disc and
+zero times in this material**. Two further mechanisms were tested and refuted
+the same evening: a repeated sample within a voice is absent 0 times of 12,
+and a key range repeated across voices is absent at exactly the same rate as
+one seen for the first time (12% both).
+
+**What survives is a correlate, not a mechanism:**
+
+    resolved by name + pointer    1 absent of 124   0.8 %
+    resolved by POINTER ONLY     19 absent of  48   40   %
+
+A pointer-only resolution is a wavesample with no `sample_name` of its own --
+an alias sharing another's audio. Those are ~50x more likely to be missing
+from the device's bank, which also fits the sample counts from the other side:
+we fold aliases onto the sample they share (26 distinct) where the device
+imported 33.
+
+**Next cut:** 29 of those 48 pointer-only zones ARE present, so "alias" alone
+does not decide it. Find what separates the 29 from the 19 before implementing
+anything -- three mechanisms that fit part of this residual have now been
+refuted, two of them in one evening. Full numbers in §EPSZONERESID.
 
 ⚠ **Do not "fix" this by merging zones.** That would build the refuted
 mechanism into the writer, and the output would then differ from the device
