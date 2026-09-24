@@ -143,8 +143,7 @@
       "target": "krz",
       "device": "Kurzweil K2000 v3.87J",
       "modes_offered": [
-        "firmware",
-        "best"
+        "firmware"
       ],
       "modes_differ_in_output": true,
       "best_mode_adds": [],
@@ -164,8 +163,7 @@
       "target": "krz",
       "device": "Kurzweil K2000 v3.87J",
       "modes_offered": [
-        "firmware",
-        "best"
+        "firmware"
       ],
       "modes_differ_in_output": true,
       "best_mode_adds": [],
