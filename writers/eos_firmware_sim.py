@@ -743,21 +743,34 @@ EOS_AKAI_EMITTER_CALLS = 12       #: bsrw 0x46370
 #: `reference_register_is_not_a_variable` exists for, committed in the file
 #: that records the rule.
 #:
-#: What each one emits (`src`, `dst`, amount), all verbatim unless stated:
+#: What each one emits (`src`, `dst`, amount), all verbatim unless stated.
 #:
-#:     pgm[32]  src 11  dst 64
-#:              + src 160 dst 64 at pgm[32]/5, ONLY when that signed
-#:                quotient is non-zero (0x464c8 tstl / beqs)
-#:     pgm[46]  src 16  dst 48
-#:     pgm[47]  src 18  dst 48
-#:     pgm[48]  dst 48, and pgm[7] selects the source three ways:
-#:                pgm[7] == 0    src 96, amount clamp(pgm[48]*2, -127, 127)
-#:                pgm[7] == 255  src 96, amount verbatim
-#:                otherwise      src 97, amount verbatim
-#:     pgm[56]  src 17 | gated on itself, dst 168 + d5
-#:     pgm[57]  src 18 | gated on itself, dst 168 + d5
-#:     pgm[58]  src 12 | gated on itself, dst 168 + d5
-#:     kg  [?]  src 10 dst 52, amount rescale(word, -9999, 9999, 127)
+#: ⚠ **`d[N]` is a DISPLACEMENT off `%a5`, NOT an AKAI file offset.** Written
+#: `pgm[N]` here until 2026-09-24, which is the retracted claim above and read
+#: as a file offset by two projects. The notation is the fix: a banner a
+#: hundred lines up does not survive someone reading the table.
+#: The displacement-to-file map is the seven-slot table's, and it is not a
+#: constant shift.
+#:
+#:     d[32]  src 11  dst 64
+#:            + src 160 dst 64 at d[32]/5, ONLY when that signed
+#:              quotient is non-zero (0x464c8 tstl / beqs)
+#:     d[46]  src 16  dst 48
+#:     d[47]  src 18  dst 48
+#:     d[48]  dst 48, and d[7] selects the source three ways:
+#:              d[7] == 0    src 96, amount clamp(d[48]*2, -127, 127)
+#:              d[7] == 255  src 96, amount verbatim
+#:              otherwise    src 97, amount verbatim
+#:     d[56]  src 17 | gated on itself, dst 168 + d5
+#:     d[57]  src 18 | gated on itself, dst 168 + d5
+#:     d[58]  src 12 | gated on itself, dst 168 + d5
+#:     kg[?]  src 10 dst 52, amount rescale(word, -9999, 9999, 127)
+#:
+#: ℹ `s3ked` read `d[7]` as the program name's fifth character and called the
+#: three-way branch a branch on junk. **That reading is void in both
+#: directions** (their `9741efd`): displacement 7 is not byte 7, so it was
+#: never a claim about the program file and was never refuted. `d[7]` is
+#: simply unidentified, like the rest.
 #:
 #: ⚠ **`dst = 168 + d5` is a CORD-AMOUNT destination, and `d5` is chosen at
 #: run time** — `movel %d7,%d5` at `0x4657e` leaves it holding the slot index
