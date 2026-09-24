@@ -943,12 +943,28 @@ def simulate_akai_preset(program_raw: bytes, s3000: bool, name: str,
 #:   so voice *i* is not keygroup *i* on a source that has duplicates;
 #: * `header[26]` transpose, read from the code as a clamped copy but written
 #:   zero on all 363 presets of the reference disc, so nothing exercises it.
-#: ⚠ `zone_dedup` is **[S]**, downgraded from [C] on 2026-09-24. Its stated
-#: evidence was "explains the 23 differing zone counts" — the symptom it
-#: explains. The same sentence was copied onto the Ensoniq arm and is refuted
-#: there (§EPSZONERESID: every zone on both sides is velocity 0-127), so
-#: differing zone counts has at least one other cause and cannot carry the
-#: claim alone. The AKAI reading is not refuted, only unproven.
+#: ✅ `zone_dedup` is **[C] with a method as of 2026-09-24 — and its
+#: DESCRIPTION is refuted.** See §AKAIZONEMERGE. The loop is at `0x4765c`
+#: (inner scan) with the skip at `0x47614` and the consume-mark at `0x4768e`;
+#: the predicate is `0x2f8a0`, which compares **exactly two fields**:
+#:
+#:     zone[14:16]  signed tune word -> (hi<<6 + lo/4) / 64, i.e. the
+#:                  SEMITONE part; the fine byte cannot reach the result
+#:     zone[17]     filter frequency offset, exact
+#:
+#: **It never reads the velocity range at [12]/[13].** So "merges identical
+#: VELOCITY zones" names the one field the comparison ignores. Two zones over
+#: different velocity spans playing different samples are merged when their
+#: coarse tune and filter offset agree — which is how an ordinary
+#: velocity-split keygroup is built.
+#:
+#: Prevalence, enabled zones only: **62% of the 9 851 multi-zone keygroups**
+#: in 8 discs contain a merging pair; of 17 404 such pairs, 63% play a
+#: different sample and 53% span a different velocity range.
+#:
+#: Still not implemented, and the prevalence is the reason to be deliberate
+#: rather than quick: it fires on most multi-zone keygroups, so switching it
+#: on changes a great deal of output at once.
 EOS_AKAI_SIM_KNOWN_GAPS = ('located_not_modelled_cords', 'zone_dedup',
                            'header26_transpose')
 

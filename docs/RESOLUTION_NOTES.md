@@ -373,6 +373,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§KRZSAMPPERIOD — round vs truncate in `samplePeriod`](#krzsampperiod-round-vs-truncate-in-sampleperiod)
 - [§RELSCAN — the release name scan, and why it is a program with mutated tests (2026-09-23)](#relscan-the-release-name-scan-and-why-it-is-a-program-with-mutated-tests-2026-09-23)
 - [§EPSZONERESID — the EOS←Ensoniq zone residual is not de-duplication](#epszoneresid-the-eosensoniq-zone-residual-is-not-de-duplication)
+- [§AKAIZONEMERGE — the merge loop, located; "identical velocity zones" refuted](#akaizonemerge-the-merge-loop-located-identical-velocity-zones-refuted)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -36171,3 +36172,99 @@ carries `zone_dedup` for the AKAI arm, where keygroups really do have velocity
 zones and the claim has its own evidence. **The error was applying a
 measurement from one arm to another that looked similar**, and repeating it in
 the other direction would be the same mistake.
+
+## §AKAIZONEMERGE — the merge loop, located; "identical velocity zones" refuted
+
+**Located in EOS 4.7 on 2026-09-24, no hardware involved.** The claim that
+"EOS compares velocity zones pairwise and merges identical ones" had been
+`[C]` on the strength of *explaining the zone-count discrepancy*, was
+downgraded to `[S]` earlier the same day, and can now be stated properly: the
+loop is real, and **"identical" does not mean what the sentence says.**
+
+### The loop
+
+`0x475b4` handles ONE outer zone, given its index in `%fp@(12)` and a
+per-zone flag array in `%fp@(16)`:
+
+    0x47614  tstb %a5@(0,%d7:l)        this zone already consumed -> skip out
+    0x475e4  lea %a3@(22,%d0:l),%a2    %d0 = index*24; %a2 = the zone record
+    0x47642  moveb #1,%a5@(0,%d7:l)    mark this one emitted
+
+then the inner scan:
+
+    0x4765c  addql #1,%d7              start at the NEXT zone
+    0x47660  cmpl %d7,%d0  (d0 = 4)    four velocity zones
+    0x47666  addal %d7,%a5             %a5@ is now the inner zone's flag
+    0x4766a  tstb %a5@                 already consumed -> skip
+    0x47678  lea %a3@(22,%d0:l),%a4    the inner zone record
+    0x47680  jsr 0x2f8a0               COMPARE(outer, inner) -> bool
+    0x4768a  beqw 0x476f6              not equal -> leave it alone
+    0x4768e  moveb #1,%a5@             EQUAL -> mark it consumed
+
+So a consumed zone is skipped when the outer loop reaches it. That is a
+pairwise merge, and it is exactly the shape the sentence claimed.
+
+### The predicate, which is the part that was wrong
+
+`0x2f8a0` is fourteen instructions of substance and ends at `0x2f92e`. It
+compares **two fields and nothing else**:
+
+    %a0@(14) / %a1@(14)   word, signed
+        d = (hi << 6) + (lo / 4)  then  d / 64        <- both toward zero
+        i.e. the SEMITONE part only; the low byte can contribute at most
+        63/64 and is discarded by the second divide
+    %a0@(17) / %a1@(17)   byte, exact
+
+Per `docs/AKAI_S3000_FORMAT.md`, in a 24-byte velocity zone `+0e-0f` is the
+signed **tune offset** and `+11` the **filter frequency offset**.
+
+**It never reads the velocity range at `+0c`/`+0d`.** Nor the sample name, the
+loudness offset, the pan offset, or loop-in-release. Two zones covering
+different velocity spans and playing different samples are merged if their
+coarse tuning and filter-frequency offset agree.
+
+⚠ **One assumption, stated.** The record base here is `+22`, where a raw AKAI
+keygroup's first zone is at `+34`, so this is the staged form rather than the
+file. The field offsets are therefore read on the assumption that the 24-byte
+record is copied verbatim. **Supported, not proven:** `0x475d6` copies `0xd`
+bytes from the record's offset 0 as a string, which is the 12-character sample
+name plus its terminator — so offset 0 of the staged record is the raw zone's
+offset 0. Getting this wrong is how the `d[N]`-are-file-offsets claim went
+wrong two days ago, hence the label.
+
+### How much of the corpus this touches
+
+Counting only **enabled** zones — velocity `lo <= hi` and a non-blank name;
+the first pass forgot this and reported 99.2%, which was empty slots matching
+each other:
+
+    22 446 keygroups      enabled-zone counts {0: 147, 1: 12448, 2: 7179,
+                                               3: 361, 4: 2311}
+     9 851 have 2+ enabled zones
+     6 105 of those (62%) contain a pair this predicate merges  -- 17 404 pairs
+
+and of those merged pairs:
+
+    11 007 (63%) play a DIFFERENT SAMPLE
+     9 146 (53%) span a DIFFERENT VELOCITY RANGE
+       223 ( 1%) differ only in FINE tune, which the divide discards
+
+So this is not a tidy-up of redundant duplicates. On a velocity-split keygroup
+— soft and loud samples at the same tuning and the same filter offset, which
+is the ordinary way to build one — **the two layers meet the predicate and one
+of them is dropped.**
+
+### What this changes
+
+`EOS_AKAI_SIM_KNOWN_GAPS` keeps `zone_dedup`, and it is now `[C]` with a
+method: loop located, predicate read, prevalence measured. The description
+must not survive: it is **not** "identical velocity zones", it is *equal
+coarse tune and equal filter-frequency offset, velocity range unread*.
+
+Implementing it is a separate decision from documenting it, and the
+prevalence is the reason to be careful rather than quick: it fires on 62% of
+multi-zone keygroups, so a simulation that starts merging will change a great
+deal of output at once. The check that it is right is a device import of a
+program with two enabled zones that agree on those two fields and differ on
+everything else — which is 11 007 candidates in this corpus, not a hunt.
+
