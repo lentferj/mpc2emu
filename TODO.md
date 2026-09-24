@@ -7947,48 +7947,32 @@ is mechanical.
 that is the whole of the disagreement, and it is a policy question rather than
 a defect.*
 
-## A second measurement-equals-policy biconditional, same file, still live
+## ~~A second measurement-equals-policy biconditional~~ ✅ **FIXED 2026-09-24**
 
-**Status:** open, found 2026-09-24, **deliberately not fixed that night** —
-two wrong claims had already been pushed and retracted in the preceding three
-hours, and this needs the direction analysis done with a clear head. Tests
-only; no shipped behaviour depends on it.
+`assertEqual(bool(best_mode_adds), extracts[p['source']])` is split into the
+sound direction plus a converse guard, on the same pattern as the
+`modes_offered` correction.
 
-`VinSamLib` named the shape after `modes_offered` was corrected: **an `==`
-between a MEASUREMENT and a POLICY is always wrong in one direction, because
-a measured fact cannot imply what you ought to offer.** The suite then goes
-green around the wrong rule, and a green test on a false rule looks exactly
-like a green test from the outside.
+**Checked first, as the entry required:** is any currently-extracted field
+unusable on either target, which would make the scope error live rather than
+latent? **No.** Both writers reach all four groups -- `krz_writer` gets
+velocity->attack through `getattr(voice, 'velocity_to_amp_attack_span')`,
+which a name grep misses and which I nearly reported as a live defect. So the
+per-source keying is a scope error that happens to be harmless, and the test
+no longer depends on that.
 
-The corrected one was
-`'best' in modes_offered == modes_differ_in_output`. The one still standing is
-`tests/test_firmware_sim_contract.py`:
+Two further things came out of mutating it:
 
-    self.assertEqual(bool(adds), extracts[p['source']],
-                     'the claim must follow what the reader reads')
-
-where `adds` is `best_mode_adds` (a **claim** about what the better mode
-contributes) and `extracts` is a source scan of the parser module for
-`filter_cutoff=` / `filter_resonance=` / `lfo1_` / `velocity_to_` (a
-**measurement** of our own code).
-
-Two problems, and the second is the sharper one:
-
-1. **Only one direction is sound.** `best_mode_adds` non-empty ⟹ the parser
-   must extract something. The converse does not follow: a parser can extract
-   a field the writer discards, or that the target cannot carry.
-2. **`extracts` is keyed on SOURCE, `best_mode_adds` is per (source, target).**
-   So `akai→krz` and `akai→e4b` are forced to identical non-emptiness
-   regardless of what each target can express. A field the K2000 cannot carry
-   would make the test demand a false claim.
-
-It passes today, so this is latent rather than live.
-
-**Fix**, same correction as the other: assert the sound direction only, add a
-converse test so the biconditional cannot creep back, and assert the converse
-case is non-vacuous so it does not become decoration. ⚠ Check first whether
-any currently-extracted field is unusable on either target — if one is, the
-test is already demanding a false claim and this is live rather than latent.
+* The old test read parser source as TEXT, so a **comment** mentioning
+  `filter_cutoff` would have satisfied it -- and `akai_s3000_parser` has two
+  such comments. It now walks the AST for real assignments and keyword
+  arguments.
+* `assertTrue(barren)` passed when `eps_parser` was mutated to extract a
+  field, because `roland` alone kept it non-empty: **the test kept working
+  while its coverage halved, 4 subtests to 2.** It now asserts the SET
+  `{'roland', 'ensoniq'}`, so a reader gaining fields fails loudly -- which is
+  also exactly when that path's `best_mode_adds` and `modes_offered` need
+  revisiting.
 
 ## EOS←Ensoniq zone residual: measured, and the recorded cause was wrong
 
