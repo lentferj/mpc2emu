@@ -894,10 +894,17 @@ def simulate_akai_preset(program_raw: bytes, s3000: bool, name: str,
 #: ⚠ **What `simulate_akai_preset` does NOT reproduce**, so a diff expects it:
 #:
 #: * the **11 located-but-unmodelled cords** (`EOS_AKAI_CORDS_NOT_MODELLED`);
-#: * **zone de-duplication** — EOS merges identical velocity zones pairwise,
+#: * **zone de-duplication** [S, not [C] — see below] — EOS is believed to
+#:   merge identical velocity zones pairwise,
 #:   so voice *i* is not keygroup *i* on a source that has duplicates;
 #: * `header[26]` transpose, read from the code as a clamped copy but written
 #:   zero on all 363 presets of the reference disc, so nothing exercises it.
+#: ⚠ `zone_dedup` is **[S]**, downgraded from [C] on 2026-09-24. Its stated
+#: evidence was "explains the 23 differing zone counts" — the symptom it
+#: explains. The same sentence was copied onto the Ensoniq arm and is refuted
+#: there (§EPSZONERESID: every zone on both sides is velocity 0-127), so
+#: differing zone counts has at least one other cause and cannot carry the
+#: claim alone. The AKAI reading is not refuted, only unproven.
 EOS_AKAI_SIM_KNOWN_GAPS = ('located_not_modelled_cords', 'zone_dedup',
                            'header26_transpose')
 

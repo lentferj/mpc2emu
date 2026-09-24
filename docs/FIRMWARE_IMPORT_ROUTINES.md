@@ -584,8 +584,29 @@ so the two are not confused]: `MODVLFOD 0x60`, `PANDEL 0x1f`, `LFODEL 0x23` — 
 two octaves is silently narrowed.
 
 **Zone de-duplication.** EOS compares velocity zones pairwise and merges
-identical ones, so voice *i* ≠ keygroup *i*. [C: explains the 23 differing
-zone counts in the import differential]
+identical ones, so voice *i* ≠ keygroup *i*. **[S]** — believed, not
+demonstrated.
+
+> ⚠ **This was `[C: explains the 23 differing zone counts in the import
+> differential]` until 2026-09-24, and that is a method-shaped label on no
+> method.** The evidence cited is *the symptom the claim explains*. `[C]`
+> requires hardware, corpus, or two independent traces agreeing; "it accounts
+> for the discrepancy" is the definition of `[S]`. The bucket legend's own
+> warning — *"`[C]` without a method is what produced most of the retraction
+> table"* — applies to this line, written under the legend that says so.
+>
+> **What forced the re-read:** the identical sentence had been copied onto the
+> **Ensoniq** arm, where the same symptom appeared, and it is refuted there
+> (§EPSZONERESID — every zone on both sides is velocity 0-127, so there is
+> nothing to merge). So *differing zone counts* demonstrably has at least one
+> other cause. It cannot carry a claim on its own.
+>
+> This does **not** refute the AKAI reading. AKAI keygroups really do have
+> velocity zones, and the mechanism remains plausible and unreproduced. What
+> changed is the label: a reader must now know it is an explanation that fits,
+> not a finding. To reach `[C]` it needs either the merge loop located in the
+> firmware, or an import differential where a source with **known duplicate
+> velocity zones** loses exactly those.
 
 ## [S] Suggested, not confirmed
 

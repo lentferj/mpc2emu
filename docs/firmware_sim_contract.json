@@ -113,7 +113,7 @@
       "cord_write_sites_in_firmware": 23,
       "caveats": [
         "11 modulation cords are located in the firmware but not reproduced, so a simulated voice can be missing up to that many routings.",
-        "EOS merges identical velocity zones pairwise, so a simulated voice index does not match a source keygroup index on material that has duplicates."
+        "[S] EOS is BELIEVED to merge identical velocity zones pairwise, so a simulated voice index may not match a source keygroup index on material that has duplicates. Downgraded from confirmed 2026-09-24: the evidence cited was that it explains the differing zone counts -- the symptom it explains -- and the same sentence is refuted on the Ensoniq arm, so differing counts has at least one other cause. Not refuted here, only unproven."
       ],
       "input_shapes": [
         "disk_image",
