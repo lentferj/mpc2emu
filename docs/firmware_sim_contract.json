@@ -212,8 +212,11 @@
       "input_shapes": [
         "disk_image"
       ],
-      "verified_against_device": "EPSTEST.e4b, written by the E4XT from an EPS CD (24/24 preset names matched): all 41 voices match on the 276-byte template and on velocity floor and coarse tune; volume and pan 40/41; zone COUNT 31/41. The residual is zone de-duplication -- EOS merges identical velocity zones and we do not, so we emit MORE zones on all 10 mismatches and never fewer.",
-      "caveats": [],
+      "verified_against_device": "EPSTEST.e4b, written by the E4XT from an EPS CD (24/24 preset names matched): all 41 voices match on the 276-byte template and on velocity floor and coarse tune; volume and pan 40/41; zone COUNT 31/41. THE RESIDUAL IS NOT DIAGNOSED -- it was recorded as zone de-duplication and that is refuted for this path (2026-09-24).",
+      "residual_status": "measured, not diagnosed",
+      "caveats": [
+        "Zone COUNT differs on 10 of 41 voices: we emit 175 zones over 26 distinct samples, the device 152 over 33. The cause is NOT established. Do not rely on voice or zone index alignment for this path; align on (src, dst) and on key range."
+      ],
       "reason_historical": "The importer exists and is located (EOS 4.7 carries \"Scanning Ensoniq device\", \"Ensoniq Instrument\" and an EPS wavesample placeholder). mpc2emu already applies EOS's own volume table and pan law here, so an ordinary conversion is already faithful in those fields. What is NOT established is what EOS omits -- and a simulation whose only content is a plausible silence would certify nothing.",
       "modelled_cords": null,
       "located_not_modelled": null

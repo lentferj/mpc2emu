@@ -7990,3 +7990,47 @@ case is non-vacuous so it does not become decoration. ⚠ Check first whether
 any currently-extracted field is unusable on either target — if one is, the
 test is already demanding a false claim and this is live rather than latent.
 
+## EOS←Ensoniq zone residual: measured, and the recorded cause was wrong
+
+**Status:** open. The mechanism is now a stated hypothesis rather than a
+claim; see §EPSZONERESID in `docs/RESOLUTION_NOTES.md` for the measurements.
+
+It was recorded as zone de-duplication -- *"EOS merges identical velocity
+zones pairwise"* -- in the contract, the test class name, the module notes and
+the status table. **That was borrowed from the AKAI arm because the symptom
+matched** (we emit more zones, never fewer) and it is refuted: every zone on
+both sides is velocity 0-127, so there is nothing to merge; only 1 of our 175
+zones shares a key range with a sibling; and the device leaves the gap
+*uncovered* rather than widening a neighbour, which a merge would not do.
+
+Measured: **ours 175 zones over 26 distinct samples, device 152 over 33.** The
+device imported MORE wavesamples and emitted FEWER zones -- the opposite shape
+from a merge.
+
+**Next step, and it is a different investigation from the one the old note
+implied:** `eps_parser._resolve` maps a wavesample to a sample name through
+four fallbacks, the last being *the first sample sharing a root key*. That can
+collapse distinct wavesamples onto one name, which would explain our flat
+usage (samples 1..22 referenced exactly 7 times each, against the device's
+1..10). Instrument `_resolve` to report which fallback fired per zone, and
+check whether the 20 unmatched zones are exactly the fallback cases.
+
+⚠ **Do not "fix" this by merging zones.** That would build the refuted
+mechanism into the writer, and the output would then differ from the device
+in a second way while appearing to agree on the count.
+
+⚠ **Nothing here applies to the AKAI arm.** `EOS_AKAI_SIM_KNOWN_GAPS` still
+carries `zone_dedup`, where keygroups really do have velocity zones and the
+claim has its own evidence. Applying a measurement from one arm to another
+that looked similar is what produced this entry.
+
+### Found alongside: a shadowed key in the contract generator
+
+The `ensoniq->e4b` entry carried `caveats` **twice**, a populated one and a
+later empty one. Python keeps the last, so the text describing the residual
+was discarded silently and the consumer read `[]`. Nothing failed -- valid
+file, green suite, and the only symptom was an artifact quietly missing a
+field its source appeared to set. Fixed, and
+`tests/test_firmware_sim_contract.py` now walks the generator's AST and
+refuses any dict literal with a repeated key. **Status: done.**
+

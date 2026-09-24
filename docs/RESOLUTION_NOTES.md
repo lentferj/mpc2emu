@@ -372,6 +372,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§EOSROLVOLSEL — EOS's Roland volume-import selection rule *(superseded)*](#eosrolvolsel-eoss-roland-volume-import-selection-rule-superseded)
 - [§KRZSAMPPERIOD — round vs truncate in `samplePeriod`](#krzsampperiod-round-vs-truncate-in-sampleperiod)
 - [§RELSCAN — the release name scan, and why it is a program with mutated tests (2026-09-23)](#relscan-the-release-name-scan-and-why-it-is-a-program-with-mutated-tests-2026-09-23)
+- [§EPSZONERESID — the EOS←Ensoniq zone residual is not de-duplication](#epszoneresid-the-eosensoniq-zone-residual-is-not-de-duplication)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -36080,3 +36081,55 @@ refusal, each word boundary independently, byte-vs-text reading, and the
 printing of hits. All fourteen tests passed on the first run, which is exactly
 the state this section exists to distrust.
 
+
+## §EPSZONERESID — the EOS←Ensoniq zone residual is not de-duplication
+
+**Measured 2026-09-24 against `EPSTEST.e4b`, the bank the E4XT wrote from the
+same EPS CD.** 41 voices, 24 presets matched by name.
+
+The residual had been recorded as *"EOS merges identical velocity zones
+pairwise, so we emit MORE zones and never fewer"*. **That mechanism was
+borrowed from the AKAI arm because the symptom matched**, and it is refuted:
+
+    every zone on BOTH sides is velocity 0-127
+        -> there are no velocity zones in this material at all, so none can
+           be duplicated, let alone merged
+    1 of our 175 zones shares a key range with a sibling in the same voice
+        -> key-level duplication is not it either
+    the device leaves the gap UNCOVERED
+        -> TRMLO STRNGS0*, voice 0: ours 36-47 / 48-57 / 58-66 / 67-75 /
+           76-96, device the same MINUS 58-66, with 48-57 **not widened** to
+           close the hole. A merge would move a boundary; nothing moved.
+
+### What is measured
+
+    zones            ours 175          device 152
+    distinct samples ours  26          device  33
+    voice counts     match everywhere except BWD STRINGS0* (ours 2, device 1)
+    key coverage     equal on every preset except two
+
+**The device imported MORE wavesamples and emitted FEWER zones**, which is the
+opposite shape from a merge. Our sample usage is also flat in a way the
+device's is not — samples 1..22 referenced exactly 7 times each (4 variants ×
+layers), against the device's 1..10.
+
+The 20 zones we emit that have no device counterpart at the same key range are
+spread over 8 presets, with roots both inside and outside their own key range,
+so no single geometric rule covers them.
+
+### ⚠ [S] Leading hypothesis, NOT established
+
+`eps_parser._resolve` maps a wavesample to a sample name through four
+fallbacks, the last of which is *the first sample sharing a root key*. That
+can collapse distinct wavesamples onto one name, which would explain both the
+flat usage and a zone count that drifts from the device's. **It is a
+RESOLUTION question, not a zone-merging one** — and "fixing" the residual by
+merging zones would build the refuted mechanism into the code.
+
+### What must not be inferred from this
+
+This measurement is about the **Ensoniq** arm. `EOS_AKAI_SIM_KNOWN_GAPS` still
+carries `zone_dedup` for the AKAI arm, where keygroups really do have velocity
+zones and the claim has its own evidence. **The error was applying a
+measurement from one arm to another that looked similar**, and repeating it in
+the other direction would be the same mistake.

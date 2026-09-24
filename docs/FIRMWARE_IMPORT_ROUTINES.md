@@ -2758,7 +2758,7 @@ not established, a simulation writes **nothing** and names the gap.
 | 5 | **K2000: AKAI → KRZ** | ✅ implemented | 84 programs diffed against ROM Program 199 | none known |
 | 3 | **EOS: AKAI → E4B** | ✅ implemented | the cord manifests; enum table confirmed on hardware | 11 of 23 cord sites located-not-modelled |
 | 2 | **EOS: Roland → E4B** | ✅ implemented | `ROLTEST.e4b` — **25/25 voices byte-exact, all 284 bytes** | none |
-| 1 | **EOS: Ensoniq → E4B** | ✅ implemented | `EPSTEST.e4b` — 41/41 on the template; volume/pan 40/41 | zone de-duplication (we emit MORE zones on 10 of 41) |
+| 1 | **EOS: Ensoniq → E4B** | ✅ implemented | `EPSTEST.e4b` — 41/41 on the template; volume/pan 40/41 | zone COUNT on 10 of 41, **cause NOT diagnosed** — the "zone de-duplication" reading is refuted, see §EPSZONERESID |
 | 6 | **K2000: Roland → KRZ** | ✅ implemented | 12 device banks, **164 layers**: `lyr[5]`, `lyr[8]`, `cal[7,8,11,12]`, `0x53[2]/[14]` | none known |
 | 4 | **K2000: Ensoniq → KRZ** | ✅ implemented | 1 device bank, **56 layers**: `lyr[3]/[4]`, `cal[12]`, `0x53[14]` | `cal[11]` unexercised (all ids < 256) |
 
