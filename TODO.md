@@ -8198,3 +8198,33 @@ voices and only rule out *indiscriminate* widening. The separating case is a
 natively single-zone voice with a partial range, which this material does not
 contain — the test does not exist here rather than having been skipped.
 
+## ~~F2DEPTH — the MODVFLT2_3 depth law~~ ✅ **MEASURED 2026-09-24: ~216 cents/unit, in CENTS**
+
+Volume `F2DEPTH`, 13 programs, note 36, corner against depth with depth 0 as
+control and PRG 56 (both filters open) as the deflattening reference.
+
+**~216 cents per unit** — mean 216.6 over every rung, 215.5 excluding the top
+one. Linear across depths 2/4/6/8 and symmetric on the negative half.
+
+**The law is in CENTS, not bytes**, which is what the second and third base
+corners existed to decide: the same depth gives the same cents at corners
+spanning 461→1149 Hz (depth +4: 859.6/865.1, spread 5.5 ct; depth +8:
+1733.0/1719.9, spread 13.0 ct). A bytes law would have given the same shift in
+bytes and therefore different cents.
+
+The build's own free consistency check passes: `FIL2FR 72 depth 0` and
+`FIL2FR 80 depth −4` reach the same corner by different routes and land
+**15.3 cents apart**.
+
+Full table and caveats in §AKAIF2DEPTH. **This unblocks writing a real
+`MODVFLT2_3` depth** instead of the zero we emit today, which is the field
+behind "filter envelope is silently dropped when the shape routes to filter 2".
+
+### Handed over by the same captures, NOT acted on
+
+Our `FIL2FR`→Hz table reads high at all three measured bytes, growing with
+byte: 66 → +3.2 %, 72 → +4.5 %, 80 → +6.6 %. A systematic that scales rather
+than a constant offset, and a different region from §FIL2FRGAP's 19-byte hole
+(which reads ~18 % **low**), so it is a separate observation. Three points,
+one note, one machine — recorded, not fixed.
+

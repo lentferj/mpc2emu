@@ -377,6 +377,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAICORDSTAGE — the eleven cords' staging map, and what it maps to](#akaicordstage-the-eleven-cords-staging-map-and-what-it-maps-to)
 - [§AKAIZONEDROP — nothing merges (HW), and a dropped zone WIDENS its survivor](#akaizonedrop-nothing-merges-hw-and-a-dropped-zone-widens-its-survivor)
 - [§AKAIATKRECHECK — the ATTAK1 law re-measured on our own rig, 7 points](#akaiatkrecheck-the-attak1-law-re-measured-on-our-own-rig-7-points)
+- [§AKAIF2DEPTH — MODVFLT2_3 is ~216 cents per unit, and the law is in CENTS](#akaif2depth-modvflt2_3-is-216-cents-per-unit-and-the-law-is-in-cents)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -36666,4 +36667,67 @@ this file.
   "faster than the law", the same direction as the convention error. Both were
   caught before anything was written down; either alone would have produced a
   confident wrong answer in the same direction.
+
+## §AKAIF2DEPTH — MODVFLT2_3 is ~216 cents per unit, and the law is in CENTS
+
+**Measured 2026-09-24**, volume `F2DEPTH` on the AKAI card at id 2, note 36,
+CC7=48, corner against depth at a fixed time with depth 0 as the control,
+deflattened against **PRG 56** (both filters open) rather than against a
+theoretical −6 dB/oct — so the source shape and the converter cancel instead
+of being assumed. Source f0 55.00 Hz, reference usable to 2310 Hz.
+
+    FIL2FR  depth   corner Hz   vs depth 0    cents/unit
+      66      +0      461.3         +0.0        (control)
+      66      +2      589.8       +425.5         212.7
+      66      +4      757.9       +859.4         214.9
+      66      +6      975.4      +1296.3         216.1
+      66      +8     1255.2      +1732.9         216.6
+      66     +10     1691.2      +2249.0         224.9   <- see caveat
+      72      +0      689.0         +0.0        (control)
+      72      +4     1135.6       +865.0         216.3
+      72      +8     1860.7      +1719.9         215.0
+      80      +0     1148.7         +0.0        (control)
+      80      -4      695.1       −869.7         217.4
+      80      -8      424.9      −1722.0         215.2
+
+**~216 cents per unit**, mean 216.6 over every rung, 215.5 excluding the top
+one. **Linear** (425/859/1296/1733 cents at depths 2/4/6/8) and **symmetric**
+(−4 gives −869.7 against +4's +859.4 / +865.0).
+
+### The law is in CENTS, which is what the second corner was for
+
+One corner cannot separate a cents law from a bytes law — they agree at the
+anchor and differ everywhere else. The ladder carries two more:
+
+    depth +4:   859.6 / 865.1 cents      spread  5.5 ct
+    depth +8:  1733.0 / 1719.9 cents     spread 13.0 ct
+
+The same depth produces the **same cents** at corners spanning 461→1149 Hz.
+A bytes law would have produced the same shift *in bytes* and therefore
+different cents. **Cents, settled.**
+
+### The free consistency check passes
+
+Two rungs reach ~690 Hz by different routes: `FIL2FR 72 depth 0` measures
+689.0 Hz and `FIL2FR 80 depth −4` measures 695.1 Hz — **15.3 cents apart**,
+against the ~40 cents the build note predicted on paper at 220 ct/unit.
+
+⚠ **The `+10` rung is the one to distrust**, and it is the one that reads
+high (224.9). Its corner lands at 1691 Hz against a reference usable only to
+2310 Hz, so the −3 dB fit has under half an octave of headroom above it. It is
+reported rather than dropped, and excluded from the headline figure.
+
+### A second finding the controls handed over: our FIL2FR table reads high
+
+The depth-0 rungs are pure corner measurements and our table disagrees with
+all three, in one direction, growing with byte:
+
+    FIL2FR 66:  table  476.0 Hz   measured  461.3 Hz   table +3.2 % high
+    FIL2FR 72:  table  720.0 Hz   measured  689.0 Hz   table +4.5 % high
+    FIL2FR 80:  table 1225.0 Hz   measured 1148.7 Hz   table +6.6 % high
+
+A systematic that scales with the byte rather than a constant offset. This is
+a different region from §FIL2FRGAP's 19-byte hole (which reads ~18 % **low**),
+so it is a separate observation and not that one seen again. **Not acted on:
+three points, one note, one machine.**
 
