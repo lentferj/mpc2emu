@@ -7947,3 +7947,46 @@ is mechanical.
 that is the whole of the disagreement, and it is a policy question rather than
 a defect.*
 
+## A second measurement-equals-policy biconditional, same file, still live
+
+**Status:** open, found 2026-09-24, **deliberately not fixed that night** —
+two wrong claims had already been pushed and retracted in the preceding three
+hours, and this needs the direction analysis done with a clear head. Tests
+only; no shipped behaviour depends on it.
+
+`VinSamLib` named the shape after `modes_offered` was corrected: **an `==`
+between a MEASUREMENT and a POLICY is always wrong in one direction, because
+a measured fact cannot imply what you ought to offer.** The suite then goes
+green around the wrong rule, and a green test on a false rule looks exactly
+like a green test from the outside.
+
+The corrected one was
+`'best' in modes_offered == modes_differ_in_output`. The one still standing is
+`tests/test_firmware_sim_contract.py`:
+
+    self.assertEqual(bool(adds), extracts[p['source']],
+                     'the claim must follow what the reader reads')
+
+where `adds` is `best_mode_adds` (a **claim** about what the better mode
+contributes) and `extracts` is a source scan of the parser module for
+`filter_cutoff=` / `filter_resonance=` / `lfo1_` / `velocity_to_` (a
+**measurement** of our own code).
+
+Two problems, and the second is the sharper one:
+
+1. **Only one direction is sound.** `best_mode_adds` non-empty ⟹ the parser
+   must extract something. The converse does not follow: a parser can extract
+   a field the writer discards, or that the target cannot carry.
+2. **`extracts` is keyed on SOURCE, `best_mode_adds` is per (source, target).**
+   So `akai→krz` and `akai→e4b` are forced to identical non-emptiness
+   regardless of what each target can express. A field the K2000 cannot carry
+   would make the test demand a false claim.
+
+It passes today, so this is latent rather than live.
+
+**Fix**, same correction as the other: assert the sound direction only, add a
+converse test so the biconditional cannot creep back, and assert the converse
+case is non-vacuous so it does not become decoration. ⚠ Check first whether
+any currently-extracted field is unusable on either target — if one is, the
+test is already demanding a false claim and this is live rather than latent.
+
