@@ -588,8 +588,9 @@ matching ones, so voice *i* ≠ keygroup *i*. **[C]** — loop located and
 predicate read, 2026-09-24, §AKAIZONEMERGE.
 
 ⚠ **"identical" was wrong and is the part to unlearn.** The comparison at
-`0x2f8a0` reads **only** the coarse tune (`zone[14:16]`, semitone part) and
-the filter-frequency offset (`zone[17]`). **It never reads the velocity range
+`0x2f8a0` reads **only** the coarse tune (`zone[0x0e:0x10]`, semitone part)
+and the filter-frequency offset (`zone[0x11]`) — both proven against the
+format doc's own table, with the record at `kg + 0x22 + index*24`. **It never reads the velocity range
 at `zone[12]`/`[13]`** — the one field the old wording named. 62% of
 multi-zone keygroups in the corpus contain a merging pair; 63% of those pairs
 play a different sample and 53% span a different velocity range.

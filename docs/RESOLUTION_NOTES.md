@@ -36223,14 +36223,37 @@ loudness offset, the pan offset, or loop-in-release. Two zones covering
 different velocity spans and playing different samples are merged if their
 coarse tuning and filter-frequency offset agree.
 
-⚠ **One assumption, stated.** The record base here is `+22`, where a raw AKAI
-keygroup's first zone is at `+34`, so this is the staged form rather than the
-file. The field offsets are therefore read on the assumption that the 24-byte
-record is copied verbatim. **Supported, not proven:** `0x475d6` copies `0xd`
-bytes from the record's offset 0 as a string, which is the 12-character sample
-name plus its terminator — so offset 0 of the staged record is the raw zone's
-offset 0. Getting this wrong is how the `d[N]`-are-file-offsets claim went
-wrong two days ago, hence the label.
+### ✅ PROVEN, and the assumption was my own misreading of objdump
+
+The first version of this section carried a caveat: the record base looked like
+`+22` where a raw keygroup's first zone is at `+34`, so the record was taken
+for a staged copy and the field identifications were labelled *supported, not
+proven*. **There was no discrepancy. objdump prints the two displacement forms
+in different bases**, which I read as one:
+
+    constructed                  objdump prints
+    brief  disp 0x22 (34 dec)    lea %a3@(22,%d0:l),%a2     <- HEX, no prefix
+    brief  disp 0x0a (10 dec)    lea %a3@(a,%d0:l),%a2      <- "a"
+    brief  disp 0x10 (16 dec)    lea %a3@(10,%d0:l),%a2     <- "10" means 16
+    (d16)  disp 0x0e (14 dec)    movew %a0@(14),%d7         <- DECIMAL
+    (d16)  disp 0x11 (17 dec)    movew %a0@(17),%d7
+
+So in `lea %a3@(22,%d0:l),%a2` the displacement is **0x22 = 34**, and with
+`%d0 = index * 24` the four records sit at **34, 58, 82, 106 = `0x22`, `0x3a`,
+`0x52`, `0x6a`** — the documented raw AKAI velocity-zone offsets, exactly. The
+record is the raw zone in place, not a staged copy.
+
+And `%a0@(14)` / `%a0@(17)` are the `(d16,An)` form, printed in decimal, so
+they are `0x0e` and `0x11` — the documented **tune offset** and **filter
+frequency offset**. Nothing is assumed: base, stride and both field offsets
+all land on the format doc's table.
+
+⚠ **The hazard is worth carrying forward**: a displacement of `10` in the
+brief form means **16**, and one of `34` means **52**. Every brief-extension
+displacement read off this disassembly must be treated as hex. Checked by
+assembling known bytes and disassembling them, rather than by reasoning about
+it — the 12-byte "discrepancy" this produced survived four hops of chasing the
+wrong structure.
 
 ### How much of the corpus this touches
 

@@ -948,9 +948,17 @@ def simulate_akai_preset(program_raw: bytes, s3000: bool, name: str,
 #: (inner scan) with the skip at `0x47614` and the consume-mark at `0x4768e`;
 #: the predicate is `0x2f8a0`, which compares **exactly two fields**:
 #:
-#:     zone[14:16]  signed tune word -> (hi<<6 + lo/4) / 64, i.e. the
-#:                  SEMITONE part; the fine byte cannot reach the result
-#:     zone[17]     filter frequency offset, exact
+#:     zone[0x0e:0x10]  signed tune word -> (hi<<6 + lo/4) / 64, i.e. the
+#:                      SEMITONE part; the fine byte cannot reach the result
+#:     zone[0x11]       filter frequency offset, exact
+#:
+#: ✅ **Proven, not assumed.** The record sits at `kg + 0x22 + index*24` --
+#: the documented raw velocity-zone offsets -- and the two fields are the
+#: documented tune and filter-frequency offsets. An earlier version of this
+#: note called the base `+22` and hedged the field identification: objdump
+#: prints a BRIEF-extension displacement in **hex** and a `(d16,An)` one in
+#: **decimal**, so `%a3@(22,%d0:l)` is `0x22 = 34`, not 22. Verified by
+#: assembling known displacements and disassembling them.
 #:
 #: **It never reads the velocity range at [12]/[13].** So "merges identical
 #: VELOCITY zones" names the one field the comparison ignores. Two zones over
