@@ -7974,6 +7974,29 @@ Two further things came out of mutating it:
   also exactly when that path's `best_mode_adds` and `modes_offered` need
   revisiting.
 
+## EOS←AKAI: the eleven cords need the object `%d2` points at
+
+**Status:** open, narrowed 2026-09-24. Sources, destinations, gates and amount
+expressions are all read off the instruction stream and are solid. What is
+missing is which AKAI byte feeds each amount.
+
+The displacements are into a staging object, not the program file -- the
+seven-slot table's own file column satisfies `fp + 196 == file offset` from a
+frame-relative chain, while these satisfy no constant offset. Traced one hop
+further:
+
+    0x4647c   %a5 := %a0     caller's %a3
+    0x46da8   %a3 := %a1     its caller's value
+    0x475b4   %a1 := %d2     at 0x4763e, just before bsrw 0x46da8
+
+**Next: establish what `%d2` holds at `0x4763e`.** Then the displacement map
+falls out and all eleven become modellable.
+
+⚠ Stopped at a named register rather than guessing the object. The previous
+attempt asserted an identification from a three-hit anchor in the CALLER and
+had to be retracted from a pushed commit; one more inferential hop is where
+that went wrong.
+
 ## EOS←Ensoniq zone residual: measured, and the recorded cause was wrong
 
 **Status:** open. The mechanism is now a stated hypothesis rather than a

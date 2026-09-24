@@ -808,6 +808,25 @@ EOS_AKAI_EMITTER_CALLS = 12       #: bsrw 0x46370
 #: was last assigned is NOT established, so the source field is unidentified
 #: and this one stays out even when the other ten are named.
 #:
+#: ℹ **Where the staging object comes from — traced one more hop,
+#: 2026-09-24, and stopping there deliberately.** The chain is
+#:
+#:     0x4647c   %a5 := %a0        <- caller's %a3
+#:     0x46da8   %a3 := %a1        <- ITS caller's value
+#:     0x475b4   %a1 := %d2        at 0x4763e, immediately before the
+#:                                 bsrw 0x46da8 at 0x47650
+#:
+#: So the object these displacements index is **whatever `%d2` holds at
+#: `0x4763e`**, and that is the next thing to establish. It is NOT the
+#: verbatim 192-byte program buffer: that one is frame-relative at
+#: `%fp@(-196)` and satisfies `fp + 196 == file offset` on all seven known
+#: slots, while these displacements satisfy no constant offset at all.
+#:
+#: ⚠ Stopping at a named register rather than guessing the object is the
+#: point. The previous attempt on this chain asserted an identification from
+#: a three-hit anchor in the CALLER and had to be retracted from a pushed
+#: commit; one more inferential hop is exactly where that happened.
+#:
 #: **Still unmodelled, and deliberately so**: `s3k/params.py` is the authority
 #: for AKAI program-block field names and this project reads none of these
 #: offsets (`0x0f 0x11 0x13 0x14 0x15 0x17 0x18 0x19 0x1a 0x21-0x24 0x59` and
