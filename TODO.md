@@ -691,7 +691,7 @@ the comparison render and stays silent.
 `keygroup_count` threads the flag too, since the count is board-dependent, and
 a test asserts budget and file agree for **both** flag states.
 
-## Pole count vs resting corner — MEASURED 2026-09-24, consistent with a pole count but not decisive
+## ~~Pole count vs resting corner~~ ✅ **SETTLED 2026-09-24: it is a POLE COUNT**
 
 The cross-machine difference is **−6.40 dB/oct**, a *slope*, so it is a pole count
 or a resting corner — a horizontal corner offset cannot make a slope. The static
@@ -727,50 +727,63 @@ The corners are printed from the **written bytes** rather than predicted. 119 an
 by 1/`AKAI_CASCADE_CORNER_RATIO` so the *pair* lands on target — that is the
 behaviour under test, not an error.
 
-**MEASURED 2026-09-24.** Volume loaded on the S3000XL, four captures at note
-36, hold 6 s, `system:capture_13`, analysed per the spec above (harmonic
-amplitudes differenced against 117, fitted against log frequency).
+✅ **SETTLED ON HARDWARE 2026-09-24.** Volume loaded on the S3000XL, captures
+at note 36, hold 6 s, `system:capture_13`, analysed exactly as the 2026-09-11
+spec prescribed.
 
-    program                     slope        n    band
-    118  Low 2, 198 Hz         -11.86     36    440-2420 Hz     predicted -12
-    119  Low 4, 246+252 Hz     -21.80      8    550- 935 Hz     predicted -24
-    120  Low 4, 473+476 Hz     -20.00     14    990-1705 Hz     predicted -24
+    program                     slope      n    band
+    118  Low 2, 198 Hz         -11.86     36    440-2420 Hz    predicted -12
+    119  Low 4, 246+252 Hz     -22.00     12    550-1155 Hz    predicted -24
+    120  Low 4, 473+476 Hz     -21.80     21    990-2145 Hz    predicted -24
 
-    119 vs 120 difference: -1.80 dB/oct
+    119 vs 120, corners a full OCTAVE apart:  -0.20 dB/oct
 
-**118 confirms the 2-pole model outright** -- 36 harmonics over 2.4 octaves,
--11.86 against a predicted -12.
+**118 confirms the 2-pole model outright.** And **119 and 120 agree to 0.2
+dB/oct with their corners doubled**, which is the whole test: a pole count is
+corner-independent and a resting corner is not. **The -6.40 dB/oct
+cross-machine difference has a pole-count explanation and does not need a
+corner one.**
 
-**119 and 120 agree within 1.8 dB/oct, so the pole-count explanation of the
--6.40 dB/oct survives** -- a corner-independent slope is what a pole count
-predicts and what a resting corner cannot produce.
+Both cascades read ~2 dB/oct shallower than an ideal -24, consistent with the
+wide knee already documented for this family (§AKAIFIL2POLES) rather than with
+a missing pole — one to two octaves above the corner is inside the knee.
 
-⚠ **But the comparison the test hinges on is at the edge of what this capture
-supports, and that is a property of the measurement rather than the filter.**
-A 4-pole at ~250 Hz is ~100 dB down by 1 kHz and falls into the capture's
-noise floor within about an octave, so 119's fit rests on **8 harmonics over
-0.8 octaves**. Changing the analysis window from 3.0 s to 5.2 s moved the
-119-vs-120 difference from -3.23 to -1.80 dB/oct -- across the 3 dB line I had
-set in advance. A result that moves that much with the window is not settled.
+### It took a gain change, and the first answer was not the answer
 
-Both cascades also read ~2-4 dB/oct shallower than the ideal -24, which is
-consistent with the wide knee already documented for this family
-(§AKAIFIL2POLES: filter 1 is within 1 dB of its asymptote one octave up,
-filter 2 still 1.4 dB short three octaves up) rather than with a missing pole.
+The first pass gave 119/120 as -21.80/-20.00 with a **-1.80 dB/oct**
+difference that moved to **-3.23** when the analysis window changed from 5.2 s
+to 3.0 s — across the 3 dB line set in advance. A 4-pole at 250 Hz is ~100 dB
+down by 1 kHz and was falling into the converter floor within an octave, so
+119's fit rested on 8 harmonics over 0.8 octaves.
 
-**Status:** open but much narrower. **Blocked on:** dynamic range, not bench
-time. ~12 dB more level (the 119/120 captures peaked at -16.5/-15.4 dBFS)
-would buy roughly one more octave of usable harmonics and make the 119/120
-comparison decisive. The material is on the card at id 2 and can be re-run
-without another build.
+**Jan raised the input gain ~11.5 dB and 119/120 were re-captured.** The
+per-capture noise floor improved from -114.5 to -125 dB below the fundamental
+— matching the gain, which confirms the floor was in the converter and not the
+analogue path. `n` went 8→12 and 14→21, and the difference collapsed to -0.20.
 
-⚠ **A trap this measurement walked into, recorded because the first answer
-looked clean:** the initial fit reported POSITIVE slopes (+2.95 dB/oct on a
-low-pass). The filtered captures hit the noise floor above ~1.7 kHz, and past
-that the reference-difference is floor-minus-reference, which RISES as the
-reference falls. The floor guard was checking the REFERENCE's level and not
-the filtered capture's -- **the guard was on the wrong side**, and a low-pass
-with a rising skirt is the only reason it was caught.
+⚠ **117 and 118 were NOT re-taken and did not need to be.** The fit reads a
+slope, and a constant gain offset moves a fit's INTERCEPT, not its slope — so
+captures may be at different gains. That matters because the reference peaked
+at -8.0 dBFS and would have clipped under a 12 dB raise, which would have
+destroyed the method rather than improving it.
+
+**Stability, which is what makes this a result rather than a number:**
+
+    window   118      119      120     119-120
+     2.0 s  -11.93  -21.91  -21.05    -0.86
+     3.0 s  -11.89  -22.02  -21.48    -0.54
+     4.0 s  -12.01  -22.02  -21.86    -0.15
+     5.2 s  -11.86  -22.00  -21.80    -0.20
+
+Every window agrees, where before the answer crossed the decision threshold
+depending on the window.
+
+⚠ **A trap recorded because the first fit looked clean:** it reported POSITIVE
+slopes (+2.95 dB/oct on a low-pass). Above the floor the reference-difference
+becomes floor-minus-reference and RISES as the reference falls. The floor
+guard was testing the REFERENCE's level and not the filtered capture's — **the
+guard was on the wrong side**, and only the physical impossibility of a rising
+low-pass skirt caught it.
 
 ## TD1/TD2 — the non-saturating envelope test (OPEN 2026-09-11, material on the card)
 
