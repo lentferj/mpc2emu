@@ -8130,3 +8130,38 @@ there: the tool reads whichever card it finds first and says which, but it
 does not say it scanned only ONE — it was run with both cards mounted and
 silently reported the AKAI one.
 
+## EOS←AKAI: the simulation keeps zones the device DROPS, and a range it WIDENS
+
+**Status:** open, **hardware-measured 2026-09-24**, actionable with no further
+bench time. §AKAIZONEDROP has the evidence.
+
+Two behaviours confirmed on the E4XT that `writers/eos_firmware_sim.py` does
+not implement:
+
+1. **A zone whose sample is not in the volume's arena is DROPPED.** The gate
+   is `0x2fdf8`, read from the ROM by `eosed` and now seen firing.
+2. **The surviving zone is WIDENED to velocity 0-127**, not left at its own
+   range. Source verified from the image as `0-63` present / `64-127` absent;
+   the device emitted one zone at `0-127`.
+
+This writer copies `lo_vel`/`hi_vel` verbatim and drops nothing. **The arena
+filter only ever existed in the analysis script** that produced the
+2 438/2 438 zone-count agreement — which is why that agreement looked total
+while the writer was never doing the filtering.
+
+⚠ **The affected population is large, not marginal.** This project's own
+parser notes record one disc leaving **1 292 of 1 369 zones naming samples
+that do not exist**.
+
+**How to do it:** apply the arena filter and the widening in
+`simulate_akai_preset`, then score against `B030-AKAIIMPORT-full.E4B`
+offline — zone counts should stay at 2 438/2 438 and velocity ranges become
+checkable for the first time.
+
+⚠ **One thing to settle first, and it needs a read rather than a guess:**
+whether the widening is *caused by the drop* or whether **any single-zone
+voice** is written `0-127` regardless. P004/P005 on the test disc carry two
+zones each and their velocity ranges separate the two readings; they were not
+read back. Implementing the wrong one would widen ranges the device leaves
+alone.
+

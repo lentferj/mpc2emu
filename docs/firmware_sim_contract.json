@@ -113,7 +113,7 @@
       "cord_write_sites_in_firmware": 23,
       "caveats": [
         "11 modulation cords are located in the firmware but not reproduced, so a simulated voice can be missing up to that many routings.",
-        "[C] Zone handling is EXACT: EOS writes one E4 zone per enabled AKAI velocity zone whose sample is loaded, and this simulation reproduces the device count on 2438 of 2438 voices of EOS's own AKAI conversion. A pairwise merge loop does exist in the firmware (0x4765c, name classifier 0x2faf0, arena gate 0x2fdf8) but changes nothing on material without -L/-R sample names, which is the branch it exists for. Previously listed as a gap on the strength of a zone-count discrepancy that an analysis script manufactured by not applying this project's own hi_vel==0 rule."
+        "[C, hardware] NOTHING MERGES. A disc built for the question was imported on the E4XT 2026-09-24: -L/-R pairs identical otherwise give TWO zones, the same sample twice gives two, and a volume entirely -L/-R imported 326 zones from 326. BUT the import is not zone-for-zone: a zone whose sample is not loaded is DROPPED, and the surviving zone is WIDENED to velocity 0-127. This simulation models neither -- it copies the velocity range verbatim and drops nothing -- so it diverges on any source naming absent samples. See RESOLUTION_NOTES \u00a7AKAIZONEDROP."
       ],
       "input_shapes": [
         "disk_image",

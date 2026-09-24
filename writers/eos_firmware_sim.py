@@ -967,7 +967,26 @@ def simulate_akai_preset(program_raw: bytes, s3000: bool, name: str,
 #:   so voice *i* is not keygroup *i* on a source that has duplicates;
 #: * `header[26]` transpose, read from the code as a clamped copy but written
 #:   zero on all 363 presets of the reference disc, so nothing exercises it.
-#: ✅ **`zone_dedup` is NOT a gap — resolved 2026-09-24, §AKAIZONEMERGE.**
+#: ✅✅ **CLOSED ON HARDWARE 2026-09-24 — §AKAIZONEDROP.** A disc built for
+#: this question was imported on the E4XT and read back: **nothing merges.**
+#: `-L`/`-R` pairs identical in every other respect yield TWO zones, the same
+#: sample number twice yields two zones, and a volume that is entirely
+#: `-L`/`-R` imported 326 zones from 326. The merge loop, the classifier and
+#: both gates are correctly read and none changes the zone count on the disc
+#: import path.
+#:
+#: ⚠ **But the import is NOT simply zone-for-zone, and this simulation does
+#: not model what it is.** The arena gate fires: a zone whose sample is not
+#: loaded is dropped — and the SURVIVING zone is **widened to velocity
+#: 0-127** rather than keeping its own 0-63. Source verified from the image,
+#: device behaviour measured. This writer copies `lo_vel`/`hi_vel` verbatim
+#: and drops nothing; the arena filter lived only in the analysis script that
+#: produced the 2 438/2 438 agreement, never here. On a source whose zones
+#: name absent samples — **1 292 of 1 369 on one disc in this project's own
+#: notes** — that is a live divergence. See §AKAIZONEDROP.
+#:
+#: ℹ Superseded reasoning kept below, because the route to the answer is the
+#: reusable part: **`zone_dedup` was NOT a gap — §AKAIZONEMERGE.**
 #: Scored against EOS's own AKAI conversion using this project's own parser:
 #: the zones `_zone_of` returns, minus those whose sample is absent from the
 #: volume's arena, **with no merge applied**, reproduce the device's zone

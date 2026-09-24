@@ -375,6 +375,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§EPSZONERESID — the EOS←Ensoniq zone residual is not de-duplication](#epszoneresid-the-eosensoniq-zone-residual-is-not-de-duplication)
 - [§AKAIZONEMERGE — RESOLVED: there is no zone-count gap, and there never was](#akaizonemerge-resolved-there-is-no-zone-count-gap-and-there-never-was)
 - [§AKAICORDSTAGE — the eleven cords' staging map, and what it maps to](#akaicordstage-the-eleven-cords-staging-map-and-what-it-maps-to)
+- [§AKAIZONEDROP — nothing merges (HW), and a dropped zone WIDENS its survivor](#akaizonedrop-nothing-merges-hw-and-a-dropped-zone-widens-its-survivor)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -36502,4 +36503,67 @@ reported *"cord absent"* on every predicted pair, i.e. 0 % agreement across
 the board, which looks exactly like a refuted hypothesis. Same class as the
 zone investigation: **a scratch harness disagreeing with the shipped reader
 in one constant.**
+
+## §AKAIZONEDROP — nothing merges (HW), and a dropped zone WIDENS its survivor
+
+**Measured on the E4XT, 2026-09-24**, from `CD5-STEREOZONE.iso` built for this
+question. `eosed` drove the import and read the presets back over SysEx
+(their `bd8357a`); the source side is verified here from the image.
+
+### `zone_dedup` is CLOSED — the merge does not fire, on the branch it exists for
+
+    preset   AKAI source                    predict-if-merge   MEASURED
+    P000     -L/-R, identical otherwise            1              2
+    P001     -L/-R, tune differs by 1              2              2
+    P002     -R names an ABSENT sample             1              1
+    P003     stems differ inside the first 10      2              2
+    P004     plain, SAME sample twice              2              2
+    P005     plain, different samples              2              2
+
+**P000 is the direct test and it yields two zones with two distinct samples.**
+At scale, volume `LRREAL` — material that is *entirely* `-L`/`-R`, 326 enabled
+zones — imported as **326 zones**, per preset 92/46/46/46/92/4. Zero merging.
+
+**P004 additionally rules out de-duplication of any kind**: the same sample
+number in both zones still yields two zones.
+
+So the loop at `0x4765c`, the classifier `0x2faf0`, `0x2fd54` and `0x2fe78`
+are all correctly read and **none of them changes the zone count on the disc
+import path**. The gap closes outright rather than staying conditional.
+
+⚠ **`0x2f8a0`'s safety-check reading is now unfalsifiable on this path.** P001
+was built to test it and predicts 2 under both hypotheses once nothing merges,
+so the hand-patched tune difference tested nothing. Worth knowing before
+anyone spends a crossing on it.
+
+### The new finding: a dropped zone does not merely vanish
+
+P002's source, verified from the image rather than recalled:
+
+    zone 'SZ HALF C -L'  vel   0- 63   sample PRESENT
+    zone 'SZ HALF C -R'  vel  64-127   sample ABSENT
+
+The E4XT emitted **one zone at velocity 0–127**, not 0–63. So the arena gate
+at `0x2fdf8` is confirmed on hardware *and* **the surviving zone is widened to
+full velocity range**, rather than the dropped one simply being deleted.
+
+⚠ **[?] Not yet distinguished:** widening-on-drop against *any* single-zone
+voice being written 0–127 regardless. P004/P005 have two zones each and their
+velocity ranges would separate the two readings; they were not read back.
+
+### What this costs the simulation, and it is not small
+
+`writers/eos_firmware_sim.py` copies `lo_vel`/`hi_vel` from the source zone
+verbatim and models **neither** behaviour. The arena filter existed only in
+the analysis script that produced the 2 438/2 438 zone-count agreement — it
+was never in the writer. So on any source whose zones name samples the volume
+does not carry, this simulation emits zones the device drops, and keeps a
+velocity range the device widens.
+
+**That population is large.** This project's own parser notes record a disc
+leaving **1 292 of 1 369 zones naming samples that do not exist**.
+
+**Status: open, and actionable without hardware** — the rule is measured, the
+material is on the card, and `B030-AKAIIMPORT-full.E4B` can score any
+implementation offline.
 
