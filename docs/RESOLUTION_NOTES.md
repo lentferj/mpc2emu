@@ -376,6 +376,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIZONEMERGE — RESOLVED: there is no zone-count gap, and there never was](#akaizonemerge-resolved-there-is-no-zone-count-gap-and-there-never-was)
 - [§AKAICORDSTAGE — the eleven cords' staging map, and what it maps to](#akaicordstage-the-eleven-cords-staging-map-and-what-it-maps-to)
 - [§AKAIZONEDROP — nothing merges (HW), and a dropped zone WIDENS its survivor](#akaizonedrop-nothing-merges-hw-and-a-dropped-zone-widens-its-survivor)
+- [§AKAIATKRECHECK — the ATTAK1 law re-measured on our own rig, 7 points](#akaiatkrecheck-the-attak1-law-re-measured-on-our-own-rig-7-points)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -36607,4 +36608,62 @@ something else.
 **Status: open, and actionable without hardware** — the rule is measured, the
 material is on the card, and `B030-AKAIIMPORT-full.E4B` can score any
 implementation offline.
+
+## §AKAIATKRECHECK — the ATTAK1 law re-measured on our own rig, 7 points
+
+**2026-09-24**, volume `ATKCAL` on the AKAI card at id 2, PRGNUM 109–115,
+ATTAK1 = 60/70/80/85/90/95/99, sustain 99, note 60, our rig
+(`system:capture_13`), our analysis. The law `_AK_ATTAK1_TIME` was **fitted to
+these very programs** by `s3ked` (§234), so this is a re-measurement through a
+different chain rather than new calibration.
+
+    byte   t(99%)   t(100%)   our law   law/measured
+     60     0.127    0.127     0.140       1.099
+     70     0.368    0.372     0.412       1.107
+     80     1.116    1.127     1.215       1.078
+     85     1.945    1.962     2.086       1.063
+     90     3.273    3.366     3.581       1.064
+     95     5.870    5.897     6.149       1.043
+     99     9.097    9.177     9.475       1.033
+
+**The law agrees with its own calibration data within 3–11 %, mean 7 %.**
+There is a mild systematic — it runs longest at short attacks and converges by
+byte 99 — but nothing here justifies moving a constant.
+
+### ⚠ The convention nearly produced a 19 % "error" that does not exist
+
+The first pass measured **time to 90 % of plateau** and reported the law as
+**0.84×** the measurement — i.e. 19 % too long — with a ratio impressively
+constant across the sweep (0.80–0.86), which is exactly what a real scale
+error looks like.
+
+It was the threshold. `_ak_attack_seconds`'s own provenance note records
+`s3ked` measuring **9.63 s** at byte 99; at 90 % this capture gives 8.17 s and
+at full plateau 9.18 s. **The law is fitted to these programs**, so a genuine
+19 % disagreement would have meant the fit was wrong about its own data —
+which is the tell that should stop the report, and did.
+
+    threshold   t at byte 99
+      63 %        5.712
+      90 %        8.170      <- the first pass used this
+      99 %        9.097
+     100 %        9.177      <- s3ked's 9.63 convention, 4.7 % apart
+
+**t(90 %) and t(100 %) differ by 1.12× on this envelope**, so an attack time
+quoted without its threshold is ambiguous at that scale. This is the same
+failure `eosed` hit at 1.89× between argmax and threshold conventions on the
+E4XT ladder, and the same one the `_E4XT_ATK_SLOWDOWN` note warns about in
+this file.
+
+### Controls that could have failed
+
+* **Gain invariance.** PRG 111 captured at CC7=48 and CC7=32: t(90 %) =
+  1.013 s both times. A post-envelope gain does not bias a normalised time,
+  as expected, but it was asserted rather than assumed.
+* **Clipping caught before it was measured.** The first seven captures were
+  taken with the POLES gain raise still in and ran 12–31 % of samples at full
+  scale. A flattened plateau shortens an apparent attack — biasing toward
+  "faster than the law", the same direction as the convention error. Both were
+  caught before anything was written down; either alone would have produced a
+  confident wrong answer in the same direction.
 
