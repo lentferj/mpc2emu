@@ -36547,9 +36547,41 @@ The E4XT emitted **one zone at velocity 0–127**, not 0–63. So the arena gate
 at `0x2fdf8` is confirmed on hardware *and* **the surviving zone is widened to
 full velocity range**, rather than the dropped one simply being deleted.
 
-⚠ **[?] Not yet distinguished:** widening-on-drop against *any* single-zone
-voice being written 0–127 regardless. P004/P005 have two zones each and their
-velocity ranges would separate the two readings; they were not read back.
+### The alternative is refuted, 116 of 116 — but the mechanism is n = 1
+
+`eosed` read the velocity ranges of every voice in both volumes (their
+`e795f20`):
+
+    x47   (0,99) (0,99) (100,127) (100,127)     4-zone
+    x46   (0,99) (100,127)                      2-zone
+    x23   (0,127) (0,127)                       2-zone, both full range
+    ---
+    single-zone voices: 0
+
+**EOS preserves source velocity ranges verbatim.** 93 voices carry a split at
+**99/100**, a boundary it could only have taken from the source, and the other
+23 are genuinely full-range on both zones. There is no normalisation pass.
+
+So the general hypothesis — *any* single-zone voice written 0–127 — is dead,
+and the rule to implement is: **copy the range verbatim, and write full range
+only on the drop path.**
+
+⚠ **State the asymmetry.** The negative rests on 116 voices; the positive —
+that the drop *causes* the widening — rests on **n = 1**, P002, the only case
+on the disc with a drop. What is excluded is the alternative explanation, not
+the mechanism confirmed. A second authored drop case on a future disc makes
+it n = 2 cheaply.
+
+⚠ **And my framing of the discriminator was wrong**: P004/P005 are both
+two-zone voices, so they only rule out *indiscriminate* widening. The case
+that separates the readings is a **natively single-zone voice with a partial
+range**, and this material has none — so the direct test does not exist here
+rather than having been skipped.
+
+ℹ A second no-merge datum fell out of the same read: those 23 voices carrying
+two zones at identical full velocity range with *different* samples are
+exactly the shape of a stereo pair, preserved as two zones. **The mechanism's
+own target shape, surviving untouched, at scale.**
 
 ### What this costs the simulation, and it is not small
 
@@ -36560,8 +36592,17 @@ was never in the writer. So on any source whose zones name samples the volume
 does not carry, this simulation emits zones the device drops, and keeps a
 velocity range the device widens.
 
-**That population is large.** This project's own parser notes record a disc
-leaving **1 292 of 1 369 zones naming samples that do not exist**.
+**That population is 2.33 %.** **Measured 2026-09-24, 1 843 volumes, 111 221 enabled zones: 2 592 zones
+(2.33 %) name a sample their own volume does not carry.** Median per volume
+is **0 %**; 1 685 of 1 810 volumes have none at all, and only 8 volumes
+(0.4 %) are mostly absent.
+
+⚠ The first version of this section called it *large* and cited "1 292 of
+1 369 zones on one disc" — which is the **symptom of a parser bug** (S1000
+files read with S3000 block lengths), not a property of real discs. The
+behaviour is still worth implementing, because it is measured and cheap to
+model; it is not worth implementing because of a number that was about
+something else.
 
 **Status: open, and actionable without hardware** — the rule is measured, the
 material is on the card, and `B030-AKAIIMPORT-full.E4B` can score any

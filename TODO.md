@@ -8149,19 +8149,39 @@ filter only ever existed in the analysis script** that produced the
 2 438/2 438 zone-count agreement — which is why that agreement looked total
 while the writer was never doing the filtering.
 
-⚠ **The affected population is large, not marginal.** This project's own
-parser notes record one disc leaving **1 292 of 1 369 zones naming samples
-that do not exist**.
+⚠ **CORRECTED: the affected population is 2.33 %, not "large".** **Measured 2026-09-24, 1 843 volumes, 111 221 enabled zones: 2 592 zones
+(2.33 %) name a sample their own volume does not carry.** Median per volume
+is **0 %**; 1 685 of 1 810 volumes have none at all, and only 8 volumes
+(0.4 %) are mostly absent.
+
+The first version of this entry said the population was large and cited
+"1 292 of 1 369 zones on one disc" from this project's own parser notes.
+**That figure describes a PARSER BUG** — what happens when S1000 files are
+read with S3000 block lengths — and says nothing about how often real discs
+name absent samples. Quoting it here moved a number from one question to
+another, which is the failure this project has a rule about, committed twice
+in one message before it was checked.
 
 **How to do it:** apply the arena filter and the widening in
 `simulate_akai_preset`, then score against `B030-AKAIIMPORT-full.E4B`
 offline — zone counts should stay at 2 438/2 438 and velocity ranges become
 checkable for the first time.
 
-⚠ **One thing to settle first, and it needs a read rather than a guess:**
-whether the widening is *caused by the drop* or whether **any single-zone
-voice** is written `0-127` regardless. P004/P005 on the test disc carry two
-zones each and their velocity ranges separate the two readings; they were not
-read back. Implementing the wrong one would widen ranges the device leaves
-alone.
+✅ **Settled by a read, 2026-09-24.** `eosed` took the velocity ranges of all
+116 voices: 47 are `(0,99)(0,99)(100,127)(100,127)`, 46 are
+`(0,99)(100,127)`, 23 are `(0,127)(0,127)`, and **there are no single-zone
+voices at all**. 93 voices carry a 99/100 split EOS could only have taken
+from the source, so **it preserves velocity ranges verbatim and there is no
+normalisation pass.** Copy the range as we already do; write full range only
+on the drop path.
+
+⚠ **The asymmetry, because it governs how hard to lean on this:** the negative
+rests on 116 voices, the positive — that the drop *causes* the widening —
+rests on **n = 1**. What is excluded is the alternative explanation, not the
+mechanism confirmed. A second authored drop case makes it n = 2 cheaply.
+
+⚠ My own framing of the discriminator was wrong: P004/P005 are both two-zone
+voices and only rule out *indiscriminate* widening. The separating case is a
+natively single-zone voice with a partial range, which this material does not
+contain — the test does not exist here rather than having been skipped.
 

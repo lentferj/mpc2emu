@@ -982,8 +982,16 @@ def simulate_akai_preset(program_raw: bytes, s3000: bool, name: str,
 #: device behaviour measured. This writer copies `lo_vel`/`hi_vel` verbatim
 #: and drops nothing; the arena filter lived only in the analysis script that
 #: produced the 2 438/2 438 agreement, never here. On a source whose zones
-#: name absent samples — **1 292 of 1 369 on one disc in this project's own
-#: notes** — that is a live divergence. See §AKAIZONEDROP.
+#: name absent samples that is a live divergence. **Measured 2026-09-24 over
+#: 1 843 volumes and 111 221 enabled zones: 2 592 zones, 2.33 %.** Median per
+#: volume 0 %; 1 685 of 1 810 volumes have none.
+#:
+#: ⚠ An earlier version of this note cited "1 292 of 1 369 zones on one disc"
+#: as the population. **That figure is the symptom of a PARSER BUG** — reading
+#: S1000 files with S3000 block lengths — not a property of real discs, and
+#: reusing it here took a number from a different question entirely. The real
+#: rate is 2.33 %: worth implementing because it is measured and cheap, not
+#: because it is large. See §AKAIZONEDROP.
 #:
 #: ℹ Superseded reasoning kept below, because the route to the answer is the
 #: reusable part: **`zone_dedup` was NOT a gap — §AKAIZONEMERGE.**
