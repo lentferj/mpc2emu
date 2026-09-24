@@ -8066,3 +8066,25 @@ field its source appeared to set. Fixed, and
 `tests/test_firmware_sim_contract.py` now walks the generator's AST and
 refuses any dict literal with a repeated key. **Status: done.**
 
+## `whichcard.py` misses a lowercase `hd0.img`, and ZuluSCSI does not
+
+**Status:** open, found 2026-09-24 while staging the AKAI card. Low effort,
+real collision risk.
+
+`tests/re_banks/whichcard.py` reported *"ids with no image: 0 2 3 6 8 9"* for
+the AKAI card while `/hd0.img` sits in its root. The tool matches `HD<n>`
+case-sensitively; **ZuluSCSI does not**, and its own boot log states the
+outcome plainly:
+
+    [197ms] -- Opening /hd0.img for id:0 lun:0
+
+So id 0 **is** claimed, and a future staging that trusts the tool would put an
+image on top of the hard disk. That is the same class of failure the card's
+own header warns about at length — an id claimed by something the operator
+did not expect, with a clean boot log throughout.
+
+**Fix:** case-insensitive matching on the `HD<n>`/`CD<n>` prefix. ⚠ And while
+there: the tool reads whichever card it finds first and says which, but it
+does not say it scanned only ONE — it was run with both cards mounted and
+silently reported the AKAI one.
+
