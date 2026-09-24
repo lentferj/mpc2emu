@@ -683,10 +683,62 @@ EOS_AKAI_EMITTER_CALLS = 12       #: bsrw 0x46370
 #:     0x46706 src 12  dst 168+%d5  amt %a5@(58)
 #:     0x46c48 src 10  dst 52
 #:
-#: ⚠ **Most take their amount from staged `%a5@(32/46/47/48/56/57/58)`**, whose
-#: provenance is not traced — so they are *located*, not *modelled*, and
-#: writing them would need the staging map the seven program-level slots
-#: needed.
+#: ✅ **THE "STAGING" WAS NOT STAGING — traced 2026-09-24.** The amounts come
+#: straight from the **AKAI program common block**. In `0x4647c`:
+#:
+#:     0x46488  moveal %a1,%a4      -> the E4 VOICE; cords at voice+188,
+#:                                    24 slots x 4, cleared by the memset at
+#:                                    0x4649a (pea %a4@(188), 0x60 bytes)
+#:     0x4648a  moveal %a0,%a5      -> caller's %a3 = the PROGRAM COMMON BLOCK
+#:     0x4648e  moveal %fp@(8),%a3  -> caller's %a4 = the raw AKAI KEYGROUP
+#:
+#: Identified, not guessed: the caller reads `%a5@(24/25/26)`, which this
+#: project decodes as `pan` / `loudness` / `vel_loudness` at `0x18/0x19/0x1a`
+#: — three consecutive hits — and the known cords read `%a3@(27)`, keygroup
+#: `0x1b`, the byte measured on the E4XT the same evening.
+#:
+#: ⚠ **`%a5` names two different objects in this one function.** It is
+#: reassigned to the cord slot at `0x46b74` (`lea %a4@(0,%d7:l:4),%a5`), which
+#: is why the nine fixed cords appear to write `%a5@(188/189/190)` while these
+#: appear to read `%a5@(32)`. The note above quoted the offsets without saying
+#: which assignment was live — exactly the failure that
+#: `reference_register_is_not_a_variable` exists for, committed in the file
+#: that records the rule.
+#:
+#: What each one emits (`src`, `dst`, amount), all verbatim unless stated:
+#:
+#:     pgm[32]  src 11  dst 64
+#:              + src 160 dst 64 at pgm[32]/5, ONLY when that signed
+#:                quotient is non-zero (0x464c8 tstl / beqs)
+#:     pgm[46]  src 16  dst 48
+#:     pgm[47]  src 18  dst 48
+#:     pgm[48]  dst 48, and pgm[7] selects the source three ways:
+#:                pgm[7] == 0    src 96, amount clamp(pgm[48]*2, -127, 127)
+#:                pgm[7] == 255  src 96, amount verbatim
+#:                otherwise      src 97, amount verbatim
+#:     pgm[56]  src 17 | gated on itself, dst 168 + d5
+#:     pgm[57]  src 18 | gated on itself, dst 168 + d5
+#:     pgm[58]  src 12 | gated on itself, dst 168 + d5
+#:     kg  [?]  src 10 dst 52, amount rescale(word, -9999, 9999, 127)
+#:
+#: ⚠ **`dst = 168 + d5` is a CORD-AMOUNT destination, and `d5` is chosen at
+#: run time** — `movel %d7,%d5` at `0x4657e` leaves it holding the slot index
+#: the `pgm[48]` cord landed in. So those three modulate *another cord's
+#: amount*, and a writer has to know which slot that cord took. That is a
+#: different kind of dependency from everything else modelled here.
+#:
+#: ⚠ **`0x46c48`'s guard is not traced.** `lea %a3@(0,%d3:l:2),%a5` then
+#: `tstw %a5@(140)` — keygroup base, `%d3`-indexed, word-sized. Where `%d3`
+#: was last assigned is NOT established, so the source field is unidentified
+#: and this one stays out even when the other ten are named.
+#:
+#: **Still unmodelled, and deliberately so**: `s3k/params.py` is the authority
+#: for AKAI program-block field names and this project reads none of these
+#: offsets (`0x0f 0x11 0x13 0x14 0x15 0x17 0x18 0x19 0x1a 0x21-0x24 0x59` and
+#: stop). `docs/AKAI_S3000_FORMAT.md` has no table covering them. Asked
+#: `s3ked` 2026-09-24. **A wrong field name is worse than a gap**, and the
+#: contract reports these honestly today — inferring a name from what EOS
+#: happens to do with the byte is fitting a label to one consumer's use of it.
 #:
 #: ⚠ **And a reconciliation failure worth keeping.** This module's own
 #: extractor reported `dst` for `0x466ae`/`0x466da`/`0x46706` as `17`, `18`,
