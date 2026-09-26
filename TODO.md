@@ -3819,6 +3819,18 @@ via `VERIFY_emu.hda`:**
 
 ### Enhancements (no behaviour change)
 
+**Performance review DS41F — MED/LOW items still open.** Status: open, not
+blocked. Every HIGH and CRITICAL item of `/home/lentferj/temp/mpc2emu_performance_cr_DS41F_20260926.txt`
+is done or refuted (2026-09-27, ten implemented / four refuted with
+measurements / one rejected on risk). What is left is the MED and LOW tail,
+none of it measured yet by us: CLI-4, CLI-6, CLI-7, CLI-8, P-6, P-8, P-9,
+P-10, P-11, W-5, W-6, W-7, W-8, W-9, W-10, PA-2, PA-4..PA-10. Strategy and
+the per-item verdicts in `docs/RESOLUTION_NOTES.md` §PERFDS41F.
+⚠ Do not implement any of them from the report's own reasoning — four of its
+HIGH recommendations measured WORSE than the code they replaced. Profile the
+named function first; the report's stated *cause* was wrong in three of the
+items that were nonetheless real.
+
 **Parser performance pass — DONE 2026-07-29.** Benchmarked all input parsers
 over real files; the cost was not spread out but concentrated in a handful of
 per-sample Python loops plus two repeated directory walks. Every change is

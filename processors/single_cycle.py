@@ -55,6 +55,9 @@ Pure Python (array + math), matching the rest of the DSP here — no numpy.
 
 import os
 import math
+from operator import mul
+
+from processors.parallel import default_workers, map_over_banks
 import struct
 import concurrent.futures
 from dataclasses import replace
@@ -103,9 +106,8 @@ def _sustain_start(sig: list, frame: int = 512, hop: int = 256) -> int:
     best_i = 0
     st = 0
     while st + frame <= n:
-        s = 0.0
-        for x in sig[st:st + frame]:
-            s += x * x
+        sl = sig[st:st + frame]
+        s = sum(map(mul, sl, sl))
         if s > best:
             best = s
             best_i = st
@@ -121,18 +123,23 @@ def _autocorr_vals(seg: list, lo: int, hi: int, compare_len: int) -> list:
     """
     w = len(seg)
     vals = []
+    # The three accumulators are independent left-to-right sums, so evaluating
+    # each as one C-level pass is BIT-IDENTICAL to the per-element loop.  e0
+    # covers seg[:m] only, so it depends on m alone -- and m is pinned at
+    # compare_len for every lag until the tail, which is where the repeats are.
+    e0_by_m = {}
     for lag in range(lo, hi + 1):
         m = min(w - lag, compare_len)
         if m <= 0:
             vals.append(0.0)
             continue
-        s = e0 = e1 = 0.0
-        for i in range(m):
-            a = seg[i]
-            b = seg[i + lag]
-            s += a * b
-            e0 += a * a
-            e1 += b * b
+        a = seg[:m]
+        b = seg[lag:lag + m]
+        e0 = e0_by_m.get(m)
+        if e0 is None:
+            e0 = e0_by_m[m] = sum(map(mul, a, a))
+        s = sum(map(mul, a, b))
+        e1 = sum(map(mul, b, b))
         denom = math.sqrt(e0 * e1)
         vals.append(s / denom if denom > 0.0 else 0.0)
     return vals
@@ -455,70 +462,80 @@ def _dump_cycle(sample: SampleData, dump_dir: str, seen: set) -> None:
         f.write(_wav_bytes_with_loop(sample))
 
 
-def single_cycle_bank(bank, *, cycles='auto',
-                      keep_flt: bool = False, keep_lfo: bool = False,
-                      keep_amp: bool = False, dump_dir: Optional[str] = None,
-                      workers: Optional[int] = None) -> None:
-    """Extract single/multi-cycle oscillators for every sample in `bank`
+def single_cycle_bank(bank, **kw) -> None:
+    """Cycle one bank.  See `single_cycle_banks`, which this defers to."""
+    single_cycle_banks([bank], **kw)
+
+
+def single_cycle_banks(banks, *, cycles='auto',
+                       keep_flt: bool = False, keep_lfo: bool = False,
+                       keep_amp: bool = False, dump_dir: Optional[str] = None,
+                       workers: Optional[int] = None) -> None:
+    """Extract single/multi-cycle oscillators for every sample of every bank
     (in place) and neutralise every voice's preset params.
 
     cycles:  'auto' (per-sample) or a positive int N.
     keep_*:  leave the source filter / LFO / amp-env instead of templating it.
     dump_dir: if set, write each extracted cycle as a .wav for audition.
+
+    ONE worker pool covers the whole list; see processors/parallel.py for why
+    a pool per bank measured 4.77x slower.
+
+    ⚠ Retuning stays PER BANK.  `tune` maps sample name -> new root, and two
+    banks can hold different samples under the same name -- merging the maps
+    would retune one bank's zones from another bank's oscillator.
     """
     if workers is None:
-        workers = max(1, (os.cpu_count() or 2) - 1)
+        workers = default_workers()
 
-    n = len(bank.samples)
+    n = sum(len(b.samples) for b in banks)
     label = 'auto' if cycles == 'auto' else f'{cycles} cycle(s)'
     print(f"\n  Single-cycle extraction ({label}); samples: {n}  (workers: {workers})")
 
-    args = [(s, cycles) for s in bank.samples]
-    results = [None] * n
-    if workers == 1 or n <= 1:
-        for i, s in enumerate(bank.samples):
-            results[i] = _single_cycle_sample(s, cycles)
-    else:
-        with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as ex:
-            for i, r in enumerate(ex.map(_sc_worker, args)):
-                results[i] = r
+    per_bank = map_over_banks(
+        banks,
+        make_args=lambda smp: (smp, cycles),
+        worker=_sc_worker,
+        serial=lambda smp: _single_cycle_sample(smp, cycles),
+        workers=workers)
 
-    # Apply transformed samples, collect per-name retuning, report.
-    tune = {}
     dumped_stems = set()   # case-folded, so dumps never silently overwrite (macOS/Windows)
     n_ok = 0
     n_low = 0
-    for i, (new_s, info) in enumerate(results):
-        bank.samples[i] = new_s
-        if info['ok']:
-            n_ok += 1
-            tune[new_s.name] = new_s.root_note
-            shrink = (100.0 * (1 - info['loop'] / info['orig_frames'])
-                      if info['orig_frames'] else 0.0)
-            flag = ''
-            if info['conf'] < 0.7:
-                n_low += 1
-                flag = '  [LOW CONFIDENCE — audition]'
-            note = _note_name(info['root'])
-            print(f"    '{info['name']}': {info['n']}cyc×{info['reps']} = "
-                  f"{info['loop']}f loop (-{shrink:.1f}%), root {note} @ "
-                  f"{info['rate']}Hz ({info['cents']:+d}c), "
-                  f"conf {info['conf']:.2f}{flag}")
-        else:
-            print(f"    '{info['name']}': SKIPPED ({info['reason']}) — left full-length")
-        if dump_dir and info['ok']:
-            _dump_cycle(new_s, dump_dir, dumped_stems)
+    for bank, results in zip(banks, per_bank):
+        # Apply transformed samples, collect per-name retuning, report.
+        tune = {}
+        for i, (new_s, info) in enumerate(results):
+            bank.samples[i] = new_s
+            if info['ok']:
+                n_ok += 1
+                tune[new_s.name] = new_s.root_note
+                shrink = (100.0 * (1 - info['loop'] / info['orig_frames'])
+                          if info['orig_frames'] else 0.0)
+                flag = ''
+                if info['conf'] < 0.7:
+                    n_low += 1
+                    flag = '  [LOW CONFIDENCE — audition]'
+                note = _note_name(info['root'])
+                print(f"    '{info['name']}': {info['n']}cyc×{info['reps']} = "
+                      f"{info['loop']}f loop (-{shrink:.1f}%), root {note} @ "
+                      f"{info['rate']}Hz ({info['cents']:+d}c), "
+                      f"conf {info['conf']:.2f}{flag}")
+            else:
+                print(f"    '{info['name']}': SKIPPED ({info['reason']}) — left full-length")
+            if dump_dir and info['ok']:
+                _dump_cycle(new_s, dump_dir, dumped_stems)
 
-    # Retune the zones that reference a transformed sample, and neutralise voices.
-    for preset in bank.presets:
-        for voice in preset.voices:
-            for z in voice.zones:
-                if z.sample_name in tune:
-                    z.root_key = tune[z.sample_name]
-                    z.fine_tune = 0        # tuning is baked into the sample rate
-                    z.coarse_tune = 0
-                    z.transpose = 0
-            _neutralize_voice(voice, keep_flt, keep_lfo, keep_amp)
+        # Retune the zones that reference a transformed sample, and neutralise voices.
+        for preset in bank.presets:
+            for voice in preset.voices:
+                for z in voice.zones:
+                    if z.sample_name in tune:
+                        z.root_key = tune[z.sample_name]
+                        z.fine_tune = 0    # tuning is baked into the sample rate
+                        z.coarse_tune = 0
+                        z.transpose = 0
+                _neutralize_voice(voice, keep_flt, keep_lfo, keep_amp)
 
     kept = 'kept source' if (keep_flt and keep_lfo and keep_amp) else 'neutral synth preset'
     print(f"  Done: {n_ok}/{n} sample(s) cycled"

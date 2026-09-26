@@ -260,6 +260,12 @@ def _articulation_label(sw_label: Optional[str], sw_last: Optional[str]) -> str:
     return (sw_last or 'default').strip()
 
 
+# Fallback audio-file index, memoized per .sfz parent directory -- see the
+# comment at its use site in parse_sfz. Keyed (not global) so files in
+# different folders resolve exactly as they did when each built its own.
+_AUDIO_INDEX_CACHE: dict = {}
+
+
 def parse_sfz(sfz_path: str, wav_dir: Optional[str] = None) -> Bank:
     """
     Parse an SFZ file into a Bank object.
@@ -277,8 +283,23 @@ def parse_sfz(sfz_path: str, wav_dir: Optional[str] = None) -> Bank:
 
     # Lazy fallback index: resolve samples kept in a sibling audio folder a few
     # levels away (common in commercial packs) by basename, built on first miss.
-    _audio_index: dict = {}
-    _index_built = [False]
+    #
+    # The index is derived purely from p.parent's ancestors, so every .sfz in
+    # one folder builds a byte-for-byte identical one -- but the closure used
+    # to be per-parse_sfz call, so converting a folder of N presets re-walked
+    # the same (80k-file-bounded) tree N times. The sibling exs24 parser hit
+    # exactly this and profiling put its scan at 97% of parse time; this is
+    # that fix, deliberately the same shape. Memoized per parent directory
+    # rather than globally, so .sfz files in different folders still get their
+    # own index and resolve exactly as before.
+    _cache_key = str(p.parent)          # p is already resolved
+    _cached = _AUDIO_INDEX_CACHE.get(_cache_key)
+    if _cached is not None:
+        _audio_index = _cached
+        _index_built = [True]
+    else:
+        _audio_index: dict = {}
+        _index_built = [False]
     _AUDIO_DIR_NAMES = {'wav', 'wavs', 'audio', 'samples', 'sampler',
                         'aif', 'aiff', 'sounds', 'audiofiles'}
 
@@ -316,6 +337,11 @@ def parse_sfz(sfz_path: str, wav_dir: Optional[str] = None) -> Bank:
                         pass
                 if count > 80000:
                     break
+            # Publish for the next .sfz in this same folder. Bounded FIFO so a
+            # deep recursive convert over many folders cannot grow without limit.
+            if len(_AUDIO_INDEX_CACHE) >= 16:
+                _AUDIO_INDEX_CACHE.pop(next(iter(_AUDIO_INDEX_CACHE)))
+            _AUDIO_INDEX_CACHE[_cache_key] = _audio_index
         return _audio_index.get(name.lower())
 
     text = p.read_text(encoding='utf-8', errors='replace')

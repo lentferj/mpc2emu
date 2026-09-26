@@ -54,9 +54,13 @@ only meaningful RELATIVE to each other within one preset.
 """
 from __future__ import annotations
 
+import array
 import cmath
 import math
+import sys
 import weakref
+from functools import lru_cache
+from operator import mul
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from models.common import Bank, Preset, SampleData, VoiceLayer
@@ -139,26 +143,54 @@ def _fft(a: List[complex]) -> List[complex]:
     return a
 
 
-def _frames(sd: SampleData) -> List[float]:
-    """Mono float frames from a SampleData, or [] when it cannot be read."""
+def _centroid_frames(sd: SampleData) -> List[float]:
+    """The ONE 2048-frame window the centroid measures, as mono floats.
+
+    This used to decode the whole sample and then slice 2048 frames out of it
+    -- for a 4 s 44.1 kHz mono sample, ~176 000 interpreted iterations to keep
+    1.2% of them.  The frame count is arithmetic on len(data), so the window
+    offset is known before anything is decoded.
+
+    Returns [] when the sample cannot be read or is shorter than one frame,
+    which is the same "unmeasurable" signal the caller handled before.
+    """
     data = getattr(sd, 'data', None)
     if not data:
         return []
     depth = getattr(sd, 'bit_depth', 16) or 16
     ch = max(1, getattr(sd, 'channels', 1) or 1)
     if depth == 16:
-        n = len(data) // 2
-        out = []
-        for i in range(n):
-            v = data[2 * i] | (data[2 * i + 1] << 8)
-            out.append(float(v - 65536 if v > 32767 else v))
+        n_interleaved = len(data) // 2
     elif depth == 8:
-        out = [float(b) - 128.0 for b in data]
+        n_interleaved = len(data)
     else:
         return []
+    n_frames = n_interleaved // ch
+    if n_frames < _FRAME:
+        return []
+    start = min(int(n_frames * _FRAME_AT), n_frames - _FRAME)
+    lo, hi = start * ch, (start + _FRAME) * ch      # in interleaved samples
+    if depth == 16:
+        a = array.array('h')
+        a.frombytes(bytes(memoryview(data)[2 * lo:2 * hi]))
+        if sys.byteorder == 'big':
+            # The old decode was explicitly little-endian (data[2i] |
+            # data[2i+1] << 8); array('h') is native, so a big-endian host
+            # needs the swap to read the same numbers.
+            a.byteswap()
+        out = [float(v) for v in a]
+    else:
+        out = [float(b) - 128.0 for b in memoryview(data)[lo:hi]]
     if ch > 1:                       # mix to mono; centroid is a timbre measure
         out = [sum(out[i:i + ch]) / ch for i in range(0, len(out) - ch + 1, ch)]
     return out
+
+
+@lru_cache(maxsize=4)
+def _hann(n: int) -> Tuple[float, ...]:
+    """Hann window of length n.  Constant across every sample in a run."""
+    return tuple(0.5 - 0.5 * math.cos(2 * math.pi * i / (n - 1))
+                 for i in range(n))
 
 
 def sample_centroid(sd: SampleData) -> Optional[float]:
@@ -170,19 +202,16 @@ def sample_centroid(sd: SampleData) -> Optional[float]:
     key = id(sd)
     if key in _centroid_cache:
         return _centroid_cache[key]
-    frames = _frames(sd)
+    seg = _centroid_frames(sd)
     sr = getattr(sd, 'sample_rate', 44100) or 44100
-    if len(frames) < _FRAME:
+    if len(seg) < _FRAME:
         _cache_put(sd, None, 0.0)
         return None
-    start = min(int(len(frames) * _FRAME_AT), len(frames) - _FRAME)
-    seg = frames[start:start + _FRAME]
     _rms = math.sqrt(sum(s * s for s in seg) / len(seg))
     # Hann window: an unwindowed frame smears energy across the whole spectrum
     # and pulls every centroid toward the middle, which would flatten exactly
     # the differences this is here to detect.
-    seg = [s * (0.5 - 0.5 * math.cos(2 * math.pi * i / (_FRAME - 1)))
-           for i, s in enumerate(seg)]
+    seg = list(map(mul, seg, _hann(_FRAME)))
     spec = _fft([complex(s, 0.0) for s in seg])
     num = den = 0.0
     for k in range(1, _FRAME // 2):           # skip DC: it carries no timbre

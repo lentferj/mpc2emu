@@ -36,7 +36,7 @@ Strategie für den E4XT, da ein Preset alle seine Samples in derselben Bank brau
 
 import math
 from dataclasses import dataclass, field, replace
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from models.common import Bank, Preset, SampleData
 
 
@@ -596,6 +596,17 @@ class TargetBank:
     #: keygroups with the board and correctly share one without it. Budgeting
     #: with the wrong value under-counts exactly the programs the board enlarges.
     ib304f: bool = False
+    #: Running totals, so a fit probe does not re-derive the whole bank.
+    #: `akai_object_count` and `bank_pram_bytes` are both a plain SUM over the
+    #: presets, so a running total is exact, not an estimate -- but the old
+    #: code re-summed (and for AKAI, RE-RENDERED every keygroup of every
+    #: preset already in the bank) once per probe, i.e. once per target bank
+    #: per item. MEASURED: akai_object_count is ~0.48 ms per preset, so a
+    #: 200-preset AKAI split spent ~9.7 s re-counting what it already knew.
+    #: PRAM is not in that class -- bank_pram_bytes over 200 presets is
+    #: 0.11 ms -- but it is summed here too because it costs nothing.
+    _kg_total: int = 0                      # keygroups of the presets held
+    _pram_presets: int = 0                  # PRAM of the presets held
 
     def _unique_sample_name(self, base: str) -> str:
         if base not in self._sample_names:
@@ -609,6 +620,17 @@ class TargetBank:
             i += 1
 
     def add_preset(self, preset: Preset, needed_samples: List[SampleData]) -> None:
+        # ⚠ BEFORE the sample remap below. The AKAI keygroup signature is the
+        # rendered keygroup bytes, which carry the sample NAMES, so a preset
+        # whose samples get renamed here can group differently afterwards.
+        # would_fit judged the un-renamed preset; the running total has to
+        # record the same number or the two drift apart on exactly the
+        # dedup-collision presets.
+        if self.object_pool:
+            from writers.akai_s3000_writer import keygroup_count
+            self._kg_total += keygroup_count(preset, self.ib304f)
+        if self.pram_budget:
+            self._pram_presets += preset_pram_bytes(preset)
         self.presets.append(preset)
         # CR-7: dedup by (name, content).  A genuine duplicate (same name AND
         # same PCM) is shared; a same-name/different-PCM sample is renamed and
@@ -642,8 +664,17 @@ class TargetBank:
         self.current_size += _PRESET_CHUNK_OVERHEAD + voice_overhead
 
     def would_fit(self, preset: Preset, needed_samples: List[SampleData],
-                  limit_bytes: int, capacity=None) -> bool:
-        """Check if adding this preset+samples would stay within the limit."""
+                  limit_bytes: int, capacity=None,
+                  preset_kg: Optional[int] = None,
+                  preset_pram: Optional[int] = None) -> bool:
+        """Check if adding this preset+samples would stay within the limit.
+
+        `preset_kg` / `preset_pram` are the candidate's own keygroup count and
+        PRAM, which do not change while it is probed against one bank after
+        another.  The caller computes them once per item and passes them in;
+        omitted, they are derived here, which is what every external caller
+        gets and what the tests exercise.
+        """
         max_samples, max_presets, max_files = capacity or _capacity('e4b')
         extra = _PRESET_CHUNK_OVERHEAD
         for voice in preset.voices:
@@ -673,15 +704,23 @@ class TargetBank:
         # about: a volume can fit the directory four times over and still be
         # unloadable. Only applied where a pool is known.
         if self.object_pool:
-            if akai_object_count(self.presets + [preset],
-                                 len(self._sample_names) + new_samples,
-                                 self.ib304f) > self.object_pool:
+            if preset_kg is None:
+                from writers.akai_s3000_writer import keygroup_count
+                preset_kg = keygroup_count(preset, self.ib304f)
+            # Identical arithmetic to akai_object_count(presets + [preset],
+            # n_samples): programs + keygroups + samples.
+            objects = (len(self.presets) + 1
+                       + self._kg_total + preset_kg
+                       + len(self._sample_names) + new_samples)
+            if objects > self.object_pool:
                 return False
 
         # PRAM, not object count, is what a K2000 actually runs out of.
         if self.pram_budget:
-            used = bank_pram_bytes(len(self._sample_names) + new_samples,
-                                   self.presets + [preset])
+            if preset_pram is None:
+                preset_pram = preset_pram_bytes(preset)
+            used = ((len(self._sample_names) + new_samples) * _PRAM_SAMPLE
+                    + self._pram_presets + preset_pram)
             if used > self.pram_budget:
                 return False
 
@@ -807,10 +846,20 @@ def split_into_banks(
                 f"--reduce-velocity-layers."
             )
 
+        # Computed ONCE per item, not once per target bank it is probed
+        # against: the candidate does not change during the scan, and for
+        # AKAI this call renders every keygroup of the preset.
+        _kg = None
+        if _pool:
+            from writers.akai_s3000_writer import keygroup_count
+            _kg = keygroup_count(preset, ib304f)
+        _pp = preset_pram_bytes(preset) if _pram else None
+
         # Find first target bank that fits
         placed = False
         for tb in target_banks:
-            if tb.would_fit(preset, needed_samples, limit_bytes, cap):
+            if tb.would_fit(preset, needed_samples, limit_bytes, cap,
+                            preset_kg=_kg, preset_pram=_pp):
                 tb.add_preset(preset, needed_samples)
                 placed = True
                 break

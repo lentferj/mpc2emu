@@ -404,6 +404,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§LF2TONEPOST — a RAM sample's program produced signal AFTER a power cycle; three readings, none excluded (2026-09-26)](#lf2tonepost-a-ram-samples-program-produced-signal-after-a-power-cycle-three-readings-none-excluded-2026-09-26)
 - [§KRZF2RESDEPTH — the F2 RES *Depth* law: prevalence says DECLINE, on both sides of the conversion (2026-09-26)](#krzf2resdepth-the-f2-res-depth-law-prevalence-says-decline-on-both-sides-of-the-conversion-2026-09-26)
 - [§NONTRANSPOSEREAD — `non_transpose` is now read back from KRZ and AKAI, and the two formats do not mean quite the same thing by it (2026-09-26)](#nontransposeread-non_transpose-is-now-read-back-from-krz-and-akai-and-the-two-formats-do-not-mean-quite-the-same-thing-by-it-2026-09-26)
+- [§PERFDS41F — performance review DS41F (2026-09-26/27)](#perfds41f-performance-review-ds41f-2026-09-2627)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -39290,3 +39291,85 @@ The candidates that were NOT taken failed for reasons worth recording, since
   positive for `lfo1_to_volume` on 2026-09-01.
 * `lfo_volume_centre_db` (KRZ) — summed into the static level byte with two
   other dB terms.
+
+## §PERFDS41F — performance review DS41F (2026-09-26/27)
+
+Report: `/home/lentferj/temp/mpc2emu_performance_cr_DS41F_20260926.txt`
+Companion (disc browsing, same reviewer):
+`/home/lentferj/temp/VinSamLib_EPS_Roland_Browser_CR_DS41F_20260927.txt`
+
+### Done, with the measured figure
+
+| id | what | measured |
+|---|---|---|
+| CLI-1 | one `rglob` instead of 64 recursive globs | 10.72 s → 2.14 s (5.0x) on 54 106 files |
+| CLI-2 | `_sniff_format` reads 512 B, not the file | 265.5 ms → 0.1 ms on a 300 MB image |
+| CLI-3 | one worker pool per run, not per bank | 13.31 s → 2.27 s (5.86x), E4B byte-identical |
+| CLI-5 | explicit downsample stages pooled | 20.75 s → 2.60 s (8.0x), KRZ byte-identical |
+| P-1/P-2 | `_match_cost`, `_autocorr_vals`, `_windowed_rms`, `_sustain_start` at C level | 1.57x combined, BIT-identical |
+| P-3 | sinc bank memoised | 136.9 ms per build removed, output bit-identical |
+| P-4 | centroid decodes only its 2048-frame window | 65.34 ms → 6.66 ms (9.8x) |
+| P-7 (item 3) | `_float_to_pcm` clip without max/min/int per element | 112.18 ms → 44.87 ms (2.5x) |
+| W-1 | AKAI `_extract_channel` / `_mixdown` | 107-122x / 356x, byte-identical |
+| W-2 | fit probe keeps running totals | AKAI split 3598 ms → 118 ms (30.5x) |
+| W-3/W-4 | fusion span cache; fall-curve power pass | 7.8x at 96 voices; 1.5x |
+| PA-1 | SFZ audio index memoised per parent dir | 135.26 s → 4.67 s (29x) |
+| PA-3 (eps) | `_eps_audio` via `array.byteswap` | whole EPS disc 18.83 s → 0.78 s (24x) |
+| VSL 3.6 | Roland tables read in one region each | 9767 reads → 2 |
+
+### Refuted or rejected — do not re-adopt from the report
+
+* **P-5** `heapq.nsmallest(k+1, ms)[-1]` for the 10th percentile. MEASURED at
+  n = 176 400: sorted 51.4 ms, nsmallest 89.8 ms. The heap loses to a C
+  Timsort at a tenth of the array. `sorted` is already correct.
+* **P-7 item 2** memoryview into `_pcm_to_float`: 19.11 → 19.57 ms. No change.
+* **P-7 item 1** a float cache on `SampleData` shared between stages:
+  rejected on risk. SampleData is pickled across process boundaries in every
+  DSP stage and replaced wholesale, so a stale cache means a stage silently
+  processing the previous stage's audio.
+* **P-3's `maxsize=32`**: one sinc bank is 4.5 MB and this runs in a
+  cpu_count-1 pool, so 32 = 144 MB **per worker**. Sized to 4.
+* **W-4's prefix sum**: the fall-curve windows do not overlap (step == length),
+  so a prefix sum of squares saves nothing.
+* **P-1's algebraic `_match_cost`**: 8x rather than 1.8x, but deviates up to
+  5e-13 and can score a perfect match NEGATIVE, which reorders near-ties and
+  changes which loop point `--auto-loop` picks. Blocked on an auto-loop
+  hardware re-confirmation, not on effort.
+* **CLI-2's claim** that `is_akai_image` / `akai_cd_label` re-read whole files:
+  false, both were already bounded.
+* **VinSamLib's `Bank.find_sample` is O(samples)**: true and negligible. At
+  the 77-sample preset they profiled it is 0.15 ms of a 20.94 s render, and
+  at the 1000-sample bank cap a full sweep is 21 ms. A cached index would go
+  stale every time a stage replaces `bank.samples[i]`; not worth it.
+
+### Still open (MED/LOW), none measured by us yet
+
+CLI-4 (fit assistant rescans + re-resamples the whole bank per iteration),
+CLI-6 (`preset_needed_samples` recomputed 4+ times; `bank_splitter.py` builds
+a `sample_map` it never uses), CLI-7, CLI-8, P-6, P-8, P-9, P-10, P-11,
+W-5 (eiii double copy + whole-bank buffer), W-6 (FAT full scan/repack per
+file), W-7, W-8, W-9, W-10, PA-2, PA-4 (bisect over already-sorted lists),
+PA-5 (sampledir reads every WAV twice), PA-6..PA-10.
+
+⚠ **Method, not optional.** Profile the named function before writing the
+fix. Of the report's HIGH recommendations, four measured worse than or equal
+to the code they replaced, and in three more the finding was real while the
+stated CAUSE was wrong — sizing CLI-3's fix to its stated cause would have
+bought 3.5% instead of 5.86x.
+
+### Upstream requests from the VinSamLib browser review, NOT implemented
+
+* **4.2 — a single-instrument selector on `parse_eps_image`** (`only=` /
+  `entries=`). Their audition and detail panes parse a whole disc to show one
+  instrument. With the byte swap fixed that is 0.78 s warm rather than 19 s,
+  so it is no longer a wall, but a targeted parse is 2-21 ms.
+  ⚠ Needs a decision first: sample names are `instrument name + a GLOBAL
+  counter across the disc`, so a targeted parse cannot reproduce the
+  whole-disc parse's sample-name strings without reading everything before
+  it. Either the API documents that its names are local to the call, or the
+  naming changes for both — and the current scheme is what gives 2681 names
+  with 0 duplicates (`tests/test_eps_filesystem.py`).
+* **`parse_roland_image` loads the whole disc's PCM** (roland_s7xx_parser.py
+  around the per-sample read), so auditioning one Roland preset reads
+  hundreds of MB. Same shape as the EPS `only=` request.
+

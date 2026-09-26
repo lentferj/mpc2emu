@@ -166,12 +166,22 @@ def read_roland_samples(path: str) -> List[dict]:
     """
     out: List[dict] = []
     with RolandImage(path) as img:
+        # ONE read for the whole record table, not one seek+read per record.
+        # The table is contiguous (0x255800..0x2B5800 = 384 KB) and a listing
+        # used to cost 5761 syscalls before a byte of audio was touched. On
+        # local storage that is tens of ms; over a network mount it is the
+        # whole cost of browsing the disc, and it scales with latency rather
+        # than with disc size. (VinSamLib disc-browser review, DS41F,
+        # 2026-09-27.)
+        table = img.at(ROLAND_SAMPLE_BASE,
+                       min(ROLAND_SAMPLE_LEN * ROLAND_MAX_SAMPLES,
+                           max(0, img.size - ROLAND_SAMPLE_BASE)))
         running = 0
         for i in range(ROLAND_MAX_SAMPLES):
-            off = ROLAND_SAMPLE_BASE + ROLAND_SAMPLE_LEN * i
-            if off + ROLAND_SAMPLE_LEN > img.size:
-                break
-            r = img.at(off, ROLAND_SAMPLE_LEN)
+            o = ROLAND_SAMPLE_LEN * i
+            r = table[o:o + ROLAND_SAMPLE_LEN]
+            # Same two stops as the per-record reads: past the end of the
+            # image, and an all-zero record.
             if len(r) < ROLAND_SAMPLE_LEN or not any(r):
                 break
             size = _le16(r, ROL_SIZE)
@@ -199,7 +209,6 @@ def read_roland_samples(path: str) -> List[dict]:
                 audio_off=ROLAND_AUDIO_BASE + running * ROLAND_AUDIO_BLOCK,
                 audio_len=size * ROLAND_AUDIO_BLOCK))
             running += size
-            i += 1
     return out
 
 
@@ -290,14 +299,27 @@ def read_roland_partials(path: str, limit: Optional[int] = None) -> List[dict]:
     """Every partial: a name and up to four zones naming sample indices."""
     out: List[dict] = []
     with RolandImage(path) as img:
+        # One read for the contiguous partial table (0x1D5800..0x255800 =
+        # 512 KB) instead of 4004 seek+reads -- see read_roland_samples.
+        # Bounded by img.size as well, because the per-record reads relied on
+        # a short read at EOF to stop.
+        _want = ROLAND_SAMPLE_BASE - ROLAND_PARTIAL_BASE
+        if limit:
+            # ⚠ Without this a limit=5 browse read all 512 KB and got SLOWER
+            # than the per-record version (0.12 ms -> 0.43 ms measured). The
+            # loop appends one record per stride and stops at `limit`, so
+            # limit+1 strides is everything it can reach.
+            _want = min(_want, ROLAND_PARTIAL_STRIDE * (limit + 1))
+        table = img.at(ROLAND_PARTIAL_BASE,
+                       min(_want, max(0, img.size - ROLAND_PARTIAL_BASE)))
         i = 0
         while True:
             if limit and len(out) >= limit:
                 break
-            off = ROLAND_PARTIAL_BASE + ROLAND_PARTIAL_STRIDE * i
-            if off + ROLAND_PARTIAL_STRIDE > ROLAND_SAMPLE_BASE:
+            o = ROLAND_PARTIAL_STRIDE * i
+            if ROLAND_PARTIAL_BASE + o + ROLAND_PARTIAL_STRIDE > ROLAND_SAMPLE_BASE:
                 break
-            r = img.at(off, ROLAND_PARTIAL_STRIDE)
+            r = table[o:o + ROLAND_PARTIAL_STRIDE]
             if len(r) < ROLAND_PARTIAL_STRIDE or not any(r) or r[0] == 0xFF:
                 break
             zones = []

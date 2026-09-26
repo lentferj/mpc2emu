@@ -37,6 +37,7 @@ end into the next structure's text — which produced four "files" whose start
 block was the ASCII `ONGS` before the count was respected.
 """
 
+import array
 import os
 from typing import Dict, List, Optional
 
@@ -660,8 +661,27 @@ def _eps_audio(d: bytes, w: dict) -> bytes:
     little-endian, a 7.6x separation, and big-endian lower on 36 of 36.
     """
     raw = d[w['audio_off']:w['audio_off'] + w['audio_len']]
-    return bytes(raw[i + 1] if i % 2 == 0 else raw[i - 1]
-                 for i in range(len(raw)))
+    # One interpreted iteration PER BYTE was 6.2 MB/s; array('H').byteswap()
+    # is 369 MB/s on the same data, byte-for-byte identical out. The reference
+    # EPS disc carries ~122 MB of instrument audio, so this swap alone WAS the
+    # "19 s whole-disc parse" that made browsing a disc feel broken -- the
+    # decoding around it is a small fraction. (Measured by the VinSamLib disc
+    # browser review, DS41F 2026-09-27, and by our own PA-3.)
+    if len(raw) % 2:
+        # The old generator indexed raw[i + 1] at the final even i and died
+        # with a bare IndexError. Nothing legitimate reaches here -- EPS audio
+        # is 16-bit -- so say which wavesample is malformed instead.
+        raise ValueError(
+            f"EPS wavesample audio is {len(raw)} bytes (odd) at offset "
+            f"{w.get('audio_off')}: 16-bit audio cannot have an odd length")
+    # No host-endianness branch here, deliberately: frombytes() and tobytes()
+    # both use native order, so they cancel, and byteswap() reverses the two
+    # bytes of each element. The net effect on the BYTE SEQUENCE is exactly
+    # the adjacent-pair swap the loop did, on either host.
+    a = array.array('H')
+    a.frombytes(raw)
+    a.byteswap()
+    return a.tobytes()
 
 
 def parse_eps_image(path: str, wav_dir: Optional[str] = None,
