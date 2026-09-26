@@ -893,7 +893,7 @@ a distinct non-zero value of mixed sign so no byte could hold still by accident:
 | Field | Offset | Encoding | Range |
 |---|---|---|---|
 | `Adjust` | **242** | signed byte, **1 %/unit** | ±100 % |
-| `KeyTrk` | **244** | signed byte, **0.2 %/key per unit** | ±16 %/key |
+| `KeyTrk` | **244** | signed byte, 0.2 %/key per unit — **ONE CLICK, NOT A SWEPT LAW** (see below) | ±16 %/key |
 | `VelTrk` | **245** | signed byte, **2 %/unit** | ±200 % |
 | `Depth` (Src1) | **247** | signed byte, **2 %/unit** | ±200 % |
 | `MinDpt` (Src2) | **249** | signed byte, **2 %/unit** | ±200 % |
@@ -1468,6 +1468,45 @@ a changed cell names the field. **`CAL[k]` is program offset `177 + k`.**
 on either page. **Offset 208 is not part of CAL** — writing 0 there reads back
 `0x50`; it sits between the segment and the F1 block-type byte at 209 and the
 device keeps its own value.
+
+⚠ **THE PANNER `KeyTrk` UNIT RESTS ON TWO POINTS, AND THE OFFSET DOES NOT.**
+Offset 244 is solid — an edit-buffer diff, found twice independently. The
+**0.2 %/key per unit** beside it is a single wheel click (byte 255 → −0.2)
+plus the zero baseline: a slope with nothing tested in between. k2kremote
+withdrew a "driven rather than inferred" claim about it on 2026-09-26 after
+their own suite caught it, and their reason generalises — **two of the four
+DSP fields swept properly this week turned out PIECEWISE**, including the two
+KeyTrk ladders at offsets 196 and 180, where a straight line through the
+endpoints reproduces both and is wrong everywhere between.
+
+**AND THE CASE IS QUANTIFIABLE, because the panner's evidence brackets the same
+bytes as a field whose interior we DO know.** §PANMOD's reading is better than
+one click — it typed −9.0 %/key and read byte −45, so the panner rests on
+(0, 0) and (45, 9.0), a real lever arm. PITCH KeyTrk has measured points at
+bytes 1 and 45 as well, and 89 points in between. Fitting the line the PANNER's
+evidence would license, on the field where the truth is known:
+
+    line through byte 1 (5 ct) and byte 45 (102 ct)  ->  2.2045 ct/unit
+
+     byte   line says   truth    error
+        8        20.4      40   -48.9 %
+       13        31.5      50   -37.1 %
+       23        53.5      70   -23.6 %
+       33        75.5      90   -16.1 %
+       40        91.0      97    -6.2 %
+
+**Both endpoints exact and up to 49 % wrong in between**, with the breakpoints
+at 8 and 33 sitting squarely inside the 1..45 span our panner evidence brackets.
+
+That does not show the panner IS piecewise. It shows our evidence **cannot
+distinguish** a linear panner from one as piecewise as the field beside it on
+the same page, and that the mid-range error would be up to a factor of two.
+
+So do not convert a large `KeyTrk` value through 0.2 %/key, and treat the
+±16 %/key rail as the same two points multiplied by 80 rather than as a range
+check. The interior needs ~40 panel points and no audio. For finding the
+field's PIVOT the slope does not matter: the pivot is where the pan does not
+move, whatever the law.
 
 **COARSE IS A DIFFERENCE OF TWO BYTES**, read as 8-bit signed:
 

@@ -10,6 +10,7 @@ one you need back by hand (`~/.local/bin/mididings -f ~/mididings_k2000r.py &`)
 and confirm with `ps -ef | grep mididings_k2000r` before trusting any capture.
 See [[reference_mididings_configs]] -- these files are channel filtering only,
 so restarting one changes nothing about how notes are shaped.
+| **`KRZ_LFO_PAN_DEPTH_SCALE` cannot be re-checked — its calibration captures no longer exist** | *(2026-09-26, found while chasing a partials scare that turned out to be something else)* **Status: OPEN, low priority, and the shipped value is UNCHANGED at 0.4377.** The ladder behind it (0.75/1.50/2.23/3.69/7.45/35.08 dB pp, 0.372 dB/byte constant to +/-0.003 over a 10x range) is recorded only as numbers. **No capture file anywhere reproduces those rungs**, on either this project's side or k2kremote's. The two surviving pan sets in `~/temp` are the pre-§K2PANWIRES run (0.2 dB at every depth, before the doubled-wire cancellation was understood) and one dominated by the rig's own 0.40 Hz image wander.<br><br>⚠ **WHY THE LINEARITY IS NOT THE REASSURANCE IT LOOKS LIKE: a test is blind to whatever it holds constant.** Any dilution CONSTANT across depths preserves 0.372 dB/byte to +/-0.003 exactly while rescaling the result — so the property that makes this the cleanest of the three sweeps cannot see that entire class of error. Third instance of the same shape in one day (a cancellation test blind to an error two fields share; two FFT windows blind to a common bias; this), each caught by the other reader rather than by the rule its maker already held.<br><br>**WHAT IS NOT WRONG WITH IT, so nobody re-derives this:** the docstring's "mono ROM sine" is accurate and the partials scare is **CLOSED**, not provisional. Keymap 163 decodes as 21 identical entries all naming Soundblock 163 at tuning 0; every program involved reads `Layer:1/1`; ROM program 1 on its own keymap shows ordinary harmonics. The two partial series that raised the alarm were a **carrier plus vibrato sidebands** — they alternate in dominance WITHIN one note and sit a fixed **5 Hz** apart, fixed in Hz rather than in cents. Programs 212/213 carry LFO→pitch (213 is named `L2 SHAPE B5`); k2kremote's original setup used 217 precisely because it is the bank's only unrouted program. **This ladder was taken on ROM #199 with nothing routed, so it inherited none of it.**<br><br>✅ **THE CAPTURE IS TAKEN, 2026-09-26** (`§K163CONFIRM`, `~/temp/k163_confirm_20260926.wav`), and the stimulus description is confirmed by observation rather than by argument: ROM program 199 across keys 48-84 gives **ONE tracking series** — top pair a fixed OCTAVE in cents (1219/1210/1205/1205) with the Hz separation doubling, ~100 ct/key throughout, no A/B/A dominance alternation, and none of the 5 Hz pairs 212/213 carried. Two corrections fell out of it: the stimulus is **not a sine** (fundamental and 2nd harmonic within 1 dB), and **my prediction's "no 5 Hz sidebands" clause was barely a test** — a synthetic control shows a 5 Hz pair resolves only while the components are within ~5 dB, so the absence rules out deep modulation and nothing weaker. The exoneration rests on the two positive findings, not the absence.<br><br>**WHAT REMAINS OPEN IS ONLY THE LADDER ITSELF.** Every step of the exoneration above is inference over captures made for another purpose, so the capture is worth taking even though the conclusion is not in doubt. **If it fails, doubt the sideband ANALYSIS before the byte-level exclusions** — the exclusions read decoded device state, whereas the 5 Hz figure came from a sub-window FFT whose argmax had already produced a four-semitone error at internal 72 and a whole coherent false picture (see §KEYMAPARGMAX). Re-measuring the ladder itself would need the K2000R and a fresh depth sweep; **nobody has asked for that and the value has never been heard to be wrong.** |
 | **`KRZ_FORMAT.md` §3.1 says `Soundfilehead.flags` is `0x70` or `0xF0`; the corpus holds five more values** | *(2026-09-21, found while testing a firmware prediction against the corpus)* **Status: OPEN, documentation only — our writer is unaffected.** Scanned **11 798 `Soundfilehead` headers across 333 distinct `.KRZ` files**:<br><br>`0x70` 5347 · `0xF0` 3693 · **`0x04` 1716** · **`0x00` 1006** · **`0x72` 20** · `0x01` 6 · `0xF4` 2 · `0x02` 2 · `0x06` 2 · `0x80`/`0x05`/`0x84` 1 each<br><br>**`0x70`/`0xF0` is what mpc2emu WRITES and what the doc describes. It is not what the corpus contains.** `0x04` and `0x00` — 2722 headers, 23 % of the corpus — carry neither the `0x40` needsLoad bit nor the `0x10|0x20` playback-enable pair. **The obvious reading is ROM samples, which need no loading** — plausible, untested, and *not* what §3.1 currently implies. **`0x72` is `0x70` plus bit 1**, on 20 headers; bit 1 is unexplained on our side.<br><br>⚠ **AND THE K2000 ITSELF EMITS A FIFTH VALUE.** 14 type-134 bodies dumped over SysEx from banks Jan imported from a Roland disc all carry **`0xB0`** — `0xF0` without the `0x40` needsLoad bit, i.e. one-shot and already resident after the import. **So this is not a third-party-bank problem.** An earlier version of this entry said "concentrate in a handful of third-party banks", which implies the device is the well-behaved case. **It is not: a reader assuming `0x70`/`0xF0` mis-handles the K2000's own output.**<br><br>**Why it matters: the reader, not the writer.** A reader that assumes `0x70`/`0xF0` mis-handles a quarter of the corpus *and* every Roland import the device produces. **Blocked on: nothing** — it needs a paragraph in §3.1 saying what the corpus actually holds, and a check of whether `0x04`/`0x00` headers are ROM-referencing. |
 | **`samplePeriod` rounds where the K2000's own importer truncates** | *(2026-09-21, found by checking our corpus-fitted formula against the ROM)* **Status: OPEN, one-line fix, but it changes written bytes so it needs a decision.** `_compute_sample_period` writes `round(1e9 / rate)`. The K2000's Roland importer computes `a0@(28) = 1000000000 / rate` in **integer division** at `0x169DE2` — truncation, not rounding.<br><br>**Divergence on three of the six rates the firmware knows:** 44100 → we write 22676, it writes 22675; 24000 → 41667 vs 41666; 15000 → 66667 vs 66666. The other three agree exactly.<br><br>**Irrelevant to playback** — 1 ns on a ~22 µs period is 4×10⁻⁵ of a semitone — and **visible in any byte-diff against a K2000's own import**, which is how the E4B and KRZ writers have been validated all along.<br><br>**CONFIRMED ON DEVICE OUTPUT 2026-09-21 23:22** — not only in the instruction stream. `k2kremote` read back 19 sample objects from a live **AKAI** import on the K2000R: `samplePeriod = 22675` on all nineteen, where `round(1e9/44100) = 22676`. *This morning's Roland imports could not have shown it — they were all rate code 0, one of the three rates where round and truncate agree. These are rate code 1, which discriminates.* The same truncation therefore holds on **both** import arms, so it is the divisor's behaviour and not one parser's.<br><br>**Blocked on: a decision, not information.** Matching the device means truncating; our value is arguably *more* correct. Jan's standing rule for formats he cannot check by ear is that matching the device is the definition of correct, which argues for truncation — but our own writer's output is already hardware-confirmed with rounding, so changing it invalidates nothing and re-opens nothing. Strategy in `docs/RESOLUTION_NOTES.md` §KRZSAMPPERIOD. |
 | **`maxPitch` omits the fine-tune term the K2000 includes** | *(2026-09-21, from a live AKAI import read back by `k2kremote`)* **Status: OPEN, one-line fix, measured not inferred.** `_compute_max_pitch` writes `round(100*rootkey + 1200*log2(48000/rate))`. The K2000's own importer writes `round(100*rootkey + 1200*log2(48000/rate) - fine_tune)`.<br><br>**17 of 19 exact against AKAI ground truth; 2 disagree by exactly +2 and are UNEXPLAINED.** Seventeen samples land on the predicted `maxPitch` to the unit. `SOP.SAX F 3` (root 65, fine −16) predicts 6663 and reads **6665**; `SOP.SAX D 5` (root 87, fine +28) predicts 8819 and reads **8821**. Same magnitude, same sign — a pattern, not noise. Not rounding: the raw AKAI tune units are −41 and +71 (÷2.56 = −16.0156 and +27.7344 cents), and neither round nor truncate reaches the observed values. Nothing distinguishes those two samples in their headers — same rate, same 0x16/0x18, same structure as the other seventeen.<br><br>⚠ **THIS ROW FIRST SAID "exact on 3 of 3" AND THAT WAS MY ARITHMETIC ERROR.** `D 5` was never exact. The peer reported `maxPitch − 100·root = 121`, i.e. **8821**; I read it as 8819, matched it to my own prediction and wrote *"Exact"* — while in the same breath filing the observation that *a 2-cent residual is exactly the size that gets explained instead of chased.* It was chased away one sentence later, by me. Caught by `k2kremote` re-checking a number I had declared settled.<br><br>**The two exceptions stay live.** 17 of 19 with two open cases is a stronger result than 19 of 19 reached by adjusting two fine tunes to fit.<br><br>**The minus sign is forced, not a convention.** `maxPitch` is the pitch at which the sample, transposed up, hits the 48 kHz ceiling; a sample carrying a −68 cent correction plays at a lower rate for a given key and can go 68 cents higher before hitting it. So there is no sign inversion to justify and our AKAI parser's sign is right.<br><br>**Affects the ceiling, not playback pitch** — but it is a written byte that differs from the device's on every fine-tuned sample, which is precisely the class of difference our byte-diff validation exists to catch. |
@@ -8267,6 +8268,40 @@ contain — the test does not exist here rather than having been skipped.
 
 ## ~~F2DEPTH — the MODVFLT2_3 depth law~~ ✅ **MEASURED 2026-09-24: ~216 cents/unit, in CENTS**
 
+> ⚠ **A SECOND DERIVATION EXISTS AND IS ~2-6 % HIGHER — 216.6 is not settled,
+> but it is not contradicted either.** s3ked's §226/§227 (**2026-09-11**, in
+> their own tree) headline **~225 cents/unit, +/-5 % between corners**. At the
+> three corners both projects measured:
+>
+>     FIL2FR 66   s3ked 230.0 (resid 68.8)   ours 212.7-216.6
+>     FIL2FR 72   s3ked 219.7 (resid 13.1)   ours 215.0-216.3
+>     FIL2FR 80   s3ked 227.8 (resid 19.2)   ours 215.2-217.4
+>
+> **At the corner where their fit is best the gap is ~4 cents/unit — about
+> 2 %.** Neither project has propagated its error bars far enough to say whether
+> that is a real difference.
+>
+> ⚠ **THIS ROW FIRST SAID "~230 +/- 8" AND "our 216.6 sits outside that
+> range". Both halves were wrong** and the error was mine: **230.0 is the ladder
+> s3ked itself calls the worst of the three** (68.8 cents residual, low rungs
+> where fewest harmonics fall in their window), and their note says outright
+> *"Rung count is not evidence quality."* I quoted the six-rung fit as the
+> peer's value because it had the most rungs. **Ranked on the wrong quantity, in
+> a file whose job is to tell the next reader what is disputed.** Corrected only
+> because k2kremote went looking for the number and could not find it.
+>
+> **The CENTS-not-bytes finding is unaffected** — it rests on three base
+> corners agreeing, which no common window bias can manufacture. Only the
+> per-unit scale is at issue.
+>
+> **Resolvable without the rig**, because what separates the two is the
+> baseline-window position — a property of the ANALYSIS, not of the machine.
+> **s3ked has not been asked about the comparison.** Nothing shipped depends on
+> either figure (`MODVFLT2_3` is still written as zero), so this is a
+> documentation conflict rather than a bug. Full text in §AKAIF2DEPTH.
+>
+> ✅ **RESOLVED 2026-09-26: there was never a disagreement.** s3ked ran their window rule on OUR thirteen captures and got 219.5-237.5 (mean 225.7), agreeing with their own §227 to one decimal at two of three corners. **216.6 was our window's artefact**, and my "their headline is ~225" correction read §226, which §227 supersedes — their figure is **~230 +/-8**. Carry that one. Full account in §AKAIF2DEPTH.
+
 Volume `F2DEPTH`, 13 programs, note 36, corner against depth with depth 0 as
 control and PRG 56 (both filters open) as the deflattening reference.
 
@@ -8424,3 +8459,45 @@ wire ever gains a range, seg[7] must be located first.
 
 See `docs/RESOLUTION_NOTES.md` §KRZLFO2AUDIO, §KRZLFO2READ, §KRZLFOSHAPE,
 §KRZLFO2RATE, §KRZLFO2SEG.
+
+## Reducing the `–` cells in docs/PARAMETER_MATRIX.md
+
+**Status:** triaged 2026-09-25. A `–` means "a reader sets it, this writer does
+not read it" and says nothing about *why* — these are the 24 fields behind one,
+split into what is implementable and what the machine cannot do.
+
+**DONE 2026-09-25:** `velocity_to_pan` → K2000 panner `VelTrk` (seg[4],
+program offset 245, §PANMOD). It was one of three model fields read by **no
+writer at all**; the scale is `Depth`'s, since the hardware map gives both the
+same encoding (2 %/unit, ±200 % rail), so it is a carry-across inside one
+block rather than a fresh rail fraction. MPC→KRZ 9→8, AKAI→KRZ 6→5.
+
+### Implementable — offsets or mechanism already known
+
+| field | target | what is needed |
+|---|---|---|
+| `key_to_pan` | KRZ | `KeyTrk` seg[3] is hardware-mapped, **but the units differ**: it is a per-key slope (0.2 %/key per unit) and our field is a scalar depth. Needs a keyboard-span decision, so it is a modelling call and not a transcription |
+| `key_to_pan` | E4B | §E4BKEYPAN — form and pivot already measured (`Key~`, source 9, pivots at key 60). Open question is whether AKAI key centres sit at 60 |
+| `lfo1_to_volume` | AKAI | the parser reads it from the `MODSAMP` slots (§AKAILFOAMP) and the writer emits only the factory routing. Inverting the product law needs the program-level `LFODEP` |
+| `lfo1_to_filter`, `lfo2_to_filter` | AKAI | same shape, `MODSFILT` slots |
+| `transpose` | KRZ | the K2000 transposes per layer; we carry the field from E4B and never write it |
+| `lfo_volume_centre_db` | KRZ | the AMP `Adjust` byte is already written for the tremolo headroom trim; this is the same byte |
+| `program_number` | KRZ | the writer allocates its own ids (a bank asking for 130 came out at 200) |
+
+### Capability limits — not gaps, and the matrix should not imply they are
+
+* **`lfo1_sync`, `lfo2_sync`, `lfo1_sync_division`** on KRZ and AKAI. The
+  K2000's LFO page has five parameters and **no clock sync** (Musician's
+  Guide); the AKAI has none either.
+* **`lfo1_variation`, `lfo2_variation`** — E4B-specific.
+* **`lfo2_delay` on KRZ** — the K2000 LFO page has no delay field at all.
+* **`velocity_to_pan` on E4B** — a **stated decision**, not a gap
+  (§E4XTVELSRC: the E4XT velocity source is a triad differing by pivot).
+  ⚠ Now that KRZ writes it, E4B is the only target that does not, and the
+  reason is recorded — do not "fix" it for symmetry.
+
+### The matrix itself cannot show this distinction
+
+A `–` reads the same for "we have the offset and have not written it" and
+"the machine has no such parameter". Until the generator can carry a reason,
+this table is where the difference lives.

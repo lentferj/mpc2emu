@@ -377,7 +377,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAICORDSTAGE — the eleven cords' staging map, and what it maps to](#akaicordstage-the-eleven-cords-staging-map-and-what-it-maps-to)
 - [§AKAIZONEDROP — nothing merges (HW), and a dropped zone WIDENS its survivor](#akaizonedrop-nothing-merges-hw-and-a-dropped-zone-widens-its-survivor)
 - [§AKAIATKRECHECK — the ATTAK1 law re-measured on our own rig, 7 points](#akaiatkrecheck-the-attak1-law-re-measured-on-our-own-rig-7-points)
-- [§AKAIF2DEPTH — MODVFLT2_3 is ~216 cents per unit, and the law is in CENTS](#akaif2depth-modvflt2_3-is-216-cents-per-unit-and-the-law-is-in-cents)
+- [§AKAIF2DEPTH — MODVFLT2_3 is ~230 cents per unit (s3ked §227); the law is in CENTS, and our own 216.6 was our window](#akaif2depth-modvflt2_3-is-230-cents-per-unit-s3ked-227-the-law-is-in-cents-and-our-own-2166-was-our-window)
 - [§AKAISIMEXTRA — what the FIRMWARE simulation carries that the ordinary path does not](#akaisimextra-what-the-firmware-simulation-carries-that-the-ordinary-path-does-not)
 - [§AKAIPANMATRIX — the pan mod matrix, wired into the measured path](#akaipanmatrix-the-pan-mod-matrix-wired-into-the-measured-path)
 - [§E4BKEYPAN — `key_to_pan` reaches the E4B writer and is dropped (2026-09-25)](#e4bkeypan-key_to_pan-reaches-the-e4b-writer-and-is-dropped-2026-09-25)
@@ -395,6 +395,11 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§LFO2ENDTOEND — every `lfo2_*` field, written and read back by every target (2026-09-25)](#lfo2endtoend-every-lfo2_-field-written-and-read-back-by-every-target-2026-09-25)
 - [§MPC3LFOJSON — the MPC 3 LFO JSON, read from a real project (2026-09-25)](#mpc3lfojson-the-mpc-3-lfo-json-read-from-a-real-project-2026-09-25)
 - [§ORPHANFIELDS — "no field a reader sets goes unread" is true of `lfo2_*` ONLY (2026-09-25)](#orphanfields-no-field-a-reader-sets-goes-unread-is-true-of-lfo2_-only-2026-09-25)
+- [§E4XTVELPANSRC — `velocity_to_pan` on the E4XT is `Vel~`, 2 127 of 2 127 (2026-09-25)](#e4xtvelpansrc-velocity_to_pan-on-the-e4xt-is-vel-2-127-of-2-127-2026-09-25)
+- [§KRZPITCHKEYTRK — REFUTED: writing `CAL[19] = 0` for `non_transpose` is a no-op (2026-09-25)](#krzpitchkeytrk-refuted-writing-cal19-0-for-non_transpose-is-a-no-op-2026-09-25)
+- [§KEYMAPARGMAX — `KEYMAP KeyTrk = 100 ct/key` was never in doubt; the "flattening" was the FFT argmax (2026-09-26)](#keymapargmax-keymap-keytrk-100-ctkey-was-never-in-doubt-the-flattening-was-the-fft-argmax-2026-09-26)
+- [§K163CONFIRM — the pan ladder's stimulus, measured at last: one tracking series, and my own prediction's third clause was untestable (2026-09-26)](#k163confirm-the-pan-ladders-stimulus-measured-at-last-one-tracking-series-and-my-own-predictions-third-clause-was-untestable-2026-09-26)
+- [§ROM1PITCH — the −12 does not exist: ROM program 1 is at pitch on five keys, and the old number was period doubling rather than a sub-octave (2026-09-26)](#rom1pitch-the-12-does-not-exist-rom-program-1-is-at-pitch-on-five-keys-and-the-old-number-was-period-doubling-rather-than-a-sub-octave-2026-09-26)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -27018,7 +27023,8 @@ outstanding. Nothing implemented.**
 signed percent — 6/6 against a panel read, 0/200 false positives on a null test.
 
 **LOCATED 2026-09-06 (k2kremote, RAM-only SysEx diff):** `Adjust` 242 at
-1 %/unit, `KeyTrk` 244 at 0.2 %/key, `VelTrk` 245, `Depth` 247, `MinDpt` 249 and
+1 %/unit, `KeyTrk` 244 at 0.2 %/key (**one click plus a zero baseline — the
+OFFSET is solid, the SLOPE is two points; see KRZ_FORMAT.md**), `VelTrk` 245, `Depth` 247, `MinDpt` 249 and
 `MaxDpt` 250 all at 2 %/unit, `Pad` 252 as the 0/6/12/18 dB ladder. Full table in
 `KRZ_FORMAT.md §4.x`. **Still NOT located:** `Src1`, `Src2`, `DptCtl` — wheel
 enumerations that a digit-entry pass does not touch.
@@ -36993,7 +36999,75 @@ this file.
   caught before anything was written down; either alone would have produced a
   confident wrong answer in the same direction.
 
-## §AKAIF2DEPTH — MODVFLT2_3 is ~216 cents per unit, and the law is in CENTS
+## §AKAIF2DEPTH — MODVFLT2_3 is ~230 cents per unit (s3ked §227); the law is in CENTS, and our own 216.6 was our window
+
+> ✅ **RESOLVED 2026-09-26 (s3ked §269, `abe47a8`): THERE WAS NEVER A
+> DISAGREEMENT. The window accounts for the whole gap, and 216.6 is OUR
+> window's artefact.** s3ked ran their window rule on **our own thirteen
+> captures** and got **219.5-237.5**, mean 225.7 — not 216.6:
+>
+>     window       FIL2FR 66   FIL2FR 72   FIL2FR 80   mean
+>     6.0/3.0        229.9       219.5       227.8     225.7
+>     8.0/4.0        230.6       221.1       226.3     226.0
+>     3.0/1.7        237.5       236.6       226.7     233.6
+>
+> Corner for corner against their own §227 captures (a fortnight earlier, same
+> programs of the same volume): theirs 235.6 / 219.7 / 227.8, ours under their
+> window 229.9 / 219.5 / 227.8. **Two independent capture sets agreeing to one
+> decimal at two of three corners.** `FIL2FR` 66 is the outlier and is the
+> corner §227 already flags as worst-residual with the fewest baseline
+> harmonics.
+>
+> **Their window rule, for the record**, since ours differed only here:
+> baseline = harmonics between `fc/6` and `fc/3` (falling back to
+> `fc/8`..`fc/2.5` when fewer than two land), **iterated to convergence in
+> `fc`** rather than placed once; `rel = db - db_ref` against wide-open program
+> 56; harmonics kept only >=20 dB above a floor taken as the median above
+> 8 kHz; corner = the -3 dB crossing of `rel` below the baseline median,
+> interpolated in log2, searched up from 150 Hz.
+>
+> ⚠ **AND MY 2026-09-26 "CORRECTION" OF THEIR FIGURE WAS ITSELF WRONG. I read
+> a SUPERSEDED section.** I had recorded them at "~230 +/- 8" and then corrected
+> myself to "their headline is ~225 +/-5 %, and 230.0 is the ladder they call
+> the worst of the three." **The first version was right.** §227 supersedes
+> §226 and says so in terms — *"the honest figure is ~230 cents/unit, +/-8, and
+> §226's '~225, +/-5 %' was the value at one window read as the value."* I
+> quoted §226's table and its headline without noticing §227 struck both.
+>
+> **What made the wrong correction look verified is a coincidence worth naming:
+> §226's worst single ladder reads 230.0, and §227's superseding headline is
+> also ~230 — from an entirely different computation, one page apart.** Anyone
+> checking "does 230 appear in §226, and what is it there?" finds it, finds a
+> 68.8-cent residual attached, and stops. I did.
+>
+> **And attaching that 68.8 to the depth law compares the two quantities §227
+> exists to separate.** The 68.8 belongs to an **absolute** corner reading,
+> which moves 295 cents across the window sweep and is not determined by the
+> data at all. The depth law is a **differential** at one window position, so
+> the common bias cancels and it moves 18. Their *"rung count is not evidence
+> quality"* is about the former; I applied it to the latter.
+>
+> **The mechanism is the one this project has been writing down all day, and
+> this is its cleanest instance: a test is blind to whatever it holds constant.**
+> Two analyses, each holding its own window fixed, and **the fixed thing WAS the
+> disagreement.** The discriminator is never inside the convention both sides
+> keep — which is why this took an hour offline rather than a bench slot, and
+> why it was our captures under their window, rather than more measurements,
+> that settled it.
+>
+> ⚠ **A GAP IN OUR OWN GUARD, worth fixing:**
+> `test_no_code_cites_a_superseded_section_unreviewed` exists precisely so that
+> a struck section re-opens its dependants — and it caught me once today, on
+> §KRZPITCHKEYTRK. **It only reads OUR notes.** A sibling project's superseded
+> section is invisible to it, which is exactly the trap above. See
+> §AKAIF2DEPTHGUARD (not yet written) if this is ever mechanised.
+>
+> **Nothing shipped depended on either number** — `MODVFLT2_3` is still written
+> as zero — so this cost documentation time and no output.
+>
+> **The figure to carry forward is s3ked's ~230 +/-8**, not our 216.6, whose
+> window is now known to bias it low.
+
 
 **Measured 2026-09-24**, volume `F2DEPTH` on the AKAI card at id 2, note 36,
 CC7=48, corner against depth at a fixed time with depth 0 as the control,
@@ -38428,3 +38502,402 @@ that day and every total looked plausible; nothing about "58 of 61" invites
 suspicion. Asking whether a claim generalises beyond the case it was measured
 on is what surfaced it — the same move that caught the "+1" LFO shape
 inference a few hours earlier, from the opposite direction.
+
+## §E4XTVELPANSRC — `velocity_to_pan` on the E4XT is `Vel~`, 2 127 of 2 127 (2026-09-25)
+
+**The question.** Writing `velocity_to_pan` to an E4XT means choosing one of the
+velocity triad — `Vel+` (0x0A), `Vel~` (0x0B), `Vel<` (0x0C) — which differ only
+in PIVOT (measured: 0, 89.4, 127). The choice changes what a given depth means,
+so it cannot be defaulted.
+
+**It could not be inherited from volume**, because §E4XTVELSRC refuted the claim
+that `Vel<` was the machine's convention — and did so only after the original
+claim turned out to rest on 22 presets resident in the machine, a population
+that included our own output. Pan needed its own.
+
+### The answer
+
+Counting **every** cord into `AmpPan` (0x41) in every voice, not the first:
+
+| population | banks | voices | `Vel+` | `Vel~` | `Vel<` |
+|---|---|---|---|---|---|
+| EOS-native library CD **A** | 11 | 11 806 | 0 | **2 024** | 0 |
+| EOS-native library CD **B** | 16 | 4 614 | 0 | **99** | 0 |
+| EOS-native library CD **C** | 12 | 1 003 | 0 | **4** | 0 |
+| **total** | 39 | 17 423 | **0** | **2 127 (100 %)** | **0** |
+
+**`Vel~`, unanimously, across three independently authored discs.** And it is
+the OPPOSITE of the volume answer on disc A, which is 96.9 % `Vel+` — two
+destinations on one machine with opposite conventions, which is exactly why
+inheriting would have been wrong.
+
+`Vel~` is also the bipolar-about-centre form, which is what a signed pan depth
+wants, and it matches the `Key~` the key→pan cord beside it already uses.
+
+### ⚠ The control, and why it is the load-bearing part
+
+Run against `AmpVol` on disc A the same scan returns **11 banks, 11 806 voices,
+11 449 / 36 / 238** — §E4XTVELSRC's recorded table **to the unit**. The census
+mechanism is therefore validated against a figure obtained independently,
+rather than trusted.
+
+*One number does not reconcile and is left visible:* §E4XTVELSRC records 488
+amount-zero cords for that disc where this scan counts 85. Every ACTIVE figure
+matches exactly, so the discrepancy is in how neutral cords were counted, not in
+the census. Not silently adopted.
+
+### The intermediate result, kept because it was nearly acted on
+
+The first pass scanned **131 loose `.e4b` files, 32 558 voices**, and found
+**8** active velocity→pan cords — all `Vel+`. Eight observations cannot choose a
+convention, and acting on them would have picked the wrong form.
+
+That population's own control gives **100 % `Vel<`** for `AmpVol`, against the
+CDs' 96.9 % `Vel+`: it is converted third-party material, i.e. tool output —
+the same *kind* of wrong subject as the 22 resident presets. **A control that
+does not reproduce a known figure is not a detail; it is the finding.**
+
+⚠ And the reason the right population was reachable at all:
+`tests/re_banks/extract_emu_hdd_bank.py` reads these EMU3 CD images directly.
+An earlier note here said an extractor would have to be written first — that
+was asserted without looking, and the tool had existed for weeks.
+
+### What was implemented
+
+`e4b_writer` writes the cord as `Vel~` on the shared pan rail. `e4b_parser`
+now READS it — together with `key_to_pan`, which the writer had emitted since
+earlier the same day and nothing read back, so an E4B → E4B conversion dropped
+both. Scanner: `tests/re_banks/corpus_scan_velpan.py` (`--dest vol` is the
+control leg and must keep reproducing the table above).
+
+## §KRZPITCHKEYTRK — REFUTED: writing `CAL[19] = 0` for `non_transpose` is a no-op (2026-09-25)
+
+**The plan said:** express `non_transpose` on the K2000 by setting pitch
+keytrack to 0 on the PITCH page. The field is `CAL[19]`, program offset 196,
+identified in `docs/KRZ_FORMAT.md` and hardware-read by k2kremote §73.
+
+**The corpus says that would change nothing.** Censused over the 201-bank
+soundset collection, 16 649 CAL segments:
+
+| `CAL[19]` | layers | share |
+|---|---|---|
+| **0** | **16 446** | **98.78 %** |
+| 43 | 150 | 0.90 % |
+| 13 further values | 53 | 0.32 % |
+
+**98.78 % cannot be the exceptional case.** Ordinary 1:1 keytracking is what
+almost every program has, so `0` is the byte for NORMAL tracking -- the field
+encodes a deviation from the default rather than the tracking amount itself.
+Writing 0 to express "pitch does not follow the key" would have been a silent
+no-op that looked like a working feature, and the round trip would not have
+shown it either, since nothing reads the field back.
+
+**This is the base-rate check earning its place.** "0 means zero" is plausible,
+free, and wrong; only the population separates it from the truth. Same family as
+the two hypotheses that died on the same day at 78 % against a 72 % base rate.
+
+**What would close it:** measure what byte gives 0 ct/key, by SysEx panel diff
+(`read_object_bytes`, panel edit with the editor open, read again, diff -- RAM
+only, nothing written to disk). The PITCH page displays `KeyTrk` directly, so
+the reading is immediate. **`43` is the candidate to try first**, being the only
+other value with a real population; if it is the "0 ct/key" setting then those
+150 layers are the corpus's fixed-pitch drum programs, which is a checkable
+prediction rather than a guess.
+
+### MEASURED 2026-09-25 (k2kremote) — and my candidate was WRONG
+
+**`43` is `+100 ct/key`, not `0`. The value that cancels tracking is byte 213.**
+
+The law, offset 196 confirmed by edit-buffer diff rather than assumed, signed
+two's-complement, three linear regions, symmetric, fitted over **89 points** (a
+full sweep 0 → byte 211 → 0 → byte 45, reading the display and dumping at every
+step):
+
+    |byte| 0      ->   0 ct/key
+    |byte| 1..8   ->   5 * |byte|
+    |byte| 9..33  ->  40 + 2*(|byte| - 8)
+    |byte| 34+    ->  90 + (|byte| - 33)
+
+**WHY THE PREDICTION FAILED, and the half of it that was right.** "0 cannot be
+the exceptional case at 98.78 %" is correct; "therefore 43 is the deviation"
+does not follow. The manual (PITCH page) states that **PITCH KeyTrk is a
+DEVIATION ADDED to the KEYMAP page's KeyTrk**, which already sits at
+100 ct/key — so byte 0 is normal tracking *because it adds nothing*, and byte 43
+is **double** tracking, 200 ct/key.
+
+**CORROBORATED BY THE POPULATION, which is how it was checked rather than
+believed.** The 150 layers at 43 are 91 distinct programs and **4 of 150 are
+drum-named (2.7 %)**: `*Tenor Windphone`, `*Bari Windphone`, `Gothic Voice`,
+`Mono Moog Bs`, `*Reso Bass`, `*Metal Lead`, `*Whistlephone`. Wind emulations
+and mono synth leads — voices where two semitones per key is a technique. If
+they had been kits, the reading would have been wrong.
+
+⚠ **BYTE 213 OCCURS ONCE IN 16 649 LAYERS** (one program, `Pulsar`). So the
+value our writer would emit has no population behind it, and the corpus cannot
+corroborate −100 the way it just corroborated +100. The functional confirmation
+— two keys an octave apart at 213, pitch not moving — is therefore load-bearing
+and is **not yet done**.
+
+**TWO ROUTES TO ZERO TOTAL TRACKING, NOT INTERCHANGEABLE:**
+
+* `PITCH KeyTrk = 213`, KEYMAP left at 100 — pitch constant, **keymap still
+  advances so each key plays its own sample**. This is what `non_transpose`
+  means for us: EOS `vpar[38]` on a voice whose zones each play at their own
+  root.
+* `KEYMAP KeyTrk = 0`, PITCH left at 0 — one sample root stretched across the
+  whole keyboard. The manual gives this as the portamento-click recipe. It
+  would collapse a multi-zone drum voice onto one sample.
+
+**OPEN:** the KEYMAP-page KeyTrk byte is not located. Predicted: real K2000 drum
+programs get fixed pitch THERE, not at PITCH 213 — which is why 213's population
+is one. Locating it makes that a census rather than a guess.
+
+### MEASURED ON HARDWARE 2026-09-26 — byte 213 cancels, and it is IMPLEMENTED
+
+k2kremote set the byte, mpc2emu captured the audio. ROM keymap 163, both legs
+differing in `CAL[19]` alone, `Xpose:0ST`, brackets stable either side:
+
+    internal key      48      60      72      84      96
+    PITCH KeyTrk 0   70.0   140.0   271.4   535.7  1064.3   -> +97.9 ct/key
+    PITCH KeyTrk 213 201.4  201.4   201.4   201.4   201.4   ->  +0.0 ct/key
+
+**Spread 0 cents across 48 keys against the control's 4712.** Total tracking is
+cancelled, so byte 213 (signed −43, displaying −100 ct/key) meets the KEYMAP
+page's default +100 exactly. **§90's three-region ladder therefore describes the
+ENGINE and not merely the display** — which was an open question, since the
+standing policy on this machine is to distrust a displayed unit.
+
+**⚠ THREE CANDIDATE VALUES CAME FIRST AND ALL THREE WERE WRONG.** Recorded
+because each was plausible and two were mine:
+
+1. **`0`** — a no-op. 98.78 % of 16 649 corpus layers carry it, because 0 means
+   "add nothing" and normal tracking lives on the KEYMAP page.
+2. **`43`** — predicted as the cancelling value; it is the opposite, +100 ct/key
+   or DOUBLE tracking. Its 150 layers are windphones and mono synth leads,
+   2.7 % drum-named.
+3. **"the engine uses the raw byte −43 as cents-per-key"** — fitted to ONE key,
+   where it agreed to 12 cents. An artefact: the test leg is FLAT and the
+   control TRACKS, so their difference at any single key is just the control's
+   tracking evaluated there. Five keys separate the two models by 2 736 cents.
+   A linear fit of that difference gave "slope −97.9, pivot 66.6", which is the
+   control's own slope sign-flipped and the crossing of two lines — neither
+   number about PITCH KeyTrk at all.
+
+**Implemented** in `krz_writer` as `_K2_PITCH_KEYTRK_CANCEL`, taking the
+multi-zone route deliberately: the keymap still advances so each key keeps its
+own sample, which is what EOS `vpar[38]` means. Real K2000 material does the
+opposite — `CAL[3] = 0` on 950 programs, drums enriched 9.7x — against a
+population of **one** for this byte, so this is measured rather than idiomatic.
+
+⚠ Internal keys 24 and 36 stayed silent in BOTH legs, so something limits the
+low end and it is not the cancellation. Not chased: the control rules out every
+explanation that depends on the cancellation.
+
+**THE RESULT IS STRONGER THAN A SLOPE, AND THAT MATTERS BECAUSE THE SLOPE WAS
+UNRELIABLE.** In the TEST leg **every spectral component is at the identical
+frequency on every key** — 201 Hz, 343 Hz, 210 Hz, 209 Hz at all five keys with
+the same relative levels, across 48 semitones. Nothing in the sound moves. That
+is what establishes the cancellation; the "+0.0 ct/key" figure is a consequence
+of it rather than the evidence for it.
+
+**AKAI side of the same item:** `docs/AKAI_S3000_FORMAT.md` has no key-tracking
+or fixed-pitch entry at all, so there the byte is genuinely unidentified and the
+corpus is the cheaper first step (which keygroup bytes separate a drum program
+from a pitched one?).
+
+## §KEYMAPARGMAX — `KEYMAP KeyTrk = 100 ct/key` was never in doubt; the "flattening" was the FFT argmax (2026-09-26)
+
+**Split out of §KRZPITCHKEYTRK, whose heading reads REFUTED.** That section's verdict — that writing `CAL[19] = 0` is a no-op — is struck, but this finding is live and independent of it, and the citation guard was right to refuse a pointer into a struck heading. Filed separately so `TODO.md` and the pan-constant docstring can cite something that is not superseded.
+
+**⚠ AND THE CONTROL LEG'S APPARENT FLATTENING IS AN ARTEFACT — DO NOT BUILD ON
+IT.** The signal is not a single sine. Every key carries TWO partials within
+0–1 dB of each other and both track, separated by a GROWING interval:
+
+    internal 48   70 + 84 Hz      (316 ct apart)
+    internal 60  140 + 169 Hz     (326 ct)
+    internal 72  271 + 346 Hz     (425 ct)
+    internal 84  536 + 699 Hz     (457 ct)
+
+So the FFT argmax hops between two series whose separation widens with key, and
+0.70 s and 0.30 s windows disagreed by **four semitones** at internal 72 (271.6
+vs 346.0). The end-to-end 98.26 ct/key reproduced across both windows, but two
+windows of the SAME method agreeing does not exclude a bias common to both.
+
+That disposes of a whole picture that had looked coherent: a root-relative onset
+(Soundblock 163's rootkey is 70, which a window artefact would match **for
+free**, since the root sets the transposition), halving increments (−47.7,
+−23.5, −12.0) and an asymptote near one semitone. **All of it was the argmax.**
+A playback-rate ceiling was separately excluded by arithmetic — it would give
+unbounded cumulative error, not a bounded deficit.
+
+`KEYMAP KeyTrk = 100 ct/key` was therefore never in doubt.
+
+**What settled it was looking at the SPECTRUM rather than at a number derived
+from it.** Two attempts at an autocorrelation estimator both failed (unclamped
+parabolic interpolation returning negative frequencies; the clamped version
+returning its own search bound on three of five notes) and were discarded.
+
+⚠ **"CONTRIBUTED NOTHING" WAS WRONG — corrected 2026-09-26 (§ROM1PITCH).** One of
+them contributed the −12 that this project then carried for a day and a peer
+spent an hour relocating. A uniform, exact factor of two across five keys is
+**period doubling**, the autocorrelation family's signature failure, and an ACF
+estimator was in use on exactly that material. A tool recorded as having failed
+and produced nothing had in fact produced the thread's first pitch number.
+
+## §K163CONFIRM — the pan ladder's stimulus, measured at last: one tracking series, and my own prediction's third clause was untestable (2026-09-26)
+
+**The capture I owed since the partials scare.** Programs 212/213 were shown to
+carry LFO→pitch, which exonerated ROM program 199's pan ladder by argument
+rather than by observation. Every step of that was inference over captures made
+for another purpose, so this is the direct look.
+
+`~/temp/k163_confirm_20260926.wav` + `.sched.json`. ROM program 199
+(`CC0=1 PC=99`, *"199 Default Program"*), internal keys 48/60/72/84, velocity
+100, 3.0 s holds, **one** `play_sequence` call so one JACK client. LCD
+bracketed either side: `Channel:9`, `Xpose:0ST`, unchanged across the run.
+
+### The result: a fixed octave in CENTS, and ~100 ct/key
+
+    key    p1        p2       dHz      dCents
+     48    128.9     260.7    131.8    1219.4
+     60    260.7     524.4    263.7    1209.9
+     72    521.5    1045.9    524.4    1204.8
+     84   1045.9    2097.7   1051.8    1204.9
+
+**The top pair is an octave at every key and the Hz separation DOUBLES per
+octave.** That is harmonic behaviour and it is the exact opposite of what
+212/213 showed, where the close pairs sat a fixed 5 Hz apart regardless of key.
+Fundamental tracking: 101.6 / 100.0 / 100.4 ct/key across the three intervals
+— **`KEYMAP KeyTrk = 100 ct/key`, confirmed here independently of
+§KEYMAPARGMAX and on a different program.**
+
+No A/B/A dominance alternation. Keys 72 and 84 hold the same peak ordering
+across early/mid/late sub-windows; keys 48 and 60 swap **once** between early
+and mid, which is the second partial settling relative to the fundamental — a
+one-way transition between two peaks an OCTAVE apart, not the back-and-forth
+between a 5 Hz pair that 212/213 gave.
+
+### ⚠ The stimulus is NOT a sine, and the docstring said it was
+
+    key 48   128.9 Hz (0.0 dB ref)  260.7 (-0.9)  392.6 (-9.1)
+    key 60   260.7 Hz (0.0)         524.4 (-0.7)  785.2 (-9.3)
+
+Fundamental and second harmonic **within 1 dB**, third at −9. "Mono ROM sine"
+is wrong and is now "mono ROM tone" in `KRZ_LFO_PAN_DEPTH_SCALE`'s docstring.
+**It does not threaten the constant** — one sample, one layer, one series, so
+every component shares one pan and none of them dilutes the swing — but the
+word was asserted, never measured, and it survived in a docstring being used to
+defend a number.
+
+### ⚠ MY OWN PREDICTION'S THIRD CLAUSE COULD NOT HAVE FAILED, AND I FILED IT AS IF IT COULD
+
+I predicted *"one harmonic series, no 5 Hz sidebands, any pair at a fixed cents
+separation."* Clauses 1 and 3 are real tests. **Clause 2 is not, except for
+near-equal amplitudes.** Synthetic control through the same `spectrum()` and the
+same peak picker — carrier 270 Hz, sideband at 275 Hz:
+
+    sideband   0 dB  -> 269.5 + 275.4 resolved
+    sideband  -6 dB  -> carrier only
+    sideband -10 dB  -> carrier only
+    sideband -30 dB  -> carrier only
+
+`n = 1<<14` gives 2.93 Hz bins, so 5 Hz clears the bin spacing — but the Hann
+main lobe is ~11.7 Hz wide and **swallows any sideband more than about 5 dB
+below its carrier.** So "no 5 Hz pairs in this capture" rules out the deep
+modulation 212/213 showed (whose pairs were within ~1 dB, which is why they
+were visible) and says **nothing** about weak LFO→pitch.
+
+**The exoneration does not rest on that clause**, which is the only reason this
+is a caveat and not a retraction: it rests on the two POSITIVE findings above —
+a pair fixed in cents with dHz doubling, and 100 ct/key tracking. An absence
+was the weakest thing in my own prediction and I had weighted it equally.
+
+> **First instinct was wrong in the other direction too**, and the control is
+> what settled it: I expected the ~11.7 Hz main lobe to make 5 Hz
+> *unresolvable at any amplitude*, and was about to report the negative as
+> vacuous. Two equal sines 5 Hz apart resolve cleanly. The limit is amplitude
+> ratio, not separation — which no amount of reasoning about lobe widths would
+> have told me.
+
+### A free result: MIDI note → pitch is 1:1, with no octave anywhere
+
+Key 48 sounds **128.9 Hz** (C3 = 130.81) and key 60 sounds **260.7 Hz**
+(C4 = 261.63) — within ~25 cents, i.e. one bin, and nowhere near ±1200.
+**So with `Xpose:0ST` there is no transposition in the chain at all.**
+
+That bears on a −12 this project inferred earlier the same day from "sent key
+60 sounding 130 Hz", which k2kremote then relocated to *"your MIDI path"* once
+Jan's saved default turned out to be 0ST. **It is not in the MIDI path**: this
+capture is that path, end to end, reading 1:1. Independently, `mididings_k2000r`
+is `ChannelFilter` + `Filter(SYSTEM)` and transposes nothing, and
+`play_sequence` applies no offset to note numbers.
+
+⚠ **The −12 observation itself is recorded NOWHERE in either tree** — not in
+`docs/`, not in k2kremote's notes; its provenance is a conversation. So it is
+not "relocated", it is **unrecorded and needs re-deriving before it is assigned
+to anything.** The cheapest untested candidate remains the program and sample
+it was observed on: Soundblock 163's own rootkey is 70, and a sample rooted at
+70 played from key 60 sounds below its recorded pitch without anything in any
+chain transposing.
+
+### What this does NOT do
+
+**It does not re-measure the pan ladder.** The surviving charge against
+`KRZ_LFO_PAN_DEPTH_SCALE` stands exactly as written: the ladder's own captures
+are gone from both projects, so its linearity cannot be re-checked, and
+linearity is blind to a constant scale factor regardless. This capture confirms
+the **stimulus description**, which was the part under suspicion, and nothing
+further.
+
+## §ROM1PITCH — the −12 does not exist: ROM program 1 is at pitch on five keys, and the old number was period doubling rather than a sub-octave (2026-09-26)
+
+**Measured, not argued.** `~/temp/rom1_pitch_20260926.wav`, ROM program 1
+(`CC0=0 PC=1`), keys 60/67/72/79/84, one capture. LCD bracketed either side:
+`Channel:9`, `Xpose:0ST`, unchanged.
+
+    key  nominal    loudest peak   cents off   peak at nominal/2 ?
+     60   261.63     260.7  0.0dB     -6         NONE
+     67   392.00     392.6  0.0dB     +3         NONE
+     72   523.25     521.5  0.0dB     -6         NONE
+     79   783.99     785.2  0.0dB     +3         NONE
+     84  1046.50    1043.0  0.0dB     -6         NONE
+
+**The nominal fundamental is the loudest peak at every key, and there is no
+component at half nominal at any key down to −45 dB.** So the −12 is not in the
+instrument, not in the MIDI path, and not in any sample's root key. k2kremote
+reached this conclusion first, from re-reading my own published peak lists;
+this is the confirming measurement.
+
+### Their conclusion is right and their MECHANISM is refuted by the same data
+
+k2kremote's reading was that the FFT argmax *"chose a sub-octave component"*
+present in the signal. **There is no such component.** Nothing sits at
+nominal/2 at any of the five keys, so the old figures were not a mis-pick from
+a real spectrum.
+
+**A uniform factor of exactly two across five keys, consistent to ~2 cents, is
+period doubling** — the characteristic failure of the autocorrelation family,
+where the estimator locks to the second ACF peak. Partial mis-selection is
+erratic by nature: it lands on the 2nd harmonic here and the 3rd there, and
+would not hold 0.5000 across five keys. And §KEYMAPARGMAX already records that
+**two ACF estimators were run on exactly this material** and were believed to
+have contributed nothing. One of them contributed this.
+
+⚠ **Both readings are ACF-family and I cannot separate them further**, because
+the original capture and script are gone: period doubling and "the clamped
+version returned its own search bound" both produce a systematically low
+answer. What is settled is that it was *not* spectrum argmax, and not the
+instrument.
+
+**Nothing shipped is affected.** `hw_measure._read` takes the sample rate from
+the file header, so the frequency-scale variant of this bug cannot occur in the
+shipped path; the fault was in a scratch analysis. Checked rather than assumed.
+
+### The durable part
+
+**A tool written off as having failed can still be the source of a number you
+are defending.** "Contributed nothing" was recorded in good faith the same day
+the estimator was abandoned, and the one figure it *had* emitted travelled on
+for a day, through a peer, and nearly landed as a defect in my own MIDI path.
+When a broken instrument is discarded, the numbers it already produced do not
+get discarded with it — they have to be hunted down individually.

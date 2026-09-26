@@ -625,10 +625,10 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
         # held PitchWheel→Pitch (0x10→0x30) on 222 of 2530 HD0 voices, read
         # back as an LFO pitch depth the voice does not have.
         ('lfo1_to_pitch',    0x60, 0x30, None),
-        ('lfo1_to_filter',   _MOD_LFO1_TO_FILTER[0],   _MOD_LFO1_TO_FILTER[1],   None),
+        ('lfo1_to_filter_cents',   _MOD_LFO1_TO_FILTER[0],   _MOD_LFO1_TO_FILTER[1],   None),
         ('lfo1_to_filter_q', _MOD_LFO1_TO_FILTER_Q[0], _MOD_LFO1_TO_FILTER_Q[1], None),
         ('lfo2_to_pitch',    _MOD_LFO2_TO_PITCH[0],    _MOD_LFO2_TO_PITCH[1],    None),
-        ('lfo2_to_filter',   _MOD_LFO2_TO_FILTER[0],   _MOD_LFO2_TO_FILTER[1],   None),
+        ('lfo2_to_filter_cents',   _MOD_LFO2_TO_FILTER[0],   _MOD_LFO2_TO_FILTER[1],   None),
         ('lfo2_to_filter_q', _MOD_LFO2_TO_FILTER_Q[0], _MOD_LFO2_TO_FILTER_Q[1], None),
         # PAN AND VOLUME, read for the first time 2026-09-17 -- and both were
         # WRITTEN long before they were read, which is the defect. `lfo*_to_pan`
@@ -696,18 +696,31 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     # beside it. So `lfo1_to_volume` is absent from this map (defaulting to
     # +1.0) for the same reason it is absent from the writer's sign flip: the
     # two must agree, or the round trip inverts a depth the writer never did.
-    _signs = {'lfo1_to_pitch': _sign1, 'lfo1_to_filter': _sign1,
+    _signs = {'lfo1_to_pitch': _sign1, 'lfo1_to_filter_cents': _sign1,
               'lfo1_to_filter_q': _sign1, 'lfo2_to_pitch': _sign2,
-              'lfo2_to_filter': _sign2, 'lfo2_to_filter_q': _sign2,
+              'lfo2_to_filter_cents': _sign2, 'lfo2_to_filter_q': _sign2,
               'lfo1_to_pan': _sign1, 'lfo2_to_pan': _sign2}
     _raw_depth = ((lambda a: _routes[a][0]) if _use_full
                   else (lambda a: _routes[a][1]))
     _depth = lambda a: _raw_depth(a) * _signs.get(a, 1.0)     # noqa: E731
     lfo1_to_pitch    = _depth('lfo1_to_pitch')
-    lfo1_to_filter   = _depth('lfo1_to_filter')
+    # CENTS since 2026-09-25, from this voice's own corner -- exactly as
+    # `velocity_to_filter_cents` above, and for the same reason: no
+    # cents-per-cord constant is right on this machine, because a full cord
+    # covers the whole cutoff range and what that is worth depends on where
+    # the corner sits (4383 cents costs amount 66.2 at vpar[60]=60 and 14.0 at
+    # 220). The field used to carry the raw cord fraction, which meant a
+    # K2000's `cents/10800` and an SFZ's `cents/4383` were being compared with
+    # an EOS cord amount as though the three were one quantity.
+    #
+    # FILTER-Q is untouched: it is still a fraction, because no cents law has
+    # been measured for resonance modulation on any of these machines.
+    _cents_of = lambda a: e4xt_cord_amount_to_cents(          # noqa: E731
+        vpar[60], _depth(a) * 100.0)
+    lfo1_to_filter_cents   = _cents_of('lfo1_to_filter_cents')
     lfo1_to_filter_q = _depth('lfo1_to_filter_q')
     lfo2_to_pitch    = _depth('lfo2_to_pitch')
-    lfo2_to_filter   = _depth('lfo2_to_filter')
+    lfo2_to_filter_cents   = _cents_of('lfo2_to_filter_cents')
     lfo2_to_filter_q = _depth('lfo2_to_filter_q')
     # INVERSE OF THE WRITER'S SCALE, or the round trip reports a depth 6.4x
     # smaller than the one that produced the file. Clamped because a preset
@@ -716,6 +729,27 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     _pan_unscale = 1.0 / E4B_LFO_PAN_CORD_SCALE
     lfo1_to_pan = max(-1.0, min(1.0, _depth('lfo1_to_pan') * _pan_unscale))
     lfo2_to_pan = max(-1.0, min(1.0, _depth('lfo2_to_pan') * _pan_unscale))
+    # VELOCITY -> PAN and KEY -> PAN, read since 2026-09-25.
+    #
+    # `e4b_writer` emits both cords into this same destination and NEITHER was
+    # read back, so an E4B -> E4B conversion dropped them and an E4B source
+    # gave the K2000 and AKAI writers nothing to write. Third instance of the
+    # written-but-never-read asymmetry this week, and the mirror of the three
+    # read-but-never-written ones in `akai_s3000_writer`.
+    #
+    # THE SOURCE IDS ARE THE MEASURED FORMS the writer chose, not a guess:
+    # `Vel~` for velocity (§E4XTVELPANSRC -- 2 127 of 2 127 cords into AmpPan
+    # across three EOS-native library CDs) and `Key~` for key (§E4XTKEYPOL).
+    # All three velocity forms are accepted on the way IN, because a file the
+    # machine wrote may use any of them and they differ only in pivot.
+    #
+    # Same rail, same unscale as the LFO pan cords above: the pan matrix does
+    # not know which selector drove it.
+    velocity_to_pan = max(-1.0, min(1.0, cord_byte_to_amount(
+        _cord_amount_byte(0x41, _SRC_VEL_TILDE, _SRC_VEL_PLUS,
+                          _SRC_VEL_LESS)) * _pan_unscale))
+    key_to_pan = max(-1.0, min(1.0, cord_byte_to_amount(
+        _cord_amount_byte(0x41, 0x09, 0x08)) * _pan_unscale))
     # TREMOLO: the cord carries PEAK-TO-TROUGH dB, the model field carries the
     # ONE-SIDED amplitude over LFO_VOLUME_MODEL_FULL_DB. Halving here is the
     # exact inverse of the doubling in the writer, and getting it wrong in
@@ -1103,12 +1137,14 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
         lfo2_variation     = lfo2_variation,
         lfo2_sync          = lfo2_sync,
         lfo1_to_pitch      = lfo1_to_pitch,
-        lfo1_to_filter     = lfo1_to_filter,
+        lfo1_to_filter_cents     = lfo1_to_filter_cents,
         lfo1_to_filter_q   = lfo1_to_filter_q,
         lfo2_to_pitch      = lfo2_to_pitch,
-        lfo2_to_filter     = lfo2_to_filter,
+        lfo2_to_filter_cents     = lfo2_to_filter_cents,
         lfo2_to_filter_q   = lfo2_to_filter_q,
         lfo1_to_pan        = lfo1_to_pan,
+        velocity_to_pan    = velocity_to_pan,
+        key_to_pan         = key_to_pan,
         lfo2_to_pan        = lfo2_to_pan,
         lfo1_to_volume     = lfo1_to_volume,
         lfo2_to_volume     = lfo2_to_volume,

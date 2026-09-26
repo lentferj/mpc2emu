@@ -41,8 +41,16 @@ from typing import Optional
 
 from models.common import AKAI_LFO_PAN_DEPTH_SCALE
 from parsers.akai_s3000_parser import (  # noqa: E402
+    AKAI_ENV_CORD_BYTES,
     AKAI_LFO1WAVE_OFFSET, AKAI_LFO1WAVE_TO_SHAPE,
     AKAI_LFO2DELAY_OFFSET, AKAI_LFO2WAVE_OFFSET)
+from models.common import akai_cord_amount_to_mod_depth   # noqa: E402
+from models.common import (AKAI_MODSPAN_OFFSETS,  # noqa: E402
+    AKAI_MODVPAN_PROG_OFFSETS, AKAI_MOD_SOURCE_VELOCITY,
+    AKAI_CP_OFFSETS, AKAI_CONST_PITCH_KEY,
+    AKAI_MODSAMP_OFFSETS, AKAI_MODVAMP3_KG_OFFSET, AKAI_MOD_SOURCE_LFO1,
+    AKAI_MODVAMP_PANEL_RAIL, AKAI_LFO_LOUDNESS_DB_PER_PRODUCT,
+    AKAI_LFO1_DEPTH_FOR_TREMOLO_ONLY, LFO_VOLUME_MODEL_FULL_DB)
 from models.common import (
     AKAI_VLOUD_SWING_DB_PER_UNIT, fit_velocity_line, AKAI_KEYFOLLOW_NEG_SCALE,
     ENV_CURVE_LINEAR,
@@ -2478,8 +2486,10 @@ def _program_common(name: str, n_keygroups: int, lo_key: int, hi_key: int,
                     lfo1_rate=None, prog_num: int = 0,
                     lfo1_depth=None, lfo1_wheel=0.0, lfo1_delay=None,
                     lfo1_shape=None, lfo2_shape=None, lfo2_delay=None,
+                    vel_to_pan=None, key_to_pan=None,
                     midi_channel=None, vel_to_volume_db=None,
-                    lfo_to_pan=None, pan_lfo_rate=None) -> bytearray:
+                    lfo_to_pan=None, pan_lfo_rate=None,
+                    lfo1_to_volume=0.0) -> bytearray:
     """The 192-byte program common block, filled with the format's own
     documented defaults rather than zeros."""
     p = bytearray(PROGRAM_COMMON_LEN)
@@ -2676,6 +2686,45 @@ def _program_common(name: str, n_keygroups: int, lo_key: int, hi_key: int,
         p[0x24] = 30                    # modwheel > depth (the factory value)
     else:
         p[0x22], p[0x24] = akai_lfo_depth_split(lfo1_depth, lfo1_wheel)
+
+    # --- LFO1 -> LOUDNESS (tremolo), written since 2026-09-25 ---------------
+    #
+    # ⚠ **READ SINCE THE MATRIX WENT IN, NEVER WRITTEN** -- the third instance
+    # of that asymmetry in this file, after `LFO1WAVE` and `velocity_to_pan`.
+    # `akai_s3000_parser` reconstructs a tremolo from this slot and no writer
+    # has ever emitted one, so every tremolo converted INTO an AKAI was lost.
+    #
+    # **THE LAW IS A PRODUCT AND THAT IS THE WHOLE DIFFICULTY.** One-sided
+    # swing in dB is `AKAI_LFO_LOUDNESS_DB_PER_PRODUCT * LFODEP * amount`
+    # (equal-product equivalence, 99x20 / 50x40 / 40x50 within 0.17 dB), so
+    # writing a requested swing means SOLVING for one factor with the other
+    # already spoken for -- `LFODEP` is the vibrato depth, set just above.
+    #
+    # THE ALLOCATION, and which way round it goes:
+    #
+    #   vibrato stated     -> `LFODEP` belongs to the vibrato and may not be
+    #                         moved. The amount absorbs what it can; the
+    #                         keygroup reports whatever the rail refuses.
+    #   no vibrato stated  -> `L_PTCH` is written 0, so the pitch route is off
+    #                         and `LFODEP` reaches only this matrix. It is then
+    #                         free, and taking it to 99 buys the widest
+    #                         reachable swing AND pins the mod wheel out of the
+    #                         tremolo. See AKAI_LFO1_DEPTH_FOR_TREMOLO_ONLY.
+    #
+    # WHICH SLOT: `MODSAMP3` (0x58), because its AMOUNT is the keygroup-level
+    # byte 155 while slots 1 and 2 take program-level amounts. The model's
+    # `lfo1_to_volume` is per voice, so only slot 3 can express a bank whose
+    # keygroups want different tremolos. Its factory source is 5 = Velocity
+    # with a zero amount -- inert -- and it is repointed ONLY when a tremolo is
+    # actually stated, so a program that states none stays byte-identical to
+    # what this writer emitted before.
+    _trem = abs(lfo1_to_volume or 0.0)
+    # The two bytes this needs are written AFTER the `_PROGRAM_HW_DEFAULTS`
+    # loop -- see the note there. `MODSAMP3` is one of that dict's entries, so
+    # setting it here is silently undone; `LFODEP` is not, so it would have
+    # survived, and the result is a program whose tremolo amount is solved
+    # against a depth of 99 while the slot still names Velocity. That is a
+    # tremolo that does not sound and a velocity response that does.
     # LFODEL is a SEPARATE parameter from LFODEP, not its second byte, and it
     # carries the same None-versus-zero question. A source stating a zero delay
     # has specified; the byte is already 0, so both branches agree here, but the
@@ -2739,6 +2788,14 @@ def _program_common(name: str, n_keygroups: int, lo_key: int, hi_key: int,
     for _off, (_val, _what) in _PROGRAM_HW_DEFAULTS.items():
         p[_off] = _val
 
+    # AFTER THE DEFAULTS LOOP, for the reason the pan note below gives: 0x58
+    # is one of its entries. Found by a test asserting the source byte, having
+    # walked into exactly the failure that note documents.
+    if _trem:
+        p[AKAI_MODSAMP_OFFSETS[2]] = AKAI_MOD_SOURCE_LFO1
+        if not lfo1_depth:
+            p[0x22] = AKAI_LFO1_DEPTH_FOR_TREMOLO_ONLY
+
     # AFTER THE DEFAULTS LOOP, DELIBERATELY. `_PROGRAM_HW_DEFAULTS` carries
     # `0x1d: PANRAT = 1` and runs last, so writing the rate before it is silently
     # undone -- which is what happened on the first attempt: the amount at 0x59
@@ -2784,6 +2841,39 @@ def _program_common(name: str, n_keygroups: int, lo_key: int, hi_key: int,
                          -50, 50) & 0xFF
         if pan_lfo_rate:
             p[0x1d] = akai_lfo2_rate_byte(pan_lfo_rate)
+
+    # --- VELOCITY -> PAN and KEY -> PAN, written since 2026-09-25 -----------
+    #
+    # ⚠ **WE HAVE READ BOTH SINCE THE PAN MATRIX WENT IN AND WROTE NEITHER** --
+    # the same read-but-never-written asymmetry as `LFO1WAVE`, which Jan
+    # spotted the same day. `velocity_to_pan` was in fact emitted by NO writer
+    # at all (§ORPHANFIELDS).
+    #
+    # The slots are already pointed the right way by the factory defaults:
+    # `MODSPAN2` (0x4d) is **6 = Key**, so `key_to_pan` needs only its amount.
+    # `MODSPAN3` (0x4e) defaults to 12, which we model nothing for, so it is
+    # repointed to **5 = Velocity** ONLY when a velocity pan is actually
+    # stated -- a program that states none keeps the factory value and stays
+    # byte-identical to what we emitted before.
+    #
+    # THE AMOUNT LAW IS THE RAIL'S, NOT THE SOURCE'S. `AKAI_LFO_PAN_DEPTH_SCALE`
+    # was measured on an LFO pan swing, but it calibrates the ±50 PAN-MATRIX
+    # RAIL (dB of balance per unit), and the rail does not know which selector
+    # drove it. `akai_s3000_parser` already inverts exactly this expression for
+    # all four sources, so writing it back is the reader's own law rather than
+    # a new one -- and it is what keeps AKAI -> model -> AKAI stable.
+    #
+    # ⚠ `PANDEP` does NOT gate these. It is LFO2's own output depth and was
+    # measured to gate LFO2's route only (§AKAILFO2REST); nothing has measured
+    # it touching a velocity- or key-sourced pan, and the parser's gate is
+    # scoped the same way.
+    if key_to_pan:
+        p[AKAI_MODVPAN_PROG_OFFSETS[1]] = _clamp(int(round(
+            key_to_pan * 50 * AKAI_LFO_PAN_DEPTH_SCALE)), -50, 50) & 0xFF
+    if vel_to_pan:
+        p[AKAI_MODSPAN_OFFSETS[2]] = AKAI_MOD_SOURCE_VELOCITY
+        p[AKAI_MODVPAN_PROG_OFFSETS[2]] = _clamp(int(round(
+            vel_to_pan * 50 * AKAI_LFO_PAN_DEPTH_SCALE)), -50, 50) & 0xFF
 
     # TPNUM ("temporary program number, internal use"). Left at zero until
     # 2026-08-10 because one sample could not distinguish a constant from a
@@ -2946,7 +3036,7 @@ def _akai_voice_loops(voice) -> bool:
 
 def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
               voice=None, dead_key_ranges=None, ib304f: bool = False,
-              probe: bool = False) -> bytearray:
+              probe: bool = False, lfo_depth: int = 0) -> bytearray:
     """One 192-byte keygroup with up to four velocity zones.
 
     `probe` renders for COMPARISON rather than for output -- see
@@ -3062,6 +3152,123 @@ def _keygroup(lo_key: int, hi_key: int, zones, index: int = 0,
     # measured first, and it is filed rather than guessed.
     _vib = abs(getattr(voice, 'lfo1_to_pitch', 0.0) or 0.0)
     k[_AKAI_LPTCH_OFFSET] = (AKAI_LFO_DEPTH_CAL_LPTCH if _vib > 0.0 else 0) & 0xFF
+
+    # MODVAMP3 (155): THE TREMOLO AMOUNT -- the other half of the product whose
+    # `LFODEP` the program block has already fixed. `lfo_depth` is read back
+    # from the program bytes rather than recomputed here, so the two factors
+    # cannot disagree: restating `akai_lfo_depth_split`'s result is exactly the
+    # scratch-script-versus-shipped-rule failure that invented a zone-merge gap.
+    _trem1 = abs(getattr(voice, 'lfo1_to_volume', 0.0) or 0.0)
+    if _trem1 and lfo_depth:
+        _want_db = _trem1 * LFO_VOLUME_MODEL_FULL_DB
+        _per_unit = AKAI_LFO_LOUDNESS_DB_PER_PRODUCT * lfo_depth
+        _amt_f = _want_db / _per_unit
+        _amt = max(-AKAI_MODVAMP_PANEL_RAIL,
+                   min(AKAI_MODVAMP_PANEL_RAIL, int(round(_amt_f))))
+        k[AKAI_MODVAMP3_KG_OFFSET] = _amt & 0xFF
+        if not probe and abs(_amt_f) > AKAI_MODVAMP_PANEL_RAIL:
+            # The rail, not the law, is the limit -- and it binds much sooner
+            # when the vibrato depth is small, because `LFODEP` is then a small
+            # factor in the product. Reported with the reachable figure so it
+            # is obvious whether the shortfall is 1 dB or 40.
+            print("    [WARN] tremolo %.1f dB needs MODVAMP3 %.0f at LFODEP "
+                  "%d; the rail is +/-%d, so only %.1f dB is written"
+                  % (_want_db, _amt_f, lfo_depth, AKAI_MODVAMP_PANEL_RAIL,
+                     AKAI_MODVAMP_PANEL_RAIL * _per_unit))
+
+    # CONSTANT PITCH (`non_transpose`), written since 2026-09-26.
+    #
+    # ⚠ **FOUR FLAGS, ONE PER VELOCITY ZONE** -- `CP1..CP4` at keygroup bytes
+    # 132..135, not one switch for the keygroup. Setting only `CP1` gives a
+    # keygroup that plays at constant pitch when struck softly and tracks the
+    # keyboard when struck hard, which presents as an intermittent fault
+    # rather than as a wrong byte.
+    #
+    # ALL FOUR ARE SET, not just the zones currently in use. An unused zone's
+    # flag is inert, and writing it means a later edit that adds a zone
+    # inherits the behaviour the source asked for instead of silently
+    # tracking.
+    #
+    # PROVENANCE: document-derived (s3ked, from the SysEx spec's own wording),
+    # NOT hardware-confirmed. A panel byte-diff on a multi-zone keygroup
+    # confirms all four in one toggle.
+    _nt = bool(getattr(voice, 'non_transpose', False))
+    if _nt:
+        for _cp in AKAI_CP_OFFSETS:
+            if _cp < len(k):
+                k[_cp] = 1
+        # ⚠ AND SAY WHAT IS STILL WRONG ABOUT IT. CONST plays the sample at a
+        # constant KEY (the manual: "a constant pitch of C3"), while this
+        # model's `non_transpose` means the sample plays at ITS OWN ROOT. They
+        # coincide only where the root already is that key. `KGTUNO`/`VTUNO`
+        # stay live on top of CONST so the difference is correctable in
+        # tuning, but that compensation is not written yet and the octave
+        # convention behind `AKAI_CONST_PITCH_KEY` is itself assumed -- so the
+        # gap is REPORTED rather than silently absorbed or bodged.
+        if not probe:
+            # ⚠ `voice.zones`, NOT the `zones` argument: by this point those
+            # are built entries rather than model ZoneMappings, so
+            # `getattr(z, 'root_key')` came back None for every one of them
+            # and the warning silently never fired. Caught by probing a zone
+            # whose root is NOT the CONST key and seeing no output.
+            _roots = {z.root_key for z in (getattr(voice, 'zones', None) or [])
+                      if getattr(z, 'root_key', None) is not None}
+            _off = sorted(r for r in _roots if r != AKAI_CONST_PITCH_KEY)
+            if _off:
+                print("    [WARN] non_transpose: CONST sounds at key %d, but "
+                      "zone root(s) %s differ -- those zones play %s semitone(s)"
+                      " from their own root until the tune compensation lands"
+                      % (AKAI_CONST_PITCH_KEY, _off,
+                         [AKAI_CONST_PITCH_KEY - r for r in _off]))
+
+    # §AKAICORDGAP — THE SEVEN ENVELOPE ROUTINGS, WRITTEN BACK (2026-09-25).
+    #
+    # `akai_s3000_parser` has read these since 2026-09-21 and only `e4b_writer`
+    # consumed them, so an AKAI -> AKAI conversion dropped every one: a
+    # velocity-to-release or key-to-release routing went in and came out blank.
+    #
+    # **THIS IS AN EXACT INVERSE, NOT A NEW SCALE.** The model carries the E4
+    # cord amount that EOS's own importer computes from these bytes, and
+    # `akai_cord_amount_to_mod_depth` runs that rescaler backwards. Nothing is
+    # fitted here -- which is what separates this destination from the LFO
+    # ones below, where no law exists in either direction.
+    #
+    # ⚠ FOUR VALUES CANNOT COME BACK, and the loss is upstream: the 101 depths
+    # -50..+50 map onto 97 distinct cord bytes, so (12, 13), (37, 38) and their
+    # negatives are indistinguishable once converted. A depth of 13 returns as
+    # 12. Every other value is exact, checked across the whole rail.
+    #
+    # THE GUARD IS THE LAW'S OTHER HALF, mirrored from the reader: a zero byte
+    # means NO ROUTING rather than a routing of zero depth, so a routing that
+    # inverts to 0 writes nothing and leaves the byte alone.
+    _env_cord_byte = {(_src, _dst): _b
+                      for _b, _src, _dst, _prev in AKAI_ENV_CORD_BYTES}
+    for _r in getattr(voice, 'mod_routings', None) or []:
+        _off = _env_cord_byte.get((_r.source, _r.dest))
+        if _off is None:
+            if not probe:
+                print("    [WARN] mod routing %s->%s has no AKAI keygroup byte;"
+                      " dropped (origin %s)"
+                      % (_r.source, _r.dest, _r.origin or 'unknown'))
+            continue
+        _d = akai_cord_amount_to_mod_depth(_r.amount or 0.0)
+        if _d and _off < len(k):
+            k[_off] = _d & 0xFF
+
+    # ⚠ LFO2 -> LOUDNESS IS NOT WRITTEN, and that is a missing MEASUREMENT
+    # rather than a missing line. LFO1's tremolo law is a product with
+    # `LFODEP`; LFO2's own depth is `PANDEP` (0x1e) and **no product law has
+    # been measured for it**, so an amount written against LFO2 would be a
+    # guessed scale on an unmeasured rail. Routing it onto LFO1 instead is
+    # worse, not better: it would run the swing at LFO1's RATE -- the "source
+    # selected without its rate" family that cost four separate fixes in one
+    # day. Announced so the loss is visible in the log rather than inferred
+    # from a silent conversion.
+    _trem2 = abs(getattr(voice, 'lfo2_to_volume', 0.0) or 0.0)
+    if _trem2 and not probe:
+        print("    [WARN] lfo2_to_volume %.3f dropped: the AKAI's LFO2 "
+              "loudness product (PANDEP x amount) has never been measured, "
+              "and LFO1's rate is not LFO2's" % _trem2)
 
     k[_AKAI_FILQ_OFFSET] = akai_01_to_filq(
         getattr(voice, 'filter_resonance', 0.0) or 0.0)
@@ -3857,8 +4064,21 @@ def build_program(preset, name: str, prog_num: int = 0,
             # (§AKAITUNEREAD): the reader put an octave entirely into
             # fine_tune, and the writer read only fine_tune. Neither side
             # could see it alone.
+            # `transpose` RIDES WITH `coarse_tune`, as it does in the KRZ
+            # writer and for the same reason: the model keeps them apart
+            # because their SOURCES differ -- EOS `vpar[34]` is a keyboard
+            # remap, `vpar[35]` a pitch trim, and the E4XT has a byte for each
+            # -- but this machine has no identified key-remap parameter, so
+            # both arrive as the one thing it can express, semitones of pitch.
+            #
+            # It was being dropped: read by the EOS and K2000 parsers and by
+            # `pgm_parser`, written by no path into an AKAI. The rail is not a
+            # concern here the way it is on the K2000's keymap -- this field is
+            # signed 16-bit in 1/256-semitone units, so +/-128 semitones, and
+            # the model's own transpose is +/-24.
             tune=_akai_tune_units(
-                     _or_default(getattr(z, 'coarse_tune', None), 0) * 100.0
+                     (_or_default(getattr(z, 'coarse_tune', None), 0)
+                      + (getattr(z, 'transpose', 0) or 0)) * 100.0
                      + _or_default(getattr(z, 'fine_tune', None), 0))
                  + _root_offset_units(z, sample_roots),
             # `ZoneMapping.pan` is -1.0..+1.0 centred on 0.0; the AKAI field
@@ -4070,6 +4290,19 @@ def build_program(preset, name: str, prog_num: int = 0,
     # LFO2's shape and delay, from the first voice that states one -- the same
     # first-stated rule as the LFO1 fields above, because these are PROGRAM
     # level on this machine and one voice must win.
+    # Velocity/key pan are PROGRAM level on this machine, same first-stated
+    # rule as the LFO fields above.
+    # The tremolo the PROGRAM block needs to know about: it owns `LFODEP` and
+    # the slot selector, both program level, so one voice must win -- the same
+    # first-stated rule as the LFO fields above. The per-keygroup AMOUNT is
+    # still each voice's own.
+    _trem = next((abs(getattr(v, 'lfo1_to_volume', 0.0) or 0.0)
+                  for v in preset.voices
+                  if getattr(v, 'lfo1_to_volume', 0.0)), 0.0)
+    _vpan = next((getattr(v, 'velocity_to_pan', 0.0) for v in preset.voices
+                  if getattr(v, 'velocity_to_pan', 0.0)), None)
+    _kpan = next((getattr(v, 'key_to_pan', 0.0) for v in preset.voices
+                  if getattr(v, 'key_to_pan', 0.0)), None)
     _l1sh = next((getattr(v, 'lfo1_shape', None) for v in preset.voices
                   if getattr(v, 'lfo1_shape', None)), None)
     _l2sh = next((getattr(v, 'lfo2_shape', None) for v in preset.voices
@@ -4085,12 +4318,18 @@ def build_program(preset, name: str, prog_num: int = 0,
                                         else _lfo),
                           lfo1_shape=_l1sh,
                           lfo2_shape=_l2sh, lfo2_delay=_l2dly,
+                          vel_to_pan=_vpan, key_to_pan=_kpan,
                           prog_num=prog_num, midi_channel=midi_channel,
-                          vel_to_volume_db=_vvol)
+                          vel_to_volume_db=_vvol, lfo1_to_volume=_trem)
+    # WHAT WAS ACTUALLY WRITTEN, read back off the bytes. `LFODEP` is one
+    # factor of the tremolo product and the amount below is the other, so they
+    # have to be the same number -- and the only way to be sure of that is to
+    # take it from the block rather than recompute the split.
+    _lfodep = out[0x22]
     dead: list = []
     for i, ((klo, khi), owner, zs) in enumerate(keygroups):
         out += _keygroup(klo, khi, zs, i, voice=owner, dead_key_ranges=dead,
-                         ib304f=ib304f)
+                         ib304f=ib304f, lfo_depth=_lfodep)
     if dead:
         # Loud, because the failure it describes is silent on the machine: the
         # keygroup loads, occupies a directory entry, and never sounds.

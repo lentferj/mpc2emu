@@ -810,6 +810,10 @@ _MOD_KEY_TO_CUTOFF_AMT  = 26   # slot 6: Key → Filter-Freq ("Cord 06")
 # would centre on vel 64 and darken softer notes below base — wrong semantics;
 # Vel< only ever subtracts, the original bug.)
 _SRC_VEL_PLUS = 0x0A
+#: `Vel~`, the velocity form that centres on its pivot (measured at 89.4).
+#: Used for PAN and nothing else -- see the cord below for the census that
+#: chose it, and note that it is NOT what the same triad's volume cord uses.
+_SRC_VEL_TILDE = 0x0B
 
 #: §AKAICORDGAP — model routing name -> (E4 source id, E4 destination id).
 #: Both columns are the literal `moveq #N` operands from EOS's own AKAI
@@ -1178,6 +1182,40 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
     # which is the step that lost every corner below 57 Hz.
     _nominal_hz = max(E4B_CUTOFF_MIN_HZ,
                       min(E4B_CUTOFF_MAX_HZ, voice.filter_cutoff))
+    # VELOCITY -> FILTER IS A RANGE, AND ITS FLOOR BELONGS TO THIS BYTE.
+    #
+    # `velocity_to_filter_cents` is the corner at FULL velocity;
+    # `velocity_to_filter_min_cents` is the corner at ZERO velocity, which a
+    # K2000 states as `Src2 (MinDpt, MaxDpt)` and an AKAI as a bipolar half.
+    # Writing only the depth collapses `(0, +10800)` and `(-5400, +5400)` onto
+    # one scalar -- and they are different patches: the first only ever opens
+    # the filter, the second closes it as much as it opens.
+    #
+    # The floor is expressible here and nowhere else. The cord below is `Vel+`
+    # (0x0A), whose whole point is that **vel 0 = base cutoff** -- so a sweep
+    # that must start `min` cents away from nominal starts there only if the
+    # BASE moves by `min`. The cord then carries the SPAN, `max - min`, and the
+    # two together reproduce both endpoints instead of one.
+    #
+    # It has to happen before `vpar[60]` is written, because every cord amount
+    # below is converted against that byte (§FENVFULLSCALE: cents-per-cord is
+    # not a constant, it depends on where the corner sits). Shifting the base
+    # afterwards would leave every other cord calibrated for the old corner.
+    _vel_floor_ct = getattr(voice, 'velocity_to_filter_min_cents', 0.0) or 0.0
+    _floor_lost_ct = 0.0
+    if _vel_floor_ct:
+        _want_hz = _nominal_hz * 2.0 ** (_vel_floor_ct / 1200.0)
+        _got_hz = max(E4B_CUTOFF_MIN_HZ, min(E4B_CUTOFF_MAX_HZ, _want_hz))
+        if _got_hz != _want_hz:
+            # The rail ate part of the floor. Announced, not absorbed: the
+            # voice now has a velocity range narrower than the source asked
+            # for, and that is audible at the quiet end.
+            _floor_lost_ct = 1200.0 * math.log2(_want_hz / _got_hz)
+            print("    [WARN] velocity->filter floor %+.0f ct clamped at the "
+                  "cutoff rail (%.0f Hz wanted, %.0f Hz written); %+.0f ct of "
+                  "the range is lost at low velocity"
+                  % (_vel_floor_ct, _want_hz, _got_hz, _floor_lost_ct))
+        _nominal_hz = _got_hz
     vpar[60] = min(255, round(e4xt_cutoff_position(_nominal_hz) * 255))
     # SATURATION: A FULLY OPEN FILTER MUST STAY FULLY OPEN.
     #
@@ -1195,7 +1233,11 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
     #
     # Only the saturated end is touched. The Hz path below saturation is the
     # hardware-calibrated one (§E4BFILTCAL) and is left exactly as it was.
-    if voice.filter_cutoff >= E4B_CUTOFF_MAX_HZ:
+    # ⚠ NOT when a velocity floor has moved the corner. `filter_cutoff` is
+    # still wide open in that case, but the byte deliberately no longer is --
+    # forcing 255 here would throw the floor away again and leave the cord
+    # carrying a span measured against a base that was never written.
+    if voice.filter_cutoff >= E4B_CUTOFF_MAX_HZ and not _vel_floor_ct:
         vpar[60] = 255
     # RESONANCE through the MEASURED curve, since 2026-08-24 (§E4XTQCAL).
     # This was `round(resonance * 127)` -- an uncalibrated linear guess on a
@@ -1579,11 +1621,32 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
     # to be prepended here, and that was wrong twice over -- see the ungated
     # write after the loop below. Everything in `_extra_cords` is an LFO (or
     # the attack) routing, which is what the mod-wheel gate is about.
+    def _cord(cents, units=1.0):
+        amt = e4xt_cents_to_cord_amount(vpar[60], cents, source_units=units)
+        if amt and e4xt_cord_saturates(vpar[60], amt) and abs(amt) < 100.0:
+            return math.copysign(100.0, amt)
+        return amt
+
+    # ⚠ DEFINED HERE RATHER THAN BESIDE ITS FIRST OTHER USE, because the LFO
+    # filter cords below now need it and they are built earlier in this
+    # function. Nothing it closes over moves: `vpar[60]` is written far above.
+    # LFO -> FILTER-FREQ IS CONVERTED FROM CENTS AT THIS VOICE'S OWN CORNER
+    # (2026-09-25), the same way `filter_env_cents` and
+    # `velocity_to_filter_cents` already are a few lines up. The model used to
+    # carry a raw cord fraction here, which is why it could be multiplied
+    # straight in -- and why a K2000 or MPC source's depth arrived meaning
+    # whatever that source's own full scale happened to be.
+    #
+    # `_cord` returns PERCENT and this list is in -1..+1 fractions, hence /100.
+    # Filter-Q is still a fraction: no cents law has been measured for
+    # resonance modulation on any of these machines.
+    _lfo1_filt = _cord(voice.lfo1_to_filter_cents) / 100.0
+    _lfo2_filt = _cord(voice.lfo2_to_filter_cents) / 100.0
     _extra_cords = [
-        (0x60, 0x38, voice.lfo1_to_filter   * _lfo1_sign),  # LFO1 → Filter-Freq
+        (0x60, 0x38, _lfo1_filt             * _lfo1_sign),  # LFO1 → Filter-Freq
         (0x60, 0x39, voice.lfo1_to_filter_q * _lfo1_sign),  # LFO1 → Filter-Q
         (0x68, 0x30, voice.lfo2_to_pitch    * _lfo2_sign),  # LFO2 → Pitch
-        (0x68, 0x38, voice.lfo2_to_filter   * _lfo2_sign),  # LFO2 → Filter-Freq
+        (0x68, 0x38, _lfo2_filt             * _lfo2_sign),  # LFO2 → Filter-Freq
         (0x68, 0x39, voice.lfo2_to_filter_q * _lfo2_sign),  # LFO2 → Filter-Q
         # LFO → AmpPan (§PANMOD). Destination 0x41, HARDWARE-CONFIRMED
         # 2026-09-06 rather than transcribed: driving it gave 122 dB of balance
@@ -1607,15 +1670,65 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
         # that says nothing about either machine.
         (0x60, 0x41, voice.lfo1_to_pan * _lfo1_sign * E4B_LFO_PAN_CORD_SCALE),
         (0x68, 0x41, voice.lfo2_to_pan * _lfo2_sign * E4B_LFO_PAN_CORD_SCALE),
+        # KEY -> PAN, written since 2026-09-25. Source 9 is `Key~`, and the
+        # form and pivot are MEASURED: §E4XTKEYPOL put Key~/Key+ at 0.997 of
+        # each other at equal amount over four octaves, with `Key~` returning
+        # to the control corner at key 60 on all three amounts independently.
+        # So `Key~` is the bipolar-about-centre form an AKAI signed key->pan
+        # asks for, and the destination `0x41` AmpPan is hardware-confirmed
+        # (§PANMOD) and already carries both LFO pan cords above.
+        #
+        # Scale is the pan rail's, shared with the LFO pan cords beside it --
+        # same destination, same cord-amount encoding.
+        #
+        # ⚠ **ONE THING REMAINS OPEN AND IT IS A FIDELITY QUESTION, NOT A
+        # BLOCKER:** `Key~` pivots at key 60, and an AKAI program's key->pan is
+        # signed about the PROGRAM's own centre, which need not be 60. Where
+        # they differ this pans the wrong way on one side of the keyboard.
+        # Answerable offline from the corpus (§E4BKEYPAN); until then the cord
+        # is written because dropping it is certainly wrong and writing it is
+        # wrong only where the centres disagree.
+        (0x09, 0x41, (getattr(voice, 'key_to_pan', 0.0) or 0.0)
+         * E4B_LFO_PAN_CORD_SCALE),
         (_trem_src, E4B_AMPVOL_DST, _trem_lfo),   # LFO1 or LFO2 → AmpVol
         (E4B_DC_CORD_SRC,    E4B_AMPVOL_DST, _trem_dc),    # DC   → AmpVol
-        # VELOCITY → PAN IS DELIBERATELY NOT WRITTEN YET. The model carries
-        # `velocity_to_pan` and the MPC supplies it, but the velocity SOURCE on
-        # the E4XT is a triad — `Vel+` 0x0A, `Vel~` 0x0B, `Vel<` 0x0C — differing
-        # by PIVOT, and choosing one changes what the depth means. That choice
-        # was taken deliberately for volume (Jan, 2026-09-04, §E4XTVELSRC) with
-        # the cost stated, and pan deserves the same treatment rather than
-        # inheriting it by accident.
+        # VELOCITY -> PAN, written since 2026-09-25 as `Vel~` (0x0B).
+        #
+        # The velocity source here is a triad -- `Vel+` 0x0A, `Vel~` 0x0B,
+        # `Vel<` 0x0C -- differing by PIVOT (measured: 0, 89.4, 127), so
+        # choosing one decides what a depth means. This cord was left unwritten
+        # until the choice could be made on pan's OWN evidence, because the
+        # volume answer cannot be inherited: the claim that `Vel<` was the
+        # machine's convention was itself refuted by census (§E4XTVELSRC).
+        #
+        # **CENSUSED 2026-09-25, and pan's answer is the opposite of volume's**
+        # (§E4XTVELPANSRC). Across three EOS-native library CD-ROMs, counting
+        # every cord into `AmpPan` in every voice rather than the first:
+        #
+        #     2 127 active cords    Vel~ 2 127 (100 %)    Vel+ 0    Vel< 0
+        #
+        # against 96.9 % `Vel+` for `AmpVol` on the largest of those same
+        # discs. Two destinations, one machine, opposite conventions -- which
+        # is exactly why this was not allowed to inherit.
+        #
+        # ⚠ THE SCAN'S CONTROL REPRODUCES A RECORDED FIGURE EXACTLY. Run
+        # against `AmpVol` on that disc it returns 11 banks / 11 806 voices /
+        # 11 449 / 36 / 238, matching §E4XTVELSRC's table to the unit. A census
+        # whose control had not been checked is how the refuted claim got made
+        # in the first place.
+        #
+        # NOT the loose-`.e4b` population, which holds 8 such cords all naming
+        # `Vel+`: its volume convention comes back 100 % `Vel<` against the
+        # CDs' 96.9 % `Vel+`, so it is converted third-party material rather
+        # than EOS-native authoring -- the same kind of wrong subject as the 22
+        # resident presets that produced the original error.
+        #
+        # `Vel~` is also the bipolar-about-centre form, which is what pan
+        # wants and what the `Key~` cord immediately above uses for the same
+        # reason. Scale is the pan rail's, shared with every other cord into
+        # this destination.
+        (_SRC_VEL_TILDE, 0x41, (getattr(voice, 'velocity_to_pan', 0.0) or 0.0)
+         * E4B_LFO_PAN_CORD_SCALE),
     ]
     # THRESHOLD IS THE ENCODED BYTE, NOT AN ARBITRARY FRACTION -- the same
     # correction already made for `lfo1_to_pitch` above (§AKAILPTCH), finally
@@ -1648,13 +1761,10 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
     # full-amount cord would be rewritten smaller on every round trip, sounding
     # identical and reading differently. 36.5% of the nonzero filter depths in
     # 60 real banks saturate, so this is the common case, not an edge one.
-    def _cord(cents, units=1.0):
-        amt = e4xt_cents_to_cord_amount(vpar[60], cents, source_units=units)
-        if amt and e4xt_cord_saturates(vpar[60], amt) and abs(amt) < 100.0:
-            return math.copysign(100.0, amt)
-        return amt
     _fenv_amt = _cord(voice.filter_env_cents)
-    _vel_amt = _cord(voice.velocity_to_filter_cents, E4XT_VEL_SOURCE_UNITS)
+    # THE SPAN, not the depth -- the floor is in `vpar[60]` above.
+    _vel_amt = _cord(voice.velocity_to_filter_cents - _vel_floor_ct,
+                     E4XT_VEL_SOURCE_UNITS)
     # VELOCITY -> VOLUME, slot 0 of the template. THREE STATES (§KRZAMPVEL's
     # E4B half; Jan's decision 2026-09-01):
     #
@@ -1851,7 +1961,7 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
         #     how much of the vibrato the wheel owns; it simply did nothing
         #     until the wheel was raised.
         #   * 12 free slots, and a gated cord costs two. Seven env-cord rows
-        #     plus wheel vibrato filled them before `lfo1_to_filter`,
+        #     plus wheel vibrato filled them before `lfo1_to_filter_cents`,
         #     `lfo*_to_pan` and the tremolo pair were reached, and those were
         #     dropped with no diagnostic. LFO routings are hardware-calibrated
         #     here; the model cords are carried through. The calibrated ones

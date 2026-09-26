@@ -3610,7 +3610,64 @@ AKAI_LFO_PAN_DEPTH_SCALE = 0.1563
 #: other two. For `LfoPan` 0.6398 that is byte 32; the measured law puts the
 #: MPC's 5.11 dB at byte 14.
 #:
-#: **THE CLEANEST OF THE THREE SWEEPS.** Mono ROM sine (keymap 163), LFO1 at
+#: ⚠ **2026-09-26: ONE CHARGE AGAINST THIS NUMBER SURVIVES, AND IT IS NOT THE
+#: ONE WE SPENT THE MORNING ON. Its ladder captures no longer exist**, on either
+#: project's side, so the linearity below cannot be re-checked. The two
+#: surviving pan sets in `~/temp` are the pre-§K2PANWIRES run (0.2 dB at every
+#: depth) and one dominated by the rig's own 0.40 Hz image wander; no file
+#: anywhere records the 0.75/1.50/2.23/3.69/7.45/35.08 rungs.
+#:
+#: **THE PARTIALS SCARE IS CLOSED — the stimulus description is accurate.** A
+#: pitch sweep on ROM keymap 163 showed two partial series 0-1 dB apart whose
+#: separation GREW with key, which looked like it might mean 163 was not the
+#: "mono sine" this docstring claims, and therefore that the pan swing had been
+#: diluted by a differently-panned component. It resolved the other way:
+#:
+#:   * keymap 163 decodes as **21 identical entries**, every one naming
+#:     Soundblock 163 with tuning 0 -- functionally one sample (k2kremote);
+#:   * every program involved reads `Layer:1/1`, so there is no second layer;
+#:   * ROM program 1, on its own keymap, shows ordinary harmonics (9-19 cents
+#:     between its two loudest low down, an exact octave higher up), so the rig
+#:     is not doing it;
+#:   * and the two series were a **carrier plus vibrato sidebands**: the peaks
+#:     alternate in dominance WITHIN one note, and the close pairs sit a fixed
+#:     **5 Hz** apart -- fixed in Hz, not cents. Programs 212/213 carry
+#:     LFO -> pitch (213 is named `L2 SHAPE B5`), which is why k2kremote's
+#:     original setup deliberately used 217, the bank's only unrouted program.
+#:
+#: **This ladder was taken on ROM #199 with nothing routed**, so it inherited
+#: none of that, and the scale is not threatened by partials. See §KEYMAPARGMAX for the
+#: analysis, and why the same captures' apparent key-flattening was the FFT
+#: argmax rather than the instrument.
+#:
+#: ✅ **CONFIRMED BY DIRECT CAPTURE 2026-09-26** (`§K163CONFIRM`,
+#: `~/temp/k163_confirm_20260926.wav`): sounding ROM program 199 across keys
+#: 48-84 gives ONE tracking series -- top pair a fixed OCTAVE in cents
+#: (1219/1210/1205/1205 ct) with the Hz separation doubling, and ~100 ct/key
+#: throughout. The 5 Hz pairs that 212/213 showed are absent.
+#:
+#: ⚠ **That last clause is weaker than it reads, and the weakness is mine.**
+#: A synthetic control through the same analysis shows a 5 Hz pair resolves
+#: only while the two components are within ~5 dB; at -6 dB and below the
+#: Hann main lobe (~11.7 Hz) swallows the sideband entirely. So the absence
+#: rules out deep modulation of the kind 212/213 carried and says nothing
+#: about weak LFO->pitch. **The exoneration rests on the two POSITIVE
+#: findings above, not on that absence.**
+#:
+#: ⚠ **LINEARITY IS BLIND TO A CONSTANT SCALE FACTOR**, which is why the
+#: surviving charge matters at all: any dilution constant across depths
+#: preserves the 0.372 dB/byte to +/-0.003 exactly while rescaling the result.
+#: The property that makes the sweep look trustworthy cannot see that class of
+#: error. Third instance of one shape in a day -- a cancellation test blind to
+#: an error two fields share, two FFT windows blind to a common bias, and this.
+#: **A test is blind to whatever it holds constant.**
+#:
+#: **THE CLEANEST OF THE THREE SWEEPS** -- in residuals, which is what that
+#: claim was about. Mono ROM **tone** (keymap 163) -- *not a sine, measured
+#: 2026-09-26: fundamental and 2nd harmonic within 1 dB, 3rd at -9 dB
+#: (§K163CONFIRM). Harmless to this number, since one sample and one layer
+#: means every component shares one pan, but the word was asserted and never
+#: measured.* LFO1 at
 #: byte 20 = 0.20 Hz, recovered at 0.201 Hz on every point:
 #:
 #:     byte  2   0.75 dB pp   resid 0.01    0.376 dB/byte
@@ -4776,11 +4833,40 @@ class VoiceLayer:
     # Pitch=0x30, Filter-Freq=0x38, Filter-Q=0x39.  LFO1→Pitch uses the default
     # cord 02 (mod[10]); the rest are written into free cord slots (8+).
     lfo1_to_pitch: float = 0.0       # LFO1 → Pitch   (cord 02, mod[10])
-    lfo1_to_filter: float = 0.0      # LFO1 → Filter-Freq (0x60→0x38)
+    #: LFO -> FILTER-FREQ DEPTH, IN CENTS, one-sided. Signed.
+    #:
+    #: **Cents since 2026-09-25, and it was three different quantities before
+    #: that.** As a 0..1 fraction this field meant `cents/10800` to
+    #: `krz_parser`, `cents/4383` to the SF2 and SFZ readers, and a raw EOS
+    #: cord amount to `e4b_parser` -- so the same 4383-cent sweep arrived as
+    #: 0.406 from a K2000 and 1.000 from an SFZ, a factor of 2.46, and every
+    #: cross-format conversion of this parameter was wrong by whichever pair
+    #: it crossed.
+    #:
+    #: **A FRACTION CANNOT BE MADE TO WORK HERE, which is why this is a unit
+    #: change and not a shared constant.** What a full E4XT filter cord is
+    #: worth in cents depends on where the corner already sits: 4383 cents
+    #: costs cord amount 66.2 at `vpar[60]` = 60 and 14.0 at 220, nearly 5x,
+    #: and it saturates (§FENVFULLSCALE spent three days on two candidate
+    #: constants 41 % apart before concluding the quantity is not constant).
+    #: No single "full scale" exists to divide by.
+    #:
+    #: So this follows `filter_env_cents` and `velocity_to_filter_cents`, which
+    #: were moved to cents for the same reason on 2026-08-25: carry the
+    #: physical quantity, convert at the point of use. Every reader already had
+    #: cents in hand and was dividing the information away --
+    #: `krz_depth_byte_to_cents`, `e4xt_cord_amount_to_cents` and
+    #: `MPC_FILTER_MOD_FULL_CENTS` (measured twice, 0.8 % spread; its own
+    #: docstring states that one law covers EVERY filter-frequency destination
+    #: on that machine, which is what makes the MPC's LFO depth convertible).
+    #:
+    #: The name carries the unit deliberately. A silent unit change on an
+    #: unchanged name is how "correct number, wrong quantity" happens.
+    lfo1_to_filter_cents: float = 0.0      # LFO1 → Filter-Freq (0x60→0x38)
     lfo1_to_filter_q: float = 0.0    # LFO1 → Filter-Q    (0x60→0x39)
     lfo1_to_volume: float = 0.0      # LFO1 → Volume (tremolo); 0.0-1.0 depth
     lfo2_to_pitch: float = 0.0       # LFO2 → Pitch       (0x68→0x30)
-    lfo2_to_filter: float = 0.0      # LFO2 → Filter-Freq (0x68→0x38)
+    lfo2_to_filter_cents: float = 0.0      # LFO2 → Filter-Freq (0x68→0x38)
     lfo2_to_filter_q: float = 0.0    # LFO2 → Filter-Q    (0x68→0x39)
     lfo2_to_volume: float = 0.0      # LFO2 → Volume (tremolo); 0.0-1.0 depth
     #: WHERE THE TREMOLO'S SWING SITS, in dB relative to the un-modulated
@@ -5044,6 +5130,32 @@ class Preset:
 # a future RE finds one.  None = no cap.
 MAX_VOICES_PER_PRESET = None
 
+
+
+def akai_cord_amount_to_mod_depth(amount: float,
+                                  scale: int = AKAI_CORD_SCALE_DEFAULT) -> int:
+    """E4 cord amount (-1..+1) -> AKAI +/-50 modulation depth.
+
+    The inverse of `akai_mod_depth_to_cord_amount`, for writing the
+    §AKAICORDGAP routings back out to an AKAI. **This is an inverse of a KNOWN
+    transform, not a new scale** -- the forward direction is EOS's own
+    rescaler read out of its importer (`0x2f6b4`), so nothing here is fitted or
+    guessed.
+
+    ⚠ **IT CANNOT BE EXACT EVERYWHERE, AND THE LOSS IS THE FORWARD
+    DIRECTION'S.** The 101 depths -50..+50 map onto only 97 distinct cord
+    bytes, so four pairs collide -- (12, 13), (37, 38) and their negatives --
+    and once a value has been through the forward transform the pair member it
+    came from is gone. Every other value returns exactly. Verified across the
+    whole rail rather than argued.
+
+    Rounds half AWAY FROM ZERO to match the forward's own `+1 >> 1`, which is
+    round-half-up and not Python's round-half-to-even.
+    """
+    byte = int(math.floor(abs(amount) * 127.0 + 0.5))
+    v = int(math.floor(byte * AKAI_CORD_RAIL / float(scale) + 0.5))
+    v = max(0, min(AKAI_CORD_RAIL, v))
+    return -v if amount < 0 else v
 
 def cap_voices_by_coverage(voices: "List[VoiceLayer]",
                            max_voices=MAX_VOICES_PER_PRESET) -> "List[VoiceLayer]":
@@ -5507,6 +5619,82 @@ KRZ_HOUSE_PROGRAM_GAIN_DB = 12.0
 #: write an AKAI tremolo writer that "normalises" either factor without
 #: deciding, explicitly, which modulation is allowed to move.
 AKAI_LFO_LOUDNESS_DB_PER_PRODUCT = 0.010068
+
+#: `LFODEP` to write when a source asks for TREMOLO and no VIBRATO.
+#: **A CHOICE, not a measurement — and it is only available because the two
+#: routings are gated separately.**
+#:
+#: The loudness law is a PRODUCT, `AKAI_LFO_LOUDNESS_DB_PER_PRODUCT * LFODEP *
+#: amount`, so a tremolo is inexpressible at `LFODEP 0` however large the
+#: matrix amount is: zero times anything. And `LFODEP` is the VIBRATO depth,
+#: which a source that states none leaves at 0 — 206 of 213 real AKAI programs
+#: sit there.
+#:
+#: But `L_PTCH` (keygroup 150) gates LFO1 -> PITCH independently, and this
+#: writer already writes it 0 whenever no vibrato is stated. So with the pitch
+#: route switched off, `LFODEP` is a free variable that reaches only the
+#: matrix, and setting it costs no vibrato.
+#:
+#: **WHY 99 (the maximum) rather than a mid-scale value.** Three reasons, in
+#: order of how much they matter:
+#:
+#: 1. It is a MEASURED point. The product law was established at LFODEP
+#:    99x20, 50x40 and 40x50 (within 0.17 dB), so 99 is one of the three
+#:    depths the law was actually fitted at rather than an extrapolation.
+#: 2. It maximises the swing the +/-50 amount rail can reach: 0.010068 * 99 *
+#:    50 = 49.8 dB one-sided. A smaller LFODEP shrinks that ceiling
+#:    proportionally, and the model's field goes to 96 dB.
+#: 3. **It takes the MOD WHEEL out of the tremolo.** The machine plays
+#:    `depth = min(99, LFODEP + MWLDEP*wheel/127)` (s3ked §255) and this
+#:    writer leaves the factory `MWLDEP 30` in place on a no-vibrato program.
+#:    At LFODEP 99 that expression is pinned at 99 for every wheel position,
+#:    so the tremolo depth is stable; at any lower value the wheel would
+#:    change the TREMOLO of a program whose source never mentioned a wheel.
+#:
+#: Not applicable when vibrato IS stated: `LFODEP` is then the vibrato's own
+#: depth and may not be moved to suit the tremolo. The amount absorbs what it
+#: can and the writer reports the rest.
+AKAI_LFO1_DEPTH_FOR_TREMOLO_ONLY = 99
+
+#: AKAI keygroup `CP1..CP4` — the CONSTANT-PITCH flag, **one per VELOCITY
+#: ZONE**, at keygroup bytes 132..135. `0 = TRACK`, `1 = CONST`.
+#:
+#: **FOUR FLAGS, NOT ONE**, and that is the whole reason this is a tuple.
+#: `non_transpose` reads like a per-keygroup switch and is not: a keygroup with
+#: four velocity zones has four independent flags, so setting only `CP1` gives
+#: a keygroup that plays at constant pitch when struck softly and tracks the
+#: keyboard when struck hard. That would present as an intermittent fault
+#: rather than as a wrong byte, which is the kind of defect this bench loses
+#: evenings to.
+#:
+#: PROVENANCE: **document-derived, not hardware-confirmed** (s3ked, from the
+#: SysEx specification's own wording, "0 represents TRACK, 1 represents
+#: CONST"). A panel byte-diff on a multi-zone keygroup would confirm all four
+#: in one toggle; it is a confirmation rather than a search, and it has not
+#: been done.
+#:
+#: ⚠ **"CONSTANT PITCH" IS NOT "AT ITS OWN ROOT".** The S3000XL manual says
+#: CONST plays the sample "at a constant pitch of C3" — a fixed KEY, not the
+#: sample's root — while this model's `non_transpose` means the sample plays
+#: at its root. The two coincide only where the root already is that key.
+#: `KGTUNO` and `VTUNO1..4` remain live on top of CONST, so the difference is
+#: correctable in tuning rather than lost; see `AKAI_CONST_PITCH_KEY`.
+AKAI_CP_OFFSETS = (132, 133, 134, 135)
+
+#: The key a CONST zone sounds at, as a MIDI note.
+#:
+#: **INFERRED, AND ISOLATED HERE SO ONE VALUE FIXES IT IF IT IS WRONG.** The
+#: manual says "a constant pitch of C3"; which MIDI number that names is an
+#: octave convention this project has NOT established for the AKAI, and
+#: vendors differ (C3 = 48 and C3 = 60 are both in use). 60 is assumed.
+#:
+#: It matters only through the compensation: a CONST zone plays as though the
+#: key were this note, so a sample whose root is elsewhere sounds
+#: `root - AKAI_CONST_PITCH_KEY` semitones away from its own pitch, and the
+#: writer adds exactly that back through the zone tune. If the convention
+#: turns out to be 48, every compensated zone is an octave out and this one
+#: constant corrects all of them.
+AKAI_CONST_PITCH_KEY = 60
 #: Mod-matrix offsets. **SOURCE: the table in `docs/AKAI_S3000_FORMAT.md`,
 #: transcribed from Akai's own parameter document.** This pointer is here
 #: because its absence cost two rounds of argument on 2026-09-15: the doc

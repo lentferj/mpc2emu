@@ -550,7 +550,12 @@ def parse_sf2(sf2_path: str, max_presets: int = 64) -> Bank:
                         if mod_pitch:
                             voice.lfo1_to_pitch  = lfo_pitch_depth_to_amount(mod_pitch)
                         if mod_cutoff:
-                            voice.lfo1_to_filter = cents_to_filter_env_amount(mod_cutoff)
+                            # `mod_cutoff` IS cents (SF2 modulator units),
+                            # so it is stored as-is since 2026-09-25. It
+                            # used to be divided by FILTER_ENV_FULL_CENTS,
+                            # which threw the physical quantity away and
+                            # disagreed with the KRZ reader by 2.46x.
+                            voice.lfo1_to_filter_cents = float(mod_cutoff)
                         if mod_volume_cb:
                             voice.lfo1_to_volume = lfo_volume_depth_to_amount(mod_volume_cb / 10.0)
                     vib_pitch = ig_dict.get(6, {}).get('amt', 0)

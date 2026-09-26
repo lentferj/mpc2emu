@@ -5,6 +5,51 @@
 
 # Does EOS merge `-L`/`-R` zones on import? — E4XT procedure
 
+> # ✅ RESOLVED 2026-09-24 — **NOTHING MERGES.** Do not re-run this.
+>
+> Imported on the E4XT and read back over SysEx (eosed `bd8357a`, re-verified
+> 2026-09-26). Committed here as **`269b7dc`**; §AKAIZONEMERGE in
+> `RESOLUTION_NOTES.md` is marked RESOLVED.
+>
+> | PRG | predict-if-merge | **MEASURED** |
+> |---|---|---|
+> | 120 `SZ PAIR MATCH` | 1 | **2** |
+> | 121 `SZ PAIR TUNED` | 2 | 2 |
+> | 122 `SZ PAIR HALF` | 1 | **1** |
+> | 123 `SZ STEM DIFF` | 2 | 2 |
+> | 124 `SZ PLAIN SAME` | 2 | 2 — control passes |
+> | 125 `SZ PLAIN DIFF` | 2 | 2 — control passes |
+>
+> `LRREAL`: **326 zones in, 326 out**, so the authored volume and real library
+> material agree and the finding is about the firmware, not the disc.
+> `zone_dedup` is closed outright rather than left conditional.
+>
+> **Beyond the count:** 122 confirms the arena-existence gate on hardware, and
+> the survivor comes back at velocity **0–127** rather than the 0–63 it carries
+> on the AKAI side — so the gate *widens* the survivor rather than merely
+> dropping the partner. A scan of all 116 `LRREAL` voices found no general
+> normalisation (93 carry a 99/100 split that can only come from the source),
+> so the widening is tied to the drop, **n = 1**.
+>
+> ⚠ **121 TESTS NOTHING.** Once nothing merges it predicts 2 under both
+> hypotheses, so `0x2f8a0` stays unfalsifiable on this path. Worth knowing
+> before anyone authors another disc for it.
+>
+> ---
+>
+> ⚠ **WHY THIS BANNER EXISTS.** On 2026-09-26 I read this document and the
+> card's staging note, saw a procedure with predictions and no outcome, and
+> told Jan three times that the test had "never been run" — then sent him to
+> load the banks and commissioned eosed to redo it. The answer had been in
+> **our own commit log** since two days earlier. Both records I trusted were
+> written BEFORE the run (the card note predates the commit by sixteen
+> minutes) and neither was updated after it, so a forward-looking document read
+> as current state. eosed caught the duplication.
+>
+> **A procedure with no outcome is not evidence that it has no outcome.**
+> Check `git log` and the notes index before commissioning rig time.
+
+
 **One import settles four firmware readings that have never been observed.**
 
 ## Why

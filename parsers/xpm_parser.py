@@ -2242,7 +2242,8 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None,
                     pdict.update(
                         lfo2_rate=_lfo_rate_to_hz(_get_text(lfo2_block, 'Rate', '0.5')),
                         lfo2_shape=_xpm_lfo_shape(_get_text(lfo2_block, 'Type', 'Sine')),
-                        lfo2_to_filter=_l2_cut,
+                        lfo2_to_filter_cents=(max(-1.0, min(1.0, _l2_cut))
+                                              * MPC_FILTER_MOD_FULL_CENTS),
                         lfo2_to_pan=_l2_pan,
                         lfo2_to_volume=_l2_vol,
                         lfo2_delay=(_l2_dly or None),
@@ -2258,7 +2259,13 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None,
                     lfo1_rate=lfo_rate_hz, lfo1_shape=lfo_shape, lfo1_sync=lfo_sync,
                     lfo1_sync_division=lfo_sync_div,
                     lfo1_to_pitch=lfo_pitch,
-                    lfo1_to_filter=lfo_cutoff,
+                    # CENTS since 2026-09-25, through the SAME measured law
+                    # as `filter_env_cents` and `velocity_to_filter_cents`
+                    # above: `MPC_FILTER_MOD_FULL_CENTS`'s own docstring
+                    # states that one law covers EVERY filter-frequency
+                    # destination on this machine, and the LFO is one.
+                    lfo1_to_filter_cents=(max(-1.0, min(1.0, lfo_cutoff))
+                                          * MPC_FILTER_MOD_FULL_CENTS),
                     lfo1_to_pan=lfo_pan,
                     wheel_to_lfo=wheel_to_lfo,
                     # ONE-SIDED, because that is what the model field means --

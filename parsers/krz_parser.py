@@ -978,8 +978,8 @@ class _KrzLayer:
         # attribute nobody ever reads. No error, no warning, correct-looking
         # output -- I wired the LFO pair, watched 412 tests pass, and measured
         # zero of 126 routings arriving before finding it.
-        self.lfo1_to_filter = 0.0
-        self.lfo2_to_filter = 0.0
+        self.lfo1_to_filter_cents = 0.0
+        self.lfo2_to_filter_cents = 0.0
         # LFO2's own oscillator, read since 2026-09-25 (segment 0x15).
         self.lfo2_rate: Optional[float] = None
         self.lfo2_shape: Optional[str] = None
@@ -1388,9 +1388,21 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
                     # 1.0, neither of which the writers on the other side
                     # agreed with. The model carries cents for both since
                     # 2026-08-25, so the depth the machine states is the depth
-                    # that is stored. The LFO destinations below are still
-                    # amounts and still keep the ceiling; each needs its own
-                    # measured full scale (TODO: KRZ depth normalisation).
+                    # that is stored.
+                    #
+                    # **THE LFO -> FILTER-FREQ DESTINATIONS NOW DO THE SAME**
+                    # (2026-09-25). They were `_k2_depth_cents(_d) /
+                    # KRZ_DEPTH_MAX_CENTS`, and the TODO that stood here --
+                    # "each needs its own measured full scale" -- is answered
+                    # by not needing one: the cents are carried and each writer
+                    # converts at its own operating point. `KRZ_DEPTH_MAX_CENTS`
+                    # was a CEILING rather than a measured full scale, so a
+                    # K2000 sweep arrived at an E4XT or an MPC meaning
+                    # something else entirely.
+                    #
+                    # `_amt` survives for FILTER-Q only, which is still a
+                    # fraction because no cents law has been measured for
+                    # resonance on any of these machines.
                     _amt = max(-1.0, min(1.0,
                                          _k2_depth_cents(_d) / KRZ_DEPTH_MAX_CENTS))
                     if _src == _K2_CS_ENV2:
@@ -1411,9 +1423,9 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
                         # still assigned. Only the depth sums.
                         cur.velocity_to_filter_min_cents = _k2_depth_cents(_f)
                     elif _src == _K2_CS_LFO1:
-                        cur.lfo1_to_filter = _amt
+                        cur.lfo1_to_filter_cents = _k2_depth_cents(_d)
                     elif _src == _K2_CS_LFO2:
-                        cur.lfo2_to_filter = _amt
+                        cur.lfo2_to_filter_cents = _k2_depth_cents(_d)
             else:
                 cur.filter_type = 0
         elif tag == HOB_F4_TAG:
@@ -1632,7 +1644,7 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
             # The display-only caveat that stood for two hours is discharged.
             #
             # This reader had NO LFO2 rate or shape at all until today: it
-            # extracted `lfo2_to_filter` and `lfo2_to_volume` from the mod
+            # extracted `lfo2_to_filter_cents` and `lfo2_to_volume` from the mod
             # wires and nothing else, so a K2000 source's second LFO arrived
             # with destinations and no oscillator behind them.
             cur.lfo2_rate = krz_lfo_rate_byte_to_hz(seg[2])
@@ -1973,8 +1985,8 @@ def parse_krz(path: str) -> Bank:
                     velocity_to_filter_cents=layer.velocity_to_filter_cents,
                     velocity_to_filter_min_cents=layer.velocity_to_filter_min_cents,
                     filter_keytrack=layer.filter_keytrack,
-                    lfo1_to_filter=layer.lfo1_to_filter,
-                    lfo2_to_filter=layer.lfo2_to_filter,
+                    lfo1_to_filter_cents=layer.lfo1_to_filter_cents,
+                    lfo2_to_filter_cents=layer.lfo2_to_filter_cents,
                     lfo2_rate=layer.lfo2_rate,
                     lfo2_shape=layer.lfo2_shape,
                     lfo2_to_pitch=layer.lfo2_to_pitch,

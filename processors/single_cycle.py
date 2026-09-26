@@ -367,8 +367,8 @@ def _neutralize_voice(v, keep_flt: bool, keep_lfo: bool, keep_amp: bool) -> None
                   'lfo2_rate', 'lfo2_shape', 'lfo2_delay', 'lfo2_variation',
                   'lfo2_sync'):
             setattr(v, a, None)
-        for a in ('lfo1_to_pitch', 'lfo1_to_filter', 'lfo1_to_filter_q',
-                  'lfo2_to_pitch', 'lfo2_to_filter', 'lfo2_to_filter_q',
+        for a in ('lfo1_to_pitch', 'lfo1_to_filter_cents', 'lfo1_to_filter_q',
+                  'lfo2_to_pitch', 'lfo2_to_filter_cents', 'lfo2_to_filter_q',
                   'wheel_to_lfo', 'chorus_amount'):
             setattr(v, a, 0.0)
 

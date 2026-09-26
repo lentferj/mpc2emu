@@ -756,7 +756,32 @@ def _build_keymap_entries(voice: VoiceLayer,
         # E4B and AKAI writers both already read `coarse_tune` (`e4b_writer.py`
         # `_zone_entry`, `akai_s3000_writer.py`); the K2000 path is the one
         # that dropped it, not a deliberate KRZ-specific choice.
-        tuning = 100 * (r_sample - r_zone + zone.coarse_tune) + zone.fine_tune
+        # `zone.transpose` RIDES WITH `coarse_tune`, and the two are one
+        # quantity as far as this machine is concerned.
+        #
+        # The model keeps them apart because their SOURCES mean different
+        # things -- `transpose` is EOS `vpar[34]`, a keyboard offset that
+        # remaps which key plays which sample, while `coarse_tune` is a pitch
+        # trim. On the K2000 that distinction has no destination: the keymap
+        # page's `Xpose` shifts pitch by exactly the amount it transposes
+        # (k2kremote §73, measured -- `Xpose 12` gives +11.97 st, and it ADDS
+        # to the pitch page's `Coarse` rather than overriding it). So both land
+        # in the same semitone term here.
+        #
+        # ⚠ **IT WAS BEING DROPPED, and only this writer dropped it.** Probed
+        # 2026-09-25 with a positive control: a zone written with
+        # `coarse_tune=+12` reads back at `root_key` 48, and the same zone with
+        # `transpose=+12` reads back at 60 -- unchanged, the whole octave gone.
+        # The control matters because `krz_parser` folds transposition into
+        # `root_key`/`fine_tune` and sets `transpose` to 0 on the way out, so a
+        # probe that watched the `transpose` field alone would have reported the
+        # same zero for a working writer.
+        #
+        # Same shape as §KRZCOARSETUNE above: not a KRZ-specific decision, just
+        # a term that never reached the arithmetic.
+        _xpose = getattr(zone, 'transpose', 0) or 0
+        tuning = (100 * (r_sample - r_zone + zone.coarse_tune + _xpose)
+                  + zone.fine_tune)
         tuning = max(-32768, min(32767, tuning))
 
         # Up-pitch ceiling (HW-confirmed 2026-06-21): a sample can only transpose
@@ -787,8 +812,14 @@ def _build_keymap_entries(voice: VoiceLayer,
         orig_hi = hi_key
         over_ceiling = False
         if sample is not None:
-            ceiling = _compute_playback_ceiling(sample.sample_rate,
-                                                r_zone - zone.coarse_tune) // 100
+            # `_xpose` is subtracted alongside `coarse_tune` for the reason
+            # the paragraph above gives: it spends up-pitch headroom exactly as
+            # a positive coarse tune does, so a transposed zone that no longer
+            # fits under the 48 kHz ceiling has to be clipped, not written and
+            # left to flatten the whole keymap's keytracking.
+            ceiling = _compute_playback_ceiling(
+                sample.sample_rate,
+                r_zone - zone.coarse_tune - _xpose) // 100
             over_ceiling = ceiling < zone.lo_key
             hi_key = min(hi_key, ceiling)
 
@@ -1416,6 +1447,31 @@ def _make_layer_segments(keymap_id: int, stereo: bool = False,
 #   keymap reference      = CAL[7,8] / CAL[11,12]
 
 # (tag, default bytes) — global PGM+FX, then one layer block, from DFLT.KRZ:
+#: ROM preset effect 31, `Stereo Chorus` (K2000 Musician's Guide ch. 22, the
+#: 47-entry factory list). **The only pure-chorus configuration in ROM** --
+#: every other chorus-bearing preset is `Chorus+Room`, `Chorus+Hall`,
+#: `Chorus+Delay+...` or `EQ+Chorus+4-Tap`, so its wet/dry would be buying
+#: reverb or delay along with the chorus the source asked for.
+_K2_FX_STEREO_CHORUS = 31
+
+#: The program EFFECT page's `Wet/Dry Mix` **Adjust**, at segment `0x0F` byte 2.
+#:
+#: **INFERRED, not measured**, and said so plainly. Two things support it and
+#: neither is a hardware read:
+#:
+#: 1. The page holds exactly one 0..100 parameter -- `Wet/Dry Mix` Adjust --
+#:    and six that are -128..127 (the two realtime Adjusts, and a Source and a
+#:    Depth for each of the three inputs). Manual, ch. 6, "The EFFECT Page".
+#: 2. **An exhaustive negative over 4 280 corpus programs**: byte 2 never
+#:    exceeds 86, and in particular is never >100 and never >127. A signed
+#:    -128..127 Depth field would be expected to produce both, and produces
+#:    neither. Bytes 3..6 are 0 in every one of those programs, consistent
+#:    with the three Sources sitting at OFF and the Depths at 0.
+#:
+#: What would settle it: a SysEx panel diff -- set Wet/Dry to a distinctive
+#: value with the editor open, dump, compare. Cheap, and not done.
+_K2_FX_WETDRY_INDEX = 2
+
 _TPL_GLOBAL = [
     (0x08, [2, 1, 0, 55, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),   # PGM
     (0x0F, [0, 1, 0, 0, 0, 0, 0]),                             # FX
@@ -1607,6 +1663,11 @@ _K2_CS_MWHEEL = 1      #: MWheel -- the codes ARE MIDI CC numbers (k2kremote §7
 _K2_F3_PANNER = 40
 _K2_ALG_PANNER = 2
 _K2_PAN_ADJUST, _K2_PAN_SRC1, _K2_PAN_DEPTH = 1, 5, 6
+#: `VelTrk`, program offset 245 -> seg index 4 (offset - 241), from the same
+#: hardware map as Src1/Depth (§PANMOD). A signed byte at **2 %/unit over a
+#: ±200 % rail -- the SAME encoding as `Depth` at seg[6]**, which is what lets
+#: it share `KRZ_LFO_PAN_DEPTH_SCALE` rather than needing a scale of its own.
+_K2_PAN_VELTRK = 4
 #: The panner's SECOND wire, from the same hardware map above (program offsets
 #: 248/249/250/251 at seg index = offset - 241). It is what lets LFO1 and LFO2
 #: both reach pan instead of one masking the other.
@@ -2425,6 +2486,44 @@ _K2_F3_NONE = 60             # HOB2[0]: F3 = NONE        (Alg 5, clean series pa
 #: is a separate change from correcting the fact.
 _K2_F3_NONE_ALG2 = 40        # = _K2_F3_PANNER; see above
 _K2_CAL_ALGORITHM = 29       # CAL byte holding the algorithm number
+
+#: `CAL[19]` — the PITCH page's `KeyTrk`, a DEVIATION added to the KEYMAP page's
+#: own KeyTrk rather than the tracking amount itself.
+_K2_CAL_PITCH_KEYTRK = 19
+
+#: The `CAL[19]` byte that CANCELS key tracking: signed −43, displaying as
+#: −100 ct/key, which meets the KEYMAP page's default +100 exactly.
+#:
+#: **HARDWARE-MEASURED 2026-09-26** (k2kremote set the byte, mpc2emu captured),
+#: on ROM keymap 163 with both legs differing in this byte alone:
+#:
+#:     PITCH KeyTrk 0    -> +97.9 cents/key,  4712 ct across 48 keys
+#:     PITCH KeyTrk 213  ->  +0.0 cents/key,     0 ct across 48 keys
+#:                          201.43 Hz at every one of five keys
+#:
+#: **TWO WRONG ANSWERS CAME FIRST AND BOTH LOOKED RIGHT.** `0` is a no-op —
+#: 98.78 % of 16 649 corpus layers already carry it, because 0 means "add
+#: nothing" and normal tracking comes from the KEYMAP page. Then `43` was
+#: predicted as the cancelling value and is the opposite: +100, i.e. DOUBLE
+#: tracking, and its 150 layers are windphones and mono synth leads.
+#:
+#: ⚠ A third near-miss is worth recording because it would have been believed.
+#: Measured at ONE key the difference between the two legs is −516 cents, which
+#: matches a law of "the engine uses the raw byte −43 as cents-per-key" to
+#: 12 cents. It is an artefact: the test leg is FLAT and the control TRACKS, so
+#: their difference at any single key is just the control's own tracking
+#: evaluated there. One point could not separate the two models; five keys
+#: separate them by 2736 cents.
+#:
+#: **THE MULTI-ZONE ROUTE, DELIBERATELY.** Total tracking is also zero with
+#: KEYMAP KeyTrk = 0 (`CAL[3]`), but that stretches one sample root across the
+#: keyboard. This way the keymap still advances, so each key keeps its own
+#: sample — which is what EOS `vpar[38]` means on a voice whose zones each play
+#: at their own root. Real K2000 material does it the other way: `CAL[3] = 0`
+#: on 950 programs with drums enriched 9.7x, against a population of ONE for
+#: this byte. So this is measured rather than idiomatic, and the measurement is
+#: why it is safe to write.
+_K2_PITCH_KEYTRK_CANCEL = 213
 # PARA MID (Alg2) AMP gain = HOB1[1] as signed dB, 1:1 (HW: +24dB->24, +48dB->48,
 # 0->0, range +-48).  Band-boost depth from MPC resonance: +12 .. +24 dB.
 _K2_PARAMID_GAIN_MIN_DB = 12
@@ -2654,6 +2753,17 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
         lyr[8] |= 0x20
 
     cal = seg(0x40)
+    # NON_TRANSPOSE: cancel key tracking on the PITCH page (2026-09-26).
+    #
+    # `non_transpose` means the sample does not follow the key -- drums, loops,
+    # sound effects. The K2000 has no flag for it; it is expressed by making
+    # the PITCH page's KeyTrk deviation cancel the KEYMAP page's tracking, and
+    # the cancelling byte is hardware-measured. See
+    # `_K2_PITCH_KEYTRK_CANCEL`, which carries the two wrong values that came
+    # first and the one-key artefact that nearly produced a third.
+    if getattr(voice, 'non_transpose', False):
+        cal[_K2_CAL_PITCH_KEYTRK] = _K2_PITCH_KEYTRK_CANCEL
+
     # Keymap reference: CAL[11,12] always; CAL[7,8] is a SECOND keymap slot, and
     # the K2000 appears to use one slot per channel.
     #
@@ -2821,21 +2931,55 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
             _hob4[KRZ_F4_AMP_DEPTH_INDEX] = _d
             level_offset_db -= _d * KRZ_F4_AMP_ADJUST_DB_PER_UNIT
 
+    # WHERE THE SOURCE'S TREMOLO ACTUALLY SITS -- a third contributor, and the
+    # only one of the three that is the SOURCE's statement rather than this
+    # writer's arithmetic.
+    #
+    # `lfo*_to_volume` carries the swing's SIZE only. The MPC's LFO -> AMP does
+    # not swing about the un-modulated level: its centre SINKS as the depth
+    # grows (`mpc_lfo_amp_centre_db`, measured 2026-09-17). The K2000's own
+    # swing IS centred on nominal -- +0.29 dB at Depth 12, measured -- so the
+    # sink is not reproduced by writing the depth alone, and a voice arrives at
+    # the right wobble and the wrong average loudness.
+    #
+    # It is a static level offset in dB and `Adjust` is a static level offset
+    # in dB at 1.0 dB/unit, so it ADDS to the other two rather than competing
+    # for the byte. Readers whose centring is measured leave it 0.0 (AKAI
+    # symmetric to 0.42 dB; K2000 as above), so this contributes nothing on
+    # every path but MPC -- which is why it is added here rather than branched.
+    _centre_db = getattr(voice, 'lfo_volume_centre_db', 0.0) or 0.0
+    level_offset_db += _centre_db
+
     # --- one clamped write of the layer's static level ------------------
     #
-    # TWO THINGS MOVE THIS BYTE and they are both dB, so they add rather than
+    # THREE THINGS MOVE THIS BYTE and they are all dB, so they add rather than
     # compete: the tremolo headroom trim above (subtracting the depth, because
-    # the swing is bipolar about nominal) and the velocity-pivot offset passed
-    # in by the caller. Writing them separately would have meant two clamps and
-    # a read-modify-write between them.
+    # the swing is bipolar about nominal), the velocity-pivot offset passed in
+    # by the caller, and the source's tremolo centre. Writing them separately
+    # would have meant three clamps and a read-modify-write between each.
     if level_offset_db:
         _a = seg(0x53)[KRZ_F4_AMP_ADJUST_INDEX]
         _a = _a - 256 if _a > 127 else _a
-        seg(0x53)[KRZ_F4_AMP_ADJUST_INDEX] = max(
-            -KRZ_F4_AMP_DEPTH_CLAMP,
-            min(KRZ_F4_AMP_DEPTH_CLAMP,
-                _a + int(round(level_offset_db
-                               / KRZ_F4_AMP_ADJUST_DB_PER_UNIT)))) & 0xFF
+        _want = _a + int(round(level_offset_db
+                               / KRZ_F4_AMP_ADJUST_DB_PER_UNIT))
+        _got = max(-KRZ_F4_AMP_DEPTH_CLAMP,
+                   min(KRZ_F4_AMP_DEPTH_CLAMP, _want))
+        seg(0x53)[KRZ_F4_AMP_ADJUST_INDEX] = _got & 0xFF
+        # ⚠ THE RAIL IS NOW REACHABLE WHERE IT WAS NOT. Two contributors could
+        # not saturate a +/-96 dB byte in practice; three can -- a full-depth
+        # tremolo trims 96 on its own, so ANY centre sink on top of it runs off
+        # the end. That case is announced rather than absorbed: E4XT tremolos
+        # resolve the same squeeze by keeping the centre and letting the swing
+        # give way (`e4xt_tremolo_cords`, Jan 2026-09-17), and doing the same
+        # here would mean rewriting `Depth` below its measured request. That is
+        # a decision for Jan, not for this clamp, so until it is made the loss
+        # is reported and the swing is kept.
+        if _want != _got and _centre_db:
+            print("    [WARN] KRZ amp Adjust saturated at %d (wanted %d): "
+                  "%.2f dB of tremolo centre could not be written, so this "
+                  "voice keeps its swing and arrives loud by that much"
+                  % (_got, _want, abs(_want - _got)
+                     * KRZ_F4_AMP_ADJUST_DB_PER_UNIT))
 
     # --- amp envelope (always User mode + the source ADSR) ---
     seg(0x20)[1] = 0                                         # AMPENV mode -> User
@@ -2894,8 +3038,12 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
         # alone justifies switching to the panner algorithm; the allocation
         # below decides which wire each one gets.
         _pan_depth2 = (getattr(voice, 'lfo2_to_pan', 0.0) or 0.0)
-        _want_pan = bool(_pan_depth or _pan_depth2) and algo == 5 \
-            and ftype_byte == _K2_FILTER_2P_LP
+        # Velocity->pan alone is enough to need the panner: the destination is
+        # the same block, and without this a voice stating only velocity pan
+        # would silently keep the non-panner algorithm and lose it.
+        _vel_pan_req = getattr(voice, 'velocity_to_pan', 0.0) or 0.0
+        _want_pan = bool(_pan_depth or _pan_depth2 or _vel_pan_req) \
+            and algo == 5 and ftype_byte == _K2_FILTER_2P_LP
         if _want_pan:
             algo, f3_byte = _K2_ALG_PANNER, _K2_F3_PANNER
         hob_f1[0] = ftype_byte                               # F1 DSP filter type
@@ -2941,6 +3089,30 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
                 _f3[_K2_PAN_MINDPT] = _d2
                 _f3[_K2_PAN_MAXDPT] = _d2
                 _f3[_K2_PAN_DPTCTL] = _K2_CS_OFF
+            # --- VELOCITY -> PAN, written since 2026-09-25 -------------------
+            #
+            # ⚠ **NO WRITER EMITTED THIS FIELD AT ALL.** `velocity_to_pan` is
+            # set by the MPC and AKAI readers and was read by none of the three
+            # writers -- one of only three fields in the whole model in that
+            # state (§ORPHANFIELDS). The K2000 has the destination and we had
+            # the offset: `VelTrk` is hardware-mapped at program offset 245 in
+            # the same RAM-only diff that gave us Src1 and Depth (§PANMOD).
+            #
+            # THE SCALE IS A CARRY-ACROSS WITHIN ONE BLOCK, not a new guess.
+            # `VelTrk` and `Depth` share an encoding -- both signed bytes at
+            # 2 %/unit over a ±200 % rail per the hardware map -- so the depth
+            # calibration measured at 0.372 dB/byte applies to both. That is
+            # why this does NOT repeat `_pan_depth * 50`, the raw fraction of
+            # the rail with nothing behind it that §PANMOD had to correct.
+            #
+            # Same ±50 clamp as Depth, for the same reason: it is the range
+            # the calibration was measured over, not the rail's arithmetic
+            # maximum of ±100.
+            _vel_pan = getattr(voice, 'velocity_to_pan', 0.0) or 0.0
+            if _vel_pan:
+                _f3[_K2_PAN_VELTRK] = max(-50, min(50, int(round(
+                    _vel_pan * 50 * KRZ_LFO_PAN_DEPTH_SCALE)))) & 0xFF
+
             # SPREAD THE TWO WIRES, or none of the above is audible (§K2PANWIRES).
             # Musician's Guide p284: PANNER "converts a single wire at its input
             # into a double wire at its output" and "by itself the PANNER doesn't
@@ -3185,21 +3357,18 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
         # `MinDpt == MaxDpt` on Src2, the same plain-wire construction used
         # for LFO2 -> Pitch and for the panner, and for the same measured
         # reason (DptCtl scales linearly between the two, k2kremote §73).
-        _l1_filt = getattr(voice, 'lfo1_to_filter', 0.0) or 0.0
-        _l2_filt = getattr(voice, 'lfo2_to_filter', 0.0) or 0.0
+        _l1_filt = getattr(voice, 'lfo1_to_filter_cents', 0.0) or 0.0
+        _l2_filt = getattr(voice, 'lfo2_to_filter_cents', 0.0) or 0.0
         if _l1_filt or _l2_filt:
-            # EXACTLY THE READER'S INVERSE. `krz_parser` stores this
-            # destination as `_k2_depth_cents(byte) / KRZ_DEPTH_MAX_CENTS`,
-            # so multiplying back round-trips a K2000 source. Inventing a
-            # separate "full scale" here would give one field two definitions
-            # of 1.0 -- the fault the parser's own comment records fixing for
-            # the envelope in August.
-            #
-            # ⚠ That constant is a CEILING, not a measured full-scale depth:
-            # the parser flags "each needs its own measured full scale (TODO:
-            # KRZ depth normalisation)". KRZ->KRZ is exact; an MPC or E4B
-            # source whose 1.0 means something else is only as right as that
-            # TODO. A round-trip test here is not a calibration.
+            # THE MODEL CARRIES CENTS, so there is nothing to un-normalise
+            # (2026-09-25). This used to multiply by `KRZ_DEPTH_MAX_CENTS` to
+            # invert the reader's own division, and the warning that stood here
+            # -- "that constant is a CEILING, not a measured full-scale depth;
+            # KRZ->KRZ is exact, an MPC or E4B source whose 1.0 means something
+            # else is only as right as that TODO" -- was exactly right. It is
+            # resolved by not having a full scale at all: the reader keeps the
+            # cents the machine states and every writer converts at its own
+            # operating point, as `filter_env_cents` has since August.
             _wires = [(_K2_CS_LFO1, _l1_filt)] if _l1_filt else []
             if _l2_filt:
                 _wires.append((_K2_CS_LFO2, _l2_filt))
@@ -3209,7 +3378,7 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
             _free.append('src2')
             _lost = []
             for (_src, _amt), _slot in zip(_wires, _free):
-                _byte = _filter_env_depth_byte(_amt * KRZ_DEPTH_MAX_CENTS) & 0xFF
+                _byte = _filter_env_depth_byte(_amt) & 0xFF
                 if _slot == 'src1':
                     hob_f1[5] = _src
                     hob_f1[6] = _byte
@@ -3237,8 +3406,8 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
                     # ever gains a range, seg[7] stops being moot and must be
                     # located before it is written.
             if len(_wires) > len(_free):
-                _lost = ['lfo1_to_filter' if _src == _K2_CS_LFO1
-                         else 'lfo2_to_filter'
+                _lost = ['lfo1_to_filter_cents' if _src == _K2_CS_LFO1
+                         else 'lfo2_to_filter_cents'
                          for _src, _ in _wires[len(_free):]]
             if _lost:
                 _diag(_W, 'KRZ_FILTER_WIRE_CONTENDED',
@@ -3289,7 +3458,7 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
     # panel reading. §KRZLFO2RATE is the bank that asks, and until it runs
     # every LFO2 rate here is provisional.
     _l2_routed = any((getattr(voice, f, 0.0) or 0.0)
-                     for f in ('lfo2_to_pitch', 'lfo2_to_filter',
+                     for f in ('lfo2_to_pitch', 'lfo2_to_filter_cents',
                                'lfo2_to_pan', 'lfo2_to_volume'))
     # ⚠ **OR THE SOURCE STATED A RATE.** This was `if _l2_routed:` alone, on the
     # reasoning that "a rate reaching nothing is inert, so writing one changes a
@@ -3399,11 +3568,42 @@ def _write_program_object(f, preset: Preset, prog_id: int,
     bw = _BlockWriter(f, _hash(T_PROGRAM, prog_id))
     bw.begin(preset.name)
 
+    # CHORUS: SELECT A ROM EFFECT AND SET ITS WET/DRY (2026-09-25).
+    #
+    # `chorus_amount` had no destination here because the K2000 does not carry
+    # a chorus depth in the program at all -- the `0x0F` segment SELECTS an
+    # effect object by id, and we reference ROM effects rather than authoring
+    # type-28 objects. So the amount is expressed the only way this machine
+    # allows without writing a new object type: pick the pure-chorus ROM
+    # preset and set how much of it is heard.
+    #
+    # ⚠ **THIS REPLACES THE PROGRAM'S EFFECT, and that is a real cost.** The
+    # template selects effect 1, `Sweet Hall`; a source that states chorus
+    # gets chorus instead of that reverb, not as well as it. The machine has
+    # ONE global effect per program, so something must lose, and honouring
+    # what the source actually asked for is the better loss than silently
+    # dropping it -- which is what happened until now.
+    #
+    # ⚠ **THE CHORUS'S OWN RATE AND DEPTH ARE THE ROM PRESET'S.** Only the
+    # wet/dry is ours. A source asking for a slow deep chorus and one asking
+    # for a fast shallow one differ here only in level. Carrying the rest
+    # needs a type-28 FX object, which is a format we do not write.
+    #
+    # PROGRAM LEVEL, so one voice must win -- the first that states one, the
+    # same first-stated rule the LFO and pan fields use in the AKAI writer.
+    _chorus = next((abs(getattr(v, 'chorus_amount', 0.0) or 0.0)
+                    for v in preset.voices
+                    if getattr(v, 'chorus_amount', 0.0)), 0.0)
+
     # PGM + FX (global), with numLayers patched
     for tag, data in _TPL_GLOBAL:
         d = bytearray(data)
         if tag == 0x08:
             d[1] = n
+        elif tag == FXSEGTAG and _chorus:
+            d[0] = 0
+            d[1] = _K2_FX_STEREO_CHORUS
+            d[_K2_FX_WETDRY_INDEX] = max(0, min(100, int(round(_chorus * 100))))
         f.write(_pack_segment(tag, bytes(d)))
 
     for voice, kid, segs in _preset_layers(layers, samples_by_name,
@@ -4184,8 +4384,67 @@ def write_krz(bank: Bank, output_path: str,
                         zone_gain_db, sample_gain_db))
 
         # --- Program objects (one layer per voice) ---
+        #
+        # THE SOURCE'S OWN PROGRAM NUMBER IS HONOURED WHERE IT CAN BE.
+        #
+        # A program's object id IS its program number on this machine: the
+        # panel selects `bank = id // 100`, `PC = id % 100`, so id 213 is bank
+        # 2, program 13. Until now every bank was numbered 200, 201, 202... in
+        # preset order and a source asking for 213 got whatever position it
+        # happened to occupy -- which matters, because a program number is how
+        # a sequencer addresses the sound.
+        #
+        # ⚠ **IDS BELOW `base_id` ARE NOT AVAILABLE**, so a source asking for
+        # program 130 cannot have it: 200..999 is the writable range (the
+        # ceiling is HW-confirmed; see the comment on `_MAX_OBJ_ID`). That is a
+        # real limit, not a policy, and it is reported rather than silently
+        # rounded -- the old behaviour put such a preset on 200 and said
+        # nothing.
+        #
+        # A PROGRAM'S OWN ID IS SAFE TO MOVE. It is not referenced by anything
+        # else in the file: programs point AT keymaps, and nothing points at a
+        # program. So this reorders numbers without touching a cross-reference.
+        #
+        # COLLISIONS RESOLVE IN PRESET ORDER, first come first served, and the
+        # loser is told. Two presets asking for one number is a source-side
+        # fault we cannot fix here, and silently stacking them is what the AKAI
+        # writer's PRGNUM hazard turned out to be: four programs sharing a
+        # number all sound at once on one program change.
+        _claimed: set = set()
+        _requested: dict = {}
         for pi, preset in enumerate(bank.presets):
-            pid = base_id + pi
+            want = getattr(preset, 'program_number', None)
+            if not want:
+                continue
+            if not (base_id <= want <= _MAX_OBJ_ID):
+                print(f"  [WARN] preset '{preset.name}' asks for program "
+                      f"{want}; this bank can only number programs "
+                      f"{base_id}..{_MAX_OBJ_ID}, so it is assigned "
+                      f"sequentially instead")
+                continue
+            if want in _claimed:
+                print(f"  [WARN] preset '{preset.name}' asks for program "
+                      f"{want}, already taken by an earlier preset; assigned "
+                      f"sequentially instead")
+                continue
+            _claimed.add(want)
+            _requested[pi] = want
+        _next = base_id
+        _pids = []
+        for pi in range(len(bank.presets)):
+            if pi in _requested:
+                _pids.append(_requested[pi])
+                continue
+            while _next in _claimed:
+                _next += 1
+            _claimed.add(_next)
+            _pids.append(_next)
+        if max(_pids, default=base_id) > _MAX_OBJ_ID:
+            raise ValueError(
+                f"program ids ran past {_MAX_OBJ_ID} once the source's own "
+                f"program numbers were honoured; split the bank")
+        for pi, preset in enumerate(bank.presets):
+            pid = _pids[pi]
             _write_program_object(f, preset, pid, preset_keymaps[pi],
                                   samples_by_name, firmware_sim=firmware_sim)
             print(f"  Program [{pid}] '{preset.name}': "

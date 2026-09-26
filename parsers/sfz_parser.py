@@ -224,7 +224,10 @@ def _sfz_voice_params(merged: dict) -> dict:
     if f_depth:
         params['lfo2_rate']      = f_freq if f_freq else 5.0
         params['lfo2_shape']     = _sfz_lfo_wave(merged.get('lfo02_wave'))
-        params['lfo2_to_filter'] = cents_to_filter_env_amount(f_depth)
+        # `f_depth` is SFZ `lfo0N_cutoff`, already in CENTS -- stored
+        # directly since 2026-09-25 rather than divided by a full scale
+        # that no other reader agreed with.
+        params['lfo2_to_filter_cents'] = float(f_depth)
     # Volume LFO (tremolo, v1 amplfo_*/v2 lfo0N_gain). SFZ treats this as an
     # independent oscillator from the filter LFO, but the model only carries
     # two LFO slots (matching E4B/EOS's actual 2-LFO hardware) -- reuse LFO2

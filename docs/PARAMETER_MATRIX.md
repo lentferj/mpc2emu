@@ -3,7 +3,7 @@
 
 # Parameter matrix — what survives each conversion
 
-Generated 2026-09-25 from the source, by `tools/parameter_matrix.py`.
+Generated 2026-09-26 from the source, by `tools/parameter_matrix.py`.
 
 
 
@@ -99,7 +99,7 @@ found by asking a question with a known answer rather than by reading output:
 | `root_key` | + | + | + | + | + |
 | `fine_tune` | + | + | + | + |  |
 | `coarse_tune` | + | + | + | + |  |
-| `transpose` |  | – |  |  |  |
+| `transpose` |  | + |  |  |  |
 | `volume` | + | + | + | + | + |
 | `pan` | + | + | + | + | + |
 | `src_resonance` |  |  |  |  |  |
@@ -129,20 +129,20 @@ found by asking a question with a known answer rather than by reading output:
 | `lfo2_sync` | – | – |  |  |  |
 | **LFO routing** | | | | | |
 | `lfo1_to_pitch` | + | + | + |  |  |
-| `lfo1_to_filter` | + | + |  |  |  |
+| `lfo1_to_filter_cents` | + | + |  |  |  |
 | `lfo1_to_filter_q` |  | – |  |  |  |
 | `lfo1_to_volume` | + | + | + |  |  |
 | `lfo1_to_pan` | + | + | + |  |  |
 | `lfo2_to_pitch` | + | + |  |  |  |
-| `lfo2_to_filter` | + | + |  |  |  |
+| `lfo2_to_filter_cents` | + | + |  |  |  |
 | `lfo2_to_filter_q` |  | – |  |  |  |
 | `lfo2_to_volume` | + | + |  |  |  |
 | `lfo2_to_pan` | + | + | + |  |  |
-| `lfo_volume_centre_db` | – | – |  |  |  |
+| `lfo_volume_centre_db` | + | + |  |  |  |
 | `wheel_to_lfo` | + | + | + |  |  |
 | **Velocity / key routing** | | | | | |
-| `velocity_to_pan` | – |  | – |  |  |
-| `key_to_pan` |  |  | – |  |  |
+| `velocity_to_pan` | + | + | + |  |  |
+| `key_to_pan` |  | – | – |  |  |
 | `velocity_to_volume_db` | + | + | + |  |  |
 | `velocity_to_volume_pivot` | + | + | + |  |  |
 | `velocity_to_volume_curve` | + |  |  |  |  |
@@ -150,12 +150,12 @@ found by asking a question with a known answer rather than by reading output:
 | `velocity_to_amp_attack_span` |  | + | + |  |  |
 | `velocity_to_amp_attack_pivot` |  | – | – |  |  |
 | **Other** | | | | | |
-| `non_transpose` | – | – |  |  |  |
+| `non_transpose` | + | + |  |  |  |
 | `plays_whole_sample` | + |  |  |  |  |
-| `chorus_amount` |  | – |  |  |  |
+| `chorus_amount` |  | + |  |  |  |
 | `mod_routings` |  |  | – |  |  |
 | `name` | + | + | + | + | + |
-| `program_number` | – |  | – |  |  |
+| `program_number` | + |  | + |  |  |
 | `voices` | + | + | + | + | + |
 | `zones` | + | + | + | + | + |
 | `firmware_raw` |  |  |  |  |  |
@@ -184,7 +184,7 @@ found by asking a question with a known answer rather than by reading output:
 | `filter_env_cents` | + | + | + |  |  |
 | `filter_keytrack` | + | + | + |  |  |
 | `velocity_to_filter_cents` | + | + | + |  |  |
-| `velocity_to_filter_min_cents` |  | – | – |  |  |
+| `velocity_to_filter_min_cents` |  | + | + |  |  |
 | **Envelopes** | | | | | |
 | `amp_env` | + | + | + |  |  |
 | `filter_env` | + | + | + |  |  |
@@ -203,20 +203,20 @@ found by asking a question with a known answer rather than by reading output:
 | `lfo2_sync` | + |  |  |  |  |
 | **LFO routing** | | | | | |
 | `lfo1_to_pitch` | + | + | + |  |  |
-| `lfo1_to_filter` | + | + |  |  |  |
+| `lfo1_to_filter_cents` | + | + |  |  |  |
 | `lfo1_to_filter_q` |  |  |  |  |  |
 | `lfo1_to_volume` | + | + | + |  |  |
 | `lfo1_to_pan` | + | + | + |  |  |
 | `lfo2_to_pitch` | + | + |  |  |  |
-| `lfo2_to_filter` | + | + |  |  |  |
+| `lfo2_to_filter_cents` | + | + |  |  |  |
 | `lfo2_to_filter_q` |  |  |  |  |  |
 | `lfo2_to_volume` | + | + |  |  |  |
 | `lfo2_to_pan` | + | + | + |  |  |
 | `lfo_volume_centre_db` | + |  |  |  |  |
 | `wheel_to_lfo` | + | + | + |  |  |
 | **Velocity / key routing** | | | | | |
-| `velocity_to_pan` | – |  | – |  |  |
-| `key_to_pan` |  |  | – |  |  |
+| `velocity_to_pan` | + |  | + |  |  |
+| `key_to_pan` |  |  | + |  |  |
 | `velocity_to_volume_db` | + | + | + |  |  |
 | `velocity_to_volume_pivot` | + | + | + |  |  |
 | `velocity_to_volume_curve` | + |  |  |  |  |
@@ -247,7 +247,7 @@ found by asking a question with a known answer rather than by reading output:
 | `root_key` | + | + | + | n/a | n/a |
 | `fine_tune` | + | + | + | n/a | n/a |
 | `coarse_tune` | + | + | + | n/a | n/a |
-| `transpose` |  | – | – | n/a | n/a |
+| `transpose` |  | + | + | n/a | n/a |
 | `volume` | + | + | + | n/a | n/a |
 | `pan` | + | + | + | n/a | n/a |
 | `src_resonance` |  |  |  | n/a | n/a |
@@ -277,20 +277,20 @@ found by asking a question with a known answer rather than by reading output:
 | `lfo2_sync` | – |  | – | n/a | n/a |
 | **LFO routing** | | | | | |
 | `lfo1_to_pitch` | + | + | + | n/a | n/a |
-| `lfo1_to_filter` | – | – | – | n/a | n/a |
+| `lfo1_to_filter_cents` | – | – | – | n/a | n/a |
 | `lfo1_to_filter_q` |  |  | – | n/a | n/a |
-| `lfo1_to_volume` | – | – | – | n/a | n/a |
+| `lfo1_to_volume` | + | + | + | n/a | n/a |
 | `lfo1_to_pan` | + | + | + | n/a | n/a |
 | `lfo2_to_pitch` | – | – | – | n/a | n/a |
-| `lfo2_to_filter` | – | – | – | n/a | n/a |
+| `lfo2_to_filter_cents` | – | – | – | n/a | n/a |
 | `lfo2_to_filter_q` |  |  | – | n/a | n/a |
 | `lfo2_to_volume` | – | – | – | n/a | n/a |
 | `lfo2_to_pan` | + | + | + | n/a | n/a |
 | `lfo_volume_centre_db` | – |  | – | n/a | n/a |
 | `wheel_to_lfo` | + | + | + | n/a | n/a |
 | **Velocity / key routing** | | | | | |
-| `velocity_to_pan` | – |  |  | n/a | n/a |
-| `key_to_pan` |  |  |  | n/a | n/a |
+| `velocity_to_pan` | + |  | + | n/a | n/a |
+| `key_to_pan` |  |  | + | n/a | n/a |
 | `velocity_to_volume_db` | + | + | + | n/a | n/a |
 | `velocity_to_volume_pivot` | + | + | + | n/a | n/a |
 | `velocity_to_volume_curve` | + |  |  | n/a | n/a |
@@ -298,7 +298,7 @@ found by asking a question with a known answer rather than by reading output:
 | `velocity_to_amp_attack_span` |  | + | + | n/a | n/a |
 | `velocity_to_amp_attack_pivot` |  | + | + | n/a | n/a |
 | **Other** | | | | | |
-| `non_transpose` | – |  | – | n/a | n/a |
+| `non_transpose` | + |  | + | n/a | n/a |
 | `plays_whole_sample` | + |  |  | n/a | n/a |
 | `chorus_amount` |  |  | – | n/a | n/a |
 | `mod_routings` |  |  |  | n/a | n/a |
@@ -308,22 +308,87 @@ found by asking a question with a known answer rather than by reading output:
 | `zones` | + | + | + | n/a | n/a |
 | `firmware_raw` |  |  |  | n/a | n/a |
 
+## Why each `–` is a `–`
+
+A dash says the writer does not read the field. It does **not** say whether that is a limit or a gap, and those call for opposite responses — so every one is classified here.
+
+### Impossible — the target has no such parameter
+
+Nothing to implement. A dash here is a correct and final answer, and "fixing" it would mean inventing a parameter the machine does not have.
+
+| field | target | reason |
+|---|---|---|
+| `lfo1_sync` | KRZ | the K2000 LFO page has five parameters -- MnRate, MxRate, RateCtl, Shape, Phase -- and no clock sync (Musician's Guide) |
+| `lfo1_sync_division` | KRZ | no clock sync, so no division |
+| `lfo1_variation` | KRZ | `variation` is an E4B LFO randomisation parameter with no K2000 equivalent |
+| `lfo2_delay` | KRZ | the K2000 LFO page has no delay field; LFO1's delay is not carried either |
+| `lfo2_sync` | KRZ | as lfo1_sync |
+| `lfo2_variation` | KRZ | as lfo1_variation |
+| `velocity_to_amp_attack_pivot` | KRZ | the K2000's `Att VelTrk` is anchored at velocity 1 by the machine -- measured, t(1)/t(127) = 1.988 against a table 2.000 -- so the pivot is not a settable parameter |
+| `velocity_to_volume_requested` | KRZ | provenance, not a parameter: it records what the SOURCE asked for before clamping, so no target should ever emit it |
+| `lfo1_sync_division` | E4B | an MPC tempo-lock division index; the E4XT LFO has no clock division |
+| `chorus_amount` | AKAI | **the base S3000XL has no effects processor.** The `DFX` digital-filter chip is EB16-only on this model (service-manual parts lists, three models compared); effect DATA lives in a separate `.X` file that only a type-0 save produces and that we write from the machine's own fixed defaults; and the effects ASSIGNMENT is a MULTI parameter, not a program one -- `AKAI_S3000_FORMAT.md`: 'stereo level, pan, output and effects assignment are MULTI'. The program object this writer emits has no destination at all, and the spec marks its one FX byte `PFXSLEV` as 'not used' |
+| `lfo1_sync` | AKAI | the S3000 LFO has no tempo sync |
+| `lfo1_sync_division` | AKAI | no clock sync, so no division |
+| `lfo1_variation` | AKAI | no equivalent on the S3000 |
+| `lfo2_sync` | AKAI | as lfo1_sync |
+| `lfo2_to_pitch` | AKAI | the S3000's LFO2 reaches PAN; pitch modulation is LFO1's |
+| `lfo2_variation` | AKAI | no equivalent on the S3000 |
+| `velocity_to_volume_requested` | AKAI | as above -- provenance, never a conversion target |
+
+### Needs a different approach — possible, but something must be settled first
+
+The machine can do it and we cannot yet. Each of these is blocked on a decision or a measurement, named below — they are work items, not limits.
+
+| field | target | reason |
+|---|---|---|
+| `key_to_pan` | KRZ | the OFFSET is confirmed — `KeyTrk` at program 244, edit-buffer diff, found twice independently. Three things are not. (1) The UNIT: 0.2 %%/key rests on one wheel click plus a zero baseline, and two of the four DSP fields swept properly this week turned out PIECEWISE. (2) The PIVOT: documented as Middle C = C4 = 60 but untested, and a `KStart` parameter can move it. (3) The SPAN: the field is a per-key slope and ours is a scalar depth, so converting needs a keyboard span decided. The pivot is the cheap one and is slope-independent — the pivot is where the pan does not move, whatever the law |
+| `lfo1_to_filter_q` | KRZ | **the slot IS located** (corpus, 2026-09-25): the F2 block follows the same generic DSP layout as F1 and the panner -- `seg(0x51)[5]` Src1, `[6]` Depth. Over 16 649 layers byte 5 is non-zero on 18.6 %, never exceeds 127, and byte 6 accompanies it 86.9 % of the time; LFO1 and LFO2 appear there 37 and 119 times, so real material routes LFOs to resonance. What is missing is the DEPTH LAW in the model's units -- and §KRZRESKEYTRK is Jan's standing decision that F2 RES must be measured before it is written, after three cases of a plausible reading of a displayed unit being wrong. One SysEx panel diff |
+| `lfo2_to_filter_q` | KRZ | as lfo1_to_filter_q |
+| `mod_routings` | KRZ | the AKAI half landed 2026-09-25 by running EOS's own rescaler backwards -- an exact inverse of a known transform. The K2000 has the DESTINATIONS (ENVCTL `Att Source`, `Dec KeyTrk`, `Rel KeyTrk`) but the model's amount is in **EOS cord units** and no measured law relates those to K2000 VelTrk/KeyTrk units, so a depth written there would be a guessed scale on an unmeasured rail |
+| `lfo1_to_filter_cents` | AKAI | **the model half is DONE** -- the field carries CENTS since 2026-09-25, so the objection that 1.0 meant three different things no longer applies. What is left is a rail: only `MODVFILT1` has ever been measured and its law is VELOCITY-specific (`4.368 x MODVFILT1 x (velocity - 64.56)`), which says nothing about an LFO source; `AKAI_S3000_FORMAT.md` records every other `MODV*` range as still transcribed. ⚠ §AKAIF2DEPTH is `MODVFLT2_3`, the FILTER 2 matrix -- a different block, and citing it here was a correct-number-wrong-quantity error. Its figure is now **~230 cents/unit +/-8** (s3ked §227); our own 216.6 was an artefact of OUR baseline window, shown 2026-09-26 by running their window rule on our own captures. Needs one sweep |
+| `lfo1_to_filter_q` | AKAI | no resonance-modulation slot has been identified in the S3000 matrix |
+| `lfo2_to_filter_cents` | AKAI | as lfo1_to_filter_cents, and LFO2's own depth is `PANDEP` rather than `LFODEP`, so it needs its own point in the same sweep |
+| `lfo2_to_filter_q` | AKAI | as lfo1_to_filter_q |
+| `lfo2_to_volume` | AKAI | LFO1's tremolo lands via `MODSAMP3`/`MODVAMP3` since 2026-09-25, but LFO2's own depth is `PANDEP` and **no loudness product has been measured for it** -- so an amount written against source 8 would be a guessed scale. Re-routing it onto LFO1 is worse: the swing would run at LFO1's rate. Needs one sweep, not a decision |
+| `lfo_volume_centre_db` | AKAI | no measured centre-offset rail on this machine |
+
+## Parameters the FORMATS have that this model does not carry
+
+Everything above is complete with respect to the **model** — all 61 of its fields have a row. That is narrower than it sounds: a parameter a source file carries but no reader extracts appears nowhere above, **not even as a dash**. Silence is worse than a dash, because a dash at least records that the question was asked.
+
+⚠ **This is not a census of either format.** It is what has been positively identified and checked. A format parameter absent from both the tables above and this list has simply not been looked at.
+
+| source | parameter | status | why |
+|---|---|---|---|
+| AKAI | `LFO2TRIG` | no reader extracts it | program byte 0x66, LFO2's retrigger mode (s3ked). Named in our notes, read by nothing, and no model field would receive it |
+| E4B | `preset LINK parameters` | no model field | 29 link params per preset, per the SysEx header counts. Our side has never modelled preset links -- no read, no write, nothing in `E4B_FORMAT.md` -- and only a SysEx read can say what one currently is (§E4XTKEYPOL) |
+| KRZ | `LFO phase` | no reader extracts it | segment byte [4], 0-based over the four positions. Settled on hardware 2026-09-25 (§KRZLFOSHAPE) and deliberately left at the template's value -- we have no phase field, and writing a shape into it was the bug that section records |
+| KRZ | `MxRate` | no model field | the second rate of the K2000's LFO pair, segment byte [3] on the same 0..184 rail as `MnRate`. Never written, and its law is unmeasured -- the 185-row ladder was measured on `MnRate` only |
+| KRZ | `RateCtl` | no model field | LFO segment byte [1], a control source that modulates the LFO's own rate. 86.4% of corpus LFO segments leave it at 0 (OFF); we neither read nor write it |
+| MPC | `GLOBAL LFO 1/2` | no model field | MPC 3 has FOUR LFOs. The globals live at `program.<kind>.freeRunningLfoData.{value0,value1}` -- PROGRAM level, not per keygroup -- with only rate, waveform, level and sync (§MPC3LFOJSON, and the photographed page agrees). `VoiceLayer` has no global-LFO concept; a global LFO runs once per layer rather than per note, so converting one as a per-voice LFO would arrive phase-locked across the keyboard |
+| MPC | `filterData.value1 (Filter 2)` | no reader extracts it | MPC 3.9 Advanced Keygroups have TWO filters, serial/parallel/blended, which is why `filterData` and `lfoFilterCutOff` are both `{value0, value1}`. We take the first of each. **Jan's call 2026-09-25: not worth modelling at the moment** -- a deliberate deferral, recorded so it is not re-found as a bug |
+| MPC | `lfoFadein / lfoFadeinSync` | no model field | a fade-in is not a delay: an LFO that ramps in over 1 ms differs from one that starts 1 ms late. We model `lfo*_delay` and have no fade-in field |
+| MPC | `lfoLevel` | no model field | a per-LFO MASTER depth, confirmed present in every LFO node of a real MPC 3 project (§MPC3LFOJSON). Our depths are per-destination only, so the effective depth is presumably `lfoLevel x destination` and we read the second factor alone -- a `LEVEL 20` program would convert six times too deep. The LAW is unknown and a file cannot give it |
+| MPC | `lfoReset / lfoFreeRunning` | no reader extracts it | ⚠ the MPC 3 converter EMITS `<Reset>` into the intermediate XML and nothing reads it back, so it is dropped mid-pipeline rather than at the door. Free-run vs retrigger is a real audible distinction and the K2000 has it (LFO1 always local, LFO2 switchable) |
+| MPC | `pitchEnvelope` | no model field | the model has `amp_env` and `filter_env` and no pitch envelope, so an MPC program with one converts without it, silently. ConvertWithMoss reads this field (cross-checked at `e74ae01d`); we do not |
+
 ## Totals
 
 | pair | carried | dropped at the writer | not read by the reader |
 |---|---|---|---|
-| MPC → KRZ | 38 | 9 | 14 |
-| E4B → KRZ | 38 | 12 | 11 |
-| AKAI → KRZ | 35 | 6 | 20 |
+| MPC → KRZ | 42 | 5 | 14 |
+| E4B → KRZ | 43 | 9 | 9 |
+| AKAI → KRZ | 37 | 4 | 20 |
 | Roland → KRZ | 13 | 0 | 48 |
 | Ensoniq → KRZ | 9 | 0 | 52 |
-| MPC → E4B | 45 | 2 | 14 |
-| KRZ → E4B | 40 | 1 | 20 |
-| AKAI → E4B | 38 | 3 | 20 |
+| MPC → E4B | 46 | 1 | 14 |
+| KRZ → E4B | 41 | 0 | 20 |
+| AKAI → E4B | 41 | 0 | 20 |
 | Roland → E4B | 13 | 0 | 48 |
 | Ensoniq → E4B | 9 | 0 | 52 |
-| MPC → AKAI | 35 | 12 | 14 |
-| KRZ → AKAI | 35 | 6 | 20 |
-| E4B → AKAI | 35 | 15 | 11 |
+| MPC → AKAI | 39 | 8 | 14 |
+| KRZ → AKAI | 38 | 3 | 20 |
+| E4B → AKAI | 41 | 11 | 9 |
 | Roland → AKAI | n/a | n/a | refused |
 | Ensoniq → AKAI | n/a | n/a | refused |
