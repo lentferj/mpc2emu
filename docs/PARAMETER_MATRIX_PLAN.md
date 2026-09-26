@@ -291,6 +291,138 @@ For filter 1:
 **So this is a bench item, not a code item.** One sweep covers both cells and
 should also take LFO2's point, whose depth is `PANDEP` rather than `LFODEP`.
 
+### ✅ THE SWEEP HAPPENED, 2026-09-26 (s3ked §270) — and the prediction above held
+
+`cents peak-to-peak = ~4.0 × LFODEP × MODVFILT1`, measured on hardware with
+`MODSFILT1 = 7` (LFO1), `FILFRQ` 70, `LFORAT` 8.
+
+**It is a product, and it was established the way the bullet above said it had
+to be** — by equal-product equivalence, not by sweeping one variable. Product
+held at 400 while the split varied 6.25× each way:
+
+    LFODEP × amount   20×20   40×10   10×40   50×8   8×50
+    excursion (cents)  1565    1629    1634   1547   1549
+
+Spread 5.3 % of the mean; an independent amount sweep agrees to 1 %. The
+evidence is recorded here rather than only the section number, deliberately —
+a section id is a dependency, a described measurement is a copy that survives
+its source being withdrawn.
+
+⚠ **Fitted over products 40-400 ONLY.** At 700 and 1000 the corner sweeps to
+2593 and 3463 Hz, past the 2500 Hz band edge, so those points are excluded and
+**compression above product 400 is unmeasured** rather than absent.
+
+**What is left is now a DESIGN decision, not a measurement**, which is why this
+cell does not simply close: `LFODEP` is program-wide and also drives the pitch
+LFO, so a cents target has **no unique `(LFODEP, MODVFILT1)` split**. Choosing
+one rescales the vibrato; choosing the other rescales every filter destination
+sharing the amount. This is the same non-invertible collapse already recorded
+for tremolo, and it wants the same answer, decided once for both.
+
+**LFO2's point is still not taken** — its depth is `PANDEP`, not `LFODEP`, so
+nothing here transfers to it.
+
+### The split has a determinate answer (s3ked, `f66f60c`) — and it implies a ceiling
+
+**The two factors are not symmetric, which is what dissolves the "no unique
+split" objection above:**
+
+    LFODEP     program 34     0..99    PROGRAM-WIDE, shared by every LFO1 target
+    MODVFILT1  keygroup 151  -50..50   per keygroup, per slot, filter only
+
+`LFODEP` is a **shared bus** and the amounts are **per-destination taps**. So it
+is not a two-way split repeated per destination; it is one free parameter with
+N constraints:
+
+    amount_i = target_i / (k_i * LFODEP),  |amount_i| <= 50
+    =>  LFODEP >= max_i( target_i / (50 * k_i) )
+
+**And the objective is forced rather than chosen, because quantisation runs the
+other way.** The amount is an integer, so the reachable step on destination *i*
+is `k_i * LFODEP`. For filter 1 at `k = 4.0`:
+
+    LFODEP   1:  step   4.0 ct,  max    200 ct
+    LFODEP  20:  step  80.0 ct,  max   4000 ct
+    LFODEP  99:  step 396.0 ct,  max  19800 ct
+
+So the **smallest feasible `LFODEP` is simultaneously the finest-resolution one
+on every destination at once** — a unique optimum, not a tie broken by
+convention. Solve across the whole routed set, not per destination. One rule
+answers tremolo and filter together, which is what this plan wanted.
+
+⚠ **AND IT IMPLIES A CEILING ON DYNAMIC RANGE. Two of us stated that ceiling
+wrongly before it was right, each by quoting it outside its regime.**
+
+Writing `d_i = target_i / k_i` (demand in amount-units at `LFODEP` 1),
+feasibility forces `L = ceil(max_i d_i / 50)`, and destination *j* rounds to
+**zero** when `d_j < L/2`. The achievable range across destinations is
+therefore
+
+    range  =  2 * max(d) / ceil( max(d) / 50 )
+
+**mpc2emu first said a flat 100:1.** That is the continuous bound and it is
+reached only when `max(d)` is an exact multiple of 50; `ceil` can only make the
+threshold worse.
+
+**s3ked corrected it to 50:1..100:1** — right, and the correction matters,
+because one unit above a multiple it collapses:
+
+    max(d)    L   range        max(d)    L   range
+        50    1   100.0 : 1       101    3    67.3 : 1
+        51    2    51.0 : 1       150    3   100.0 : 1
+       100    2   100.0 : 1       201    5    80.4 : 1
+
+⚠ **But that table starts at `max(d)` = 50, and below it there is a worse
+regime neither of us looked at.** For `max(d) < 50` the ceiling `L` is already
+1 and cannot go lower, so the zero-threshold sticks at 0.5 and
+
+    range  =  2 * max(d)        (max(d) <= 50)
+
+    max(d)    1     5    10    25    49
+    range   2:1  10:1  20:1  50:1  98:1
+
+**A patch whose largest demand is small has almost no usable dynamic range at
+all** — at `max(d)` = 10 a second destination is lost below one twentieth of
+the first. **So "50:1" is as wrong as "100:1" was, in the same way: a bound
+quoted outside the regime it was derived in.** The formula is the statement;
+the ratios are summaries of it.
+
+What survives every version of this, and is the part worth keeping: the bound
+is **independent of the coefficients**, needing only `|amount| <= 50` and
+integer steps. It therefore applies to pan and to the unmeasured slots whatever
+their `k` turns out to be. Arithmetic, not measurement.
+
+**The practical form is a detectable precondition, not a limitation to
+document:** a writer computes `max(d)/d_j` before emitting anything and refuses
+or reports, rather than emitting a tap that rounds to zero. Same defect class
+as the AKAI zero-guard already covered by a regression test here, where a later
+zero silently clobbered an earlier routing.
+
+**What is missing is coefficients, not structure.** `k` is measured for filter 1
+(s3ked §270), loudness (§173) and pitch (§160). **Pan has no law at all** —
+§265 showed `PANDEP` gates it but never measured the shape. And
+`MODVFILT2/3` / `MODVAMP2/3` are unmeasured: **whether they share slot 1's
+coefficient is an assumption nobody has tested**, and a writer must not make it
+silently.
+
+⚠ **`LFODEP` is itself modulated** by `MWLDEP`/`PRSDEP`/`VELDEP` (program
+36/37/38), so the shared bus moves at play time and rescales every destination
+together. Any writer treating it as static is describing the **resting state
+only**.
+
+**And that undercuts the optimum further than "resting state only" suggests**
+(s3ked's point back). If those rescale `LFODEP` during performance then the
+smallest-feasible-`L` solve is optimal for one instant, and a patch played with
+the modwheel up is running a different `L` — **with a different zero-threshold,
+so destinations can drop in and out as the wheel moves.**
+
+**[?] Whether that is real depends on something nobody has established: does
+the machine apply `MWLDEP`/`PRSDEP`/`VELDEP` BEFORE or AFTER the amount
+multiply?** Before, and the effect above is real. After, and the tap ratios
+hold and only the overall depth moves. One sweep of §270's shape with `MWLDEP`
+non-zero would decide it — worth taking only if this cell ever justifies a
+writer.
+
 ---
 
 ## I. `lfo1_to_filter_q`, `lfo2_to_filter_q` → KRZ, AKAI — *KRZ slot located; both need the law*
