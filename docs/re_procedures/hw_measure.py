@@ -57,6 +57,7 @@
 import argparse
 import json
 import math
+import re
 import signal
 import subprocess
 import sys
@@ -127,11 +128,51 @@ DEVICES = {
     # eX's eighth port, MIDI channel 9 (index 8), audio on capture 17/18.
     #
     # PROGRAM SELECT IS BANK-OF-100, NOT BANK-OF-128 (Jan, 2026-09-02):
-    #     CC0 = id // 100     program change = id % 100     banks go to 99
+    #     CC0 *or* CC32 = id // 100     program change = id % 100
     # so program 402 is bank 4, PC 2. The MIDI-standard id//128 / id%128 is
     # WRONG here and FAILS QUIETLY: CC0=3 + PC=18 selects **318**, a perfectly
     # real program on another bank, so the rig sounds fine and measures the
     # wrong thing. Only Jan reading the front panel caught it.
+    #
+    # BOTH CONTROLLERS WORK -- established 2026-09-17 by ASKING THE INSTRUMENT
+    # (k2kremote, SysEx 0x16 read-back of what was actually selected) rather
+    # than by either of us defending a note. This entry said CC0, k2kremote's
+    # said CC32, and the device answers to both identically:
+    #
+    #     CC0 =1 PC=99 -> '199 Default Program'   CC32=1 PC=99 -> same
+    #     CC0 =2 PC=4  -> '204 Not Found'         CC32=2 PC=4  -> same
+    #     CC0 =0 PC=1  -> '1 Acoustic Piano'      CC32=0 PC=1  -> same
+    #
+    # AND THE FAILURE ABOVE WAS REPRODUCED IN THE SAME RUN: a bare PC 0 with no
+    # bank select landed on **'100 Cheeze'** -- program 0 of whatever bank the
+    # machine happened to be on. That is why `play_sequence` now sends the bank
+    # select before the program change and sends nothing when it is not given.
+    # ⚠ **THIS CHANNEL IS CORRECT; READ THE MACHINE ANYWAY.** 8 zero-based
+    # (displayed 9) is where the K2000 sits, confirmed 2026-09-26 after a
+    # detour worth recording: the machine read `Channel:11` that morning and I
+    # "fixed" this entry, wrote that the table was stale, and added a note that
+    # the instrument drifts. **None of that was true.** A peer's
+    # editor-navigation script had pressed SoftF twice, which in ProgramMode is
+    # `Chan+`; they moved it back to 9 and nothing had drifted.
+    #
+    # So the table was right and my correction was the error. What survives is
+    # the PROTOCOL, and it survives for a better reason than drift: whatever
+    # ⚠ THE TRANSPOSE HALF OF THAT IS NOW NARROWER, MEASURED 2026-09-26
+    # (§XPOSERECV): the ProgramMode / MIDI-XMIT `Xpose` is TRANSMIT-side and
+    # does NOT reach notes arriving at MIDI In. With `LocalKbdCh:None` it
+    # cannot: note 60 sounded 260.7 Hz at Xpose 7ST, the same 260.7 Hz the
+    # same program and note gave at 0ST an hour earlier. So a pitch capture
+    # does NOT silently change reference when someone moves that field.
+    #
+    # READ IT ANYWAY, which is why this function still returns it: the one
+    # thing that would break the above is `LocalKbdCh` itself changing, by a
+    # person or by a bank load -- which is exactly how a 12ST arrived on
+    # 2026-09-26. The bracket costs one connection and covers the case the
+    # measurement cannot.
+    # moves the channel or the transpose -- a peer session, a stray press, a
+    # real fault -- **nothing in the audio shows it**. `k2000_state_from_lcd()`
+    # reads both off the LCD; bracket every capture with it and treat a change
+    # across one as invalidating that capture.
     'k2000': Device('K2000R', 'ESI M4U eX MIDI 8', 8,
                     ['system:capture_17', 'system:capture_18']),
 }
@@ -139,11 +180,71 @@ DEVICES = {
 DEFAULT_DEVICE = 'e4xt'
 _ACTIVE = DEVICES[DEFAULT_DEVICE]
 
-# Back-compat: the module used to expose these as plain globals and other
-# scripts import them. They track the active device.
+# ⚠ RESTORED 2026-09-26, and they had been GONE. `use_device()` declares
+# `global _ACTIVE, MIDI_PORT_MATCH, MIDI_CHANNEL, CAPTURE` and assigns them, but
+# nothing bound them at module level -- so every reference before the first
+# `use_device()` call was a latent NameError, and `main()` reading
+# `DEFAULT_DEVICE` meant running this file as a CLI raised outright.
+#
+# It never bit an import-and-call user, which is how it survived. And the
+# static check that would have caught it scans only the TRACKED copy in
+# `docs/re_procedures/`, which still had these lines -- so the archival copy
+# was not a stale snapshot of this file, it was a MORE COMPLETE one. Found
+# only by refreshing docs/ from here and watching the suite fail.
+#
+# Back-compat: other scripts (and eosed's `tools/rig.py`) import these as plain
+# globals. They track the active device.
 MIDI_PORT_MATCH = _ACTIVE.midi_port
 MIDI_CHANNEL = _ACTIVE.channel
 CAPTURE = _ACTIVE.capture
+
+
+#: Seconds to wait before trusting the ProgramMode header. See the note in
+#: `k2000_state_from_lcd`; 0.5 s is demonstrably too short.
+_LCD_SETTLE = 1.0
+
+
+def k2000_state_from_lcd(timeout=2.0):
+    """The K2000's channel AND transpose, in ONE connection.
+
+    -> {'channel': displayed, 'channel0': zero_based, 'xpose': semitones}
+
+    **ONE CONNECT, ONE READ, THEN CLOSED.** The two separate readers this
+    replaces each called `connect()`, which opens an ALSA sequencer client per
+    matching ESI sub-port -- eight for the M4U eX -- and never closed them. A
+    capture bracketed before and after therefore leaked ~16 clients and
+    exhausted the sequencer, and the error surfaced on a later unrelated call
+    as "error creating ALSA sequencer client object", which reads as a dead
+    instrument rather than as a leak.
+
+    ⚠ **SETTLE BEFORE TRUSTING THE HEADER.** k2kremote read it 0.5 s after an
+    `Octav-` press, saw the old value and concluded the key had no effect. A
+    state read taken straight after any press returns the PRE-press value and
+    reports the machine stable while it is not -- a check that converts "I did
+    not look" into "I looked and it was fine".
+    """
+    import os as _os
+    import re as _re
+    import time as _time
+    sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+    import krz_sysex_live as _live
+    _time.sleep(_LCD_SETTLE)
+    c = _live.connect()
+    try:
+        txt = c.get_screen_text(timeout=timeout) or ''
+    finally:
+        mi = getattr(c, 'midi_in', None)
+        if mi is not None and hasattr(mi, 'close'):
+            mi.close()
+    out = {}
+    m = _re.search(r'Channel:\s*(\d+)', txt)
+    if m:
+        out['channel'] = int(m.group(1))
+        out['channel0'] = int(m.group(1)) - 1
+    m = _re.search(r'Xpose:\s*(-?\d+)ST', txt)
+    if m:
+        out['xpose'] = int(m.group(1))
+    return out
 
 
 def use_device(key, channel=None):
@@ -217,8 +318,53 @@ def _release_midi():
     _MIDI_CACHE.clear()
 
 
+def _release_recorder():
+    """Close the session's JACK recorder, if one was ever built.
+
+    **THE MIDI HOOK BELOW EXISTED AND THIS ONE DID NOT, AND THAT ASYMMETRY IS
+    WHAT HID THE LEAK** (eosed, 2026-09-18). Every killed capture released its
+    MIDI port cleanly, so the teardown path *looked* fine; the audio client was
+    never released by anything. eosed ran ~40 captures under a shell `timeout`
+    that SIGTERMs, installed signal handlers for All Notes Off, and never once
+    called `close()` -- because nothing in this module asked them to.
+
+    A leaked audio client is what takes the SERVER down, so this is the more
+    important of the two hooks, and it was the missing one.
+    """
+    global _REC
+    rec, _REC = _REC, None
+    if rec is not None:
+        try:
+            rec.close()
+        except Exception:
+            pass
+
+
 import atexit as _atexit
+import signal as _signal
 _atexit.register(_release_midi)
+_atexit.register(_release_recorder)
+
+
+def _teardown_on_signal(signum, _frame):
+    """atexit does NOT run on SIGTERM, which is how a killed capture dies.
+
+    `timeout N python3 ...` sends SIGTERM; the default disposition terminates
+    without running atexit hooks, so the recorder survived every timed-out run.
+    Re-raise with the default handler afterwards so the exit status still says
+    the process was signalled.
+    """
+    _release_recorder()
+    _release_midi()
+    _signal.signal(signum, _signal.SIG_DFL)
+    _signal.raise_signal(signum)
+
+
+for _sig in (_signal.SIGTERM, _signal.SIGINT, _signal.SIGHUP):
+    try:
+        _signal.signal(_sig, _teardown_on_signal)
+    except (ValueError, OSError):
+        pass          # not the main thread, or the platform lacks it
 
 
 # Standard MIDI sound controllers. Whether a given box honours them without
@@ -493,10 +639,123 @@ class _PersistentRecorder:
             if self._armed:
                 self._frames.append([p.get_array().copy() for p in self.ports])
 
-        self.client.activate()
-        self._sources = []
-        self.reconnect(capture)
-        self.samplerate = self.client.samplerate
+        # ACTIVATE AND CONNECT UNDER A GUARD, OR A FAILED CONNECT LEAKS A LIVE
+        # CLIENT. Between `activate()` and the end of `reconnect()` the client
+        # is REGISTERED AND RUNNING. `reconnect` can raise three ways -- a
+        # missing source port, a busy server, or its own connection read-back
+        # assertion -- and if it does, this half-built object is discarded with
+        # no reference left, so nothing can ever call `close()` on it. The
+        # registration then outlives the process.
+        #
+        # **TO jackd A LEAKED CLIENT AND A LIVE ONE ARE IDENTICAL** (s3ked,
+        # 2026-09-18), which is why this is invisible from outside: the server
+        # keeps trying to write to it, blocks, and wedges for every session on
+        # the box. One failed capture is enough; it does not need the eight
+        # that §20's create/destroy ceiling needs.
+        #
+        # BaseException, not Exception: SystemExit and KeyboardInterrupt are
+        # not Exceptions, and being killed is exactly how this arrives.
+        #
+        # **THERE IS NO RECOVERY IF THIS GUARD FAILS, SO IT IS NOT ONE LAYER OF
+        # A DEFENCE -- IT IS THE WHOLE DEFENCE.** (eosed, 2026-09-18, retracting
+        # their own proposed orphan-recovery path after checking it.) The
+        # obvious repair -- reopen the orphan by name and close it -- CANNOT
+        # work: `jack.Client(name)` defaults to `use_exact_name=False`, so the
+        # server hands you `name-01` instead, you close that, and the orphan is
+        # untouched. It raises nothing and looks like it worked. The JACK API
+        # exposes `close()` and `deactivate()` for your OWN client only; there
+        # is no call that clears another client's registration.
+        #
+        # So once a client outlives its owner, only a SERVER RESTART clears it
+        # -- which is what s3ked observed from the other end when killing the
+        # offending process did not help. Everything here has to work the first
+        # time.
+        try:
+            self.client.activate()
+            self._sources = []
+            self.reconnect(capture)
+            self.samplerate = self.client.samplerate
+        except BaseException:
+            self.close()
+            raise
+
+    #: Maps the stable logical name this project has always used onto
+    #: whatever the server actually calls the port today.
+    #:
+    #: ⚠ **2026-09-26: THIS MACHINE MOVED FROM jackd TO PipeWire AND THE
+    #: `system:*` PORTS VANISHED.** The pipewire-jack shim keeps the JACK API
+    #: working, so every script here still runs -- and every capture would
+    #: have connected to nothing. `jack_lsp | grep -c '^system:'` returns 0.
+    #:
+    #:     system:capture_N  ->  <iface>:capture_AUX{N-1}
+    #:
+    #: The DEVICES table above deliberately still reads `system:capture_17`,
+    #: because that is the name in two years of notes, commit messages and
+    #: peer messages. Translating HERE keeps every one of those readable.
+    #:
+    #: ⚠ The interface's real name is a GERMAN-LOCALE string ("Mehrkanal") and
+    #: is NOT hard-coded: a locale change would silently break it. We match on
+    #: the `capture_AUX<n>` suffix, which is locale-independent, and fall back
+    #: to the transition map file only if that finds nothing.
+    _PORT_MAP_FILE = (Path.home() / 'Dokumente' / 'jack2pipewire_transition'
+                      / 'state' / 'system-port-map.txt')
+
+    def _resolve_port(self, name):
+        # ⚠ **THE NAME-LIST MATCH BELOW IS LOAD-BEARING, NOT A STYLE CHOICE.**
+        # `get_ports(is_audio=, is_output=)` takes FLAGS, not a name pattern, so
+        # the names come back real and `name in live` is an exact match that
+        # correctly FAILS for a legacy `system:*` name under PipeWire.
+        #
+        # Three obvious alternatives all answer YES when the port does not
+        # exist, because pipewire-jack resolves `system:capture_N` at lookup
+        # time against **whatever the current default source is** (verified
+        # live 2026-09-26; found by s3ked, confirmed by eosed and the
+        # jack2pipewire session):
+        #
+        #     get_port_by_name('system:capture_17') -> Scarlett …:capture_AUX16
+        #     get_ports('system:.*')                -> all 28 Scarlett ports
+        #     connect('system:capture_17', dst)     -> returns 0
+        #
+        # ⚠ And there is NO ARTEFACT that would reveal the binding: the real
+        # port's own `.aliases` are `alsa:pcm:2:hw:2:capture:capture_16` and
+        # `Scarlett 18i8 USB:capture_AUX16` -- `system:capture_17` is **not**
+        # among them. Nothing is registered under that name at all.
+        #
+        # Today the alias lands on the right physical input, because the
+        # Scarlett is the default source. The day the default moves, anything
+        # using one of those three forms records a DIFFERENT DEVICE, silently,
+        # and it analyses cleanly. `tests/test_resolve_port_alias.py` fails if
+        # any of them appears here.
+        live = [pt.name for pt in self.client.get_ports(is_audio=True,
+                                                        is_output=True)]
+        if name in live:
+            return name                      # jackd, or a future restore
+        m = re.match(r'^system:capture_(\d+)$', name)
+        if m:
+            suffix = ':capture_AUX%d' % (int(m.group(1)) - 1)
+            hits = [p for p in live if p.endswith(suffix)]
+            if len(hits) == 1:
+                return hits[0]
+            if len(hits) > 1:
+                raise RuntimeError(
+                    "%r is ambiguous under PipeWire: %s. Narrow it in DEVICES."
+                    % (name, hits))
+        try:
+            # encoding pinned: the map's right-hand column is the ALSA card
+            # description as the CURRENT LOCALE renders it, so this is exactly
+            # the file where riding the locale codec would bite.
+            with open(self._PORT_MAP_FILE, encoding='utf-8') as fh:
+                for line in fh:
+                    old, _, new = line.partition('\t')
+                    if old.strip() == name and new.strip() in live:
+                        return new.strip()
+        except OSError:
+            pass
+        raise RuntimeError(
+            "capture port %r does not exist and could not be mapped. This "
+            "machine runs PipeWire since 2026-09-26 and the `system:*` ports "
+            "are gone; expected a live port ending in ':capture_AUX<n>'. "
+            "Live output ports: %s" % (name, live[:8] or 'none'))
 
     def reconnect(self, capture):
         """Point the recorder at `capture`, disconnecting whatever it had.
@@ -514,7 +773,7 @@ class _PersistentRecorder:
         MPC half was silent because it was still listening to the K2000's
         inputs. One bug hid behind another.
         """
-        capture = list(capture)
+        capture = [self._resolve_port(c) for c in capture]
         if capture == self._sources:
             return
         for dst in self.ports:
@@ -540,6 +799,13 @@ class _PersistentRecorder:
         # We never swallowed the exception, but we did trust its absence,
         # which is the same assumption one step weaker. Now the connection is
         # read back.
+        #
+        # ⚠ **AND THE READ-BACK PROVES A PATH, NOT THE RIGHT PATH** (eosed,
+        # 2026-09-26). It cannot catch the PipeWire alias above: with a legacy
+        # `system:*` name the connection GENUINELY EXISTS and reads back
+        # correctly -- to whatever the default source happens to be. This gate
+        # answers "is something connected here", and `_resolve_port` is what
+        # answers "is it the right something". Neither covers the other.
         for src, dst in zip(capture, self.ports):
             live = [str(c) for c in self.client.get_all_connections(dst)]
             if not any(src in c for c in live):
@@ -652,6 +918,7 @@ def _recorder():
 
 
 def play_sequence(notes, program=None, out_wav=None, velocity=127,
+                  bank_cc=None, bank_value=None,
                   controls=None, off_velocity=0):
     """notes: list of (midi_note, hold_s, gap_s) or (midi_note, hold_s, gap_s,
     velocity).  Records the whole run and
@@ -692,6 +959,43 @@ def play_sequence(notes, program=None, out_wav=None, velocity=127,
     # session (the JACK-Client binding, which is installed here -- 0.5.5) and
     # got 19 consecutive captures across two runs with zero wedges.
     #
+    # ⚠ **2026-09-26, PipeWire: MEASURED AND *NOT* THE CASE THAT BIT US.** The
+    # jack2pipewire-transition session ran 60 create/destroy cycles under
+    # PipeWire 0.3.65 -- 20 clean exits, 20 SIGTERM, 20 SIGKILL -- with zero
+    # failures, zero lingering ports and no restart needed: PipeWire reaps a
+    # client when its socket closes. So the jackd-era "orphan needs a server
+    # restart" does NOT reproduce.
+    #
+    # **That is the DEAD-OWNER case, and every wedge this project has actually
+    # suffered is the live-owner one.** s3ked's ceiling came from a SWEEP: one
+    # Python process creating and destroying clients in a loop, alive
+    # throughout. Their own caveat names the untested shapes exactly -- an
+    # owner that is alive but holds an unreferenced, un-closed client (a
+    # constructor that raises after `activate()` while the process keeps
+    # running), and a client stuck inside its process callback.
+    #
+    # So the reassuring number covers a failure mode we never had, and the one
+    # that took down Jan's whole graph twice in an evening is still untested.
+    #
+    # **SPLIT THE RULE, rather than relaxing or keeping all of it** (eosed's
+    # §178a, sharper than this project's first reaction, which was a blanket
+    # "every guard stays"):
+    #
+    #   RELAX the BATCHING budget. The ~8-capture ceiling does not reproduce
+    #   at 60, so a session no longer has to ration captures -- and this file
+    #   was doing that, skipping a positive control earlier today partly to
+    #   save a client. That was a cost paid to a retired hazard.
+    #
+    #   KEEP every TEARDOWN guard. They exist for a client left registered
+    #   inside a process that KEEPS RUNNING -- `__init__` raising after
+    #   `activate()`, the half-built object dropped, the socket still open.
+    #   "Reaped when the socket closes" says exactly nothing about a socket
+    #   that stays open, and a client stuck in its process callback was not
+    #   tested either.
+    #
+    # The persistent single-client design stays regardless: it is what makes
+    # the batching question moot rather than merely survivable.
+    #
     # This rig has the same exposure and the same fix is available. It has not
     # bitten here yet only because our sessions have been short: an E4XT
     # calibration is a handful of captures, not fifty. Anything unattended, or
@@ -725,6 +1029,23 @@ def play_sequence(notes, program=None, out_wav=None, velocity=127,
 
     m = _midi_out()
     if program is not None:
+        # BANK SELECT GOES FIRST, AND ONLY WHEN ASKED FOR.
+        #
+        # A bare program change selects within whatever bank the machine
+        # happens to be on, so a sweep staged at 200-205 and addressed as
+        # PC 0-5 measures programs 0-5 instead -- six real programs, six clean
+        # captures, one meaningless dataset. This is the failure Jan caught on
+        # 2026-09-02 from the front panel, in its other form.
+        #
+        # `bank_cc` is passed explicitly rather than derived, because the
+        # CONTROLLER NUMBER is itself device-specific: the DEVICES note for the
+        # K2000 records CC0 with banks of 100 (id // 100), while MIDI's own
+        # bank select is CC0 as MSB plus CC32 as LSB. Guessing between them is
+        # how the quiet version of this failure happens.
+        if bank_cc is not None and bank_value is not None:
+            m.send_message([0xB0 | MIDI_CHANNEL, int(bank_cc) & 0x7F,
+                            int(bank_value) & 0x7F])
+            time.sleep(0.2)
         m.send_message([0xC0 | MIDI_CHANNEL, program])
         time.sleep(0.6)
     for key, value in (controls or {}).items():
@@ -827,7 +1148,27 @@ def envelope(path, hop=0.005):
 
 
 def anchor_offset(env, t, sched, hop=0.005, search_s=5.0):
-    """Map MIDI clock -> audio clock by finding the first note's onset."""
+    """Map MIDI clock -> audio clock by finding the first note's onset.
+
+    ⚠ **IT TAKES THE FIRST THING ABOVE 5 % OF PEAK, WHICH IS NOT ALWAYS THE
+    NOTE — and when it is wrong it returns a confident number rather than
+    raising.** 2026-09-26, §LF2TONEPOST: a capture carried a transient at
+    1.755 s (-59 dBFS, decaying to the floor over ~500 ms) ahead of the real
+    tone at ~2.30 s. This returned **1.755 s, 550 ms early**. Every other
+    capture that session, same lead-in, anchored at ~0.8 s after `LEAD_IN`;
+    this one reported 0.255 s and nothing flagged the discrepancy.
+
+    Anything anchored on that reads the click and the silence after it as the
+    start of the note: `attack_time` measures the wrong rise, a sub-window
+    spectrum analyses silence, an envelope fit starts 550 ms early.
+
+    **So sanity-check the value against the other captures in the same run**
+    — the program-change-to-note latency is stable within a session, so an
+    outlier is the tell. And for a test whose hypothesis is SILENCE, do not use
+    this at all: it presupposes the thing under test. Use `LEAD_IN + t_on` with
+    a fixed pre-roll instead, which is what settled whether a sample survived a
+    power cycle.
+    """
     import numpy as np
     head = env[:int(search_s / hop)]
     a = t[np.argmax(head > head.max() * 0.05)]
@@ -1550,7 +1891,7 @@ if __name__ == '__main__':
 # window rather than returning NaN that reads as "no pitch here".
 #
 # Use:
-#     sys.path.insert(0, '~/git-repos/s3ked')
+#     sys.path.insert(0, '/home/lentferj/git-repos/s3ked')
 #     from probes.measure import fundamental_hz, cents_between, rms_db
 #
 # Duplicating it here would have given this project a second, worse copy of a
