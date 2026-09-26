@@ -81,9 +81,14 @@ found by asking a question with a known answer rather than by reading output:
 | | |
 |---|---|
 | **+** | the reader sets it **and** the writer reads it — this pair can carry it |
-| **–** | the reader sets it, the writer's module does not read it — **dropped here** |
-| *(blank)* | the reader never sets it — nothing to carry |
+| **–** | the reader sets it, the writer does not read it — **dropped here, and it is a WORK ITEM** |
+| **○** | **the format has no settable parameter for this** — absent, machine-fixed, or not a machine parameter at all. A final answer, not a gap |
+| *(blank)* | the reader never sets it — **by design, a reader gap, or an open question**; which one is recorded per cell below |
 | **n/a** | identity pair, or a pair this converter refuses |
+
+⚠ **`–` and `○` are different claims and they call for opposite responses.** A dash is something we could do and have not; a circle is something the machine cannot do, so "fixing" it would mean inventing a parameter. They shared one symbol until 2026-09-26, which made 17 final answers look like 17 outstanding tasks.
+
+⚠ **A circle is the same fact whichever way the conversion runs.** It is keyed by FORMAT, not by direction: the K2000 having no clock sync is why `lfo1_sync` is unreadable FROM a KRZ source and unwritable TO a KRZ target. One entry renders both, so the two halves cannot drift apart, and the suite fails if any reader or writer contradicts one.
 
 ⚠ **Ensoniq/Roland sources convert to e4b and krz only** — every other target is refused with a non-zero exit, in ordinary conversion as well as with `--firmware-sim`, because nothing outside this project could check the result. Those cells read `n/a` rather than `–`.
 
@@ -103,7 +108,7 @@ found by asking a question with a known answer rather than by reading output:
 | `transpose` |  | + |  |  |  |
 | `volume` | + | + | + | + | + |
 | `pan` | + | + | + | + | + |
-| `src_resonance` |  |  |  |  |  |
+| `src_resonance` | ○ | ○ | ○ | ○ | ○ |
 | **Filter** | | | | | |
 | `filter_type` | + | + | + |  |  |
 | `filter_cutoff` | + | + | + |  |  |
@@ -118,23 +123,23 @@ found by asking a question with a known answer rather than by reading output:
 | **LFO 1** | | | | | |
 | `lfo1_rate` | + | + | + |  |  |
 | `lfo1_shape` | + | + | + |  |  |
-| `lfo1_delay` |  | + | + |  |  |
-| `lfo1_variation` |  | – |  |  |  |
-| `lfo1_sync` | – | – |  |  |  |
-| `lfo1_sync_division` | – |  |  |  |  |
+| `lfo1_delay` | ○ | + | + |  |  |
+| `lfo1_variation` |  | ○ | ○ |  |  |
+| `lfo1_sync` | ○ | ○ | ○ |  |  |
+| `lfo1_sync_division` | ○ | ○ | ○ |  |  |
 | **LFO 2** | | | | | |
 | `lfo2_rate` | + | + | + |  |  |
 | `lfo2_shape` | + | + | + |  |  |
-| `lfo2_delay` | – | – | – |  |  |
-| `lfo2_variation` |  | – |  |  |  |
-| `lfo2_sync` | – | – |  |  |  |
+| `lfo2_delay` | ○ | ○ | ○ |  |  |
+| `lfo2_variation` |  | ○ | ○ |  |  |
+| `lfo2_sync` | ○ | ○ | ○ |  |  |
 | **LFO routing** | | | | | |
 | `lfo1_to_pitch` | + | + | + |  |  |
 | `lfo1_to_filter_cents` | + | + |  |  |  |
 | `lfo1_to_filter_q` |  | – |  |  |  |
 | `lfo1_to_volume` | + | + | + |  |  |
 | `lfo1_to_pan` | + | + | + |  |  |
-| `lfo2_to_pitch` | + | + |  |  |  |
+| `lfo2_to_pitch` | + | + | ○ |  |  |
 | `lfo2_to_filter_cents` | + | + |  |  |  |
 | `lfo2_to_filter_q` |  | – |  |  |  |
 | `lfo2_to_volume` | + | + |  |  |  |
@@ -147,19 +152,19 @@ found by asking a question with a known answer rather than by reading output:
 | `velocity_to_volume_db` | + | + | + |  |  |
 | `velocity_to_volume_pivot` | + | + | + |  |  |
 | `velocity_to_volume_curve` | + |  |  |  |  |
-| `velocity_to_volume_requested` | – |  |  |  |  |
+| `velocity_to_volume_requested` | ○ | ○ | ○ |  |  |
 | `velocity_to_amp_attack_span` |  | + | + |  |  |
-| `velocity_to_amp_attack_pivot` |  | – | – |  |  |
+| `velocity_to_amp_attack_pivot` |  | ○ | ○ |  |  |
 | **Other** | | | | | |
 | `non_transpose` | + | + |  |  |  |
 | `plays_whole_sample` | + |  |  |  |  |
-| `chorus_amount` |  | + |  |  |  |
+| `chorus_amount` |  | + | ○ |  |  |
 | `mod_routings` |  |  | – |  |  |
 | `name` | + | + | + | + | + |
 | `program_number` | + |  | + |  |  |
 | `voices` | + | + | + | + | + |
 | `zones` | + | + | + | + | + |
-| `firmware_raw` |  |  |  |  |  |
+| `firmware_raw` | ○ | ○ | ○ | ○ | ○ |
 
 ## → E4B
 
@@ -177,7 +182,7 @@ found by asking a question with a known answer rather than by reading output:
 | `transpose` |  | + |  |  |  |
 | `volume` | + | + | + | + | + |
 | `pan` | + | + | + | + | + |
-| `src_resonance` |  |  |  |  |  |
+| `src_resonance` | ○ | ○ | ○ | ○ | ○ |
 | **Filter** | | | | | |
 | `filter_type` | + | + | + |  |  |
 | `filter_cutoff` | + | + | + |  |  |
@@ -192,23 +197,23 @@ found by asking a question with a known answer rather than by reading output:
 | **LFO 1** | | | | | |
 | `lfo1_rate` | + | + | + |  |  |
 | `lfo1_shape` | + | + | + |  |  |
-| `lfo1_delay` |  |  | + |  |  |
-| `lfo1_variation` |  |  |  |  |  |
-| `lfo1_sync` | + |  |  |  |  |
-| `lfo1_sync_division` | – |  |  |  |  |
+| `lfo1_delay` | ○ |  | + |  |  |
+| `lfo1_variation` |  | ○ | ○ |  |  |
+| `lfo1_sync` | + | ○ | ○ |  |  |
+| `lfo1_sync_division` | ○ | ○ | ○ |  |  |
 | **LFO 2** | | | | | |
 | `lfo2_rate` | + | + | + |  |  |
 | `lfo2_shape` | + | + | + |  |  |
-| `lfo2_delay` | + |  | + |  |  |
-| `lfo2_variation` |  |  |  |  |  |
-| `lfo2_sync` | + |  |  |  |  |
+| `lfo2_delay` | + | ○ | + |  |  |
+| `lfo2_variation` |  | ○ | ○ |  |  |
+| `lfo2_sync` | + | ○ | ○ |  |  |
 | **LFO routing** | | | | | |
 | `lfo1_to_pitch` | + | + | + |  |  |
 | `lfo1_to_filter_cents` | + | + |  |  |  |
 | `lfo1_to_filter_q` |  |  |  |  |  |
 | `lfo1_to_volume` | + | + | + |  |  |
 | `lfo1_to_pan` | + | + | + |  |  |
-| `lfo2_to_pitch` | + | + |  |  |  |
+| `lfo2_to_pitch` | + | + | ○ |  |  |
 | `lfo2_to_filter_cents` | + | + |  |  |  |
 | `lfo2_to_filter_q` |  |  |  |  |  |
 | `lfo2_to_volume` | + | + |  |  |  |
@@ -221,19 +226,19 @@ found by asking a question with a known answer rather than by reading output:
 | `velocity_to_volume_db` | + | + | + |  |  |
 | `velocity_to_volume_pivot` | + | + | + |  |  |
 | `velocity_to_volume_curve` | + |  |  |  |  |
-| `velocity_to_volume_requested` | + |  |  |  |  |
+| `velocity_to_volume_requested` | + | ○ | ○ |  |  |
 | `velocity_to_amp_attack_span` |  | + | + |  |  |
 | `velocity_to_amp_attack_pivot` |  | + | + |  |  |
 | **Other** | | | | | |
 | `non_transpose` | + |  |  |  |  |
 | `plays_whole_sample` | + |  |  |  |  |
-| `chorus_amount` |  |  |  |  |  |
+| `chorus_amount` |  |  | ○ |  |  |
 | `mod_routings` |  |  | + |  |  |
 | `name` | + | + | + | + | + |
 | `program_number` | + | + | + |  |  |
 | `voices` | + | + | + | + | + |
 | `zones` | + | + | + | + | + |
-| `firmware_raw` |  |  |  |  |  |
+| `firmware_raw` | ○ | ○ | ○ | ○ | ○ |
 
 ## → AKAI
 
@@ -251,7 +256,7 @@ found by asking a question with a known answer rather than by reading output:
 | `transpose` |  | + | + | n/a | n/a |
 | `volume` | + | + | + | n/a | n/a |
 | `pan` | + | + | + | n/a | n/a |
-| `src_resonance` |  |  |  | n/a | n/a |
+| `src_resonance` | ○ | ○ | ○ | n/a | n/a |
 | **Filter** | | | | | |
 | `filter_type` | + | + | + | n/a | n/a |
 | `filter_cutoff` | + | + | + | n/a | n/a |
@@ -266,23 +271,23 @@ found by asking a question with a known answer rather than by reading output:
 | **LFO 1** | | | | | |
 | `lfo1_rate` | + | + | + | n/a | n/a |
 | `lfo1_shape` | + | + | + | n/a | n/a |
-| `lfo1_delay` |  |  | + | n/a | n/a |
-| `lfo1_variation` |  |  | – | n/a | n/a |
-| `lfo1_sync` | – |  | – | n/a | n/a |
-| `lfo1_sync_division` | – |  |  | n/a | n/a |
+| `lfo1_delay` | ○ |  | + | n/a | n/a |
+| `lfo1_variation` |  | ○ | ○ | n/a | n/a |
+| `lfo1_sync` | ○ | ○ | ○ | n/a | n/a |
+| `lfo1_sync_division` | ○ | ○ | ○ | n/a | n/a |
 | **LFO 2** | | | | | |
 | `lfo2_rate` | + | + | + | n/a | n/a |
 | `lfo2_shape` | + | + | + | n/a | n/a |
-| `lfo2_delay` | + |  | + | n/a | n/a |
-| `lfo2_variation` |  |  | – | n/a | n/a |
-| `lfo2_sync` | – |  | – | n/a | n/a |
+| `lfo2_delay` | + | ○ | + | n/a | n/a |
+| `lfo2_variation` |  | ○ | ○ | n/a | n/a |
+| `lfo2_sync` | ○ | ○ | ○ | n/a | n/a |
 | **LFO routing** | | | | | |
 | `lfo1_to_pitch` | + | + | + | n/a | n/a |
 | `lfo1_to_filter_cents` | – | – | – | n/a | n/a |
 | `lfo1_to_filter_q` |  |  | – | n/a | n/a |
 | `lfo1_to_volume` | + | + | + | n/a | n/a |
 | `lfo1_to_pan` | + | + | + | n/a | n/a |
-| `lfo2_to_pitch` | – | – | – | n/a | n/a |
+| `lfo2_to_pitch` | ○ | ○ | ○ | n/a | n/a |
 | `lfo2_to_filter_cents` | – | – | – | n/a | n/a |
 | `lfo2_to_filter_q` |  |  | – | n/a | n/a |
 | `lfo2_to_volume` | – | – | – | n/a | n/a |
@@ -295,51 +300,67 @@ found by asking a question with a known answer rather than by reading output:
 | `velocity_to_volume_db` | + | + | + | n/a | n/a |
 | `velocity_to_volume_pivot` | + | + | + | n/a | n/a |
 | `velocity_to_volume_curve` | + |  |  | n/a | n/a |
-| `velocity_to_volume_requested` | – |  |  | n/a | n/a |
+| `velocity_to_volume_requested` | ○ | ○ | ○ | n/a | n/a |
 | `velocity_to_amp_attack_span` |  | + | + | n/a | n/a |
 | `velocity_to_amp_attack_pivot` |  | + | + | n/a | n/a |
 | **Other** | | | | | |
 | `non_transpose` | + |  | + | n/a | n/a |
 | `plays_whole_sample` | + |  |  | n/a | n/a |
-| `chorus_amount` |  |  | – | n/a | n/a |
+| `chorus_amount` |  |  | ○ | n/a | n/a |
 | `mod_routings` |  |  |  | n/a | n/a |
 | `name` | + | + | + | n/a | n/a |
 | `program_number` | + | + |  | n/a | n/a |
 | `voices` | + | + | + | n/a | n/a |
 | `zones` | + | + | + | n/a | n/a |
-| `firmware_raw` |  |  |  | n/a | n/a |
+| `firmware_raw` | ○ | ○ | ○ | n/a | n/a |
 
-## Why each `–` is a `–`
+## Why each `○` is a `○`, and each `–` a `–`
 
-A dash says the writer does not read the field. It does **not** say whether that is a limit or a gap, and those call for opposite responses — so every one is classified here.
+Two marks, two questions. A circle says the machine cannot; a dash says we have not. Every one of both is classified here, because an unexplained mark is what this section exists to prevent.
 
-### Impossible — the target has no such parameter
+### ○ — the format has no settable parameter
 
-Nothing to implement. A dash here is a correct and final answer, and "fixing" it would mean inventing a parameter the machine does not have.
+Nothing to implement. A circle is a correct and final answer, and "fixing" one would mean inventing a parameter the machine does not have. Keyed by FORMAT, so each row explains that format as a source *and* as a target.
 
-| field | target | reason |
-|---|---|---|
-| `lfo1_sync` | KRZ | the K2000 LFO page has five parameters -- MnRate, MxRate, RateCtl, Shape, Phase -- and no clock sync (Musician's Guide) |
-| `lfo1_sync_division` | KRZ | no clock sync, so no division |
-| `lfo1_variation` | KRZ | `variation` is an E4B LFO randomisation parameter with no K2000 equivalent |
-| `lfo2_delay` | KRZ | the K2000 LFO page has no delay field; LFO1's delay is not carried either |
-| `lfo2_sync` | KRZ | as lfo1_sync |
-| `lfo2_variation` | KRZ | as lfo1_variation |
-| `velocity_to_amp_attack_pivot` | KRZ | the K2000's `Att VelTrk` is anchored at velocity 1 by the machine -- measured, t(1)/t(127) = 1.988 against a table 2.000 -- so the pivot is not a settable parameter |
-| `velocity_to_volume_requested` | KRZ | provenance, not a parameter: it records what the SOURCE asked for before clamping, so no target should ever emit it |
-| `lfo1_sync_division` | E4B | an MPC tempo-lock division index; the E4XT LFO has no clock division |
-| `chorus_amount` | AKAI | **the base S3000XL has no effects processor.** The `DFX` digital-filter chip is EB16-only on this model (service-manual parts lists, three models compared); effect DATA lives in a separate `.X` file that only a type-0 save produces and that we write from the machine's own fixed defaults; and the effects ASSIGNMENT is a MULTI parameter, not a program one -- `AKAI_S3000_FORMAT.md`: 'stereo level, pan, output and effects assignment are MULTI'. The program object this writer emits has no destination at all, and the spec marks its one FX byte `PFXSLEV` as 'not used' |
-| `lfo1_sync` | AKAI | the S3000 LFO has no tempo sync |
-| `lfo1_sync_division` | AKAI | no clock sync, so no division |
-| `lfo1_variation` | AKAI | no equivalent on the S3000 |
-| `lfo2_sync` | AKAI | as lfo1_sync |
-| `lfo2_to_pitch` | AKAI | the S3000's LFO2 reaches PAN; pitch modulation is LFO1's |
-| `lfo2_variation` | AKAI | no equivalent on the S3000 |
-| `velocity_to_volume_requested` | AKAI | as above -- provenance, never a conversion target |
+| field | format | kind | why |
+|---|---|---|---|
+| `chorus_amount` | AKAI | no such parameter | **the base S3000XL has no effects processor.** The `DFX` digital-filter chip is EB16-only on this model (service-manual parts lists, three models compared); effect DATA lives in a separate `.X` file that only a type-0 save produces and that we write from the machine's own fixed defaults; and the effects ASSIGNMENT is a MULTI parameter, not a program one -- `AKAI_S3000_FORMAT.md`: 'stereo level, pan, output and effects assignment are MULTI'. The program object this writer emits has no destination at all, and the spec marks its one FX byte `PFXSLEV` as 'not used' |
+| `firmware_raw` | AKAI | not a machine parameter | a writer-side scratch dict for `writers/eos_firmware_sim.py`; declared on the model only so a misspelled `getattr` cannot silently default forever |
+| `firmware_raw` | E4B | not a machine parameter | a writer-side scratch dict for `writers/eos_firmware_sim.py`; declared on the model only so a misspelled `getattr` cannot silently default forever |
+| `firmware_raw` | Ensoniq | not a machine parameter | a writer-side scratch dict for `writers/eos_firmware_sim.py`; declared on the model only so a misspelled `getattr` cannot silently default forever |
+| `firmware_raw` | KRZ | not a machine parameter | a writer-side scratch dict for `writers/eos_firmware_sim.py`; declared on the model only so a misspelled `getattr` cannot silently default forever |
+| `firmware_raw` | MPC | not a machine parameter | a writer-side scratch dict for `writers/eos_firmware_sim.py`; declared on the model only so a misspelled `getattr` cannot silently default forever |
+| `firmware_raw` | Roland | not a machine parameter | a writer-side scratch dict for `writers/eos_firmware_sim.py`; declared on the model only so a misspelled `getattr` cannot silently default forever |
+| `lfo1_delay` | MPC | no such parameter | the MPC has `lfoFadein`/`lfoFadeinSync`, which is a RAMP and not a delay -- an LFO that fades in over 1 ms differs from one that starts 1 ms late, so there is no MPC field this model's `lfo1_delay` could read. See the UNMODELLED table below |
+| `lfo1_sync` | AKAI | no such parameter | the S3000 LFO has no tempo sync |
+| `lfo1_sync` | KRZ | no such parameter | the K2000 LFO page has five parameters -- MnRate, MxRate, RateCtl, Shape, Phase -- and no clock sync (Musician's Guide) |
+| `lfo1_sync_division` | AKAI | no such parameter | no clock sync, so no division |
+| `lfo1_sync_division` | E4B | no such parameter | an MPC tempo-lock division index; the E4XT LFO has no clock division |
+| `lfo1_sync_division` | KRZ | no such parameter | no clock sync, so no division |
+| `lfo1_variation` | AKAI | no such parameter | no equivalent on the S3000 |
+| `lfo1_variation` | KRZ | no such parameter | `variation` is an E4B LFO randomisation parameter with no K2000 equivalent |
+| `lfo2_delay` | KRZ | no such parameter | the K2000 LFO page has no delay field; LFO1's delay is not carried either |
+| `lfo2_sync` | AKAI | no such parameter | as lfo1_sync |
+| `lfo2_sync` | KRZ | no such parameter | as lfo1_sync |
+| `lfo2_to_pitch` | AKAI | no such parameter | the S3000's LFO2 reaches PAN; pitch modulation is LFO1's |
+| `lfo2_variation` | AKAI | no such parameter | no equivalent on the S3000 |
+| `lfo2_variation` | KRZ | no such parameter | as lfo1_variation |
+| `src_resonance` | AKAI | not a machine parameter | carries the SOURCE's resonance for a writer to consult; provenance, not a parameter any machine exposes |
+| `src_resonance` | E4B | not a machine parameter | carries the SOURCE's resonance for a writer to consult; provenance, not a parameter any machine exposes |
+| `src_resonance` | Ensoniq | not a machine parameter | carries the SOURCE's resonance for a writer to consult; provenance, not a parameter any machine exposes |
+| `src_resonance` | KRZ | not a machine parameter | carries the SOURCE's resonance for a writer to consult; provenance, not a parameter any machine exposes |
+| `src_resonance` | MPC | not a machine parameter | carries the SOURCE's resonance for a writer to consult; provenance, not a parameter any machine exposes |
+| `src_resonance` | Roland | not a machine parameter | carries the SOURCE's resonance for a writer to consult; provenance, not a parameter any machine exposes |
+| `velocity_to_amp_attack_pivot` | KRZ | exists, machine-fixed | the parameter EXISTS and three readers set it -- the K2000 anchors `Att VelTrk` at velocity 1 BY THE MACHINE, measured, t(1)/t(127) = 1.988 against a table 2.000. So it is readable and not settable. ⚠ An earlier version of this entry said the target 'has no such parameter', which is false: `krz_parser`, `akai_s3000_parser` and `e4b_parser` all set it |
+| `velocity_to_volume_requested` | AKAI | not a machine parameter | as for KRZ -- provenance, never a conversion target |
+| `velocity_to_volume_requested` | E4B | not a machine parameter | provenance, not an E4B parameter: it records what the SOURCE asked for before clamping. `e4b_writer` reads it only to decide whether to warn |
+| `velocity_to_volume_requested` | KRZ | not a machine parameter | provenance, not a parameter: it records what the SOURCE asked for before clamping. No machine has it and no target should emit it -- only `e4b_writer` reads it, to decide whether to warn |
 
-### Needs a different approach — possible, but something must be settled first
+⚠ **The three kinds are not interchangeable.** `absent` means the parameter does not exist; `fixed` means it exists and the machine sets it, so it is readable and never writable; `internal` means no machine has it at all. Calling a `fixed` field absent is a real error — `velocity_to_amp_attack_pivot` is set by three readers, and this table said the target had no such parameter until 2026-09-26.
 
-The machine can do it and we cannot yet. Each of these is blocked on a decision or a measurement, named below — they are work items, not limits.
+### – — possible, but something must be settled first
+
+The machine can do it and we cannot yet. Each is blocked on a decision or a measurement, named below. These are work items.
 
 | field | target | reason |
 |---|---|---|
@@ -348,11 +369,59 @@ The machine can do it and we cannot yet. Each of these is blocked on a decision 
 | `lfo2_to_filter_q` | KRZ | as lfo1_to_filter_q |
 | `mod_routings` | KRZ | the AKAI half landed 2026-09-25 by running EOS's own rescaler backwards -- an exact inverse of a known transform. The K2000 has the DESTINATIONS (ENVCTL `Att Source`, `Dec KeyTrk`, `Rel KeyTrk`) but the model's amount is in **EOS cord units** and no measured law relates those to K2000 VelTrk/KeyTrk units, so a depth written there would be a guessed scale on an unmeasured rail |
 | `lfo1_to_filter_cents` | AKAI | **the model half is DONE** -- the field carries CENTS since 2026-09-25. **AND THE RAIL IS NOW MEASURED (s3ked §270, 2026-09-26, on hardware): `cents peak-to-peak = ~4.0 x LFODEP x MODVFILT1`.** It is a PRODUCT law, established the way §173 demands rather than by linearity in each variable separately -- product held at 400 while the split varied 6.25x each way (20x20, 40x10, 10x40, 50x8, 8x50) gave 1565/1629/1634/1547/1549 cents, a spread of 5.3%; an independent amount sweep agrees to 1%. **Fitted over products 40-400 only**: at 700 and 1000 the corner sweeps past the 2500 Hz band edge, so whether the machine compresses above 400 is UNMEASURED. ⚠ What remains is a DESIGN decision, not a measurement: `LFODEP` is program-wide and also drives the pitch LFO, so a given cents target has no unique (LFODEP, MODVFILT1) split, and rescaling either one moves the vibrato or the other destinations with it -- the same non-invertible collapse already recorded for tremolo. A writer also has to clamp at product 400 and say so |
-| `lfo1_to_filter_q` | AKAI | no resonance-modulation slot has been identified in the S3000 matrix |
 | `lfo2_to_filter_cents` | AKAI | as lfo1_to_filter_cents, and LFO2's own depth is `PANDEP` rather than `LFODEP`, so it needs its own point in the same sweep |
-| `lfo2_to_filter_q` | AKAI | as lfo1_to_filter_q |
 | `lfo2_to_volume` | AKAI | LFO1's tremolo lands via `MODSAMP3`/`MODVAMP3` since 2026-09-25, but LFO2's own depth is `PANDEP` and **no loudness product has been measured for it** -- so an amount written against source 8 would be a guessed scale. Re-routing it onto LFO1 is worse: the swing would run at LFO1's rate. Needs one sweep, not a decision |
+
+### – — unknown: nobody has established whether the machine can  (3)
+
+⚠ **Not the same as the section above, and they were filed together until 2026-09-26.** An `approach` dash asserts the machine CAN do it; these say the slot has never been identified or the rail never measured. Filing "no slot has been identified" under "the machine can do it and we cannot yet" states the opposite of the evidence. They stay dashes and never circles: a circle is a final answer and an open question is not one.
+
+| field | target | what is actually known |
+|---|---|---|
+| `lfo1_to_filter_q` | AKAI | no resonance-modulation slot has been identified in the S3000 matrix |
+| `lfo2_to_filter_q` | AKAI | as lfo1_to_filter_q |
 | `lfo_volume_centre_db` | AKAI | no measured centre-offset rail on this machine |
+
+## Why each *(blank)* is a blank
+
+A blank says the READER never sets the field. Like a dash, that is two different facts wearing one mark — and until they are separated a deliberate scope decision is indistinguishable from an oversight.
+
+### By design — we deliberately do not read it  (96)
+
+On record, and in these cases the record is not ours: the reference implementation drops the same fields.
+
+| source | fields | why |
+|---|---|---|
+| Ensoniq | 50 — `amp_env`, `chorus_amount`, `coarse_tune`, `filter_cutoff`, `filter_env`, `filter_env_cents`, `filter_keytrack`, `filter_resonance`, `filter_type`, `fine_tune`, `hi_vel`, `key_to_pan`, `lfo1_delay`, `lfo1_rate`, `lfo1_shape`, `lfo1_sync`, `lfo1_sync_division`, `lfo1_to_filter_cents`, `lfo1_to_filter_q`, `lfo1_to_pan`, `lfo1_to_pitch`, `lfo1_to_volume`, `lfo1_variation`, `lfo2_delay`, `lfo2_rate`, `lfo2_shape`, `lfo2_sync`, `lfo2_to_filter_cents`, `lfo2_to_filter_q`, `lfo2_to_pan`, `lfo2_to_pitch`, `lfo2_to_volume`, `lfo2_variation`, `lfo_volume_centre_db`, `lo_vel`, `mod_routings`, `non_transpose`, `plays_whole_sample`, `program_number`, `transpose`, `velocity_to_amp_attack_pivot`, `velocity_to_amp_attack_span`, `velocity_to_filter_cents`, `velocity_to_filter_min_cents`, `velocity_to_pan`, `velocity_to_volume_curve`, `velocity_to_volume_db`, `velocity_to_volume_pivot`, `velocity_to_volume_requested`, `wheel_to_lfo` | geometry-only reader: EOS's own importer for this format drops envelopes, filters, LFO and cords (`FIRMWARE_IMPORT_ROUTINES.md`), and these sources convert only to the targets where that can be checked. The FORMAT may well carry the parameter -- this is our scope, not the machine's limit |
+| Roland | 46 — `amp_env`, `chorus_amount`, `filter_cutoff`, `filter_env`, `filter_env_cents`, `filter_keytrack`, `filter_resonance`, `filter_type`, `key_to_pan`, `lfo1_delay`, `lfo1_rate`, `lfo1_shape`, `lfo1_sync`, `lfo1_sync_division`, `lfo1_to_filter_cents`, `lfo1_to_filter_q`, `lfo1_to_pan`, `lfo1_to_pitch`, `lfo1_to_volume`, `lfo1_variation`, `lfo2_delay`, `lfo2_rate`, `lfo2_shape`, `lfo2_sync`, `lfo2_to_filter_cents`, `lfo2_to_filter_q`, `lfo2_to_pan`, `lfo2_to_pitch`, `lfo2_to_volume`, `lfo2_variation`, `lfo_volume_centre_db`, `mod_routings`, `non_transpose`, `plays_whole_sample`, `program_number`, `transpose`, `velocity_to_amp_attack_pivot`, `velocity_to_amp_attack_span`, `velocity_to_filter_cents`, `velocity_to_filter_min_cents`, `velocity_to_pan`, `velocity_to_volume_curve`, `velocity_to_volume_db`, `velocity_to_volume_pivot`, `velocity_to_volume_requested`, `wheel_to_lfo` | geometry-only reader: EOS's own importer for this format drops envelopes, filters, LFO and cords (`FIRMWARE_IMPORT_ROUTINES.md`), and these sources convert only to the targets where that can be checked. The FORMAT may well carry the parameter -- this is our scope, not the machine's limit |
+
+### Reader gap — the format carries it, we do not reach it yet  (23)
+
+A work item on the READ side. Unlike a dash, no writer is involved: the field never reaches the model at all.
+
+| source | fields | why |
+|---|---|---|
+| AKAI | 4 — `non_transpose`, `plays_whole_sample`, `transpose`, `velocity_to_volume_curve` | our **writer** for this format emits it, so the format demonstrably carries the parameter — the gap is on the read side. Derived from the writer, not asserted here |
+| AKAI | 3 — `lfo1_to_filter_cents`, `lfo2_to_filter_cents`, `lfo2_to_volume` | the same field is an `approach` dash for this format as a TARGET, and that category asserts the machine can do it — so the parameter exists and the read side has not reached it. Derived from the dash, not asserted twice |
+| E4B | 5 — `mod_routings`, `plays_whole_sample`, `program_number`, `velocity_to_filter_min_cents`, `velocity_to_volume_curve` | our **writer** for this format emits it, so the format demonstrably carries the parameter — the gap is on the read side. Derived from the writer, not asserted here |
+| KRZ | 7 — `chorus_amount`, `lfo1_delay`, `lfo_volume_centre_db`, `non_transpose`, `plays_whole_sample`, `velocity_to_pan`, `velocity_to_volume_curve` | our **writer** for this format emits it, so the format demonstrably carries the parameter — the gap is on the read side. Derived from the writer, not asserted here |
+| KRZ | 4 — `key_to_pan`, `lfo1_to_filter_q`, `lfo2_to_filter_q`, `mod_routings` | the same field is an `approach` dash for this format as a TARGET, and that category asserts the machine can do it — so the parameter exists and the read side has not reached it. Derived from the dash, not asserted twice |
+
+### Unknown — nobody has established whether the format has it  (3)
+
+Not a gap and not an absence: an open question. It stays blank rather than becoming a circle, because a circle is a final answer.
+
+| source | fields | why |
+|---|---|---|
+| AKAI | 3 — `lfo1_to_filter_q`, `lfo2_to_filter_q`, `lfo_volume_centre_db` | nobody has established whether this format has the parameter — the slot is unidentified or the rail unmeasured. Derived from the matching dash |
+
+### ⚠ Untriaged blanks  (11)
+
+**Nobody has recorded why these are blank.** Each is either a parameter the format does not have (which belongs in `ABSENT` and should render as a circle), a deliberate scope decision, or a reader gap — and the three call for different things. They are listed rather than omitted because a blank nobody has thought about looks exactly like one somebody has.
+
+| source | count | fields |
+|---|---|---|
+| MPC | 11 | `chorus_amount`, `key_to_pan`, `lfo1_to_filter_q`, `lfo1_variation`, `lfo2_to_filter_q`, `lfo2_variation`, `mod_routings`, `transpose`, `velocity_to_amp_attack_pivot`, `velocity_to_amp_attack_span`, `velocity_to_filter_min_cents` |
 
 ## Parameters the FORMATS have that this model does not carry
 
@@ -376,20 +445,22 @@ Everything above is complete with respect to the **model** — all 61 of its fie
 
 ## Totals
 
-| pair | carried | dropped at the writer | not read by the reader |
-|---|---|---|---|
-| MPC → KRZ | 42 | 5 | 14 |
-| E4B → KRZ | 43 | 9 | 9 |
-| AKAI → KRZ | 37 | 4 | 20 |
-| Roland → KRZ | 13 | 0 | 48 |
-| Ensoniq → KRZ | 9 | 0 | 52 |
-| MPC → E4B | 46 | 1 | 14 |
-| KRZ → E4B | 41 | 0 | 20 |
-| AKAI → E4B | 41 | 0 | 20 |
-| Roland → E4B | 13 | 0 | 48 |
-| Ensoniq → E4B | 9 | 0 | 52 |
-| MPC → AKAI | 39 | 8 | 14 |
-| KRZ → AKAI | 38 | 3 | 20 |
-| E4B → AKAI | 41 | 11 | 9 |
-| Roland → AKAI | n/a | n/a | refused |
-| Ensoniq → AKAI | n/a | n/a | refused |
+Counted from the marks themselves, by the same function that draws them — so a total cannot disagree with its grid.
+
+| pair | + carried | – work item | ○ machine cannot | *(blank)* untriaged |
+|---|---|---|---|---|
+| MPC → KRZ | 42 | 0 | 8 | 11 |
+| E4B → KRZ | 43 | 3 | 10 | 5 |
+| AKAI → KRZ | 37 | 2 | 12 | 10 |
+| Roland → KRZ | 13 | 0 | 2 | 46 |
+| Ensoniq → KRZ | 9 | 0 | 2 | 50 |
+| MPC → E4B | 46 | 0 | 4 | 11 |
+| KRZ → E4B | 41 | 0 | 9 | 11 |
+| AKAI → E4B | 41 | 0 | 10 | 10 |
+| Roland → E4B | 13 | 0 | 2 | 46 |
+| Ensoniq → E4B | 9 | 0 | 2 | 50 |
+| MPC → AKAI | 38 | 4 | 8 | 11 |
+| KRZ → AKAI | 37 | 3 | 10 | 11 |
+| E4B → AKAI | 40 | 6 | 10 | 5 |
+| Roland → AKAI | n/a | n/a | n/a | refused |
+| Ensoniq → AKAI | n/a | n/a | n/a | refused |

@@ -52,10 +52,17 @@ rewritten: `tests/test_parameter_matrix.py`, `tests/test_krz_lfo2.py`,
 
 ---
 
-# Part 1 — The 17 cells that are NOT work items
+# Part 1 — The 18 cells that are NOT work items
 
-**Do not open these.** The target has no such parameter; a dash is the correct
-and final answer, and "fixing" one means inventing hardware.
+**Do not open these.** The format has no settable parameter; this is the
+correct and final answer, and "fixing" one means inventing hardware.
+
+⚠ **These render as `○` in the matrix, not `–`, since 2026-09-26.** They
+shared the dash with the actionable cells until then, which made 17 final
+answers look like 17 outstanding tasks. The mark is keyed by FORMAT rather
+than by direction, because absence is the same fact whichever way the
+conversion runs — the K2000 having no clock sync is why `lfo1_sync` is
+unreadable *from* a KRZ source and unwritable *to* a KRZ target.
 
 | cell | why it is final |
 |---|---|
@@ -67,7 +74,9 @@ and final answer, and "fixing" one means inventing hardware.
 | `lfo2_to_pitch` → AKAI | The S3000's LFO2 reaches **pan**; pitch modulation is LFO1's job. |
 | `velocity_to_amp_attack_pivot` → KRZ | The K2000's `Att VelTrk` is anchored at velocity 1 **by the machine** — measured, t(1)/t(127) = 1.988 against a table 2.000. The pivot is not a settable parameter. |
 | `chorus_amount` → AKAI | **The base S3000XL has no effects processor.** The `DFX` chip is EB16-only on this model; effect data lives in a `.X` file written from the machine's own fixed defaults; and the effects *assignment* is a MULTI parameter, not a program one. The program object this writer emits has no destination, and the spec marks its one FX byte `PFXSLEV` as "not used". **Moved here from Part 2 on 2026-09-25** — it had been filed as a work item. |
-| `velocity_to_volume_requested` → KRZ, AKAI | **Provenance, not a parameter.** It records what the source asked for *before* clamping, so no target should ever emit it. If you find yourself writing this one, the model is being misread. |
+| `lfo1_delay` → MPC | **The MPC has a FADE-IN, not a delay.** `lfoFadein` / `lfoFadeinSync` ramp the LFO in; an LFO that fades in over 1 ms is not one that starts 1 ms late, so there is no MPC field this model's `lfo1_delay` could read. Evidenced from the matrix's own `UNMODELLED` table rather than assumed. *(added 2026-09-26, source-side ○)* |
+| `firmware_raw`, `src_resonance` → every format | **Model-internal plumbing, not conversion cells.** No machine has either; `firmware_raw` is a writer-side scratch dict for `eos_firmware_sim` and `src_resonance` carries the source's resonance for a writer to consult. They render as a full row of circles and are deliberately NOT counted among the 18 — requiring a plan entry for each would be twelve lines saying "this was never a conversion". |
+| `velocity_to_volume_requested` → KRZ, AKAI, E4B | **Provenance, not a parameter.** *(E4B added 2026-09-26: `e4b_writer` READS it, to decide whether to warn about a clamp, which briefly made it look like an E4B read-side work item.)* It records what the source asked for *before* clamping, so no target should ever emit it. If you find yourself writing this one, the model is being misread. |
 
 ---
 
