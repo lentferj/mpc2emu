@@ -25,6 +25,13 @@ series.
 > machines and recorded back off each one. Level-matched, because louder always
 > sounds better.
 
+> **[What survives your conversion?](docs/PARAMETER_MATRIX.md)** —
+> `docs/PARAMETER_MATRIX.md` answers it per parameter, for all fifteen
+> source→target pairs. It is **generated from the source**, so it cannot drift
+> from what the code actually does, and it separates *"we have not done this
+> yet"* (**`–`**) from *"the machine has no such parameter"* (**`○`**) rather
+> than letting one symbol mean both.
+
 > **Legal:** [DISCLAIMER.md](DISCLAIMER.md) · [LICENSE](LICENSE)
 
 ---
@@ -153,9 +160,10 @@ mpc2emu was built by its human author together with Anthropic's **Claude**. The
 **ideas, the project vision, and every feature** came from the human author;
 Claude assisted with **writing the code and analyzing the binary formats**.
 Crucially, the **reverse engineering rests on hands-on human work** — all testing
-and verification on real **E-mu E4XT** and **Kurzweil K2000R** hardware, creating
-the RE reference images/banks on those instruments (disk saves, SysEx probes),
-and aural A/B comparison of presets — which is what makes the results correct.
+and verification on real **E-mu E4XT**, **Kurzweil K2000R** and **Akai
+S3000XL** hardware, creating the RE reference images/banks on those instruments
+(disk saves, SysEx probes), and aural A/B comparison of presets — which is what
+makes the results correct.
 Full account in [DISCLAIMER.md](DISCLAIMER.md).
 
 ---
@@ -164,12 +172,16 @@ Full account in [DISCLAIMER.md](DISCLAIMER.md).
 
 mpc2emu is a converter for sampler instruments. It **reads** a wide range of
 sampler and library formats — Akai MPC keygroups (`.xpm`) and binary drum
-programs (`.pgm` — MPC 500/1000/2500, MPC 2000/2000XL, and MPC 60), SFZ v1/v2,
-SoundFont 2, GigaSampler / GigaStudio (uncompressed), Logic EXS24 (classic and
-v1.1), TAL-Sampler, EMU E4B banks, Kurzweil KRZ banks, E-mu Emulator
-IIIX/ESI banks, and even a plain folder of root-note-named WAVs — and
-**writes** EMU E4B (Emulator 4 / E4XT / EOS 4.x), Kurzweil KRZ (K2000 / K2500
-/ K2600), E-mu Emulator IIIX/ESI, and TAL-Sampler presets.
+programs (`.pgm` — MPC 500/1000/2500, MPC 2000/2000XL, and MPC 60), AKAI
+S1000/S3000 programs and samples, SFZ v1/v2, SoundFont 2, GigaSampler /
+GigaStudio (uncompressed), Logic EXS24 (classic and v1.1), TAL-Sampler, EMU
+E4B banks, Kurzweil KRZ banks, E-mu Emulator IIIX/ESI banks, and even a plain
+folder of root-note-named WAVs. It also reads **whole disk images** — AKAI,
+EMU3, Ensoniq EPS/ASR and Roland S-7xx SCSI disks, CD-ROMs and floppies,
+identified by content rather than by extension — so a library can come off the
+media without the sampler. It **writes** EMU E4B (Emulator 4 / E4XT /
+EOS 4.x), Kurzweil KRZ (K2000 / K2500 / K2600), AKAI S1000/S3000, E-mu
+Emulator IIIX/ESI, and TAL-Sampler presets.
 
 **It maps the musical parameters, not just the raw samples.** Filter
 type / cutoff / resonance, the amplitude and filter envelopes, the LFO, and the
@@ -179,9 +191,14 @@ hardware; the [E4B Voice Parameters](#e4b-voice-parameters),
 [KRZ Program Parameters](#krz-program-parameters) and
 [AKAI Program Parameters](#akai-program-parameters) sections below document
 exactly what transfers and how it was verified, and
-[`docs/MODULATION_MATRIX.md`](docs/MODULATION_MATRIX.md) gives the parameter-by-
-parameter matrix across the MPC, AKAI, E4B and KRZ paths — including, explicitly,
-what does **not** transfer.
+[`docs/PARAMETER_MATRIX.md`](docs/PARAMETER_MATRIX.md) gives the
+parameter-by-parameter matrix for all fifteen source→target pairs — generated
+from the source rather than maintained by hand, and saying for every field
+whether the reader extracts it, the writer emits it, or the path drops it. It
+distinguishes a **`–`** (a work item) from a **`○`** (the format has no such
+parameter, so there is nothing to implement), and lists what it cannot see.
+[`docs/MODULATION_MATRIX.md`](docs/MODULATION_MATRIX.md) is the hand-written
+companion for the modulation paths in particular.
 
 ### It re-models behaviour, not just parameters
 
@@ -310,9 +327,11 @@ downsample — either interactively or applied automatically with `--auto-fit`.
 `--max-preset-size` caps any single preset so no one preset fills a whole bank.
 
 **It boots straight on the instrument.** mpc2emu writes ZuluSCSI-ready media:
-EMU3 CD images and SCSI hard-disk images for the E4XT, and FAT16 CD images, SCSI
-hard-disk images, and Gotek FAT12 floppies (all hardware-confirmed) for the
-K2000. Banks can also be appended to an existing image in place with `--add-to`
+EMU3 CD images and SCSI hard-disk images for the E4XT; FAT16 CD images, SCSI
+hard-disk images and Gotek FAT12 floppies for the K2000 (all
+hardware-confirmed); and for the AKAI S3000XL a partitioned SCSI disk image
+and a CD3000 CD-ROM, both hardware-confirmed, plus an AKAI-native floppy that
+has **not** been read back by hardware. Banks can also be appended to an existing image in place with `--add-to`
 — no rebuild and no mounting.
 
 Finally, you can **inspect any input without converting** it (`--info`), and
@@ -423,6 +442,8 @@ earlier measurement round worthless, which is its own argument for checking.
 | Akai MPC60 SET / floppy | `.set` / `.img` | MPC 60 RAM set; `.img` = FAT12 floppy (SET auto-extracted) |
 | AKAI S1000/S3000 program / sample | `.P3` / `.S3` / `.a3p` / `.a3s` / `.p1` / `.s1` | S3000XL, S2000, S2800, S3200(XL), S1000/S1100, CD3000 |
 | AKAI S1000/S3000 disk image | `.hda` / `.iso` / `.img` | Whole SCSI disk, CD3000 CD-ROM or 800 KB / 1.6 MB floppy — every volume on it, read without the sampler. S1000 and S3000 volumes both, on the same disk if need be; all three extensions are identified by content, not by name |
+| Ensoniq EPS/ASR disk image | `.img` / `.iso` / `.hda` | EPS, EPS-16+ and ASR-10 media — identified by content. **Geometry only** (zones, key/velocity ranges, samples, loops): envelopes, filters, LFOs and cords are not read, matching what EOS's own Ensoniq importer does with them |
+| Roland S-7xx disk image | `.img` / `.iso` / `.hda` | S-750 / S-760 / S-770 media — identified by content. **Geometry only**, for the same reason |
 | TAL-Sampler | `.talsmpl` | TAL Software GmbH (XML + WAV) |
 | SFZ v1/v2 | `.sfz` | Open standard, `#include` supported |
 | SoundFont 2 | `.sf2` | RIFF-based, E-mu / Creative |
@@ -990,14 +1011,20 @@ FAT16 tops out near ~2047 MB).
 
 ### SCSI Hard Disk (.hda) — AKAI S3000XL
 
-> **Not hardware-confirmed.** The AKAI format is not vendor-documented. Our
-> images come out **byte-identical** to images built by
-> [`akaiutil`](#reverse-engineering-credits), an independent implementation,
-> and the reader agrees with it on all **84 345 files of 33 real library
-> CD-ROMs**. That is the strongest check available without the sampler, and is
-> *not* the same as the sampler accepting them — five separate faults survived
-> the `akaiutil` comparison alone and were only caught by real discs. See
-> `docs/AKAI_S3000_FORMAT.md`.
+> **Hardware-confirmed.** An S3000XL has mounted and played these images
+> repeatedly — 18 volumes on one live card. *(This paragraph said "not
+> hardware-confirmed" until 2026-09-26, having been written before the first
+> card went in and never updated; it contradicted three other places in this
+> file that had been.)*
+>
+> The offline checks still stand and are worth keeping, because they are what
+> got it as far as the first crossing: our images come out **byte-identical**
+> to images built by [`akaiutil`](#license-and-third-party-sources), an
+> independent implementation, and the reader agrees with it on all **84 345
+> files of 33 real library CD-ROMs**. ⚠ That is the strongest check available
+> without the sampler and it is *not* a substitute for one — **five separate
+> faults survived the `akaiutil` comparison** and were caught only by real
+> discs. See `docs/AKAI_S3000_FORMAT.md`.
 
 ```bash
 python convert.py /mpc/programs/ --format akai --hda
@@ -1226,14 +1253,61 @@ depth; on the AKAI it writes `LFODEP` / `LFODEL`, which were previously never
 written at all — every converted program got a flat LFO whatever the source
 asked for.
 
-Still not mapped (honest gaps): **LFO2 rate / shape** (LFO2 is written only as a
-tremolo *source*, never configured), **LFO → filter** (filter wobble — the MPC's
-`LfoCutoff` reaches the E4B and not the K2000), and LFO **delay / fade-in /
-tempo-sync**.
+**LFO2 is now fully written on the K2000** (2026-09-25): segment `0x15`,
+located offline from a 201-file corpus before any hardware was asked for — the
+tag appears in 4 226 of 4 280 program objects, one per layer beside LFO1's
+`0x14`, with byte-for-byte the same field ranges. Rate and shape are
+configured, not just selected as a tremolo source, which closes the
+"modulation source chosen without its rate" defect that cost four separate
+fixes in one day. ⚠ While doing it, **byte 4 turned out to be PHASE and byte 5
+SHAPE** — reader and writer had them swapped *together*, so every round trip
+passed. A round trip tests symmetry, not correctness.
+
+**LFO → filter is now mapped on the K2000 too** (2026-09-25), and the field
+carries **cents** rather than a normalised fraction: there is no single
+full-scale depth that is right on both machines, so the reader keeps the cents
+the instrument states and each writer converts at its own operating point.
+
+Still not mapped (honest gaps): LFO **delay / fade-in** — the K2000 LFO page
+has no delay field at all, so there is nothing to write to (`krz_writer`
+mentions the field only when deciding whether two layers may fuse) — and
+**tempo-sync**, which the K2000 LFO page does not have either.
 
 Per-parameter detail for every direction — what each parser reads, what each
 writer emits, and what survives end to end — is in
 [`docs/MODULATION_MATRIX.md`](docs/MODULATION_MATRIX.md).
+
+### Effects, pan and program placement
+
+Four parameters that the K2000 has and mpc2emu used to drop, all added
+2026-09-25/26 and all **read back as well as written**, so a KRZ source no
+longer loses them:
+
+**Chorus.** The K2000 has no chorus *amount* — it has an effects processor and
+a Wet/Dry mix. So the writer **picks an effect**: ROM **31**, the only pure
+stereo chorus among the 47 factory configurations, and writes `chorus_amount`
+into Wet/Dry (program offset 43, hardware-confirmed). The reader checks the
+effect id before believing the mix, because reading Wet/Dry without it would
+report a *reverb's* depth as a chorus.
+
+**Velocity → pan.** The panner's `VelTrk` (program offset 245). ⚠ The panner
+only exists on algorithms 2, 13, 24 and 26, so the writer switches to
+algorithm 2 — `PITCH → 2POLE LOWPASS → PANNER → AMP` — which is free rather
+than a trade: a 12 dB lowpass source keeps its slope *and* its resonance and
+gains the panner. It also has to **spread the panner's two wires**, because a
+panner doubles its wire and is completely inaudible with both outputs centred.
+
+**Fixed pitch.** `non_transpose` becomes `CAL[19] = 213`, measured on hardware:
+the PITCH page's `KeyTrk` is a **deviation added to** the keymap's 100 ct/key,
+so 213 as a signed byte is −100 ct/key — the value that exactly cancels
+tracking. Only that exact value reads back as fixed pitch; a near-miss is a
+real *partial* key-track, a different setting. ⚠ Real K2000 material almost
+never does it this way — 950 programs use the keymap page's own `KeyTrk`
+instead, against a population of **one** for this byte — so it is written for
+the multi-zone case, where the keymap route cannot express it.
+
+**Program number.** `program_number` is honoured rather than ignored, with
+collisions and out-of-range values reported rather than silently renumbered.
 
 ### Loops
 
@@ -1393,6 +1467,10 @@ filter corner.
 | Velocity → amp attack | Carried on all three write paths, as a **span plus a pivot** like velocity→loudness | Same lesson as the loudness swing: the amount alone is not a comparable quantity |
 | Filter key-follow | Read and carried — a parameter mpc2emu had never read at all, and it differs on **32.6 % of round-tripped zones** | A third of zones were silently losing their key tracking |
 | Attack (`ATTAK1`) | Time to 90% is measured and holds to 3.3%. The **exponential form is refuted** — `t50/t90` is 0.301 for any exponential, and the measured ratios run 1.5–2.9× above it | The curve shape is still open. The writer fits measured endpoints and assumes nothing about the curve between them, which is why the refutation leaves it standing |
+| LFO1 → loudness (tremolo) | Written since 2026-09-25 via `MODSAMP3` → source 7 with the keygroup's `MODVAMP3`. The law is a **product**, `0.010068 × LFODEP × amount`, established by equal-product equivalence rather than by sweeping one variable — a coefficient taken at one depth and applied flat over-reads by the depth ratio, 9.9× at the bottom | Tremolo had been read from soft formats, carefully averaged during layer fusion, and then written to no byte by any writer |
+| Fixed pitch (`CP1..CP4`, 132–135) | `non_transpose` is written as **all four** CONST flags, and read back the same way | ⚠ AKAI CONST plays at a constant **key** ("a constant pitch of C3") while this model's field means the sample plays at **its own root** — they coincide only where the root already is that key. The flag round-trips; the pitch offset does not, and the writer says so |
+| Transpose | Folded into the tune term with `coarse_tune` — `(coarse_tune + transpose) × 100` | The S3000 has **one** tune concept; this model splits it only because the E4XT has a byte for each. Nothing is lost, and nothing is separable on the way back |
+| Generic mod routings | `mod_routings` are written back rather than dropped | A routing the model carried from another format used to vanish silently |
 
 **Still open, and marked as such in the code:** the negative filter key-follow
 scale (0.622 from one bench sweep, against 96–103% unscaled from another on the
@@ -1728,6 +1806,17 @@ the size limit is reached:
   characters are truncated with a numeric suffix to ensure uniqueness
 - Warning issued when a single preset exceeds the limit
 
+**What triggers a split** — it is not only size. A bank splits on
+`--max-bank-size` (**default 32 MB**, deliberately below every target's
+hardware maximum) *and* on object counts, which differ per format and are
+tighter than the megabytes suggest: a KRZ bank typically runs out of
+**presets** at around 120 on a stock machine, whatever its size, because
+objects live in PRAM rather than sample RAM.
+
+⚠ The per-format ceilings, why the KRZ one binds so early, and what `--pram`
+does about it are in **[Fitting oversized presets](#fitting-oversized-presets)**
+below — they are stated once, there, rather than repeated here.
+
 ---
 
 ## Fitting oversized presets
@@ -1784,12 +1873,15 @@ mpc2emu/
 │   ├── krz_parser.py           # Kurzweil KRZ import (inverse of krz_writer)
 │   ├── eiii_parser.py          # E-mu Emulator IIIX/ESI/EIII import (inverse of eiii_writer)
 │   ├── akai_s3000_parser.py    # AKAI S1000/S3000 program + sample import
-│   └── akai_image_parser.py    # AKAI SCSI disk / CD3000 / floppy image — every volume, no sampler
+│   ├── akai_image_parser.py    # AKAI SCSI disk / CD3000 / floppy image — every volume
+│   ├── eps_parser.py           # Ensoniq EPS / EPS-16+ / ASR-10 disk image (geometry only)
+│   └── roland_s7xx_parser.py   # Roland S-750/760/770 disk image (geometry only)
 ├── writers/
 │   ├── e4b_writer.py           # EMU E4B (FORM size + EMSt; filter, loops, zones)
 │   ├── krz_writer.py           # Kurzweil KRZ
 │   ├── eiii_writer.py          # E-mu Emulator IIIX/ESI
 │   ├── akai_s3000_writer.py    # AKAI S1000/S3000 program + sample (measured scales)
+│   ├── eos_firmware_sim.py     # --firmware-sim: convert as the E4XT's own importer would
 │   ├── akai_s3000_image.py     # AKAI partitioned disk / CD3000 ISO / AKAI-native floppy
 │   ├── akai_aux_defaults.py    # AKAI header fields the format needs but no source carries
 │   ├── atomic.py               # Write-then-rename, so a failed run leaves no half-file
@@ -1808,6 +1900,24 @@ mpc2emu/
 │   ├── start_trim.py            # Adaptive lead-in/silence removal (--trim-start)
 │   ├── tail_trim.py             # Adaptive tail/silence removal (--trim-tail)
 │   └── loop_renderer.py         # Ping-pong → forward loop (bakes the bounce into PCM)
+├── docs/                       # Format references and the measurement record
+│   ├── PARAMETER_MATRIX.md     # ⭐ WHAT SURVIVES EACH CONVERSION — every model
+│   │                           #   parameter × every source × every target, for all
+│   │                           #   fifteen pairs. GENERATED from the source, so it
+│   │                           #   cannot drift from the code: `+` carried, `–` a
+│   │                           #   work item, `○` the format has no such parameter,
+│   │                           #   blank the reader never sets it. Start here.
+│   ├── PARAMETER_MATRIX_PLAN.md #  How to close each `–`, and why each `○` is final
+│   ├── MODULATION_MATRIX.md    # Hand-written companion, modulation paths in detail
+│   ├── E4B_FORMAT.md           # EMU E4B / E4XT (reverse-engineered)
+│   ├── KRZ_FORMAT.md           # Kurzweil K2000 bank + FAT16 media
+│   ├── AKAI_S3000_FORMAT.md    # AKAI S1000/S3000 program, sample and disk format
+│   ├── EIII_FORMAT.md          # E-mu Emulator III / IIIX / ESI
+│   ├── EMU3_ISO_FORMAT.md      # EMU3 CD-ROM filesystem (--iso)
+│   ├── FIRMWARE_IMPORT_ROUTINES.md # What each machine's OWN importer does
+│   ├── RESOLUTION_NOTES.md     # The measurement record — every law, how it was
+│   │                           #   measured, and what was retracted
+│   └── re_procedures/          # Step-by-step hardware RE procedures
 └── tests/
     └── re_banks/                # Hardware-RE helpers: test-bank generators
         ├── gen_amp_envelope_test.py   #   amp envelope (decay byte / rate calibration)
@@ -1928,6 +2038,16 @@ for a *velocity-dependent* filter got no filter at all.
 per target: the E4B cord was **8.3× too wide**, and the AKAI and K2000 scales were
 derived from their own sweeps (`0.1563` for both E4B and AKAI, `0.4377` for the
 K2000 — the most linear of the three, constant to ±0.003 over a 10× range).
+
+⚠ **A caveat added 2026-09-26 that does not change the advice above.** That
+linearity is the weakest part of the K2000 figure, not the strongest: **a
+linearity check is blind to a constant scale factor** — any dilution constant
+across depths preserves 0.372 dB/byte to ±0.003 exactly while rescaling the
+result. The sweep's own captures no longer exist on either side, so it cannot
+be re-checked. The stimulus behind it *was* re-verified by direct capture
+(one tracking series, no modulation sidebands), and nobody has reported the
+depth sounding wrong — but the number rests on a measurement that can no
+longer be audited, and this file should say so.
 
 The AKAI had a second half to it: the writer had been emitting LFO→pan since
 2026-09-06 and **the reader never read it back**, so a pan-modulated program lost
@@ -2216,7 +2336,7 @@ unaffected.
 | E4B forward loops | ✅ SMPL chunk read; `opts=0x0031` hardware-confirmed |
 | E4B ping-pong loops | ✅ EOS has no ping-pong mode — rendered into PCM as a forward loop (bounce baked in) |
 | E4B multi-loop samples | ❌ only the first SMPL loop entry is used |
-| E4B non-transpose (SMP) voice | ✅ one non-transpose voice per velocity range (root=60, full-range zones) |
+| Non-transpose / fixed pitch | ✅ **all three targets.** E4B: one SMP voice per velocity range (root=60, full-range zones). KRZ: `CAL[19] = 213`, the measured key-track cancel. AKAI: `CP1..CP4` CONST — ⚠ which plays at a constant *key*, not at the sample's own root |
 | E4B FORM size / EMSt chunk | ✅ EMU convention (`filesize−12`) + trailing `EMSt` — loads in e-xplorer & from CD |
 | E4B VCA (amp) envelope ADSR from source | ✅ full 6-stage amp envelope (`PZT[0:12]`); decay byte `PZT[4]` + rate↔time curve hardware-calibrated |
 | E4B chorus amount | ✅ per-voice `vpar[42]` read/written (0–100 % → 0–127, hardware-confirmed) |
@@ -2224,11 +2344,19 @@ unaffected.
 | EMU3 ISO loading from ZuluSCSI CD | ✅ `blks` ceiling-division fix — end-of-file error resolved |
 | KRZ filter type / cutoff / resonance | ✅ mapped from MPC XPM; filter-type + cutoff-Hz HW-verified on a K2000R (incl. band-boost → PARA MID) |
 | KRZ amp + filter envelope from source | ✅ mapped from source ADSR (filter-env / LFO depth calibrations approximate) |
-| KRZ LFO1 vibrato (rate + 26 shapes) | ✅ rate + all 26 shapes (live SysEx probe); **tremolo (LFO→amp) ✅ mapped**, **LFO→pan ✅ mapped** (measured depth), **mod wheel ✅ carried**; LFO2 rate/shape and filter-wobble ❌ not yet |
+| KRZ LFO1 + LFO2 | ✅ LFO1 rate + all 26 shapes (live SysEx probe); **LFO2 fully written since 2026-09-25** (segment `0x15`, rate and shape, not just selected as a source); tremolo (LFO→amp) ✅ mapped; LFO→filter ✅ mapped, in cents |
 | KRZ ping-pong loops | ✅ K2000 has no ping-pong mode — baked into PCM (bounce spliced in) |
 | KRZ multi-pole filter slopes (6/8-pole, 2-pole HP/notch) | ⚠️ collapse to nearest RE'd slope |
 | KRZ SCSI CD / hard disk (FAT16) / Gotek floppy | ✅ HW-confirmed (CD and HDx hard disk); Gotek FAT12 floppy ✅ |
 | LFO rate / shape / routing | ✅ LFO rate/shape + pitch/filter routing mapped for E4B and KRZ, plus tempo-synced MPC LFOs via `--lfo-sync-bpm`; some depth calibrations approximate |
+| AKAI S1000/S3000 programs + samples | ✅ read and written (`.P3`/`.S3`, `.a3p`/`.a3s`, `.p1`/`.s1`) |
+| AKAI SCSI disk image (`--hda`) | ✅ **hardware-confirmed** — an S3000XL has mounted and played them repeatedly, 18 volumes on one live card |
+| AKAI CD3000 CD-ROM (`--iso`) | ✅ **hardware-confirmed 2026-09-09** — twelve program headers diffed byte-for-byte against known-good disk-image originals, 3720 bytes, zero differences |
+| AKAI floppy (`--floppy`) | ⚠️ written AKAI-native (not DOS-readable) and **never read back by hardware** |
+| AKAI second filter (IB-304F) | ✅ read and written behind `--akai-ib304f`; board is EB16-only on the base S3000XL |
+| AKAI effects / chorus | ❌ **the base S3000XL has no effects processor.** The `DFX` chip is EB16-only, effect data lives in a separate `.X` file, and the assignment is a MULTI parameter — the program object has no destination at all |
+| AKAI LFO2 → loudness / filter | ❌ LFO2's depth is `PANDEP`, a different rail from LFO1's, and **no product has been measured for it** — writing an amount would be a guessed scale, so the writer drops it and says so. A calibration disc is built and waiting on a card crossing |
+| AKAI filter key-follow → E4B | ⚠️ clamps at the E4XT's **measured 0.713 oct/oct ceiling**, and real AKAI material reaches 2.5–3.3 — so most keyfollow is not representable on the E4XT and is clamped honestly rather than rescaled |
 | Binary MPC `.pgm` | ✅ MPC500/1000/2500, MPC2000/2000XL, MPC60 supported (auto-detected) |
 | MPC3000 `.pgm` | ❌ not supported — magic collides with MPC60, needs a body-level discriminator |
 | HDA > 16 dir entries | ⚠️ single 512-byte dir block — warns and keeps first 16 (excess dropped, not silently) |
@@ -2256,6 +2384,7 @@ specifications and open-source reference projects:
 | `mpc60_parser.py` | [ConvertWithMoss](https://github.com/git-moss/ConvertWithMoss) — `format/akai/mpc60` (MPC60 SET layout + 12-bit unpack); verified against the *Akai MPC60 to WAV* reference decoder | LGPL-3.0 | Jürgen Moßgraber |
 | `e4b_writer.py` | Reverse-engineered from E4XT hardware-saved banks (JL AnalogBank, FltEnvTest, FLTTYPES series, AMPENV_SETME + AMP_DECAY_CAL amp-envelope/decay banks, and the Chorus-Amount `vpar[42]` reads/sweep), commercial EOS CD-ROMs (library disc B, library disc C, library disc S) plus the commercial-library bank corpus used for parameter mining, `struct emu3_sample` from [emu3bm](https://github.com/dagargo/emu3bm) (E3S1 field layout), and [Phil's E4 format notes](http://www.philizound.co.uk/freebies/software/emu-reorder/emu-reorder.html) | — | Original code |
 | `iso_builder.py` | EMU3 filesystem structure informed by [emu3fs](https://github.com/dagargo/emu3fs) (GPL-2.0-or-later), verified against reference images; `blks` ceiling formula from `emu3_set_fattrs()` in [emu3bm](https://github.com/dagargo/emu3bm) | GPL-2.0-or-later | David García Goñi |
+| `akai_s3000_writer.py`, `akai_s3000_parser.py`, `akai_image_parser.py` | [`akaiutil`](https://github.com/kmi-ind/akaiutil) — an independent implementation of the AKAI S1000/S3000 disk format, used as a cross-check rather than a source: our images are byte-identical to its output and our reader agrees with it on all 84 345 files of 33 real library CD-ROMs | GPL-2.0 | Klaus Michael Indlekofer |
 | `eiii_writer.py`, `eiii_parser.py` | EIII/EIIIX/ESI bank structure originally reverse-engineered by [emu3bm](https://github.com/dagargo/emu3bm), independently re-verified and corrected (empty keymap/sample-table slots, ESI sample-index flag bits, EIII/EIIIX fixed low-pass filter) by [ConvertWithMoss](https://github.com/git-moss/ConvertWithMoss) against 22 commercial CD-ROMs — see `docs/EIII_FORMAT.md`. No source code copied from either; independently re-implemented against this project's own data model. Read side additionally validated read-only against 1118 real EIII/EIIIX/ESI bank images, 1017 of them directory-listed banks (see `docs/RESOLUTION_NOTES.md` §EIII and §OSFILE). | GPL-2.0-or-later / LGPL-3.0 | David García Goñi / Jürgen Moßgraber |
 
 ---
