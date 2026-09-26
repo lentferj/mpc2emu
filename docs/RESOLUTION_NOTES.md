@@ -405,6 +405,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§KRZF2RESDEPTH — the F2 RES *Depth* law: prevalence says DECLINE, on both sides of the conversion (2026-09-26)](#krzf2resdepth-the-f2-res-depth-law-prevalence-says-decline-on-both-sides-of-the-conversion-2026-09-26)
 - [§NONTRANSPOSEREAD — `non_transpose` is now read back from KRZ and AKAI, and the two formats do not mean quite the same thing by it (2026-09-26)](#nontransposeread-non_transpose-is-now-read-back-from-krz-and-akai-and-the-two-formats-do-not-mean-quite-the-same-thing-by-it-2026-09-26)
 - [§PERFDS41F — performance review DS41F (2026-09-26/27)](#perfds41f-performance-review-ds41f-2026-09-2627)
+- [§LFO2PANDEP — the AKAI LFO2 loudness law, measured off our disc (2026-09-27)](#lfo2pandep-the-akai-lfo2-loudness-law-measured-off-our-disc-2026-09-27)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -39372,4 +39373,106 @@ bought 3.5% instead of 5.86x.
 * **`parse_roland_image` loads the whole disc's PCM** (roland_s7xx_parser.py
   around the per-sample read), so auditioning one Roland preset reads
   hundreds of MB. Same shape as the EPS `only=` request.
+
+## §LFO2PANDEP — the AKAI LFO2 loudness law, measured off our disc (2026-09-27)
+
+s3ked, their §272, commit `e7103e3`, measured on the `LFO2CAL` volume this
+project built and appended to HD4. **Written out rather than cited**: a
+section id is a dependency, a described measurement is a copy, and this is
+the only place the numbers exist on our side.
+
+### The law
+
+    peak-to-peak dB  ≈  0.00724 × PANDEP × MODVAMP3        products 500..1000
+
+Equal-product equivalence over the four splits the disc was built for — a 5×
+range of each factor at a held product:
+
+| PANDEP × MODVAMP3 | dB p-p |
+|---|---|
+| 99 × 20 | 13.136 |
+| 50 × 40 | 13.212 |
+| 40 × 50 | 13.138 |
+| 20 × 99 | 13.045 |
+
+Spread **0.167 dB, 1.3% of the mean**. That is what establishes the PRODUCT;
+per-variable linearity would not have (§173), and it is why the disc was
+designed as an equal-product set rather than a sweep.
+
+⚠ **Compression above product 1000 is UNATTRIBUTED, not absent.** The
+coefficient sweep gives 0.00724/unit at product 500 *and* at 1000, identical
+to three figures, then 0.00661 at 2000 and 0.00582 at 3000. s3ked quote
+500–1000 and leave the roll-off unmodelled rather than fitting a curve to
+three points, which is the right call. A writer clamps at the fitted range and
+says so — the same shape as the LFO1 filter rail's 40–400.
+
+⚠ **Program 106 carried an xrun**, flagged by their probe at the point of
+capture. If the compression above 1000 ever matters, **17.446 dB is the row to
+re-take first.**
+
+### PANDEP gates loudness, not only pan
+
+Depth 0 with amount 40 reads **0.003 dB**, indistinguishable from the `L2NONE`
+floor, peak off-rate. So §265's gate result extends to this destination: **one
+field gates two routes.** Our own plan flagged that as a risk; it is now
+measured.
+
+This is the LFODEP collapse again in a different rail. `PANDEP` is
+program-wide and reaches both the LFO2 pan route and the LFO2 amplitude route,
+so a cents/dB target has no unique `(PANDEP, MODVAMP3)` split: choosing one
+rescales the other destination. **The shared-bus rule worked out for LFODEP
+applies unchanged** — smallest feasible depth is simultaneously the
+finest-resolution one on every destination — and the writer needs that rule
+decided before it emits `lfo2_to_volume`, not just this coefficient.
+
+### ⚠ The mono-sum defence leaks, and only a control could show it
+
+Programs 110/111 are the pair built to be wrong on purpose:
+
+| program | amp (dB p-p) | pan swing (dB p-p) |
+|---|---|---|
+| 110, pan matrix zeroed | 13.211 | 0.001 |
+| 111, pan live | 12.748 | **24.919** |
+
+A 24.9 dB pan swing shifts the mono-sum loudness reading by **3.5%**. The
+defence works and is **not complete** — the strong form, "the mono sum rejects
+pan", would have shipped as exact.
+
+**No analysis could have produced that number; only a program built to be
+wrong could.** This is the argument for putting the negative control on the
+disc rather than in the reasoning, and it is why every LFO2 loudness program
+in this set zeroes its pan matrix.
+
+### ⚠ The filter half cannot be measured with this disc, and the reason is ours
+
+`L2TONE` is a **220 Hz sine**. s3ked's `measure.corner_frequency` docstring
+already ranks source material *"noise, saw, square, sine (useless: one
+frequency says nothing about where a filter turns over)"*, and their §270 used
+white noise for exactly this.
+
+Programs **112–117 are correctly built** — the parameters and the
+equal-product design are right — and they read a real 9 dB swing. But that is
+an **amplitude** reading: a moving corner does change a sine's level. It is
+not cents, and no post-processing recovers the corner from one frequency.
+
+The loudness programs' large apparent "filter" swing (8.2–8.5) is the same
+artefact from the other side: a deep tremolo moves both bands.
+
+**Fix: rebuild 112–117 with a NOISE sample.** Their §270 instrument then reads
+them directly. That needs a regenerated volume and another card crossing, so
+it batches with whatever else the next AKAI swap unlocks.
+
+### What we owe back
+
+* `MODVAMP3`'s range in the shared table was **−50..50** and this disc
+  disproves it: program 103 carries **99** and the machine produces 13.045 dB
+  there, on the same product contour as 40 and 50. s3ked widened it to
+  **−50..99** and deliberately left the negative half at −50, since only +99
+  is demonstrated. `MODVAMP1/2` untouched — no value above 50 has been seen on
+  either, and assuming they share slot 3's range is untested. Nothing here
+  depends on it yet; noted so our own generators do not re-introduce the old
+  bound.
+* A precondition for our procedure doc and for `hw_measure`: **assert SINGLE
+  mode before capturing.** See the TODO row; it cost s3ked an hour and every
+  signal-based gate we have passes in the failing state.
 
