@@ -36186,6 +36186,260 @@ separates those 29 from the 19, and it should be run before anything is
 implemented — three mechanisms that fit part of this residual have now been
 refuted, two of them tonight.
 
+### 2026-09-25: material and harness checked first; ONE more mechanism refuted
+
+Approached deliberately in the order that dissolved §AKAICORDSTAGE the same
+afternoon — **material, then harness, then mechanism.**
+
+**Material.** The oracle's disc was confirmed by name overlap: 24 of 24
+preset names, and only one Ensoniq disc exists locally. The disc carries
+**2 392 presets** and the device imported **24**, so the oracle is a small
+hand-picked subset — worth knowing before generalising anything from it.
+
+**Structure, which the earlier note had as a bare fact.** The 24 presets are
+**six instruments x four layer-mask variants** (`**`, `*0`, `0*`, `00`), and
+both sides produce the four; `eps_parser` has modelled them since it was
+written. The `00` variant consistently carries fewer voices.
+
+### The two real signals
+
+    by voice index        voice 0   6.1% absent      voice 1  22.4% absent
+    by preset voice count 1 voice   0.0% absent      2 voices 15.3% absent
+
+**Every absence is in a two-voice preset, and they concentrate in the second
+voice.** 16 of the 24 presets match zone-for-zone; the 8 that differ lose
+zones from *either* voice and by varying amounts (6->3, 6->2, 5->1, 5->4), so
+it is not a cap and not a whole-voice drop.
+
+### What the raw wavesamples show
+
+`PZCTO STRNG` is the clearest case: 42 wavesamples = 7 layers x 6. **Layer 0
+carries all six audio regions; layers 1-6 are aliases with `audio_len = 0`**,
+mirroring layer 0's key ranges with roots transposed an octave down. Our two
+voices come out identical, the device's two come out identical, and the
+device dropped **the same zone from both** — the lowest, `36-53 root 34`.
+
+### ⚠ REFUTED: the up-transposition ceiling
+
+That dropped zone needs **+19 semitones** from its root where layer 0's
+equivalent needs +7, which is exactly the shape of a sample-rate ceiling, and
+the E4XT has one. Tested across all 175 zones:
+
+    up-stretch  8..11   present 14   absent  6   30.0% absent
+    up-stretch 12..15   present  9   absent  3   25.0%
+    up-stretch 16..19   present  7   absent  3   30.0%
+    up-stretch 20..23   present  6   absent  0    0.0%
+    up-stretch 24..27   present 21   absent  0    0.0%
+    up-stretch 44..47   present  4   absent  0    0.0%
+
+**Zones needing 24-27 semitones up are 100% present while 8-11 are 30%
+absent.** No threshold separates them. **Fourth mechanism refuted on this
+residual**, and it died the way the other three did: one case fitted it
+perfectly and the population did not. The rule was fitted on `PZCTO STRNGS0*`
+alone — *a theory that explains the case you looked at is not a law*, which
+this file already says twice.
+
+### The matcher is now validated, and the number is 23
+
+Two earlier runs counted 19-20 and 23 and neither had been shown correct.
+Fixed by a control: **the 15 presets whose per-voice zone counts already agree
+must yield zero absent.** Both a per-voice matcher and a pooled-per-preset one
+give **23 absent with 0 false absences** on those 15, so they agree with each
+other and with the control. 23 is the number; 19-20 came from an unvalidated
+rule and should not be quoted.
+
+### Per-zone wavesample attribution, and the replication was checked first
+
+To cut by wavesample fields the zone loop has to be replicated outside
+`parse_eps_image` — **which is exactly the move that invented the AKAI
+zone-merge gap**. So the harness asserts its own output is zone-for-zone
+identical to the shipped parser on all 24 presets before reporting anything,
+and refuses otherwise. It verified.
+
+Every field we parse was then cut against presence: `alias`, `audio_len`,
+`audio_off`, `boost`, `key_lo/hi`, `layer_lo/hi_key`, `loop_start/end`,
+`name`, `pan_raw`, `pos`, `rate_code`, `root`, `slot`, `vol_index`,
+`w_start/end`. **None separates 23 from 152.** The only correlate remains
+`alias`: 22 of the 23 absent zones are aliases.
+
+### ⚠ REFUTED: the stereo-pair fold (fifth mechanism)
+
+**18 of the 23 absent zones have a same-range, opposite-pan twin** in their
+preset — hard left against hard right — which is exactly the shape of EOS
+folding an L/R pair into one stereo zone, and would explain why we emit two
+zones where the device emits one.
+
+The control refutes it:
+
+    has an opposite-pan twin        103 present   18 absent   14.9%
+    has NO opposite-pan twin         44 present    5 absent   10.2%
+
+**126 of 175 zones have such a twin.** 18 of 23 is 78 % against a base rate of
+72 % — noise. The absent rate is the same with and without.
+
+Fifth mechanism refuted, and **only the base rate separated it from a
+discovery.** Recorded because the failure mode is now the most reliable thing
+about this residual: every hypothesis so far has fitted the absent set and
+then matched the present set just as well. *Compute what fraction of the
+NON-absent zones the rule also covers, before believing any of it.*
+
+### Still open, and what the next cut needs
+
+The discriminator is **not** key geometry (ranges, widths, roots, up-stretch),
+**not** sample reuse within a voice or preset, **not** `_resolve`'s fallback
+branches, and **not** variant. It correlates with being an alias
+(pointer-only resolution: 40% absent vs 0.8%) and with sitting in the second
+voice, and neither is sufficient.
+
+**The wavesample fields we parse are now exhausted** (2026-09-25) and none
+discriminates. That is itself the result: **the discriminator is not in the
+data we extract.** Either it is in EPS instrument data we do not parse at all,
+or it is in EOS's own behaviour — a running budget, an allocation order, a
+per-instrument limit — which no amount of cutting our own output can reach.
+
+The next cut should therefore be on EOS's side, not ours: the importer's zone
+emission is in the firmware we already have disassembled (`eos470_plain.eos`),
+and the AKAI arm's equivalent loop was located there in an afternoon
+(§AKAIZONEMERGE). That is the cheaper direction now.
+
+### The Ensoniq importer, mapped 2026-09-25 — and the gate is NOT yet found
+
+Image `~/temp/eos470_plain.eos`, md5 `92a7ecced0f855f0b711f0bfe5cc89c7`,
+load base `0x20000`. Entered from the strings rather than by guessing:
+`Ensoniq Bank` `0x7a80c`, `UNNAMED WS` `0x7a81c`, `Ensoniq sample` `0x7a840`,
+`Ensoniq Instrument` `0x7a850`, each referenced from exactly one site.
+
+    0x79b88   WAVESAMPLE NAME. Bounds-checks the index (0 <= n < 128),
+              defaults to `UNNAMED WS` at 0x7a81c, and de-interleaves the
+              name byte-wise -- the same big-endian unpacking `eps_parser`
+              does. This is where EOS decides a wavesample is unnamed, which
+              is our only surviving correlate, but it NAMES rather than gates.
+    0x7a13c   E4B PRESET WRITER. `movel #0x50525354` ("PRST") and
+              `#0x45415031` ("EAP1"), so this emits the preset chunk.
+    0x7a108   its caller, inside a loop, calling ->
+    0x7afd0   per-preset wrapper -> 0x7ae84
+    0x7ae84   PER-WAVESAMPLE BUILD. Fetches the wavesample by index via
+              0x78c84, calls the predicate below, and passes its boolean on
+              to 0x7ad44.
+    0x7ab78   ⚠ **NOT THE ZONE GATE.** It computes `ws[12] - ws[8]` (a
+              length) and requires that, `ws[16]` and `ws[20]` to be
+              non-zero -- but the whole body is gated on a global at
+              `0x100038f3` which is referenced from **exactly one site in the
+              image**, and the string table carries *"Adjust Akai/Ensoniq
+              fractional loops"* at `0x025d24`. So this is the fractional-loop
+              adjustment predicate: it returns whether an adjustment applies
+              and writes adjusted values through two out-pointers.
+
+**Said plainly: the zone-emission decision has not been located.** `0x7ab78`
+fits the SHAPE of a per-wavesample gate — a boolean tested against zero,
+feeding a call — and it would have been easy to report as the answer. The
+single-reference global and the preference string are what rule it out, and
+both were cheap to check.
+
+**Where to resume:** `0x7ad44` (which receives the adjust flag) and the loop
+around `0x7a108` that iterates wavesamples — the emission decision is either
+in that loop's continue-conditions or in `0x7ad44`'s early exits. Neither has
+been read.
+
+### The gate WAS then located — by DS4-Pro, and my resume pointer was wrong
+
+Cross-project review `CR_ALLPROJS_DS4Pro_20260925_1632.txt` traced it end to
+end. **`0x7ad44` is not the gate**: it is the zone SLOT WRITER, has no early
+exit, and both its branches fall through to `0x7ae14`/`rts`. The flag it
+receives only selects between two arithmetic paths (fractional loop present or
+absent). My "the decision is in `0x7ad44`'s early exits" was wrong — it always
+writes, and the decision is one function up.
+
+Their chain, per-wavesample, index `d6` in 0..127:
+
+    G1  0x79210(d6) == 0        -> SKIP   (no object behind this index)
+    G2  0x78dcc(...) != 0       -> SKIP   <- the gate, when global
+                                            0x10000829 == 0
+    G3  0x790fc(d6) != 0        -> emit a PLACEHOLDER (-1) zone, not a build
+    G4  0x19d8e0(...) != 0      -> SKIP   (slot registration)
+    then 0x7a0b8 -> 0x7afd0 -> 0x7ae84 -> 0x7ac24, with three more exits.
+
+**`0x78dcc` = "is this wavesample referenced by a layer key map?"** It walks
+the 8 layers of the runtime table `0x102BEDE0` (stride 224), scans each
+passing layer's 88-entry key map at `layer+30`, follows the `[34]` alias byte,
+and returns 0 (emit) only if some key map names **this wavesample's own
+index**.
+
+And the alias asymmetry, which decodes our only correlate: a NAMED wavesample
+is found whether the key map names it directly or names an alias pointing at
+it, but an ALIAS is found **only if the key map names the alias itself**.
+Hence aliases are far likelier to be dropped — exactly the 40 % vs 0.8 %.
+
+### ⚠ SCORED OFFLINE AND REFUTED AS AN IMPLEMENTABLE RULE (2026-09-25)
+
+The review flagged the `layer+30` versus our `0x2E` (46) offset as
+"UNVERIFIED and load-bearing — confirm before trusting" it. Confirmed, and it
+does not hold:
+
+    our zones                                      175
+    key-mapped under OUR read (layer_lo_key set)     1   <- would keep 1, not 152
+    applying the gate ACROSS all active layers      35   <- still not 152
+    device                                         152
+
+**Neither reading reproduces the device count.** A per-layer test keeps 1 zone
+and an all-active-layers test keeps 35, against a target of 152. So the
+mechanism may well be right — the firmware reading is careful and the alias
+asymmetry explains the correlate better than anything else has — but the
+**slot numbering does not line up between their runtime table and our disc
+structure**, and until it does the rule cannot be implemented.
+
+Not a defect in their trace: they said so first and said it was load-bearing.
+This is the confirmation they asked for, and it came back negative.
+
+### ⚠ THE KEY-MAP SLOT BASE IS +8 — AND CORRECTING IT MAKES OUTPUT WORSE
+
+`layer_lo_key` is None on 174 of 175 zones, so the parser's *"THE LAYER'S KEY
+MAP WINS where it names this wavesample"* override is very nearly dead code.
+**The cause is now known and it is a constant slot-base offset**, not the byte
+offset the review suspected:
+
+    layer 0 keymap names slots  1..6     its grouped wavesamples are  9..14
+    layer 1 keymap names slots  7..12    its grouped wavesamples are 15..20
+    layer 6 keymap names slots 37..42    its grouped wavesamples are 45..50
+
+`w['slot'] = keymap_value + 8`, exactly, for every layer. Measured across the
+whole disc: **1 994 of 2 333 layers (85.5 %)** give a single constant delta of
+8, and the 14 % that do not are `len-differs` cases where our grouping and the
+key map disagree on COUNT — i.e. the residual itself. Our position-based
+grouping is therefore **correct**; only the lookup key was wrong.
+
+**So `0x2E` was right and the grouping was right. The obvious fix is to add
+the +8 and light up the override. DO NOT.** Scored against the device:
+
+    zones examined                175
+    zones whose key range changes  16
+    absent from the device BEFORE  23
+    absent from the device AFTER   35
+
+**Correcting the lookup makes agreement WORSE.** Every one of the 16 ranges
+that changes moves away from what the E4XT wrote. The conclusion is the
+opposite of what "the override is dead code" invites: **the layer key map does
+not determine the emitted key range at all — the wavesample's native
+`key_lo`/`key_hi` does**, and the override is not merely dead but wrong in
+intent. Leaving it inert is what has been producing the better answer.
+
+⚠ **This is a trap for the next reader.** The slot base is a real, clean,
+85.5 %-of-the-disc structural fact, and acting on it is a regression. The
+finding and the refusal to apply it belong together or the next person will
+"fix" it in good faith.
+
+What it does still buy: the +8 makes the key map READABLE, so questions that
+need to know which wavesamples a layer names can now be asked. Applying the
+gate with the corrected base keeps 173 and drops 2 — so key-map membership is
+also **not** the mechanism behind the 23, which retires DS4-Pro's §1.6.1 in its
+implementable form on evidence rather than on the offset objection.
+
+⚠ A harness note: this run counts **23** absent where the earlier one counted
+19-20. The matching differs — this one pairs by `(lo_key, hi_key)` with
+multiplicity across the preset. The two numbers are not interchangeable and
+neither has been shown correct; whoever runs the next cut should fix one
+matching rule first.
+
 ### What must not be inferred from this
 
 This measurement is about the **Ensoniq** arm. `EOS_AKAI_SIM_KNOWN_GAPS` still
@@ -36513,6 +36767,60 @@ when the mapped program byte is non-zero?
 one-directional in both — the byte is non-zero and the cord is absent — which
 says the emission is gated by something these mappings do not carry, not that
 the mapping is wrong.
+
+### ✅ RESOLVED 2026-09-25: SEVEN OF SEVEN. There is no gate.
+
+Re-run **per VOICE with the cord AMOUNT**, rather than per preset with the
+pair's presence. 2 438 voices, 334 presets paired.
+
+**First, the provenance the note never recorded:** the oracle's source disc
+was identified by name overlap — **361 of 361 preset names** match one disc
+and 4 match the next best, so it is not in doubt. It had simply never been
+written down, which is how the two residuals below survived: nobody could
+check what the material contained.
+
+**`d[46]` bend range → PitWl → Pitch is EXACT: 2 438 / 2 438.**
+
+    bend != 0  ->  cord amount != 0     2 280 voices
+    bend == 0  ->  cord amount == 0       158 voices
+    discordant                              0
+
+The 75 % came from a PRESET-level presence test. A per-voice test with the
+amount is clean.
+
+**`d[48]` LFO depth → Lfo1~ → Pitch is EXACT TOO, and the "4 %" was
+QUANTISATION, not a gate.** EOS writes the `(96, 48)` cord slot on **all
+2 800 voices** and sets its amount from `rescale(LFODEP, 0, 99, 32)`. On this
+disc `LFODEP` takes only two values:
+
+    LFODEP 0   2 249 voices      round(0 x 32/99) = 0
+    LFODEP 1     189 voices      round(1 x 32/99) = 0   <- the whole residual
+
+**The smallest `LFODEP` that can produce a non-zero cord is 2.** The disc has
+no program above 1, so a correct implementation MUST emit zero on every voice
+of it, and the device does. There was never anything to explain.
+
+⚠ **It is exercisable, just not by this disc.** Across the 4 433-program AKAI
+corpus, **959 programs (21.6 %) carry an `LFODEP` that would produce a
+non-zero vibrato cord** — 437 at LFODEP 2 alone. So the mapping matters and
+the oracle is simply the wrong material to test it on.
+
+### What actually went wrong, and it is a measurement error not a firmware one
+
+Both residuals were artefacts of the SCORING, twice over:
+
+1. **Presence of a `(src, dst)` pair is not emission.** EOS writes the cord
+   slot whether or not it is used; the AMOUNT is the signal. A presence test
+   reports a cord on every voice and cannot see a zero depth.
+2. **Per-preset aggregation hid the per-voice truth.** `d[46]` scored 75 %
+   per preset and 100 % per voice.
+3. **The material was never checked.** `LFODEP` ∈ {0, 1} on the entire
+   oracle disc, so `d[48]` could not have scored anything else — and that was
+   knowable before any firmware was read.
+
+**A residual is a claim about the DEVICE only after the harness and the
+material are ruled out.** Both had been recorded as firmware behaviour
+("gated by something these mappings do not carry") for a day.
 
 ⚠ **A harness note that nearly produced a clean, entirely wrong negative.**
 The first run read the device's cord table at **voice+188**, where the
@@ -37710,7 +38018,99 @@ the matrix amount back into it two lines later. **There is no separate legacy
 path to disable** -- `AKAI_MODVPAN_PROG_OFFSETS[0]` IS 0x59 (§AKAIPANLAW). The
 comment described an isolation that never existed.
 
-**Not implemented either way.** Applying PANDEP as a multiplier on a guess
+### Staging notes from s3ked, 2026-09-25 — two defects in MY generator
+
+The disc went to the card as **`HD3-PANDEP.img` at SCSI id 3**, not under the
+name this generator produced:
+
+* **`HD_pandep.img` would never have been served.** ZuluSCSI claims an id from
+  a root file matching `HD<n>`, and `HD_` has no digit — so the card would
+  have carried the image and the sampler would never have seen it, **silently,
+  with no log line**. `gen_akai_stereozone_disc.py` had the identical defect.
+  Both defaults now carry a digit and the rule sits at the argument.
+* **The digit is not free to pick: id 6 is the SAMPLER.** An image there
+  mounts cleanly, logs cleanly and breaks the bus one layer down — three hours
+  on the E4XT card. The warning is now at both call sites rather than in a
+  note elsewhere.
+
+### ⚠ THE NEAR-MISS THAT WOULD HAVE ANSWERED THE QUESTION WRONGLY
+
+Jan read the loaded programs off the panel and `PD DEP 0` shows as **121**,
+not 120 — the panel displays PRGNUM 1-based while the byte is 0-based
+(already settled in this project on 2026-08-14, by s3ked's own RNUM→SEQU
+measurement: fifteen programs displayed 1..15, read back 0..14).
+
+**"They start at 121" has a second reading**: that `PD DEP 0` did not load at
+all and the row at 121 is `PD DEP 50`. Under that reading, measuring the
+lowest-numbered program gives ~7.5 dB where 0.00 was predicted, and the
+conclusion is a clean, confident **"PANDEP is not a gate"** — the cheap
+outcome, satisfying the pre-registered falsifier, with no bug anywhere.
+
+What separated them was asking Jan for the **NAME against the lowest number**
+rather than for the count. It generalises past this disc: **when programs are
+identified by number and the numbering convention is itself in question,
+identify by name once before trusting any of them.**
+
+Same family as this generator's `patched 5 of 5` guard, and worse — that one
+needed a bug, this one needs only a load failure plus an assumed offset.
+
+### ✅ ANSWERED 2026-09-25: `PANDEP` GATES. The 1 342 programs do not auto-pan.
+
+s3ked on the S3000XL, program change only, no parameter writes:
+
+    program       PANDEP  MODVPAN1   level dBFS   swing @ 3.326 Hz
+    PD DEP 0         0       25       -15.2        0.000015 dB
+    PD DEP 50       50       25       -14.8       14.54
+    PD DEP 99       99       25       -14.1       30.18
+    PD NOMATRIX     99        0       -15.2        0.000020   (no route)
+    PD CTRL          0        0       -15.2        0.000020   (floor)
+
+`PANDEP` 0 with the route fully live sits at **1.5e-5 dB** against a balance
+standard deviation of 0.002 dB, **while the program sounds at -15.2 dBFS**. A
+gate, not a quiet setting.
+
+**Applied as a GATE only.** Corpus effect: voices carrying `lfo2_to_pan` fall
+from **54.5% to 15.2%** — the difference is auto-pan we were inventing on
+programs the machine leaves silent.
+
+⚠ **Gated for LFO2's route ONLY.** `PANDEP` is LFO2's own output depth and has
+no business gating a velocity-, key- or LFO1-sourced pan; nothing has measured
+that it does, and the obvious "gate the pan matrix" reading would silently
+drop three other routings on 30% of the corpus. `test_PANDEP_gates_ONLY_the_
+LFO2_route` holds that line.
+
+### ⚠ THE LAW IS STILL UNMEASURED, AND THE REASON MATTERS
+
+s3ked swept `MODVPAN1` at `PANDEP` 99:
+
+    MODVPAN1   coherent swing   raw balance peak-to-peak
+       25        30.312 dB           45.00 dB
+       40        30.322 dB           45.68 dB
+       50        30.316 dB           47.83 dB
+
+**The machine pans harder and the statistic stops reporting it.** A hard pan
+is spiky rather than sinusoidal in the dB domain, so energy leaves the
+fundamental and the coherent amplitude caps near 30 dB.
+
+**§181's headline 29.75 dB is that same wall** — s3ked read 30.32 for the
+identical condition on a different rig two days later. So §181's figure is
+*"at least 30 dB, the instrument could not see further"*, not the strength of
+the route, and the product-law coefficient derived from it was fitted on a
+saturated value. Their predicted ratio 1.980 missed the measured 2.076 for
+that reason, and they scored their own prediction **failed, in their
+instrument rather than in the machine**.
+
+So `PANDEP` is **not** applied as a multiplier: doing so would apply a refuted
+law. It needs re-measuring with a linear-amplitude statistic — same disc, same
+rig, no new hardware.
+
+⚠ **Worth checking on our side too:** §173's amplitude product law and §160's
+pitch law were both fitted with dB-domain statistics, and §173's worked
+example runs to 39.98 dB — above the wall s3ked hit. Different destination,
+possibly a different bound, but any coefficient we carry from either was
+fitted with the class of statistic that just failed.
+
+**Previously, before the measurement:** applying PANDEP as a multiplier on a guess
 would silently rewrite 30% of the corpus's pan behaviour. Settling it is one
 bench pair: a program with matrix amount set and PANDEP 0, against the same
 program with PANDEP 99, measuring stereo balance. Referred to s3ked, who owns

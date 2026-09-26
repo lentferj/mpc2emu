@@ -70,7 +70,30 @@ Parameter notes:
   - adsramp*:              0..1 normalised, approximate log mapping to seconds
   - loopenabled:           "0"/"1"  (NOT "false"/"true")
 
-  .talwav files are TAL-proprietary encrypted audio and cannot be decoded.
+  .talwav files are TAL-proprietary encrypted audio. **WE DELIBERATELY DO
+  NOT DECRYPT THEM, and this is a decision rather than a gap.**
+
+  The scheme is known and a third-party converter merged support for it on
+  2026-09-24 (Blowfish-ECB, fixed key shipped in the tool), so "we have not
+  worked it out" is NOT why this is absent. Shipping a fixed decryption key
+  would make this file a circumvention COMPONENT rather than a format
+  reader, and distributing one is what EU anti-circumvention law reaches --
+  InfoSoc 2001/29/EC Art. 6, German UrhG 95a(3), which prohibits the
+  DISTRIBUTION of such components and not merely the act. The audio is a
+  phonogram, so the narrower computer-program rule in 2009/24/EC Art. 7(1)(c)
+  does not apply, and a weak cipher is poor engineering rather than a
+  defence: "effective technological measure" is a low bar in EU law.
+
+  Everything else this project does is on the protected side of that line:
+  reverse engineering for interoperability is expressly permitted by
+  2009/24/EC Arts. 5(3) and 6 (UrhG 69d(3)/69e) and cannot be signed away
+  (Art. 8), and trade-secret law treats RE of a lawfully acquired product as
+  lawful acquisition (EU 2016/943 Art. 3(1)(b)). Reading an unencrypted
+  format is not circumvention. Shipping a key is.
+
+  So: do not "fix" this. If it is ever revisited the question is not whether
+  the key can be obtained -- it can -- but whether this project ships a
+  circumvention component, which is Jan's call and nobody else's.
 
 filtermode encoding (confirmed 2026-06-08):
   13 discrete modes, filtermode = mode_index / 12.0  (step ≈ 0.0833).

@@ -8029,7 +8029,12 @@ Two further things came out of mutating it:
   also exactly when that path's `best_mode_adds` and `modes_offered` need
   revisiting.
 
-## ~~EOS←AKAI: the eleven cords need the object `%d2` points at~~ ✅ **STAGING MAP SOLVED 2026-09-24**
+- **AKAI→E4B cord staging: RESOLVED 2026-09-25 (§AKAICORDSTAGE).** All
+  seven mappings are exact per VOICE with the cord amount; the 75% and 4%
+  were scoring artefacts (presence-of-pair, not emission; per-preset, not
+  per-voice) plus an oracle disc whose `LFODEP` never exceeds 1, below the
+  quantisation floor of `rescale(v,0,99,32)`. 21.6% of the AKAI corpus
+  WOULD exercise it.
 
 **Status:** open, narrowed 2026-09-24. Sources, destinations, gates and amount
 expressions are all read off the instruction stream and are solid. What is
@@ -8064,7 +8069,69 @@ that went wrong.
 ## EOS←Ensoniq zone residual: measured, and the recorded cause was wrong
 
 **Status:** open. The mechanism is now a stated hypothesis rather than a
-claim; see §EPSZONERESID in `docs/RESOLUTION_NOTES.md` for the measurements.
+## EOS←Ensoniq zone residual: 23 zones, discriminator not in our data
+
+**Status:** narrowed 2026-09-25 (§EPSZONERESID). **Five mechanisms refuted.**
+
+The matcher is now validated — the 15 presets whose per-voice counts agree
+must yield zero absent, and they do — so the number is **23**, not the 19–20
+quoted before.
+
+**Every wavesample field we parse has been cut against presence and none
+discriminates.** That is the result: the discriminator is not in the data we
+extract. The only correlate is `alias` (22 of 23 absent zones are aliases),
+and 127 aliases are present, so it does not decide.
+
+Refuted so far: `_resolve`'s same-root fallback; one-zone-per-sample within a
+voice; the same across the preset; an up-transposition ceiling; the
+stereo-pair fold. **The last two each fitted the absent set and then matched
+the present set just as well** — the up-stretch rule was fitted on one preset,
+and the stereo fold scored 18 of 23 against a base rate of 72%.
+
+**THE GATE IS LOCATED — by DS4-Pro's review, and my resume pointer was wrong.**
+`0x7ad44` is the zone SLOT WRITER with no early exit; the decision is one
+function up, at `0x78dcc` = *"is this wavesample referenced by a layer key
+map?"*. Its alias asymmetry (a named wavesample is found via a pointing alias,
+an alias only via itself) decodes our 40%-vs-0.8% correlate.
+
+**But the rule is NOT implementable yet, scored offline 2026-09-25:** keeping
+only key-mapped wavesamples leaves **1** zone under our per-layer read and
+**35** across all active layers, against the device's **152**. The slot
+numbering does not line up between their runtime table (`layer+30`) and our
+disc read (`0x2E`). DS4-Pro flagged exactly this as load-bearing and asked for
+confirmation; the confirmation is negative.
+
+**The dead-override cause is FOUND and must NOT be fixed.** `layer_lo_key` is
+None on 174 of 175 zones because the key map's values are the wavesample slot
+**minus 8** — `w['slot'] = keymap_value + 8`, exact on 1 994 of 2 333 layers
+(85.5%) across the whole disc. Our grouping and the `0x2E` offset were both
+right; only the lookup key was wrong.
+
+⚠ **Correcting it makes output WORSE**: 16 key ranges change and absences go
+**23 → 35**. So the layer key map does not determine the emitted key range —
+the wavesample's native `key_lo`/`key_hi` does — and the override is not just
+dead but wrong in intent. **Leaving it inert is what produces the better
+answer.** The finding and the refusal to act on it belong together, or the
+next reader will "fix" it in good faith and regress the Ensoniq path.
+
+Applying the gate with the corrected base keeps 173 and drops 2, so key-map
+membership is **not** the mechanism behind the 23 either — DS4-Pro's §1.6.1
+is retired on evidence rather than on the offset objection.
+
+**The importer is also mapped** (§EPSZONERESID, 2026-09-25) —
+`0x79b88` wavesample name + `UNNAMED WS` default, `0x7a13c` the E4B preset
+writer (PRST/EAP1), `0x7afd0`→`0x7ae84` the per-wavesample build. **The zone
+gate is NOT among them.** `0x7ab78` has exactly the shape of one — a boolean
+tested against zero, feeding a call — but its body is gated on a global
+referenced from one site in the whole image, beside the string *"Adjust
+Akai/Ensoniq fractional loops"*, so it is loop adjustment.
+
+**Resume at** `0x7ad44` (receives that flag) and the wavesample loop around
+`0x7a108`: the emission decision is in that loop's continue-conditions or in
+`0x7ad44`'s early exits. Neither has been read. No hardware needed.
+
+**Before believing any future hypothesis here: compute what fraction of the
+NON-absent zones it also covers.** That single check has now killed two.
 
 It was recorded as zone de-duplication -- *"EOS merges identical velocity
 zones pairwise"* -- in the contract, the test class name, the module notes and

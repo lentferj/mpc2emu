@@ -1659,6 +1659,8 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
         # Slots ACCUMULATE, as the amp slots above do, and they add to the
         # dedicated `lfo_pan_depth` rather than replacing it: a program may
         # carry both, and the machine sums them.
+        # `PANDEP` (0x1e), LFO2's own output depth -- the gate, see below.
+        _l2_depth = prog.get('lfo2_depth_byte') or 0
         _pan_srcs = prog.get('mod_src_pan') or ()
         _pan_amts = prog.get('mod_amt_pan') or ()
         _pan_add = {}
@@ -1670,6 +1672,39 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
                       AKAI_MOD_SOURCE_LFO2: 'lfo2_to_pan',
                       AKAI_MOD_SOURCE_VELOCITY: 'velocity_to_pan',
                       AKAI_MOD_SOURCE_KEY: 'key_to_pan'}.get(_sel)
+            if _field == 'lfo2_to_pan' and not _l2_depth:
+                # ⚠ **`PANDEP` GATES THE LFO2 PAN ROUTE. MEASURED 2026-09-25**
+                # (s3ked §265, on an S3000XL, program change only, no
+                # parameter writes):
+                #
+                #     PANDEP  MODVPAN1   level      swing @ 3.326 Hz
+                #        0       25      -15.2 dBFS  0.000015 dB
+                #       50       25      -14.8       14.54
+                #       99       25      -14.1       30.18
+                #       99        0      -15.2       0.000020   (no route)
+                #        0        0      -15.2       0.000020   (control)
+                #
+                # `PANDEP` 0 with the route fully live sits at the floor --
+                # 1.5e-5 dB against a balance sd of 0.002 dB -- **while the
+                # program sounds at -15.2 dBFS**, so it is a gate and not a
+                # quiet setting.
+                #
+                # Blast radius of NOT gating: **1 342 of 4 433 corpus programs
+                # (30.3%)** carry a pan-matrix amount naming LFO2 with PANDEP
+                # at zero, and every one of them was converting with an
+                # auto-pan the machine never plays.
+                #
+                # ⚠ GATE ONLY, NOT A MULTIPLIER. The LAW is still unmeasured:
+                # s3ked's own product-law coefficient was fitted on a
+                # SATURATED number (their statistic caps near 30 dB while the
+                # machine keeps panning harder), so the depth relationship has
+                # to be re-measured with a linear-amplitude statistic. Scaling
+                # by PANDEP today would be applying a refuted law.
+                #
+                # ⚠ LFO2's ROUTE ONLY. `PANDEP` is LFO2's own output depth, so
+                # it has no business gating a velocity-, key- or LFO1-sourced
+                # pan, and nothing has measured that it does.
+                continue
             if _field:          # a source with no field is dropped VISIBLY
                 # RAIL UNITS here; converted ONCE below. Summing converted
                 # depths and summing rail units differ the moment a clamp is

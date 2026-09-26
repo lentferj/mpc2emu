@@ -2207,7 +2207,7 @@ unaffected.
 | Native stereo samples in E4B | ✅ written as an L/R block pair |
 | Native stereo samples in KRZ | ✅ written as two planar blocks, panned hard apart |
 | GIG Giga-codec (compressed) | ❌ not supported |
-| TAL `.talwav` (encrypted) | ❌ not readable |
+| TAL `.talwav` (encrypted) | ❌ **not decrypted — deliberate, not a gap.** The scheme is known; we do not ship a decryption key. See `parsers/talsmpl_parser.py` |
 | EXS24 PPC big-endian | ❌ not supported — same on-disk magic as LE, can't be distinguished |
 | EXS24 v1.1 multi-velocity layers | ⚠️ first layer only — positional zone mapping |
 | EXS24 v1.1 L/R stereo | ✅ de-duplicated — `_R` group dropped when an `_L` partner exists |
