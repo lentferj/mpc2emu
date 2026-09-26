@@ -37,6 +37,7 @@ import re
 import struct
 from pathlib import Path
 from models.common import (
+    ModRouting,
     e4xt_cord_amount_to_cents, E4XT_VEL_SOURCE_UNITS,
     e4xt_attack_span_from_cord, E4XT_ATTACK_CORD_SRC_VEL_LT,
     E4XT_ATTACK_CORD_DST_VOLENV_ATK, E4XT_ATTACK_CORD_FACTORY_AMOUNT,
@@ -83,6 +84,14 @@ _MOD_LFO_TO_PITCH_SLOT  = 2   #   …its cord slot (gate dest = 0xA8 + 2)
 _SRC_MOD_WHEEL          = 0x11
 _CORD_AMT_DEST_BASE     = 0xA8
 _MOD_WHEEL_GATE_DEFAULT = 16
+
+#: Inverses of `e4b_writer._MOD_SRC_ID` / `_MOD_DST_ID`, for the generic
+#: `mod_routings` read. Spelled out rather than imported -- a parser must not
+#: depend on a writer here -- and `test_e4b_mod_routings_read.py` asserts they
+#: are exact inverses, so the two cannot drift.
+_E4B_MOD_SRC_NAME = {0x08: 'key', 0x0A: 'velocity', 0x0D: 'release_velocity'}
+_E4B_MOD_DST_NAME = {0x49: 'amp_env_attack', 0x4B: 'amp_env_release',
+                     0x51: 'filter_env_attack', 0x53: 'filter_env_release'}
 #: Velocity sources and the AmpVol destination, for the velocity→volume read.
 #: The three sources differ ONLY in their pivot (measured, eosed 2026-09-01):
 #: Vel+ pivots at velocity 0, Vel< at 127, and Vel~ at 89.4 -- NOT at 64,
@@ -567,6 +576,43 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
                 _atk_span = e4xt_attack_span_from_cord(
                     _a * 100.0 / 127.0, pzt[0])
             break
+    # GENERIC MOD ROUTINGS, the read side of what e4b_writer emits from
+    # `voice.mod_routings` (§NONTRANSPOSEREAD). The four envelope-TIME
+    # destinations, which no dedicated field on this reader claims.
+    #
+    # ⚠ CHECKED FOR DOUBLE-COUNTING RATHER THAN ASSUMED SAFE, because a cord
+    # read into BOTH a dedicated field and this list would be applied twice on
+    # the next write. The one nearby risk is the attack-span read above, and it
+    # does not collide: that consumes source `0x0C` (Vel<) while these sources
+    # are 0x08/0x0A/0x0D. Destinations 0x4B/0x51/0x53 are read by nothing else
+    # in this parser at all.
+    #
+    # Only the pairs the WRITER can emit are read back. A cord this project
+    # cannot write would round-trip to a warning, and inventing a `ModRouting`
+    # the writer would then drop is worse than leaving it unread: it turns a
+    # silent gap into a noisy one without carrying anything further.
+    _mod_routings = []
+    for _s in range(20):
+        _o = _s * 4
+        if _o + 2 >= len(mod_region):
+            break
+        _src_name = _E4B_MOD_SRC_NAME.get(mod_region[_o])
+        _dst_name = _E4B_MOD_DST_NAME.get(mod_region[_o + 1])
+        if _src_name is None or _dst_name is None:
+            continue
+        # ⚠ CALL THE SHIPPED INVERSE, do not restate the scale. The first
+        # version of this line wrote `byte * 100/127` by hand and read 40.0
+        # back as 100.0 -- `e4b_writer._set_cord` encodes through
+        # `cord_amount_to_byte`, whose inverse `cord_byte_to_amount` this
+        # parser already imports. A re-derived law that looks right is how a
+        # scratch `enabled zone` test invented a whole zone-merge gap.
+        _amt = cord_byte_to_amount(mod_region[_o + 2])
+        if not _amt:
+            continue
+        _mod_routings.append(ModRouting(
+            source=_src_name, dest=_dst_name, amount=_amt,
+            origin='e4b:cord%d' % _s))
+
     # CENTS, from this voice's own corner -- the exact inverse of what
     # e4b_writer wrote. vpar[60] is the base; see `e4xt_cents_to_cord_amount`
     # for why no cents-per-cord constant is right on this machine.
@@ -1123,6 +1169,7 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
         filter_keytrack    = filter_keytrack,
         velocity_to_filter_cents = velocity_to_filter_cents,
         velocity_to_amp_attack_span = _atk_span,
+        mod_routings       = _mod_routings,
         velocity_to_amp_attack_pivot = (127 if _atk_span else None),
         velocity_to_volume_db = velocity_to_volume_db,
         velocity_to_volume_pivot = velocity_to_volume_pivot,

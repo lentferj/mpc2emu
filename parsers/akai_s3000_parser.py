@@ -41,7 +41,7 @@ from typing import Optional
 from models.diagnostics import emit as _diag, WARNING as _W, INFO as _I
 from models.common import (
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType,
-    ModRouting, akai_mod_depth_to_cord_amount,
+    ModRouting, akai_mod_depth_to_cord_amount, AKAI_CP_OFFSETS,
     akai_filfrq_to_hz, hz_to_e4b_cutoff, AKAI_FILTER_LAW, AKAI_FILTER_OPEN,
     AKAI_ENV2_ATTACK, AKAI_ENV2_DECAY, AKAI_ENV2_RELEASE,
     AKAI_ENV2_DEPTH_OFFSET, AKAI_ENV2_DEPTH_MAX, akai_env2_stage_seconds,
@@ -1490,6 +1490,24 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
     _unverified_warned = set()
     for kg in prog['keygroups']:
         voice = VoiceLayer()
+        # NON_TRANSPOSE, the read side of the CP1..CP4 flags `akai_s3000_writer`
+        # emits (§NONTRANSPOSEREAD). `CP<n> = 1` is CONST on that zone: the
+        # sample plays at a constant pitch instead of tracking the keyboard.
+        #
+        # ALL FOUR must be set. The writer sets all four together, and a
+        # program with only some zones CONST is a real, different patch -- one
+        # where part of the keygroup tracks. Reading "any" would flatten that
+        # into "the whole keygroup is fixed", which is louder than the source.
+        #
+        # ⚠ AND THE TWO CONCEPTS ARE NOT IDENTICAL, which the writer already
+        # records: AKAI CONST plays at a constant KEY (the manual: "a constant
+        # pitch of C3"), while this model's `non_transpose` means the sample
+        # plays at ITS OWN ROOT. They coincide only where the root already is
+        # that key. So this read is right about "does not track the keyboard"
+        # and approximate about WHICH pitch -- the same caveat, in the same
+        # direction, as the write side.
+        voice.non_transpose = all(
+            kg[_cp] == 1 for _cp in AKAI_CP_OFFSETS if _cp < len(kg))
         # The AKAI filter is 12 dB/octave -- the service manual's own
         # specification and s3ked's §139 measurement. Left unset until
         # 2026-08-23, and the model default of 0 is "Off", which the E4B

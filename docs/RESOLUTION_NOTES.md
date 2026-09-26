@@ -403,6 +403,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§XPOSERECV — the ProgramMode/XMIT `Xpose` is transmit-side and does NOT reach notes arriving at MIDI In (2026-09-26)](#xposerecv-the-programmodexmit-xpose-is-transmit-side-and-does-not-reach-notes-arriving-at-midi-in-2026-09-26)
 - [§LF2TONEPOST — a RAM sample's program produced signal AFTER a power cycle; three readings, none excluded (2026-09-26)](#lf2tonepost-a-ram-samples-program-produced-signal-after-a-power-cycle-three-readings-none-excluded-2026-09-26)
 - [§KRZF2RESDEPTH — the F2 RES *Depth* law: prevalence says DECLINE, on both sides of the conversion (2026-09-26)](#krzf2resdepth-the-f2-res-depth-law-prevalence-says-decline-on-both-sides-of-the-conversion-2026-09-26)
+- [§NONTRANSPOSEREAD — `non_transpose` is now read back from KRZ and AKAI, and the two formats do not mean quite the same thing by it (2026-09-26)](#nontransposeread-non_transpose-is-now-read-back-from-krz-and-akai-and-the-two-formats-do-not-mean-quite-the-same-thing-by-it-2026-09-26)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -39177,3 +39178,115 @@ exists locally. Method, so it can be redone: read each `.KRZ` with
 `krz_parser._read_objects` + `walk_program` (never a re-derived offset), take
 `T_PROGRAM` objects, and for tag `0x51` test `[0] == 16` for a RES block then
 `[5]` and `[6]` for a routed modulation.
+
+## §NONTRANSPOSEREAD — `non_transpose` is now read back from KRZ and AKAI, and the two formats do not mean quite the same thing by it (2026-09-26)
+
+**The read side of two writes this project already had.** Both writers emitted
+`non_transpose`; neither reader set it, so a KRZ or AKAI source lost its
+fixed-pitch flag on every conversion. Closed after Jan asked whether the reader
+gaps were worth working.
+
+### KRZ — `CAL[19] = 213`
+
+Hardware-measured 2026-09-26: k2kremote set the byte over SysEx, this project
+captured the audio, both legs differing in that byte alone, `Xpose 0ST`, LCD
+brackets stable either side. PITCH `KeyTrk` is a **deviation ADDED** to the
+KEYMAP page's 100 ct/key, so 213 as a signed byte is −100 ct/key — the value
+that exactly cancels tracking.
+
+⚠ **Only the exact value counts.** A near-miss is a real partial key-track, a
+different setting; a reader testing `!= 0` or a range would turn "tracks at
+40 ct/key" into "does not track". `test_krz_non_transpose.py` pins that case.
+
+**Rare by construction, and that is expected.** Real K2000 material does fixed
+pitch with KEYMAP `KeyTrk` instead — 950 programs at 0, drum-named enriched
+9.7× per DISTINCT program — against a population of **one** for PITCH 213. So
+this read firing almost never is the predicted behaviour, not a broken reader.
+
+### AKAI — `CP1..CP4` (keygroup 132-135)
+
+`CP<n> = 1` is CONST on that zone. The reader requires **all four**: the writer
+sets them together, and a program with only some zones CONST is a real,
+different patch where part of the keygroup still tracks. Reading "any" would
+flatten that into "the whole keygroup is fixed", which claims more than the
+source does.
+
+### ⚠ The two formats do not mean the same thing, and the model has one field
+
+**AKAI CONST plays at a constant KEY** — the manual says "a constant pitch of
+C3". **This model's `non_transpose` means the sample plays at ITS OWN ROOT.**
+They coincide only where the root already is that key.
+
+So the AKAI read is exact about *"does not track the keyboard"* and
+**approximate about WHICH pitch** — the same caveat, in the same direction, as
+the write side, which already records that `KGTUNO`/`VTUNO` stay live on top of
+CONST so the difference is correctable in tuning, and that the compensation is
+not written yet. Reading the flag does not make that gap worse; it does mean
+an AKAI→AKAI round trip now preserves the flag while still not preserving the
+pitch offset, which is a narrower claim than "round trips".
+
+### `velocity_to_pan` → KRZ, closed the same day — and it took three tries
+
+`VelTrk` at tag `0x52` index 4, the panner's own encoding (2 %/unit over a
+±200 % rail, so it shares `KRZ_LFO_PAN_DEPTH_SCALE` with `Depth`). Round-trips
+to within one byte: 0.25/0.50/−0.50/−0.80 all inside the 0.046 quantum, rails
+clamp exactly.
+
+⚠ **Three mistakes on the way in, each a different wrong assumption, and all
+three were silent:**
+
+1. The read was placed **inside the F1/F3 filter branch**, which is entered for
+   `0x52` only when the layer has NO F1 filter. The panner algorithm the writer
+   uses (2) is precisely one that KEEPS its 2-pole lowpass, so the read could
+   never fire on the only programs that have a panner. It also must not join
+   that chain at all: the branch decides `filter_type`, and a PANNER routed
+   through it would overwrite a real lowpass with 0 (Off). It is now an
+   independent `if`, with a regression test for the clobber.
+2. The guard used `_alg_has_third_function()`, which answers **False for
+   algorithm 2** — the panner algorithm. See the flagged inconsistency below.
+3. The first round-trip test had **no filter**, so the writer never selected the
+   panner algorithm and the test would have passed vacuously by never
+   exercising the read. `filter_type=2` is load-bearing in that test and says so.
+
+### ⚠ A live inconsistency, flagged and NOT resolved
+
+`_ALG_DSP_FUNCTIONS` gives algorithm **2** a count of 2, so
+`_alg_has_third_function(2)` is False — for the algorithm whose printed signal
+path is `PITCH → [filter] → PANNER → AMP` and into which this project's own
+writer puts a panner at tag `0x52`. One of the two is wrong about algorithm 2:
+the table's count, or the helper docstring's claim that the count answers "is
+`0x52` real?".
+
+**Neither was edited.** `_ALG_DSP_FUNCTIONS` feeds other decisions and moving it
+to fit one field is how a local fix becomes a global regression. The panner read
+uses the manual's own list (2, 13, 24, 26), which is the narrower and
+better-sourced claim. Recorded in `TODO.md`.
+
+### `program_number` → E4B: NOT cheap, and the reason is a deliberate decision
+
+It lives in the **TOC1** chunk, byte 31 of a 32-byte entry. `e4b_parser` walks
+the IFF container sequentially and **deliberately does not trust TOC1 offsets**
+— *"more robust against third-party files"*, in its own words. So reading this
+means either trusting TOC indices the parser exists to avoid, or correlating
+entries by name. That is a design decision to take with Jan, not a cheap read,
+and it was on the cheap list only because the writer emits the field.
+
+### Why these two and not the rest of the reader gaps
+
+Both are **discrete bytes with a measured law** — invertible by inspection.
+The candidates that were NOT taken failed for reasons worth recording, since
+"our writer emits it" was the thing that nominated all of them:
+
+* `plays_whole_sample` (all three) — synthesised into the AMP ENVELOPE
+  (`hold_open` / `hold_release` / `pzt[8..11]`), so reading it back is an
+  inference and an ambiguous one.
+* `velocity_to_volume_curve` — not a parameter of any target at all; every
+  target is dB-linear and the curve is fitted away. Now a circle.
+* `transpose` — KRZ bakes it into the ROOT KEY (written 7, read back as root
+  60⇒53 with transpose 0: the same pitch, a different representation), and
+  AKAI rides it with `coarse_tune`. Nothing is lost; nothing is separable.
+* `lfo1_delay` (KRZ) — read only by the fusion-compatibility check, never
+  written to a byte. This project had already recorded that exact false
+  positive for `lfo1_to_volume` on 2026-09-01.
+* `lfo_volume_centre_db` (KRZ) — summed into the static level byte with two
+  other dB terms.

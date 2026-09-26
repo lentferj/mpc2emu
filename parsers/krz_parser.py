@@ -459,6 +459,13 @@ def _entry_runs(entries: List[_KrzEntry]) -> Iterator[Tuple[int, int, _KrzEntry]
 # ---------------------------------------------------------------------------
 
 LYR_TAG, CAL_TAG = 0x09, 0x40
+
+#: PITCH `KeyTrk` in the CAL segment, and the signed-byte value that cancels
+#: key tracking. Mirrors `krz_writer._K2_CAL_PITCH_KEYTRK` /
+#: `_K2_PITCH_KEYTRK_CANCEL` -- kept as the reader's own named constants rather
+#: than imported, because parsers must not depend on writers here.
+_KRZ_CAL_PITCH_KEYTRK = 19
+_KRZ_PITCH_KEYTRK_CANCEL = 213
 ENC_AMPMODE_TAG, ENV_AMP_TAG, ENC_FILTERENV_TAG = 0x20, 0x21, 0x22
 HOB_F1_TAG, HOB_F2_TAG, HOB_F3_TAG = 0x50, 0x51, 0x52
 #: The F3 block type that selects the PANNER (§PANMOD).
@@ -526,6 +533,36 @@ def _alg_has_third_function(alg: Optional[int]) -> bool:
     """Does this algorithm have a third DSP function, i.e. is tag 0x52 real?"""
     return _ALG_DSP_FUNCTIONS.get(alg, 0) >= 3
 LFO1_TAG, LFO2_TAG = 0x14, 0x15
+
+#: PANNER block type and its `VelTrk` index inside tag 0x52. Mirrors
+#: `krz_writer._K2_F3_PANNER` / `_K2_PAN_VELTRK`; kept as the reader's own
+#: names because a parser must not import a writer here, and the suite asserts
+#: they stay equal.
+_KRZ_F3_PANNER = 40
+_KRZ_PAN_VELTRK = 4
+#: The algorithms that HAVE a panner (K2000 manual Ch.14, and the algorithm
+#: `krz_writer` switches to when it needs one).
+#:
+#: ⚠ **NOT `_alg_has_third_function()`, and the difference is a live
+#: inconsistency worth naming rather than papering over.** That helper reads
+#: `_ALG_DSP_FUNCTIONS`, which gives algorithm **2** a count of 2 -- so it
+#: answers False for "is tag 0x52 real?" on the very algorithm whose printed
+#: signal path is `PITCH -> [filter] -> PANNER -> AMP` and into which this
+#: project's own writer puts a panner at 0x52. One of the two is wrong about
+#: algorithm 2: either the table's count, or the docstring's claim that the
+#: count answers the 0x52 question.
+#:
+#: Not resolved here, and neither is silently edited -- `_ALG_DSP_FUNCTIONS` is
+#: read by other decisions and moving it to fit this one field is how a local
+#: fix becomes a global regression. Recorded in TODO.md instead; this read uses
+#: the manual's own list, which is the narrower and better-sourced claim.
+_KRZ_PANNER_ALGOS = (2, 13, 24, 26)
+
+#: The FX segment, and the one ROM effect that is a pure stereo chorus.
+#: Mirrors `krz_writer.FXSEGTAG` / `_K2_FX_STEREO_CHORUS` / `_K2_FX_WETDRY_INDEX`.
+FXSEG_TAG = 0x0F
+_KRZ_FX_STEREO_CHORUS = 31
+_KRZ_FX_WETDRY = 2
 def _k2_depth_cents(b: int) -> float:
     """K2000 DSP depth byte -> cents, for a frequency-unit function.
 
@@ -954,6 +991,14 @@ class _KrzLayer:
         self.lo_key, self.hi_key = 0, 127
         self.lo_vel, self.hi_vel = 0, 127
         self.transpose = 0
+        #: Declared, not left to `setattr`, for the reason the model docs
+        #: give: an undeclared attribute typo'd once defaults forever and
+        #: nothing fails. Read from CAL[19] below.
+        self.non_transpose = False
+        #: Panner `VelTrk`, read from tag 0x52 when the block is a PANNER.
+        self.velocity_to_pan = 0.0
+        #: Program-GLOBAL FX, stamped onto every layer after the walk.
+        self.chorus_amount = 0.0
         #: Fraction of the pitch-LFO depth that the modwheel gates, from the
         #: PITCH page's `DptCtl = MWheel` with `MinDpt < MaxDpt`. 0.0 means the
         #: LFO sits at full depth with the wheel down, which is the model's
@@ -1070,10 +1115,24 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
     layers: List[_KrzLayer] = []
     cur: Optional[_KrzLayer] = None
     hob = {}   # tag -> bytes, reset per layer
+    _chorus = 0.0   # program-global FX; see the FXSEG read below
 
     for tag, seg in walk_program(data, obj):
         if seg is None:
             break   # unrecognized tag; stop (matches krz_reader.py behavior)
+        # CHORUS, read side of the FX segment krz_writer emits. Program-GLOBAL,
+        # so it is captured here and stamped onto every layer after the walk --
+        # NOT inside the `cur is None` skip below, which is where the PGM/FX
+        # segments are discarded and is exactly why this was never read.
+        #
+        # ⚠ THE EFFECT MUST BE THE CHORUS. The K2000 has 47 factory effects in
+        # this slot and only ROM 31 is a pure stereo chorus; reading the wet/dry
+        # byte without checking the effect id would report a reverb's mix as a
+        # chorus depth. `[0:2]` is the id big-endian, `[2]` is Wet/Dry 0-100
+        # (program offset 43, hardware-confirmed).
+        if tag == FXSEG_TAG and len(seg) > _KRZ_FX_WETDRY:
+            if ((seg[0] << 8) | seg[1]) == _KRZ_FX_STEREO_CHORUS:
+                _chorus = max(0.0, min(1.0, seg[_KRZ_FX_WETDRY] / 100.0))
         if tag == LYR_TAG:
             cur = _KrzLayer()
             layers.append(cur)
@@ -1083,6 +1142,34 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
             continue
         if cur is None:
             continue   # PGM/FX global segments
+
+        # VELOCITY -> PAN, read side of the panner's `VelTrk` (program offset
+        # 245 -> tag 0x52 index 4). §NONTRANSPOSEREAD / §PANMOD.
+        #
+        # ⚠ AN INDEPENDENT `if`, DELIBERATELY OUTSIDE THE if/elif CHAIN BELOW.
+        # The first attempt put this inside the F1/F3 filter branch, which is
+        # entered for 0x52 only when the layer has NO F1 filter -- and the
+        # panner algorithm the writer uses (2) is precisely one that KEEPS its
+        # 2-pole lowpass. So the read could never fire on the only programs that
+        # have a panner. It also must not join the chain: that branch decides
+        # `filter_type`, and letting a PANNER block through it would overwrite a
+        # real F1 filter with 0.
+        #
+        # Positive identification, not inference: the block must declare itself
+        # a PANNER (`seg[0] == 40`) AND the algorithm must be one the manual
+        # says has one. A stale 0x52 on an algorithm without the slot is exactly
+        # what the invented-bandpass incident was.
+        if (tag == HOB_F3_TAG and len(seg) > _KRZ_PAN_VELTRK
+                and seg[0] == _KRZ_F3_PANNER
+                and cur.algorithm in _KRZ_PANNER_ALGOS):
+            _pb = seg[_KRZ_PAN_VELTRK]
+            _pv = _pb - 256 if _pb >= 128 else _pb
+            if _pv:
+                # Inverse of the writer's `vel_pan * 50 * SCALE`. Same encoding
+                # as the panner's own `Depth` -- 2 %/unit over a +/-200 % rail --
+                # which is why it shares KRZ_LFO_PAN_DEPTH_SCALE.
+                cur.velocity_to_pan = max(-1.0, min(1.0, _pv / (
+                    50.0 * KRZ_LFO_PAN_DEPTH_SCALE)))
         if tag == CAL_TAG:
             cur.algorithm = seg[29]
             # TOTAL TRANSPOSITION IS TWO FIELDS ADDED, NOT ONE.
@@ -1122,6 +1209,21 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
             # live they agree on 3.4%. An agreement rate is meaningless until it
             # is conditioned on the rows where the field is in play.
             cur.transpose = krz_total_transpose(seg)
+            # NON_TRANSPOSE, the read side of what krz_writer emits as
+            # `CAL[19] = 213` (§NONTRANSPOSEREAD, measured on hardware
+            # 2026-09-26). PITCH `KeyTrk` is a DEVIATION added to the KEYMAP
+            # page's 100 ct/key, so 213 as a signed byte is -100 ct/key: the
+            # value that exactly cancels tracking and makes the sample play at
+            # one pitch across the keyboard.
+            #
+            # ⚠ ONLY the exact cancel value counts. A near-miss is a partial
+            # key-track, which is a real and different setting -- reading it as
+            # a boolean would turn "tracks at 40 ct/key" into "does not track".
+            # Real material does fixed pitch with KEYMAP KeyTrk instead (950
+            # programs at 0 against a population of ONE for PITCH 213), so this
+            # read is rare by construction and that is expected, not a bug.
+            cur.non_transpose = (seg[_KRZ_CAL_PITCH_KEYTRK]
+                                 == _KRZ_PITCH_KEYTRK_CANCEL)
             cur.keymap_id = (seg[11] << 8) | seg[12]   # CAL[11:13] only, see TODO.md
             # THE PITCH PAGE HAS TWO WIRES AND WE READ ONLY ONE UNTIL
             # 2026-09-14. `Src1` (seg[21]) with its depth `Dpt` (seg[22]) is the
@@ -1691,6 +1793,14 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
         if layer.amp_env is False:
             layer.amp_env = None
 
+    # Program-global FX onto every layer. The writer collapses the other way
+    # -- it takes the FIRST non-zero voice's `chorus_amount` for the whole
+    # program -- so a preset that had different values per voice already lost
+    # them at write time. Stamping all layers is the faithful inverse of that
+    # collapse, not an invention.
+    if _chorus:
+        for _l in layers:
+            _l.chorus_amount = _chorus
     return obj['name'], layers
 
 
@@ -2003,6 +2113,9 @@ def parse_krz(path: str) -> Bank:
                     lfo2_to_volume=layer.lfo2_to_volume,
                     lfo1_rate=layer.lfo1_rate,
                     lfo1_shape=layer.lfo1_shape,
+                    non_transpose=layer.non_transpose,
+                    velocity_to_pan=layer.velocity_to_pan,
+                    chorus_amount=layer.chorus_amount,
                     amp_env=layer.amp_env if layer.amp_env else Envelope(),
                     filter_env=layer.filter_env if layer.filter_env else Envelope(0.0, 0.3, 1.0, 0.0),
                 ))
