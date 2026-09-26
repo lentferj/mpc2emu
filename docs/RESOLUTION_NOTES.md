@@ -400,6 +400,8 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§KEYMAPARGMAX — `KEYMAP KeyTrk = 100 ct/key` was never in doubt; the "flattening" was the FFT argmax (2026-09-26)](#keymapargmax-keymap-keytrk-100-ctkey-was-never-in-doubt-the-flattening-was-the-fft-argmax-2026-09-26)
 - [§K163CONFIRM — the pan ladder's stimulus, measured at last: one tracking series, and my own prediction's third clause was untestable (2026-09-26)](#k163confirm-the-pan-ladders-stimulus-measured-at-last-one-tracking-series-and-my-own-predictions-third-clause-was-untestable-2026-09-26)
 - [§ROM1PITCH — the −12 does not exist: ROM program 1 is at pitch on five keys, and the old number was period doubling rather than a sub-octave (2026-09-26)](#rom1pitch-the-12-does-not-exist-rom-program-1-is-at-pitch-on-five-keys-and-the-old-number-was-period-doubling-rather-than-a-sub-octave-2026-09-26)
+- [§XPOSERECV — the ProgramMode/XMIT `Xpose` is transmit-side and does NOT reach notes arriving at MIDI In (2026-09-26)](#xposerecv-the-programmodexmit-xpose-is-transmit-side-and-does-not-reach-notes-arriving-at-midi-in-2026-09-26)
+- [§LF2TONEPOST — a RAM sample's program produced signal AFTER a power cycle; three readings, none excluded (2026-09-26)](#lf2tonepost-a-ram-samples-program-produced-signal-after-a-power-cycle-three-readings-none-excluded-2026-09-26)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -38832,7 +38834,18 @@ capture is that path, end to end, reading 1:1. Independently, `mididings_k2000r`
 is `ChannelFilter` + `Filter(SYSTEM)` and transposes nothing, and
 `play_sequence` applies no offset to note numbers.
 
-⚠ **The −12 observation itself is recorded NOWHERE in either tree** — not in
+⚠ **The −12 observation itself is recorded nowhere — re-established at full
+tree scope 2026-09-26 after the first version of this claim was made from a
+`docs/`-only search and stated as repo-wide.** The negative does hold: nothing
+outside this section records it. But it was asserted before it had been
+established, which is the same defect as quoting a bound outside its regime.
+The only near-misses are **note 48** readings (130.80 Hz carrier, 131.15 Hz
+measured against a 130.81 Hz nominal) where 130 Hz is the CORRECT pitch —
+[S] and not chased: a correct 130.8 Hz on note 48 misremembered onto note 60
+would produce this claim exactly, which is a second candidate origin beside the
+measured period doubling, not a replacement for it.
+
+The original wording was:** — not in
 `docs/`, not in k2kremote's notes; its provenance is a conversation. So it is
 not "relocated", it is **unrecorded and needs re-deriving before it is assigned
 to anything.** The cheapest untested candidate remains the program and sample
@@ -38901,3 +38914,196 @@ the estimator was abandoned, and the one figure it *had* emitted travelled on
 for a day, through a peer, and nearly landed as a defect in my own MIDI path.
 When a broken instrument is discarded, the numbers it already produced do not
 get discarded with it — they have to be hunted down individually.
+
+## §XPOSERECV — the ProgramMode/XMIT `Xpose` is transmit-side and does NOT reach notes arriving at MIDI In (2026-09-26)
+
+**Pre-registered before the capture, then measured.** 261.6 Hz would mean the
+field does not touch received notes; 392.0 Hz would mean it does.
+
+    LCD before   Channel:9  Xpose:7ST     (asserted, not assumed -- see below)
+    LCD after    Channel:9  Xpose:7ST     unchanged across the run
+    f0           260.7 Hz
+                   vs 261.63 (no effect)      -6.2 cents
+                   vs 392.00 (applied)      -706.2 cents
+
+`~/temp/xpose7st_20260926.wav`, ROM program 1, note 60, velocity 100.
+
+**The control is a same-day measurement, not a nominal.** The identical program
+and note at `Xpose:0ST` at 11:45 the same morning (§ROM1PITCH) gave **260.7 Hz**
+— same rig, same session, same gain staging, same analysis path. Shift with
+`Xpose` at 7ST: **+0.0 cents.** ROM program 1 was chosen for exactly that
+reason.
+
+**Mechanism, read at the parameter by k2kremote before the capture:
+`LocalKbdCh:None`** on the MIDI RECV page. The manual states that with
+`LocalKbdCh` unmatched only Program Change Type, Program Change and Buttons
+operate as programmed; Transpose is among "the remaining parameters" that do
+not. So the field is transmit-side, and a receive-path note cannot inherit it.
+
+**k2kremote also promoted the identification from [S] to measured**, in three
+directions — soft-key `Octav+` moves header and XMIT `Transpos` together, both
+Octav keys together return both, and the XMIT page wheel at +7 moves both to
+7ST. **That third leg matters beyond bookkeeping: 7 is representable, so the
+field holds SEMITONES rather than an octave count.** Everything either project
+had previously seen move it moved it by 12, which would have made a 7ST test
+uninterpretable.
+
+### What this retires, and what it does not
+
+**Retired: the cold-boot hazard as a MEASUREMENT hazard.** A capture taken
+before a power event and one taken after share a pitch reference whatever
+`Xpose` does across the cycle, because the field never reaches the notes we
+send.
+
+**NOT retired: the bracket.** Reading the LCD either side of a run costs one
+connection and is the only thing that would catch `LocalKbdCh` itself being
+changed — by a person or by a bank load, which is precisely how this morning's
+12ST arrived. The hazard's cause moved; the cheap check that covers it did not.
+
+**Also not retired: the persistence question**, which is k2kremote's to close
+with the 7ST power cycle. It matters for their remote tool, which must display
+the field correctly, and 7ST discriminates against every candidate cold default
+at once.
+
+### ⚠ The control that mattered was one I nearly did not have
+
+k2kremote found the XMIT page cursor resting on **`Channel`**, not `Transpos`,
+and said so before handing the rig over. A blind "7 ENTER" there sets the MIDI
+transmit channel to 7 and leaves the transposition at 0 — and the capture then
+returns **261.6 Hz and "confirms" the hypothesis**, through an instrument that
+was never set. The right answer with nothing behind it, and unfalsifiable
+afterwards, because the audio is identical to the true positive.
+
+So the script **asserted** `Xpose:7ST / Channel:9` and exited without capturing
+on anything else, rather than capturing and checking later. Same shape as this
+morning's argmax and this morning's window: **a plausible result is not a
+result**, and the check has to be able to stop the run.
+
+## §LF2TONEPOST — a RAM sample's program produced signal AFTER a power cycle; three readings, none excluded (2026-09-26)
+
+**Observation, and deliberately not a conclusion.** After Jan power-cycled the
+K2000R, before any reload, program 217 (`NO MOD CTRL`, k2kremote's LFO2 bank at
+200-217, asserted to key off Soundblock 200 `LF2TONE` in volatile sample RAM):
+
+    note 60, post-cycle, no reload
+      PRE-ROLL   peak  -82.4 dBFS    rms  -95.5 dBFS
+      NOTE       peak  -33.4 dBFS    rms  -41.7 dBFS
+      LIFT                                +53.8 dB
+
+`~/temp/lf2tone_217_20260926.wav`. Amplitude only — the question was whether
+there is anything there, and an estimator that reports a pitch for silence is a
+hazard already paid for once today.
+
+**No positive control was needed.** A positive result with a -95.5 dBFS
+pre-roll validates its own path: sound arrived, so MIDI route, program select
+and capture chain all worked. The control was scripted and exists for the
+*negative* branch, which did not happen.
+
+### Three readings. NONE of them is excluded yet.
+
+1. **The sample data survived the power event** — **now supported by two
+   independent channels** (below).
+2. **The power was not genuinely removed.** Jan confirms this machine has no
+   soft restart; power off/on is the only kind. **What remains is DURATION**,
+   and it is the only thing still open.
+3. ~~Program 217 does not depend on Soundblock 200~~ — **REFUTED 2026-09-26**,
+   read end to end on the panel by k2kremote rather than asserted:
+   `ProgramMode 217` -> `EditProg:KEYMAP KeyMap:217*NO MOD CTRL` ->
+   `EditKeyMap Sample:200*LF2TONE-C 4`. The `200*` is the RAM id with the RAM
+   marker, not a ROM waveform.
+
+### Resolved to: the data survived. What is open is only HOW LONG the power was off.
+
+**The audio is INTACT, not marginal** — which is evidence about the mechanism,
+not just about survival:
+
+    dominant partial   219.7 Hz    (-2.4 cents from the SPECIFIED 220.0 Hz)
+    next partial       -54.9 dB    i.e. essentially a pure sine
+    sustain            -40 dBFS flat for 2.2 s, no dropouts, no ragged frames
+
+Degraded DRAM gives dropouts, harmonic garbage or a wrong waveform. **Marginal
+charge retention that held an entire sample perfectly, second partial 55 dB
+down, is a coincidence the other mechanism does not need.** Retention is not
+usually all-or-nothing across a buffer.
+
+### ✅ AND IT MATCHES THE SPECIFICATION, which is in OUR OWN TREE
+
+k2kremote grepped both projects and reported that `LF2TONE` *"appears nowhere
+except today's notes"*, making the 220 Hz **our finding rather than a
+specification we are checking against**. **That is wrong for this tree, and the
+reason it is wrong is a trap already recorded here:** `tests/` is gitignored in
+mpc2emu, so a plain `grep` cannot see it — the shell's `grep` is
+`ugrep --ignore-files`. `command grep` finds it at once.
+
+`tests/re_banks/gen_krz_lfo2_re.py`, which **this project wrote**, builds it:
+
+    RATE = 44100 ; NOTE = 60
+    data, n = _tone(220.0)
+    sd = SampleData(name='LF2TONE', ..., root_note=NOTE,
+                    loop_type=LoopType.FORWARD, loop_start=0, loop_end=n-1)
+
+    def _tone(hz, secs):
+        """A steady sine. PITCH modulation is what is being measured, so the
+        source must not move on its own."""
+
+**A 220.0 Hz sine at 44.1 kHz, rooted at note 60, looped forward over its whole
+length.** Measured post-cycle: **219.7 Hz, −2.4 cents, second partial 54.9 dB
+down, flat for 2.2 s.** The loop is why the sustain is flat — that is designed
+behaviour, not luck — and the agreement is within one FFT bin.
+
+**So this is not "a clean tone consistent with survival", it is a match against
+a written specification**, which is a materially stronger basis for the
+volatility conclusion than either of us had a message ago.
+
+**Second, independent channel:** Master page 1 `Samples:65019K`, **identical
+pre- and post-cycle** (k2kremote). Had sample RAM been wiped the allocation
+would have been freed. Weaker alone — a dangling entry might still be counted
+— but it was captured **before either project knew it mattered**, so it cannot
+be motivated after the fact.
+
+⚠ **STILL OPEN: the off-duration.** Sample RAM is DRAM, and DRAM without
+refresh holds contents for a non-trivial interval at room temperature. "A few
+seconds" is genuinely marginal territory. Two live mechanisms:
+
+* **nonvolatile or backed** — survives arbitrarily long power-off, and the
+  recorded claim is simply wrong;
+* **charge retention over a short off-period** — the recorded claim is right
+  about the overnight case it was actually written for.
+
+**If the answer is "seconds", narrow the note rather than reverse it.** Reading (1) off it now would be the
+oldest trap in these notes — *verify what is actually sounding before
+interpreting any audio* — which once cost a session an hour of theories about
+decorrelated stereo while the sample under test never played at all.
+
+### The inventory step that prompted it could not have answered it
+
+k2kremote's pre-cycle prediction table had `Soundblock 200 -> GONE`, to be
+checked by the post-cycle inventory. It came back `Soundblock 1 -> 1, [200,
+'LF2TONE']` — and **that is not evidence either way.** An inventory entry is
+object-database metadata in battery-backed RAM; the sample data is in volatile
+sample RAM; a **dangling entry** (object listed, data gone) is indistinguishable
+from a live one at that level, and is the exact failure mode these notes already
+describe. They caught and reported this themselves rather than letting it stand.
+
+**Same shape as §K163CONFIRM's third clause on this side the same morning** — a
+check that cannot discriminate, weighted equally with checks that can. Twice in
+one day, each caught by the other reader.
+
+### What IS settled by the same cycle
+
+**A SECOND, INDEPENDENT CONTROL ON §XPOSERECV came free from this capture**
+(k2kremote's observation, not mine — I did not notice it). It was taken at
+`Xpose:7ST`. A 220 Hz sample transposed 7 semitones would sound **329.6 Hz**;
+it measured **219.7 Hz**, i.e. −702 cents from that. So the transmit-side
+finding now has two legs on two different programs: ROM program 1 against a
+same-day 0ST comparison, and this one on a **RAM** program with a
+unity-playback derivation — `EditProg:PITCH` on 217 entirely zeroed (Coarse 0,
+Fine 0, KeyTrk 0, VelTrk 0, Src1/Src2 OFF), keymap `Xpose:0ST`,
+`KeyTrk:100ct/key`, keymap-editor Coarse/Fine 0. No static offset anywhere, so
+note 60 on a sample rooted C4 plays at its recorded rate.
+
+The ProgramMode `Xpose` is **retained across a power event**: left at 7ST, came
+up at 7ST, with XMIT `Transpos`, `LocalKbdCh`, `PowerMode`, Master page 1 and
+all three program SHA-1s identical either side. That refutes the surviving
+alternative (not stored, cold default 12ST) and confirms semitone storage a
+second time. With §XPOSERECV, both legs of that hazard are closed.
