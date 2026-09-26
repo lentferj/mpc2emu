@@ -42,7 +42,7 @@ from models.common import (
     E4XT_ATTACK_CORD_DST_VOLENV_ATK, E4XT_ATTACK_CORD_FACTORY_AMOUNT,
     E4XT_VEL_PIVOT, E4XT_VEL_AMPVOL_DB_PER_PERCENT,
     E4B_LFO_VOLUME_FULL_DB, E4B_DC_CORD_FULL_DB, E4B_DC_CORD_SRC,
-    E4B_LFO1_TILDE_SRC, E4B_AMPVOL_DST, LFO_VOLUME_MODEL_FULL_DB,
+    E4B_LFO1_TILDE_SRC, E4B_LFO2_TILDE_SRC, E4B_AMPVOL_DST, LFO_VOLUME_MODEL_FULL_DB,
     E4B_LFO_PAN_CORD_SCALE,
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            env_sustain_from_byte,
@@ -644,6 +644,11 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
         ('lfo1_to_pan',      0x60, 0x41, None),
         ('lfo2_to_pan',      0x68, 0x41, None),
         ('lfo1_to_volume',   E4B_LFO1_TILDE_SRC, E4B_AMPVOL_DST, None),
+        # LFO2 -> AmpVol, read since 2026-09-25. The writer selects LFO2~ when
+        # it is the deeper tremolo; without this line the round trip returned
+        # the depth on `lfo1_to_volume` and `lfo2_to_volume` came back empty,
+        # so a KRZ source's LFO2 tremolo silently changed which LFO it was.
+        ('lfo2_to_volume',   E4B_LFO2_TILDE_SRC, E4B_AMPVOL_DST, None),
     ]
     _routes = {}   # attr -> (full_depth, static, gate)
     for _attr, _src, _dst, _fixed in _lfo_defs:
@@ -718,6 +723,11 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     # tremolo twice or half as deep as the file says.
     _trem_pp_db = abs(_depth('lfo1_to_volume')) * E4B_LFO_VOLUME_FULL_DB
     lfo1_to_volume = min(1.0, (_trem_pp_db / 2.0) / LFO_VOLUME_MODEL_FULL_DB)
+    # The same arithmetic on the LFO2 cord. Only one of the two is ever
+    # present -- the E4XT has one AmpVol destination on this path and the
+    # writer picks a single source for it -- so these do not sum.
+    _trem2_pp_db = abs(_depth('lfo2_to_volume')) * E4B_LFO_VOLUME_FULL_DB
+    lfo2_to_volume = min(1.0, (_trem2_pp_db / 2.0) / LFO_VOLUME_MODEL_FULL_DB)
     # AND THE CENTRE IT SWINGS ABOUT, from the `DC` cord beside it. Read here
     # rather than inferred from the depth: the MPC's sink is d/2 by measurement,
     # but this reader must handle a file the MACHINE wrote, where a DC cord into
@@ -1101,6 +1111,7 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
         lfo1_to_pan        = lfo1_to_pan,
         lfo2_to_pan        = lfo2_to_pan,
         lfo1_to_volume     = lfo1_to_volume,
+        lfo2_to_volume     = lfo2_to_volume,
         lfo_volume_centre_db = lfo_volume_centre_db,
         wheel_to_lfo       = wheel_to_lfo,
     )

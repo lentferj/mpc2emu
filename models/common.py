@@ -3641,6 +3641,11 @@ AKAI_LFO_PAN_DEPTH_SCALE = 0.1563
 KRZ_LFO_PAN_DEPTH_SCALE = 0.4377
 E4B_DC_CORD_SRC = 0xA0            #: `DC`, a constant +1 source
 E4B_LFO1_TILDE_SRC = 0x60         #: `Lfo1~`, bipolar about zero
+#: `Lfo2~`, the same form on the second LFO. Hardware-RE'd 2026-06-10 from
+#: B.011 P012 alongside LFO1~, and already used for the LFO2 pan and pitch
+#: cords; named here so the tremolo can select it too rather than collapsing
+#: an LFO2 tremolo onto LFO1 and running it at LFO1's rate.
+E4B_LFO2_TILDE_SRC = 0x68
 E4B_AMPVOL_DST = 0x40             #: AmpVol -- the LEVEL destination
 
 #: How far a cord can drive the amp level ABOVE what sustain 100 reaches.

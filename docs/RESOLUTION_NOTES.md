@@ -383,6 +383,18 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§E4BKEYPAN — `key_to_pan` reaches the E4B writer and is dropped (2026-09-25)](#e4bkeypan-key_to_pan-reaches-the-e4b-writer-and-is-dropped-2026-09-25)
 - [§KRZLFO2 — the KRZ path's missing LFO2, measured against real material (2026-09-25)](#krzlfo2-the-krz-paths-missing-lfo2-measured-against-real-material-2026-09-25)
 - [§AKAIPANLAW — one byte, two conversions, 6.4x apart (2026-09-25)](#akaipanlaw-one-byte-two-conversions-64x-apart-2026-09-25)
+- [§KRZLFO2SEG — LFO2 is segment `0x15`, and its layout is LFO1's (2026-09-25)](#krzlfo2seg-lfo2-is-segment-0x15-and-its-layout-is-lfo1s-2026-09-25)
+- [§KRZLFO2RATE — LFO2 implemented on the KRZ path; the rate law is carried across (2026-09-25)](#krzlfo2rate-lfo2-implemented-on-the-krz-path-the-rate-law-is-carried-across-2026-09-25)
+- [§KRZLFOSHAPE — byte 4 is PHASE and byte 5 is SHAPE; reader and writer were wrong together (2026-09-25)](#krzlfoshape-byte-4-is-phase-and-byte-5-is-shape-reader-and-writer-were-wrong-together-2026-09-25)
+- [§KRZLFO2RATE RESULT — the ladder is shared, on the DISPLAY law (2026-09-25)](#krzlfo2rate-result-the-ladder-is-shared-on-the-display-law-2026-09-25)
+- [§KRZLFO2AUDIO — Q1 and Q3 closed on the sound; and the negative control earned its keep (2026-09-25)](#krzlfo2audio-q1-and-q3-closed-on-the-sound-and-the-negative-control-earned-its-keep-2026-09-25)
+- [§KRZLFO2READ — the READ side was 2 of 10, and one gap flattened real material](#krzlfo2read-the-read-side-was-2-of-10-and-one-gap-flattened-real-material)
+- [§LFO2READAUDIT — the read side closed across every source it could be (2026-09-25)](#lfo2readaudit-the-read-side-closed-across-every-source-it-could-be-2026-09-25)
+- [§AKAILFO2REST — LFO2's parameters are split across the block, and PANDEP may gate the pan matrix (2026-09-25)](#akailfo2rest-lfo2s-parameters-are-split-across-the-block-and-pandep-may-gate-the-pan-matrix-2026-09-25)
+- [§MPC3LFOPAGE — the MPC 3 LFO page, photographed (2026-09-25)](#mpc3lfopage-the-mpc-3-lfo-page-photographed-2026-09-25)
+- [§LFO2ENDTOEND — every `lfo2_*` field, written and read back by every target (2026-09-25)](#lfo2endtoend-every-lfo2_-field-written-and-read-back-by-every-target-2026-09-25)
+- [§MPC3LFOJSON — the MPC 3 LFO JSON, read from a real project (2026-09-25)](#mpc3lfojson-the-mpc-3-lfo-json-read-from-a-real-project-2026-09-25)
+- [§ORPHANFIELDS — "no field a reader sets goes unread" is true of `lfo2_*` ONLY (2026-09-25)](#orphanfields-no-field-a-reader-sets-goes-unread-is-true-of-lfo2_-only-2026-09-25)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -37041,3 +37053,978 @@ depth. The calibration sweep is dense at bytes 2-10 and already saturating by
 byte 20, so byte 25 is past where anything was measured: "full depth" there
 is an extrapolation of the rail, not a measured pan width. Recorded as the
 thing to check first if AKAI pan ever sounds too wide.
+
+## §KRZLFO2SEG — LFO2 is segment `0x15`, and its layout is LFO1's (2026-09-25)
+
+Located **offline, from the 201-file K2000 corpus**, before any hardware was
+asked for. `walk_program` over every program object in the corpus:
+
+    tag    instances   in N objects (of 4 280)
+    0x14      16 455        4 248     LFO1
+    0x15      16 128        4 226     <- LFO2, 98.7% of objects
+
+One of each per layer. Byte-for-byte the two carry the same shape:
+
+    byte   LFO1 range            LFO2 range          reading
+     0     always 0              always 0
+     1     0..132 (86.4% zero)   0..132              RateCtl, a control source
+     2     0..184                0..184              MnRate
+     3     0..184                0..184              MxRate
+     4     0..3  (96.5% zero)    0..3
+     5     0..39 (89.8% = 1)     0..39
+     6     always 0              always 0
+
+**Byte 2 tops out at exactly 184 on BOTH**, which is `KRZ_LFO_RATE_BYTE_MAX` —
+the top of the 185-row ladder k2kremote measured on LFO1 `MnRate`. Two
+independent fields on one rail is strong structural evidence they share an
+encoding, and the **Musician's Guide gives both LFOs the same published range,
+0 to 24 Hz** (LFO2's default is OFF where LFO1's is 2.00 Hz). That is
+consistent with a shared law and is **not a measurement of one** — see
+§KRZLFO2RATE, which is the hardware half.
+
+**Byte 3 is `MxRate`**, on the same rail, and is the field
+`docs/KRZ_FORMAT.md` already flagged as outside the ladder's scope. We have
+never written it.
+
+⚠ **LFO2 CAN BE GLOBAL AND LFO1 CANNOT.** Musician's Guide: "LFO1 is always
+local... LFO2 is local by default, but can be made global" via the COMMON
+page's `Globals` parameter, which switches LFO2, ASR2, FUN2 and FUN4 together.
+A global LFO2 runs once for the whole layer instead of per note, so a
+converted per-voice modulation would arrive phase-locked across the keyboard.
+We do not write that parameter and must not start without knowing where it is.
+
+### ⚠ OPEN: bytes 4 and 5 may be PHASE and SHAPE, not SHAPE and PHASE
+
+`docs/KRZ_FORMAT.md` §4.5 says byte 4 is the shape enum (0 = Sine, "all 26
+shapes probed live 2026-06-17") and byte 5 the phase (`1 + deg/45`), and
+`krz_writer` writes them that way. **The corpus does not fit that:**
+
+    byte 4   4 distinct values {0,1,2,3}, 96.5% zero
+    byte 5  27 distinct values 0..39, 89.8% on the single value 1
+
+The LFO page has four phase positions (0, 90, 180, 270) and a shape list of
+26 entries. Four values with a dominant default looks like phase; 27 values
+reaching 39 with a dominant `1` looks like a **1-based** shape enum whose
+default Sine is 1. Byte 5's observed set (1,2,3,4,5,6,20,21,30,38) is the
+shape list's shape, offset by one.
+
+**This is a distribution argument and it is NOT being acted on.** §4.5 says
+byte 4 was probed live across all 26 shapes, and a hardware probe outranks a
+histogram — the rule this project already has for exactly this. But §4.5 also
+still carries the superseded rate law `round(26 + 10 x rate)`, so it is
+demonstrably not current throughout, and that is why the question is open
+rather than closed either way.
+
+**If the corpus reading is right**, `krz_writer` has been writing shape values
+into a phase field on every conversion since it was written. It would be
+nearly invisible: Sine is 0 under our enum and byte 4 is 0 in 96.5% of real
+material, so the commonest case writes the correct byte for the wrong reason.
+A source asking for `8-Step` (our 20) would land as a phase of 20 in a 0..3
+field.
+
+Costs nothing to settle: one program with a distinctive shape and a
+distinctive phase, loaded, read off the panel. It is on the §KRZLFO2RATE bank
+for that reason, because a card crossing is the expensive step and this rides
+along free.
+
+## §KRZLFO2RATE — LFO2 implemented on the KRZ path; the rate law is carried across (2026-09-25)
+
+Closes §KRZLFO2's cheap half and stages the hardware half.
+Procedure: `docs/re_procedures/krz_lfo2.md`. Bank: `~/temp/KRZLFO2.KRZ`.
+
+### What now reaches the K2000
+
+Every `lfo2_*` field any reader sets is now read by a writer, and the KRZ
+path's remaining LFO2 gaps are **exactly its LFO1 gaps** -- delay, sync,
+`filter_q` -- which are capability limits, not implementation ones: the
+Musician's Guide gives the LFO page five parameters (MnRate, MxRate, RateCtl,
+Shape, Phase) and **no delay and no clock sync**.
+
+    destination   wire                                  status
+    pitch         cal Src1 or Src2, whichever LFO1      allocation, tested
+                  did not take
+    pan           panner Src1, and Src2 when both       Src1 HW-confirmed,
+                                                        Src2 never driven
+    filter        F1 Src1 and Src2 (the envelope        offsets are the
+                  keeps Src1)                           READER's own
+    volume        F4 AMP source (already existed)       now gets a RATE too
+
+### The conflict answer, because it was a question
+
+Jan asked on 2026-09-25 whether LFO1/LFO2 mapping has conflicts, masking or
+overwrites. The answer is **no, by allocation**, on all three of
+pitch, pan and filter: each destination has two mapped wires, and the second
+LFO takes the one the first did not. Only a voice wanting a filter envelope
+AND both LFOs on the filter exceeds the budget, and then the loser is
+**reported** as `KRZ_FILTER_WIRE_CONTENDED` with `content_lost=True`.
+
+### ⚠ I first wrote the filter with ONE wire, and the caution was wrong
+
+The first version of this said the F1 block's Src2 "is not hardware-mapped",
+reasoning that inferring it from the panner's layout would repeat the
+retracted cord claim of 2026-09-24. **Grepping our own reader before writing
+that caution would have shown it was already mapped:**
+
+    krz_parser, the filter block:
+        for _src, _depth, _floor in ((seg[5], seg[6], 0),
+                                     (seg[10], seg[9], seg[8])):
+
+The reader has read the Src2 wire all along and reads it correctly off real
+third-party material. **The offsets rest on our reader agreeing with the
+machine's own files**, which is stronger than the analogy I declined to make.
+
+It was caught by a round trip, not by review: a corpus program carrying BOTH
+a 5 300-cent filter envelope on Src1 and an LFO2 routing on Src2 lost the LFO2
+to the precedence I had just written. Round-tripping that bank went from
+**0 of 5 LFO2 routings preserved** before this work, to 3 of 5 with one wire,
+to **4 of 5** with two -- the fifth being a voice the layer handling drops
+entirely, which is pre-existing and unrelated.
+
+The general rule this instance is: **claims about our own tree are evidence,
+not recall.** "Not mapped" is a claim about a file I could have grepped.
+
+### The rate is a CARRY-ACROSS. Say so, at the call site and here.
+
+The 185-row ladder was measured on LFO1 `MnRate`. Reusing it for LFO2 rests on
+two structural facts and no measurement:
+
+* byte 2 tops out at **exactly 184 on both segments**, over 32 583 corpus
+  LFO segments;
+* the Musician's Guide gives **both LFOs the same 0-24 Hz published range**.
+
+⚠ `docs/KRZ_FORMAT.md` already carried k2kremote's own boundary -- *"if a
+second-LFO rate is ever written, its law is unmeasured and must not be assumed
+to be this one"* -- and we have now written one. The doc says so, the call
+site says so, and §KRZLFO2RATE's bank asks. **Nothing here may be quoted as
+measured until that bank is loaded.**
+
+### Two defects closed on the way, both "a depth whose rate went somewhere else"
+
+**1. KRZ.** `krz_writer` selected `KRZ_F4_AMP_SRC_LFO2` for a tremolo and
+never programmed LFO2's rate, so the swing ran at whatever the template
+carried. Unreachable on every source we hold (0 voices carry
+`lfo2_to_volume`), which is why it was never heard.
+
+**2. AKAI, and this one WAS reachable.** `p[0x1d]` is `PANRAT` -- LFO2's rate,
+the one driving the pan matrix -- and `akai_s3000_writer` fed it `lfo1_rate`
+unconditionally, while the pan-source selection `lfo1_to_pan or lfo2_to_pan`
+discarded which LFO the depth came from. A source stating an LFO2 pan at its
+own rate had that rate silently replaced. Now the source is tracked and its
+own rate used, with LFO1 still winning where both are stated (the AKAI pan
+matrix is per PROGRAM and has one rate, so one must lose).
+
+The pair is worth naming as a family: **a modulation SOURCE selected without
+its RATE**. Both were invisible to the test suite because each test routed one
+LFO and asserted one field.
+
+### Honest scope
+
+* The writer emits these bytes. Whether the machine sounds as the bytes say is
+  the bank's job.
+* `lfo*_to_filter` uses `KRZ_DEPTH_MAX_CENTS`, which is the reader's own
+  inverse -- so KRZ->KRZ round-trips exactly, and an MPC or E4B source whose
+  1.0 means something else is only as right as the parser's own open TODO on
+  depth normalisation. A round-trip test here is not a calibration.
+* Bytes 4 and 5 of both LFO segments may be phase and shape rather than shape
+  and phase (§KRZLFO2SEG). We still write the documented order. On the bank.
+
+## §KRZLFOSHAPE — byte 4 is PHASE and byte 5 is SHAPE; reader and writer were wrong together (2026-09-25)
+
+**MEASURED, k2kremote, from the K2000 panel on the loaded KRZLFO2 bank.** They
+did not run my audio test: they read the machine's own labelled page, which is
+the law with nothing in between.
+
+Two programs differing only in a requested shape differ at **program offsets
+101 and 102** (found by diffing them, not by trusting our segment position),
+and the pages read:
+
+    offset 101 = 0  ->  Phase 0deg        offset 101 = 2  ->  Phase 180deg
+    offset 102 = 1  ->  Shape Sine        offset 102 = 2  ->  Shape +Sine
+
+So LFO segment **byte 4 is Phase (0-based)** and **byte 5 is Shape (1-based)**
+-- the reverse of `docs/KRZ_FORMAT.md` §4.5, which both the reader and the
+writer followed. The corpus histogram that raised the question (§KRZLFO2SEG:
+byte 4 holds {0,1,2,3} at 96.5% zero, byte 5 holds 27 values to 39 at 89.8% on
+1) was right.
+
+### Why nothing ever surfaced it: the error was SYMMETRIC
+
+    krz_writer:  lfo[4] = _LFO_SHAPE[name]
+    krz_parser:  cur.lfo1_shape = _LFO_SHAPE_FROM_BYTE.get(seg[4])
+
+**Both sides used byte 4.** A KRZ -> KRZ round trip therefore agreed with
+itself perfectly and disagreed with the machine, and this project leans heavily
+on round-trip tests. A symmetric error is invisible to every one of them. That
+is the transferable lesson and it is worth more than the offset: **a round trip
+tests self-consistency, not correctness.** Only an external reference -- the
+panel, the corpus distribution, real third-party files -- can tell the two
+apart.
+
+The second reason it survived: **the default hid it.** Sine is 0 in the old
+table and byte 4 is 0 in 96.5% of real material, so the commonest request wrote
+the correct byte for the wrong reason. Every other shape silently became a
+phase offset -- a requested Square wrote 2, which the machine reads as Phase
+180deg on a Sine, which is exactly what k2kremote's program 212 turned out to
+be. A requested `8-Step` wrote 20 into a field with four legal values.
+
+### Measured blast radius
+
+    KRZ corpus, 32 583 LFO segments
+      byte 5 non-Sine ................ 3 316  (10.2%)  shapes we mangled
+      byte 4 non-zero ................ 1 150  ( 3.5%)  phases we overwrote
+    MPC corpus, 307 voices
+      requested square or triangle ...    12  ( 3.9%)  became a phase offset
+
+### THE ENUM, FULLY MEASURED -- and my own first answer was wrong too
+
+k2kremote swept **every byte 0..44** into offset 102 and read the panel back,
+restoring the object afterwards, and cross-checked the label set independently
+against the v3.87J ROM shape table at `0x1A17C6..0x1A1D46`:
+
+     0  None  <- SWITCHES THE LFO OFF       11..19  "Not Found"
+     1  Sine          2  +Sine              32, 33  "Not Found"
+     3  Square        4  +Square            36, 37  "Not Found"
+     5  Triangle      6  +Triangle          40..44  "Not Found"
+     7  Rise Saw      8  +Rise Saw
+     9  Fall Saw     10  +Fall Saw
+
+**The step shapes are POSITIONAL:**
+
+    byte = 14 + 2 * step_count        ("+" variant at byte + 1)
+
+3->20, 4->22, 5->24, 6->26, 7->28, 8->30, 10->34, 12->38. **The holes at 32/33
+and 36/37 are where 9-Step and 11-Step would be** -- the K2000 has no such
+shapes and the encoding leaves their slots empty rather than packing the list.
+`Not Found` is the machine's own string (v3.87J pool, five sites), not a
+paraphrase, and an out-of-range byte DISPLAYS it rather than being clamped or
+defaulted.
+
+⚠ The ROM table is **contiguous** while the byte values are not, so the enum is
+**not a direct index into it**. There is an indirection nobody has chased; do
+not assume one.
+
+### Two wrong answers preceded this, and the second was mine
+
+**1.** The "26 shapes probed live 2026-06-17" note had `Square=2` (really 3)
+**and** `8-Step=20` (really 30) -- off by one in one region and by ten in
+another. That is what a probe reading a field it did not understand looks like,
+and it is why the conflict with `2 -> +Sine` could not be resolved by shifting.
+
+**2.** Having learnt that byte 5 is the shape, **I shipped "the old table + 1"
+as a labelled inference.** It is right for 1..10 and wrong by ten for every
+step shape: `8-Step` became 21, and **21 is `+3 Step`**. The sweep caught it
+before it reached anything.
+
+The general fault is one this project has a name for: **a rule fitted to the
+region you happened to look at is not a law.** Both measured anchors (1, 2) sat
+inside 1..10, so the region that disproved the rule was the region neither
+anchor touched -- and the corpus values 20..39 had been sitting there the whole
+time saying the steps did not start at 11. I had that histogram in front of me
+when I wrote the inference.
+
+### Corpus and sweep now explain each other with no residue
+
+Valid values: 0..10 (11) + 20..31 (12) + 34, 35 + 38, 39 = **27 distinct,
+topping out at 39** -- exactly the histogram that raised the question. Two
+independent methods that could have disagreed: before the encoding was known, a
+corpus maximum of 39 was equally consistent with junk data.
+
+`_k2_step_shape_byte()` is a function rather than eleven table entries so the
+gaps cannot be tidied shut, and `test_the_step_shapes_are_positional_with_the_
+gaps_left_open` fails if anyone packs them.
+
+### Free hardware facts from the sweep, worth more than the enum
+
+* **`0 = None` switches the LFO off.** A source with no LFO writing 0 expecting
+  Sine, or the reverse, is silent. Every lookup on both sides now falls back to
+  `'sine'`, never to 0.
+* **A DUMP while an object is open in the editor returns the EDIT BUFFER, not
+  the stored object.** k2kremote read offset 102 back as their own wheel
+  position while the editor held the object. Same shape as a silent over-read:
+  an authoritative-looking read of something other than what was asked for.
+* **A LOAD to an object held by the editor is refused** (`DNAK
+  ObjectCurrentlyBeingEdited`) -- that one at least fails loudly.
+* **A bare `Exit` does not leave the editor**; it raises `Save <name> before
+  exiting?` and waits.
+
+## §KRZLFO2RATE RESULT — the ladder is shared, on the DISPLAY law (2026-09-25)
+
+k2kremote, panel, on the loaded bank. Programs 200-205 carry the rate byte on
+LFO1 and 206-211 carry the same six bytes on LFO2:
+
+    byte    ladder says   LFO1 page   LFO2 page
+      20      0.200         0.20H       0.20H
+      60      3.400         3.40H       3.40H
+     100      7.400         7.40H       7.40H
+     140     12.800        12.80       12.80
+     184     24.000        24.00       24.00
+      36      1.000         1.00H       1.00H
+
+LFO2 at each byte displays exactly what LFO1 displays, and both match our
+185-row ladder at all six. 200-205 double as a control: their reading agrees
+with our table for LFO1, which is the leg that says the bank and the addressing
+are right.
+
+**So the carry-across is supported. One door is explicitly left open**, in
+k2kremote's own words and kept here rather than smoothed over: this proves the
+**display** law is shared. A shared display with a different oscillation rate
+would be a firmware oddity nothing else suggests, but it is not excluded, and
+only the audio period test closes it. `krz_writer`'s LFO2 rate is therefore
+**no longer a bare assumption** but is not yet "measured through the sound".
+The call site says so.
+
+**Q3 (does the panner's Src2 sum with Src1?) is untouched** -- it needs audio
+and a depth comparison across programs 214/215/216.
+
+### The addressing escape worth keeping
+
+k2kremote never used bank select: `MidiBridge.reselect_program(id)` types the
+digits on the front panel and presses Enter, selecting by object id with **no
+bank arithmetic anywhere in it**. For anything where the OBJECT ID is what
+matters, that removes the whole class of silent off-by-a-bank error -- the trap
+that turns program 200 into 172 when `id // 128` is used instead of the
+K2000's `id // 100`.
+
+## §KRZLFO2AUDIO — Q1 and Q3 closed on the sound; and the negative control earned its keep (2026-09-25)
+
+The audio half of §KRZLFO2RATE, run by this session after k2kremote handed the
+rig back having answered Q1 and Q2 from the panel.
+
+### Q1 CLOSED — the ladder is shared, measured through the SOUND
+
+k2kremote's panel result was the display law, with one door left open: a shared
+display with a different oscillation rate was not excluded. One pair closes it.
+
+    byte 140, ladder says 12.800 Hz
+      prog 203  LFO1   804 cents of vibrato   12.803 Hz
+      prog 209  LFO2   818 cents of vibrato   12.803 Hz
+
+Identical to three decimals and both on the ladder. **`krz_writer`'s LFO2 rate
+is now measured, not carried across.** One pair was enough: six display
+agreements plus one sound agreement makes a display-that-lies-about-the-rate
+implausible, and that was the whole of the gap.
+
+### Q3 CLOSED — the panner's Src2 SUMS with Src1
+
+k2kremote's panel reading first excluded both no-audio outcomes: 216 shows
+`Src1:LFO1 Depth:36%` **and** `Src2:LFO2 MinDpt:36% MaxDpt:36% DptCtl:OFF`, so
+Src2 is addressed and Src1 is not replaced. Only the summing question remained.
+
+    coherent L/R swing AT 3.400 Hz (the pan LFO's rate)
+      217  CTRL, nothing routed    1.71 dB   <- the floor
+      214  LFO1 -> Src1            3.49 dB
+      215  LFO2 -> Src1            3.04 dB
+      216  BOTH, Src1 + Src2       7.06 dB   = 2.02x the deeper single wire
+
+**Src2 sums.** Writing both wires is correct, and `lfo1_to_pan` and
+`lfo2_to_pan` both reach the machine on a voice that states both.
+
+### ⚠ THE CONTROL IS THE REASON THIS NUMBER IS TRUSTWORTHY
+
+The first pass used the broadband percentile swing and reported:
+
+    217 CTRL 2.20 dB | 214 LFO1 4.05 | 215 LFO2 3.50 | 216 BOTH 8.89
+
+A 2.20 dB floor on a program with **nothing routed** is far above the 0.3-0.5 dB
+of image wander the E4XT and MPC captures carried, and it would have made the
+result look like a modest effect sitting on a large unexplained pedestal.
+Narrowband analysis at the known rate separated them completely: **the control's
+strongest component is at 0.400 Hz, not 3.400 Hz.** The rig has real slow image
+wander, and a broadband statistic reads it as pan depth.
+
+So `pan_swing_db` is not the right statistic for this question and
+`coherent_swing_db` replaced it: it returns the amplitude AT the asked-for
+frequency alongside the strongest peak and its frequency, so a caller can see
+whether the effect is where it was supposed to be. **A percentile cannot tell
+pan modulation from image wander.** The control said so; nothing else would
+have.
+
+## §KRZLFO2READ — the READ side was 2 of 10, and one gap flattened real material
+
+Jan, 2026-09-25, on being told "every `lfo2_*` field any reader sets is now read
+by a writer": *"does this imply we also read `lfo2_*` in all readers?"* **It did
+not, and the sentence was about the writer side only.** Measured:
+
+    reader    lfo2_* fields extracted, of 10
+    E4B         9    delay rate shape sync to_filter to_filter_q to_pan
+                     to_pitch variation
+    MPC         3    rate shape to_pitch
+    KRZ         2 -> 5   was: to_filter, to_volume only
+    AKAI        2    rate to_pan
+    Roland      0    extracts no program parameters at all (by design)
+    Ensoniq     0    likewise
+
+**KRZ had the least excuse**, because its own format doc now carries the byte
+layout. It read LFO2's destinations off the mod wires and never its oscillator,
+so a K2000 source's second LFO arrived with somewhere to go and no rate or shape
+behind it. Now reads `lfo2_rate` (segment `0x15[2]`), `lfo2_shape` (`[5]`) and
+`lfo2_to_pitch` off either CAL wire.
+
+### Two defects the round trip found that neither side showed alone
+
+**1. The writer dropped a stated rate.** The LFO2 segment was written only when
+a destination was routed -- sound reasoning while nothing read the rate, wrong
+the moment something did. Measured: **39.7% of corpus voices carry an LFO2 rate
+and only ~3% route LFO2 anywhere**, so a real bank round-tripped **12 of 58**.
+An unrouted LFO2 is inert to the sound, but the rate is the source's value, not
+a default. Gate widened; now 58 of 58.
+
+**2. The writer could not write the names the reader produces.** `krz_parser`
+names byte 20 `3_step`; `_LFO_SHAPE` had no such key, `.get(name, sine)` fell
+back, and three corpus voices' 3-Step LFO came back out as a **Sine**. The step
+names are now generated from `_k2_step_shape_byte` on both sides, so they cannot
+drift and the 9-Step/11-Step gaps stay open in both tables. Shapes now
+round-trip 64 of 64 on LFO2 and 66 of 66 on LFO1.
+
+Both were found by **diffing a real bank through the pair**, not by reading
+either module. That is the same lesson as §KRZLFOSHAPE from the other side: a
+round trip cannot catch a symmetric error, but it is very good at catching an
+ASYMMETRIC one, and reader-writer name mismatches are exactly that.
+
+### Still open on the read side, stated so it is not mistaken for done
+
+* **No reader extracts pan modulation from a KRZ source.** `krz_parser` reads
+  neither `lfo1_to_pan` nor `lfo2_to_pan`, although the panner offsets are
+  hardware-confirmed (§PANMOD) and the writer writes them. A symmetric gap
+  across both LFOs, so it is not an LFO2 issue and is not fixed here.
+* **MPC**: `lfo2_delay`/`sync`/`to_filter`/`to_pan` are not extracted. The MPC 3
+  `<LFO2>` block is routed to pitch only, so most of these may not exist in the
+  source -- unverified, and **no local `.xpm` has an LFO2 block at all**, so the
+  corpus cannot say.
+* **AKAI**: `lfo2_shape` is `LFO2WAVE`, read by nothing.
+
+## §LFO2READAUDIT — the read side closed across every source it could be (2026-09-25)
+
+Prompted by Jan: *"does this imply we also read `lfo2_*` in all readers?"* It
+did not. The audit and what came of it:
+
+    reader     before   after   what changed
+    E4B          9        9     already complete
+    KRZ          2        6     + rate, shape, to_pitch, to_pan
+    MPC          3        5     + to_filter, sync
+    AKAI         2        2     blocked: LFO2WAVE's offset is unknown
+    Roland       0        0     extracts no program parameters at all
+    Ensoniq      0        0     likewise
+
+`lfo1_to_pan` is now set by MPC, KRZ, E4B and AKAI; `lfo2_to_pan` by KRZ, E4B
+and AKAI.
+
+### The KRZ pan gap: nothing read it, for EITHER LFO
+
+`krz_parser` read neither `lfo1_to_pan` nor `lfo2_to_pan`, although §PANMOD
+hardware-confirmed the panner offsets on 2026-09-06 and our own writer has
+written them since. **A KRZ -> anything conversion silently dropped the pan
+modulation its source states.**
+
+It survived for the same reason §KRZLFOSHAPE did, in the opposite form: the
+gap was **symmetric** -- neither side read it, so no round trip could notice
+something missing from both ends. Now read from the panner block (`0x52`,
+Src1 `[5]/[6]` and Src2 `[10]/[9]`), as the writer's inverse. Round-trips at
+0.80 -> 0.822 and 0.60 -> 0.594, the residual being byte quantisation on a
+±50 rail.
+
+The read is a **separate `if`, not part of the segment chain**: tag `0x52` is
+already claimed there as a filter candidate, and which branch won would have
+depended on whether `cur.filter_type` had been set by an earlier segment --
+i.e. on walk order. A test on the block TYPE cannot be shadowed that way.
+
+### The MPC gap: the gate was pitch-only
+
+MPC 3's `lfoData` carries `value0` and `value1` -- **one structure twice** --
+so LFO2's block has LFO1's shape. We took three keys of it and LFO1's reader
+takes six. Worse, the gate was `abs(pitch) > 0.001` **alone**, so an LFO2
+routed only to the FILTER was dropped entirely: rate, shape and all, because
+pitch happened to be the one destination the block originally carried.
+
+### `valueN` is the INSTANCE, and the docstring saying otherwise cost doubt
+
+`_v0`'s docstring said *"one entry per articulation"*. **It is wrong, and
+§MPC3XPM already said so**: every keygroup of 71 real MPC 3 programs carries
+`filterData.value0` AND `value1`, they DIFFER in all 71
+(`value0.filterType = 2`, `value1.filterType = 0`), and they are **Filter 1
+and Filter 2**. `lfoData` is the same shape, so `value1` is LFO2.
+
+The stale wording nearly got a correct extension reverted: it made a correct
+`lfoData.value1` read look like a mislabelled articulation. **A comment that
+contradicts a measured section in the same repository is not inert** -- it is
+a claim, and the more confidently it is worded the more expensive it is.
+Corrected in place, citing the 71 programs.
+
+### ⚠ MPC 3 HAS FOUR LFOS AND WE MODEL TWO
+
+Jan, 2026-09-25: **LFO 1/2 plus GLOBAL LFO 1/2.** `lfoData` lives inside
+`synthSection`, which is per keygroup, so the global pair is almost certainly
+program-level and elsewhere in the JSON. Unlocated, unread, unmodelled --
+`VoiceLayer` has no global-LFO concept at all.
+
+There is a real target for one if it is ever located: the **K2000's COMMON
+page `Globals`** switches LFO2, ASR2, FUN2 and FUN4 to global together, and a
+global LFO2 runs once per LAYER instead of per note. So an MPC 3 global LFO
+has a natural destination, and converting one as a per-voice LFO would be
+wrong in a specific, audible way -- phase-locked across the keyboard rather
+than independent per note. Neither side is implemented and neither should be
+guessed at.
+
+⚠ **STILL UNVERIFIED FOR `lfoData` SPECIFICALLY.** The 71-program evidence is
+about `filterData`. No local `.xpm` is MPC 3 JSON and none contains an LFO2
+block, so nothing here confirms `lfoData.value1` carries these keys. It degrades safely -- an absent key takes
+the `.get` default and emits zero, which reads as "not stated" -- and it is
+inferred from the structure, not measured. Verified end-to-end on a synthetic
+MPC-3-shaped program: filter-only, pitch-only, both, and neither all behave.
+
+### AKAI: blocked, with the method attached
+
+`lfo2_shape` is `LFO2WAVE`, named in our writer's notes but with **no offset
+anywhere in our code or format doc**. `AKAI_LFO2RATE_OFFSET = 0x1d` is
+confirmed 363/363 by differential test; LFO2WAVE presumably sits near it, but
+"near it" is not an offset and guessing one into a parser is the fault
+§AKAICORDSTAGE was retracted for. Asked of s3ked, who owns that rig, with the
+one-variable differential method and an offer to check any candidate against
+45 000+ corpus program files -- a distribution check is independent
+confirmation rather than a restatement.
+
+Also asked: whether an LFO2 DELAY exists distinct from `PANDEL` (our
+`lfo2_delay` is set only by the E4B reader).
+
+### The F1 filter block's `DptCtl` (seg[7]): NOT written, and safe by a measured law
+
+Src1, Src2, MinDpt and MaxDpt are all read by `krz_parser` off real material.
+**seg[7] is the one field of that block we infer from the panner's layout**,
+and writing a byte on an inferred offset is what produced the retracted cord
+claim of 2026-09-24.
+
+It cannot matter on this wire: k2kremote measured `DptCtl` scaling LINEARLY
+between MinDpt and MaxDpt (§73: wheel 0/64/127 gave +0.99/+1.97/+3.00 st for
+Min=100 Max=300), and the wire sets **Min == Max**. A linear interpolation
+between two equal endpoints is constant for every controller value, so
+whatever the template left there changes nothing.
+
+⚠ **That argument holds only while Min == Max.** If the wire ever gains a
+range, seg[7] stops being moot and must be located before it is written. The
+comment at the call site says so.
+
+## §AKAILFO2REST — LFO2's parameters are split across the block, and PANDEP may gate the pan matrix (2026-09-25)
+
+s3ked, on being asked for `LFO2WAVE`'s offset. **The LFO2 parameters are
+split across the program block and the first three are named `PAN*` for
+historical reasons while being documented as LFO2 controls** -- which is
+exactly why they read as a pan feature and went unread:
+
+    0x1d  PANRAT    "Speed of LFO2"              already read
+    0x1e  PANDEP    "Depth of LFO2"              NOT applied -- see below
+    0x1f  PANDEL    "Delay in growth of LFO2"    now read
+    0x62  LFO2WAVE   LFO2 waveform               now read
+
+**There is no LFO2 delay distinct from `PANDEL` -- `PANDEL` is it.** `LFODEL`
+at 0x23 is LFO1's; do not cross them. AKAI reader: 2 of 10 -> 4 of 10.
+
+### The corpus leg, which was the only evidence not downstream of one document
+
+s3ked's offset came from a spec transcription, and **their reader and writer
+share one offset table** -- so a wrong offset round-trips perfectly there, the
+identical symmetric blindness that hid our own KRZ byte 4 for months. They
+asked for the independent check; over 4 433 corpus programs:
+
+    0x61 LFO1WAVE   4 distinct {0,1,2,3}, 98.6% on 0
+    0x62 LFO2WAVE   4 distinct {0,1,2,3}, 96.5% on 0
+    0x1f PANDEL    65 distinct 0..99, 81.1% on 0
+    0x1e PANDEP    67 distinct 0..99, 55.0% on 99, 33.1% on 0
+
+Two adjacent byte-wide fields with identical four-value distributions are the
+two LFOs' waveforms. A distribution cannot prove alignment, but an
+out-of-range value would have disproved it and there is none.
+
+**The documented enum has three values and the corpus uses four** -- and this
+project already knew the fourth. `AKAI_LFO1WAVE_TO_SHAPE` carries `3 = random`,
+hardware-measured for LFO1 (§46, §31), and value 3 appears on 1.8% of programs,
+more often than 1 (1.1%) or 2 (0.5%). LFO2 uses that same table.
+
+### ⚠ OPEN AND IT MATTERS: does PANDEP gate the pan matrix?
+
+We read `lfo2_to_pan` from the mod matrix amount alone. If `PANDEP` is LFO2's
+output depth and it GATES that path, then a program with a matrix amount but
+`PANDEP = 0` has no pan modulation at all and we are inventing one.
+
+    PANDEP > 0   matrix names LFO2 with an amount      programs
+      no                     no                            125
+      no                     YES                         1 342   <- the question
+      yes                    no                          2 411
+      yes                    YES                           555
+
+**1 342 programs of 4 433 (30.3%)** carry a pan-matrix amount naming LFO2 with
+`PANDEP` at zero. Either they pan and PANDEP is not a gate, or they do not and
+every one of our conversions has been adding an auto-pan the machine never
+plays. That is the "wired and the volume down" shape §181 already caught once
+from the other side -- `MODVPAN1` zero throughout while everything else looked
+set -- so the reverse arrangement is worth taking seriously.
+
+### The disc is built (2026-09-25), and it asks THREE outcomes not two
+
+`tests/re_banks/gen_akai_pandep_disc.py` -> `~/temp/HD_pandep.img`, verified
+by reading the image back:
+
+    prg  name          PRGNUM  PANDEP  matrix(=0x59)   decides
+    120  PD DEP 0        120       0        25         the 1342-program case
+    121  PD DEP 50       121      50        25         GATE vs SCALE
+    122  PD DEP 99       122      99        25         full depth, reference
+    123  PD NOMATRIX     123      99         0         route absent: must be silent
+    124  PD CTRL         124       0         0         the floor
+
+**`PANDEP 50` is s3ked's contribution and it is what makes this a measurement
+rather than a verdict.** PANDEP could SCALE rather than gate, in which case 0
+is a floor and not an off, and those 1 342 programs pan faintly rather than
+silently:
+
+    0 silent, 50 ~= 99         -> GATES.  Apply as a gate.
+    0 silent, 50 ~= half of 99 -> SCALES. Apply as a multiplier.
+    0 ~= 50 ~= 99              -> not a gate at all; the matrix amount rules
+                                  and our reader is already right.
+
+The third outcome costs nothing to act on, and it must be REACHABLE or the
+disc begs its own question.
+
+⚠ s3ked's prior is that it gates, **and they wrote down that expecting it is
+not evidence.** §52's "PANDEP gates the depth -- 0 silences it entirely" was
+measured against the FILTER destination, and §181 exists precisely because the
+pan route behaves differently from the filter route. A mechanism used past its
+measured range is what made §52 "partly retracted" in the first place.
+
+### Two defects in the disc itself, both caught by reading the image back
+
+**1. The name match never fired.** The first version identified programs by
+decoding `raw[0x03:0x0f]` as ASCII -- but **AKAI program names are in the
+machine's own character set**, not ASCII. All five kept the writer's hardcoded
+`PANDEP = 99`, and the disc would have measured *"PANDEP has no effect"*
+perfectly cleanly: a result indistinguishable from the real one being looked
+for. Only the `patched 5 of 5` count guard caught it.
+
+**2. PRGNUM would have been 0.** `build_akai_volume` numbers sequentially from
+zero, which puts the first program on the machine's boot `TEST PROGRAM` and
+sounds both at once -- §135 exactly, where an evening of spectral work was
+done on a sine sitting on top of the test source with three mutually
+consistent wrong observations. Now 120+.
+
+A third thing the read-back corrected, which is a claim rather than a bug: the
+generator zeroed `0x59` "to leave only the matrix under test" and then wrote
+the matrix amount back into it two lines later. **There is no separate legacy
+path to disable** -- `AKAI_MODVPAN_PROG_OFFSETS[0]` IS 0x59 (§AKAIPANLAW). The
+comment described an isolation that never existed.
+
+**Not implemented either way.** Applying PANDEP as a multiplier on a guess
+would silently rewrite 30% of the corpus's pan behaviour. Settling it is one
+bench pair: a program with matrix amount set and PANDEP 0, against the same
+program with PANDEP 99, measuring stereo balance. Referred to s3ked, who owns
+that rig and has the balance apparatus from §181.
+
+### A retraction that travelled, and how it was caught
+
+s3ked's §52 body asserted `PANRAT = 0.23708 Hz/unit` and *"LFO2 runs at exactly
+twice LFO1"*. Both were refuted by their §260 on 2026-09-23 (real slope
+**0.11880**, ratio **1.0011** -- the two LFOs share one rate scale), but §260
+fixed their code and wrote itself up **without touching §52's body or the
+handoff file they give us**, so their handoff asserted "twice LFO1" for two
+days.
+
+**We never took it:** `AKAI_LFO2_RATE_HZ_PER_UNIT` is 0.11913 against LFO1's
+0.11867, ratio 1.0039, and the 0.23708 figure survives here only struck through
+in a comment that records its refutation. Checked rather than assumed --
+`grep` for the refuted number, not recall.
+
+It was found only because this session said which of their sections it was
+reading. **That is not a detection method**, and both sides have recorded it as
+such. The general form is already in this file as §260's own disease: a
+correction that fixes the code and the new section, and leaves the old section
+and the handoff asserting the refuted thing.
+
+## §MPC3LFOPAGE — the MPC 3 LFO page, photographed (2026-09-25)
+
+Jan's MPC One, two screenshots of the keygroup LFO page. **Direct evidence
+from the machine**, which is what every claim below rests on -- no local
+`.xpm` is MPC 3 JSON, so nothing in the corpus could have said any of this.
+
+**Four LFOs, and the two kinds are NOT the same object:**
+
+    LFO 1 / LFO 2 (per keygroup)      GLOBAL LFO 1 / 2
+      WAVE                              WAVE
+      FADE IN   + FADE IN [SYNC]        --
+      RESET                             --
+      DELAY     + DELAY [SYNC]          --
+      RATE      + RATE [SYNC]           RATE + RATE [SYNC]
+      LEVEL                             LEVEL
+      WHEEL TO LFO 1                    --
+      DESTINATIONS (its own page)       (not shown; presumably also)
+
+A global LFO has **three parameters**. A per-keygroup one has nine plus a
+destination list.
+
+### ⚠ `LEVEL` is a per-LFO MASTER DEPTH and we do not model it
+
+LFO 1 reads `LEVEL 20`; Global LFO 1 reads `LEVEL 127`. Our model carries only
+PER-DESTINATION depths (`lfo1_to_pitch`, `lfo1_to_filter`, ...) and has no
+master. So the effective depth is presumably `LEVEL x destination amount`, and
+we are reading the second factor alone.
+
+**This is the same shape as the AKAI `PANDEP` question** (§AKAILFO2REST), and
+it has the same three possible answers -- gate, scale, or no effect on the
+destination path. A `LEVEL 20` program converted as though level were full
+would arrive **six times too deep** on every destination. Unmeasured, and the
+disc for the AKAI half is already built; the MPC half needs a real MPC 3
+program plus a capture.
+
+### Other things visible that we do not carry
+
+* **`FADE IN` is separate from `DELAY`**, with its own sync. We model
+  `lfo1_delay` and have no fade-in at all -- an LFO that ramps in over 1 ms is
+  not the same as one that starts 1 ms late.
+* **`RESET`** (On here) -- free-running vs retriggered per note. The K2000 has
+  exactly this distinction (LFO1 is always local/retriggered; LFO2 can be made
+  global), so it has somewhere to go.
+* **`[SYNC]` variants of RATE, DELAY and FADE IN**, all reading `None` here.
+  We carry `lfo1_sync` / `lfo1_sync_division` but only for the rate.
+* **`DESTINATIONS` is its own page**, so routings are a LIST rather than the
+  fixed slots our `lfo*_to_*` fields assume. A program routing one LFO to four
+  destinations has no representation here beyond the four we happen to name.
+
+### ⚠ THE RATE IS DISPLAYED IN Hz, AND WE CONVERT FROM A KNOB
+
+The page shows `RATE 4.58 Hz` and `3.81 Hz` directly. `xpm_parser` puts MPC 3
+rates through `lfo_knob_to_hz`, a fitted exponential mapping a 0..1 knob to Hz
+(`0.0202 * e^(9.195*knob)`), because that is what MPC 2.x XML stores.
+
+**If MPC 3 JSON stores Hz rather than a knob position, that conversion is
+wrong for every MPC 3 program** -- and it would be wrong in the quiet way,
+producing a plausible rate from a plausible number. `lfoRate` is read with a
+default of `0.5`, which is a knob-shaped default; a Hz-shaped field would make
+that default 0.5 Hz. **One real MPC 3 program settles it**, and it is the same
+file that settles `lfoData.value1`.
+
+Not changed on the strength of a photograph: the screenshot shows the PANEL,
+not the file.
+
+**A defensive fix that needs no file, applied 2026-09-25.** A 0..1 knob cannot
+exceed 1.0 **by definition**, so a stored rate above it is unambiguously
+already in Hz. `_lfo_rate_to_hz` now branches on that: knob values go through
+the measured exponential exactly as before, and a Hz value passes through
+clamped. The discriminator cannot misfire on a genuine knob, which is why it
+is safe to apply BEFORE the question is settled rather than after. It does not
+answer the question -- it makes the wrong answer survivable.
+
+### ConvertWithMoss cross-check: they have nothing here
+
+Checked at `e74ae01d` (2026-09-25, updated by Jan for this question). Their
+MPC 3 support reads `synthSection` -> `ampEnvelope`, `filterData`,
+`filterEnvelope`, `pitchEnvelope` -- and **`MPCModernDetector.java` contains
+zero LFO references in 1 046 lines**, as does every other file in their `mpc`
+package except the XML *writer*. So the second implementation cannot settle
+`lfoData.value1`, the `LEVEL` question or the rate units, and its silence is
+not evidence either way.
+
+⚠ **But they read `pitchEnvelope` and we do not.** Our model has `amp_env` and
+`filter_env` and no pitch envelope at all, so an MPC program with a pitch
+envelope converts without it, silently. Unrelated to LFO2 and not fixed here;
+recorded because the cross-check surfaced it and it would otherwise be lost.
+
+## §LFO2ENDTOEND — every `lfo2_*` field, written and read back by every target (2026-09-25)
+
+The claim "LFO2 is implemented" is worth exactly what an end-to-end check says
+it is, so: one voice with all seven carried `lfo2_*` fields set, written by
+each writer, read back by each reader.
+
+    field             -> KRZ     -> E4B     -> AKAI     in
+    lfo2_rate          7.400      7.320      7.318      7.400
+    lfo2_shape         square     square     square     square
+    lfo2_to_pitch      0.408      0.402      --         0.400
+    lfo2_to_filter     0.296      0.299      --         0.300
+    lfo2_to_pan        0.594      0.605      0.640      0.600
+    lfo2_to_volume     0.500      0.083*     --         0.500
+    lfo2_delay         --         0.315      0.341      0.350
+
+Residuals are byte quantisation on each machine's own rail. **The blanks are
+capability limits, each with a source:**
+
+* **KRZ has no LFO delay.** The Musician's Guide gives the LFO page five
+  parameters -- MnRate, MxRate, RateCtl, Shape, Phase -- and no delay and no
+  clock sync. Same for `lfo2_sync` and `lfo2_to_filter_q`, and these are
+  exactly LFO1's gaps too, so they are the machine's limits and not ours.
+* **AKAI's LFO2 reaches pan, not pitch or filter.** Pitch and filter
+  modulation on that machine are LFO1's.
+
+### `*` The E4B tremolo SATURATES, and it predates this work
+
+`lfo2_to_volume` returns 0.083 rather than 0.500 -- and **so does
+`lfo1_to_volume`, on committed HEAD, before any of today's changes.** Checked
+by stashing rather than assumed:
+
+    depth 0.10  one-sided  9.60 dB -> cord 0.1688 -> back 0.083
+    depth 0.25  one-sided 24.00 dB -> cord 0.1688 -> back 0.083
+    depth 0.50  one-sided 48.00 dB -> cord 0.1688 -> back 0.083
+    depth 1.00  one-sided 96.00 dB -> cord 0.1688 -> back 0.083
+
+**The cord is constant at 0.1688 for every requested depth**, so it is a
+CLAMP and not a scale error: the E4XT's AmpVol cord tops out near 8 dB
+one-sided while the model's field spans 96. Every model depth above ~0.083
+converts to the same swing.
+
+That ceiling may well be right -- the machine cannot swing further than it
+can swing -- but **it has never been checked against the hardware**, and the
+round trip cannot distinguish "the machine's limit" from "our cord scale is
+12x small". Recorded as an open question rather than fixed: it is LFO1's
+behaviour as much as LFO2's, and changing it on the strength of a round trip
+would be changing a conversion on no evidence.
+
+### Two writer defects closed by this check, both the same family
+
+Neither was visible to any existing test, because every test routed one LFO.
+
+**1. The AKAI writer read LFO2's shape and delay and could not write them.**
+We started extracting `lfo2_shape` (0x62) and `lfo2_delay` (`PANDEL`, 0x1f)
+earlier today and the writer emitted neither, so AKAI -> AKAI dropped both.
+That is the ASYMMETRIC failure -- the kind a round trip does catch, unlike the
+symmetric byte-4 shape bug found on the K2000 the same morning. Now written;
+round-trips square/random/sawtooth and delay to within byte quantisation.
+
+**2. The E4B writer collapsed both tremolos onto LFO1.** It wrote
+`max(|lfo1_to_volume|, |lfo2_to_volume|)` unconditionally at
+`E4B_LFO1_TILDE_SRC`, so an LFO2 tremolo was emitted as an LFO1 one and ran at
+**LFO1's rate**, while the LFO2 rate the writer had already emitted drove
+nothing. The reader had the matching hole: it mapped the AmpVol cord only from
+LFO1~, so `lfo2_to_volume` went in and `lfo1_to_volume` came back.
+
+**THIRD INSTANCE OF ONE FAMILY IN ONE DAY: a modulation SOURCE selected
+without its RATE.** The other two were `krz_writer` picking LFO2 as its amp
+source and never programming LFO2's rate, and `akai_s3000_writer` feeding
+`PANRAT` -- LFO2's rate -- with `lfo1_rate`. Three writers, three formats, one
+shape. Worth naming because the next one will look different and be the same:
+**whenever a writer CHOOSES between two modulation sources, check that the
+choice carries the source's own parameters with it.**
+
+## §MPC3LFOJSON — the MPC 3 LFO JSON, read from a real project (2026-09-25)
+
+**Settled from a file, not a photograph.** Jan loaded MPC 2 presets, switched
+`legacy` OFF, changed every parameter on all four LFOs and saved the project
+(`AdvKG.xpj`, MPC firmware **3.9.1.2**). Container: gzip, then a text header
+`ACVS\n3.9.1.2\nSerialisableProjectData\njson\nLinux\n`, then the JSON.
+
+### Where the four LFOs live -- and they are in TWO different places
+
+    synthSection.lfoData.value0          LFO 1        per keygroup
+    synthSection.lfoData.value1          LFO 2        per keygroup
+    program.<kind>.freeRunningLfoData.value0   GLOBAL LFO 1   per PROGRAM
+    program.<kind>.freeRunningLfoData.value1   GLOBAL LFO 2   per PROGRAM
+
+So `lfoData` never has a `value2`/`value3`: the globals are a **separate
+object at program level**, which is why grepping for `globalLfo` found nothing
+and why the photographed page shows them as separate tabs. They are called
+`freeRunningLfoData` because that is what they are -- the per-keygroup pair
+carry `lfoFreeRunning: False`.
+
+**How they were found without knowing the name:** `lfoLevel`,
+`lfoWaveformType`, `lfoRate` and `lfoSync` occur **780** times in the project
+while every other LFO key occurs **774**. That difference of six is exactly
+the global-LFO key set from the photographed page, and six is the number of
+global LFOs across the three programs. Searching for *nodes carrying `lfoRate`
+but not `lfoPitch`* then landed on them directly.
+
+### The per-keygroup LFO, every key
+
+    lfoRate            0.0..1.0   ** A KNOB, NOT Hz **
+    lfoWaveformType    int enum
+    lfoLevel           0.0..1.0   the LFO's MASTER output level
+    lfoPitch           depth -> pitch
+    lfoPan             depth -> pan
+    lfoAmpLevel        depth -> amplitude
+    lfoFilterCutOff    {value0, value1}  -- ONE PER FILTER, not per articulation
+    lfoDelay  + lfoDelaySync
+    lfoFadein + lfoFadeinSync
+    lfoReset, lfoFreeRunning
+    lfoSync            int (0 = none; 5, 7, 13, 16, 19 observed)
+
+The global pair carry **only** `lfoRate`, `lfoWaveformType`, `lfoLevel`,
+`lfoSync` -- matching the photographed page exactly, which is a real
+cross-check: the page and the file were read independently and agree.
+
+### ✅ `lfoRate` IS A 0..1 KNOB. Our conversion was right.
+
+Observed values: `0.5`, `0.61`, `0.36`, `0.78`, `0.23`, `0.43`, `0.755`,
+`0.131`, `1.0`. All within 0..1, and the MPC displays them as Hz on the panel.
+**So `lfo_knob_to_hz` is correct for MPC 3** and §MPC3LFOPAGE's worry that the
+file might store Hz is discharged.
+
+The defensive `_lfo_rate_to_hz` discriminator added before this file arrived
+(`> 1.0` means Hz) is therefore **inert on real material** -- every observed
+value takes the knob branch. It cost nothing and it is left in place: it is
+the kind of guard whose value is that it never fires.
+
+⚠ One observed value is **exactly 1.0**, which the discriminator treats as a
+knob (`> 1.0`, not `>=`). That boundary was chosen correctly by luck rather
+than by reasoning, and it is worth stating: a full-scale knob is the one value
+where the two interpretations touch.
+
+### What we do not read, now that the names are known
+
+`lfoPan`, `lfoAmpLevel` and `lfoDelay` are all present per LFO and our MPC 3
+path takes none of them -- it emits Pitch, Cutoff, Rate, Type, Sync only. And
+`lfoFilterCutOff` being `{value0, value1}` is **one depth per FILTER**, which
+matches §MPC3XPM's finding that `filterData` has two slots; we take the first.
+
+**`lfoLevel` is the master depth** (§MPC3LFOPAGE predicted this from the panel
+and the file confirms the field exists). Its LAW is still unknown -- whether
+the effective depth is `lfoLevel x lfoPitch` or something else is not
+readable from a file, and it is the same open question as the AKAI `PANDEP`
+gate. Not applied.
+
+## §ORPHANFIELDS — "no field a reader sets goes unread" is true of `lfo2_*` ONLY (2026-09-25)
+
+Jan, on being told that: *"is that statement true only for `lfo2_*` or for any
+parameter?"* **Only `lfo2_*`.** Across all 61 model fields:
+
+    set by at least one reader ............. 59
+    read by at least one writer ............ 58
+    SET BY A READER, READ BY NO WRITER ...... 3
+    never set by any reader ................. 2   (both fine, see below)
+
+### The three orphans
+
+* **`key_to_pan`** — set by the AKAI reader, emitted by nothing. Already
+  §E4BKEYPAN: the E4 form and pivot are measured (`Key~`, source 9, pivots at
+  key 60) and the destination `0x41` is hardware-confirmed; what is open is
+  whether AKAI programs' own key centres sit at 60.
+* **`velocity_to_pan`** — set by the MPC and AKAI readers, emitted by nothing.
+  **Documented as deliberate for E4B only** (§E4XTVELSRC: the velocity source
+  is a triad differing by pivot and the choice was taken explicitly for
+  volume). For KRZ and AKAI it is an undocumented drop, which is a different
+  thing from a decision.
+* **`lfo1_sync_division`** — set by the MPC reader alone. No target carries a
+  tempo-sync division: the K2000's LFO page has no clock sync at all, and
+  neither the E4B nor the AKAI writer emits one. Genuinely nothing to carry
+  it, so this one is a capability limit rather than a gap.
+
+### The two never set are both correct
+
+* **`src_resonance`** is not a reader field at all — `krz_writer` sets it on a
+  zone as its own scratch and reads it back two functions later.
+* **`firmware_raw`** is the firmware-simulation payload, `None` on every
+  ordinary conversion by design.
+
+### ⚠ THE FOURTH ORPHAN WAS THE SCAN'S OWN BLIND SPOT
+
+`mod_routings` reported as "never set by any reader" while
+`akai_s3000_parser` fills it and `e4b_writer` consumes it. The reason:
+
+    voice.mod_routings.append(ModRouting(...))
+
+**A method call on an attribute LOAD. There is no `Store` anywhere in it**, so
+every rule in `fields_set` — attribute assign, augmented assign, keyword,
+dispatch table — was structurally incapable of seeing it. And the blind spot
+was **systematic rather than incidental**: a list-valued model field is
+*always* populated this way, so the scan could never have seen any of them.
+
+Now counted for `append`/`extend`/`insert`/`update`/`add` on a model-field
+attribute, and for `obj.field[k] = v`. Any other mutation route is still
+unseen and the generator says so.
+
+**It took a question to find.** The matrix had been regenerated a dozen times
+that day and every total looked plausible; nothing about "58 of 61" invites
+suspicion. Asking whether a claim generalises beyond the case it was measured
+on is what surfaced it — the same move that caught the "+1" LFO shape
+inference a few hours earlier, from the opposite direction.

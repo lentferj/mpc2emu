@@ -94,6 +94,7 @@ from models.common import (
     KEY_FILTER_OCT_PER_OCT,
     krz_cents_to_depth_byte,
     krz_cents_to_lfo_pitch_byte, LFO_PITCH_FULL_CENTS,
+    KRZ_DEPTH_MAX_CENTS,
     AKAI_MUTE_CUT_SECONDS, RESONANCE_FULL_DB,
     KRZ_RES_KEYTRK_PIVOT_KEY, KRZ_RES_KEYTRK_DB_PER_UNIT,
     krz_db_to_level_pct, krz_level_pct_to_db,
@@ -1482,19 +1483,103 @@ _TPL_LAYER = [
 # LFO shape name -> K2000 file byte.  All 26 shapes probed live on K2000R 2026-06-17:
 # 0=Sine 1=+Sine 2=Square 3=+Square 4=Triangle 5=+Triangle
 # 6=Rise S 7=+Rise 8=Fall S 9=+Fall 10-25=step patterns (3/4/5/6/7/8/10/12 Step ± unipolar)
+#: LFO SHAPE -- **segment byte 5, and the value space is NOT contiguous.**
+#:
+#: **FULLY MEASURED 2026-09-25 (k2kremote): every byte 0..44 written to program
+#: offset 102 and read off the K2000's own panel, object restored afterwards.**
+#: Cross-checked independently against the v3.87J ROM shape table at
+#: 0x1A17C6..0x1A1D46.
+#:
+#:      0  None  <- SWITCHES THE LFO OFF        11..19  "Not Found"
+#:      1  Sine          2  +Sine               32,33   "Not Found"
+#:      3  Square        4  +Square             36,37   "Not Found"
+#:      5  Triangle      6  +Triangle           40..44  "Not Found"
+#:      7  Rise Saw      8  +Rise Saw
+#:      9  Fall Saw     10  +Fall Saw
+#:
+#: **The step shapes are POSITIONAL, not sequential:**
+#:
+#:      byte = 14 + 2 * step_count      ("+" variant at byte + 1)
+#:
+#: 3->20, 4->22, 5->24, 6->26, 7->28, 8->30, 10->34, 12->38. The holes at
+#: 32/33 and 36/37 are where 9-Step and 11-Step WOULD be: the K2000 has no
+#: such shapes and the encoding leaves their slots empty rather than packing
+#: the list. The ROM table is contiguous while the byte values are not, so the
+#: enum is NOT a direct index into it -- there is an indirection nobody has
+#: chased, and it must not be assumed away.
+#:
+#: ⚠ **THIS IS THE SECOND CORRECTION IN ONE DAY AND THE FIRST ONE WAS MINE.**
+#: Having learnt that byte 5 is the shape, I shipped the old table + 1 as an
+#: inference, labelled. It is right for 1..10 and **wrong by ten** for every
+#: step shape: `8-Step` became 21, and 21 is `+3 Step`. The sweep caught it
+#: before it went anywhere. A rule fitted to the region you happened to look
+#: at is not a law -- the corpus values 20..39 were sitting there the whole
+#: time saying the steps did not start at 11.
+#:
+#: The superseded "26 shapes probed live 2026-06-17" note was not off by one
+#: either: it had Square=2 (really 3) AND 8-Step=20 (really 30). Off by one in
+#: one region and by ten in another, which is what a probe reading a field it
+#: did not understand looks like. §KRZLFOSHAPE.
+#:
+#: **The corpus and the sweep now explain each other with no residue:** valid
+#: values are 0..10, 20..31, 34, 35, 38, 39 = **27 distinct, topping out at
+#: 39**, which is exactly the histogram that raised the question. Two
+#: independent methods that could have disagreed.
+
+
+def _k2_step_shape_byte(steps: int, unipolar: bool = False) -> int:
+    """`n`-Step -> its byte. Positional: `14 + 2n`, `+` variant one above.
+
+    A function rather than eleven table entries so the gaps cannot be
+    "tidied": 9-Step and 11-Step have slots (32/33, 36/37) that the machine
+    reports as `Not Found`, and any hand-written list invites someone to close
+    them up.
+    """
+    if steps not in (3, 4, 5, 6, 7, 8, 10, 12):
+        raise ValueError('the K2000 has no %d-step LFO shape' % steps)
+    return 14 + 2 * steps + (1 if unipolar else 0)
+
+
+#: ⚠ 0 IS `None` AND IT SWITCHES THE LFO OFF. Never use it as a fallback for
+#: an unrecognised name -- that silently disables the LFO rather than giving a
+#: plain shape. Every lookup here falls back to `'sine'`.
+_K2_LFO_SHAPE_NONE = 0
 _LFO_SHAPE = {
-    'sine':       0,   # Sine
-    '+sine':      1,   # +Sine (unipolar)
-    'square':     2,   # Square
-    '+square':    3,
-    'triangle':   4,   # Triangle
-    '+triangle':  5,
-    'sawtooth':   6,   # Rising Sawtooth (most common upward-ramp LFO)
-    '+sawtooth':  7,
-    'sawtooth_down': 8,  # Falling Sawtooth (explicit downward ramp)
-    'random':    20,   # 8 Step — nearest deterministic approximation to S&H
-    'hemiquaver':20,   # 8 Step (stepped clock pattern, like E4B hemiquaver)
+    'none':          _K2_LFO_SHAPE_NONE,
+    'sine':          1,
+    '+sine':         2,
+    'square':        3,
+    '+square':       4,
+    'triangle':      5,
+    '+triangle':     6,
+    'sawtooth':      7,   # Rise Saw
+    '+sawtooth':     8,   # +Rise Saw
+    'sawtooth_down': 9,   # Fall Saw
+    '+sawtooth_down': 10,  # +Fall Saw
+    # 8 Step is the nearest deterministic stand-in for sample-and-hold and for
+    # the E4B hemiquaver. **30, not 21** -- see the positional formula above.
+    'random':        _k2_step_shape_byte(8),
+    'hemiquaver':    _k2_step_shape_byte(8),
 }
+# ⚠ THE STEP SHAPES NEED NAMES THE READER ALSO USES, or a K2000 source's own
+# step LFO is flattened to Sine on the way back out. `krz_parser` names byte 20
+# `3_step`; this table had no such key, `.get(name, sine)` fell back, and a
+# round trip turned three corpus voices' 3-Step into a Sine. Found by diffing a
+# real bank through the pair, not by reading either side.
+#
+# Generated from the same formula the reader uses, so the two cannot drift and
+# the 9-Step / 11-Step gaps stay open on both sides.
+for _n in (3, 4, 5, 6, 7, 8, 10, 12):
+    _LFO_SHAPE['%d_step' % _n] = _k2_step_shape_byte(_n)
+    _LFO_SHAPE['+%d_step' % _n] = _k2_step_shape_byte(_n, unipolar=True)
+#: Every byte the machine accepts, so a writer-side value can be asserted
+#: against the same set the reader validates. 27 values, matching the corpus.
+_K2_LFO_SHAPE_VALID = frozenset(_LFO_SHAPE.values())
+#: Phase, at segment byte 4. 0-based over the four positions the LFO page
+#: offers (Musician's Guide: 0, 90, 180, 270 degrees). We do not currently
+#: carry a phase in the model, so byte 4 is left at the template's own value
+#: rather than receiving a shape enum, which is what it used to receive.
+_K2_LFO_PHASE_MAX = 3
 _K2_CS_ENV2 = 121      # control-source code for ENV2
 _K2_CS_LFO1 = 114      # control-source code for LFO1
 _K2_CS_MWHEEL = 1      #: MWheel -- the codes ARE MIDI CC numbers (k2kremote §73)
@@ -1522,6 +1607,26 @@ _K2_CS_MWHEEL = 1      #: MWheel -- the codes ARE MIDI CC numbers (k2kremote §7
 _K2_F3_PANNER = 40
 _K2_ALG_PANNER = 2
 _K2_PAN_ADJUST, _K2_PAN_SRC1, _K2_PAN_DEPTH = 1, 5, 6
+#: The panner's SECOND wire, from the same hardware map above (program offsets
+#: 248/249/250/251 at seg index = offset - 241). It is what lets LFO1 and LFO2
+#: both reach pan instead of one masking the other.
+_K2_PAN_DPTCTL, _K2_PAN_MINDPT, _K2_PAN_MAXDPT, _K2_PAN_SRC2 = 7, 8, 9, 10
+
+#: LFO2's control-source code, and its own segment.
+#:
+#: 116 is the reader's `_K2_CS_LFO2` and matches the Musician's Guide Ch.25
+#: list, the same list that validated LFO1 = 114. The SEGMENT is `0x15`,
+#: located from the corpus in §KRZLFO2SEG: 4 226 of 4 280 program objects carry
+#: one, beside `0x14`, with byte-for-byte the same field ranges.
+_K2_CS_LFO2 = 116
+_K2_LFO1_SEG, _K2_LFO2_SEG = 0x14, 0x15
+#: A control source of OFF. 0 in 86.4% of corpus `RateCtl` bytes, whose
+#: documented default is OFF — so this is corpus-supported rather than assumed.
+_K2_CS_OFF = 0
+#: Within an LFO segment: `[1]` RateCtl, `[2]` MnRate, `[3]` MxRate,
+#: **`[4]` Phase, `[5]` Shape** -- settled on the panel 2026-09-25, and the
+#: reverse of what §4.5 said. See `_LFO_SHAPE`.
+_K2_LFO_RATE, _K2_LFO_PHASE_IDX, _K2_LFO_SHAPE_IDX = 2, 4, 5
 
 
 def _env_steps(seconds: float) -> float:
@@ -2707,6 +2812,10 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
                  int(round(_depth_db / KRZ_F4_AMP_DEPTH_DB_PER_UNIT)))
         if _d > 0:
             _hob4 = seg(0x53)
+            # ⚠ SELECTING LFO2 HERE USED TO LEAVE ITS RATE UNPROGRAMMED, so the
+            # swing ran at whatever the template carried. The LFO2 segment is
+            # written further down whenever any LFO2 destination is reached,
+            # and `lfo2_to_volume` is one of them, which closes that.
             _hob4[KRZ_F4_AMP_SRC1_INDEX] = (KRZ_F4_AMP_SRC_LFO1 if _use1
                                             else KRZ_F4_AMP_SRC_LFO2)
             _hob4[KRZ_F4_AMP_DEPTH_INDEX] = _d
@@ -2781,7 +2890,12 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
         # dropped, in the same class as the unrepresentable filter envelope of
         # §AKAIENV2SUSTAIN. Not written yet.
         _pan_depth = (getattr(voice, 'lfo1_to_pan', 0.0) or 0.0)
-        _want_pan = bool(_pan_depth) and algo == 5 and ftype_byte == _K2_FILTER_2P_LP
+        # LFO2 REACHES PAN TOO, on the panner's own second wire. Either LFO
+        # alone justifies switching to the panner algorithm; the allocation
+        # below decides which wire each one gets.
+        _pan_depth2 = (getattr(voice, 'lfo2_to_pan', 0.0) or 0.0)
+        _want_pan = bool(_pan_depth or _pan_depth2) and algo == 5 \
+            and ftype_byte == _K2_FILTER_2P_LP
         if _want_pan:
             algo, f3_byte = _K2_ALG_PANNER, _K2_F3_PANNER
         hob_f1[0] = ftype_byte                               # F1 DSP filter type
@@ -2799,14 +2913,34 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
             # Adjust stays 0 (centred) -- the LFO sweeps about centre, and a
             # static offset is a different parameter the source does not state.
             _f3 = seg(0x52)
-            _f3[_K2_PAN_SRC1]  = _K2_CS_LFO1
+            _f3[_K2_PAN_SRC1]  = _K2_CS_LFO1 if _pan_depth else _K2_CS_LFO2
             # SCALED, since 2026-09-18 -- `_pan_depth * 50` was a raw fraction
             # of this machine's rail with nothing behind it, putting a real
             # program on byte 32 against a measured target of 14. The law is
             # 0.372 dB/byte, linear to +/-0.003 over a 10x range. See
             # KRZ_LFO_PAN_DEPTH_SCALE.
             _f3[_K2_PAN_DEPTH] = max(-50, min(50, int(round(
-                _pan_depth * 50 * KRZ_LFO_PAN_DEPTH_SCALE)))) & 0xFF
+                (_pan_depth or _pan_depth2)
+                * 50 * KRZ_LFO_PAN_DEPTH_SCALE)))) & 0xFF
+            # SECOND WIRE: both LFOs pan, rather than the deeper one winning.
+            #
+            # The panner's Src2 is hardware-mapped in the same diff as Src1
+            # (program offsets 248-251, seg 7-10). `MinDpt == MaxDpt` with
+            # `DptCtl = OFF` makes it a plain wire, the same construction used
+            # for LFO2 -> Pitch above and for the same measured reason.
+            #
+            # ⚠ Src2 is written here for the first time. Src1 is HW-confirmed
+            # (§PANMOD, balance measured); Src2's OFFSET is from the same
+            # confirmed diff but has never been driven, so whether a second
+            # panner wire SUMS with the first is untested. It is on the
+            # §KRZLFO2RATE bank, where it costs nothing extra.
+            if _pan_depth and _pan_depth2:
+                _d2 = max(-50, min(50, int(round(
+                    _pan_depth2 * 50 * KRZ_LFO_PAN_DEPTH_SCALE)))) & 0xFF
+                _f3[_K2_PAN_SRC2]   = _K2_CS_LFO2
+                _f3[_K2_PAN_MINDPT] = _d2
+                _f3[_K2_PAN_MAXDPT] = _d2
+                _f3[_K2_PAN_DPTCTL] = _K2_CS_OFF
             # SPREAD THE TWO WIRES, or none of the above is audible (§K2PANWIRES).
             # Musician's Guide p284: PANNER "converts a single wire at its input
             # into a double wire at its output" and "by itself the PANNER doesn't
@@ -3020,33 +3154,169 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
             # sweep the source asked for, and the K2000 has the sign.
             hob_f1[6] = _filter_env_depth_byte(_fenv_ct) & 0xFF
 
-    # --- LFO1 + vibrato (LFO1 -> Pitch) ---
-    lfo = seg(0x14)
+        # --- LFO -> Filter-Freq. THE F1 BLOCK HAS TWO WIRES. -------------
+        #
+        # ⚠ I first wrote this with ONE wire and a precedence, on the grounds
+        # that the F1 block's Src2 offset was "not hardware-mapped" and that
+        # inferring it from the panner's layout would repeat the retracted
+        # cord claim of 2026-09-24. **That was wrong, and grepping our own
+        # reader before writing the caution would have shown it:**
+        #
+        #     krz_parser, the filter block:
+        #         for _src, _depth, _floor in ((seg[5], seg[6], 0),
+        #                                      (seg[10], seg[9], seg[8])):
+        #
+        # The reader has read the Src2 wire all along, and reads it correctly
+        # off real third-party material -- a corpus program carrying BOTH a
+        # 5300-cent filter envelope on Src1 and an LFO2 filter routing on Src2
+        # is what surfaced this, in a round-trip that lost the LFO2 my own
+        # precedence had just dropped. The offsets are established by our
+        # reader agreeing with the machine's own files, which is stronger than
+        # the analogy I declined to make.
+        #
+        #     Src1  seg[5] source, seg[6] Dpt
+        #     Src2  seg[10] source, seg[8] MinDpt, seg[9] MaxDpt
+        #
+        # So: the envelope keeps Src1 (byte-identical to every conversion
+        # before today), and an LFO takes Src2. Only when BOTH LFOs want a
+        # filter on a voice that also has an envelope does anything lose, and
+        # that is reported rather than dropped silently.
+        #
+        # `MinDpt == MaxDpt` on Src2, the same plain-wire construction used
+        # for LFO2 -> Pitch and for the panner, and for the same measured
+        # reason (DptCtl scales linearly between the two, k2kremote §73).
+        _l1_filt = getattr(voice, 'lfo1_to_filter', 0.0) or 0.0
+        _l2_filt = getattr(voice, 'lfo2_to_filter', 0.0) or 0.0
+        if _l1_filt or _l2_filt:
+            # EXACTLY THE READER'S INVERSE. `krz_parser` stores this
+            # destination as `_k2_depth_cents(byte) / KRZ_DEPTH_MAX_CENTS`,
+            # so multiplying back round-trips a K2000 source. Inventing a
+            # separate "full scale" here would give one field two definitions
+            # of 1.0 -- the fault the parser's own comment records fixing for
+            # the envelope in August.
+            #
+            # ⚠ That constant is a CEILING, not a measured full-scale depth:
+            # the parser flags "each needs its own measured full scale (TODO:
+            # KRZ depth normalisation)". KRZ->KRZ is exact; an MPC or E4B
+            # source whose 1.0 means something else is only as right as that
+            # TODO. A round-trip test here is not a calibration.
+            _wires = [(_K2_CS_LFO1, _l1_filt)] if _l1_filt else []
+            if _l2_filt:
+                _wires.append((_K2_CS_LFO2, _l2_filt))
+            _free = []
+            if not _fenv_ct:
+                _free.append('src1')
+            _free.append('src2')
+            _lost = []
+            for (_src, _amt), _slot in zip(_wires, _free):
+                _byte = _filter_env_depth_byte(_amt * KRZ_DEPTH_MAX_CENTS) & 0xFF
+                if _slot == 'src1':
+                    hob_f1[5] = _src
+                    hob_f1[6] = _byte
+                else:
+                    hob_f1[10] = _src
+                    hob_f1[9] = _byte
+                    hob_f1[8] = _byte
+                    # `DptCtl` (seg[7]) IS DELIBERATELY NOT WRITTEN, and that
+                    # is safe by a MEASURED law rather than by hope.
+                    #
+                    # seg[7] is the one field of this block whose offset we
+                    # infer from the panner's layout -- Src1, Src2, MinDpt and
+                    # MaxDpt are all read by `krz_parser` off real material,
+                    # seg[7] is not. Writing a byte on an inferred offset is
+                    # what produced the retracted cord claim of 2026-09-24.
+                    #
+                    # It cannot matter here: k2kremote measured DptCtl scaling
+                    # LINEARLY between MinDpt and MaxDpt (§73 -- wheel 0/64/127
+                    # gave +0.99/+1.97/+3.00 st for Min=100 Max=300), and this
+                    # wire sets Min == Max. A linear interpolation between two
+                    # equal endpoints is constant for every controller value,
+                    # so whatever the template left in seg[7] changes nothing.
+                    #
+                    # ⚠ That argument holds ONLY while Min == Max. If this wire
+                    # ever gains a range, seg[7] stops being moot and must be
+                    # located before it is written.
+            if len(_wires) > len(_free):
+                _lost = ['lfo1_to_filter' if _src == _K2_CS_LFO1
+                         else 'lfo2_to_filter'
+                         for _src, _ in _wires[len(_free):]]
+            if _lost:
+                _diag(_W, 'KRZ_FILTER_WIRE_CONTENDED',
+                      'the K2000 F1 filter block has two modulation wires and '
+                      '%d routings wanted them; dropped %s'
+                      % (len(_wires) + (1 if _fenv_ct else 0),
+                         ', '.join(_lost)),
+                      subject=getattr(voice, 'name', None) or 'layer',
+                      content_lost=True,
+                      detail={'dropped': _lost,
+                              'filter_env_holds_src1': bool(_fenv_ct)},
+                      remedy='route one of the LFOs to pitch or pan instead')
+
+    # --- LFO1 + LFO2 segments, then the routings ---
+    #
+    # THE RATE IS A LOOKUP, NOT A SLOPE. This call site used to carry a long
+    # warning that `byte = 26 + 10*Hz` had no provenance and was 11.5% out at
+    # the one point anyone had checked. **That warning is spent**: the 185-row
+    # panel ladder it was waiting for landed, `krz_lfo_rate_hz_to_byte` is a
+    # table lookup over bytes 0..184, and `..._actual` reports what was
+    # reachable because the grid is coarse above 10 Hz. Removing the warning is
+    # part of the fix -- a stale caveat makes correct code look wrong, and this
+    # one outlived its measurement by long enough to be quoted as current.
+    lfo = seg(_K2_LFO1_SEG)
+    lfo2 = seg(_K2_LFO2_SEG)
     if voice.lfo1_rate is not None:
-        # !! THIS LAW IS WRONG AND HAS NO PROVENANCE. `byte = 26 + 10*Hz` is
-        # asserted by this line and by nothing else -- no comment, no anchors, no
-        # calibration record anywhere in the repository. Where the E4XT curve at
-        # least documented its three readings and asked for more, this one just
-        # states a slope.
-        #
-        # MEASURED DISAGREEMENT 2026-09-07 (k2kremote, panel + audio):
-        #     2-pole src  byte 113   machine  8.70 Hz   this law  8.70   ( 0.0%)
-        #     Target      byte 141   machine 13.00 Hz   this law 11.50   (-11.5%)
-        # A line through both points is Hz = 0.1536*byte - 8.654; our slope is
-        # 0.1000, off by 35%. **The shape is wrong, not the scale** -- exact where
-        # it was presumably set and diverging everywhere else, which is what a
-        # single-anchor guess looks like. To reach 11.5 Hz this writes byte 141
-        # where the two-point line wants 131.
-        #
-        # NOT CORRECTED HERE: two points is not a law, and fitting a line to two
-        # readings would repeat exactly the mistake that put the E4XT map 28.4%
-        # out for three months (§ "a fitted law must be validated somewhere it
-        # was not fitted"). A panel sweep -- set the byte, read the rate the
-        # machine shows, one row per byte -- is running, and this becomes a
-        # lookup table when it lands, as the E4XT one now is.
-        lfo[2] = krz_lfo_rate_hz_to_byte(voice.lfo1_rate)
+        lfo[_K2_LFO_RATE] = krz_lfo_rate_hz_to_byte(voice.lfo1_rate)
     if voice.lfo1_shape:
-        lfo[4] = _LFO_SHAPE.get(voice.lfo1_shape.lower(), 0)  # fallback: Sine
+        # FALLBACK IS 1 (Sine), NOT 0. The enum is 1-based; 0 is not a shape.
+        # Left at 0 this would have written an out-of-range value for every
+        # unrecognised shape name -- the corrected-index version of the bug it
+        # is part of fixing.
+        lfo[_K2_LFO_SHAPE_IDX] = _LFO_SHAPE.get(voice.lfo1_shape.lower(),
+                                                _LFO_SHAPE['sine'])
+
+    # --- LFO2's own segment (§KRZLFO2SEG) -----------------------------------
+    #
+    # Written whenever ANY LFO2 destination is reached, and only then: an LFO2
+    # rate with nothing routed is inert, and the template's OFF default is the
+    # machine's own (LFO1 defaults to 2.00 Hz, LFO2 to OFF -- Musician's Guide).
+    # Writing a rate into an unrouted LFO2 would change a default for no gain.
+    #
+    # ⚠ **THE RATE LAW IS A CARRY-ACROSS, NOT A MEASUREMENT.** The 185-row
+    # ladder was measured on LFO1 `MnRate` and k2kremote stated that boundary
+    # themselves. What supports reusing it: byte 2 tops out at exactly 184 on
+    # both segments across 32 583 corpus LFOs, and the Musician's Guide gives
+    # both LFOs the same published 0-24 Hz range. What would refute it: one
+    # panel reading. §KRZLFO2RATE is the bank that asks, and until it runs
+    # every LFO2 rate here is provisional.
+    _l2_routed = any((getattr(voice, f, 0.0) or 0.0)
+                     for f in ('lfo2_to_pitch', 'lfo2_to_filter',
+                               'lfo2_to_pan', 'lfo2_to_volume'))
+    # ⚠ **OR THE SOURCE STATED A RATE.** This was `if _l2_routed:` alone, on the
+    # reasoning that "a rate reaching nothing is inert, so writing one changes a
+    # default for no gain". That reasoning was sound when NOTHING READ the rate
+    # -- and it stopped being sound the moment `krz_parser` started extracting
+    # LFO2's segment on the same day.
+    #
+    # Measured: 39.7% of corpus voices carry an LFO2 rate while only ~3% route
+    # LFO2 anywhere, so the gate dropped the stated rate on most of them and a
+    # KRZ -> KRZ round trip preserved **12 of 58**. An unrouted LFO2 rate is
+    # still inert to the SOUND, but it is the source's value rather than a
+    # default, and discarding a value the source states is not ours to do for
+    # free.
+    if _l2_routed or getattr(voice, 'lfo2_rate', None) is not None:
+        _l2_hz = getattr(voice, 'lfo2_rate', None)
+        if _l2_hz is None:
+            # A depth with no rate is the defect this work exists to close:
+            # the writer used to select LFO2 as the tremolo source and leave
+            # its rate at whatever the template carried. Fall back to LFO1's
+            # rate, which is at least a rate the source asked for somewhere.
+            _l2_hz = voice.lfo1_rate
+        if _l2_hz is not None:
+            lfo2[_K2_LFO_RATE] = krz_lfo_rate_hz_to_byte(_l2_hz)
+        _l2_shape = getattr(voice, 'lfo2_shape', None)
+        if _l2_shape:
+            lfo2[_K2_LFO_SHAPE_IDX] = _LFO_SHAPE.get(
+                _l2_shape.lower(), _LFO_SHAPE['sine'])
     if getattr(voice, 'lfo1_to_pitch', 0.0) > 0.0:
         _kw = max(0.0, min(1.0, getattr(voice, 'wheel_to_lfo', 0.0) or 0.0))
         if _kw <= 0.0:
@@ -3082,6 +3352,37 @@ def _patch_layer(voice, keymap_id: int, stereo: bool = False,
             cal[25] = _lfo_pitch_depth_byte(voice.lfo1_to_pitch)
             cal[24] = _lfo_pitch_depth_byte(voice.lfo1_to_pitch * (1.0 - _kw))
             cal[23] = _K2_CS_MWHEEL
+
+    # --- LFO2 -> Pitch, on whichever pitch wire LFO1 did not take -----------
+    #
+    # THE PITCH PAGE HAS TWO WIRES AND THEY DO NOT COLLIDE:
+    #
+    #     Src1   cal[21] source, cal[22] Dpt
+    #     Src2   cal[26] source, cal[24] MinDpt, cal[25] MaxDpt, cal[23] DptCtl
+    #
+    # LFO1 takes Src1 when ungated and Src2 when wheel-gated, so the other is
+    # free by construction and LFO2 takes it. **Nothing is masked and nothing
+    # overwrites** -- which is the question Jan asked about LFO1/LFO2 mapping
+    # on 2026-09-25, answered by allocation rather than by precedence.
+    #
+    # On Src2, `MinDpt == MaxDpt` with `DptCtl = OFF`. k2kremote measured
+    # DptCtl scaling LINEARLY between Min and Max (§73: wheel 0/64/127 gave
+    # +0.99/+1.97/+3.00 st for Min=100 Max=300), so equal endpoints give a
+    # constant depth whatever the controller does -- a plain second wire built
+    # out of a ranged one, rather than an approximation of it.
+    _l2_pitch = getattr(voice, 'lfo2_to_pitch', 0.0) or 0.0
+    if _l2_pitch > 0.0:
+        _l1_took_src2 = (getattr(voice, 'lfo1_to_pitch', 0.0) or 0.0) > 0.0 \
+            and max(0.0, min(1.0, getattr(voice, 'wheel_to_lfo', 0.0) or 0.0)) > 0.0
+        _d2 = _lfo_pitch_depth_byte(_l2_pitch)
+        if _l1_took_src2:
+            cal[21] = _K2_CS_LFO2
+            cal[22] = _d2
+        else:
+            cal[26] = _K2_CS_LFO2
+            cal[25] = _d2
+            cal[24] = _d2
+            cal[23] = _K2_CS_OFF
 
     return segs
 

@@ -837,15 +837,40 @@ signaling "peak reached"; an unused release stage's `level<=0` naturally
 means "already at the end" either way) — only the single-stage decay/
 sustain read needed the explicit check.
 
-### 4.5 LFO segment (0x14)
+### 4.5 LFO segments — `0x14` is LFO1, `0x15` is LFO2
 
-`_patch_layer` sets, on the LFO1 segment (`seg 0x14`):
+**Both LFOs have the same five-field layout**, located from the 201-file
+corpus (§KRZLFO2SEG): `0x15` appears in 4 226 of 4 280 program objects,
+one per layer alongside `0x14`, with byte-for-byte the same ranges.
 
 | Byte | Field | Encoding |
 |---|---|---|
-| `2` | rate | `round(26 + 10 × lfo1_rate)` — linear (HW: 1 Hz = 36, 2 Hz = 46, 10 Hz = 126) |
-| `4` | shape | enum (`_LFO_SHAPE`), all 26 shapes probed live 2026-06-17: `0` Sine, `1` +Sine, `2` Square, `3` +Square, `4` Triangle, `5` +Triangle, `6` Rising Saw, `8` Falling Saw, `20` 8-Step (nearest to S&H/random), … |
-| `5` | phase | `1 + deg/45` (template default) |
+| `1` | `RateCtl` | control-source code (0..132; 86.4 % of the corpus is 0 = OFF). Never written by us |
+| `2` | `MnRate` | **lookup, 0..184** — `krz_lfo_rate_byte_to_hz`, the 185-row ladder k2kremote measured on LFO1 |
+| `3` | `MxRate` | same 0..184 rail. Never written by us; **its law is unmeasured** |
+| `4` | **phase** | 0-based over the four positions the LFO page offers: `0`=0°, `1`=90°, `2`=180°, `3`=270°. We do not carry a phase in the model, so this is left at the template's value |
+| `5` | **shape** | `0`=None (**switches the LFO OFF**), `1`=Sine, `2`=+Sine, `3`=Square, `4`=+Square, `5`=Triangle, `6`=+Triangle, `7`=Rise Saw, `8`=+Rise Saw, `9`=Fall Saw, `10`=+Fall Saw; **step shapes are positional at `14 + 2n`** with the `+` variant one above (3→20 … 8→30, 10→34, 12→38). `11..19`, `32/33`, `36/37` and `40+` display the machine's own `Not Found` |
+
+> **MEASURED 2026-09-25 (k2kremote): every byte 0..44 written to program offset
+> 102 and read off the K2000's panel**, object restored, label set cross-checked
+> against the v3.87J ROM shape table at `0x1A17C6..0x1A1D46`. The gaps at 32/33
+> and 36/37 are where 9-Step and 11-Step would be; the encoding leaves them
+> empty rather than packing the list. The ROM table is contiguous while the
+> bytes are not, so the enum is **not** a direct index into it.
+>
+> ⚠ **This table previously had shape and phase THE OTHER WAY ROUND**, citing an
+> "all 26 shapes probed live 2026-06-17" probe — which had `Square=2` (really 3)
+> and `8-Step=20` (really 30), i.e. it read a field it did not understand.
+> `krz_writer` wrote the shape into byte 4 and `krz_parser` read it from byte 4,
+> so the two agreed with each other and disagreed with the machine: **a
+> symmetric error, invisible to every round-trip test.** Blast radius: 10.2% of
+> 32 583 corpus LFO segments carry a non-Sine shape and 3.5% carry a non-zero
+> phase we were overwriting. §KRZLFOSHAPE.
+
+**The rate row above superseded `round(26 + 10 × rate)`**, which was a slope
+with no provenance and which shipped a 13.00 Hz LFO for an 11.50 Hz source.
+The ladder is a lookup in both directions and `krz_lfo_rate_hz_to_byte_actual`
+returns what was actually reachable, because the grid is coarse above 10 Hz.
 
 LFO→pitch routing is expressed through `CAL[21] = 114` (LFO1 source) /
 `CAL[22]` (depth). Control-source codes match the K2000 Musician's Guide Ch 25
@@ -1318,6 +1343,14 @@ measured table — all confirmed:**
 The 185-row ladder was measured on **LFO1 `MnRate`, on a Program object**. It has
 **not** been checked against `GLFO2`, `LFO2`, or the `MxRate` field — they may
 well share it, but that is untested (k2kremote's own boundary on their result).
+
+**Since 2026-09-25 we DO write an LFO2 `MnRate`** (segment `0x15` byte 2) and
+it uses this ladder, which is a **carry-across, not a measurement**. What
+supports it: byte 2 tops out at exactly 184 on both segments, and the
+Musician's Guide gives both LFOs the same 0–24 Hz published range. What would
+refute it: any reading off the panel that disagrees. §KRZLFO2RATE is the bank
+that asks, and until it is run every LFO2 rate we write is provisional and
+says so at the call site.
 
 **This project is inside that boundary, and it was checked rather than assumed.**
 `krz_writer` has exactly one call site for the rate conversion —

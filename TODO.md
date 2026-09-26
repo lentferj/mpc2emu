@@ -8229,6 +8229,21 @@ than a constant offset, and a different region from §FIL2FRGAP's 19-byte hole
 one note, one machine — recorded, not fixed.
 
 
+## Three model fields are set by a reader and emitted by nothing
+
+**Status:** surveyed 2026-09-25 (§ORPHANFIELDS), after Jan asked whether the
+`lfo2_*` result generalised. It does not — across all 61 fields:
+
+- **`velocity_to_pan`** (MPC, AKAI) — deliberate for E4B (§E4XTVELSRC), but
+  an **undocumented** drop on KRZ and AKAI. Decide or document.
+- **`key_to_pan`** (AKAI) — see below.
+- **`lfo1_sync_division`** (MPC) — no target has a tempo-sync division; the
+  K2000's LFO page has no clock sync at all. A capability limit, not a gap.
+
+`src_resonance` and `firmware_raw` are set by no reader and that is correct:
+the first is `krz_writer`'s own scratch field, the second the firmware-sim
+payload.
+
 ## `key_to_pan` is read from AKAI and dropped by the E4B writer
 
 **Status:** open, found by `docs/PARAMETER_MATRIX.md` on 2026-09-25.
@@ -8251,36 +8266,94 @@ Answerable offline from the programs already scanned for §AKAIZONEMERGE.
 
 See `docs/RESOLUTION_NOTES.md` §E4BKEYPAN.
 
-## KRZ path drops every LFO2 routing
+## KRZ LFO2: DONE and hardware-confirmed. Read-side gaps remain elsewhere
 
-**Status:** open, blast radius measured 2026-09-25 (§KRZLFO2).
+**Status:** implemented and measured 2026-09-25. All three questions closed on
+the K2000R (bank `CD5-KRZLFO2.iso`, ID5, still resident).
 
-`krz_writer` reads no `lfo2_*` field except `lfo2_to_volume`. Measured cost
-on real material, counting voices with a non-zero LFO2 **destination** (a
-rate with no destination costs nothing):
+- **Rate ladder shared** — panel at six bytes, then the sound at byte 140:
+  LFO1 12.803 Hz, LFO2 12.803 Hz (§KRZLFO2AUDIO). No longer a carry-across.
+- **Byte 4 = Phase, byte 5 = Shape**, enum fully swept 0..44, step shapes
+  positional at `14 + 2n` (§KRZLFOSHAPE). Both reader and writer had been on
+  byte 4 — a **symmetric** error no round trip could catch.
+- **The panner's Src2 sums with Src1** — 7.06 dB against 3.49/3.04 alone,
+  2.02× the deeper single wire, against a 1.71 dB control floor.
 
-| source | voices | hit | presets hit |
-|---|---|---|---|
-| E4B third-party (131 banks) | 32 558 | 51 (0.16%) | 39 (2.43%) |
-| AKAI library CD-ROMs | 8 919 | 4 862 (54.51%) | 1 892 (42.75%) |
-| MPC local `.xpm` | 307 | 0 | 0 |
+### Read side: closed everywhere it could be (§LFO2READAUDIT)
 
-The AKAI figure is **entirely `lfo2_to_pan`** and is dominated by two
-publisher templates (99.7% and 97.8% of two discs carry the same vector;
-one whole disc carries none). The MPC zero is a property of our corpus —
-no local file has an LFO2 block and none is an MPC 3 JSON program, which is
-the only MPC that emits one.
+KRZ went 2 -> 6 of 10 `lfo2_*` fields (+ rate, shape, to_pitch, to_pan) and
+MPC 3 -> 5 (+ to_filter, sync). **`krz_parser` read no pan modulation at all,
+for either LFO**, although §PANMOD confirmed the offsets in September — a
+symmetric gap, invisible to round trips because neither side had it.
 
-**Cheap first half, needs no new measurement:** `lfo2_to_pan` alone takes the
-AKAI cost to 0 and the E4B cost to 0.06%, and the K2000 pan depth rail is
-already calibrated (`_K2_PAN_DEPTH`).
+### Still open
 
-**Blocked on** (second half only): the K2000 LFO2 rate/shape rails have never
-been measured, where LFO1's were. Pitch and filter destinations need them.
+**AKAI: does `PANDEP` gate the pan matrix?** (§AKAILFO2REST) We read
+`lfo2_to_pan` from the matrix amount alone. **1 342 of 4 433 corpus programs
+(30.3%)** carry a matrix amount naming LFO2 with `PANDEP` at zero — either
+they pan and PANDEP is not a gate, or they do not and every conversion adds an
+auto-pan the machine never plays. Not implemented either way: applying PANDEP
+on a guess silently rewrites 30% of the corpus's pan behaviour. **Blocked on**
+one bench pair (matrix amount with PANDEP 0 vs 99, on balance), referred to
+s3ked who has that apparatus from §181.
 
-Also fixed by the same work: `krz_writer` currently selects
-`KRZ_F4_AMP_SRC_LFO2` for a tremolo without ever programming LFO2's rate, so
-the swing runs at whatever rate the template carries. Unreachable on every
-source we hold (0 voices carry `lfo2_to_volume`), but wrong.
+**Neither handoff file is covered by any guard.** `.claude/handoff-*.md` are
+gitignored and every consistency check walks tracked files only — so a
+retracted finding can sit in one indefinitely. One did:
+`handoff-vinsamlib.md` told VinSamLib that AKAI auto-pan is inert for 20 days
+after that was retracted, and it was **already stale on the day it was
+written**. Corrected in place 2026-09-25. A guard over an untracked file that
+one peer reads needs a scope decision — Jan's call, not taken here.
 
-See `docs/RESOLUTION_NOTES.md` §KRZLFO2.
+**`MxRate` (`[3]` on both KRZ LFO segments)** — same 0..184 rail, never
+written, law unmeasured. And the COMMON page's **`Globals`**, which makes LFO2
+global: a global LFO2 runs once per layer rather than per note, so converted
+per-voice modulation would arrive phase-locked. Both cheap while
+`CD5-KRZLFO2.iso` is resident; k2kremote has explicitly not claimed either.
+
+**MPC 3's two GLOBAL LFOs are located but not modelled.** Settled from a real
+project (§MPC3LFOJSON): they live at `program.<kind>.freeRunningLfoData.
+{value0,value1}` — **program level, not per keygroup** — with only
+`lfoRate`, `lfoWaveformType`, `lfoLevel` and `lfoSync`, exactly matching the
+photographed page. `VoiceLayer` has no global-LFO concept, and the K2000's
+COMMON-page `Globals` is the natural destination (a global LFO2 runs once per
+layer, not per note), so converting one as a per-voice LFO would arrive
+phase-locked across the keyboard. **Blocked on** a model decision, not on
+evidence.
+
+**MPC 3 `lfoLevel` is a per-LFO master depth whose LAW is unknown.** The field
+is confirmed present in every LFO node; whether the effective depth is
+`lfoLevel × destination` is not readable from a file. Same open question as
+the AKAI `PANDEP` gate, and unapplied for the same reason.
+
+**MPC 3.9 Advanced Keygroups have TWO filters** — serial, parallel or blended
+— which is why `filterData` and `lfoFilterCutOff` are both `{value0,value1}`.
+**Jan's call 2026-09-25: not worth modelling at the moment.** We take the
+first of each. Recorded as a deliberate deferral so it is not re-found as a
+bug.
+
+**`filterData.value1` (Filter 2) is unread**, noted in §MPC3XPM: a program
+that uses Filter 2, or blends the pair, converts with only the first. Not an
+LFO issue; recorded here because it is the same `valueN` structure.
+
+**MPC `pitchEnvelope` is unread and the model has no field for it.**
+ConvertWithMoss reads it (cross-checked at `e74ae01d`); we have `amp_env` and
+`filter_env` only, so an MPC program with a pitch envelope converts without
+one, silently. Found by the LFO cross-check, unrelated to LFOs.
+
+**MPC 3 LFO `LEVEL` is a per-LFO master depth we do not model**
+(§MPC3LFOPAGE, photographed). Our depths are per-destination only, so the
+effective depth is presumably `LEVEL x destination` and we read the second
+factor alone — a `LEVEL 20` program would convert six times too deep. Same
+shape as the AKAI `PANDEP` question. Also unmodelled from the same page:
+`FADE IN` (distinct from `DELAY`), `RESET` (free-run vs retrigger, which the
+K2000 has), and the `[SYNC]` variants of delay and fade-in.
+
+**Not a gap:** the F1 block's `DptCtl` (seg[7]) is deliberately unwritten. It
+is the one field of that block on an inferred offset, and it is moot while the
+wire sets `MinDpt == MaxDpt` — `DptCtl` interpolates linearly between them
+(measured, §73), so equal endpoints are constant for any controller. If that
+wire ever gains a range, seg[7] must be located first.
+
+See `docs/RESOLUTION_NOTES.md` §KRZLFO2AUDIO, §KRZLFO2READ, §KRZLFOSHAPE,
+§KRZLFO2RATE, §KRZLFO2SEG.

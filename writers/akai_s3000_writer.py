@@ -40,6 +40,9 @@ from pathlib import Path
 from typing import Optional
 
 from models.common import AKAI_LFO_PAN_DEPTH_SCALE
+from parsers.akai_s3000_parser import (  # noqa: E402
+    AKAI_LFO1WAVE_OFFSET, AKAI_LFO1WAVE_TO_SHAPE,
+    AKAI_LFO2DELAY_OFFSET, AKAI_LFO2WAVE_OFFSET)
 from models.common import (
     AKAI_VLOUD_SWING_DB_PER_UNIT, fit_velocity_line, AKAI_KEYFOLLOW_NEG_SCALE,
     ENV_CURVE_LINEAR,
@@ -2474,6 +2477,7 @@ _PROGRAM_HW_DEFAULTS = {
 def _program_common(name: str, n_keygroups: int, lo_key: int, hi_key: int,
                     lfo1_rate=None, prog_num: int = 0,
                     lfo1_depth=None, lfo1_wheel=0.0, lfo1_delay=None,
+                    lfo1_shape=None, lfo2_shape=None, lfo2_delay=None,
                     midi_channel=None, vel_to_volume_db=None,
                     lfo_to_pan=None, pan_lfo_rate=None) -> bytearray:
     """The 192-byte program common block, filled with the format's own
@@ -2678,6 +2682,51 @@ def _program_common(name: str, n_keygroups: int, lo_key: int, hi_key: int,
     # test is written explicitly so it does not have to be re-derived.
     if lfo1_delay is not None and lfo1_delay > 0.0:
         p[0x23] = akai_delay_seconds_to_byte(lfo1_delay)
+
+    # --- LFO1's WAVEFORM, written since 2026-09-25 --------------------------
+    #
+    # ⚠ **WE HAVE READ `LFO1WAVE` SINCE 2026-08-31 AND NEVER WRITTEN IT.**
+    # Jan spotted it the moment LFO2's shape started being written and LFO1's
+    # did not: an AKAI source's LFO1 waveform was extracted into the model,
+    # used by the K2000 and E4B writers, and silently dropped on the way back
+    # to AKAI. Every non-triangle LFO1 in the corpus -- 1.4% of programs, and
+    # 466 voices of the 5 125 measured -- converted AKAI -> AKAI as a triangle.
+    #
+    # Same offset family as LFO2's: 0x61 LFO1WAVE, 0x62 LFO2WAVE, adjacent and
+    # sharing one enum (0 Triangle, 1 Sawtooth, 2 Square, 3 random).
+    if lfo1_shape:
+        _w1 = {v: k for k, v in AKAI_LFO1WAVE_TO_SHAPE.items()}.get(
+            str(lfo1_shape).lower())
+        if _w1 is not None:
+            p[AKAI_LFO1WAVE_OFFSET] = _w1 & 0xFF
+
+    # --- LFO2's shape and delay, written since 2026-09-25 -------------------
+    #
+    # ⚠ **WE READ THESE AND COULD NOT WRITE THEM**, which is the ASYMMETRIC
+    # failure -- the one a round trip does catch, unlike the symmetric byte-4
+    # shape bug found on the K2000 the same morning. An AKAI source's LFO2
+    # waveform and delay were extracted into the model and then dropped on the
+    # way back out.
+    #
+    # Offsets from s3ked 2026-09-25, and the LFO2 parameters are SPLIT across
+    # the block with the first three named `PAN*` for historical reasons:
+    #     0x1d PANRAT (speed)   0x1e PANDEP (depth)   0x1f PANDEL (delay)
+    #     0x62 LFO2WAVE
+    # `LFODEL` at 0x23 above is LFO1's -- do not cross them.
+    #
+    # `LFO2WAVE` shares LFO1's enum: 0 Triangle, 1 Sawtooth, 2 Square, and
+    # 3 = random, the last hardware-measured for LFO1 (§46, §31) and confirmed
+    # present on 1.8% of corpus programs at 0x62 (§AKAILFO2REST).
+    if lfo2_shape:
+        _w = {v: k for k, v in AKAI_LFO1WAVE_TO_SHAPE.items()}.get(
+            str(lfo2_shape).lower())
+        if _w is not None:
+            p[AKAI_LFO2WAVE_OFFSET] = _w & 0xFF
+    if lfo2_delay is not None and lfo2_delay > 0.0:
+        # The same 0..99 rail and the same law as LFO1's delay, which is what
+        # `akai_delay_seconds_to_byte` was measured on. A carry-across across
+        # the two LFOs, said plainly rather than implied.
+        p[AKAI_LFO2DELAY_OFFSET] = akai_delay_seconds_to_byte(lfo2_delay)
     p[0x27] = 2                         # bendwheel > pitch
     p[0x2a] = _clamp(n_keygroups, 1, MAX_KEYGROUPS)
     p[0x3e] = 10                        # soft pedal loudness reduction
@@ -3983,9 +4032,33 @@ def build_program(preset, name: str, prog_num: int = 0,
     # between keygroups and the difference is audible balance.
     # Pan modulation from the first voice that states one -- same rule as the
     # LFO rate above, because the AKAI's pan matrix is per PROGRAM.
-    _pan = next((getattr(v, 'lfo1_to_pan', 0.0) or getattr(v, 'lfo2_to_pan', 0.0)
-                 for v in preset.voices
-                 if (getattr(v, 'lfo1_to_pan', 0.0) or getattr(v, 'lfo2_to_pan', 0.0))), None)
+    #
+    # ⚠ **WHICH LFO IT CAME FROM IS LOAD-BEARING, and this used to discard it.**
+    # `p[0x1d]` is `PANRAT` -- **LFO2's** rate on this machine, which is what
+    # drives the pan matrix -- and it was being fed `lfo1_rate` regardless.
+    # A source stating an LFO2 pan at its own rate had that rate replaced by
+    # LFO1's, which is the AKAI-side twin of the K2000 defect fixed the same
+    # day (a pan source selected and its rate left to something else).
+    #
+    # `lfo1_to_pan` still wins where both are stated: the AKAI pan matrix is
+    # per PROGRAM and has one rate, so one of the two must lose, and taking
+    # the first-stated one keeps the existing behaviour for every source that
+    # only ever sets LFO1.
+    _pan = _pan_rate = None
+    for v in preset.voices:
+        _p1 = getattr(v, 'lfo1_to_pan', 0.0) or 0.0
+        _p2 = getattr(v, 'lfo2_to_pan', 0.0) or 0.0
+        if _p1:
+            _pan, _pan_rate = _p1, getattr(v, 'lfo1_rate', None)
+            break
+        if _p2:
+            # LFO2's OWN rate, falling back to LFO1's only if the source
+            # never stated one -- a depth with no rate is still better placed
+            # on a rate the source asked for somewhere than on the default.
+            _pan = _p2
+            _pan_rate = (getattr(v, 'lfo2_rate', None)
+                         or getattr(v, 'lfo1_rate', None))
+            break
     # Truthiness here is correct ONLY because `lfo1_to_pitch` defaults to 0.0
     # rather than None, so a zero carries no information to preserve. If that
     # field ever becomes Optional, this and `_program_common`'s guard change
@@ -3994,11 +4067,24 @@ def build_program(preset, name: str, prog_num: int = 0,
                  if getattr(v, 'lfo1_to_pitch', None)), None)
     _kw = next((getattr(v, 'wheel_to_lfo', 0.0) or 0.0 for v in preset.voices
                 if getattr(v, 'lfo1_to_pitch', None)), 0.0)
+    # LFO2's shape and delay, from the first voice that states one -- the same
+    # first-stated rule as the LFO1 fields above, because these are PROGRAM
+    # level on this machine and one voice must win.
+    _l1sh = next((getattr(v, 'lfo1_shape', None) for v in preset.voices
+                  if getattr(v, 'lfo1_shape', None)), None)
+    _l2sh = next((getattr(v, 'lfo2_shape', None) for v in preset.voices
+                  if getattr(v, 'lfo2_shape', None)), None)
+    _l2dly = next((getattr(v, 'lfo2_delay', None) for v in preset.voices
+                   if getattr(v, 'lfo2_delay', None)), None)
     _dly = next((v.lfo1_delay for v in preset.voices
                  if getattr(v, 'lfo1_delay', None) is not None), None)
     out = _program_common(name, len(keygroups), lo, hi, lfo1_rate=_lfo,
                           lfo1_depth=_dep, lfo1_wheel=_kw, lfo1_delay=_dly,
-                          lfo_to_pan=_pan, pan_lfo_rate=_lfo,
+                          lfo_to_pan=_pan,
+                          pan_lfo_rate=(_pan_rate if _pan_rate is not None
+                                        else _lfo),
+                          lfo1_shape=_l1sh,
+                          lfo2_shape=_l2sh, lfo2_delay=_l2dly,
                           prog_num=prog_num, midi_channel=midi_channel,
                           vel_to_volume_db=_vvol)
     dead: list = []

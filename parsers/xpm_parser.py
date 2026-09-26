@@ -40,6 +40,7 @@ from models.common import (
     nominal_filter_env_cents, nominal_velocity_filter_cents,
     nominal_knob_to_hz,
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType, lfo_knob_to_hz,
+    LFO_RATE_HZ_MAX,
     cap_voices_by_coverage, stereo_to_mono, hz_to_e4b_cutoff,
     mpc_velsens_swing_db, MPC_VELSENS_PIVOT,
     VELOCITY_CURVE_DB_LINEAR, VELOCITY_CURVE_AMPLITUDE_LINEAR,
@@ -1162,11 +1163,58 @@ def _resolve_mpc3_sample(layer, sample_dir) -> Optional[Path]:
 
 
 def _v0(node, default=0.0):
-    """MPC 3 wraps many scalars as {'value0': x} (one entry per articulation);
-    take the first."""
+    """MPC 3 wraps many scalars as `{'value0': x, 'value1': y, ...}`; take the
+    first.
+
+    ⚠ **`valueN` INDEXES THE INSTANCE, NOT THE ARTICULATION.** This docstring
+    said "one entry per articulation" until 2026-09-25 and that is wrong:
+    §MPC3XPM established over **71 real MPC 3 programs** that every keygroup
+    carries `filterData.value0` AND `value1` and that they DIFFER in all 71
+    (`value0.filterType = 2`, `value1.filterType = 0`) -- they are **Filter 1
+    and Filter 2**. `lfoData` is the same shape, which is why `value1` is
+    LFO2 and not a second articulation.
+
+    The stale wording cost real doubt: it made a correct `lfoData.value1` read
+    look like a mislabelled articulation, and nearly got a working extension
+    reverted. A comment that contradicts a measured section is not inert.
+
+    ⚠ **AND MPC 3 HAS FOUR LFOS, not two** (Jan, 2026-09-25): LFO 1/2 plus
+    GLOBAL LFO 1/2. `lfoData` sits inside `synthSection`, which is per
+    keygroup, so the globals are almost certainly program-level and elsewhere
+    in the JSON -- unlocated, unread, and not modelled. `VoiceLayer` has no
+    global-LFO concept at all. The K2000 does (COMMON-page `Globals` switches
+    LFO2/ASR2/FUN2/FUN4 to global, running once per layer instead of per
+    note), so there is a real target for one if it is ever located.
+    """
     if isinstance(node, dict):
         return node.get('value0', default)
     return default if node is None else node
+
+
+def _lfo_rate_to_hz(stored, default=0.5):
+    """An `<Rate>` value -> Hz, tolerating BOTH of the units MPC uses.
+
+    MPC 2.x XML stores a 0..1 KNOB POSITION and `lfo_knob_to_hz` maps it
+    through the hardware-measured exponential. **MPC 3's LFO page displays Hz
+    directly** (photographed 2026-09-25: `RATE 4.58 Hz`, `GLOBAL LFO 1
+    3.81 Hz`, §MPC3LFOPAGE), and whether its JSON stores Hz or a knob is
+    unknown -- no local `.xpm` is MPC 3 JSON.
+
+    ⚠ **Getting it wrong is silent and large.** Feeding 4.58 to the knob law
+    gives 198.92 Hz, which the byte conversion then clamps to the 18.01 Hz
+    ceiling: a 4.58 Hz vibrato arrives as an 18 Hz buzz, from a number that
+    looked perfectly reasonable going in.
+
+    **A knob CANNOT exceed 1.0 by definition**, so a stored value above it is
+    unambiguously already in Hz. That discriminator cannot misfire on a
+    genuine knob, which is why it is safe to apply before the question is
+    settled rather than after. A real MPC 3 program would settle it properly;
+    this makes the wrong answer survivable in the meantime.
+    """
+    v = _as_float(stored, default)
+    if v > 1.0:
+        return max(0.0, min(LFO_RATE_HZ_MAX, v))
+    return lfo_knob_to_hz(v)
 
 
 def _as_float(value, default=0.0) -> float:
@@ -1440,7 +1488,19 @@ def _mpc3_to_xml(data) -> 'ET.Element':
         put('FilterRelease', _v0(fenv.get('Release')))
         # LFO — lfoFilterCutOff is itself per-articulation.
         put('LfoPitch',  lfo.get('lfoPitch', 0.0))
+        # `lfoFilterCutOff` is {value0, value1} -- ONE PER FILTER, not per
+        # articulation (§MPC3LFOJSON). MPC 3.9's Advanced Keygroups have two
+        # filters which can run serial, parallel or blended; we take the
+        # first, as `filterData` already does. **Jan's call 2026-09-25: the
+        # second filter is not worth modelling at the moment**, so this is a
+        # deliberate deferral and not an oversight.
         put('LfoCutoff', _v0(lfo.get('lfoFilterCutOff')))
+        # Read since 2026-09-25, once a real project named them
+        # (§MPC3LFOJSON). All three were present in every LFO node and taken
+        # by nothing.
+        put('LfoPan',    lfo.get('lfoPan', 0.0))
+        put('LfoVolume', lfo.get('lfoAmpLevel', 0.0))
+        put('LfoDelay',  lfo.get('lfoDelay', 0.0))
         lfo_el = ET.SubElement(ie, 'LFO')
         ET.SubElement(lfo_el, 'Rate').text  = str(lfo.get('lfoRate', 0.5))
         ET.SubElement(lfo_el, 'Type').text  = _MPC3_LFO_SHAPES.get(
@@ -1460,6 +1520,25 @@ def _mpc3_to_xml(data) -> 'ET.Element':
             ET.SubElement(l2, 'Type').text  = _MPC3_LFO_SHAPES.get(
                 lfo2.get('lfoWaveformType', 0), 'Sine')
             ET.SubElement(l2, 'Pitch').text = str(lfo2.get('lfoPitch', 0.0))
+            # THE SAME KEYS LFO1 READS. `valueN` indexes the INSTANCE --
+            # §MPC3XPM established over 71 real programs that
+            # `filterData.value0`/`value1` are Filter 1 and Filter 2 and
+            # differ in all 71. `lfoData` is the same shape, so `value1` is
+            # LFO2, and taking only three of its six keys was an asymmetry
+            # rather than a property of the format.
+            #
+            # ⚠ **STILL UNVERIFIED FOR lfoData SPECIFICALLY.** The 71-program
+            # evidence is about `filterData`; no local `.xpm` is MPC 3 JSON
+            # and none carries an LFO2 block, so nothing here confirms that
+            # `lfoData.value1` holds these particular keys. It degrades
+            # safely: an absent key takes the `.get` default and emits zero,
+            # which reads downstream as "not stated".
+            ET.SubElement(l2, 'Cutoff').text = str(
+                _v0(lfo2.get('lfoFilterCutOff')) or 0.0)
+            ET.SubElement(l2, 'Sync').text = str(lfo2.get('lfoSync', 0))
+            ET.SubElement(l2, 'Pan').text = str(lfo2.get('lfoPan', 0.0))
+            ET.SubElement(l2, 'Volume').text = str(lfo2.get('lfoAmpLevel', 0.0))
+            ET.SubElement(l2, 'Delay').text = str(lfo2.get('lfoDelay', 0.0))
 
         layers_el = ET.SubElement(ie, 'Layers')
         for lidx, lay in enumerate(layers):
@@ -2052,7 +2131,7 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None,
                           or abs(lfo_pan) > 0.001 or lfo_volume > 0.001
                           ) and lfo_block is not None
             if lfo_active:
-                lfo_rate_hz = lfo_knob_to_hz(float(_get_text(lfo_block, 'Rate', '0.5')))
+                lfo_rate_hz = _lfo_rate_to_hz(_get_text(lfo_block, 'Rate', '0.5'))
                 lfo_shape   = _xpm_lfo_shape(_get_text(lfo_block, 'Type', 'Sine'))
                 # MPC <Reset> True = retrigger phase per note = E4B Key Sync;
                 # False = free-run.  model lfo*_sync: False=Key Sync, True=Free Run.
@@ -2146,10 +2225,29 @@ def parse_xpm(xpm_path: str, wav_dir: Optional[str] = None,
             if lfo2_block is not None:
                 _l2_pitch = max(-1.0, min(1.0,
                                 float(_get_text(lfo2_block, 'Pitch', '0.0'))))
-                if abs(_l2_pitch) > 0.001:
+                # THE GATE WAS `abs(_l2_pitch) > 0.001` ALONE, so an LFO2
+                # routed only to the FILTER was dropped entirely -- rate,
+                # shape and all -- because pitch happened to be the one
+                # destination the block originally carried.
+                _l2_cut = max(-1.0, min(1.0, float(
+                    _get_text(lfo2_block, 'Cutoff', '0.0') or 0.0)))
+                _l2_pan = max(-1.0, min(1.0, float(
+                    _get_text(lfo2_block, 'Pan', '0.0') or 0.0)))
+                _l2_vol = max(0.0, min(1.0, float(
+                    _get_text(lfo2_block, 'Volume', '0.0') or 0.0)))
+                _l2_dly = max(0.0, float(
+                    _get_text(lfo2_block, 'Delay', '0.0') or 0.0))
+                if (abs(_l2_pitch) > 0.001 or abs(_l2_cut) > 0.001
+                        or abs(_l2_pan) > 0.001 or _l2_vol > 0.001):
                     pdict.update(
-                        lfo2_rate=lfo_knob_to_hz(float(_get_text(lfo2_block, 'Rate', '0.5'))),
+                        lfo2_rate=_lfo_rate_to_hz(_get_text(lfo2_block, 'Rate', '0.5')),
                         lfo2_shape=_xpm_lfo_shape(_get_text(lfo2_block, 'Type', 'Sine')),
+                        lfo2_to_filter=_l2_cut,
+                        lfo2_to_pan=_l2_pan,
+                        lfo2_to_volume=_l2_vol,
+                        lfo2_delay=(_l2_dly or None),
+                        lfo2_sync=bool(int(float(
+                            _get_text(lfo2_block, 'Sync', '0') or 0))),
                         lfo2_to_pitch=_l2_pitch,
                     )
 

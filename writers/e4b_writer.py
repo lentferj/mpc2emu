@@ -110,7 +110,7 @@ import struct
 from typing import List
 from models.common import (
     e4xt_cents_to_cord_amount, e4xt_cord_saturates, E4XT_VEL_SOURCE_UNITS,
-    e4xt_tremolo_cords, LFO_VOLUME_MODEL_FULL_DB, E4B_LFO1_TILDE_SRC,
+    e4xt_tremolo_cords, LFO_VOLUME_MODEL_FULL_DB, E4B_LFO1_TILDE_SRC, E4B_LFO2_TILDE_SRC,
     E4B_DC_CORD_SRC, E4B_AMPVOL_DST, E4B_LFO_PAN_CORD_SCALE,
     E4XT_VEL_AMPVOL_DB_PER_PERCENT,
     key_track_to_filter_amount,
@@ -1540,8 +1540,26 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
     # it here would put the swing out of phase with the PAN cord beside it,
     # which on this material (AMP 29 + PAN 81 on one LFO) is the one
     # relationship a listener can actually hear.
-    _trem_one_sided = (max(abs(voice.lfo1_to_volume), abs(voice.lfo2_to_volume))
-                       * LFO_VOLUME_MODEL_FULL_DB)
+    # ⚠ **WHICH LFO DRIVES THE TREMOLO IS LOAD-BEARING, and this used to
+    # discard it.** The line was `max(abs(lfo1_to_volume), abs(lfo2_to_volume))`
+    # written unconditionally at `E4B_LFO1_TILDE_SRC` -- so an LFO2 tremolo was
+    # emitted as an LFO1 one and ran at **LFO1's rate**, while the LFO2 rate
+    # the writer had already emitted drove nothing. A KRZ -> E4B round trip
+    # also lost the distinction entirely: `lfo2_to_volume` went in and
+    # `lfo1_to_volume` came back.
+    #
+    # THIRD INSTANCE OF ONE FAMILY IN ONE DAY -- a modulation SOURCE selected
+    # without its RATE. The other two: `krz_writer` picking LFO2 as its amp
+    # source and never programming LFO2's rate, and `akai_s3000_writer`
+    # feeding `PANRAT` (LFO2's rate) with `lfo1_rate`. All three were
+    # invisible to the suite because every test routed one LFO.
+    #
+    # LFO1 still wins a tie and when both are stated: the E4XT has one AmpVol
+    # destination on this path, so one must lose, and taking the first-stated
+    # keeps every existing single-LFO conversion byte-identical.
+    _l1v, _l2v = abs(voice.lfo1_to_volume), abs(voice.lfo2_to_volume)
+    _trem_src = E4B_LFO1_TILDE_SRC if _l1v >= _l2v else E4B_LFO2_TILDE_SRC
+    _trem_one_sided = max(_l1v, _l2v) * LFO_VOLUME_MODEL_FULL_DB
     _trem_lfo, _trem_dc = e4xt_tremolo_cords(
         _trem_one_sided, getattr(voice, 'lfo_volume_centre_db', 0.0) or 0.0)
     # §AKAICORDGAP: routings with no measured law, carried in the reference
@@ -1589,7 +1607,7 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
         # that says nothing about either machine.
         (0x60, 0x41, voice.lfo1_to_pan * _lfo1_sign * E4B_LFO_PAN_CORD_SCALE),
         (0x68, 0x41, voice.lfo2_to_pan * _lfo2_sign * E4B_LFO_PAN_CORD_SCALE),
-        (E4B_LFO1_TILDE_SRC, E4B_AMPVOL_DST, _trem_lfo),   # LFO1 → AmpVol
+        (_trem_src, E4B_AMPVOL_DST, _trem_lfo),   # LFO1 or LFO2 → AmpVol
         (E4B_DC_CORD_SRC,    E4B_AMPVOL_DST, _trem_dc),    # DC   → AmpVol
         # VELOCITY → PAN IS DELIBERATELY NOT WRITTEN YET. The model carries
         # `velocity_to_pan` and the MPC supplies it, but the velocity SOURCE on

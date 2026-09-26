@@ -264,6 +264,39 @@ AKAI_KGMUTE_OFF = 255
 #: matrix (`MODSFILT` = 8 selects LFO2), which the reference disc never
 #: exercises — all 369 of its programs are `(5, 3, 10)`.
 AKAI_LFO2RATE_OFFSET = 0x1d
+#: The rest of LFO2, from s3ked 2026-09-25. **The LFO2 parameters are SPLIT
+#: across the program block and the first three are named `PAN*` for
+#: historical reasons while being documented as LFO2 controls** -- which is
+#: why they read as a pan feature and went unread for so long:
+#:
+#:     0x1d PANRAT   "Speed of LFO2"              (already read)
+#:     0x1e PANDEP   "Depth of LFO2"
+#:     0x1f PANDEL   "Delay in growth of LFO2"
+#:     0x62 LFO2WAVE  LFO2 waveform
+#:
+#: So **there is no LFO2 delay distinct from `PANDEL` -- `PANDEL` is it.**
+#: `LFODEL` at 0x23 is LFO1's; do not cross them.
+#:
+#: ✅ **0x62 CONFIRMED INDEPENDENTLY BY THE CORPUS**, which matters because
+#: s3ked's offset came from a spec transcription and their reader and writer
+#: share one offset table -- a wrong offset would round-trip perfectly there,
+#: the same symmetric blindness that hid our own KRZ byte 4 for months. Over
+#: 4 433 corpus programs, 0x62 takes **4 distinct values {0,1,2,3}, 96.5% on
+#: 0**, and its neighbour 0x61 (`LFO1WAVE`) has the same shape (4 values,
+#: 98.6% on 0). Two adjacent fields with identical small-enum distributions
+#: are the two LFOs' waveforms. A distribution is not proof of alignment, but
+#: an out-of-range value would have disproved it and there is none.
+AKAI_LFO2DEPTH_OFFSET = 0x1e
+AKAI_LFO2DELAY_OFFSET = 0x1f
+AKAI_LFO2WAVE_OFFSET = 0x62
+
+#: ⚠ **THE DOCUMENTED ENUM HAS THREE VALUES AND THE CORPUS USES FOUR** --
+#: and this project already knew the fourth. s3ked's spec gives 0 = Triangle,
+#: 1 = Sawtooth, 2 = Square; the corpus shows **3 on 1.8% of programs**, more
+#: often than 1 (1.1%) or 2 (0.5%), so it is real material. `AKAI_LFO1WAVE_TO_
+#: SHAPE` below carries `3 = random`, hardware-measured for LFO1 (§46, §31),
+#: so LFO2 uses that same table rather than a shorter one of its own.
+#: (superseded: LFO2 shares AKAI_LFO1WAVE_TO_SHAPE, which already carries 3=random)
 
 AKAI_LFO1WAVE_OFFSET = 97
 
@@ -1270,6 +1303,12 @@ def parse_program_bytes(data: bytes, fallback_name: str = '',
         # was dropped on every voice before that.
         lfo2_rate_byte=(data[AKAI_LFO2RATE_OFFSET]
                         if len(data) > AKAI_LFO2RATE_OFFSET else 0),
+        lfo2_depth_byte=(data[AKAI_LFO2DEPTH_OFFSET]
+                         if len(data) > AKAI_LFO2DEPTH_OFFSET else 0),
+        lfo2_delay_byte=(data[AKAI_LFO2DELAY_OFFSET]
+                         if len(data) > AKAI_LFO2DELAY_OFFSET else 0),
+        lfo2_wave_byte=(data[AKAI_LFO2WAVE_OFFSET]
+                        if len(data) > AKAI_LFO2WAVE_OFFSET else 0),
         # LFO -> loudness slots (§AKAILFOAMP).
         mod_src_amp=tuple(data[o] if len(data) > o else None
                           for o in AKAI_MODSAMP_OFFSETS),
@@ -1518,6 +1557,37 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
             _shape = AKAI_LFO1WAVE_TO_SHAPE.get(prog.get('lfo1_wave'))
             if _shape:
                 voice.lfo1_shape = _shape
+
+        # --- the rest of LFO2, read since 2026-09-25 ------------------------
+        #
+        # ⚠ **THIS BLOCK WAS FIRST PLACED ONE `if` HIGHER** and swallowed the
+        # LFO1 waveform read above into its own condition, so `lfo1_shape`
+        # came back None whenever the LFO2 delay happened to be zero -- which
+        # is 81.1% of corpus programs. Caught by `test_lfo1wave_selects_the_
+        # matching_shape` on all four values, which is exactly the kind of
+        # unrelated-looking failure that says the edit moved control flow
+        # rather than data.
+        #
+        # Shape and delay only. **`PANDEP` (LFO2's own depth) is NOT applied
+        # -- see §AKAILFO2REST for the 1 342-program reason.**
+        _l2w = prog.get('lfo2_wave_byte')
+        if _l2w is not None and voice.lfo2_shape is None:
+            # THE SAME TABLE LFO1 USES. s3ked's spec documents three values
+            # (0 Triangle, 1 Sawtooth, 2 Square) and the corpus shows a fourth
+            # at 1.8%; this project already knows it -- `AKAI_LFO1WAVE_TO_SHAPE`
+            # carries `3 = random`, hardware-measured for LFO1 (§46, §31).
+            # Two adjacent byte-wide fields with identical four-value
+            # distributions are the two LFOs' waveforms, so sharing the table
+            # is better founded than giving LFO2 a shorter one of its own.
+            voice.lfo2_shape = AKAI_LFO1WAVE_TO_SHAPE.get(_l2w)
+        _l2d = prog.get('lfo2_delay_byte') or 0
+        if _l2d and voice.lfo2_delay is None:
+            # `PANDEL` IS the LFO2 delay -- there is no separate field, which
+            # s3ked settled flatly. Same 0..99 rail and the same law as LFO1's
+            # own delay, which is what `akai_lfo_delay_seconds` was measured
+            # on; reusing it across the two is a carry-across, said here
+            # rather than implied.
+            voice.lfo2_delay = akai_lfo_delay_seconds(_l2d)
 
         # LFO1 -> LOUDNESS (tremolo), §AKAILFOAMP. Read by nobody until
         # 2026-09-01; before that the AKAI, E4B, KRZ and EIII readers all

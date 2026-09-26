@@ -465,6 +465,18 @@
       ]
     },
     {
+      "code": "KRZ_FILTER_WIRE_CONTENDED",
+      "severity": "warning",
+      "content_lost": true,
+      "detail_keys": [
+        "dropped",
+        "filter_env_holds_src1"
+      ],
+      "emitted_from": [
+        "writers/krz_writer.py"
+      ]
+    },
+    {
       "code": "KRZ_LAYERS_THINNED",
       "severity": "warning",
       "content_lost": "varies",

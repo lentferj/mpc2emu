@@ -33,6 +33,18 @@ this project has already made in a test.
 * **Whether the value is CORRECT.** A cell says the field is carried from the
   reader to the writer, not that the conversion is faithful, calibrated or
   hardware-confirmed. `docs/RESOLUTION_NOTES.md` is where that lives.
+* **A field only ever MUTATED through a method** was invisible until
+  2026-09-25 (`voice.mod_routings.append(...)` has no `Store` in it at all).
+  Now counted for `append`/`extend`/`insert`/`update`/`add` on a model-field
+  attribute, and for `obj.field[k] = v`. Any other mutation route is still
+  unseen.
+* **A read for a DECISION rather than for EMISSION.** ⚠ Found 2026-09-25 by
+  checking a surprising cell: `lfo1_delay` shows as read by the KRZ writer,
+  but the only use is a voice-FUSION compatibility test (`getattr(a, name) !=
+  getattr(b, name)` — two voices with different LFO delays must not merge).
+  The K2000's LFO page has no delay field at all, so nothing is emitted. A `+`
+  means the writer's module touches the field; confirm what it does with it
+  before quoting a cell as coverage.
 * **Conditional writes.** A field written only under some branch reads the
   same here as one written always.
 
@@ -110,22 +122,22 @@ found by asking a question with a known answer rather than by reading output:
 | `lfo1_sync` | – | – |  |  |  |
 | `lfo1_sync_division` | – |  |  |  |  |
 | **LFO 2** | | | | | |
-| `lfo2_rate` | – | – | – |  |  |
-| `lfo2_shape` | – | – |  |  |  |
-| `lfo2_delay` |  | – |  |  |  |
+| `lfo2_rate` | + | + | + |  |  |
+| `lfo2_shape` | + | + | + |  |  |
+| `lfo2_delay` | – | – | – |  |  |
 | `lfo2_variation` |  | – |  |  |  |
-| `lfo2_sync` |  | – |  |  |  |
+| `lfo2_sync` | – | – |  |  |  |
 | **LFO routing** | | | | | |
 | `lfo1_to_pitch` | + | + | + |  |  |
-| `lfo1_to_filter` | – | – |  |  |  |
+| `lfo1_to_filter` | + | + |  |  |  |
 | `lfo1_to_filter_q` |  | – |  |  |  |
 | `lfo1_to_volume` | + | + | + |  |  |
 | `lfo1_to_pan` | + | + | + |  |  |
-| `lfo2_to_pitch` | – | – |  |  |  |
-| `lfo2_to_filter` |  | – |  |  |  |
+| `lfo2_to_pitch` | + | + |  |  |  |
+| `lfo2_to_filter` | + | + |  |  |  |
 | `lfo2_to_filter_q` |  | – |  |  |  |
-| `lfo2_to_volume` |  |  |  |  |  |
-| `lfo2_to_pan` |  | – | – |  |  |
+| `lfo2_to_volume` | + | + |  |  |  |
+| `lfo2_to_pan` | + | + | + |  |  |
 | `lfo_volume_centre_db` | – | – |  |  |  |
 | `wheel_to_lfo` | + | + | + |  |  |
 | **Velocity / key routing** | | | | | |
@@ -141,11 +153,11 @@ found by asking a question with a known answer rather than by reading output:
 | `non_transpose` | – | – |  |  |  |
 | `plays_whole_sample` | + |  |  |  |  |
 | `chorus_amount` |  | – |  |  |  |
-| `mod_routings` |  |  |  |  |  |
+| `mod_routings` |  |  | – |  |  |
 | `name` | + | + | + | + | + |
 | `program_number` | – |  | – |  |  |
-| `voices` |  | + | + | + | + |
-| `zones` |  | + | + | + | + |
+| `voices` | + | + | + | + | + |
+| `zones` | + | + | + | + | + |
 | `firmware_raw` |  |  |  |  |  |
 
 ## → E4B
@@ -184,22 +196,22 @@ found by asking a question with a known answer rather than by reading output:
 | `lfo1_sync` | + |  |  |  |  |
 | `lfo1_sync_division` | – |  |  |  |  |
 | **LFO 2** | | | | | |
-| `lfo2_rate` | + |  | + |  |  |
-| `lfo2_shape` | + |  |  |  |  |
-| `lfo2_delay` |  |  |  |  |  |
+| `lfo2_rate` | + | + | + |  |  |
+| `lfo2_shape` | + | + | + |  |  |
+| `lfo2_delay` | + |  | + |  |  |
 | `lfo2_variation` |  |  |  |  |  |
-| `lfo2_sync` |  |  |  |  |  |
+| `lfo2_sync` | + |  |  |  |  |
 | **LFO routing** | | | | | |
 | `lfo1_to_pitch` | + | + | + |  |  |
 | `lfo1_to_filter` | + | + |  |  |  |
 | `lfo1_to_filter_q` |  |  |  |  |  |
 | `lfo1_to_volume` | + | + | + |  |  |
-| `lfo1_to_pan` | + |  | + |  |  |
-| `lfo2_to_pitch` | + |  |  |  |  |
-| `lfo2_to_filter` |  | + |  |  |  |
+| `lfo1_to_pan` | + | + | + |  |  |
+| `lfo2_to_pitch` | + | + |  |  |  |
+| `lfo2_to_filter` | + | + |  |  |  |
 | `lfo2_to_filter_q` |  |  |  |  |  |
-| `lfo2_to_volume` |  | + |  |  |  |
-| `lfo2_to_pan` |  |  | + |  |  |
+| `lfo2_to_volume` | + | + |  |  |  |
+| `lfo2_to_pan` | + | + | + |  |  |
 | `lfo_volume_centre_db` | + |  |  |  |  |
 | `wheel_to_lfo` | + | + | + |  |  |
 | **Velocity / key routing** | | | | | |
@@ -215,11 +227,11 @@ found by asking a question with a known answer rather than by reading output:
 | `non_transpose` | + |  |  |  |  |
 | `plays_whole_sample` | + |  |  |  |  |
 | `chorus_amount` |  |  |  |  |  |
-| `mod_routings` |  |  |  |  |  |
+| `mod_routings` |  |  | + |  |  |
 | `name` | + | + | + | + | + |
 | `program_number` | + | + | + |  |  |
-| `voices` |  | + | + | + | + |
-| `zones` |  | + | + | + | + |
+| `voices` | + | + | + | + | + |
+| `zones` | + | + | + | + | + |
 | `firmware_raw` |  |  |  |  |  |
 
 ## → AKAI
@@ -252,28 +264,28 @@ found by asking a question with a known answer rather than by reading output:
 | `filter_env` | + | + | + | n/a | n/a |
 | **LFO 1** | | | | | |
 | `lfo1_rate` | + | + | + | n/a | n/a |
-| `lfo1_shape` | – | – | – | n/a | n/a |
+| `lfo1_shape` | + | + | + | n/a | n/a |
 | `lfo1_delay` |  |  | + | n/a | n/a |
 | `lfo1_variation` |  |  | – | n/a | n/a |
 | `lfo1_sync` | – |  | – | n/a | n/a |
 | `lfo1_sync_division` | – |  |  | n/a | n/a |
 | **LFO 2** | | | | | |
-| `lfo2_rate` | – |  | – | n/a | n/a |
-| `lfo2_shape` | – |  | – | n/a | n/a |
-| `lfo2_delay` |  |  | – | n/a | n/a |
+| `lfo2_rate` | + | + | + | n/a | n/a |
+| `lfo2_shape` | + | + | + | n/a | n/a |
+| `lfo2_delay` | + |  | + | n/a | n/a |
 | `lfo2_variation` |  |  | – | n/a | n/a |
-| `lfo2_sync` |  |  | – | n/a | n/a |
+| `lfo2_sync` | – |  | – | n/a | n/a |
 | **LFO routing** | | | | | |
 | `lfo1_to_pitch` | + | + | + | n/a | n/a |
 | `lfo1_to_filter` | – | – | – | n/a | n/a |
 | `lfo1_to_filter_q` |  |  | – | n/a | n/a |
 | `lfo1_to_volume` | – | – | – | n/a | n/a |
-| `lfo1_to_pan` | + |  | + | n/a | n/a |
-| `lfo2_to_pitch` | – |  | – | n/a | n/a |
-| `lfo2_to_filter` |  | – | – | n/a | n/a |
+| `lfo1_to_pan` | + | + | + | n/a | n/a |
+| `lfo2_to_pitch` | – | – | – | n/a | n/a |
+| `lfo2_to_filter` | – | – | – | n/a | n/a |
 | `lfo2_to_filter_q` |  |  | – | n/a | n/a |
-| `lfo2_to_volume` |  | – |  | n/a | n/a |
-| `lfo2_to_pan` |  |  | + | n/a | n/a |
+| `lfo2_to_volume` | – | – | – | n/a | n/a |
+| `lfo2_to_pan` | + | + | + | n/a | n/a |
 | `lfo_volume_centre_db` | – |  | – | n/a | n/a |
 | `wheel_to_lfo` | + | + | + | n/a | n/a |
 | **Velocity / key routing** | | | | | |
@@ -292,26 +304,26 @@ found by asking a question with a known answer rather than by reading output:
 | `mod_routings` |  |  |  | n/a | n/a |
 | `name` | + | + | + | n/a | n/a |
 | `program_number` | + | + |  | n/a | n/a |
-| `voices` |  | + | + | n/a | n/a |
-| `zones` |  | + | + | n/a | n/a |
+| `voices` | + | + | + | n/a | n/a |
+| `zones` | + | + | + | n/a | n/a |
 | `firmware_raw` |  |  |  | n/a | n/a |
 
 ## Totals
 
 | pair | carried | dropped at the writer | not read by the reader |
 |---|---|---|---|
-| MPC → KRZ | 29 | 11 | 21 |
-| E4B → KRZ | 31 | 18 | 12 |
-| AKAI → KRZ | 32 | 6 | 23 |
+| MPC → KRZ | 38 | 9 | 14 |
+| E4B → KRZ | 38 | 12 | 11 |
+| AKAI → KRZ | 35 | 6 | 20 |
 | Roland → KRZ | 13 | 0 | 48 |
 | Ensoniq → KRZ | 9 | 0 | 52 |
-| MPC → E4B | 38 | 2 | 21 |
-| KRZ → E4B | 35 | 1 | 25 |
-| AKAI → E4B | 35 | 3 | 23 |
+| MPC → E4B | 45 | 2 | 14 |
+| KRZ → E4B | 40 | 1 | 20 |
+| AKAI → E4B | 38 | 3 | 20 |
 | Roland → E4B | 13 | 0 | 48 |
 | Ensoniq → E4B | 9 | 0 | 52 |
-| MPC → AKAI | 28 | 12 | 21 |
-| KRZ → AKAI | 30 | 6 | 25 |
-| E4B → AKAI | 31 | 18 | 12 |
+| MPC → AKAI | 35 | 12 | 14 |
+| KRZ → AKAI | 35 | 6 | 20 |
+| E4B → AKAI | 35 | 15 | 11 |
 | Roland → AKAI | n/a | n/a | refused |
 | Ensoniq → AKAI | n/a | n/a | refused |

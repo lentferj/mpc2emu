@@ -53,7 +53,8 @@ import struct
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional, Tuple
 
-from models.common import (
+from models.common import (KRZ_LFO_PAN_DEPTH_SCALE,  # noqa: E402
+    
     k2000_envctl_byte_to_multiplier, K2000_ATTACK_VEL_ANCHOR,Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
                            LoopType, Envelope, krz_cutoff_byte_to_hz,
                            krz_reson_byte_to_01, krz_env_byte_to_seconds,
@@ -460,6 +461,8 @@ def _entry_runs(entries: List[_KrzEntry]) -> Iterator[Tuple[int, int, _KrzEntry]
 LYR_TAG, CAL_TAG = 0x09, 0x40
 ENC_AMPMODE_TAG, ENV_AMP_TAG, ENC_FILTERENV_TAG = 0x20, 0x21, 0x22
 HOB_F1_TAG, HOB_F2_TAG, HOB_F3_TAG = 0x50, 0x51, 0x52
+#: The F3 block type that selects the PANNER (§PANMOD).
+_K2_F3_PANNER = 40
 
 #: The F4/AMP HOB segment. Byte 14's HIGH NIBBLE carries pan as a signed
 #: -7..+7 step (§KRZPANREAD) -- the writer has emitted it since stereo support
@@ -522,7 +525,7 @@ _ALG_DSP_FUNCTIONS = {
 def _alg_has_third_function(alg: Optional[int]) -> bool:
     """Does this algorithm have a third DSP function, i.e. is tag 0x52 real?"""
     return _ALG_DSP_FUNCTIONS.get(alg, 0) >= 3
-LFO1_TAG = 0x14
+LFO1_TAG, LFO2_TAG = 0x14, 0x15
 def _k2_depth_cents(b: int) -> float:
     """K2000 DSP depth byte -> cents, for a frequency-unit function.
 
@@ -796,11 +799,44 @@ _K2_ALLPASS = {
     5:  '2-pole ALLPASS (ditto)',
 }
 
+#: LFO SHAPE, from **byte 5**. Inverse of `krz_writer._LFO_SHAPE`.
+#:
+#: **FULLY MEASURED 2026-09-25 (k2kremote): every byte 0..44 written to program
+#: offset 102 and read off the K2000's panel.** Byte 4 is the PHASE (0-based)
+#: and byte 5 the shape; this read `seg[4]` until today, and so did the writer.
+#:
+#: ⚠ **THE ERROR WAS SYMMETRIC, WHICH IS WHY NO TEST CAUGHT IT.** Reader and
+#: writer both used byte 4, so every KRZ -> KRZ round trip agreed with itself
+#: perfectly and disagreed with the machine. A round trip tests SYMMETRY, not
+#: correctness; only an external referent -- the panel, the corpus
+#: distribution, real third-party files -- can tell them apart, and this
+#: project leans on a lot of round trips.
+#:
+#: The values are NOT contiguous: 0 = None (the LFO OFF), 1..10 are the
+#: continuous shapes, and the step shapes are positional at `14 + 2n` with the
+#: `+` variant one above. 11..19, 32/33, 36/37 and 40+ read `Not Found` on the
+#: machine -- the K2000's own string, not a paraphrase. §KRZLFOSHAPE.
+#:
+#: Built from the formula rather than typed out, so reader and writer cannot
+#: drift and so the gaps at 9-Step and 11-Step cannot be "tidied" shut.
 _LFO_SHAPE_FROM_BYTE = {
-    0: 'sine', 1: '+sine', 2: 'square', 3: '+square', 4: 'triangle',
-    5: '+triangle', 6: 'sawtooth', 7: '+sawtooth', 8: 'sawtooth_down',
-    20: 'random',
+    0: 'none',
+    1: 'sine', 2: '+sine',
+    3: 'square', 4: '+square',
+    5: 'triangle', 6: '+triangle',
+    7: 'sawtooth', 8: '+sawtooth',
+    9: 'sawtooth_down', 10: '+sawtooth_down',
 }
+for _n in (3, 4, 5, 6, 7, 8, 10, 12):
+    _LFO_SHAPE_FROM_BYTE[14 + 2 * _n] = '%d_step' % _n
+    _LFO_SHAPE_FROM_BYTE[14 + 2 * _n + 1] = '+%d_step' % _n
+#: 8 Step is what the writer emits for `random` / `hemiquaver`, so the read
+#: side names it back to `random` for a round trip through the model.
+_LFO_SHAPE_FROM_BYTE[30] = 'random'
+#: Every value the machine accepts. Anything else displays `Not Found`, so a
+#: byte outside this set in real material is genuinely invalid rather than
+#: something we have failed to name.
+_K2_LFO_SHAPE_VALID = frozenset(_LFO_SHAPE_FROM_BYTE)
 
 
 def _vel_marks_to_range(byte: int) -> Tuple[int, int]:
@@ -944,6 +980,13 @@ class _KrzLayer:
         # zero of 126 routings arriving before finding it.
         self.lfo1_to_filter = 0.0
         self.lfo2_to_filter = 0.0
+        # LFO2's own oscillator, read since 2026-09-25 (segment 0x15).
+        self.lfo2_rate: Optional[float] = None
+        self.lfo2_shape: Optional[str] = None
+        self.lfo2_to_pitch = 0.0
+        # Pan modulation, read since 2026-09-25 (the panner block).
+        self.lfo1_to_pan = 0.0
+        self.lfo2_to_pan = 0.0
         self.lfo1_to_pitch = 0.0
         #: Tremolo (§KRZF4AMPDEPTH). Declared here AND in the VoiceLayer
         #: construction below for the reason the comment above gives -- a
@@ -1106,6 +1149,19 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
             if seg[21] == _K2_CS_LFO1:
                 cur.lfo1_to_pitch = min(1.0, krz_lfo_pitch_byte_to_cents(
                     seg[22]) / LFO_PITCH_FULL_CENTS)
+            elif seg[21] == _K2_CS_LFO2:
+                # Src1 can carry LFO2 instead: the writer puts LFO2 here when
+                # a wheel-gated LFO1 has taken Src2, so a round trip needs to
+                # read it back off either wire rather than only off Src2.
+                cur.lfo2_to_pitch = min(1.0, krz_lfo_pitch_byte_to_cents(
+                    seg[22]) / LFO_PITCH_FULL_CENTS)
+            if seg[26] == _K2_CS_LFO2:
+                # Src2 carrying LFO2 -- the writer's ordinary placement, with
+                # MinDpt == MaxDpt and DptCtl OFF. MaxDpt is the depth.
+                cur.lfo2_to_pitch = min(1.0, max(
+                    cur.lfo2_to_pitch,
+                    krz_lfo_pitch_byte_to_cents(seg[25])
+                    / LFO_PITCH_FULL_CENTS))
             _p2, _kw = krz_pitch_lfo_src2(seg)
             if _p2:
                 # Two wires into one destination ADD on the machine; the model
@@ -1564,7 +1620,59 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
             # reader was left behind, so a KRZ round trip silently flattened
             # its own slow LFOs. Same law, both directions, from one place.
             cur.lfo1_rate = krz_lfo_rate_byte_to_hz(seg[2])
-            cur.lfo1_shape = _LFO_SHAPE_FROM_BYTE.get(seg[4])
+            # BYTE 5, not 4. `seg[4]` is the Phase.
+            cur.lfo1_shape = _LFO_SHAPE_FROM_BYTE.get(seg[5])
+        elif tag == LFO2_TAG:
+            # LFO2's segment, read since 2026-09-25. Same layout, same ladder.
+            #
+            # ⚠ **THE LADDER IS SHARED, AND THAT IS MEASURED, NOT ASSUMED.**
+            # k2kremote read LFO2's `MnRate` off the panel at six bytes with
+            # LFO1 as its own control, and then the two at byte 140 were
+            # measured through the SOUND at 12.803 Hz each (§KRZLFO2RATE).
+            # The display-only caveat that stood for two hours is discharged.
+            #
+            # This reader had NO LFO2 rate or shape at all until today: it
+            # extracted `lfo2_to_filter` and `lfo2_to_volume` from the mod
+            # wires and nothing else, so a K2000 source's second LFO arrived
+            # with destinations and no oscillator behind them.
+            cur.lfo2_rate = krz_lfo_rate_byte_to_hz(seg[2])
+            cur.lfo2_shape = _LFO_SHAPE_FROM_BYTE.get(seg[5])
+
+        # --- THE PANNER, read since 2026-09-25 ------------------------------
+        #
+        # A SEPARATE `if`, NOT PART OF THE CHAIN ABOVE. Tag 0x52 is already
+        # claimed there as a FILTER candidate, and which of the two branches
+        # would win depends on whether `cur.filter_type` happens to have been
+        # set by an earlier segment -- i.e. on walk order. An independent test
+        # on the block TYPE cannot be shadowed by that.
+        #
+        # ⚠ **NOTHING READ PAN MODULATION FROM A KRZ SOURCE AT ALL** until
+        # today, for either LFO, although §PANMOD hardware-confirmed these
+        # offsets on 2026-09-06 and our own writer has written them since.
+        # So a KRZ -> anything conversion silently dropped pan modulation the
+        # source states. It survived because it was SYMMETRIC in the other
+        # direction: neither side read it, so no round trip could notice.
+        #
+        # The depth law is the writer's inverse: it emits
+        # `depth * 50 * KRZ_LFO_PAN_DEPTH_SCALE`, measured at 0.372 dB/byte
+        # and linear to +/-0.003 over a 10x range.
+        #
+        # Src2 SUMS with Src1 -- measured 2026-09-25 (§KRZLFO2AUDIO: both
+        # wires 7.06 dB against 3.49 and 3.04 alone, 2.02x the deeper one) --
+        # so a program driving both is read as two routings, not one.
+        if (tag == HOB_F3_TAG and len(seg) > 10
+                and seg[0] == _K2_F3_PANNER):
+            def _pan_depth(_b):
+                _v = _b - 256 if _b >= 128 else _b
+                return max(-1.0, min(1.0, (_v / 50.0)
+                                     / KRZ_LFO_PAN_DEPTH_SCALE))
+            for _src, _amt in ((seg[5], seg[6]), (seg[10], seg[9])):
+                if not _amt:
+                    continue
+                if _src == _K2_CS_LFO1:
+                    cur.lfo1_to_pan = _pan_depth(_amt)
+                elif _src == _K2_CS_LFO2:
+                    cur.lfo2_to_pan = _pan_depth(_amt)
 
     # amp_env sentinel cleanup: False (Natural, no ENV seen yet) or unresolved -> None
     for layer in layers:
@@ -1867,6 +1975,11 @@ def parse_krz(path: str) -> Bank:
                     filter_keytrack=layer.filter_keytrack,
                     lfo1_to_filter=layer.lfo1_to_filter,
                     lfo2_to_filter=layer.lfo2_to_filter,
+                    lfo2_rate=layer.lfo2_rate,
+                    lfo2_shape=layer.lfo2_shape,
+                    lfo2_to_pitch=layer.lfo2_to_pitch,
+                    lfo1_to_pan=layer.lfo1_to_pan,
+                    lfo2_to_pan=layer.lfo2_to_pan,
                     lfo1_to_pitch=layer.lfo1_to_pitch,
                     wheel_to_lfo=layer.wheel_to_lfo,
                     velocity_to_amp_attack_span=layer.vel_attack_span,
