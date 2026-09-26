@@ -402,6 +402,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§ROM1PITCH — the −12 does not exist: ROM program 1 is at pitch on five keys, and the old number was period doubling rather than a sub-octave (2026-09-26)](#rom1pitch-the-12-does-not-exist-rom-program-1-is-at-pitch-on-five-keys-and-the-old-number-was-period-doubling-rather-than-a-sub-octave-2026-09-26)
 - [§XPOSERECV — the ProgramMode/XMIT `Xpose` is transmit-side and does NOT reach notes arriving at MIDI In (2026-09-26)](#xposerecv-the-programmodexmit-xpose-is-transmit-side-and-does-not-reach-notes-arriving-at-midi-in-2026-09-26)
 - [§LF2TONEPOST — a RAM sample's program produced signal AFTER a power cycle; three readings, none excluded (2026-09-26)](#lf2tonepost-a-ram-samples-program-produced-signal-after-a-power-cycle-three-readings-none-excluded-2026-09-26)
+- [§KRZF2RESDEPTH — the F2 RES *Depth* law: prevalence says DECLINE, on both sides of the conversion (2026-09-26)](#krzf2resdepth-the-f2-res-depth-law-prevalence-says-decline-on-both-sides-of-the-conversion-2026-09-26)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -39107,3 +39108,72 @@ up at 7ST, with XMIT `Transpos`, `LocalKbdCh`, `PowerMode`, Master page 1 and
 all three program SHA-1s identical either side. That refutes the surviving
 alternative (not stored, cold default 12ST) and confirms semitone storage a
 second time. With §XPOSERECV, both legs of that hazard are closed.
+
+## §KRZF2RESDEPTH — the F2 RES *Depth* law: prevalence says DECLINE, on both sides of the conversion (2026-09-26)
+
+**Jan's question (TODO #2): is measuring the F2 RES modulation `Depth` law
+worth bench time?** Answered offline, from both corpora, before any rig was
+asked for.
+
+**Not in question:** the F2 RES `Adjust` law is already measured — offset 226
+is dB×2 (typed 120 → panel 12.0 dB → byte 24). Static resonance works today.
+What is unmeasured is **`Depth` at offset 231**, whose panel display claims
+0.5 dB/unit — a hypothesis, not a reading. A displayed unit on this machine has
+been wrong three times (§KRZLEVELCURVE, §KRZENVDEPTH2, §KRZLFOPITCH).
+
+### The deciding quantity is the SOURCE side, and it is one bank
+
+`lfo1_to_filter_q` / `lfo2_to_filter_q` are set by **`e4b_parser` alone** and
+emitted by **`e4b_writer` alone**. So **E4B → KRZ is the only route that would
+ever need this law.** Censused with the shipped parser:
+
+    141 .e4b files, 131 parsed, 32 558 voices
+      positive control  lfo1_to_filter_cents non-zero   2 444 voices
+      lfo1_to_filter_q non-zero                            34 voices
+      lfo2_to_filter_q non-zero                             0 voices
+      ANY resonance modulation            34  (0.104 % of voices)
+      distinct banks containing it        1 of 131
+
+**All 34 sit in a single bank**, and the LFO2 half of the field is **empty
+across the entire corpus**.
+
+⚠ **Denominator audited rather than asserted:** the 10 unparsed files all fail
+identically with `Not an IFF FORM file (got b'\x00\x00\x00\x00')` — they are
+not E4B banks at all, and no other parser sets these fields, so they cannot
+contribute to the demand whatever they are.
+
+### The target side agrees, and its concentration is worse than its count
+
+201 `.KRZ`, 4 280 programs, 16 649 layers. Positive control: F4(`0x53`)
+segments = 16 649, one per layer, so the walker is reading.
+
+    F2 block is RES type (HOB1[0] == 16)      90 layers   (0.5 % of layers)
+      Adjust non-zero                         90          <- law already known
+      KeyTrk / VelTrk / Src2 non-zero         35 / 13 / 29
+    Src1 routed AND Depth non-zero            68 layers   (0.41 % of layers)
+                                              43 programs (1.00 % of programs)
+                                              10 files of 201
+
+⚠ **Counted as DISTINCT programs and files, not layers** — and it matters:
+**36 of the 68 layers are in one bank**, so a layer count overstates the spread
+by roughly a factor of two. No single program carries more than 3.
+
+### Recommendation: DECLINE, and it is not close
+
+* the only route that needs it would serve **34 voices in one bank of 131**;
+* **`lfo2_to_filter_q` is zero across 32 558 voices**, so half the field is
+  dead in real material;
+* nothing shipped depends on either number — no writer emits F2 RES `Depth`;
+* the static `Adjust` law, which is what most resonant material actually uses
+  (90 of 90 RES layers set it), is already measured.
+
+**What would change the answer:** a source format other than E4B starting to
+carry resonance modulation, or Jan wanting E4B→KRZ to be faithful on that one
+bank specifically. Neither is true today.
+
+⚠ **The scan scripts are in `tests/re_banks/`, which is GITIGNORED**, so the
+numbers above are the durable record and the scripts are not — `corpus_scan_f2res.py`
+exists locally. Method, so it can be redone: read each `.KRZ` with
+`krz_parser._read_objects` + `walk_program` (never a re-derived offset), take
+`T_PROGRAM` objects, and for tag `0x51` test `[0] == 16` for a RES block then
+`[5]` and `[6]` for a routed modulation.
