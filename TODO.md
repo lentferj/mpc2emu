@@ -8228,3 +8228,59 @@ than a constant offset, and a different region from §FIL2FRGAP's 19-byte hole
 (which reads ~18 % **low**), so it is a separate observation. Three points,
 one note, one machine — recorded, not fixed.
 
+
+## `key_to_pan` is read from AKAI and dropped by the E4B writer
+
+**Status:** open, found by `docs/PARAMETER_MATRIX.md` on 2026-09-25.
+
+The AKAI program mod matrix can name Key as a pan source (selector 6, slots
+76/77/78 with 89/90/91), and `akai_s3000_parser` now reads it into
+`voice.key_to_pan`. `e4b_writer` emits no cord for it, so it is read and
+thrown away — silently, which is what makes it worth an entry.
+
+Contrast `velocity_to_pan`, which the same writer also drops: that one is a
+**stated** decision (§E4XTVELSRC). `key_to_pan` has no such note, so it is a
+gap rather than a choice.
+
+**Blocked on:** a corpus question, not hardware. The E4 form and pivot are
+already measured (§E4XTKEYPOL: `Key~`, source 9, pivots at key 60, shares
+`Key+`'s span) and the destination `0x41` `AmpPan` is hardware-confirmed
+(§PANMOD). What is not known is whether AKAI programs' own key centres sit at
+60; where they do not, a straight copy pans the wrong way on one side.
+Answerable offline from the programs already scanned for §AKAIZONEMERGE.
+
+See `docs/RESOLUTION_NOTES.md` §E4BKEYPAN.
+
+## KRZ path drops every LFO2 routing
+
+**Status:** open, blast radius measured 2026-09-25 (§KRZLFO2).
+
+`krz_writer` reads no `lfo2_*` field except `lfo2_to_volume`. Measured cost
+on real material, counting voices with a non-zero LFO2 **destination** (a
+rate with no destination costs nothing):
+
+| source | voices | hit | presets hit |
+|---|---|---|---|
+| E4B third-party (131 banks) | 32 558 | 51 (0.16%) | 39 (2.43%) |
+| AKAI library CD-ROMs | 8 919 | 4 862 (54.51%) | 1 892 (42.75%) |
+| MPC local `.xpm` | 307 | 0 | 0 |
+
+The AKAI figure is **entirely `lfo2_to_pan`** and is dominated by two
+publisher templates (99.7% and 97.8% of two discs carry the same vector;
+one whole disc carries none). The MPC zero is a property of our corpus —
+no local file has an LFO2 block and none is an MPC 3 JSON program, which is
+the only MPC that emits one.
+
+**Cheap first half, needs no new measurement:** `lfo2_to_pan` alone takes the
+AKAI cost to 0 and the E4B cost to 0.06%, and the K2000 pan depth rail is
+already calibrated (`_K2_PAN_DEPTH`).
+
+**Blocked on** (second half only): the K2000 LFO2 rate/shape rails have never
+been measured, where LFO1's were. Pitch and filter destinations need them.
+
+Also fixed by the same work: `krz_writer` currently selects
+`KRZ_F4_AMP_SRC_LFO2` for a tremolo without ever programming LFO2's rate, so
+the swing runs at whatever rate the template carries. Unreachable on every
+source we hold (0 voices carry `lfo2_to_volume`), but wrong.
+
+See `docs/RESOLUTION_NOTES.md` §KRZLFO2.

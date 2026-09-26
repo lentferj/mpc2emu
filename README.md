@@ -431,6 +431,15 @@ earlier measurement round worthless, which is its own argument for checking.
 | Zampler | — | Uses SFZ natively → read via SFZ parser |
 | **WAV sample folder** | _directory_ | Point at a directory of root-note-named `.wav`s (e.g. `Piano C3.wav`, `Pad_60.wav`) → auto-builds one multisample preset (`--from-samples`; auto-detected for a WAV-only dir; `--middle-c` sets the octave convention) |
 
+
+> **Which parameter survives which conversion?**
+> [`docs/PARAMETER_MATRIX.md`](docs/PARAMETER_MATRIX.md) has a per-parameter
+> table for each of the fifteen source→target pairs (MPC, KRZ, E4B, AKAI,
+> Roland and Ensoniq in; KRZ, E4B and AKAI out), saying for every field
+> whether the reader extracts it, the writer emits it, or the path drops it.
+> It is generated from the source rather than maintained by hand, and it says
+> plainly what it cannot see.
+
 ### Output
 
 | Format | Extension | Target device |

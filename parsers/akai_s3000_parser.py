@@ -1601,8 +1601,24 @@ def build_preset_from_program(prog: dict, sample_bytes, bank: Bank,
                       AKAI_MOD_SOURCE_VELOCITY: 'velocity_to_pan',
                       AKAI_MOD_SOURCE_KEY: 'key_to_pan'}.get(_sel)
             if _field:          # a source with no field is dropped VISIBLY
-                _pan_add[_field] = _pan_add.get(_field, 0.0) + _amt / 50.0
-        for _field, _add in _pan_add.items():
+                # RAIL UNITS here; converted ONCE below. Summing converted
+                # depths and summing rail units differ the moment a clamp is
+                # involved, and the clamp is the whole point of the rail.
+                _pan_add[_field] = _pan_add.get(_field, 0.0) + _amt
+        for _field, _rail in _pan_add.items():
+            # ⚠ THE SAME LAW AS `0x59` BELOW, BECAUSE IT IS THE SAME BYTE.
+            # `AKAI_MODVPAN_PROG_OFFSETS[0]` is 89, which is `0x59`, so slot 0
+            # and `lfo_pan_depth` read one byte -- and when this block was
+            # added on 2026-09-25 it converted with a bare `/50.0` while the
+            # `0x59` path divided by the measured `AKAI_LFO_PAN_DEPTH_SCALE`
+            # as well. One rail, two laws, differing by 6.4x, and the matrix
+            # path was the shallow one.
+            #
+            # Found by asking a prevalence question, not by reading this code:
+            # a corpus scan put 2 381 voices on exactly 0.5, which is
+            # `25/50` -- a round number that only appears if the measured
+            # scale was never applied.
+            _add = (_rail / 50.0) / AKAI_LFO_PAN_DEPTH_SCALE
             # Slots accumulate with each other -- two may name one source and
             # the machine sums them, as the amp slots above do -- but they do
             # NOT accumulate with `0x59`, which the guard above has already

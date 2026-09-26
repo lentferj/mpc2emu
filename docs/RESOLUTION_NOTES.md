@@ -380,6 +380,9 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§AKAIF2DEPTH — MODVFLT2_3 is ~216 cents per unit, and the law is in CENTS](#akaif2depth-modvflt2_3-is-216-cents-per-unit-and-the-law-is-in-cents)
 - [§AKAISIMEXTRA — what the FIRMWARE simulation carries that the ordinary path does not](#akaisimextra-what-the-firmware-simulation-carries-that-the-ordinary-path-does-not)
 - [§AKAIPANMATRIX — the pan mod matrix, wired into the measured path](#akaipanmatrix-the-pan-mod-matrix-wired-into-the-measured-path)
+- [§E4BKEYPAN — `key_to_pan` reaches the E4B writer and is dropped (2026-09-25)](#e4bkeypan-key_to_pan-reaches-the-e4b-writer-and-is-dropped-2026-09-25)
+- [§KRZLFO2 — the KRZ path's missing LFO2, measured against real material (2026-09-25)](#krzlfo2-the-krz-paths-missing-lfo2-measured-against-real-material-2026-09-25)
+- [§AKAIPANLAW — one byte, two conversions, 6.4x apart (2026-09-25)](#akaipanlaw-one-byte-two-conversions-64x-apart-2026-09-25)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -36865,3 +36868,176 @@ reason survives review.
 * **KRZ deliberately untouched.** The K2000 imports no AKAI mod matrix, so
   there is no reference there and the same constants would be an invention.
 
+
+## §E4BKEYPAN — `key_to_pan` reaches the E4B writer and is dropped (2026-09-25)
+
+**How it was found, which is the part worth keeping.** Not by reading the
+writer: by generating `docs/PARAMETER_MATRIX.md` and looking at the three
+fields `AKAI → E4B` drops. Two of the three (`velocity_to_pan`,
+`velocity_to_filter_min_cents`) turned out to be documented deliberate
+choices; the third was not. A per-pair table makes a silent drop visible in a
+way that reading either module alone does not, because neither module is wrong
+on its own — the reader is right to read it, and the writer simply never
+mentions it.
+
+### What is already measured, and it is more than I first wrote here
+
+The first draft of this section said the pivot question was open "the same as
+velocity's". **It is not: §E4XTKEYPOL settled it on 2026-09-20 and I had not
+read that section before writing the caveat.** Recorded rather than quietly
+corrected, because a stale "unmeasured" is the failure mode that makes correct
+code look wrong, and this one would have been three days old.
+
+    Key~ / Key+ at amount 32 = 0.997      -> the two forms SHARE a span
+    Key~ returns to the control corner at key 60, on all three amounts
+                                           -> Key~ pivots at key 60
+
+So for a signed AKAI key→pan amount the E4 form is **`Key~` (source 9),
+pivoting at key 60**, and the depth scale is the same family `Key+` uses.
+The destination is `0x41` (`AmpPan`), hardware-confirmed under §PANMOD and
+already carrying `lfo1_to_pan` / `lfo2_to_pan`.
+
+⚠ That measurement was taken into **Filter-Freq**, not AmpPan. Span and pivot
+are properties of the SOURCE, and the velocity triad behaves the same way
+across destinations (§E4XTVELSRC), so carrying it across is the ordinary
+reading — but it is a carry-across, not a second measurement, and the note
+below is what would actually test it.
+
+### The one thing genuinely open
+
+`Key~` pivots at key **60**. An AKAI program's key→pan is signed about **the
+program's own centre**, which is not necessarily 60. Where they differ, a
+straight copy pans the wrong way on one side of the keyboard. Whether AKAI
+programs in practice sit at 60 is a **corpus** question, answerable offline
+from the 3 598 programs already scanned for §AKAIZONEMERGE, and it should be
+answered before the cord is written rather than after.
+
+### Procedure, and why it probably still needs the front panel
+
+One bank, several presets, one cord each — `Key~`→AmpPan at a fixed amount
+plus a no-cord control — then play C1, C3 and C5 and read the pan position at
+each. That fits in one bank and costs no extra card crossing.
+
+**It is not obviously a SysEx-only job, despite the preset send working.**
+§E4XTKEYPOL established two limits that bite here: a whole-preset send
+**carries no zone parameters** (the receiving zone came back `low=0 high=127`),
+and **the playback mapping is compiled at bank load**, so a send cannot change
+which key sounds. A key-dependent measurement therefore needs a bank whose
+resident mapping already spans the keys being played. If one is resident the
+send route works; otherwise it is a card load like any other.
+
+**Until the corpus question is answered and a cord is written, the drop
+stands — now recorded rather than silent.**
+
+## §KRZLFO2 — the KRZ path's missing LFO2, measured against real material (2026-09-25)
+
+Jan's question after the parameter matrix showed `krz_writer` reading no
+`lfo2_*` field but `lfo2_to_volume`: **how big is the blast radius for MPC,
+AKAI and E4B sources?** Answered offline, before any hardware was asked for.
+`tests/re_banks/corpus_scan_lfo2.py`.
+
+### The deciding quantity is a ROUTING, not a rate
+
+A voice carrying `lfo2_rate` with every LFO2 destination at zero sounds
+identical with or without LFO2 support — the oscillator runs and reaches
+nothing. Counting "voices with any `lfo2_*` field set" would have returned
+**32 507 of 32 558 E4B voices**, which is a number about a default, not about
+a cost. The cost is a non-zero DESTINATION: `lfo2_to_pitch`, `lfo2_to_filter`,
+`lfo2_to_filter_q`, `lfo2_to_pan`. `lfo2_to_volume` is excluded because the
+writer already reads it.
+
+### Result
+
+    source                       voices    presets   voices hit      presets hit
+    E4B third-party (131/141)    32 558      1 605    51  (0.16%)    39  (2.43%)
+    E4B our own banks            16 595      6 514    94  (0.57%)    47  (0.72%)
+    AKAI library CD-ROMs          8 919      4 426  4 862 (54.51%) 1 892 (42.75%)
+    MPC local .xpm                   307         68     0  (0.00%)     0  (0.00%)
+
+    E4B fields hit: to_pan 30, to_filter 15, to_pitch 9, to_filter_q 0
+    AKAI fields hit: to_pan 4 862, everything else 0
+
+**The E4B answer is small and it is real**: 0.16% of voices, but 2.43% of
+presets, because one affected voice spoils a preset. Spread across pitch,
+filter and pan, so a partial implementation would not cover it.
+
+**The MPC answer is zero, and the corpus cannot say more than that.** None of
+the 70 local `.xpm` files contains the string `LFO2` and none is an MPC 3
+JSON program — `xpm_parser` says in its own comment that an MPC 2.x XML
+program never has one. So this is 0 on everything we hold and **unmeasured
+for MPC 3**, which is the only MPC that emits the block.
+
+### The AKAI 54% is two publishers, and the subgroup split is the finding
+
+    akai disc            progs   LFO2 pan slot   commonest pan vector
+    1  orchestral           356      99.7%       (6,8,1)/(0,25,0)  x341
+    2  pads + percussion    369      97.8%       (6,8,1)/(0,25,0)  x353
+    3  manufacturer's own 2 292      43.6%       (8,6,12)/(0,0,0)  x960
+    4  world/ethnic A       243      25.1%
+    5  analogue synths      631      19.2%
+    6  world/ethnic B       542       0.0%       (8,6,12)/(0,0,0)  x542
+
+(ids as `tests/re_banks/corpus_map.md` — that file is gitignored and may name
+them; this one may not.)
+
+Discs 1 and 2 put the *same* vector on ~98% of their programs — a publisher
+template, not 700 independent authoring decisions. One whole disc has none.
+Quoting 54.51% as "how much AKAI material auto-pans" would be counting
+repetitions rather than distinct decisions. The honest reading: **it is
+common enough to matter and its distribution is wildly per-publisher**, and
+the AKAI cost is entirely `lfo2_to_pan` — a single destination, which makes
+it the cheapest of the three to cover.
+
+### Two defects this scan found on the way, neither of them the thing asked about
+
+**1. `krz_writer` selects LFO2 as the amp-block source without programming
+LFO2's rate.** When `lfo2_to_volume` exceeds `lfo1_to_volume` the writer sets
+`KRZ_F4_AMP_SRC_LFO2` and a depth, and nothing anywhere in that module writes
+an LFO2 rate — so the tremolo runs at whatever rate the template program
+carries. Nothing in the corpora triggers it (0 voices carry `lfo2_to_volume`
+on any source we hold), which is why it has never been heard. Still a defect,
+and it is fixed by the same work.
+
+**2. §AKAIPANMATRIX converted one byte under two laws — fixed here.** See
+below; found by this scan, not by reading the code.
+
+### What implementing it would take
+
+The K2000 has a second LFO per layer, so this is a writer job rather than an
+RE job — but the K2000's LFO2 rate/shape rails have never been measured,
+where LFO1's were (§KRZPROGPARAM). Covering `lfo2_to_pan` alone would take
+the AKAI cost from 54.51% to 0 and the E4B cost from 0.16% to 0.06%, and pan
+depth on the K2000 (`_K2_PAN_DEPTH`) is already calibrated. **That is the
+cheap first half and it needs no new measurement.** Pitch and filter
+destinations need the LFO2 rate rail, which does need the K2000R.
+
+## §AKAIPANLAW — one byte, two conversions, 6.4x apart (2026-09-25)
+
+`AKAI_MODVPAN_PROG_OFFSETS[0]` is **89, which is `0x59`** — the pan matrix's
+first amount and the legacy `lfo_pan_depth` are one byte read twice. The
+matrix block added earlier the same day converted it with a bare `/50.0`
+while the `0x59` path divided by the measured `AKAI_LFO_PAN_DEPTH_SCALE` as
+well. Same byte in, depths 6.4x apart out, and **the matrix path — the
+authoritative one, the one EOS itself reads — was the shallow one.**
+
+`AKAI_LFO_PAN_DEPTH_SCALE` is a WRITER-side law: `byte = depth * 50 * 0.1563`
+puts `LfoPan` 0.6398 on byte 5. The reader's inverse is therefore
+`depth = byte / 50 / 0.1563`, which is what `0x59` did and the matrix did not.
+
+**510 AKAI and pan tests passed under both laws**, because each tested a path
+against itself; nothing compared the two. `tests/test_akai_pan_matrix_law.py`
+now does, and asserts `AKAI_MODVPAN_PROG_OFFSETS[0] == 0x59` first so the
+comparison cannot quietly become two unrelated fields.
+
+**How it surfaced, which is the transferable part.** Not by review: by a
+corpus scan run for an unrelated prevalence question, which put 2 381 voices
+on a pan depth of exactly `0.5`. `0.5` is `25/50` — a round number that can
+only survive if a calibration was never applied. **A suspiciously round value
+is evidence. A plausible distribution is not.**
+
+⚠ **The fix makes library-typical amounts saturate.** Byte 25, which two
+discs put on ~98% of their programs, converts to 3.2 and clamps to full
+depth. The calibration sweep is dense at bytes 2-10 and already saturating by
+byte 20, so byte 25 is past where anything was measured: "full depth" there
+is an extrapolation of the rail, not a measured pan width. Recorded as the
+thing to check first if AKAI pan ever sounds too wide.
