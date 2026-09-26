@@ -34127,14 +34127,14 @@ object, not a copy, so every unaffected source stays byte-identical. Emits
 a split spends the target's voice budget.
 
 Round-tripped after the fix: `SMOOTH SAX 1` -24..+12 all eleven preserved,
-`S7` {-47, 0}, `PPG.2.3 4B` {-12, 0}, `LIVE KIT 4` {-7,-6,-2,-1,0}.
+`LIB-A` {-47, 0}, `LIB-B` {-12, 0}, `LIB-C` {-7,-6,-2,-1,0}.
 
 ### What it explains, and what it does not
 
 Of thirteen programs in the test bank, the collapse hit five: SMOOTH SAX 1 (11
-zones), S7 (34), PPG.2.3 4B (72), LIVE KIT 4 (2). Jan's independent
+zones), S7 (34), LIB-B (72), LIB-C (2). Jan's independent
 reports match: *"S7 is way off again, far to low, almost not audible
-so low"* ({0, -47} collapsed to -47), and for PPG *"plays an octave low
+so low"* ({0, -47} collapsed to -47), and for LIB-B *"plays an octave low
 overall, also, the original seems to have two layers one octave apart - that is
 not hearable on the E4XT"* -- one symptom, not two: the unison layer was
 dropped and only the octave-down layer remained.
@@ -34158,7 +34158,7 @@ that this defect does not touch, and SOLDANO's real fault is still open.
 
 ## §AKAISSRATE — the S3000XL ignores an unplayable SSRATE, and we did not (2026-09-20)
 
-Jan: *"Live Kit 4 - pitch is off, eg. note 79 sounds far deeper on the E4xt
+Jan: *"LIB-C - pitch is off, eg. note 79 sounds far deeper on the E4xt
 than on the Akai"*.
 
 `_playback_rate` carried a documented open question: on `.S1` the byte-0x01
@@ -34374,9 +34374,9 @@ preset NAME on each selection, and the machine agreed with the MODEL to within
 11 per cent while sitting 49-72 per cent from what the parser reported:
 
     preset          Dcy1 byte   machine   model   vs model    parser   vs parser
-    PPG.2.3 4B          100       5.27 s   5.08     +3.8%     10.34      -49.0%
+    LIB-B          100       5.27 s   5.08     +3.8%     10.34      -49.0%
     S7        100       6.37     6.36     +0.1%     20.29      -68.6%
-    LIVE KIT 4           69       0.98     1.09    -10.5%      3.49      -71.9%
+    LIB-C           69       0.98     1.09    -10.5%      3.49      -71.9%
 
 Their caveat, which matters: that byte->seconds law is fitted over bytes 44-86,
 so two of the five were refused rather than extrapolated, and the +0.1 per cent

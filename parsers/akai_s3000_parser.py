@@ -561,7 +561,7 @@ def _playback_rate(data: bytes, s3000: bool) -> int:
                           'cents': round(_cents, 1),
                           'playable': list(_AKAI_PLAYBACK_RATES)})
         # MEASURED 2026-09-20 -- this is the disc test the docstring above was
-        # blocked on, and it says prefer the index. `LIVE KIT 4` keygroup
+        # blocked on, and it says prefer the index. `LIB-C` keygroup
         # 72-88 plays LVBASSL4.S1, whose header declares 30000 Hz with the
         # index at 44100 and carries SHTUNO -6.668 semitones -- exactly the
         # -6.67 that cancels 44100/30000. Note 79 on the S3000XL measured

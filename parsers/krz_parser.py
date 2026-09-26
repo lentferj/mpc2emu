@@ -530,7 +530,24 @@ _ALG_DSP_FUNCTIONS = {
 
 
 def _alg_has_third_function(alg: Optional[int]) -> bool:
-    """Does this algorithm have a third DSP function, i.e. is tag 0x52 real?"""
+    """Does this algorithm have a third DSP FUNCTION?
+
+    ⚠ **IT DOES NOT ANSWER "IS TAG 0x52 REAL?", AND THE DOCSTRING SAID IT DID
+    UNTIL 2026-09-26.** The table is correct; the inference drawn from it was
+    not. Read off the panel (k2kremote), algorithm 2:
+
+        | PITCH   2POLE LOWPASS   PANNER  AMP    |
+        |<more  F1 FRQ F2 RES F3 POS F4 AMP more>|
+
+    **Two functions, three F-pages.** `2POLE LOWPASS` is ONE function
+    occupying TWO pages (`F1 FRQ` and `F2 RES`), and `PANNER` is function two
+    sitting on `F3 POS`. So tag 0x52 -- the third SLOT -- is real while the
+    third FUNCTION does not exist.
+
+    **A function's page count is not fixed at one, so a function count cannot
+    tell you slot occupancy.** `2POLE LOWPASS` is the counterexample to keep.
+    Anything deriving slot occupancy from this has the same bug.
+    """
     return _ALG_DSP_FUNCTIONS.get(alg, 0) >= 3
 LFO1_TAG, LFO2_TAG = 0x14, 0x15
 
@@ -543,19 +560,15 @@ _KRZ_PAN_VELTRK = 4
 #: The algorithms that HAVE a panner (K2000 manual Ch.14, and the algorithm
 #: `krz_writer` switches to when it needs one).
 #:
-#: ⚠ **NOT `_alg_has_third_function()`, and the difference is a live
-#: inconsistency worth naming rather than papering over.** That helper reads
-#: `_ALG_DSP_FUNCTIONS`, which gives algorithm **2** a count of 2 -- so it
-#: answers False for "is tag 0x52 real?" on the very algorithm whose printed
-#: signal path is `PITCH -> [filter] -> PANNER -> AMP` and into which this
-#: project's own writer puts a panner at 0x52. One of the two is wrong about
-#: algorithm 2: either the table's count, or the docstring's claim that the
-#: count answers the 0x52 question.
-#:
-#: Not resolved here, and neither is silently edited -- `_ALG_DSP_FUNCTIONS` is
-#: read by other decisions and moving it to fit this one field is how a local
-#: fix becomes a global regression. Recorded in TODO.md instead; this read uses
-#: the manual's own list, which is the narrower and better-sourced claim.
+#: ⚠ **NOT `_alg_has_third_function()` -- RESOLVED 2026-09-26, and neither
+#: the table nor the helper was wrong.** Read off the panel: algorithm 2 shows
+#: `PITCH | 2POLE LOWPASS | PANNER | AMP` over pages `F1 FRQ F2 RES F3 POS
+#: F4 AMP`. `2POLE LOWPASS` is ONE function on TWO pages, so the algorithm has
+#: two FUNCTIONS and three SLOTS -- the helper answers the function question
+#: correctly and simply does not answer the slot question. Using the manual's
+#: panner list here is right for a second reason as well: it is a statement
+#: about which algorithms contain a panner, which is exactly what is being
+#: asked.
 _KRZ_PANNER_ALGOS = (2, 13, 24, 26)
 
 #: The FX segment, and the one ROM effect that is a pure stereo chorus.
@@ -1295,6 +1308,14 @@ def _parse_program_object(data: bytes, obj: dict) -> Tuple[str, List[_KrzLayer]]
                 cur.amp_env = None
         elif tag == ENC_FILTERENV_TAG:
             cur.filter_env = _decode_env(seg)
+        # ⚠ THIS BRANCH MAKES THE INFERENCE THE HELPER ABOVE SAYS IS INVALID:
+        # it asks "third function?" to decide whether the third SLOT holds a
+        # filter. On algorithm 2 that is harmless -- 0x52 is the panner there,
+        # and skipping it is right -- but on any algorithm where a function
+        # spans two pages AND the third slot holds a filter, this would miss
+        # it. Left as-is rather than widened: which algorithms those are has
+        # not been established, and loosening a gate on a guess is how the
+        # invented bandpass got 10.2% of F1 slots. Filed in TODO.md.
         elif tag == HOB_F1_TAG or (tag == HOB_F3_TAG
                                    and not cur.filter_type
                                    and _alg_has_third_function(cur.algorithm)):
