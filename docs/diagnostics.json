@@ -343,6 +343,7 @@
         "keys_over",
         "lo_key",
         "root_key",
+        "sample_name",
         "sample_rate",
         "zones_over"
       ],

@@ -2371,7 +2371,14 @@ def write_e4b(bank: Bank, output_path: str) -> None:
               detail={'lo_key': _z.lo_key, 'hi_key': _z.hi_key,
                       'highest_safe_key': _safe, 'sample_rate': _sr,
                       'root_key': _z.root_key, 'keys_over': _excess,
-                      'zones_over': _nover},
+                      'zones_over': _nover,
+                      # The zone's identity, added 2026-09-28. It was in the
+                      # message text and `echo` but not here, so a consumer
+                      # acting on the record had to either parse a sentence or
+                      # match on (lo_key, root_key, hi_key) -- which is unique
+                      # in practice and ambiguous in principle, two zones of one
+                      # preset being free to share all three.
+                      'sample_name': _z.sample_name},
               remedy='narrow the zone to end at the highest safe key, or '
                      'resample the sample lower. The ceiling is an absolute '
                      'playback rate, so halving the sample rate buys a full '

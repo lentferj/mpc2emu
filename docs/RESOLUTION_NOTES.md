@@ -406,6 +406,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§NONTRANSPOSEREAD — `non_transpose` is now read back from KRZ and AKAI, and the two formats do not mean quite the same thing by it (2026-09-26)](#nontransposeread-non_transpose-is-now-read-back-from-krz-and-akai-and-the-two-formats-do-not-mean-quite-the-same-thing-by-it-2026-09-26)
 - [§PERFDS41F — performance review DS41F (2026-09-26/27)](#perfds41f-performance-review-ds41f-2026-09-2627)
 - [§LFO2PANDEP — the AKAI LFO2 loudness law, measured off our disc (2026-09-27)](#lfo2pandep-the-akai-lfo2-loudness-law-measured-off-our-disc-2026-09-27)
+- [§E4BCEILSRC — did the SOURCE already exceed the playback ceiling? (2026-09-28)](#e4bceilsrc-did-the-source-already-exceed-the-playback-ceiling-2026-09-28)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -39476,3 +39477,140 @@ it batches with whatever else the next AKAI swap unlocks.
   mode before capturing.** See the TODO row; it cost s3ked an hour and every
   signal-based gate we have passes in the failing state.
 
+---
+
+## §E4BCEILSRC — did the SOURCE already exceed the playback ceiling? (2026-09-28)
+
+**Done in this pass, and the reason the rest is written down:** VinSamLib asked
+for two fields on `E4B_ZONE_ABOVE_PLAYBACK_CEILING`. `sample_name` is in
+`detail` as of 2026-09-28 and in `docs/diagnostics.json`; a
+source-was-already-over boolean is **not**, by Jan's call ("only 1 for now").
+
+### Why they asked
+
+Jan imported one preset of a commercial E4 library twice — once by plain Add,
+once through us with the EII vintage profile — and only the converted one
+warned. His objection was the useful part: a commercial preset should not read
+into another sample's RAM.
+
+It does, and it ships that way. VinSamLib parsed the vendor `.e4b` with our own
+`parsers.e4b_parser`, before anything of ours touched it: zone keys 66-127,
+root 72, 44100 Hz, coarse 0 — authored about ten keys past the ceiling, and
+invisible because keys 119-127 are off a 61-key controller and the material is
+played two octaves lower.
+
+Prevalence, theirs: **129 of 1 195 presets (10.8%)** over 113 banks, worst
+excess **38 keys**. ⚠ Population caveat, theirs and restated because it bounds
+the claim: one library, one owner, `sorted(rglob('*.e4b'))[:120]` —
+alphabetical, not random, 113 of 120 parsed. A floor on "this is common", not
+an estimate of the rate.
+
+### ⚠ RETRACTED: "their remedy table is one key optimistic"
+
+**This section first said VinSamLib's 44.1 kHz figure of 118 was one key too
+kind and ours was 117. That was wrong, and it was nearly sent to them as a
+correction.** Keeping the retraction rather than deleting the claim, because
+the way it went wrong is the reusable part.
+
+Re-derived here with `models.common.e4xt_max_transpose_semitones` and the
+writer's own `ceil(top) - 1`: their 27777 -> 125 and 22050 -> 129 reproduce
+exactly, and 44100 came out 117 against their 118. `72 + 45.900 = 117.900`, so
+118 only appears if the top is ROUNDED — which looked like the explanation.
+
+It is not. **The zones carry `fine_tune` −12 cents**, and −12 cents lifts the
+top from 117.900 to 118.020, giving 118 exactly as they said. Their note read
+"root 72, 44100 Hz, coarse 0", which is TRUE — coarse *is* 0 — and I took
+"coarse 0" to mean *no tune offset at all* and re-derived with fine 0 as well.
+**A re-derivation that substitutes its own inputs is not a check of their
+number; it is a different measurement that happens to share a label.**
+
+Their `(three voices; the third carries a small tune offset -> 117)` has the
+offset on the wrong voice — in `LIB-D/B02/P1` it is voices 0 and 1 that carry
+−12 and the THIRD that is untuned at 0, which is why the third is the worst
+and the record names it. Both of their numbers are right and both are
+correctly attached to a real voice; only the attribution of which voice is
+tuned is inverted. **Not worth sending as a correction** — it changes nothing
+they concluded, and the last thing this file sent them under that heading was
+wrong.
+
+### MEASURED HERE: 15 of 15 presets in that bank, not half
+
+Jan's estimate on 2026-09-28 was that *"half of their presets presumably create
+artefacts"*. Parsed with our own `parsers.e4b_parser` and scored by the shipped
+writer rule (`write_e4b` under `models.diagnostics.collect`, so the arithmetic
+is not restated), `LIB-D/B02` gives:
+
+| | |
+|---|---|
+| presets in the bank | 15 |
+| presets with >=1 zone over the ceiling | **15 (100%)** |
+| presets clean | **0** |
+
+Every record names the same sample, `LIB-D/B02/S1`, and the same span: zone
+66-127, root 72, 44100 Hz. Fourteen presets read `highest_safe_key` 118 (9
+keys over); `LIB-D/B02/P1` reads **117** (10 over) because its third voice is
+the untuned one. `zones_over` runs 1..3 and tracks the voice count.
+
+**It is one sample, mapped the same way into every preset of the bank.** That
+is why the rate is 100% here and 10.8% across VinSamLib's 113 banks: the unit
+that is authored wrong is a KEYMAP, and presets inherit it. Counting presets
+therefore counts inheritances, not mistakes — the honest denominator for "how
+often does an author do this" is distinct (sample, span) pairs, and this bank
+contributes exactly one. ⚠ **Do not quote 100% as a prevalence.** It is the
+right number for "does this bank trip the diagnostic" and the wrong number for
+anything about how common the authoring error is.
+
+Reproduce: `tests/_local/disc_name_map.md` has the path; the scoring loop is
+five lines around `collect()` and `write_e4b` into `~/temp`.
+
+### The boolean is a real question
+
+* Resampling only ever **raises** the ceiling (a lower rate transposes
+  further), so a vintage profile cannot create the condition.
+* `processors/zone_reducer.py:220` (`set_voice_key_range`) stretches surviving
+  zones over a removed neighbour's span, so **`--reduce-key-zones` can push
+  `hi_key` past a ceiling the source cleared.** That is the case where the
+  flag reads False and the user needs it to.
+
+### What it would cost
+
+The writer sees only the post-processor bank, and nothing carries the
+pre-processor state:
+
+* `SampleData.declared_sample_rate` is **not** it — that is "what the file
+  said" vs "what the machine will do" (§AKAISSRATE), a different quantity, and
+  reusing it here would put two meanings on one field.
+* The resampler preserves no source rate at all.
+
+**Preferred shape:** an `Optional[bool]` on `ZoneMapping`, stamped once in
+`convert.py` immediately after parse and before any processor runs, by a helper
+that reuses the writer's own arithmetic rather than restating it (§the scratch
+script that diverged from the shipped rule). `None` means *we did not look* —
+the writer called directly, outside the pipeline — so the record never asserts
+a state nobody measured. Declared on the dataclass, not stamped ad hoc, for the
+reason `src_resonance` is: a `getattr` default silently survives a misspelling
+forever.
+
+**Rejected alternatives:**
+
+* *Re-parse the source in the writer* — it does not know the source path, and a
+  second parse of a 128 MB bank to answer a warning is not proportionate.
+* *Emit unconditionally as True* — it is False under `--reduce-key-zones`, which
+  is exactly the case worth telling apart.
+
+### Not asked for, and we should not do it
+
+VinSamLib explicitly does **not** want the writer to clamp `hi_key`. Silently
+editing vendor-authored content to fix keys nobody plays is what
+`content_lost=False` plus a report are for. They are building the "narrow this
+zone to N" button themselves against `highest_safe_key` and `zones_over`.
+
+**Standing offer they made:** if we ever emit one record per over-zone instead
+of one per preset, they would use it. The one-per-preset collapse is
+deliberate (a 40-zone program would otherwise produce 40 findings) and
+`zones_over` exists so a consumer knows the record does not name the siblings —
+so this is a request to reconsider, not a defect.
+
+Pinned by `tests/test_e4b_ceiling_names_its_zone.py`, whose second test builds
+two zones sharing `(lo_key, root_key, hi_key)` at different rates: the case
+their old fallback key genuinely cannot resolve.
