@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026  mpc2emu contributors
+#
+# Part of mpc2emu — https://github.com/lentferj/mpc2emu
+# Contributions: Jan Lentfer, with AI assistance (see README).
+#
+# ACCEPTED VIOLATIONS IN PUBLISHED COMMIT MESSAGES.
+#
+# The project rule is that no commercial library, vendor, volume or preset
+# name appears in a tracked file or a commit message (see §RELSCAN). A tracked
+# FILE can be edited, so a hit in one is always a defect to fix and is never
+# listed here. A pushed MESSAGE cannot be edited without rewriting every sha
+# after it, which invalidates every clone and reference; so where the cost of
+# the rewrite is judged worse than the exposure, the commit is named here
+# instead of being silently tolerated.
+#
+# ⚠ THIS FILE IS TRACKED, SO IT MAY NOT CONTAIN A SINGLE COMMERCIAL NAME.
+# That is why each line is a sha and a COUNT and nothing else: the count says
+# how many term hits were read and accepted in that message. A bare "ignore
+# this commit" would also hide a DIFFERENT name landing in the same message
+# later. If the count stops matching in either direction the scan REFUSES --
+# an exception nobody re-read is a standing permission, not a record.
+#
+# Format:  <40-char sha> <accepted hit count>   # short note, no names
+#
+# Adding a line is a decision, not maintenance. It needs Jan's call, and the
+# reason belongs in docs/RESOLUTION_NOTES.md §RELSCAN.
+
+# ── 2026-09-28, Jan's call. Surfaced the day a library vendor was added to
+# the local term list: the scan had reported clean on every earlier run only
+# because the list did not contain that name. Three zone-reducer commits from
+# 2026-07-27/28 name the library the fixture came from, once each, in the
+# body. All three are published. Rewriting them would move every sha from
+# 2026-07-27 onward for one word in a repro note.
+e713a0b4260971208a455ac63b1a8b9eeca614d8 1   # docs(zone_reducer), 2026-07-28
+590ee198baa65dd01511111484103f4524e96720 1   # fix(zone-reducer), 2026-07-27
+efe130c3c9bf1fefd1f019be7c189b31105ebcf9 1   # fix(zone-reducer), 2026-07-27

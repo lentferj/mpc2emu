@@ -36077,6 +36077,57 @@ control passed on all three runs**, because the machinery was fine and the
 pattern was wrong. For a release scan a false positive does not fail safe: it
 reads as "commercial names found the night before a push".
 
+### 2026-09-28 — the published-history case, and why the exception carries a COUNT
+
+**The scan had been clean on every run, and the term list was the reason.**
+Adding a library vendor to `tests/_local/relscan_terms.txt` on 2026-09-28 —
+while recording §E4BCEILSRC's prevalence measurement — immediately surfaced
+**three published commit messages** naming that library in a repro note:
+`e713a0b`, `590ee19`, `efe130c`, all zone-reducer commits from 2026-07-27/28,
+one hit each. Real violations, not pattern artefacts. This is the second
+instance of the same shape (the first was 2026-09-26, eosed's) and the rule it
+proves is the one already written above: **a clean scan is not coverage.**
+
+**Jan's call: record them, do not rewrite.** Rewriting three messages moves
+every sha from 2026-07-27 onward, which invalidates every clone and every
+reference to those commits, for one word in a note about a test fixture.
+
+So `tools/relscan.py` grew two things:
+
+1. **Commit messages are scanned PER COMMIT.** They were concatenated into one
+   blob named `<commit message>`, which is unaddressable — you cannot accept a
+   hit you cannot name. Hits now read `<commit e713a0b>`. `git log -z` is safe
+   as the separator because git forbids NUL inside a message, unlike any
+   printable sentinel a message is free to contain.
+
+2. **`--history-exceptions`**, a TRACKED file of `<40-char sha> <count>` lines:
+   `docs/relscan_history_exceptions.txt`.
+
+⚠ **Why a count and not a sha list.** A bare "ignore this commit" is a
+permanent blind spot: a different name reaching that same message later would
+never surface, which is precisely the failure this whole section is about,
+rebuilt inside its own fix. The count pins what was read and accepted, and the
+scan returns **UNSOUND** — not `HITS` — when it stops matching in either
+direction. More means a new name landed; fewer means the message was rewritten
+and the line is stale. Both need a human, neither is a release-blocking hit.
+
+⚠ **It exempts MESSAGES only.** A file can be edited, so there is no case for
+accepting one, and `test_an_exception_never_covers_a_TRACKED_FILE` is the
+mutation guard: blanketing file hits under an exception fails it. Also refused:
+exceptions supplied without a `--range` (they would apply to nothing while
+reading as though they had), and a malformed line, which raises rather than
+being skipped — a typo'd sha silently ignored is an exception that does not
+exist, found as a red suite months later.
+
+**Adding a line is a decision, not maintenance.** It needs Jan's call and a
+dated note in the file, and the file may not contain a single commercial name —
+it is tracked.
+
+**Still open and NOT covered by this:** three further commits Jan has yet to
+rule on (`dcd4fcf`, `d542028`, `acd737f`). Their names are not in the term list
+yet, so the scan does not see them — which is the same blindness, one term list
+away.
+
 ### Two refusals the tool owes its operator
 
 - **The terms file may not be tracked.** A checked-in list of commercial names
