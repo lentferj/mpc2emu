@@ -409,6 +409,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§E4BCEILSRC — did the SOURCE already exceed the playback ceiling? (2026-09-28)](#e4bceilsrc-did-the-source-already-exceed-the-playback-ceiling-2026-09-28)
 - [§XPOSE3 — the ceiling bracket and the loop question, on the card 2026-09-29](#xpose3-the-ceiling-bracket-and-the-loop-question-on-the-card-2026-09-29)
 - [§E4BBANDS — the ceiling is not a ceiling: four-semitone bands at x16 and x32 (2026-09-29)](#e4bbands-the-ceiling-is-not-a-ceiling-four-semitone-bands-at-x16-and-x32-2026-09-29)
+- [§E4BBANDPLAN — how to close the playback-band diagnostic (2026-09-29)](#e4bbandplan-how-to-close-the-playback-band-diagnostic-2026-09-29)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -40008,3 +40009,99 @@ the next band is +70..+73 (×64) while +34..+37 (×8) is measured ABSENT.
 
 Captures: `~/temp/xpose3_p000_sweep3.wav` is the 28-note run. Sweeps 1 and 2
 are kept only as the record of two wrong instruments.
+
+---
+
+## §E4BBANDPLAN — how to close the playback-band diagnostic (2026-09-29)
+
+Jan's call: **leave `E4B_ZONE_ABOVE_PLAYBACK_CEILING` as it is for now**, and
+write the plan that closes it. This is that plan. Nothing here is started.
+
+### Where it stands
+
+The warning means "everything above `highest_safe_key` is unsafe". §E4BBANDS
+measured that false: the free-run happens in **four-semitone bands** at playback
+ratio ≈ ×16 and ×32, and notes between and above them play normally. The
+constant is the first band's lower edge. Three things block a correct rule.
+
+**B1 — the band's lower half is unexplained.** eosed's `0x96028` accounts for the
+upper half (an off-the-end table read at ratio ≥ 12) but not the −2/−1 semitones,
+where `%d7` is 3 on both the failing and the passing side.
+**B2 — what ends a voice is unlocated**, on either side. The pitch table is
+referenced from exactly two sites, both inside `0x96028`, so it is not downstream
+of that.
+**B3 — generality is unmeasured.** One sample, one root, one declared rate,
+unlooped, mono, one bank layout.
+
+### Step 0 — fix the instrument first, because it silently poisoned this session
+
+⚠ **Every spectral window taken here was anchored on the MIDI clock**
+(`LEAD_IN + t_on + 0.05`) while this rig's program-change-to-note latency is
+**0.71–0.93 s**. Those windows sat *before the note* and measured the pre-note
+noise floor. That is why the centroid read a flat ~7 kHz from ratio 1.0 to 4.5
+and why every pair of spectra came out equidistant — noise against noise. It was
+reported twice as "the statistic is blind" and once, to eosed, as *"over 8-15×
+this sample's spectral envelope does not depend on the playback rate"*, which is
+**retracted**: re-anchored on each note's own envelope peak, the centroid tracks
+the rate with slope 0.80.
+
+`anchor_offset` exists for this and its docstring warns about it; it was not
+used, and nothing in the analysis checked that the window contained a note.
+**Put a level-checked onset anchor in `hw_measure` and make every spectral
+helper take it**, so a window that does not contain a note raises instead of
+returning a number. The duration results are unaffected — they scan the whole
+inter-note window — which is precisely why they survived and the spectra did not.
+
+### Step 1 — no rig, no disc: does the band shape change what we would warn?
+
+Re-express the rule as a predicate on the **playback ratio** — within [−2, +1]
+semitones of ×16 or ×32 — and run it over the 113-bank corpus beside the current
+`highest_safe_key` test. Count presets that **enter a band** against presets that
+merely **pass the old edge**.
+
+**If the two counts are close, stop here and leave the warning alone for good.**
+The band rule is more accurate and less certain, and trading a slightly
+over-broad warning for a rule with an unexplained half is a bad trade at equal
+yield. This step is cheap and it is the one that decides whether the rest is
+worth doing.
+
+### Step 2 — one disc, one load: XPOSE4, closing B3
+
+All cells **unlooped** so the duration detector applies, plus one sparse-spectrum
+pair for the questions duration cannot reach.
+
+| cell | purpose | discriminating prediction |
+|---|---|---|
+| root 48 / 60 / 72, 44100 | does the band track the ROOT? | bands at root+46..49 and +58..61 |
+| root 60 at 22050 **and** 32000 | does the DECLARED RATE move the bands? | ratio-includes-rate → band 1 at note 118; key-vs-root-only → note 106. **The 110-117 gap is the discriminator**, and XPOSETEST2's old 22050 point cannot separate them because both predict its single break at 118 |
+| sinusoid comb, root 60, 44100 | makes pitch and filtering measurable | partials land near 2/6/10/14/18 kHz at ratio ≈12; rate moves them, the interpolation selector moves their relative levels |
+| comb, looped + unlooped twin | **leg B at last** — does a loop escape the band? | a looped voice sustains to the gate either way, so duration cannot tell; with a comb, a free-run shows as the partials being replaced by other material |
+| fine tune ±1/64 across a band edge | locate the edge to 1/64 semitone | the original leg A, aimed at a band edge instead of a ceiling |
+
+⚠ Sizing note for whoever builds it: give each test sample a **distinct**
+neighbour in the bank. XPOSE3 put three copies of the same PCM in a row, so a
+run-on played the same audio again — audible, but not identifiable as a run-on.
+
+### Step 3 — write the rule down, once B3 is measured
+
+A band predicate in `models/common.py` beside `e4xt_max_transpose_semitones`,
+with the measurement in its docstring the way the current constant carries its
+own. `e4b_writer` emits one record per zone entering a band, and `detail` gains
+the band index so a UI can say *which* band. Re-run Step 1's corpus count as the
+regression check.
+
+### Step 4 — the warning text, which is Jan's call and not ours
+
+Once the shape is bands, "narrow the zone to end at the highest safe key" is
+wrong and "halving the sample rate buys a full octave" is worse than wrong — it
+moves a zone from one band to where the next band sits. Options, cheapest first:
+leave the warning as an over-broad first-edge alarm and say so in the text;
+report the bands and let the UI decide; or drop to `info` on the grounds that
+nobody plays those keys, which is the reason this shipped unnoticed for years.
+
+### What is NOT on this plan
+
+**B1 and B2 are eosed's**, and neither blocks Step 1 or Step 2. A correct
+*predictive* rule does not need the mechanism — §E4BBANDS is already a rule that
+predicts 40 of 40 measured notes. The mechanism decides how much to trust it
+*outside* what has been measured, which is exactly what Step 2 measures directly.
