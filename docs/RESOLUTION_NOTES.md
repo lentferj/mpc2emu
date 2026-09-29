@@ -408,6 +408,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§LFO2PANDEP — the AKAI LFO2 loudness law, measured off our disc (2026-09-27)](#lfo2pandep-the-akai-lfo2-loudness-law-measured-off-our-disc-2026-09-27)
 - [§E4BCEILSRC — did the SOURCE already exceed the playback ceiling? (2026-09-28)](#e4bceilsrc-did-the-source-already-exceed-the-playback-ceiling-2026-09-28)
 - [§XPOSE3 — the ceiling bracket and the loop question, on the card 2026-09-29](#xpose3-the-ceiling-bracket-and-the-loop-question-on-the-card-2026-09-29)
+- [§E4BBANDS — the ceiling is not a ceiling: four-semitone bands at x16 and x32 (2026-09-29)](#e4bbands-the-ceiling-is-not-a-ceiling-four-semitone-bands-at-x16-and-x32-2026-09-29)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -39710,3 +39711,102 @@ control a different experiment that merely resembles the old one.
 **Displaced `CD5-STEREOZONE.iso`, parked not deleted** (`XX_` prefix, rename to
 restore). That test is RESOLVED — nothing merges, 2026-09-24 — which is why it
 gave up its slot. Every id 0-5 and 7 is claimed and 6 is the sampler.
+
+---
+
+## §E4BBANDS — the ceiling is not a ceiling: four-semitone bands at x16 and x32 (2026-09-29)
+
+**MEASURED on Jan's E4XT, XPOSE3 P000.** One unlooped sample, 614909 frames,
+declared 44100 Hz, root key 60, zone 0-127, no tune offset. Every semitone
+100..127, one note per capture, 3.0 s gate, 6.0 s of silence between notes.
+
+| notes | root-relative | verdict | sounding time |
+|---|---|---|---|
+| 100-105 | +40..+45 | normal | 1.70 → 1.43 s |
+| **106-109** | **+46..+49** | **FREE-RUNS** | **4.12, 3.85, 4.42, 4.23 s** |
+| 110-117 | +50..+57 | normal | 1.83 → 1.44 s |
+| **118-121** | **+58..+61** | **FREE-RUNS** | **4.13, 3.85, 4.45, 4.23 s** |
+| 122-127 | +62..+67 | normal | 1.83 → 1.54 s |
+
+Twelve apart. Each band is **[exact octave − 2, exact octave + 1]**: +48 is
+×16, +60 is ×32. **+36 (×8, note 96) is NORMAL**, so the effect begins at ×16
+rather than at every octave.
+
+### What it refutes
+
+`E4XT_MAX_PLAYBACK_RATE_HZ = 625000` divided by 44100 is **14.17**, and the
+first band starts at `2^(46/12) = 14.25`. **The "ceiling" is the lower edge of
+the first band.** Every §E4BXPOSE point sat on that edge — four points, three
+roots and two rates, all landing on the same discontinuity — and a single
+absolute rate fits them perfectly. And every sweep there stopped at note 110,
+which is *inside the normal gap*, so nobody saw the band close again. The model
+"above +45 semitones the voice free-runs" is wrong: on the same sample,
+110-117 and 122-127 play normally.
+
+⚠ **This is the theory-that-fits-every-point shape.** 625 000 was not a bad
+fit; it was an excellent fit to data that could not distinguish it from a band
+edge, and the sweep that would have distinguished them stopped four semitones
+short.
+
+### The instrument, and how two earlier versions of it were wrong
+
+The detector is **total time above the measured noise floor**. A voice that ends
+with its sample reads 1.4-1.8 s; one that plays until key-release reads ~4 s
+(3 s gate + release). 2.5× separation, and the pattern is exact.
+
+Two earlier passes are recorded because each looked like data:
+
+* **v1** gated 0.5 s and compared sounding length to the sample's own predicted
+  length. The measured value sat at ~1.4 s for every note from 96 to 127 while
+  the prediction fell from 1.74 s to 0.29 s, so the ratio climbed monotonically
+  0.85 → 4.66 and every note above 104 scored "RUNS ON". **It was measuring the
+  amp release after a short gate**, and a roughly constant numerator over a
+  shrinking denominator manufactures a perfect-looking trend.
+* **v2** looked for a re-onset — the §E4BXPOSE signature of decaying out and
+  jumping back. Its "first decay below −30 dB of peak" fired on frame 0 of every
+  window, because the window opens before the note sounds; the tail it then
+  searched was the note itself, and all 21 notes scored a re-onset. **A detector
+  that fires on every case is not evidence, and it printed a verdict column
+  anyway.**
+
+The column that survived both needed no model at all.
+
+### NOT measured, and why
+
+**The two looped presets (`XP3 LOOP LONG`, `XP3 LOOP SHORT`) have no result.**
+A looped voice sustains for the whole gate by design, so a duration detector
+cannot tell "loops correctly" from "free-runs" on them — both read ~3.9 s, and
+they did. Leg B needs a different instrument (spectral identity of the loop
+region, or behaviour after note-off). **Do not read the ~3.9 s as a finding.**
+
+**Pitch was not checked.** "Normal" here means the voice *stops*, not that it
+plays at the right rate. The normal durations track 1/ratio plus a constant,
+which is consistent, and that is all.
+
+### What it means for what we ship
+
+`highest_safe_key` is right about where trouble **starts** and wrong to imply
+everything above it is unsafe. A zone ending at root+55 is flagged today and
+plays fine. So the 10.8 % prevalence over 113 banks (§E4BCEILSRC) counts zones
+that *reach* the first edge, which is not the same as zones that break — and
+the remedy text ("halving the sample rate buys a full octave") is now
+ambiguous, because moving a zone down an octave moves it from one band to the
+next band's position, not out of trouble.
+
+`E4XT_MAX_PLAYBACK_RATE_HZ` and `e4xt_max_transpose_semitones` are **left
+unchanged**: as a first-edge predictor the number is still correct, and
+changing the shape of the warning is a decision, not a silent edit.
+
+### Handed to eosed
+
+The band shape is a firmware question. [octave−2, octave+1] recurring at ×16
+and ×32 looks like a fixed-point phase increment whose integer field overflows
+4 bits and then 5, or a mantissa/exponent conversion mishandling the top of the
+mantissa. Two things only the disassembly can answer: where the voice's phase
+increment is computed and what its fixed-point layout is, and whether the
+end/loop address is compared against the accumulator's integer part in a way a
+carry can skip. Sent 2026-09-29 with the table above and the prediction that
+the next band is +70..+73 (×64) while +34..+37 (×8) is measured ABSENT.
+
+Captures: `~/temp/xpose3_p000_sweep3.wav` is the 28-note run. Sweeps 1 and 2
+are kept only as the record of two wrong instruments.

@@ -10,6 +10,23 @@
 change. Built by `tests/re_banks/gen_e4xt_xpose3.py`, which is gitignored —
 this document is the record.
 
+> # ⚠ RUN 2026-09-29 — LEG A ANSWERED SOMETHING ELSE ENTIRELY. There is no
+> # ceiling to narrow: P000 free-runs in TWO FOUR-SEMITONE BANDS, 106-109 and
+> # 118-121, and plays normally at 100-105, 110-117 and 122-127. Root-relative
+> # +46..+49 and +58..+61, twelve apart, each [exact octave −2, octave +1] —
+> # ×16 and ×32. See §E4BBANDS.
+> #
+> # **The fine-tune ladder below was designed to bisect a single ceiling and is
+> # now the wrong instrument for the wrong question.** Its cells would bisect a
+> # BAND EDGE, which is still worth having, but read the prediction table below
+> # as superseded: it predicts "first bad note 106 and everything above", and
+> # 110-117 are fine.
+> #
+> # **Leg B has NO result.** A looped voice sustains for the whole gate by
+> # design, so the duration detector used here cannot distinguish "loops
+> # correctly" from "free-runs"; both looped cells read ~3.9 s at every note.
+> # Leg B needs a different instrument.
+
 > **What is NOT open.** That an over-ceiling zone makes an audible artefact is
 > already settled and is how §E4BXPOSE started: Jan at the instrument, *"there
 > are clear artefacts on the output ... as if other samples are appended to the
@@ -104,7 +121,8 @@ geometry of the zone Jan imported. The shipped diagnostic reports
 
 Fifteen presets of the commercial bank itself, geometry unmodified (93 zones
 round-trip identical), so the as-shipped preset plays beside the authored
-cells. `SYNCO X   (cl)RP` is the one Jan imported; its third voice is the
+cells. `LIB-D/B02/P1` is the one Jan imported (ids in
+`tests/_local/disc_name_map.md`, local and gitignored); its third voice is the
 untuned one and therefore the worst, `highest_safe_key` **117**.
 
 ## Running it

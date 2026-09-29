@@ -1025,6 +1025,28 @@ E4XT_Q_MAX_BYTE = 112
 #: same bracket twice -- narrowing it needs a rate that is not a power-of-two
 #: multiple. A 30000 Hz sample breaks at root+53 if the ceiling is 625 000 and
 #: at root+52 if it is at the bracket's low end; that is the experiment.
+#: ⚠⚠ REFUTED AS A CEILING, 2026-09-29, ON HARDWARE (§E4BBANDS). NOT A LIMIT
+#: ABOVE WHICH EVERYTHING BREAKS. Sweeping EVERY semitone 100..127 on one
+#: unlooped 44100 Hz sample at root 60 (XPOSE3 P000) gives two FOUR-SEMITONE
+#: BANDS and normal playback between and above them:
+#:
+#:     +40..+45  normal        110..117  (+50..+57)  normal
+#:     +46..+49  FREE-RUNS     118..121  (+58..+61)  FREE-RUNS
+#:                             122..127  (+62..+67)  normal
+#:
+#: Root-relative, twelve apart, each spanning [exact octave - 2, octave + 1]:
+#: +48 is x16 and +60 is x32. +36 (x8) is NORMAL, so it begins at x16.
+#:
+#: 625000/44100 = 14.17 and the first band starts at 2^(46/12) = 14.25, so THIS
+#: NUMBER IS THE LOWER EDGE OF THE FIRST BAND, not a ceiling. Every §E4BXPOSE
+#: point sat on that edge, and every sweep there stopped at note 110 -- inside
+#: the normal gap -- so nobody saw the band close again.
+#:
+#: The value and `e4xt_max_transpose_semitones` are LEFT UNCHANGED on purpose:
+#: as a first-edge predictor it is still correct, so every `highest_safe_key`
+#: we ship is right about where trouble STARTS and wrong to imply everything
+#: above it is unsafe. Changing the shape of what we warn is Jan's call and is
+#: a TODO row, not a silent edit.
 E4XT_MAX_PLAYBACK_RATE_HZ = 625000.0
 
 #: AKAI program loudness (program byte 0x19, 0..99) -> E4B preset volume in dB.
