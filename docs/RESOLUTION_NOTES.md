@@ -39928,8 +39928,64 @@ is no same-ratio-different-idx pair to build. Two negatives are all we have:
 * **it does not change the level** — peaks −19.9, −20.1, −20.0, −20.0 dBFS,
   inside the −19.3..−20.2 spread of all 28 notes.
 
-Timbre is untested and there is no instrument for it here. If eosed can say
-which field bits 26-31 of `%a5@(8)` belong to, that names what to listen for.
+### The field is an interpolation selector (eosed §179b) — and the disc cannot test it
+
+Decoding the 48 valid entries: a monotone step every **0.5× of playback rate**,
+`>=0.00 -> 0`, `>=1.25 -> 1`, `>=1.75 -> 2`, `>=2.25 -> 3`, `>=2.75 -> 4`,
+`>=3.25 -> 5`, `>=3.75 -> 6` (saturated), only 3 of the 6 bits ever used. The
+shape of a **reconstruction / anti-alias selector**: the faster the sample is
+read, the further the filter comes down. The write is
+`(old & 0x03FFFFFF) | entry`, so bits 26-31 are REPLACED and the low 26 bits are
+preserved and then OR-ed with whatever the entry carries there — zero for a valid
+entry, garbage for an off-the-end one.
+
+The intended value is **6 for every note in our sweep** (the table saturates at
+3.75× and the sweep starts at 8×). Notes 106/118 get **3** — less filtering at a
+higher rate, so brighter and more aliased, not duller — and 104/105/116/117 get
+**15** and **18**, outside the table's own 0..6 range.
+
+eosed's A/B is right and needs **adjacency, not equal ratio**: since the intended
+field is constant at 6 across the sweep, any difference between two sweep notes
+is entirely the off-the-end read. **103 vs 104** and **115 vs 116** — adjacent
+semitones, 5.9 % apart in rate, straddling ratio 12.0, two independent instances,
+both already captured.
+
+**The disc cannot report it, and that is a fact about the sample.**
+
+| metric | positive control (bit-identical ratios) | negative control (ratios 30-50 % apart) | verdict |
+|---|---|---|---|
+| per-bin log-spectral rms | 7.56 – 7.80 dB | 7.58 – 7.79 dB | blind |
+| 1/6-octave envelope rms | 1.52 dB (sd 0.20) | **1.32 dB** | blind, and inverted |
+
+The first attempt looked like an answer: a null of 7.68 dB (sd 0.08) over 15
+non-straddling adjacent pairs, with 103/104 at 7.65 (z −0.33) and 115/116 at 7.63
+(z −0.57) — *slightly less different than typical*, which reads as "the read is
+inert". The positive control killed it: identical, adjacent and 50 %-apart ratios
+all land in 7.6-7.8 dB, so the metric was measuring capture-to-capture
+decorrelation of aliased broadband content. Smoothing to 1/6 octave did not
+rescue it; the negative control came out *lower* than the positive.
+
+⚠ **Over 8-15×, this sample's spectral envelope does not depend on the playback
+rate at all.** That was already visible in the centroid result — every note
+pinned within a ~400 Hz window while the ratio spanned 1.9× — and it should have
+been *inferred* there instead of prompting two more variations on the same
+statistic. A broadband metallic source stretched four octaves past the capture
+band and then reconstruction-filtered arrives as rate-independent noise. The
+selector could be swinging 6 → 15 and this disc would not show it.
+
+**What would answer it** (a proposal for Jan, not a plan): replace the broadband
+source with a **sparse, known spectrum** — a handful of sinusoids placed so that
+at ratio ≈12 they land at roughly 2, 6, 10, 14 and 18 kHz. Rate then moves the
+partials while the selector changes their relative LEVELS, so the two effects
+separate by construction, which is precisely what this sample cannot do. The top
+partial's level across 103 → 104 is the whole measurement, and the same cell
+re-tests the pitch law with a real f0 instead of through duration. One preset per
+root, three roots to put the boundary at three different absolute notes.
+
+**The two negatives still stand**, because they came from duration and level
+rather than spectrum, and eosed's decode says they are exactly what an
+interpolation selector predicts: the off-the-end read changes neither the
+playback rate nor the output level.
 
 **Still unlocated: what ends a voice.** The end comparison is not in `0x96028`
 and eosed has not found it. The sawtooth predicts a wrong PITCH, not a
