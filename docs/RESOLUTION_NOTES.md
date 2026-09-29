@@ -39797,6 +39797,148 @@ next band's position, not out of trouble.
 unchanged**: as a first-edge predictor the number is still correct, and
 changing the shape of the warning is a decision, not a silent edit.
 
+### The mechanism, from eosed's disassembly (§179) — and my hypothesis refuted
+
+`0x96028`, one argument, the voice's pitch block. A **768-entry table at
+`0x965fa` of `trunc(4096 * 2^(k/768))`**, 4096..8184, verified entry by entry
+(max deviation 0.998, pure truncation). 768 per octave is **1/64 semitone**, so
+the mantissa is Q12 and the table index is the same unit our fine-tune cells
+step in.
+
+    d7 = floor(P/768)   exponent, *** CLAMPED TO 3 ***   (0x960bc: moveq #3,%d7)
+    d6 = P mod 768      table index
+    d5 = table[d6] << d7                                 = ratio * 4096
+
+written as `d5 << 16` into `%a5@(4)`, so the hardware word is **ratio × 2^28 —
+Q4.28, four integer bits.** Four integer bits cap the ratio at 16, and
+`8184/4096 × 8 = 15.984` is the largest value that fits: **the clamp is the
+field width written out, not policy.** The downward path at `0x9608c` uses
+`asrl` with no clamp at all — the asymmetry is in the instruction stream.
+
+**My overflow hypothesis is refuted.** Nothing overflows. Because `d6` is
+`P mod 768` regardless of the clamp, above +48 the mantissa index wraps to the
+bottom of the table and climbs again: the ratio is a **sawtooth of period
+exactly 12 semitones**, 8.000 → 15.102, dropping back.
+
+It also reproduces our durations without being fitted to them: notes 110 and 122
+compute bit-identical ratios (8.979) and we measured 1.83 s for both; 105 and
+117 compute 13.453 and we measured 1.43 and 1.44 s. **The 12-semitone repeat in
+the duration column IS the table modulo.** And it explains the absent ×8 band,
+which was our own proposed test of the mechanism.
+
+### MEASURED 2026-09-29: notes 94-97 are NORMAL, so the residue is not the rule
+
+eosed's rule candidate was the band being `P mod 768 ∈ {640, 704, 0, 64}` with
+no exponent dependence, which predicts a reachable band **downward** at notes
+94-97 — a test this file had missed, having wrongly said the next one was
++70..+73 and off the keyboard (it is note 130, and the downward one was there
+all along).
+
+Swept 88..100, every semitone, **6 s gate** — not 3, because at note 88 the
+sample's own length is 2.767 s and a 3 s gate would score a normal low note as
+free-running. **All thirteen end with their sample**, sounding time tracking the
+sample length plus a constant ~0.25 s, no outlier:
+
+| note | +st | P | d7 | d6 | own sample | sounding | verdict |
+|---|---|---|---|---|---|---|---|
+| 94 | 34 | 2176 | 2 | 640 | 1.956 | 2.190 | normal |
+| 95 | 35 | 2240 | 2 | 704 | 1.847 | 2.105 | normal |
+| 96 | 36 | 2304 | 3 | 0 | 1.743 | 2.010 | normal |
+| 97 | 37 | 2368 | 3 | 64 | 1.645 | 1.945 | normal |
+
+**So the free-run is not decided in `0x96028`.** Their contradiction is resolved
+and it resolves against the function: notes 96 and 108 write identical `%d5`
+(32768, ratio 8.000) and behave differently — 2.010 s against 7.650 s, now
+measured on the same instrument, so the disowned pass is out of the comparison.
+
+In P units the picture is:
+
+    P = 3*768 = 2304  ->  94..97    ALL NORMAL
+    P = 4*768 = 3072  ->  106..109  FREE-RUN
+    P = 5*768 = 3840  ->  118..121  FREE-RUN
+
+Each band is `P ∈ [boundary − 128, boundary + 64]`, −2..+1 semitones about an
+exponent boundary. The mantissa residues are identical in all three, so the
+residue cannot be the rule; a band appears at boundary 4 and 5 and **not** at 3.
+
+⚠ **And a pure clamp story does not fit either, left raw rather than tidied.**
+`d7` at the moment the table is read is 3 on both sides: +46 (P 2944, d7 3,
+d6 640) free-runs, +36 (P 2304, d7 3, d6 0) does not. Nor is it a threshold on
+the unclamped ratio: +47 is 15.10 and free-runs, +50 is 17.96 and is normal.
+Whatever decides it appears to see `P` itself or a pre-clamp exponent, with the
+threshold between P 2368 and P 2944.
+
+### CONFIRMED 2026-09-29: the sawtooth is real. R² 0.9969 against 0.0313
+
+Tested on sweep 3's existing capture — no extra rig time, the pitch was already
+in those bytes. `duration = SAMPLE_S / ratio + overhead`:
+
+| §179-identical, a full octave apart | durations | spread | naive predicts |
+|---|---|---|---|
+| 110 / 122 | 1.830 1.835 | 0.3 % | 2× apart |
+| 100 / 112 / 124 | 1.695 1.700 1.705 | 0.6 % | 4× apart |
+| 101 / 113 / 125 | 1.635 1.650 1.645 | 0.9 % | 4× apart |
+| 102 / 114 / 126 | 1.580 1.585 1.590 | 0.6 % | 4× apart |
+| 103 / 115 / 127 | 1.525 1.530 1.540 | 1.0 % | 4× apart |
+| 104 / 116 | 1.475 1.470 | 0.3 % | 2× apart |
+| 105 / 117 | 1.430 1.435 | 0.3 % | 2× apart |
+
+Negative control, pairs **both** models agree differ: 100 vs 105 (ratios 33 %
+apart) → durations 19 % apart; 110 vs 117 (50 %) → 28 %; 100 vs 103 (19 %) →
+11 %. So the instrument separates rates from 19 % up, and the octave pairs agree
+to under 1 %.
+
+Fit over the 20 stopping notes: **§179 R² = 0.99685, rms 6.8 ms; naive
+`2^(st/12)` R² = 0.03132, rms 118 ms.** ⚠ The slope is **0.773, not 1.0**, with a
++0.631 s intercept, so duration is not exactly `SAMPLE_S/ratio` and something
+rate-dependent folds in — the release, most likely. That does not touch the
+within-pair comparison the test rests on; do not read the slope as a constant.
+
+### ⚠ AND A FOURTH BAD INSTRUMENT, caught before it was reported
+
+The test eosed and I both proposed was **f0 / spectrum**, and it is blind here.
+Spectral centroid on all 28 notes matched every predicted-identical pair
+beautifully — 110/122 within 1.8 %, 104/116 within 0.3 % — and read as a clean
+confirmation. **The negative control killed it:** notes 100 and 107 differ by
+1.5× under *both* models and their centroids are 9465 and 9485 Hz, a ratio of
+**1.002**. Every note in the sweep sits in 9280..9660 Hz while the §179 ratio
+spans 8.0 to 15.1. At 10-16× a 44.1 kHz sample's spectrum is stretched four
+octaves past the capture band and only its bottom survives the output filter, so
+the shape reaching 48 kHz carries no rate information at all.
+
+**A statistic that cannot see a difference both hypotheses predict cannot
+confirm one of them** — and this one would have been reported as a confirmation
+of the same conclusion the duration test then reached honestly. The right answer
+being available by another route is exactly what makes this shape dangerous.
+
+### The off-the-end table read (eosed §179a) — NOT answered, two negatives only
+
+After the shift, `idx = d5 >> 10 = floor(ratio*4)` indexes a table at `0x96bfc`
+whose entries occupy bits 26-31 only; exactly **48 entries** satisfy that, and
+`idx` reaches **60**, so `idx >= 48` — i.e. `ratio >= 12.0` — reads instructions
+as table data and ORs them into `%a5@(8)`. Notes 104, 105, 116, 117 do this and
+we scored them normal, because the detector only asks whether the voice stops.
+
+**The pairing works against testing it:** 104 and 116 read off the end at the
+*same* idx (50), as do 105 and 117 (53), and since `idx = floor(ratio*4)` there
+is no same-ratio-different-idx pair to build. Two negatives are all we have:
+
+* **the corruption does not change the rate** — 104/116 and 105/117 match their
+  octave partners to 0.3 %, tighter than any other pair in the table;
+* **it does not change the level** — peaks −19.9, −20.1, −20.0, −20.0 dBFS,
+  inside the −19.3..−20.2 spread of all 28 notes.
+
+Timbre is untested and there is no instrument for it here. If eosed can say
+which field bits 26-31 of `%a5@(8)` belong to, that names what to listen for.
+
+**Still unlocated: what ends a voice.** The end comparison is not in `0x96028`
+and eosed has not found it. The sawtooth predicts a wrong PITCH, not a
+free-run, so these are two defects and only one of them is explained.
+
+**Cheapest next measurement, and it tests the sawtooth directly rather than
+through a side effect:** f0 on notes 110 and 122, which compute bit-identical
+ratios. Pitch has not been checked anywhere in this section.
+
 ### Handed to eosed
 
 The band shape is a firmware question. [octave−2, octave+1] recurring at ×16
