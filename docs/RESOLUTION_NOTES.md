@@ -40078,6 +40078,74 @@ pair for the questions duration cannot reach.
 | comb, looped + unlooped twin | **leg B at last** — does a loop escape the band? | a looped voice sustains to the gate either way, so duration cannot tell; with a comb, a free-run shows as the partials being replaced by other material |
 | fine tune ±1/64 across a band edge | locate the edge to 1/64 semitone | the original leg A, aimed at a band edge instead of a ceiling |
 
+#### ⚠⚠ THE REMEDY TEXT WE SHIP IS WRONG ADVICE — and this now outranks the rest
+
+`E4B_ZONE_ABOVE_PLAYBACK_CEILING`'s remedy currently reads:
+
+> narrow the zone to end at the highest safe key, or resample the sample lower.
+> The ceiling is an absolute playback rate, so **halving the sample rate buys a
+> full octave of extra range**
+
+The first clause is still sound and merely conservative. **The second is false
+under the band model.** Halving the rate shifts the pitch by −11.9815 semitones
+— within 0.02 of exactly twelve — so every band lands back on the **same pitch
+classes**. It does not buy range; it relocates the problem and reports success.
+
+⚠ **And our own `--resample eii` is the same failure.** 27777 Hz is −7.9842
+semitones, 0.016 off the grid. The profile shifts every band bodily by eight
+semitones and lands them back on keys. Under the old ceiling model it "bought 8
+of 10 keys" and that is what we told Jan on 2026-09-28.
+
+**This is a different class of defect from an over-broad warning.** A warning
+that fires too often costs attention; a remedy that says "do X and the problem
+goes away" when X moves the problem costs the user the work AND leaves them
+believing it is fixed. **It is the highest-priority item on this plan**, ahead
+of Step 1, and it is one string.
+
+**Proposed wording, ready to apply, NOT applied** (Jan's 2026-09-29 call was to
+leave the diagnostic alone; that call predates knowing the remedy is wrong, so
+it is worth re-asking rather than assuming either way):
+
+> narrow the zone to end at the highest safe key. ⚠ Resampling lower does NOT
+> reliably help: the failure recurs at fixed ratios, so a rate change that is a
+> whole number of semitones — halving is exactly twelve, and the EII profile's
+> 27777 Hz is eight — moves the affected keys to the same pitch classes rather
+> than out of range.
+
+#### The reference is 44053, not 44100 (eosed §179e)
+
+`0x38bb2` dispatches on a rate code and calls `0x49984`, whose two soft-float
+literals name it: **`768 / ln(2) = 1107.98979`** — precisely the constant that
+turns a natural log into 1/768-octave units, the units of the mantissa table —
+and **`44053.0`**. So the declared rate enters as
+`round(768 · log2(rate / 44053))`, the *same* log-unit space as `%a1@(36)`'s
+output-rate term, which is added before the split, the modulo and the clamp.
+
+⚠ **Labelled as eosed labels it: a strong architectural answer, not a located
+path.** The converter and its units are proven by the constants; that its result
+reaches the pitch adder follows from the units rather than from a traced write.
+
+Re-derived here (`768/ln(2)` reproduces the literal to five decimals):
+
+| rate | units (ref 44053) | semitones | off the semitone grid |
+|---|---|---|---|
+| 22050 | −766.819 | −11.9815 | +0.0185 |
+| 27500 | −522.093 | −8.1577 | **−0.1577** |
+| 27777 (EII) | −510.988 | −7.9842 | +0.0158 |
+| **32000** | **−354.177** | **−5.5340** | **+0.4660** |
+
+Everything moves by a constant **+1.181 units** against a 44100 base — below the
+1/64-semitone grid, so **no conclusion changes**. But a remedy table computed on
+44100 carries that constant error, and there is no 44100 anywhere in this path.
+
+⚠ **Two rate corrections, two references, and they must not be reconciled into
+one number.** The output-rate correction at `0x95fa6` is `94` against 44100
+(93.89); the declared-rate converter is against 44053. Different quantities.
+
+**32000 is not merely non-integer, it is nearly the best possible cell**: 0.466
+of a maximum 0.5 semitone off the grid. `27500` — the other rate in our own
+profile table — is 0.158 off, a usable but much weaker fallback.
+
 #### ⚠ 32000 is the cell, and 22050 and 27777 are both useless (eosed §179d)
 
 The rate conversion is an **additive pitch offset in table units**, applied
