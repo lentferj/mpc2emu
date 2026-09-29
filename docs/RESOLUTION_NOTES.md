@@ -40073,10 +40073,39 @@ pair for the questions duration cannot reach.
 | cell | purpose | discriminating prediction |
 |---|---|---|
 | root 48 / 60 / 72, 44100 | does the band track the ROOT? | bands at root+46..49 and +58..61 |
-| root 60 at 22050 **and** 32000 | does the DECLARED RATE move the bands? | ratio-includes-rate → band 1 at note 118; key-vs-root-only → note 106. **The 110-117 gap is the discriminator**, and XPOSETEST2's old 22050 point cannot separate them because both predict its single break at 118 |
+| **root 60 at 32000** | does the DECLARED RATE move the bands, and is `P` quantised? | see below — 22050 and 27777 are both dropped |
 | sinusoid comb, root 60, 44100 | makes pitch and filtering measurable | partials land near 2/6/10/14/18 kHz at ratio ≈12; rate moves them, the interpolation selector moves their relative levels |
 | comb, looped + unlooped twin | **leg B at last** — does a loop escape the band? | a looped voice sustains to the gate either way, so duration cannot tell; with a comb, a free-run shows as the partials being replaced by other material |
 | fine tune ±1/64 across a band edge | locate the edge to 1/64 semitone | the original leg A, aimed at a band edge instead of a ceiling |
+
+#### ⚠ 32000 is the cell, and 22050 and 27777 are both useless (eosed §179d)
+
+The rate conversion is an **additive pitch offset in table units**, applied
+before `0x96028` sees anything. At `0x95f8e` the output rate selects `%d7 = 94`
+for 48 kHz out and `0` for 44.1 kHz, and `log2(48000/44100) × 768 = 93.89` — the
+constant is the log of the rate ratio in the table's own units. `%a1@(36)` is
+added to the pitch at `0x96064`, **before** the octave split, the modulo and the
+clamp. So a rate shift moves the bands **bodily**, and a key-versus-root-only
+rule is architecturally implausible: there is no other way to express a ratio in
+a log representation.
+
+⚠ That is the **output** rate, a global; where the *sample's* declared rate
+enters is not located, so this is an architectural argument rather than a
+located constant, and it does not close the cell on its own.
+
+It does re-rank the cells, and the arithmetic is re-derived here rather than
+taken over:
+
+| rate | units vs 44100 | semitones | use |
+|---|---|---|---|
+| 22050 | **768.000** | **12.0000** | **useless** — exactly an octave, so the bands land on the *same pitch classes*. Invisible to anything reading note numbers, and it cannot test quantisation |
+| 27777 (our EII profile) | **512.170** | **8.0027** | **useless** — within 0.003 semitone of the grid. ⚠ Worth knowing on its own: our own shipped vintage profile cannot move a band off a key |
+| **32000** | **355.359** | **5.5525** | **the cell.** Not an integer, so if the rate is folded into `P` the band edges land *between* keys and the band changes width or position off the semitone grid; if the rule is key-only it does not move at all |
+
+That separates the hypotheses far more sharply than the 110-117 gap, and tests
+quantisation at the same time. eosed quoted 94.04 and 355.4 against the 93.89
+and 355.36 computed here — no consequence for either conclusion, and the
+firmware constant 94 is the correct rounding of both.
 
 ⚠ Sizing note for whoever builds it: give each test sample a **distinct**
 neighbour in the bank. XPOSE3 put three copies of the same PCM in a row, so a
