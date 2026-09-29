@@ -407,6 +407,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§PERFDS41F — performance review DS41F (2026-09-26/27)](#perfds41f-performance-review-ds41f-2026-09-2627)
 - [§LFO2PANDEP — the AKAI LFO2 loudness law, measured off our disc (2026-09-27)](#lfo2pandep-the-akai-lfo2-loudness-law-measured-off-our-disc-2026-09-27)
 - [§E4BCEILSRC — did the SOURCE already exceed the playback ceiling? (2026-09-28)](#e4bceilsrc-did-the-source-already-exceed-the-playback-ceiling-2026-09-28)
+- [§XPOSE3 — the ceiling bracket and the loop question, on the card 2026-09-29](#xpose3-the-ceiling-bracket-and-the-loop-question-on-the-card-2026-09-29)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -39665,3 +39666,47 @@ so this is a request to reconsider, not a defect.
 Pinned by `tests/test_e4b_ceiling_names_its_zone.py`, whose second test builds
 two zones sharing `(lo_key, root_key, hi_key)` at different rates: the case
 their old fallback key genuinely cannot resolve.
+
+---
+
+## §XPOSE3 — the ceiling bracket and the loop question, on the card 2026-09-29
+
+**`CD5-XPOSE3.iso`, md5 `6bd9770d`, verified off the card.** One bank, 26
+presets. Full procedure, the pre-registered prediction table and the capture
+rules: `docs/re_procedures/e4xt_ceiling_bracket_and_loops.md`.
+
+Two gaps close on one crossing.
+
+**The bracket is 5.95 % wide** and cannot be narrowed by the experiment
+`models/common.py` currently names. Both rates §E4BXPOSE tested differ by
+exactly an octave, so they give the same bracket twice; the note there proposes
+a 30000 Hz sample, and a novel declared rate is the wrong lever while EOS's
+handling of that field is itself under investigation (§E4BRATE). **Fine tune
+moves the same quantity at a fixed 44100 Hz** — the rate the bracket was
+measured at — in 1/64-semitone steps, which is the format's own resolution.
+Eight cells bisect it: all eight breaking at note 106 puts the ceiling in
+(624 096, 628 618], **0.72 %**, and any cell breaking at 105 refutes the fitted
+625 000 outright.
+
+**Every measurement of the ceiling so far used UNLOOPED samples** — both
+original presets, all four XPOSETEST presets. The population the warning exists
+for is the opposite: §E4BCEILSRC's bank is 15 of 15 presets over the ceiling
+with **all four samples FORWARD-looped**, and a looped voice never reaches the
+end of its sample while the key is held. ⚠ **The prevalence result rests on an
+untested transfer.** Two loop shapes are on the disc, the commercial one
+(loop_start ~40 % in) and one short and early that never nears the end address;
+if they disagree, the answer is about the end comparison rather than about
+looping.
+
+⚠ **What is NOT open, so nobody re-asks it:** that an over-ceiling zone is
+audible. Jan heard it at the instrument on 2026-09-20 and it is captured —
+that is how §E4BXPOSE started. The TODO row written on 2026-09-28 said "nobody
+has listened", which was wrong; it has been corrected.
+
+**Identical PCM to XPOSETEST2**, asserted by md5 in the generator, because the
+bracket being narrowed was measured on those bytes — new PCM would make the
+control a different experiment that merely resembles the old one.
+
+**Displaced `CD5-STEREOZONE.iso`, parked not deleted** (`XX_` prefix, rename to
+restore). That test is RESOLVED — nothing merges, 2026-09-24 — which is why it
+gave up its slot. Every id 0-5 and 7 is claimed and 6 is the sampler.
