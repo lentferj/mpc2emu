@@ -578,6 +578,17 @@ def parse_gig(gig_path: str, max_instruments: int = 32,
     # comprehension per zone made the dedup check O(zones x samples).
     banked_names: set = set()
 
+    # Spans already warned about below, as (key_lo, key_hi). Per parse rather
+    # than per instrument: the message is about a FORMAT limitation -- every
+    # target format transposes by (key - root) and has no unpitched flag -- so
+    # once per distinct span is the useful amount. Keyed rather than a single
+    # bool so two different spans in one file both get reported.
+    #
+    # 2026-10-02: this was a bare `_warned_span` that was never assigned
+    # before it was read. A GIG with a pitch-tracking-off dimension region
+    # spanning more than one key raised NameError and killed the whole parse.
+    _warned_span: set = set()
+
     # Instrument list
     lins = riff.find_list('lins')
     if lins is None:
@@ -739,13 +750,14 @@ def parse_gig(gig_path: str, max_instruments: int = 32,
                     if untracked:
                         # Root = the key it covers, so (key - root) is zero.
                         r = min(127, rgn['key_lo'])
-                        if rgn['key_hi'] != rgn['key_lo'] and not _warned_span:
+                        if rgn['key_hi'] != rgn['key_lo'] \
+                                and (rgn['key_lo'], rgn['key_hi']) not in _warned_span:
                             print(f"  [WARN] pitch-tracking is off for a zone "
                                   f"spanning keys {rgn['key_lo']}-{rgn['key_hi']}: "
                                   f"the target formats always transpose by "
                                   f"(key - root), so it will transpose across "
                                   f"that span. Rooted at {rgn['key_lo']}.")
-                            _warned_span = True
+                            _warned_span.add((rgn['key_lo'], rgn['key_hi']))
                     voice.zones.append(ZoneMapping(
                         sample_name = dim_sd.name,
                         lo_key      = min(127, rgn['key_lo']),

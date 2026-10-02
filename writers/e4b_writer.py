@@ -107,6 +107,7 @@ Sample (E3S1) body = 94-byte header + little-endian 16-bit PCM
 import math
 import copy
 import struct
+from dataclasses import replace
 from typing import List
 from models.common import (
     e4xt_cents_to_cord_amount, e4xt_cord_saturates, E4XT_VEL_SOURCE_UNITS,
@@ -443,13 +444,27 @@ def _build_sample_header(sample: SampleData, sample_idx: int) -> bytes:
 
     PCM is LE — confirmed from hardware-saved E4XT banks.
     """
-    n_bytes   = len(sample.data)   # WAV = LE; E4XT reads LE — written as-is
+    # The PCM LENGTH the write loop will emit, not the length the buffer holds.
+    # `_pcm_bytes_written` exists precisely so a chunk never declares more than
+    # it writes -- its docstring says so, and `write_e4b` uses it for the chunk
+    # length. This function was reading `len(sample.data)` instead, which for a
+    # stereo buffer holding a half-frame (`len % 4 == 2`) is two bytes MORE than
+    # `_interleaved_to_planar` emits. The header then addressed a right channel
+    # starting one frame late and an end two bytes past the data, while the
+    # chunk length was right: a sample object whose own geometry disagreed with
+    # its payload, with nothing else in the file to catch it. The same number
+    # now comes from one place.
+    n_bytes   = _pcm_bytes_written(sample)
     STRUCT_SZ = 92                 # sizeof(struct emu3_sample)
 
     # Stereo: one object carries BOTH channels as two sequential PCM blocks,
     # each addressed by its own half of the start/end pairs, with the channel
     # bits 0x0020|0x0040 both set. Corpus-RE'd over 473 local banks (23.6% of
     # sample objects are stereo this way) — see RESOLUTION_NOTES §E4BSTEREO.
+    #
+    # `n_bytes` is a multiple of 4 for stereo, so chan_bytes is even and both
+    # channels stay 2-byte aligned. The half-frame case is truncated away
+    # above rather than handled here, which is why this division is exact.
     is_stereo   = getattr(sample, 'channels', 1) == 2
     chan_bytes  = n_bytes // 2 if is_stereo else n_bytes   # bytes per channel
     start_r     = STRUCT_SZ + chan_bytes if is_stereo else 0
@@ -484,6 +499,18 @@ def _build_sample_header(sample: SampleData, sample_idx: int) -> bytes:
     #   0x0020 = MONO_L, no loop
     has_loop = (sample.loop_type in (LoopType.FORWARD, LoopType.ALTERNATING)
                 and sample.loop_end > sample.loop_start)
+    # A loop point past the end of the PCM is not a loop point. The frame count
+    # comes from the bytes this object will actually carry, so a buffer whose
+    # trailing half-frame was truncated above (stereo, `len % 4 == 2`) cannot
+    # leave a loop pointing into bytes that were never written -- the E4XT would
+    # read past the end of the chunk. Clamping can collapse the loop (a loop
+    # whose whole extent fell in the dropped half-frame), so `has_loop` is
+    # re-tested after the clamp rather than before it.
+    if has_loop:
+        n_frames = n_bytes // 2
+        if sample.loop_end > n_frames:
+            sample = replace(sample, loop_end=n_frames)
+        has_loop = sample.loop_end > sample.loop_start
     if has_loop:
         lsl = sample.loop_start * 2 + STRUCT_SZ
         # loop_end_l stores the frame BEFORE the true inclusive last loop
@@ -1116,8 +1143,22 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
     #   vpar[35] = Coarse Tune  (semitones, −72..+24): repitches/stretches sample
     #   vpar[36] = Fine Tune    (1/64-semitone units, −64..+63): ~1.56 cents/unit
     # _tp/_ct/_ft/_ft_64/_vol/_pan computed above, before the zone loop.
-    vpar[34] = max(-128, min(127, int(_tp))) & 0xFF
-    vpar[35] = max(-128, min(127, int(_ct))) & 0xFF
+    # The clamp is the DOCUMENTED range, not the byte's. These were written as
+    # `max(-128, min(127, ...))` -- the full signed-byte span -- which passes a
+    # transpose of +40 semitones straight through as 40, a value the field does
+    # not have and the comment two lines above says it does not have. Clamping
+    # wider than the hardware range is not a safe default: it produces a file
+    # that is well-formed and wrong, and nothing reads it back.
+    #
+    # Which end to clamp at is a choice with a consequence either way, so it is
+    # made loudly rather than by accident: coarse tune down is dropped, because
+    # coarse tune up is what carries a low sample into the K2000's octave of
+    # playback headroom (§KRZUPPITCH), and losing the upward direction would
+    # cost audible range on every import that needs it.
+    _tp = max(-24, min(24, int(_tp)))
+    _ct = max(-72, min(24, int(_ct)))
+    vpar[34] = _tp & 0xFF
+    vpar[35] = _ct & 0xFF
     vpar[36] = _ft_64 & 0xFF
     vpar[38] = 0x01 if voice.non_transpose else 0x00
     # vpar[42] = Chorus Amount (Voice/Tuning page). Hardware-confirmed 2026-06-08:

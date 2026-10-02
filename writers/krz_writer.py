@@ -115,6 +115,7 @@ from processors.loop_renderer import bake_alternating_loop
 # whole right), so the de-interleaver is shared rather than reimplemented --
 # duplicated codecs in this project have drifted before (CR-13/CR-17).
 from writers.e4b_writer import _interleaved_to_planar
+from writers.atomic import atomic_write
 
 
 # ---------------------------------------------------------------------------
@@ -268,6 +269,49 @@ def _compute_max_pitch(sample_rate: int, root_note: int,
         100 * root_note + 1200.0 * math.log(48000.0 / sample_rate, 2)
         - (fine_tune or 0)
     ))
+
+
+def _pack_max_pitch(max_pitch: int) -> int:
+    """`maxPitch` as the 16-bit SIGNED value the K2000 stores.
+
+    The field is read back signed -- `krz_parser` unpacks `>h` at header
+    offset 4 -- and the law above can legitimately produce a negative number:
+    root note 0 at 96 kHz gives -1200 (0 + 1200*log2(48000/96000)), and root
+    note 0 with any positive fine tune goes further negative still. A root note
+    of 0 is legal in our model even though no real soundset uses one.
+
+    2026-10-02: this was written as `max_pitch & 0xFFFF` packed into `>h`,
+    which is not an identity for negative input -- `-1200 & 0xFFFF` is 64436,
+    and `struct.pack('>h', 64436)` raises. So a sample whose computed maxPitch
+    was negative aborted the whole bank write. Masking to *unsigned* and then
+    packing *signed* is the mistake; the mask and the pack have to agree.
+
+    The K2000 reads this as a signed 16-bit count of 1/100 semitones, so the
+    representable range is -32768..32767. Values outside it are clamped, which
+    is a loss only for a sample more than 327 semitones below its root note --
+    far past anything the law produces for a root note in 0..127.
+
+    Returns the value to hand to `struct.pack('>h', ...)`, i.e. already in
+    range. Kept separate from `_compute_max_pitch` so the law stays the law and
+    the field-width decision is one auditable line.
+    """
+    return max(-32768, min(32767, int(max_pitch)))
+
+
+def _pcm_words_written(sample) -> int:
+    """How many 16-bit words `sample` contributes to the K2000's PCM region.
+
+    **Must** match the write loop, which de-interleaves stereo first and keeps
+    whole frames only. For a stereo buffer holding a half-frame
+    (`len(data) % 4 == 2`) that is one word fewer than `len(data) // 2`; using
+    the latter for the sampleStart table put every subsequent sample's declared
+    offset one word past its data. `e4b_writer._pcm_bytes_written` is the same
+    invariant in bytes.
+    """
+    n = len(sample.data)
+    if getattr(sample, 'channels', 1) >= 2:
+        n = (n // 4) * 4
+    return n // 2
 
 
 #: The K2000's real playback-rate ceiling, measured 2026-09-05 (§KRZUPPITCH).
@@ -601,7 +645,7 @@ def _write_sample_object(f, sample: SampleData, obj_id: int,
             sfh_flags & 0xFF,
             va,   # volumeAdjust      (signed i8, 0.5 dB steps)
             va,   # altVolumeAdjust   (same, applied when the Alt start is active)
-            max_pitch & 0xFFFF,
+            _pack_max_pitch(max_pitch),
             0,    # offsetToName
         ))
         f.write(struct.pack('>iiii',
@@ -4150,12 +4194,24 @@ def write_krz(bank: Bank, output_path: str,
                 _mean = sample_gain_db.get(_z.sample_name, 0.0)
                 zone_gain_db[id(_z)] = (_z.volume or 0.0) - _mean
 
-    # Pre-compute per-sample word offsets into the PCM region
+    # Pre-compute per-sample word offsets into the PCM region.
+    #
+    # The cursor advances by the number of 16-bit words the WRITE LOOP will
+    # emit, not by half the length of the buffer it holds. Those differ for
+    # stereo: the loop de-interleaves first (`_interleaved_to_planar`, keeping
+    # whole frames only), so a stereo buffer holding a half-frame -- an odd
+    # number of frames, `len(data) % 4 == 2` -- yields two bytes fewer than it
+    # holds. `len(s.data) // 2` over-counted that case by one word, so every
+    # sample after it in the bank had a declared `sampleStart` one word past
+    # its data and the whole bank read shifted. The comment beside the write
+    # loop claims "no corpus sample has an odd length -- 16-bit PCM cannot",
+    # which is true of an ODD byte length and false of `len % 4 == 2`: 16-bit
+    # stereo PCM is even in bytes and still half a frame short.
     word_offsets: list[int] = []
     cursor = 0
     for s in samples:
         word_offsets.append(cursor)
-        cursor += len(s.data) // 2
+        cursor += _pcm_words_written(s)
 
     # CR-1: one keymap per voice — assign keymap ids with a running counter
     # (typed-hash means numeric overlap with sample/program ids is fine).
@@ -4381,7 +4437,14 @@ def write_krz(bank: Bank, output_path: str,
     # entry tuning is only a constant per-zone fine offset (see _build_keymap_entries).
     base_pitch = 0
 
-    with open(output_path, 'w+b') as f:
+    # ATOMIC, like every other writer in this project. This was the last one
+    # still `open(output_path, 'w+b')`, which truncates on entry: an
+    # interrupted or failed build left a partial .KRZ on disk that looked like a
+    # finished bank, and the next run's `--overwrite` pre-flight then refused to
+    # replace it -- so the failure was not recoverable by simply re-running.
+    # `atomic_write` removes the temporary and leaves any previous file
+    # untouched.
+    with atomic_write(output_path, 'w+b') as f:
         # --- File header (32 bytes) ---
         f.write(b'PRAM')
         osize_pos = f.tell()
@@ -4504,13 +4567,16 @@ def write_krz(bank: Bank, output_path: str,
             # the write path still had the loop, reintroduced when this block
             # was rewritten for stereo.
             #
-            # A ragged final byte is DROPPED, not written. word_offsets above
-            # advances by len(data)//2 words, so writing that byte pushed every
-            # later sample's declared start one byte out and would have read
-            # the rest of the bank byte-shifted. The old loop wrote a 0x00
-            # there and desynced identically; dropping it is the fix, not a
-            # regression. No corpus sample has an odd length -- 16-bit PCM
-            # cannot -- so this path is a guard, not a behaviour change.
+            # A ragged final byte is DROPPED, not written. Writing it pushed
+            # every later sample's declared start one byte out and would have
+            # read the rest of the bank byte-shifted. The old loop wrote a
+            # 0x00 there and desynced identically; dropping it is the fix, not
+            # a regression. No corpus sample has an ODD byte length -- 16-bit
+            # PCM cannot -- so that path is a guard rather than a behaviour
+            # change. The stereo half-frame case (`len % 4 == 2`, an even
+            # length that is still not whole frames) is reached through
+            # `_interleaved_to_planar`, and `word_offsets` above now advances
+            # by `_pcm_words_written`, the same number this loop writes.
             n = len(data) // 2 * 2
             a = array.array('h')
             a.frombytes(memoryview(data)[:n])   # memoryview: no extra copy

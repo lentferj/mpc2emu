@@ -17,6 +17,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 ---
 
 <!-- INDEX:BEGIN -->
+- [§REVIEW1002 — a full-codebase review: twelve real defects, two false alarms, and one I caused while fixing them (2026-10-02)](#review1002-a-full-codebase-review-twelve-real-defects-two-false-alarms-and-one-i-caused-while-fixing-them-2026-10-02)
 - [§SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)](#sibcheck-three-sibling-findings-checked-against-our-own-corpora-2026-08-15)
 - [§NAMEBYTE — name fields decoded as ASCII (E4B/EMU3 DONE; EIII/SF2/MPC60 open)](#namebyte-name-fields-decoded-as-ascii-e4bemu3-done-eiiisf2mpc60-open)
 - [§KRZNAME16 — a full-length KRZ name picked up the bytes after it (2026-08-09)](#krzname16-a-full-length-krz-name-picked-up-the-bytes-after-it-2026-08-09)
@@ -416,6 +417,301 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§RELSE1WIN — the RELSE1 window is 0..99, and the floor we warned at was a fact about a statistic (2026-10-02)](#relse1win-the-relse1-window-is-099-and-the-floor-we-warned-at-was-a-fact-about-a-statistic-2026-10-02)
 - [§E4BSELECTORREP — three takes, and the +0.146 dB was the filter (2026-10-02)](#e4bselectorrep-three-takes-and-the-0146-db-was-the-filter-2026-10-02)
 <!-- INDEX:END -->
+
+---
+
+## §REVIEW1002 — a full-codebase review: twelve real defects, two false alarms, and one I caused while fixing them (2026-10-02)
+
+A full read of 51,744 lines across 57 Python files, four reviewers over
+`models/`, `writers/`, `parsers/`, `convert.py` + `processors/` + `tools/`.
+Eighteen findings came back. **Twelve were real, two were false, one could not
+be verified, and fixing the twelfth produced a thirteenth defect that only an
+independent reader caught.**
+
+The shape worth keeping is not the list. It is this: **the project's own
+diagnosis of a bug class was already written, in the fix for that class, on the
+branch where the fix was made — and was true of five other sites.** See
+[§CR](#cr-code-review-findings-2026-06-10-fix-recipes) for the June batch.
+
+⚠ **The tests for all of this are gitignored, like every other test in this
+project** (`tests/` is in `.gitignore`; TODO.md row 20 records Jan's 2026-10-02
+decision and the reason — `tests/_local/` holds the commercial-name maps, so a
+partial un-ignore would put the one directory that must stay hidden into the
+repository). **So this section is the record; the tests are not findable from a
+clone.** They are named here for that reason, and the mitigation is the one
+already in place:
+
+- `tests/test_silent_failures.py` — §SILENTFAIL. End-to-end subprocess runs.
+- `tests/test_review_2026_10_02.py` — §CRASHES, §HALFFRAME, §MUTATION,
+  §ESTIMATE, §VPARCLAMP, §KRZATOMIC, §TWOFALSE.
+- `tests/test_iso_9660_descriptor.py` — §ISOPATH, plus the `xorriso`
+  cross-check.
+
+**Ten of them are mutation-checked**, and one of those ten **passed with the
+defect present** — see [§MUTCHECK](#mutcheck-one-test-passed-with-the-bug-it-was-written-for), which is the most useful thing in this section.
+
+### §SILENTFAIL — a run that lost data said `Done` (5 sites)
+
+`write_akai_output` had already been fixed for this, and its comment says why:
+*"a warning standing next to a volume that was still written, and then loaded
+onto a sampler"*, and *"only a non-zero rc says so to a script"*. Both accurate.
+About its own branch.
+
+The E4B/EIII/KRZ side had all five shapes:
+
+| site | what it lost | was |
+|---|---|---|
+| `parse_all_sources` | per-file failures | `[ERROR]` then continue, **return `List[Bank]`** |
+| per-bank write loop | banks that failed to write | `[ERROR]` then continue |
+| `--add-to` (KRZ) | the append the user asked for | `[ADD] ERROR` then continue |
+| `--add-to` (E4B/EIII) | same | same |
+| `--hda-size` over 14336 MB | the whole image | `ERROR`, build nothing, fall through |
+
+Seven of ten inputs failing printed `Done: 3 file(s) written` and exited 0.
+
+**Fix — new exit code 4, `RC_PARTIAL`.** Deliberately distinct from 1
+("nothing usable") and from 3 ("refused to write"): in this case the banks that
+*did* work stay on disk, because dropping them wastes good output over one bad
+input. The summary prints `PARTIAL:` with the three counts rather than `Done:`.
+`parse_all_sources` now returns `(banks, n_skipped, n_failed)` — it could not
+report a failure to a caller that could not receive one. `--hda-size` exits 2,
+matching `--firmware-sim` on an unimplemented source: a value that cannot
+produce the thing it asks for is a usage error, not a partial result.
+
+⚠ **The temptation, and why it was rejected:** making these fatal. Refusing to
+write anything if one input fails would be defensible and is what the AKAI rate
+path already does (§3, exit 3). It is wrong here because the failure modes are
+unrelated — one malformed .sfz in a 200-file directory run should not discard
+199 good banks.
+
+Documented in README §Exit codes, with a test asserting the table matches the
+code. **A table that drifts from the code is worse than no table — it is a
+table someone trusts.**
+
+### §CRASHES — two writers that died on legal input
+
+**`gig_parser.py` — a GIG that spanned keys with pitch-tracking off did not
+parse.** `_warned_span` was read on the first zone and assigned only on a
+later one, in the same function, so Python bound it local and the first read
+raised.
+
+⚠ **It is an `UnboundLocalError`, not a `NameError`.** The review reported
+NameError and the first draft of this note repeated it. Both the read and the
+assignment were inside `parse_gig`, so the local case applies; NameError would
+have implied a module-level name missing from a namespace, which is a
+different defect with a different fix. The distinction matters because only the
+local case is caught by scanning a function body for the name.
+
+Now a per-parse `set` keyed on `(key_lo, key_hi)` — not a bool, because a bool
+warns once for the whole file and hides every later offending zone.
+
+**`krz_writer.py` — a negative `maxPitch` aborted the whole bank.** The K2000
+stores it as a **signed** 16-bit value (`krz_parser` unpacks `>h` at header
+offset 4) and the law legitimately goes negative: root note 0 at 96 kHz is
+`-1200`. `max_pitch & 0xFFFF` packed into `'>h'` is not an identity for
+negative input — `-1200 & 0xFFFF` is 64436, and `struct.pack('>h', 64436)`
+raises. **Masking to unsigned and then packing signed is the mistake; the mask
+and the pack have to agree.** New `_pack_max_pitch` clamps into the range the
+reader uses.
+
+⚠ Distinct from the tracked `maxPitch` fine-tune row (TODO.md) — same field,
+different defect: that one is a wrong *value*, this one is a crash.
+
+### §HALFFRAME — one cause, two writers, and a comment that was wrong about why
+
+A stereo buffer holding a **half-frame** — `len % 4 == 2`, i.e. an odd number
+of frames — has `_interleaved_to_planar` emit two bytes fewer than it holds.
+Both writers computed their geometry from the buffer length rather than the
+written length:
+
+- **E4B**: `_build_sample_header` read `len(sample.data)` while `write_e4b`
+  used `_pcm_bytes_written` for the chunk length. The header then addressed the
+  right channel one frame late with an end two bytes past the data, while the
+  chunk length was correct — **a sample object whose own geometry disagreed
+  with its payload, with nothing else in the file to catch it.**
+  `_pcm_bytes_written` already existed and documented that it "**must** match
+  what the write loop emits"; it simply was not called from the header. Loop
+  geometry is now clamped to the frames that exist, with `has_loop` re-tested
+  after the clamp because clamping can collapse the loop.
+- **KRZ**: `word_offsets` advanced by `len(s.data) // 2` against a planar
+  length that is one word shorter, so every later sample's declared
+  `sampleStart` was one word past its data and the bank read shifted.
+
+⚠ **The comment beside the KRZ write loop was wrong in a way worth recording.**
+It said *"No corpus sample has an odd length — 16-bit PCM cannot"*, and used
+that to dismiss this as a guard. That is true of an **odd byte length** and
+false of `len % 4 == 2`: 16-bit stereo PCM is even in bytes and still half a
+frame short. A correct observation generalising one step too far.
+
+### §MUTATION — three writers edited the objects they were given
+
+`write_eiii` called `ensure_mono` on the **caller's** `SampleData`, so after an
+EIII write the bank held permanently-mono samples and writing that same bank
+to E4B produced a file with the right channel silently gone. `bank_splitter`'s
+`add_preset` repointed the caller's **zones** in place on a name collision —
+while the samples on the line above were already copied with `replace`, so the
+zones were the half that was not.
+
+⚠ All three are the same luck: `convert.py` writes one format per run and does
+not look at the bank again, which is exactly what keeps the already-tracked
+`write_krz` mutation harmless today. **That is not a property either writer can
+rely on, and it is why the fix is to stop relying on it** rather than to add a
+note.
+
+### §ESTIMATE — the size estimate was under a real file, and reading the code would not have found it
+
+`estimate_bank_size` claimed *"intentionally slightly overestimates"*.
+`_SAMPLE_CHUNK_OVERHEAD` was 72 — "8-byte chunk header + 64-byte E4Sa header",
+which is the E4Sa **type** length — where the object `write_e4b` emits is a
+94-byte `emu3_sample` header behind a 2-byte prefix. **30 bytes short per
+sample.** The TOC grew with the sample count and nothing counted it.
+
+**Correcting those two was still not enough.** The first fixed version
+remained **1018 bytes under** a real 40-sample bank, because the three fixed
+chunks were counted as a flat 512 guess: **EMSt alone is 1374 bytes** (8 + a
+1366-byte body that never appears in the TOC) and E4Ma another 264. Walking
+the written file's IFF chunk table is what found that; reading the estimator
+would not have.
+
+Every constant is now read from `e4b_writer` — `SAMP_HDR`, `PRES_HDR`,
+`VOICE_FIXED`, `ZONE_ENTRY`, and the two chunk builders — so a change to the
+writer cannot silently reopen the gap. The preset body formula
+(`PRES_HDR + 2 + Σ(VOICE_FIXED + ZONE_ENTRY × n_zones)`) was **fitted by
+measuring written files** at (1 voice, 1 zone)=390, (1,10)=588, (1,40)=1248 and
+(2,10)=1092; the fit returns voice=284 and residue=2, and 284 is exactly the
+writer's own `VOICE_FIXED` while 22 is exactly its `ZONE_ENTRY` — so the fit is
+agreeing with the writer rather than inventing coefficients.
+
+And the test is a **measurement**: build the bank, compare, assert the estimate
+is ≥ the file. The docstring's claim was worth nothing until something checked it.
+
+### §VPARCLAMP — a clamp wider than the field it feeds
+
+`vpar[34]` (Key Transpose) and `vpar[35]` (Coarse Tune) were clamped to
+`max(-128, min(127, ...))` — the full signed-byte span — while the comment two
+lines above documented −24..+24 and −72..+24. A transpose of +40 passed through
+as 40.
+
+⚠ **Clamping wider than the hardware range is not a safe default.** It produces
+a well-formed wrong file, and nothing reads it back. Now clamped to the
+documented range, with the asymmetry stated rather than left to arithmetic:
+**coarse-tune down is dropped**, because coarse-tune up is what carries a low
+sample into the K2000's octave of playback headroom (§KRZUPPITCH), and losing
+the upward direction would cost audible range on every import that needs it.
+
+### §KRZATOMIC — the last writer that truncated on entry
+
+`write_krz` was the only writer still `open(output_path, 'w+b')`. An interrupted
+build left a partial `.KRZ` that looked like a finished bank — **and the next
+run's `--overwrite` pre-flight then refused to replace it, so the failure was
+not recoverable by re-running.** `writers/atomic.py` existed and seven other
+writers used it.
+
+### §ISOPATH — the ISO 9660 path table was not a path table (latent)
+
+`build_iso_9660` has **no production caller** (TODO.md records that KRZ
+`--iso` moved to a FAT16 image in June 2026 because the K2000 rejected this
+ISO), so the defect was invisible in the only sense that matters.
+
+`struct.pack('<BIBB', 1, root_sec, 1, 1) + b'\x00'` is 8 bytes where
+ECMA-119 §8.4.20 requires 16: the extent little-endian only, the parent number
+packed as one byte per endianness instead of two, and the identifier byte
+counted inside the length field — **every field after the first landed early**.
+The PVD's Path Table Size was the literal `10`. Slots 144/148/152 declared a
+Type-M path table the image does not contain.
+
+**Checked with `xorriso`, not from memory.** It is installed here, so the
+descriptor is read back by an independent implementation and every offset
+asserted with `struct.unpack_from` against the generated file.
+
+⚠⚠ **And that check caught a defect I introduced while fixing this one.** An
+intermediate revision "corrected" the timestamps from 813/830/847/864 to
+1030/1035/1071/1083 on a recollection of the layout. `xorriso` had *already
+printed the original four correctly*, and **1030 and 1035 overlap a 17-byte
+timestamp**, so that version wrote `20261202600000000` as a creation date. The
+identifier fields end at 812, because the three 37-byte identifier fields end
+there — which is why 813 is right. Reverted, with a comment recording the
+reversal.
+
+**The lesson is the transferable part:** `xorriso` is lenient enough to read
+the *original* descriptor happily while it was malformed, so an independent
+reader is necessary but **not sufficient** — the offsets still have to be read
+out of the bytes. And a plausible-looking edit to a table of byte offsets is
+exactly the kind of change that should not be made from memory.
+
+### §TWOFALSE — two findings that were wrong, and why they read like bugs
+
+**`sf2_parser` and `gig_parser`: "envelope, filter and LFO silently dropped for
+any multi-zone preset."** Reported as the highest-severity finding in the
+review, with the blast radius stated as "the majority of real SF2 material".
+**It is false.**
+
+`voice.zones.append(zone)` runs **before** `if len(voice.zones) == 1:`, so the
+guard means *"this is the first zone"*, not *"this instrument has one zone"* —
+which is exactly what the adjacent comment says. A multisampled preset does
+get its envelope.
+
+It reads like a bug because `len(voice.zones) == 1` **looks** like a
+single-zone test, and nothing at the call site says otherwise. Both are now
+pinned by a test that asserts the **order** — the append must precede the
+guard — so a future edit that moves the guard above the append reintroduces the
+defect this review thought it had found.
+
+⚠ **A negative result is worth recording precisely because it will be
+re-raised.** This is the fifth time this project has written down "checked, not
+a defect" (cf. the dead-section note at `e4b_writer.py` §E4BLOOPREL) and the
+first time the claim was about a *guard* rather than a citation.
+
+### §MUTCHECK — one test passed with the bug it was written for
+
+Ten mutations were applied to the fixes and the suite re-run. Nine were caught
+first time. **The tenth was not, and it is the one worth writing down.**
+
+`test_add_preset_does_not_rewrite_the_callers_zone_names` was written to catch
+the in-place zone rename. Reverting the fix — dropping the `replace()` copy and
+restoring the mutation — left it **green**. The test added *one* preset holding
+*one* sample to a fresh `TargetBank`, where `_sample_keys` is empty. So
+`existing is None`, no rename happened, `remap` was empty, and **the code under
+test never ran.** The assertion after it was trivially true.
+
+It needed a **first** preset to collide with. The test now adds two, asserts the
+rename actually occurred (`len(stored_names) == 2`) *before* asserting anything
+about the caller's zones, and then checks the caller's zone kept its name.
+
+⚠ **My first mutation attempt was also wrong, and in the same direction.** I
+re-applied the in-place loop *after* `self.presets.append(preset)` — at which
+point `preset` had already been rebound to the copy, so the mutation was a
+no-op and the test passed. Both the test and the mutation were wrong about the
+same line, which is exactly the situation where a mutation check appears to
+succeed. The corrected mutation removes the copy itself.
+
+**A test that cannot fail is indistinguishable from a test that passes**, and
+the cost of not knowing which one you have is that the whole suite's credibility
+becomes a guess. Two of the three near-misses in this session were found only
+because the check was done:
+
+| what | how it was nearly missed |
+|---|---|
+| `add_preset` zone rename | test never reached the collision path |
+| ISO timestamps | **an independent reader caught a regression I introduced while fixing the bug it was about** |
+| the size estimate | first "fixed" version was still 1018 bytes under — only *measuring a written file* found it |
+
+A fourth, for completeness: the exit-code tests were first written against an
+in-process `C.main()` with a stubbed parser and a fake argparse namespace. They
+failed five times with `SystemExit: 1` at `convert.py:1112` — *"'x.sfz' not
+found"* — never having reached the code under test, and **every failure looked
+like a defect in the fix.** They now run `convert.py` as a subprocess on a real
+one-region SFZ and read `returncode`.
+
+### §UNVERIFIED — one finding left alone on purpose
+**`gig_parser` `n_dims = 8 if size >= 1092 else 5`.** Reported as
+misclassifying a v3 file with few dimension regions. **Not verifiable from
+here**: the threshold comes from the fixed per-version 3lnk chunk size, which
+does not vary with region count, so the premise looks wrong — but the GIG v3
+layout was not read from hardware or from libgig during this review, and
+changing a version heuristic on an unverified claim would be worse than leaving
+it. **Recorded as OPEN-UNVERIFIED in TODO.md** rather than fixed.
+
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
 

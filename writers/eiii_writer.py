@@ -54,11 +54,12 @@ All multi-byte values are little-endian (EIII/ESI, unlike E4B/KRZ, is not
 import copy
 import math
 import struct
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from models.common import Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType, ensure_mono, FILTER_ENV_FULL_CENTS
+from models.common import (Bank, Preset, VoiceLayer, ZoneMapping, SampleData,
+                            LoopType, stereo_to_mono, FILTER_ENV_FULL_CENTS)
 from processors.loop_renderer import bake_alternating_loop
 from writers.atomic import atomic_write
 
@@ -824,10 +825,22 @@ def write_eiii(bank: Bank, output_path: str, variant: str = 'e3x') -> None:
     # OPTION_CHANNEL_LEFT and zeroes the RIGHT fields, so downmix EXPLICITLY
     # here rather than letting interleaved PCM be measured as mono. Tracked
     # in TODO.md.
-    n_stereo = sum(1 for s in bank.samples if getattr(s, 'channels', 1) == 2)
+    #
+    # On COPIES. `ensure_mono` downmixes in place, and it was being called on
+    # the caller's own SampleData objects -- so after an EIII write the bank
+    # held permanently-mono samples, and writing that same bank to E4B or KRZ
+    # next produced a file with the right channel silently gone. convert.py
+    # happens to write one format per run and not look again, which is the
+    # same luck that keeps the `write_krz` mutation (TODO.md) harmless today;
+    # it is not a property either writer can rely on. `write_e4b` already
+    # copies for exactly this reason.
+    samples = list(bank.samples)
+    n_stereo = sum(1 for s in samples if getattr(s, 'channels', 1) == 2)
     if n_stereo:
-        for s in bank.samples:
-            ensure_mono(s)
+        for i, s in enumerate(samples):
+            if getattr(s, 'channels', 1) == 2:
+                samples[i] = replace(s, data=stereo_to_mono(s.data)[0],
+                                     channels=1)
         print(f"  Downmixed {n_stereo} stereo sample(s) to mono "
               f"(EIII stereo output not implemented)")
 
@@ -835,7 +848,7 @@ def write_eiii(bank: Bank, output_path: str, variant: str = 'e3x') -> None:
     used_names: set = set()
     prepared = []   # (disk_name, pcm, sample_rate, has_loop, loop_start, loop_end, loop_in_release)
     sample_info_by_name: Dict[str, Tuple[int, bool]] = {}
-    for i, s in enumerate(bank.samples):
+    for i, s in enumerate(samples):
         if len(prepared) >= bank_format.max_samples:
             _diag(_W, 'EIII_SAMPLE_LIMIT',
                   f"bank exceeds the {bank_format.max_samples}-sample "

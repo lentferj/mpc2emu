@@ -328,9 +328,34 @@ def fit_oversized_presets(source_banks: List[Bank], fmt: str,
           "load on hardware.")
 
 
+#: Exit code for "finished, but not everything asked for was produced".
+#:
+#: A run in which some inputs failed to parse, or some banks failed to write, or
+#: an --add-to append failed, still writes the banks that DID work -- dropping
+#: them would throw away good output over one bad input. But it must not exit 0,
+#: because the only thing a batch script sees is the return code. This was the
+#: AKAI floppy path's bug (see write_akai_output and
+#: tests/test_akai_image.py::..._failed_build_refuses_success_line), still
+#: present on the E4B/EIII/KRZ side: seven of ten inputs failing reported
+#: `Done` and exited 0.
+RC_PARTIAL = 4
+
+
 def parse_all_sources(files: List[Path], wav_dir: Optional[str],
-                      extra_kwargs: dict) -> List[Bank]:
+                      extra_kwargs: dict) -> tuple:
+    """Parse every input, returning `(banks, n_skipped, n_failed)`.
+
+    `n_failed` counts inputs that raised. It is returned rather than swallowed
+    because a caller that cannot see it cannot report it, and a caller that
+    cannot report it exits 0 on a run that lost data.
+
+    `n_skipped` counts inputs that parsed cleanly but had no presets or no
+    samples -- not a failure, but the user asked for those files to be
+    converted, so the number is worth stating at the end.
+    """
     banks = []
+    n_skipped = 0
+    n_failed = 0
     # ⚠ REFUSE, DO NOT IGNORE. `--firmware-sim` names a specific sampler's
     # specific importer; on a source it has not been implemented for, quietly
     # falling back to this project's own conversion would hand the user output
@@ -357,13 +382,14 @@ def parse_all_sources(files: List[Path], wav_dir: Optional[str],
         try:
             bank = parser(p, wav_dir or str(p.parent), **extra_kwargs)
             if not bank.presets:
-                print(f"  [SKIP] No presets in {p.name}"); continue
+                print(f"  [SKIP] No presets in {p.name}"); n_skipped += 1; continue
             if not bank.samples:
-                print(f"  [SKIP] No samples loaded for {p.name}"); continue
+                print(f"  [SKIP] No samples loaded for {p.name}"); n_skipped += 1; continue
             banks.append(bank)
         except Exception as e:
             print(f"  [ERROR] {p.name}: {e}")
-    return banks
+            n_failed += 1
+    return banks, n_skipped, n_failed
 
 
 def write_akai_output(output_banks: List[Bank], out_dir: Path, bank_name: str,
@@ -1156,17 +1182,26 @@ def main():
     step_n += 1
     import parsers.xpm_parser as _xpm
     _xpm.SYNC_BPM = args.lfo_sync_bpm          # tempo for synced-LFO rate
+    n_parse_failed = 0
+    n_parse_skipped = 0
     if sample_dir:
         from parsers.sampledir_parser import parse_sample_dir
         _off = None if args.middle_c == 'auto' else {'C3': 2, 'C4': 1, 'C5': 0}[args.middle_c]
         try:
             source_banks = [parse_sample_dir(str(sample_dir), octave_offset=_off)]
         except Exception as e:
-            print(f"  [ERROR] {e}"); source_banks = []
+            print(f"  [ERROR] {e}"); source_banks = []; n_parse_failed = 1
     else:
-        source_banks = parse_all_sources(input_files, args.wav_dir, extra)
+        source_banks, n_parse_skipped, n_parse_failed = parse_all_sources(
+            input_files, args.wav_dir, extra)
     if not source_banks:
         print("No banks could be parsed. Aborting."); sys.exit(1)
+    if n_parse_failed:
+        # State it here, next to the parse step, not only in the final banner:
+        # a user watching a long directory run needs to know which inputs are
+        # missing BEFORE the write step starts reporting success on the rest.
+        print(f"\n  [WARN] {n_parse_failed} input file(s) FAILED to parse and are "
+              f"not in this run's output. This run will exit {RC_PARTIAL}.")
 
     # ── Sources that can only be written where something can CHECK the result ──
     # Jan's rule, 2026-09-24. Everything this project knows about the EPS/ASR
@@ -1595,6 +1630,7 @@ def main():
     print(f"\n[{step_n}] Writing {args.format.upper()} files...")
     step_n += 1
     out_paths: List[str] = []
+    n_write_failed = 0
     for i, bank in enumerate(output_banks):
         out_path = _bank_path(i, bank)
         try:
@@ -1613,8 +1649,13 @@ def main():
             out_paths.append(out_path)
         except Exception as e:
             print(f"  [ERROR] {bank.name}{ext}: {e}")
+            n_write_failed += 1
+    if n_write_failed:
+        print(f"\n  [WARN] {n_write_failed} bank(s) FAILED to write. This run "
+              f"will exit {RC_PARTIAL}.")
 
     # ── Append to an existing image ─────────────────────────────────────────────
+    n_append_failed = 0
     if args.add_to and out_paths:
         if not Path(args.add_to).exists():
             print(f"\n[ADD] ERROR: image not found: {args.add_to}")
@@ -1636,6 +1677,7 @@ def main():
                 k2000_disk_append(args.add_to, out_paths, args.folder, args.on_duplicate)
             except Exception as e:
                 print(f"  [ADD] ERROR: {e}")
+                n_append_failed += 1
         elif args.format in ('e4b', 'eiii'):
             # EIII banks live on the same EOS/EMU-fs filesystem as E4B —
             # iso_builder/hda_builder are bank-content-agnostic (they just
@@ -1652,6 +1694,17 @@ def main():
                 append(args.add_to, out_paths, args.folder, args.on_duplicate)
             except Exception as e:
                 print(f"  [ADD] ERROR: {e}")
+                n_append_failed += 1
+    if n_append_failed:
+        # The append IS --add-to. Everything up to here produced bank files on
+        # disk, which is not what was asked for, and the summary counts those
+        # as successes -- so a batch appending to a disk that rejected every
+        # bank saw `Done: 7 file(s)` and exit 0 with an unmodified image. This
+        # is the same shape as the "image not found" case two lines up, which
+        # exits 1 for exactly this reason; the exception handler was simply
+        # never given the same treatment.
+        print(f"\n  [ERROR] {n_append_failed} append operation(s) FAILED. The "
+              f"image was not modified as asked.")
 
     # ── Floppy (Gotek / K2000R) ─────────────────────────────────────────────────
     if args.floppy and out_paths:
@@ -1721,8 +1774,18 @@ def main():
             # fits the banks.
             hda_size = args.hda_size or auto_hda_size_mb(out_paths, args.hda_fs)
             if hda_size > 14 * 1024:
+                # REFUSE. This printed the error and fell through to the
+                # summary, which reported `Done: N file(s)` and exited 0 with
+                # no .hda on disk. Exit 2, as for --firmware-sim on an
+                # unimplemented source: the value the user passed cannot
+                # produce the thing they asked for, and that is a usage error
+                # rather than a partial result. The bank files already written
+                # stay on disk.
                 print(f"\n[HDA] ERROR: --hda-size {hda_size} MB exceeds "
                       f"EIV OS limit of 14336 MB.")
+                print("  No image was built. Re-run with --hda-size <= 14336, "
+                      "or omit it to auto-size.")
+                sys.exit(2)
             elif args.hda_fs == 'fat':
                 # FAT image (EOS 4.7+) — read by ZuluSCSI + EOS directly.
                 build_hda_fat(
@@ -1741,8 +1804,19 @@ def main():
                 )
 
     # ── Summary ───────────────────────────────────────────────────────────────
+    # Everything the run was asked to do, minus what it could not do. Each of
+    # these was previously a `[ERROR]` line scrolled far above a `Done`, which
+    # is the shape the AKAI floppy fix was written about: a warning standing
+    # next to a success line, on the branch the fix did not reach.
+    partial = (n_parse_failed + n_write_failed + n_append_failed) > 0
     print(f"\n{'='*60}")
-    print(f"Done: {len(out_paths)} file(s) written to {out_dir}/")
+    if partial:
+        print(f"PARTIAL: {len(out_paths)} file(s) written to {out_dir}/ "
+              f"({n_parse_failed} input(s) failed to parse, "
+              f"{n_write_failed} bank(s) failed to write, "
+              f"{n_append_failed} append operation(s) failed)")
+    else:
+        print(f"Done: {len(out_paths)} file(s) written to {out_dir}/")
     for p in out_paths:
         mb = Path(p).stat().st_size / 1024 / 1024
         print(f"  {Path(p).name}  ({mb:.2f} MB)")
@@ -1752,7 +1826,12 @@ def main():
     if args.hda:
         for hda in sorted(out_dir.glob("*.hda")):
             print(f"  {hda.name}  ({hda.stat().st_size/1024/1024:.1f} MB)")
+    if n_parse_skipped:
+        print(f"  ({n_parse_skipped} input file(s) parsed but held no presets "
+              f"or no samples, and were skipped)")
     print(f"{'='*60}\n")
+    if partial:
+        sys.exit(RC_PARTIAL)
 
 
 if __name__ == '__main__':

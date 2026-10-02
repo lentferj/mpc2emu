@@ -888,6 +888,25 @@ Single-cycle synth (turn a sampled instrument into an oscillator patch):
 
 ---
 
+## Exit codes
+
+A script can only see the return code, so every failure mpc2emu can detect has
+to reach it. Anything that did not reach it was a bug — see the *silent failure*
+rows in **Fixed defects**.
+
+| code | meaning |
+|---|---|
+| `0` | everything asked for was produced |
+| `1` | nothing usable: no input parsed, output would clobber an input, or an existing image could not be found for `--add-to` |
+| `2` | a usage error: an argument that cannot produce the thing it asks for (`--firmware-sim` on an unimplemented source, `--hda-size` over the EIV limit) |
+| `3` | **refused to write.** A sample is at a rate the S3000XL does not play, or a bank does not fit. The image is the whole point of the run, so it is not written in a condition where it would be wrong on the machine |
+| `4` | **partial.** Some inputs failed to parse, some banks failed to write, or an `--add-to` append failed. The outputs that *did* work are still on disk — dropping them would waste good output over one bad input — but the run did not do everything it was asked to, and the banner says `PARTIAL` rather than `Done` |
+
+`3` and `4` are different on purpose: `3` means nothing was written and nothing
+should be, `4` means something was written and the script should look at what.
+
+---
+
 ## --info Mode
 
 Inspects any supported input file and prints a structured summary

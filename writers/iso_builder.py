@@ -487,6 +487,13 @@ def k2000_disk_append(image: str, krz_files: List[str], folder: Optional[str] = 
     return added
 
 
+#: Size of one ECMA-119 §8.4.20 path-table record: 1 id length + 1 extended
+#: attribute length + 8 both-endian extent + 4 both-endian parent + 1 id + 1
+#: pad. Named so the PVD's Path Table Size field and the record it describes
+#: cannot disagree -- which they did, the field being the literal 10.
+_PATH_TABLE_RECORD_LEN = 16
+
+
 def build_iso_9660(e4b_files: List[str], output_iso: str,
                    volume_label: str = "EMU_BANK") -> None:
     """
@@ -547,12 +554,34 @@ def build_iso_9660(e4b_files: List[str], output_iso: str,
     pvd[120:124]= _iso9660_both16(1)
     pvd[124:128]= _iso9660_both16(1)
     pvd[128:132]= _iso9660_both16(SEC)
-    pvd[132:140]= _iso9660_both32(10)
+
+    # ECMA-119 §8.4.19, in order. These are FOUR SEPARATE fields, not one value
+    # written twice in two byte orders -- which is what 140 and 148 were being
+    # used for:
+    #   132-139  Path Table Size (both-endian 32)  -- a BYTE COUNT
+    #   140-143  Location of Type-L path table (LE u32)
+    #   144-147  Location of Optional Type-L path table (LE u32)
+    #   148-151  Location of Type-M path table (BE u32)
+    #   152-155  Location of Optional Type-M path table (BE u32)
+    # The size was the literal 10, which is not the length of anything, and the
+    # Type-M slot pointed at the little-endian table this image does not
+    # contain. Only a Type-L table is emitted, so the Type-M entries say so.
+    pvd[132:140]= _iso9660_both32(_PATH_TABLE_RECORD_LEN)
     pvd[140:144]= struct.pack('<I', path_table_sec)
-    pvd[148:152]= struct.pack('>I', path_table_sec)
+    pvd[144:148]= struct.pack('<I', 0)
+    pvd[148:152]= struct.pack('>I', 0)
+    pvd[152:156]= struct.pack('>I', 0)
     root_rec = _iso9660_dir_record(b'\x00', root_sec, len(dir_data), True, ts)
     pvd[156:156+34] = root_rec[:34]
     pvd[190:574] = b' ' * 384
+    # ECMA-119 §8.4.25-8.4.28. These offsets are 813 / 830 / 847 / 864 and the
+    # version byte is 881 -- because the three 37-byte identifier fields before
+    # them end at 812, not because of anything else. I "corrected" these to
+    # 1030/1035/1071/1083 on a recollection of the layout, which was wrong:
+    # 1030 and 1035 OVERLAP a 17-byte timestamp, so that version wrote
+    # `20261202600000000` as a creation date. `xorriso -pvd_info` had reported
+    # the original four correctly, and that output is what should have been
+    # trusted before the edit rather than after it.
     pvd[813:830] = _iso9660_pvd_date(ts)
     pvd[830:847] = _iso9660_pvd_date(ts)
     pvd[847:864] = b'0' * 16 + b'\x00'
@@ -563,8 +592,23 @@ def build_iso_9660(e4b_files: List[str], output_iso: str,
     vdst = bytearray(SEC)
     vdst[0] = 0xFF;  vdst[1:6] = b'CD001';  vdst[6] = 0x01
 
-    # Path table
-    ptl = struct.pack('<BIBB', 1, root_sec, 1, 1) + b'\x00'
+    # Path table — ECMA-119 §8.4.20. Each record is 16 bytes:
+    #   1  length of directory identifier
+    #   1  extended attribute record length (0)
+    #   8  extent location, BOTH-endian 32
+    #   4  parent directory number, BOTH-endian 16
+    #   1  directory identifier
+    #   1  padding, to an even length
+    # This was `struct.pack('<BIBB', 1, root_sec, 1, 1) + b'\x00'` -- 8 bytes,
+    # with the extent little-endian only, the parent number packed as one byte
+    # per endianness instead of two, and the identifier byte counted inside the
+    # length field. Every subsequent field landed early.
+    ptl = (bytes([1, 0])                        # id length, extended attr length
+           + _iso9660_both32(root_sec)          # extent, both-endian
+           + _iso9660_both16(1)                 # parent = root itself
+           + b'\x00'                            # the identifier
+           + b'\x00')                           # pad to 16
+    assert len(ptl) == _PATH_TABLE_RECORD_LEN, len(ptl)
     ptl = ptl.ljust(SEC, b'\x00')
 
     with atomic_write(output_iso) as f:

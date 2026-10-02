@@ -39,16 +39,67 @@ from dataclasses import dataclass, field, replace
 from typing import List, Tuple, Optional
 from models.common import Bank, Preset, SampleData
 
+# The four constants below are DERIVED FROM THE WRITER, not remembered from it,
+# because they were not. `_SAMPLE_CHUNK_OVERHEAD` was 72, an "8-byte chunk
+# header + 64-byte E4Sa header" that was the E4Sa *type* length, while the
+# object `write_e4b` actually emits is a 94-byte `emu3_sample` header behind a
+# 2-byte `EMU4_E3S1_OFFSET` prefix. 30 bytes short per sample, on a bank that
+# held 500 of them. And the TOC grew with the sample count while nothing
+# counted it, so the error scaled with exactly the banks that needed the
+# estimate most.
+#
+# Correcting those two was still not enough: the estimate remained **1018 bytes
+# under** a real 40-sample bank, because the three fixed chunks were counted as
+# a flat 512 guess. EMSt alone is 1374 bytes and E4Ma another 264. Every number
+# below is now read from `e4b_writer`, and `tests/test_review_2026_10_02.py::
+# test_estimate_is_an_upper_bound_on_the_real_file` MEASURES the result against
+# a written file -- which is the only thing that makes an estimate trustworthy.
+from writers.e4b_writer import (
+    SAMP_HDR as _E4B_SAMPLE_HEADER,
+    PRES_HDR as _E4B_PRESET_HEADER,
+    VOICE_FIXED as _E4B_VOICE_FIXED,
+    ZONE_ENTRY as _E4B_ZONE_ENTRY,
+    _build_e4ma,
+    _build_emst,
+)
 
-# IFF/E4B structural overhead per bank (header + TOC) in bytes
-# Conservative estimate: 512 bytes is more than enough
-_BANK_OVERHEAD = 512
+# One 32-byte TOC entry per sample and per preset, plus the mandatory E4Ma
+# multimap entry. `_toc_entry` in e4b_writer builds exactly 32 bytes and
+# `write_e4b` writes `1 + n_presets + n_samples` of them.
+_TOC_ENTRY = 32
 
-# IFF chunk overhead per sample (8-byte chunk header + 64-byte E4Sa header)
-_SAMPLE_CHUNK_OVERHEAD = 72
+#: Bytes `write_e4b` emits inside an E4P1 body beyond `PRES_HDR` and the
+#: per-voice `VOICE_FIXED + ZONE_ENTRY * n_zones` terms. Fitted by measuring
+#: written files at (1 voice, 1 zone)=390, (1, 10)=588, (1, 40)=1248 and
+#: (2, 10)=1092, which give voice=284 and residue=2 -- and 284 is exactly the
+#: writer's own `VOICE_FIXED`, and 22 exactly its `ZONE_ENTRY`, so the fit is
+#: agreeing with the writer rather than inventing coefficients.
+_PRESET_BODY_RESIDUE = 2
 
-# IFF chunk overhead per preset (8 + 24 preset header + ~50 per voice estimate)
-_PRESET_CHUNK_OVERHEAD = 128
+# IFF/E4B structural overhead per bank. This is the flat part only -- the parts
+# that scale are counted per sample and per preset:
+#   16  'RIFF' + size + 'E4B0' form type
+#    8  TOC chunk header
+#  264  the mandatory E4Ma multimap chunk (8 header + 256 body)
+#   32  its TOC entry
+# 1374  the EMSt master-setup chunk (8 header + 1366 body), which is always
+#       last, is never in the TOC, and whose size does not depend on anything
+#       -- so nothing scales it and it has to be counted outright.
+_BANK_OVERHEAD = (16 + 8 + (8 + len(_build_e4ma())) + _TOC_ENTRY
+                  + (8 + len(_build_emst())))
+
+# Per sample: the 8-byte IFF chunk header plus the sample object header
+# (`SAMP_HDR` = 94 = 2-byte EMU4_E3S1_OFFSET + the 92-byte `emu3_sample`
+# struct). Read from e4b_writer so a change to the header cannot silently
+# reopen the gap.
+_SAMPLE_CHUNK_OVERHEAD = 8 + _E4B_SAMPLE_HEADER
+
+
+def _preset_body_bytes(preset: Preset) -> int:
+    """Bytes `write_e4b` will emit inside this preset's E4P1 chunk body."""
+    return (_E4B_PRESET_HEADER + _PRESET_BODY_RESIDUE
+            + sum(_E4B_VOICE_FIXED + _E4B_ZONE_ENTRY * len(v.zones)
+                  for v in preset.voices))
 
 # Per the EOS manual, a bank can hold samples S000-S999 — max 1000 samples.
 # (An earlier theory that the zone-table sample reference was a single byte,
@@ -357,19 +408,23 @@ _VOICES_PER_NOTE = {'e4b': 32, 'krz': 24, 'akai': 32}
 def estimate_bank_size(bank: Bank) -> int:
     """
     Estimate the serialized size of a Bank in bytes.
-    Intentionally slightly overestimates to stay safely under the limit.
+
+    Overestimates, and is MEASURED against real output in
+    tests/test_review_2026_10_02.py::test_estimate_is_an_upper_bound_on_the_real_file
+    -- a docstring claiming "intentionally slightly overestimates" is worth
+    nothing if the constant under it is 30 bytes short per sample, the TOC is
+    not counted at all, and the three fixed chunks are a flat guess, which is
+    what it was until 2026-10-02. After those were fixed it was STILL 1018
+    bytes under a real 40-sample bank, which is what the measurement caught and
+    a reading of the code would not have.
     """
     size = _BANK_OVERHEAD
 
     for sample in bank.samples:
-        size += _SAMPLE_CHUNK_OVERHEAD + len(sample.data)
+        size += _SAMPLE_CHUNK_OVERHEAD + len(sample.data) + _TOC_ENTRY
 
     for preset in bank.presets:
-        voice_overhead = sum(
-            8 + len(v.zones) * 32  # voice header + zone blocks
-            for v in preset.voices
-        )
-        size += _PRESET_CHUNK_OVERHEAD + voice_overhead
+        size += 8 + _preset_body_bytes(preset) + _TOC_ENTRY
 
     return size
 
@@ -379,9 +434,7 @@ def estimate_preset_size(preset: Preset, samples: List[SampleData]) -> int:
     Estimate the size contribution of a single preset + its unique samples.
     Used to check if a preset fits into a target bank.
     """
-    size = _PRESET_CHUNK_OVERHEAD
-    for voice in preset.voices:
-        size += 8 + len(voice.zones) * 32
+    size = 8 + _preset_body_bytes(preset) + _TOC_ENTRY
 
     # Add samples that belong to this preset
     needed_sample_names = {
@@ -391,7 +444,7 @@ def estimate_preset_size(preset: Preset, samples: List[SampleData]) -> int:
     }
     for sample in samples:
         if sample.name in needed_sample_names:
-            size += _SAMPLE_CHUNK_OVERHEAD + len(sample.data)
+            size += _SAMPLE_CHUNK_OVERHEAD + len(sample.data) + _TOC_ENTRY
 
     return size
 
@@ -504,12 +557,10 @@ def _resample_est_bytes(preset: Preset, needed: List[SampleData],
                         target_hz: int) -> int:
     """Estimate a preset's size if every sample above target_hz were downsampled
     to target_hz (PCM byte count scales linearly with the rate)."""
-    size = _PRESET_CHUNK_OVERHEAD
-    for v in preset.voices:
-        size += 8 + len(v.zones) * 32
+    size = 8 + _preset_body_bytes(preset) + _TOC_ENTRY
     for s in needed:
         scale = target_hz / s.sample_rate if s.sample_rate > target_hz else 1.0
-        size += _SAMPLE_CHUNK_OVERHEAD + int(len(s.data) * scale)
+        size += _SAMPLE_CHUNK_OVERHEAD + int(len(s.data) * scale) + _TOC_ENTRY
     return size
 
 
@@ -620,18 +671,17 @@ class TargetBank:
             i += 1
 
     def add_preset(self, preset: Preset, needed_samples: List[SampleData]) -> None:
-        # ⚠ BEFORE the sample remap below. The AKAI keygroup signature is the
-        # rendered keygroup bytes, which carry the sample NAMES, so a preset
-        # whose samples get renamed here can group differently afterwards.
-        # would_fit judged the un-renamed preset; the running total has to
-        # record the same number or the two drift apart on exactly the
-        # dedup-collision presets.
+        # ⚠ BEFORE the sample remap below, and on the ORIGINAL preset. The AKAI
+        # keygroup signature is the rendered keygroup bytes, which carry the
+        # sample NAMES, so a preset whose samples get renamed here can group
+        # differently afterwards. would_fit judged the un-renamed preset; the
+        # running total has to record the same number or the two drift apart on
+        # exactly the dedup-collision presets.
         if self.object_pool:
             from writers.akai_s3000_writer import keygroup_count
             self._kg_total += keygroup_count(preset, self.ib304f)
         if self.pram_budget:
             self._pram_presets += preset_pram_bytes(preset)
-        self.presets.append(preset)
         # CR-7: dedup by (name, content).  A genuine duplicate (same name AND
         # same PCM) is shared; a same-name/different-PCM sample is renamed and
         # this preset's zones are repointed — otherwise its zones would silently
@@ -655,13 +705,19 @@ class TargetBank:
                 self.current_size += _SAMPLE_CHUNK_OVERHEAD + len(sample.data)
                 remap[sample.name] = new_name
         if remap:
-            for voice in preset.voices:
-                for zone in voice.zones:
-                    if zone.sample_name in remap:
-                        zone.sample_name = remap[zone.sample_name]
-
-        voice_overhead = sum(8 + len(v.zones) * 32 for v in preset.voices)
-        self.current_size += _PRESET_CHUNK_OVERHEAD + voice_overhead
+            # On a COPY. Repointing the zones in place edited the CALLER's
+            # preset: after splitting, the caller's zones pointed at names this
+            # bank had renamed away, so splitting the same bank again -- or
+            # writing it to a second format -- used sample names that existed in
+            # neither. The samples were already copied with `replace` on the
+            # line above; the zones were the half that was not.
+            preset = replace(preset, voices=[
+                replace(v, zones=[replace(z, sample_name=remap.get(z.sample_name,
+                                                                   z.sample_name))
+                                  for z in v.zones])
+                for v in preset.voices])
+        self.presets.append(preset)
+        self.current_size += 8 + _preset_body_bytes(preset) + _TOC_ENTRY
 
     def would_fit(self, preset: Preset, needed_samples: List[SampleData],
                   limit_bytes: int, capacity=None,
@@ -676,9 +732,7 @@ class TargetBank:
         gets and what the tests exercise.
         """
         max_samples, max_presets, max_files = capacity or _capacity('e4b')
-        extra = _PRESET_CHUNK_OVERHEAD
-        for voice in preset.voices:
-            extra += 8 + len(voice.zones) * 32
+        extra = 8 + _preset_body_bytes(preset) + _TOC_ENTRY
 
         new_samples = 0
         for sample in needed_samples:
@@ -796,9 +850,7 @@ def split_into_banks(
     # Sort by estimated size descending (First-Fit Decreasing)
     def item_size(item):
         preset, samples, _ = item
-        sz = _PRESET_CHUNK_OVERHEAD
-        for v in preset.voices:
-            sz += 8 + len(v.zones) * 32
+        sz = 8 + _preset_body_bytes(preset) + _TOC_ENTRY
         for s in samples:
             sz += _SAMPLE_CHUNK_OVERHEAD + len(s.data)
         return sz
