@@ -411,6 +411,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§E4BBANDS — the ceiling is not a ceiling: four-semitone bands at x16 and x32 (2026-09-29)](#e4bbands-the-ceiling-is-not-a-ceiling-four-semitone-bands-at-x16-and-x32-2026-09-29)
 - [§E4BBANDPLAN — how to close the playback-band diagnostic (2026-09-29)](#e4bbandplan-how-to-close-the-playback-band-diagnostic-2026-09-29)
 - [✅ STEP 1 RUN 2026-10-02 — and it returned "the corpus cannot tell them apart", which is NOT "the rules are the same"](#step-1-run-2026-10-02-and-it-returned-the-corpus-cannot-tell-them-apart-which-is-not-the-rules-are-the-same)
+- [§E4BSELECTOR — the interpolation selector is not audible, and the fixed reconstruction filter is measured (2026-10-02)](#e4bselector-the-interpolation-selector-is-not-audible-and-the-fixed-reconstruction-filter-is-measured-2026-10-02)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -40422,3 +40423,136 @@ of the generator's list.
 *predictive* rule does not need the mechanism — §E4BBANDS is already a rule that
 predicts 40 of 40 measured notes. The mechanism decides how much to trust it
 *outside* what has been measured, which is exactly what Step 2 measures directly.
+
+---
+
+## §E4BSELECTOR — the interpolation selector is not audible, and the fixed reconstruction filter is measured (2026-10-02)
+
+**Answers eosed §179c, which is theirs.** Run on XPOSE4 P000 (`XP4 CMB LOW 60`)
+on Jan's E4XT, notes 60–85, one capture, five-sinusoid comb.
+
+### The question, and why the disc was aimed at the wrong ratio
+
+XPOSE4's comb was built for ratio ≈12, to test eosed §179b's off-the-end pairs
+(103/104, 115/116). **eosed's §179c then moved the question**: the selector's
+entire design range is below 4× — it steps every 0.5× of rate and saturates at 6
+from 3.75× — so all six in-range transitions sit within two octaves of the root
+on any sample. Their diagnosis of our two dead instruments is the useful part:
+
+> *"Their metrics failed at 8–15× because they were used out of range, not
+> because they are the wrong metrics."*
+
+So the six pairs were reachable on the preset already resident, and the comb was
+a better sample for them than XPOSE3's broadband PCM had been.
+
+### RESULT: no selector effect. Field spread 0.17 dB against a 0.29 dB residual sd.
+
+The decisive test needs no model at all. Because the comb's partials land at
+**known** frequencies, two notes can be compared whose partials land at the same
+output frequency under **different selector fields**. The reconstruction filter
+contributes equally to both, so any difference is the selector:
+
+| output Hz | field A | drop A | field B | drop B | B − A |
+|---|---|---|---|---|---|
+| 441 | 0 | +0.15 | 2 | −0.22 | **−0.37** |
+| 618 | 0 | +0.01 | 1 | −0.26 | **−0.28** |
+| 795 | 0 | −0.03 | 2 | +0.02 | **+0.05** |
+| 795 | 0 | −0.03 | 4 | −0.04 | **−0.00** |
+| 842 | 0 | +0.10 | 5 | −0.10 | **−0.20** |
+
+Every pair agrees within 0.4 dB **across fields 0 through 6**. By §179c's own
+criterion — *"If nothing shows at all six, the listen-for-it route is dead
+regardless of what disc is built"* — **§179b's listen-for-it route is dead.**
+
+### ⚠ AND THE FIXED FILTER IS THE LARGER FINDING
+
+| output Hz | drop dB |
+|---|---|
+| 265 – 1175 | **0.00, flat** |
+| 1175 – 1357 | −0.66 |
+| 1357 – 1540 | −1.29 |
+| 1540 – 1722 | −2.79 |
+| 1722 – 1904 | −3.33 |
+| 1904 – 2086 | −4.19 |
+| 2086 – 2268 | −5.02 |
+| 2268 – 2632 | −5.66 … −6.36 |
+| 2996 – 3178 | **−7.46** |
+
+**A fixed lowpass, corner ~1.2 kHz, −7.5 dB by 3.2 kHz, in absolute output
+frequency. It does not move with the playback rate and it is independent of the
+selector field.** This is what the comb was built to see and no prior instrument
+here could see it.
+
+⚠ **WHY IT REFRAMES §179b.** The off-the-end read produces fields 15, 18, 3 and
+8 — outside the table's own 0–6 range — and the in-range null does **not** bound
+them; an out-of-range value is not a bigger in-range value. But the measured
+filter is strong (7 dB across the band) and acts on exactly the quantity §179b's
+directional prediction is about, so **any 103-vs-104 difference must first be
+shown to exceed what this fixed filter predicts for the 5.9% shift between
+them.** §179c's own paired-control discipline, applied to the off-the-end pairs.
+
+### The instrument, and the four times it was wrong before it was right
+
+⚠ **This is the sixth instrument in this investigation and it was wrong four
+times before the data was right.** Each failure looked like a result:
+
+1. **`selector_field` returned the FIRST threshold met, not the highest.** The
+   `if ratio >= t: return v` inside an ascending loop stops at the *lowest*
+   match, so every note from 64 up was labelled field 1 — the column printed `1`
+   twenty-two times, which reads as a stable result. Same shape as an off-by-one
+   that agrees with everything around it.
+2. **`hw.envelope` returns `(env, t)`, a tuple.** Read as the array alone,
+   `len(env) == 2`, so **all 26 notes were "refused by the level check"** with
+   "only 0 envelope frames". **The capture was fine** — 145 s, peak −17.0 dBFS.
+   ⚠⚠ **A guard firing on its own bug looks exactly like the failure it guards**,
+   and "26 silent notes" would have sent someone hunting a MIDI fault that did
+   not exist. What distinguished them is that the guard reported a *reason*, and
+   the reason was impossible for a 145 s recording.
+3. **A "drop vs frequency" table filtered out every drop ≤ −0.9 dB**, intending
+   to exclude the reference partial. The reference is index 0 and is exactly 0.00
+   by construction; **excluding by value removed the entire attenuated
+   population** and the table then showed a clean flat zero everywhere. Exclude
+   by index, never by value.
+4. **The paired contrast read its within-field class as a noise floor.** It is
+   not noise: the large within-field values are all pairs that straddle the
+   filter corner, so that sd measured the *filter*, not the instrument.
+
+**And the one that mattered most was the positive control.** The first version
+asked only "is the bottom untouched and the top moved?", and **two mutations
+passed it** — a window widened to 200 bins so every partial's window contained
+its neighbours, and a window narrowed below one bin. Both produced different
+numbers; both read PASS. A qualitative pass criterion cannot fail in the ways
+that matter. It is a **calibration** now: the analytic one-pole response is
+computed and every partial must agree with it to 0.75 dB, which it does to
+**0.00 dB**. Widening the window to 200 bins now fails at 4.81 dB error and
+widening its fractional width fails at 0.84 dB.
+
+A second bug was found the same way: at 83.3 Hz a ±0.75% window is ±0.62 Hz
+while one FFT bin at 48 kHz/16384 is 2.93 Hz, so **the window fell between two
+bins and returned −inf for all five partials** — which the caller reported as
+`+nan` and `+inf dB`, five infinite bright partials off hardware. A
+fraction-of-frequency window is not a window at the bottom of a comb.
+
+### ⚠ Caveats, which bound the claim
+
+- **One take. No replication.** The bound is "no effect above ~0.6 dB on one
+  take", not a calibrated limit.
+- **The top notes are thin.** Above ~76 there were 1–3 FFT frames, and the bins
+  above 2600 Hz have n=1.
+- **Note 60 is anomalous**: an extra ~1.5 dB on its top partial against every
+  other note at the same output frequency. It is the first note after the
+  program change. Unresolved and flagged — but it does **not** change the field
+  conclusion (0.55 sd with it, 0.59 sd without).
+- **Above 3.2 kHz the filter is unmeasured.** Our comb does not reach there, and
+  a large selector change would show precisely there.
+
+### What is NOT claimed
+
+Not that the field is inert in the firmware. Not that the off-the-end values are
+harmless. Not that 103/104 and 115/116 are indistinguishable — **we did not test
+them**; the in-range pairs were the cheaper experiment and they came back null.
+
+Handover written for the eosed session: `docs/eosed_handover_selector.md`.
+Sweep: `tests/re_banks/sweep_selector_xpose4.py`. Capture:
+`~/temp/selector_p000.wav`. §E4BBANDPLAN step 0 — the level-checked anchor — is
+implemented here and is what refused all 26 notes in item 2 above.

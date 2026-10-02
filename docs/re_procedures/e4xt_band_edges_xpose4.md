@@ -5,10 +5,42 @@
 
 # `XPOSE4` — the sparse-spectrum cells, and what the previous disc could not hear
 
-**Bank built: `~/temp/XPOSE4.E4B`, 12.8 MB, 18 presets, 36 samples.**
-Generator `tests/re_banks/gen_e4xt_xpose4.py` (gitignored — this document is
-the record). **Not yet on the card.** One bank, 18 presets, so everything after
-the load is a program change.
+**Disc: `CD5-XPOSE4.iso`, ON THE CARD since 2026-10-02 14:41, md5
+`8637b390b4b9228b4d1d5dcbe2a8d469`.** One bank, 18 presets, 36 samples, so
+everything after the load is a program change. Generator
+`tests/re_banks/gen_e4xt_xpose4.py` (gitignored — this document is the record).
+**XPOSE3 is parked, not deleted**: `CD5-XPOSE3.iso` → `XX_CD5-XPOSE3.iso`,
+rename back to restore.
+
+## ⚠ CD6 MUST STAY EMPTY — do not look for a spare slot there
+
+`id 6` is **the E4XT itself** on the real SCSI bus. ZuluSCSI will mount a
+`CD6-*.iso` and log a clean *"Opening … for id:6"* — its numbering is unique on
+the SD card and it sees no conflict. The collision is one layer down: the
+sampler cannot see the device and the SCSI protocol is disrupted. `ENVSPAN` sat
+there 09:14–12:42 on 2026-08-18 doing exactly that, invisible and in the way,
+with a clean boot log throughout. Recorded in the card's own `whatiswhat.txt`.
+
+## Verified off the card, not from the source
+
+Checked **after copying, by reading the image back**:
+
+- EMU3 superblock and directory walked — **payload present *and*
+  directory-addressed**. `build_iso` has already produced banks physically on a
+  disc with *no directory entry*: invisible to the E4XT, and silently. Searching
+  the bytes for a bank would pass on exactly the image the machine cannot see.
+- Bank md5 `aa3bfd2004c338fe140285f027c20a27` matches the built `.E4B` exactly.
+- 18 presets / 36 samples, 18 markers adjacent to 18 test samples.
+- All 10 fine-tune cells at the exact intended 1/64-semitone units.
+- Both looped cells still `FORWARD`; declared 32000 Hz stored as 32000.
+
+There was **no EMU3 image reader in this project**, so one was written for it
+(`~/temp/emu3_read.py`). It is **not** ISO9660 — EMU3 images carry no ISO9660
+descriptor and begin with the ASCII magic `EMU3`. Four separate layout errors in
+its first drafts each produced output that *looked like data*, three of them
+printing a plausible bank; the reason to trust it is that it reproduces the
+known-good `CD5-XPOSE3.iso` exactly. Worth reading `docs/EMU3_ISO_FORMAT.md`
+rather than inferring the layout.
 
 ## Why this disc exists
 
