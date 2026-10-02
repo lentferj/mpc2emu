@@ -35,3 +35,32 @@
 e713a0b4260971208a455ac63b1a8b9eeca614d8 1   # docs(zone_reducer), 2026-07-28
 590ee198baa65dd01511111484103f4524e96720 1   # fix(zone-reducer), 2026-07-27
 efe130c3c9bf1fefd1f019be7c189b31105ebcf9 1   # fix(zone-reducer), 2026-07-27
+
+# ── 2026-10-02, Jan's call: accept and record. Count ZERO, and that is the
+# finding rather than an oversight.
+#
+# Three commits were flagged on 2026-09-27 as carrying a commercial name and
+# were waiting on a decision of the same shape as the three above: accept and
+# record, or rewrite and force-push. Every one of the three MESSAGES was read
+# in full before the line was written, and none of them names anything. Each
+# refers to its evidence anonymously -- "a commercial bank", "a real
+# multi-sample bank", and, in the third, an explicit statement that disc and
+# preset names are anonymised throughout, with the id map kept out of the repo.
+#
+# ⚠ The flag could not be reproduced, and the difference matters: nothing in
+# the repository records WHICH name was alleged. The count had to be measured,
+# not chosen, and measured against the whole local term list.
+#
+# Recorded as 0 rather than omitted, because a 0 is a live pin and an absence
+# is not. The count comparison is `seen != recorded`, so these three lines
+# will REFUSE the scan if a name ever reaches one of those messages -- the
+# same protection the three lines above carry, obtained here from having
+# verified rather than from having accepted.
+#
+# ⚠ Writing them as 1 -- the shape the flag implied -- makes the scan return
+# UNSOUND permanently, because 1 does not match what is there. Measured, not
+# assumed: with count 1 the run exits 2 and reports three exceptions that no
+# longer match; with count 0 it exits 0.
+dcd4fcfba7249fd4515931f3e178bc4e7fc33a49 0   # docs, 2026-09-23, read in full: no name
+d542028fc7915e2c36846b9977e31370c5b14a28 0   # docs, 2026-08-03, read in full: no name
+acd737f6c97d5961558bbae717452bbc6c26d782 0   # docs, 2026-08-02, read in full: no name

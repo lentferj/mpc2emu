@@ -2379,10 +2379,34 @@ def write_e4b(bank: Bank, output_path: str) -> None:
                       # in practice and ambiguous in principle, two zones of one
                       # preset being free to share all three.
                       'sample_name': _z.sample_name},
-              remedy='narrow the zone to end at the highest safe key, or '
-                     'resample the sample lower. The ceiling is an absolute '
-                     'playback rate, so halving the sample rate buys a full '
-                     'octave of extra range',
+              # ⚠ REWRITTEN 2026-09-29 (Jan's call). The second sentence was
+              # FALSE under the measured band model and is the reason this is
+              # a warning and not a nicety: it told the user to do X, X moved
+              # the problem onto the same keys, and it read as fixed.
+              #
+              # The old text said "the ceiling is an absolute playback rate, so
+              # halving the sample rate buys a full octave of extra range".
+              # Halving shifts pitch by -11.9815 semitones -- within 0.02 of
+              # exactly twelve -- so every band lands back on the SAME pitch
+              # classes. It relocates the problem and reports success.
+              #
+              # ⚠ OUR OWN `--resample eii` IS THE SAME FAILURE: 27777 Hz is
+              # -7.9842 semitones, 0.016 off the grid, so the profile shifts
+              # every band bodily by eight semitones and lands it back on keys.
+              # Under the old ceiling model it "bought 8 of 10 keys", which is
+              # what we told Jan on 2026-09-28.
+              #
+              # A warning that fires too often costs attention; a remedy that
+              # says "do X and it goes away" when X moves the problem costs
+              # the user the work AND leaves them believing it is fixed. The
+              # first clause was always sound and merely conservative, so it
+              # stays as the whole advice.
+              remedy='narrow the zone to end at the highest safe key. '
+                     'Resampling lower does NOT reliably help: the failure '
+                     'recurs at fixed playback ratios, so a rate change worth '
+                     'a whole number of semitones (halving is exactly twelve) '
+                     'moves the affected keys to the same pitch classes '
+                     'rather than out of range',
               echo=f"  [WARN] preset '{_pname}': zone {_z.lo_key}-{_z.hi_key} "
                    f"plays past the E4XT's rate ceiling above key {_safe}")
 

@@ -410,6 +410,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§XPOSE3 — the ceiling bracket and the loop question, on the card 2026-09-29](#xpose3-the-ceiling-bracket-and-the-loop-question-on-the-card-2026-09-29)
 - [§E4BBANDS — the ceiling is not a ceiling: four-semitone bands at x16 and x32 (2026-09-29)](#e4bbands-the-ceiling-is-not-a-ceiling-four-semitone-bands-at-x16-and-x32-2026-09-29)
 - [§E4BBANDPLAN — how to close the playback-band diagnostic (2026-09-29)](#e4bbandplan-how-to-close-the-playback-band-diagnostic-2026-09-29)
+- [✅ STEP 1 RUN 2026-10-02 — and it returned "the corpus cannot tell them apart", which is NOT "the rules are the same"](#step-1-run-2026-10-02-and-it-returned-the-corpus-cannot-tell-them-apart-which-is-not-the-rules-are-the-same)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -36126,10 +36127,69 @@ exist, found as a red suite months later.
 dated note in the file, and the file may not contain a single commercial name —
 it is tracked.
 
-**Still open and NOT covered by this:** three further commits Jan has yet to
-rule on (`dcd4fcf`, `d542028`, `acd737f`). Their names are not in the term list
-yet, so the scan does not see them — which is the same blindness, one term list
-away.
+**Still open and NOT covered by this:** the term list itself. Three batches of
+commercial names have now been found, and **every one of them by ADDING A TERM
+rather than by scanning.** The mechanism has not once failed; the list has three
+times been the thing that was wrong (2026-09-26 eosed, 2026-09-28, and
+2026-10-02 below). There is no derivation of it from anything.
+
+### 2026-10-02 — three flagged commits, and the flag did not survive being checked
+
+Jan's call on the three commits still waiting was **accept and record**, the
+same shape as the three above. The process answer was right; **the premise was
+not.**
+
+All three messages were read in full before a line was written:
+
+    dcd4fcf   "docs: the consolidated firmware-import record…"
+    d542028   "docs: mark the per-entry keymap bug fixed, drop its plan"
+    acd737f   "docs: plan to confirm or disprove the KRZ per-entry keymap bug"
+
+**None of them names anything.** Each refers to its evidence anonymously —
+"a commercial bank", "a real multi-sample bank" — and `dcd4fcf` goes further
+and says so outright: *"DISC AND PRESET NAMES ARE ANONYMISED THROUGHOUT … No
+commercial library, vendor or preset name appears in any tracked file."* Their
+**diffs** are equally clean: `FIRMWARE_IMPORT_ROUTINES.md` uses the
+`AKAI-A`/`ROL-B` ids (7 anonymisation markers, zero names), and the plan
+document that `d542028` deleted is the same story.
+
+⚠ **Nothing in the repository records WHICH name was alleged.** The flag of
+2026-09-27 carries no evidence with it, and `git log -S acd737f` shows the
+three shas first appearing in `e58928c` itself — so the observation was made
+and never written down. **The count had to be measured, not chosen**, which is
+the only thing that makes it a record.
+
+**And the measurement is the interesting part:**
+
+| recorded count | scan exit | meaning |
+|---|---|---|
+| `1` — the shape the flag implied | **2 UNSOUND** | three exceptions "no longer match" — the suite is **permanently red** |
+| `0` — what is actually there | 0 CLEAN | `seen == recorded`, and the line is still live |
+
+`stale = [(sha, n, seen.get(sha)) … if seen.get(sha) != n]` — the comparison is
+equality, in **both** directions. A count that does not describe the tree makes
+the tool unable to vouch for the tree, which is the one thing it exists to do.
+
+**So they are recorded at 0, and a 0 is not a no-op.** It is a pin: a name
+reaching any of those three messages later makes `seen` exceed 0 and the scan
+refuses — the same protection the three genuine exceptions carry, obtained here
+from having **verified** rather than from having **accepted**. That is the
+argument for recording them at all rather than closing the row: an omission is
+silent, a zero is an obligation.
+
+#### ⚠ The obvious fix for the blindness has a trap in it
+
+The open item on this section has always been *"a clean scan is not coverage"*
+and the proposed remedy is to **generate the terms from the id→name map**. It is
+still the right idea and it is still undecided, but generating it also creates a
+new failure mode worth stating before it is built:
+
+`tests/_local/disc_name_map.md` maps ids **to** names (`LIB-D` → a real library).
+Seeding terms from it makes every name in it a **hit wherever the id appears** —
+so a single wrong or over-broad entry turns the release scan permanently red
+rather than merely incomplete, which is a strictly worse failure than the one it
+fixes. It needs a per-term positive control of its own, or it trades a silent
+gap for a permanent false positive.
 
 ### Two refusals the tool owes its operator
 
@@ -40065,7 +40125,86 @@ over-broad warning for a rule with an unexplained half is a bad trade at equal
 yield. This step is cheap and it is the one that decides whether the rest is
 worth doing.
 
-### Step 2 — one disc, one load: XPOSE4, closing B3
+---
+
+## ✅ STEP 1 RUN 2026-10-02 — and it returned "the corpus cannot tell them apart", which is NOT "the rules are the same"
+
+**Script** `~/temp/e4bbands_step1.py` and `…step1b.py`. **Corpus: 141 `.e4b`
+files, 131 parsed** (`…/E4Bs/`; 10 are zero-filled stubs, `Not an IFF FORM file`
+— larger than §E4BCEILSRC's 113-of-120, and the same alphabetical-tree
+population).
+
+| | zones | presets |
+|---|---|---|
+| rule A — shipped `highest_safe_key` | 448 | 355 |
+| rule B — band predicate | 448 | 355 |
+| **A only** | **0** | **0** |
+| **B only** | **0** | **0** |
+
+**Perfect agreement. Which is the first thing to distrust**, because two
+different predicates cannot be the same rule by accident.
+
+### The instrument was mutation-checked before the result was believed
+
+```python
+zone 110-117 root 60:  A=True   B=False   *** DISAGREE ***
+zone 110-110 root 60:  A=True   B=False   *** DISAGREE ***
+zone 107-117 root 60:  A=True   B=True      AGREE
+```
+
+The predicates genuinely differ. Rule A looks **only at the zone's top key**;
+rule B tests **every key in `lo..hi`**. They part company exactly when a zone
+*starts* above the first band key and ends below the next one.
+
+### So the agreement is a property of the corpus, and here is the property
+
+```
+ZONES:  rule A only 0 | rule B only 0 | BOTH 448
+every one of them contains at least one band key inside its own lo..hi: 448 of 448
+
+lo_key distribution        most common flagged zone shapes
+   0 : 310 zones               0-127 : 309
+  66 :  54                      66-127 : 54
+  74 :  14                      74-127 : 14
+  59 :  14                      59-127 : 14
+```
+
+**310 of 448 flagged zones are full-range `0-127`, and essentially every flagged
+zone ends at `hi_key` 127.** A zone that starts at key 0 *necessarily* spans
+the first band, so this corpus has **no power to separate the two rules at
+all** — not one of the 448 is the narrow, high-starting zone that would do it.
+
+**This is the fifth instance of one shape in this investigation, and the first
+time the corpus was the instrument rather than the analysis.** A test is blind to
+whatever it holds constant: a cancellation test blind to an error two fields
+share; two FFT windows blind to a common bias; the pan ladder; a re-onset
+counter blind on frame 0; and now 141 banks blind because commercial synth
+presets are written as full-range root-60 layers. Each was caught by a different
+reader, and none by the rule its maker already held.
+
+### What Step 1 therefore decided
+
+**Nothing — and that is the correct outcome to act on, provided it is not read as
+endorsement.** The step's own instruction was *"if the two counts are close, stop
+here and leave the warning alone for good."* They are identical. So:
+
+- ✅ **The shipped warning stays.** `E4B_ZONE_ABOVE_PLAYBACK_CEILING` keeps its
+  shape, and `highest_safe_key` keeps meaning *where trouble starts*.
+- ✅ **The band predicate is NOT shipped.** It would be more accurate and less
+  certain, with an unexplained lower half (§B1), in exchange for nothing this
+  corpus can demonstrate.
+- ⚠ **And §E4BCEILSRC's 10.8% is now known to be an over-count of the same
+  kind** — it counts zones that *reach* the first edge, and a zone ending at
+  root+55 is flagged and plays fine. That number is the prevalence argument for
+  warning at all, so it should not be quoted without this caveat.
+
+**To actually separate the rules, the corpus has to contain narrow, high-root
+zones** — `lo_key` above the first band key. Nothing in this library has one,
+which is itself the finding: **the population that would be affected is not the
+population this warning was built for**, which is consistent with it having
+shipped unnoticed for years.
+
+### Step 2 — one disc, one load: XPOSE4, closing B3 — ✅ BUILT AND VERIFIED 2026-10-02
 
 All cells **unlooped** so the duration detector applies, plus one sparse-spectrum
 pair for the questions duration cannot reach.
@@ -40187,6 +40326,14 @@ own. `e4b_writer` emits one record per zone entering a band, and `detail` gains
 the band index so a UI can say *which* band. Re-run Step 1's corpus count as the
 regression check.
 
+⚠ **Step 3 IS NOT RECOMMENDED ON THE CURRENT EVIDENCE.** It was written assuming
+the band shape replaces the ceiling shape. Step 1 found the corpus cannot tell
+them apart and the band predicate has an unexplained lower half, so writing it
+down would ship a rule that is indistinguishable from the one we have and less
+certain about it. **Revisit only if Step 2's rate cell moves the bands** — a
+band that moves with the declared rate is a different object from a band at a
+fixed ratio, and would justify its own predicate.
+
 ### Step 4 — the warning text, which is Jan's call and not ours
 
 Once the shape is bands, "narrow the zone to end at the highest safe key" is
@@ -40195,6 +40342,79 @@ moves a zone from one band to where the next band sits. Options, cheapest first:
 leave the warning as an over-broad first-edge alarm and say so in the text;
 report the bands and let the UI decide; or drop to `info` on the grounds that
 nobody plays those keys, which is the reason this shipped unnoticed for years.
+
+✅ **Half of Step 4 is already done, and it was the half that was actively
+harmful.** The *remedy* no longer claims a rate change buys range
+(`writers/e4b_writer.py`, and the TODO row). ⚠ **What remains is the message
+and `highest_safe_key` itself, and Step 1's result argues for the cheapest
+option: leave the alarm as an over-broad first-edge alarm and say so in the
+text.** That is honest — it says where trouble starts, which is exactly what the
+number is — and it needs no new constant and no new certainty.
+
+### Step 2's result: XPOSE4 is BUILT, VERIFIED, AND MUTATION-CHECKED — 2026-10-02
+
+`~/temp/XPOSE4.E4B`, **12.8 MB, 18 presets, 36 samples.** Generator
+`tests/re_banks/gen_e4xt_xpose4.py` (gitignored, so
+`docs/re_procedures/e4xt_band_edges_xpose4.md` is the record). **Not yet on the
+card.**
+
+The design, the cells, the pre-registered predictions and the capture warnings
+are all in the procedure document. Three things belong here because they are not
+about the disc.
+
+#### The build caught a design error in itself, and the guard is mutation-checked
+
+The first draft carried **one** comb, built to be read at ratio 12 — and
+**reported itself fully verified.** Every fine-tune unit was read back out of
+the written file, every root was correct, every marker was adjacent.
+
+It was still wrong. A fixed comb cannot stay under Nyquist across a 12× ratio
+range, so that comb **aliased above key 106** and could not read the keys it was
+built for. **No check caught it, because every check confirmed what was
+*intended* rather than what was *produced*** — which is the same failure as the
+duration detector that was really measuring the amp release, and the same one
+again as Step 1's corpus.
+
+Printing the landing frequencies is what found it. The fix is to make
+reachability a **computed property**, `readable_keys(divisor)`: the keys at which
+every partial is under Nyquist, derived from the partials and the ratio curve.
+Two guards came with it:
+
+| mutation | result |
+|---|---|
+| `LOW` divisor 6 (aliases early) | **FAILS** — `no comb reads [115, 116]`, plus two cells that cannot hear any predicted free-run key |
+| `LOW` divisor 12 — **the original single-comb draft** | **FAILS** — `no comb reads [115, 116]` |
+| shipped: `HIGH` 12, `LOW` 24 | passes |
+
+**The second row is the one worth keeping: the disc as first written would now
+refuse to build.**
+
+#### Two combs, because one cannot cover eosed's A/B
+
+eosed §179b named **103 vs 104 and 115 vs 116** as the pair that straddles ratio
+12.0. Those are an octave apart, so a single comb cannot read both:
+
+| comb | divisor | readable keys | at 103/104 | at 115/116 |
+|---|---|---|---|---|
+| `XP4CMBHI` | 12 | 0–**106** | 2–18 kHz ✓ | **aliases** |
+| `XP4CMBLW` | 24 | 0–**118** | 1–9 kHz ✓ | 2–18 kHz ✓ |
+
+`LOW` is the workhorse and every ladder and the rate cell use it; `HIGH` is
+carried for its **spread** at ratio 12, which is where an interpolator shows
+itself most. **The gap that was open on 2026-09-29 — "this disc cannot test the
+selector" — is closed on the build side.** It is not closed on the measurement
+side: that needs the load.
+
+#### ⚠ Every test sample has a distinct neighbour, and this is a correction to XPOSE3
+
+A free-run reads past the end of the sample into **neighbouring sample RAM**, so
+what you hear is the neighbour's audio. XPOSE3 put three copies of the same PCM
+in a row — **audible as a run-on, not identifiable as one**, and the ⚠ on that
+disc said exactly that. Here each of the 18 test samples is immediately followed
+by a **single 300 Hz marker** that is not a harmonic of anything in either comb,
+named after the sample it follows, and `verify()` reads the sample order back
+**out of the written file** — because adjacency is a property of the file, not
+of the generator's list.
 
 ### What is NOT on this plan
 
