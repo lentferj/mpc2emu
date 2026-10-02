@@ -355,13 +355,61 @@ _AK_DECAY1_RATE = (23525.6, -0.09776, 25, 90)   # dB/s,  r2 0.99989 over 25..99
 # measured release is 2.62 s against 2.59 s extrapolated. Whatever he is
 # hearing, it is not the fit range (§LAWRANGE).
 #
-# BELOW 45 IS STILL UNVALIDATED and s3ked marked it rather than filling it: at
-# RELSE1 35 and below their fit collapses to r2 0.51-0.73 AND stops depending
-# on the setting -- 194, 192, 209, 155, 256, 305 dB/s for bytes 0..25.
-# Non-monotonic and roughly constant is the signature of measuring the rig's
-# own tail rather than the envelope, because the release is over in a
-# millisecond or two.
-_AK_RELSE1_RATE = (23042.3, -0.09754, 45, 99)   # dB/s,  log-space r2 0.99996
+# ⚠⚠ THE WINDOW IS NOW 0..99, NOT 45..99 — s3ked §274 (2026-10-02), and the
+# reason the old floor was wrong is worth keeping because it is a shape this
+# project has paid for twice.
+#
+# WHAT WE BELIEVED UNTIL YESTERDAY, quoting s3ked's own §158:
+#   "Below 45 is still unmeasured... at RELSE1 35 and below their fit collapses
+#    to r2 0.51-0.73 AND stops depending on the setting -- 194, 192, 209, 155,
+#    256, 305 dB/s for bytes 0..25. Non-monotonic and roughly constant is the
+#    signature of measuring the rig's own tail rather than the envelope."
+#
+# **§158's reason was a fact about a STATISTIC, not about the machine.** It fit
+# a straight line in dB over the top 40 dB at a 2 ms frame; the release is not
+# straight in dB, so that fit reports a rate that depends on where it was told
+# to stop, and a 40 dB criterion is unreachable below ~35 because a common tail
+# arrives first. What works is the interval between two level crossings from
+# ONE waveform (3 dB to 15 dB, both from the same capture), which assumes no
+# shape and is latency-free because the host's note-off jitter cancels between
+# the two crossings.
+#
+# ⚠ THE TAIL IS REAL AND WE WERE WRONG TO SAY OTHERWISE. It is a decay near
+# 126 dB/s, identical for every RELSE1 from 5 to 40, from about -47 dB at
+# +100 ms to the floor at ~330 ms. Jan heard it on the machine. It is NOT the
+# rig's and NOT RELSE1's: it is not silence, so no linear rig invented it, and
+# it is NOT envelope 2 -- V_ENV2 25 versus 0 moves it by under 1 dB.
+#
+# ⚠ THE DECISIVE CHECK, AND IT IS OURS NOT THEIRS: s3ked's measured points
+# score our UNCHANGED law, split by our own old window edge:
+#
+#     below 45 (called unmeasured)  n=7   mean  6.8%   RMS  7.6%   worst 12.5%
+#     above 45 (called measured)    n=5   mean 10.2%   RMS 12.9%   worst 22.4%
+#
+# **The law is MORE accurate where we called it unmeasured than inside the
+# window we called measured.** So 45 never marked where the law stops holding;
+# it marked where s3ked stopped measuring on 2026-08-24. Those are different
+# lines, and the second is a fact about a run, not about the instrument.
+#
+# THE CONSTANTS ARE DELIBERATELY UNCHANGED. s3ked's whole-range fit is
+# 22546.3*exp(-0.09566v), within 1.6% of ours in the prefactor and 1.7% in the
+# exponent, and on the settings whose repeats agree it is 25537.4*exp(-0.09818v),
+# an exponent 0.4% from ours. Changing them would be justified by s3ked's
+# fifteen points, but their table is coarse at the fast end -- 8000, 6000, 2200
+# are two- and one-significant-figure readings -- and our eleven in-window points
+# are finer. Mixing would trade a defensible fit for a coarser one.
+#
+# ⚠ TWO SETTINGS ARE STILL OFF THE LINE AND WE ARE NOT ABSORBING THEM INTO THE
+# FIT. RELSE1 5 reads 36% low with its repeats disagreeing 2.0x; RELSE1 20 reads
+# 44-47% high and reproduces. Both are repeatable readings off the line rather
+# than scatter, so either is a real feature of the machine or an artefact of
+# crossings quantised to a 1 ms frame. **Unresolved.** And the two-statistic
+# limit is real: a 1 ms frame is needed for the sub-30 region and cannot
+# resolve the 12 dB interval there, so no frame length escapes both ends.
+#
+# WHAT THIS DOES NOT COVER: one machine, one rig, 48 kHz. Nothing here was
+# measured on an S2800, S3000, S3200 or S2000. See §LAWRANGE and §RELSE1WIN.
+_AK_RELSE1_RATE = (23042.3, -0.09754, 0, 99)   # dB/s,  log-space r2 0.99996 over 45..99
 
 #: ATTAK1 -> seconds: `t = a * exp(b * ATTAK1)`, a RISE TIME and not a rate.
 #: HW-MEASURED by s3ked (§141, 2026-08-20), time from note-on to 90% of the

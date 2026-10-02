@@ -413,6 +413,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [✅ STEP 1 RUN 2026-10-02 — and it returned "the corpus cannot tell them apart", which is NOT "the rules are the same"](#step-1-run-2026-10-02-and-it-returned-the-corpus-cannot-tell-them-apart-which-is-not-the-rules-are-the-same)
 - [§E4BSELECTOR — the interpolation selector is not audible, and the fixed reconstruction filter is measured (2026-10-02)](#e4bselector-the-interpolation-selector-is-not-audible-and-the-fixed-reconstruction-filter-is-measured-2026-10-02)
 - [§RELSE1REMEDY — the second remedy that asked the reader to do our work (2026-10-02)](#relse1remedy-the-second-remedy-that-asked-the-reader-to-do-our-work-2026-10-02)
+- [§RELSE1WIN — the RELSE1 window is 0..99, and the floor we warned at was a fact about a statistic (2026-10-02)](#relse1win-the-relse1-window-is-099-and-the-floor-we-warned-at-was-a-fact-about-a-statistic-2026-10-02)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -40666,3 +40667,157 @@ nothing is removed, an estimate is written — but **"usable" is a judgement abo
 how wrong an estimate may be**, and 39.5% of real voices falling outside the
 fitted window means the answer is usually "quite wrong" for the field the fit
 collapsed in.
+
+---
+
+## §RELSE1WIN — the RELSE1 window is 0..99, and the floor we warned at was a fact about a statistic (2026-10-02)
+
+**s3ked §274, asked for by VinSamLib's remedy report and delivered the same
+evening.** The ask was deliberately narrow — change the *window*, not the
+constants — and this section records what we did with it and what we did not.
+
+### What we believed, quoting our own comment
+
+```
+# BELOW 45 IS STILL UNVALIDATED and s3ked marked it rather than filling it: at
+# RELSE1 35 and below their fit collapses to r2 0.51-0.73 AND stops depending
+# on the setting -- 194, 192, 209, 155, 256, 305 dB/s for bytes 0..25.
+# Non-monotonic and roughly constant is the signature of measuring the rig's
+# own tail rather than the envelope, because the release is over in a
+# millisecond or two.
+```
+
+**Both halves of that reasoning were wrong, and the split matters.** The law held.
+The rig could say so. And what defeated the earlier attempt was the STATISTIC,
+not the hardware.
+
+**§158 fit a straight line in dB over the top 40 dB at a 2 ms frame.** The
+release is not straight in dB — that was §158's own peer challenge, the "opening
+decade is slow" — so the fit reports a rate that depends on where it was told to
+stop, and a 40 dB criterion is unreachable below ~35 because the common tail
+arrives first. **A fit that reports a value which depends on an arbitrary stop
+point is not a measurement of the thing being fitted**, and the way to tell is
+to change the stop point.
+
+What works is the interval between two level crossings **from one waveform**:
+
+    rate = (L2 - L1) / (t(L2) - t(L1))      L1 = 3 dB, L2 = 15 dB
+
+No shape assumed, and latency-free by construction: the host's note-off reaches
+the machine several ms later, by a jitter comparable to the whole fall at low
+RELSE1, and **both crossings come from the same waveform so the offset cancels
+exactly.**
+
+### ⚠ THE TAIL IS REAL, AND WE WERE WRONG TO SAY OTHERWISE
+
+Jan heard one on the machine during the run, which corrected an earlier draft of
+s3ked's that said there was none. It is a decay near **126 dB/s, identical for
+every RELSE1 from 5 to 40**, from about −47 dB at +100 ms to the noise floor at
+~330 ms. **Not silence, so no linear rig invented it.** And **not envelope 2**:
+V_ENV2 25 versus 0 moves it by under 1 dB, which killed the obvious candidate —
+RELSE2, whose §59 law is a traverse in *seconds*, and 0.35 s is exactly where
+this tail sits — in a two-capture experiment.
+
+**We repeated the mistake of mistaking a search procedure for a fact about the
+world, and it took two of us.** §158 read "what survives above the floor at
+350–1200 ms is at the floor" as "there is no tail". True, and not the same claim,
+because the tail ends before 350 ms.
+
+### ⚠ THE DECISIVE CHECK IS OURS, NOT THEIRS
+
+s3ked's evidence is that the law holds below 45. Ours is sharper, because it
+needs nothing from them but their measured numbers: **score our UNCHANGED law on
+their points, split by our own old window edge.**
+
+| region | n | mean error | RMS | worst |
+|---|---|---|---|---|
+| **below 45** — we called this unmeasured | 7 | **6.8 %** | 7.6 % | 12.5 % |
+| **above 45** — we called this measured | 5 | **10.2 %** | 12.9 % | 22.4 % |
+
+**The law is more accurate where we called it unmeasured than inside the window
+we called measured.** So 45 never marked where the law stops holding. It marked
+where s3ked stopped measuring on 2026-08-24 — **a fact about a run, not about
+the instrument**, and the two were written as though they were the same line.
+
+Independent refit of their table, as a check on their arithmetic:
+
+    all 14 settings        22678.5*exp(-0.09592v)  log-r2 0.99415   (theirs 22546.3 / 0.99429)
+    excluding 5 and 20     23953.7*exp(-0.09717v)  log-r2 0.99876   (theirs 25537.4 / 0.99692)
+    ours, unchanged        23042.3*exp(-0.09754v)   window 45..99
+
+Prefactor and exponent agree with theirs to ~1.6 %, and the second fit reproduces
+better than theirs because it is over fewer, cleaner points. **Their arithmetic is
+sound; the small difference is which rows are in it.**
+
+### ⚠ THE CONSTANTS ARE DELIBERATELY UNCHANGED, and here is why that is a judgement
+
+s3ked's whole-range fit is within 1.6 % of ours in the prefactor and 1.7 % in the
+exponent; on the settings whose repeats agree it is an exponent **0.4 %** from
+ours. Adopting theirs is defensible and I did not, for a reason that is about
+their table rather than their rig: **at the fast end their readings are coarse**
+— 8000, 6000 and 2200 dB/s are two- and one-significant-figure numbers — while our
+eleven in-window points were fitted to a per-point r² above 0.9995. Adopting a
+coarser fit for fifteen mixed-precision points over our finer ones would trade a
+defensible constant for a worse one, and the 4 % difference is inside the spread
+of either.
+
+### ⚠ TWO SETTINGS REMAIN OFF THE LINE AND ARE NOT ABSORBEDED
+
+`RELSE1` 5 reads **36 % low** with its two repeats disagreeing **2.0×**;
+`RELSE1` 20 reads **44–47 % high and reproduces**. Both are repeatable readings
+off the line rather than scatter, so either is a real feature of the machine or
+an artefact of crossings quantised to a 1 ms frame. **Left unresolved rather
+than absorbed into a fit** — a law that has been quietly bent to cover two points
+it cannot explain is a law whose next refit will be wrong for a reason nobody can
+reconstruct.
+
+⚠ **And the two-statistic limit is real, not a shrug.** A 1 ms frame is needed
+for the sub-30 region and cannot resolve the 12 dB interval there. RMS of N
+Gaussian samples carries `1/sqrt(2N)` relative error — 1.8 dB at 12 samples,
+0.89 dB at 48 — and below RELSE1 ≈ 30 the whole interval is one or two frames, so
+a short frame measures its own noise. **The errors are opposed and no frame
+length escapes both ends.**
+
+### What this changes for the user
+
+`AKAI_RELSE1_EXTRAPOLATED` no longer fires below 45. It fired on **39.5 % of 666
+real voices**, on ordinary material, on an ordinary import — and Jan hit it on
+an ordinary program, RELSE1 10. **The diagnostic is gone for the region where it
+was wrong, and the constant behind it did not move at all.**
+
+⚠ **What did NOT change is the consequence.** RELSE1 10 now converts as though
+it were measured, and s3ked measured it: **8000 dB/s against our 8688, 8 % low.**
+That is the truth of the field and no warning was ever going to make it more
+accurate. The honest position is that an extrapolation which was **6.8 % mean
+error** was being labelled as an extrapolation when it was better than the
+calibrated region, and 39.5 % of users were paying a warning for nothing.
+
+### Not covered
+
+One machine, one rig, 48 kHz. **Nothing here was measured on an S2800, S3000,
+S3200 or S2000**, where the header table is a different document's. This is a
+claim about the S3000XL and the wording says so.
+
+### ⚠ THE GUARD CAUGHT THIS, AND IT HAD A CONDITION THAT WAS ALWAYS TRUE
+
+`test_akai_scales.py` compares our clamps against s3ked's declared fits, and it
+went red on the edit — correctly. Two of its mechanisms were wrong underneath:
+
+1. **`(lo, hi) != (0, 99)` was not a check.** It sat in the `else` branch as
+   "widening past the fit is allowed", and it permitted **the full byte range for
+   any law flagged `clamp_is_fitted=False`** — an exemption with a condition
+   attached. `_AK_LFO_RATE` has been relying on it, and so would RELSE1 have,
+   silently, for as long as it read `(0, 99)`. The intent was "deliberate
+   widening is allowed, silent widening is not", and an equality test against the
+   widest possible range cannot tell those apart. Replaced with an **allowlist of
+   exact ranges**, so widening again means editing a file the next reader of the
+   diff sees.
+2. **`clamp_is_fitted` had to become False for RELSE1**, which is the whole point
+   of §274 and would previously have been recorded as drift. Their `scales.py`
+   correctly still declares `(45, 99)`, because it describes **their fit**; ours
+   is a **clamp**, and the two are different claims that had been written as
+   though they were the same number.
+
+**And the sibling guard agreed at the wrong granularity.** `test_relscan`'s count
+mechanism has no analogue here — a window is a range, not a hit count — so the
+honest form is the allowlist plus a comment naming who signed off on what.
