@@ -414,6 +414,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§E4BSELECTOR — the interpolation selector is not audible, and the fixed reconstruction filter is measured (2026-10-02)](#e4bselector-the-interpolation-selector-is-not-audible-and-the-fixed-reconstruction-filter-is-measured-2026-10-02)
 - [§RELSE1REMEDY — the second remedy that asked the reader to do our work (2026-10-02)](#relse1remedy-the-second-remedy-that-asked-the-reader-to-do-our-work-2026-10-02)
 - [§RELSE1WIN — the RELSE1 window is 0..99, and the floor we warned at was a fact about a statistic (2026-10-02)](#relse1win-the-relse1-window-is-099-and-the-floor-we-warned-at-was-a-fact-about-a-statistic-2026-10-02)
+- [§E4BSELECTORREP — three takes, and the +0.146 dB was the filter (2026-10-02)](#e4bselectorrep-three-takes-and-the-0146-db-was-the-filter-2026-10-02)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -40821,3 +40822,92 @@ went red on the edit — correctly. Two of its mechanisms were wrong underneath:
 **And the sibling guard agreed at the wrong granularity.** `test_relscan`'s count
 mechanism has no analogue here — a window is a range, not a hit count — so the
 honest form is the allowlist plus a comment naming who signed off on what.
+
+---
+
+## §E4BSELECTORREP — three takes, and the +0.146 dB was the filter (2026-10-02)
+
+§E4BSELECTOR's null rested on one take, and a bound without an error bar is not
+a bound. Three captures of the same sweep, 26 notes each, same preset.
+
+### The replication is extremely tight
+
+| | |
+|---|---|
+| within-(note, partial) sd, median | **0.002 dB** |
+| worst, of 104 points × 3 takes | 0.032 dB |
+| notes refused by the level check | **0 of 26, in all three takes** |
+
+⚠ **This is itself the load-bearing result, and it is a statement about the
+RIG as much as the null.** The 0.29 dB residual in §E4BSELECTOR was never
+measurement noise — the instrument resolves to ~0.002 dB. It was the cost of a
+partial sitting on a steep filter curve, i.e. **signal, not scatter.** A reader
+who took that residual for an error bar would have believed the selector was
+bounded at ~0.6 dB when the true resolution was three orders of magnitude finer.
+
+### What three takes changed: the first answer was still wrong
+
+The naive pooled contrast, every partial, exactly as §E4BSELECTOR framed it:
+
+    cross-field  mean |change|  0.414 dB  (n=6)
+    within-field mean |change|  0.268 dB  (n=18)
+    SELECTOR EFFECT             +0.146 dB   se 0.113   1.29 sd
+
++0.146 dB, inside one standard error. The script reported "still NULL" and was
+**technically right and analytically wrong**, because the two classes are not
+comparable: **the six cross-field pairs happen to straddle the ~1175 Hz filter
+corner at different points than the controls do.** The difference measures where
+each pair sits on the filter curve, not the selector.
+
+### The cut that settles it: partials that never leave the flat region
+
+Restrict to partials whose output frequency stays below the filter corner, so `F`
+contributes nothing:
+
+| class | n | mean |
+|---|---|---|
+| cross-field | 6 | 0.103 dB |
+| within-field | 18 | 0.097 dB |
+| **SELECTOR EFFECT** | | **+0.006 dB**, se 0.021, **0.30 sd** |
+
+**The selector effect is indistinguishable from zero at the resolution of the
+instrument.** The +0.146 dB was the filter.
+
+⚠ **AND ONE CONTROL WAS CONTAMINATED, and dropping it RAISED the estimate
+rather than lowering it.** `60->61` reads **0.557 dB — four times any other
+control** — because it inherits note 60's first-note-after-program-change
+anomaly. Excluding it moves the control mean 0.121 → 0.097 and the effect
+0.006 → 0.006 dB. **The result is robust to the exclusion**, which is the part
+worth checking: an exclusion that changed the answer would have been the finding.
+
+### ⚠ WHAT THIS CUT DOES NOT ESTABLISH
+
+- **It is a mean over 1–4 partials per pair**, and a mean over 1 is not the same
+  quantity as a mean over 4. The flat-partial means drift with count because the
+  non-flat partials are the only ones carrying signal.
+- **Above 3178 Hz nothing is measured at all**, and that is where a large
+  selector change would show. `XP4CMBHI` lands its partials at 2–18 kHz at
+  ratio 12 and would cover it — at a ratio this comb never visits.
+- **The off-the-end values (fields 15, 18, 3, 8) are untested.** An in-range null
+  does not bound an out-of-range corruption, and §179b's 103/104 and 115/116
+  pairs are exactly that case.
+- **Three takes, one machine, one rig.** The replication is tight enough that
+  more takes would not move this number; a different comb would.
+
+### Net
+
+§179c's criterion — *"if nothing shows at all six, the listen-for-it route is
+dead regardless of what disc is built"* — **holds, and now for a reason that
+survives its own control**: a one-step selector change moves per-partial levels
+by **0.006 ± 0.021 dB**, which is 0.3 of the standard error and well inside the
+0.002 dB the instrument resolves.
+
+⚠ **THE FILTER IS STILL THE FINDING**, and it is now better characterised: flat
+to ~1175 Hz, −7.5 dB by 3.2 kHz, and **the reason the first analysis of this
+data was wrong.** A statistic that mixes partials sitting on a steep curve with
+partials in the flat region measures the curve. That is the sixth instrument
+error in this investigation and the same shape as the first two: a comparison
+whose two groups are not exchangeable.
+
+Sweep `tests/re_banks/sweep_selector_xpose4.py`; replicate harness
+`~/temp/replicate_selector.py`; pooled data `~/temp/selector_replicated.json`.
