@@ -412,6 +412,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§E4BBANDPLAN — how to close the playback-band diagnostic (2026-09-29)](#e4bbandplan-how-to-close-the-playback-band-diagnostic-2026-09-29)
 - [✅ STEP 1 RUN 2026-10-02 — and it returned "the corpus cannot tell them apart", which is NOT "the rules are the same"](#step-1-run-2026-10-02-and-it-returned-the-corpus-cannot-tell-them-apart-which-is-not-the-rules-are-the-same)
 - [§E4BSELECTOR — the interpolation selector is not audible, and the fixed reconstruction filter is measured (2026-10-02)](#e4bselector-the-interpolation-selector-is-not-audible-and-the-fixed-reconstruction-filter-is-measured-2026-10-02)
+- [§RELSE1REMEDY — the second remedy that asked the reader to do our work (2026-10-02)](#relse1remedy-the-second-remedy-that-asked-the-reader-to-do-our-work-2026-10-02)
 <!-- INDEX:END -->
 
 ## §SIBCHECK — three sibling findings checked against our own corpora (2026-08-15)
@@ -40556,3 +40557,112 @@ Handover written for the eosed session: `docs/eosed_handover_selector.md`.
 Sweep: `tests/re_banks/sweep_selector_xpose4.py`. Capture:
 `~/temp/selector_p000.wav`. §E4BBANDPLAN step 0 — the level-checked anchor — is
 implemented here and is what refused all 26 notes in item 2 above.
+
+---
+
+## §RELSE1REMEDY — the second remedy that asked the reader to do our work (2026-10-02)
+
+**Reported by VinSamLib, and they are right.** `AKAI_RELSE1_EXTRAPOLATED`
+carried the remedy *"extend the RELSE1 rate sweep past the window"*. That is
+addressed to this project and not to a user: nobody can extend a rate sweep,
+and nothing they do to their MPC program changes whether the value is measured.
+
+**And it is the COMMON case, which the mild wording hides.** Over 666 voices of
+real E4B material, **39.5% write RELSE1 below 45**, where s3ked's fit collapses
+to r² 0.51–0.73 and stops tracking the setting. So this is not an edge case with
+one odd remedy — it is what an ordinary conversion tells the user about release
+most of the time. Jan hit it on an ordinary program, RELSE1 10 against a 45..99
+window.
+
+⚠ **Milder than the halving remedy in one respect that matters: it does not
+claim the problem goes away.** It asks for work rather than promising a fix. But
+it still points the reader at an action they have no way to take, and it omits
+the one thing they *can* act on — that an extrapolated release is a less
+accurate approximation than a measured one, and that nothing in their source is
+wrong.
+
+`AKAI_DECAY1_EXTRAPOLATED` carried the identical sentence for DECAY1 and was
+fixed in the same edit.
+
+**The measurement gap is not ours alone.** VinSamLib has asked the s3ked session
+to extend the sweep below 45, **or to say the rig cannot resolve a 1–2 ms
+release** — which would let this diagnostic say so plainly instead of asking
+forever. That is the better outcome and it is still open.
+
+### ⚠ AND THE CATALOGUE WAS MISSING THE CODES, WHICH IS HOW IT WAS FOUND
+
+`docs/diagnostics.json` is the contract VinSamLib asserts against, and it did
+not contain `AKAI_RELSE1_EXTRAPOLATED` — **the code we emit.** The reason is in
+the generator:
+
+```python
+code = const(n.args[1])          # None for an f-string
+if not isinstance(code, str):
+    continue                     # ...so the code is silently dropped
+```
+
+`AKAI_{stage}_EXTRAPOLATED` is an **f-string**, so it was skipped. `AKAI_ATTACK_CEILING`
+and its siblings are literals and were always fine, so the catalogue looked
+complete. Two codes were affected, both real:
+
+    AKAI_RELSE1_EXTRAPOLATED     content_lost=false
+    AKAI_RELSE1_SATURATED       content_lost=true
+
+⚠ **A contract that silently omits entries is worse than no contract**, because
+the consumer's assertion passes on the cases it can see and there is no signal
+at all about the ones it cannot.
+
+Two bugs were needed to fix it, and the second is the one that generalises:
+
+1. The generator skipped f-strings. It now expands `'LITERAL_{name}_LITERAL'`
+   over the stage names found at the call sites — **derived, not hard-coded**, so
+   a new stage cannot be added without the catalogue following it.
+2. ⚠ **`stage='' if (quiet or hold_release) else 'RELSE1'` is an `ast.IfExp`,
+   not a constant**, so reading only `const()` found an EMPTY stage set and the
+   expansion produced nothing. Reading both arms fixes it. **A conditional is
+   the normal way a stage is made conditional**, so the first version of the
+   fix could only ever have found the stages nobody disabled.
+
+### The guard, and the four things wrong with it first
+
+`tests/test_diagnostic_remedies_are_actionable.py` asserts no shipped remedy asks
+the reader to do something internal. It was wrong four times before it was
+right, and the first two would each have made it silently vacuous:
+
+1. **It read remedies with `ast.Constant` only**, so it could not see an
+   f-string — **dropping both offenders it exists for.** `None` read as "no
+   remedy here" is the same bug as the catalogue's, in the guard written to
+   catch a different one.
+2. **`\bsweep\b` in the term list was a false accusation.** It matched
+   `AKAI_FILTER2_DROPPED_UNDER_SWEEP`'s remedy — *"invert the filter envelope's
+   shape at the source if a downward sweep is required"* — where the sweep is one
+   **the user performs on their own material**, and the action is entirely theirs.
+   Catch-all vocabulary produces false accusations, which is worse than a
+   missing catch because it trains a reader to ignore the test. The term now
+   names the *shape* (`sweep past`, `sweep … window`), not the noun.
+3. **`test_no_term_is_vacuous` had terms with nothing to catch.** Three of the
+   five patterns match no real offender, because there has only been one real
+   offender. Rather than delete them as redundant — they are the vocabulary this
+   defect is written in — each is paired with a synthetic string so it is
+   demonstrated rather than merely plausible. ⚠ **That is the weakest part of
+   the test and it is labelled so**: a synthetic fixture proves the pattern
+   matches, not that a real remedy would be caught.
+4. **`test_every_catalogue_code_with_a_remedy_has_one` did not test its name.**
+   It asserted against `docs/diagnostics.json`, which `_remedies()` never
+   loads, so it was decoration. It now names the files the scan must reach,
+   and **narrowing the scan to `writers/` makes it fail.**
+
+**Mutation-checked, and one mutation is the interesting one:** restoring the
+RELSE1 sentence fails 3 of 4 tests; narrowing the scan to `writers/` fails the
+fourth. Dropping a term from the list does **not** fail, and that is correct —
+`test_no_term_is_vacuous` is about not being able to *silently* lose a term, not
+about redundancy, so removing a redundant term legitimately keeps the suite
+green.
+
+### Not claimed
+
+Not that an extrapolated RELSE1 is accurate. `content_lost=False` is right —
+nothing is removed, an estimate is written — but **"usable" is a judgement about
+how wrong an estimate may be**, and 39.5% of real voices falling outside the
+fitted window means the answer is usually "quite wrong" for the field the fit
+collapsed in.

@@ -43,6 +43,8 @@
       "detail_keys": [
         "fit_window",
         "rate_db_per_s",
+        "seconds",
+        "span_db",
         "wanted",
         "written"
       ],
@@ -223,6 +225,33 @@
         "from_rate",
         "result_rate",
         "target_rate"
+      ],
+      "emitted_from": [
+        "writers/akai_s3000_writer.py"
+      ]
+    },
+    {
+      "code": "AKAI_RELSE1_EXTRAPOLATED",
+      "severity": "warning",
+      "content_lost": false,
+      "detail_keys": [
+        "fit_window",
+        "written"
+      ],
+      "emitted_from": [
+        "writers/akai_s3000_writer.py"
+      ]
+    },
+    {
+      "code": "AKAI_RELSE1_SATURATED",
+      "severity": "warning",
+      "content_lost": true,
+      "detail_keys": [
+        "fit_window",
+        "seconds",
+        "span_db",
+        "wanted",
+        "written"
       ],
       "emitted_from": [
         "writers/akai_s3000_writer.py"

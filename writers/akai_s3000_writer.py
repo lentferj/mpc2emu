@@ -1061,7 +1061,15 @@ def akai_env_bytes(env, quiet: bool = False, hold_release: bool = False) -> tupl
                   f'DECAY1 {d} is outside the measured window {_lo}..{_hi}; '
                   f'the rate is extrapolated, not measured',
                   content_lost=False,
-                  remedy='extend the DECAY1 rate sweep past the window',
+                  # ⚠ SAME REWRITE AS AKAI_RELSE1_EXTRAPOLATED below, for the same reason:
+              # "extend the DECAY1 rate sweep past the window" is addressed to
+              # the project, not to the user. The two share a fitted window and
+              # were therefore worth fixing together.
+              remedy=f'DECAY1 here is outside our measured window '
+                     f'({_lo}..{_hi}), so the rate is an estimate rather than '
+                     f'a measurement. The conversion is still usable and '
+                     f'nothing in your source is wrong; the decay may simply '
+                     f'be less accurate than a measured one would be',
                   detail={'written': d, 'fit_window': [_lo, _hi]})
     else:
         span_decay_db = _AK_SUSTAIN_DB_PER_UNIT * (99 - sus)
@@ -1494,7 +1502,39 @@ def _rate_law_value(seconds: float, span: float, law, default: int,
               f'{stage} {out} is outside the measured window {lo}..{hi}; the '
               f'rate is extrapolated, not measured',
               content_lost=False,
-              remedy=f'extend the {stage} rate sweep past the window',
+              # ⚠ REWRITTEN 2026-10-02, on VinSamLib's report. The old text was
+              # "extend the {stage} rate sweep past the window", which is
+              # addressed to US and not to the user: nobody can extend a rate
+              # sweep, and nothing they do to their MPC program changes whether
+              # the value is measured. Same class as the halving remedy fixed
+              # the same day -- a remedy that points an end user at an action
+              # they cannot take.
+              #
+              # ⚠ BUT THIS ONE IS MUCH MORE COMMON THAN IT LOOKS. Over 666
+              # voices of real E4B material, **39.5% write RELSE1 below 45**,
+              # where the fit collapses to r2 0.51-0.73 and stops tracking the
+              # setting at all. So this is not an edge case with an odd remedy
+              # -- it is the COMMON case for release, and the remedy is what
+              # every one of those conversions tells the user. Jan hit it on an
+              # ordinary program today, RELSE1 10 against a 45..99 window.
+              #
+              # It is milder than the halving remedy in one respect that
+              # matters: it does not claim the problem goes away. But it still
+              # asks for an action the reader has no way to take, and it does
+              # not say the one thing the user CAN act on, which is that an
+              # extrapolated release is a worse approximation than a measured
+              # one and that nothing in their source is wrong.
+              #
+              # The measurement gap is NOT ours alone -- s3ked's session has
+              # been asked to extend the sweep below 45, or to say the rig
+              # cannot resolve a 1-2 ms release, which would let this say so
+              # instead of asking forever. Until that lands the honest text is
+              # what the user can actually do: understand it, and ignore it.
+              remedy=f'{stage} here is outside our measured window ({lo}..{hi}), '
+                     f'so the rate is an estimate rather than a measurement. '
+                     f'The conversion is still usable and nothing in your '
+                     f'source is wrong; the release may simply be less accurate '
+                     f'than a measured one would be',
               detail={'written': out, 'fit_window': [lo, hi]},
               # DEDUPED BY SIDE, NOT BY VALUE, unlike the saturation case
               # above. Measured over 666 voices of real E4B material: 39.5% of
