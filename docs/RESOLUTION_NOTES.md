@@ -552,11 +552,41 @@ to E4B produced a file with the right channel silently gone. `bank_splitter`'s
 while the samples on the line above were already copied with `replace`, so the
 zones were the half that was not.
 
-⚠ All three are the same luck: `convert.py` writes one format per run and does
-not look at the bank again, which is exactly what keeps the already-tracked
-`write_krz` mutation harmless today. **That is not a property either writer can
-rely on, and it is why the fix is to stop relying on it** rather than to add a
-note.
+`write_krz` was the third, and the original: `merge_akai_stereo_pairs(bank)`
+rewrites `voice.zones`, zeroes the merged zone's `pan` (**the pair's hard pan
+IS the stereo image**, which is why the merge must do it), and **replaces
+`bank.samples`**, dropping every sample no zone still references. Fixed by
+`_copy_bank_for_write` — a fresh object at every level of the dataclass graph,
+taken *before* the merge.
+
+⚠ All three were the same luck: `convert.py` writes one format per run and does
+not look at the bank again. **That is not a property any writer can rely on,
+and it is why the fix is to stop relying on it** rather than to add a note.
+`write_e4b` had been immune since `bake_alternating_loop` — "work on a local
+list — never mutate the caller's bank (it may be written to other formats too)"
+— so the two siblings had the precedent sitting in the same package.
+
+**Where the copy belongs: not in the transformation.** `merge_akai_stereo_pairs`
+still mutates in place, and that is deliberate — it is a *transformation*, not a
+serialiser, and its own tests assert on the bank they hand it. Making it pure
+would have meant rewriting tests that are correct as written. The obligation is
+the serialiser's, so that is where the copy went.
+
+**And the copy is shallow per dataclass, on purpose.** PCM payloads are shared
+by reference. That is sufficient **only** because no writer mutates
+`SampleData.data` in place — the merge builds its interleaved sample with
+`copy.copy` before assigning `data` — and a deep copy would duplicate every
+buffer in a 400 MB bank to guard against something that cannot happen. The
+prerequisite is recorded at the function rather than left as an assumption:
+
+⚠ **One test here asserted something that cannot fail, and it took a mutation
+cycle to find out.** `assert out.samples[0].data is bank.samples[0].data`
+passes whether the copy is `copy.copy` or `copy.deepcopy`, because
+**`deepcopy` of a `bytes` returns the same object** — immutability means there
+is nothing to copy. So M14 stayed green and always would have. The assertion is
+kept because it catches the case that *can* happen (a change that rebuilds
+`data`, e.g. `bytes(bytearray(s.data))`, or a mutable buffer), and a comment now
+records that `deepcopy` cannot trip it, so nobody spends the cycle again.
 
 ### §ESTIMATE — the size estimate was under a real file, and reading the code would not have found it
 
@@ -664,8 +694,9 @@ first time the claim was about a *guard* rather than a citation.
 
 ### §MUTCHECK — one test passed with the bug it was written for
 
-Ten mutations were applied to the fixes and the suite re-run. Nine were caught
-first time. **The tenth was not, and it is the one worth writing down.**
+Fourteen mutations were applied to these fixes and the suite re-run. Twelve
+were caught first time. **Two were not, and they fail in different ways** —
+one tested nothing, one tested something unfalsifiable.
 
 `test_add_preset_does_not_rewrite_the_callers_zone_names` was written to catch
 the in-place zone rename. Reverting the fix — dropping the `replace()` copy and
@@ -685,25 +716,54 @@ no-op and the test passed. Both the test and the mutation were wrong about the
 same line, which is exactly the situation where a mutation check appears to
 succeed. The corrected mutation removes the copy itself.
 
+**The second: an assertion that could never have failed.**
+`assert out.samples[0].data is bank.samples[0].data` in the `write_krz` copy
+test — pinning that PCM payloads are *shared*, not duplicated. Mutating
+`copy.copy` to `copy.deepcopy` left it green. **It always would: `deepcopy` of a
+`bytes` returns the same object,** because immutability means there is nothing to
+copy. So the mutation proved nothing and cost a cycle to discover. The assertion
+is kept — it catches a change that *rebuilds* `data` rather than copying it,
+which is the realistic failure — with a comment recording that `deepcopy` cannot
+trip it.
+
+Two different shapes, one lesson:
+
+| | looks like | actually is |
+|---|---|---|
+| `add_preset` test | an assertion | nothing ran before it |
+| payload-sharing test | a mutation | a mutation that could not apply |
+
+⚠ **The second is the more dangerous one,** because a test whose *assertion* is
+unfalsifiable still looks rigorous on inspection, and the mutation check reports
+success. The first at least fails loudly when the surrounding code changes.
+
 **A test that cannot fail is indistinguishable from a test that passes**, and
 the cost of not knowing which one you have is that the whole suite's credibility
-becomes a guess. Two of the three near-misses in this session were found only
+becomes a guess. Three of the near-misses in this session were found only
 because the check was done:
 
 | what | how it was nearly missed |
 |---|---|
 | `add_preset` zone rename | test never reached the collision path |
+| payload-sharing assertion | the mutation could not apply (`deepcopy` of `bytes` is identity) |
 | ISO timestamps | **an independent reader caught a regression I introduced while fixing the bug it was about** |
 | the size estimate | first "fixed" version was still 1018 bytes under — only *measuring a written file* found it |
 
-A fourth, for completeness: the exit-code tests were first written against an
-in-process `C.main()` with a stubbed parser and a fake argparse namespace. They
-failed five times with `SystemExit: 1` at `convert.py:1112` — *"'x.sfz' not
-found"* — never having reached the code under test, and **every failure looked
-like a defect in the fix.** They now run `convert.py` as a subprocess on a real
-one-region SFZ and read `returncode`.
+A fifth, and it is the one that cost the most time. The exit-code tests were
+first written against an in-process `C.main()` with a stubbed parser and a fake
+argparse namespace. They failed five times with `SystemExit: 1` at
+`convert.py:1112` — *"'x.sfz' not found"* — **never having reached the code under
+test, and every failure looked like a defect in the fix.** They now run
+`convert.py` as a subprocess on a real one-region SFZ and read `returncode`.
+
+⚠ Worth noting alongside the two above: **that one produced five failures that
+all pointed the wrong way.** A harness that cannot reach its subject is
+indistinguishable from a broken fix unless you read where it stopped — and the
+error it stopped at (`input not found`) was three lines of output away from
+looking like a legitimate CLI complaint.
 
 ### §UNVERIFIED — one finding left alone on purpose
+
 **`gig_parser` `n_dims = 8 if size >= 1092 else 5`.** Reported as
 misclassifying a v3 file with few dimension regions. **Not verifiable from
 here**: the threshold comes from the fixed per-version 3lnk chunk size, which

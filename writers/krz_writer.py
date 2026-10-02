@@ -84,6 +84,7 @@ from operator import mul as _mul
 import copy
 import math
 import struct
+from dataclasses import replace
 from typing import List, Tuple
 
 from models.common import KRZ_LFO_PAN_DEPTH_SCALE
@@ -3962,8 +3963,40 @@ def _interleave_lr(left: bytes, right: bytes) -> bytes:
     return out.tobytes()
 
 
+def _copy_bank_for_write(bank):
+    """A copy of `bank` private to one writer run.
+
+    Every level of the dataclass graph is a fresh object, so a writer that
+    reassigns `voice.zones` or `bank.samples` — or mutates a zone's `pan` —
+    cannot be seen by the caller, by the next writer, or by a second call.
+
+    Payload bytes are deliberately SHARED, not copied. A deep copy would
+    duplicate every PCM buffer in the bank, which for a multi-hundred-MB bank
+    is a real cost for no benefit: no writer here mutates `SampleData.data` in
+    place, and the one that builds new PCM (the AKAI stereo merge) assigns to a
+    `copy.copy` of the sample rather than to the caller's.
+    """
+    samples = [copy.copy(s) for s in bank.samples]
+    presets = []
+    for p in bank.presets:
+        voices = []
+        for v in p.voices:
+            voices.append(replace(v, zones=[copy.copy(z) for z in v.zones]))
+        presets.append(replace(p, voices=voices))
+    return replace(bank, samples=samples, presets=presets)
+
+
 def merge_akai_stereo_pairs(bank):
-    """Fold `-L`/`-R` zone pairs into one stereo zone. Returns the count."""
+    """Fold `-L`/`-R` zone pairs into one stereo zone. Returns the count.
+
+    ⚠ **MUTATES `bank` in place** — rewrites `voice.zones`, zeroes the merged
+    zone's `pan`, and replaces `bank.samples`, dropping every sample no zone
+    still references. It is a transformation, not a serialiser, and its tests
+    rely on that (they assert on the bank it was handed).
+
+    `write_krz` therefore calls it on `_copy_bank_for_write(bank)`. A caller
+    wanting the same behaviour on its own objects should do the same.
+    """
     by_name = {s.name: s for s in bank.samples}
     merged_samples, n = {}, 0
     for preset in bank.presets:
@@ -4042,6 +4075,24 @@ def write_krz(bank: Bank, output_path: str,
     lost_zones: list = []
     fitted: list = []
     print(f"Writing KRZ: {output_path}")
+    # ON A COPY. `merge_akai_stereo_pairs` rewrites `voice.zones`, zeroes
+    # `zone.pan` and REPLACES `bank.samples`, dropping every sample no zone
+    # references — so it edited the caller's objects. convert.py writes one
+    # format per run and does not look at the bank afterwards, which is the only
+    # reason this was ever harmless; it also made `write_krz` non-idempotent
+    # and unsafe for any caller writing the same bank twice or to two formats,
+    # which includes the tests and the `tests/re_banks/` scripts.
+    #
+    # `write_e4b` has worked on a local list for this reason since
+    # `bake_alternating_loop`, and `write_eiii` since 2026-10-02. This was the
+    # last of the three.
+    #
+    # The copy is SHALLOW per dataclass, which is sufficient: PCM payloads are
+    # shared by reference and nothing here mutates a sample's bytes in place —
+    # the merge builds its interleaved sample with `copy.copy` before assigning
+    # `data`. What has to be private is the zone/voice/preset/sample graph,
+    # because those lists are what get reassigned.
+    bank = _copy_bank_for_write(bank)
     _n_lr = merge_akai_stereo_pairs(bank)
     if _n_lr:
         print(f"  Merged {_n_lr} AKAI -L/-R zone pair(s) into stereo samples")
