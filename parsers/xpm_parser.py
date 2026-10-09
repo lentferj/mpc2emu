@@ -693,7 +693,9 @@ def _apply_slice(sd: SampleData, slice_start: int, slice_end: int,
             if loop_pos >= n_frames - 1:
                 loop_pos = 0
             sd.loop_start = loop_pos
-            sd.loop_end = (min(slice_loop_end, n_frames - 1)
+            # `max(0, ...)` on both terms: SliceLoopEnd is a file integer too,
+            # and a negative one would otherwise invert the loop below.
+            sd.loop_end = (max(0, min(max(0, slice_loop_end), n_frames - 1))
                            if 0 < slice_loop_end else n_frames - 1)
             if sd.loop_end <= sd.loop_start:
                 sd.loop_end = n_frames - 1
@@ -708,8 +710,35 @@ def _apply_slice(sd: SampleData, slice_start: int, slice_end: int,
         # (a bass patch's tail loop) or an explicit <Loop>True.
         return
 
-    trim_start = slice_start
-    trim_end   = slice_end
+    # THE SLICE WINDOW COMES FROM THE FILE AND IS NOT TRUSTED. §REVIEW1010
+    # finding 2: `SliceStart`/`SliceEnd` were used directly as Python slice
+    # bounds, and both are reachable with hostile values because
+    # `_mpc3_to_xml` feeds `offset + sampleStart` — two arbitrary SIGNED JSON
+    # integers — straight into them.
+    #
+    # Two failures, both silent:
+    #   * a NEGATIVE bound is a Python index meaning "from the end", so
+    #     `data[start*4 : -100*4]` trims 100 frames off the TAIL instead;
+    #   * an upper bound at or below the start is an EMPTY slice, so the sample
+    #     becomes 0 frames. The writer then reports `Sample [200] 'kick':
+    #     0 words` and success, and the KRZ reads back empty — reported by the
+    #     reader as "references the K2000's ROM soundset", which is false.
+    #
+    # Only the negative-to-zero direction is clamped here. An end BEYOND the
+    # sample is deliberately left as the file's value, because the existing
+    # `trim_end <= n_frames` tests below already treat that as "no window" and
+    # that behaviour is long-standing.
+    trim_start = max(0, slice_start)
+    trim_end = max(0, slice_end)
+    if trim_end <= trim_start:
+        # Not an instruction to trim to nothing: keep the sample whole. The
+        # whole-sample window is the right sentinel because the
+        # `(trim_start > 0 or trim_end < n_frames)` tests below then find no
+        # work to do — writing 0,0 here would still slice to an empty buffer.
+        print(f"  [WARN] slice window {slice_start}..{slice_end} on "
+              f"'{sd.name}' is empty or inverted against {n_frames} frames; "
+              f"keeping the sample whole rather than trimming it to nothing")
+        trim_start, trim_end = 0, n_frames
 
     if slice_loop:
         # Case 2: XPM loop on — trim to [slice_start, slice_end] and loop from

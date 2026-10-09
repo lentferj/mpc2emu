@@ -41360,3 +41360,51 @@ fails with the fix reverted.
 
 **What did not change.** No FORWARD-source behaviour, no written byte for any
 source that does not carry `FORWARD_REL`.
+
+### Finding 2 — MPC slice bounds were file integers used raw as slice indices (2026-10-10)
+
+**The defect.** `_apply_slice` took `slice_start`/`slice_end` straight from the
+file into `sd.data[a * bytes_per_frame : b * bytes_per_frame]`. Per SFZ/Python
+slicing, a negative bound means *from the end* and a bound below the start is an
+empty slice, so both directions destroyed the sample rather than erroring.
+
+**How it was reachable.** Not from a hand-edited file. `_mpc3_to_xml` computes
+`offset + sampleStart` — two arbitrary **signed** JSON integers — and writes the
+sum into `<SliceStart>`, with `lay.get('sampleEnd', 0)` straight into
+`<SliceEnd>`. So any MPC 3.x program carrying a negative `offset` reaches it.
+Measured on the shipped code, through the real parser:
+
+```
+OLD good    : frames=[200]
+OLD negoff  : frames=[0]      <- offset -100: data[-200:400] is empty
+OLD negend  : frames=[44000]  <- sampleEnd -100: 100 frames cut off the TAIL
+NEW good    : frames=[200]
+NEW negoff  : frames=[200]
+NEW negend  : frames=[44100]  <- whole sample, with a warning
+```
+
+**Why it was invisible.** A 0-frame sample is *reported as a success* by every
+writer (`Sample [200] 'kick': 0 words`, then `Written: …`), and the KRZ then
+reads back with 0 presets / 0 samples / 0 zones — which the reader describes as
+*"references the K2000's ROM soundset"*. That is false: the sample object is
+there, and `_get_sample` classified it as ROM only because
+`h.start_w >= pcm_words` (`krz_parser.py:1973`) is what a 0-length sample looks
+like from the outside.
+
+**The fix.** `max(0, …)` on both bounds, then reject a window that is empty or
+inverted by substituting the whole-sample window — which is the sentinel that
+makes the existing `(trim_start > 0 or trim_end < n_frames)` tests find no work
+to do. Writing `0, 0` there would still slice to an empty buffer. An end
+*beyond* the sample is deliberately left alone: the existing
+`trim_end <= n_frames` tests already treat that as "no window" and that
+behaviour is long-standing.
+
+**Tests.** `tests/test_xpm_slice_bounds.py` — 5 tests. Three fail with the fix
+reverted. Two are guards on it: a well-formed window still trims to exactly
+the requested frames, and an end past the sample is still a no-op.
+
+**This is also the first coverage of the MPC 3.x path at all** (review finding
+T4): `is_mpc3_xpm`, `_mpc3_read`, `_mpc3_to_xml` and `_resolve_mpc3_sample` had
+no test anywhere in the tree. Every test drives real `parse_xpm` on a real
+gzipped-`ACVS`-JSON `.xpm` rather than calling `_apply_slice` directly, because
+the hostile integers only exist on that seam.
