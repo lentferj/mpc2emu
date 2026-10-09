@@ -41322,3 +41322,41 @@ pre-existing test for the same clamp — still passes untouched, because a loop
 rescaled to 20000 of 22050 frames was never in the off-by-one regime. E4B
 output is unaffected (it stores `loop_end - 1`); KRZ was masked by
 `krz_parser.py:2016`'s read-back clamp.
+
+### Finding 4 — `LoopType.FORWARD_REL` was written to E4B as *no loop at all* (2026-10-10)
+
+**The defect.** `writers/e4b_writer.py`'s `has_loop` tuple admitted only
+`FORWARD` and `ALTERNATING`. `FORWARD_REL` is declared first-class in
+`models/common.py:146` (`# Loop until release`), `parsers/sf2_parser.py:458`
+produces it, and `writers/eiii_writer.py:677` honours it — so it is not a
+theoretical value. Failing that tuple it was written as a sample with no loop,
+which is not a gentler rendering of "loop until release": it is an **E4XT
+one-shot that stops sustaining**, from a source that explicitly asked for a
+sustaining loop.
+
+**Why the hardcoded answer was not obvious.** The comment above the tuple
+says *"EOS 4.x has exactly ONE loop type: a forward loop, toggled On/Off"*,
+which reads as "anything not FORWARD is unmappable". That is true of the on/off
+bit and false of the sample: EOS *itself* imports EIII forward/backward loops
+as forward loops rather than dropping them, which is exactly the precedent the
+file already records for ALTERNATING one paragraph earlier. The loop survives;
+only the "stop at note-off" nuance — which E4B has no way to say — is given up.
+The bit-3 LOOP-IN-RELEASE candidate documented further down the same function
+would be the place to say it, and its own comment says the flag is confirmed
+audibly while *the bit's identity is not*; writing to an unconfirmed bit to
+carry a nuance was not worth it.
+
+**The fix.** `FORWARD_REL` joins the tuple. EIII resolves the same `LoopType`
+the same way — a plain `FORWARD` there carries the sampler's default
+loop-in-release — so the two writers now agree about what `FORWARD_REL` means
+on hardware that cannot express the distinction.
+
+**Test.** `tests/test_e4b_writer.py::test_loop_until_release_is_written_as_a_loop_not_as_no_loop`
+round-trips and asserts the loop survived (`loop_end > loop_start`), plus
+`test_a_forward_loop_still_writes_the_same_options_word` as the guard on the
+fix — plain `FORWARD` must keep writing the hardware-validated options word and
+loop points unchanged, since that output is what Jan has listened to. The first
+fails with the fix reverted.
+
+**What did not change.** No FORWARD-source behaviour, no written byte for any
+source that does not carry `FORWARD_REL`.

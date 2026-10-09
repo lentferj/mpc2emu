@@ -494,10 +494,25 @@ def _build_sample_header(sample: SampleData, sample_idx: int) -> bytes:
     # itself does when importing EIII forward/backward loops — so by the time we
     # get here the sample is already FORWARD.  ALTERNATING is kept in the tuple
     # below only as a defensive fallback.
+    #
+    # FORWARD_REL belongs in that tuple too, for the opposite reason to the one
+    # that looks like a precedent. §REVIEW1010 finding 4: it was NOT, so an
+    # SF2 "loop until release" arrived here, failed the tuple, and was written
+    # as a sample with no loop at all -- a one-shot that stopped sustaining,
+    # from a source that explicitly asked for a sustaining loop. The E4B has no
+    # way to say "stop looping at note-off" (its options word is a loop/no-loop
+    # bit, plus the bit-3 candidate for LOOP-IN-RELEASE whose identity is still
+    # not hardware-confirmed -- see the bit-3 note below). So the closest
+    # thing E4B can express is a plain forward loop, and that is what this
+    # writes: the sustain is preserved and only the "stop at note-off" nuance
+    # is given up. EIII resolves the same LoopType the same way -- a plain
+    # FORWARD there carries sampler-default loop-in-release, so the two writers
+    # agree about what FORWARD_REL means on hardware that cannot say it.
     # Options confirmed from JL AnalogBank hardware (K2 PWM Pad samples):
     #   0x0031 = MONO_L | bit4 | LOOP (forward)  — hardware-verified
     #   0x0020 = MONO_L, no loop
-    has_loop = (sample.loop_type in (LoopType.FORWARD, LoopType.ALTERNATING)
+    has_loop = (sample.loop_type in (LoopType.FORWARD, LoopType.ALTERNATING,
+                                     LoopType.FORWARD_REL)
                 and sample.loop_end > sample.loop_start)
     # A loop point past the end of the PCM is not a loop point. The frame count
     # comes from the bytes this object will actually carry, so a buffer whose
