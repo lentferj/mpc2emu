@@ -416,6 +416,7 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§RELSE1REMEDY — the second remedy that asked the reader to do our work (2026-10-02)](#relse1remedy-the-second-remedy-that-asked-the-reader-to-do-our-work-2026-10-02)
 - [§RELSE1WIN — the RELSE1 window is 0..99, and the floor we warned at was a fact about a statistic (2026-10-02)](#relse1win-the-relse1-window-is-099-and-the-floor-we-warned-at-was-a-fact-about-a-statistic-2026-10-02)
 - [§E4BSELECTORREP — three takes, and the +0.146 dB was the filter (2026-10-02)](#e4bselectorrep-three-takes-and-the-0146-db-was-the-filter-2026-10-02)
+- [§REVIEW1010 — the second full-codebase review: 42 findings, and what each fix changed (2026-10-09/10)](#review1010-the-second-full-codebase-review-42-findings-and-what-each-fix-changed-2026-10-0910)
 <!-- INDEX:END -->
 
 ---
@@ -41267,3 +41268,57 @@ whose two groups are not exchangeable.
 
 Sweep `tests/re_banks/sweep_selector_xpose4.py`; replicate harness
 `~/temp/replicate_selector.py`; pooled data `~/temp/selector_replicated.json`.
+
+---
+
+## §REVIEW1010 — the second full-codebase review: 42 findings, and what each fix changed (2026-10-09/10)
+
+Recorded in full in **[`docs/CODE_REVIEW_2026-10-10.md`](../docs/CODE_REVIEW_2026-10-10.md)**
+(findings, reproductions, and every measurement). This section is the *how it
+was fixed* companion `CLAUDE.md` asks for — one entry per landed fix, each with
+the before/after and the test that fails with it reverted. Entries appear in the
+order they landed, not in severity order.
+
+**The convention this section follows, and one departure from it.** Every fix
+below is accompanied by a test that was **confirmed to fail with the fix
+reverted** — the same discipline §REVIEW1002 used, for the same reason: a test
+that passes before and after its fix is not evidence. The departure is that
+§REVIEW1002 recorded *two false alarms* and one regression the reviewer caused
+while fixing; this section reserves the right to record the same, and does —
+see the retracted optimisations at the end.
+
+### Finding 3 — `loop_end` clamped to a count instead of an index (2026-10-10)
+
+**The defect.** `processors/resampler.py` clamped `loop_end` to `n_frames` in
+both `resample_vintage` and `resample_to_rate`. `loop_end` is an **inclusive
+frame index** in this model, so `n_frames` — a count — is one frame past the
+PCM. Every consumer agrees on the convention: `e4b_writer` stores
+`(loop_end - 1) * 2` as its byte end, `eiii`/`xpm` parsers clamp to
+`num_frames - 1`, and `akai_s3000_writer`'s own loop gate is
+`sd.loop_end < n_frames`.
+
+**Why it was silent rather than loud.** A loop rescaled to land exactly on
+`n_frames` fails the AKAI writer's gate, so the writer emits a sample with no
+loop and prints nothing about it. The run reports `Done: 1 of 1 volume(s)
+written`. Measured end-to-end on a 48 kHz WAV whose `smpl` loop ends on its
+last frame: `no --resample → loop_type=NO_LOOP loop=0..0` where the same sample
+through a vintage profile kept its loop, `FORWARD loop=0..11023` — same source,
+same target, opposite outcome, decided by which frame decimation happened to
+land on.
+
+**The fix.** `last = max(0, n_frames - 1)` and both clamps use it. The
+`max(0, …)` matters: a 0-frame sample would otherwise clamp to `-1` and invert
+the loop.
+
+**Test.** `tests/test_resampler.py::test_loop_end_is_clamped_to_the_last_frame_not_one_past_it`
+asserts `frames == 11024` and `loop_end == frames - 1`; its sibling
+`test_a_loop_ending_on_the_last_frame_survives_the_akai_writer` reproduces
+`akai_s3000_writer.py:2046`'s gate directly so the assertion is about the
+invariant rather than a fixture. `test_an_empty_sample_does_not_clamp_to_a_negative_frame`
+covers the 0-frame edge. **Both of the first two fail with the fix reverted.**
+
+**What did not change.** `test_loop_points_scale_against_real_frames` — the
+pre-existing test for the same clamp — still passes untouched, because a loop
+rescaled to 20000 of 22050 frames was never in the off-by-one regime. E4B
+output is unaffected (it stores `loop_end - 1`); KRZ was masked by
+`krz_parser.py:2016`'s read-back clamp.

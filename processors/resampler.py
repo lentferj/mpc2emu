@@ -670,10 +670,26 @@ def resample_vintage(
     pcm_out = _float_to_pcm(signal)
 
     # Loop points were relative to src_rate frames; rescale to dst_rate frames.
+    #
+    # `loop_end` is an INCLUSIVE FRAME INDEX in this model — every consumer
+    # agrees: e4b_writer stores `loop_end - 1` as the exclusive byte end
+    # (`lel = (sample.loop_end - 1) * 2 + STRUCT_SZ`), eiii/xpm parsers clamp
+    # to `num_frames - 1`, and akai_s3000_writer's own loop gate is
+    # `sd.loop_end < n_frames`. So the last addressable frame is `n_frames - 1`
+    # and a clamp to `n_frames` is one frame PAST the PCM.
+    #
+    # That off-by-one was not harmless: a loop rescaled to land exactly on
+    # `n_frames` fails the AKAI writer's gate and the loop is dropped with no
+    # diagnostic — `Done: 1 of 1 volume(s) written`. Measured on a 48 kHz WAV
+    # whose smpl loop ends on the last frame: 44100 -> NO_LOOP, where the
+    # same sample through a vintage profile (11025 frames) kept its loop,
+    # purely because decimation landed one frame differently.
+    # §REVIEW1010 finding 3.
     scale = dst_rate / src_rate
     n_frames = len(pcm_out) // max(1, sample.channels * 2)
-    loop_start = max(0, min(round(sample.loop_start * scale), n_frames))
-    loop_end   = max(loop_start, min(round(sample.loop_end * scale), n_frames))
+    last = max(0, n_frames - 1)
+    loop_start = max(0, min(round(sample.loop_start * scale), last))
+    loop_end   = max(loop_start, min(round(sample.loop_end * scale), last))
 
     return SampleData(
         name         = sample.name,
@@ -743,8 +759,13 @@ def resample_to_rate(sample: SampleData, dst_rate: int,
     pcm_out = _float_to_pcm(out)
     scale = dst_rate / src_rate
     n_frames = len(pcm_out) // 2 // max(1, sample.channels)
-    loop_start = max(0, min(round(sample.loop_start * scale), n_frames))
-    loop_end   = max(loop_start, min(round(sample.loop_end * scale), n_frames))
+    # Inclusive frame index — see the same clamp in resample_vintage above,
+    # where the off-by-one is documented (§REVIEW1010 finding 3). A loop
+    # ending exactly on the last frame rescales to `n_frames`, which is one
+    # past the PCM, and AKAI's writer then drops it silently.
+    last = max(0, n_frames - 1)
+    loop_start = max(0, min(round(sample.loop_start * scale), last))
+    loop_end   = max(loop_start, min(round(sample.loop_end * scale), last))
 
     return SampleData(
         name        = sample.name,

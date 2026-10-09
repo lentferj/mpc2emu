@@ -1936,6 +1936,8 @@ mpc2emu/
 │   ├── FIRMWARE_IMPORT_ROUTINES.md # What each machine's OWN importer does
 │   ├── RESOLUTION_NOTES.md     # The measurement record — every law, how it was
 │   │                           #   measured, and what was retracted
+│   ├── CODE_REVIEW_2026-10-10.md  # Full-tree code review — bugs, improvements,
+│   │                           #   and measured execution speed (see §Code review)
 │   └── re_procedures/          # Step-by-step hardware RE procedures
 └── tests/
     └── re_banks/                # Hardware-RE helpers: test-bank generators
@@ -1947,6 +1949,39 @@ mpc2emu/
         ├── gen_zone_entry_test.py     #   secondary-zone-entry field probes
         └── inspect_vpar.py            #   dump any vpar[N] across banks (found vpar[42]=chorus)
 ```
+
+---
+
+## Code review
+
+[`docs/CODE_REVIEW_2026-10-10.md`](docs/CODE_REVIEW_2026-10-10.md) is a
+full-tree review of the whole codebase — bugs, improvements and execution speed
+— with every finding reproduced rather than asserted.
+
+What is in it:
+
+- **Critical** — seven, of which the ones worth knowing about if you convert
+  today are the `loop_end` clamp that makes the **AKAI writer drop a loop**
+  with no diagnostic, and `LoopType.FORWARD_REL` reaching the **E4B writer as
+  no loop at all** (an SF2 "loop until release" becomes a one-shot that stops
+  sustaining).
+- **Major / minor** — the third writer to carry the "chunk size from the
+  buffer, not from the bytes written" defect, a `gig_parser` shared-wave
+  mutation, an SFZ `key=` that never overrides its group's key range, a
+  stereo sample dumped as a mono WAV by `--auto-loop-dump-dir`, and two tests
+  that cannot fail.
+- **Execution speed** — measured, with before/after numbers for every claim and
+  the four optimisations that were **retracted** because the measurement said
+  so. The two quantisers in `processors/resampler.py` are the hottest loops in
+  the project and give 1.6–1.7× each, byte-identical; the whole
+  `trim → auto_loop → resample → write_e4b` pipeline comes out **1.35× mono /
+  1.38× stereo** with every written file SHA-256-identical.
+
+Nothing in it has been changed yet — it is the record, and the fixes are a
+separate decision. Tracking lives in [`TODO.md`](TODO.md) under
+`CODE_REVIEW_2026_10_10`; the measurement reasoning behind each speed claim is
+in [`docs/RESOLUTION_NOTES.md`](docs/RESOLUTION_NOTES.md), as with everything
+else here.
 
 ---
 
