@@ -95,9 +95,38 @@ def _parse_sfz_opcodes(text: str) -> list[dict]:
                 current[key] = val
 
     if current:
-        sections.append(current)
+        sections.append(_expand_key_opcode(current))
 
     return sections
+
+
+def _expand_key_opcode(section: Dict[str, Any]) -> Dict[str, Any]:
+    """Expand `key=` into `lokey`/`hikey`/`pitch_keycenter` within one section.
+
+    §REVIEW1010 finding 11. Per the SFZ spec, `key=X` is exactly
+    `lokey=X hikey=X pitch_keycenter=X` -- a shorthand, not a weaker default.
+    It was being read as a *fallback* in the region loop, so a region-level
+    `key=48` never overrode a `<group> lokey=0 hikey=127`: the region shipped
+    as full-range in every output format, and invited a false "plays past the
+    E4XT's rate ceiling" warning on the way.
+
+    Expanding here, per section, makes the existing `global < group < region`
+    merge produce the right precedence on its own: a region's `key=` becomes a
+    region-level `lokey`/`hikey`, which beats the group's on merge. Doing it at
+    merge time instead would need to know which level each value came from,
+    which the flat merged dict does not record.
+
+    An explicit `lokey`/`hikey`/`pitch_keycenter` in the SAME section is more
+    specific and wins, so `setdefault` rather than assignment.
+    """
+    if 'key' not in section:
+        return section
+    kv = section['key']
+    for target in ('lokey', 'hikey', 'pitch_keycenter'):
+        # Only the two this parser actually consumes are listed; pitch_keycenter
+        # is carried so the shorthand is not silently half-applied.
+        section.setdefault(target, kv)
+    return section
 
 
 # ---------------------------------------------------------------------------
@@ -492,7 +521,11 @@ def parse_sfz(sfz_path: str, wav_dir: Optional[str] = None) -> Bank:
             if sd is None:
                 continue
 
-            # key= is SFZ shorthand for lokey=hikey=pitch_keycenter=
+            # `key=` was already expanded into lokey/hikey/pitch_keycenter per
+            # section by `_expand_key_opcode` (see its docstring -- this used to
+            # be the only place `key` was honoured, and as a FALLBACK, so a
+            # region's key= never beat a group's lokey/hikey). The fallbacks
+            # below stay as a defensive no-op; the expansion makes them dead.
             key_shorthand = merged.get('key')
             lo_key  = _note_name_to_midi(merged.get('lokey',
                                          key_shorthand or '0'))

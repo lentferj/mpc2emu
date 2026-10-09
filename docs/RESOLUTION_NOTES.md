@@ -41408,3 +41408,45 @@ T4): `is_mpc3_xpm`, `_mpc3_read`, `_mpc3_to_xml` and `_resolve_mpc3_sample` had
 no test anywhere in the tree. Every test drives real `parse_xpm` on a real
 gzipped-`ACVS`-JSON `.xpm` rather than calling `_apply_slice` directly, because
 the hostile integers only exist on that seam.
+
+### Finding 11 — SFZ `key=` was a fallback, so a region never beat its group's key range (2026-10-10)
+
+**The defect.** `key=X` was read only as a *fallback*:
+`merged.get('lokey', key_shorthand or '0')`. Per the SFZ spec `key=X` **is**
+`lokey=X hikey=X pitch_keycenter=X` — a shorthand, not a weaker default — so a
+region-level `key=48` under a `<group> lokey=0 hikey=127` lost to the group.
+Measured on the shipped parser:
+
+```
+g.sfz:  [('A', 0, 127, 36), ('C', 0, 127, 48)]   <- hi_key 127, WRONG
+r.sfz (no group): [('A', 36, 36, 36), ('C', 48, 48, 48)]   <- correct
+```
+
+and through the real CLI + E4B writer + parser:
+`[WARN] preset 'g': zone 0-127 plays past the E4XT's rate ceiling above key 81`,
+read back as `zone C lo 0 hi 127 root 48`. So a one-key region shipped as
+full-range, lost its key span in every output format, and invited a false
+up-pitch warning.
+
+**Why it could not be fixed in place.** The merge is
+`merged = {**global_defaults, **group_defaults, **region}` — a flat dict that
+no longer records which level each value came from, so the fallback at the
+point of use cannot tell a region's `key` from a group's. The fix is to expand
+`key` **per section, before the merge**: a region's `key` becomes a
+region-level `lokey`/`hikey`, which beats the group's on merge by the existing
+precedence rule. That is `_expand_key_opcode`, applied as each section is
+collected in `_parse_sfz_opcodes`.
+
+**The `setdefault` matters.** An explicit `lokey`/`hikey`/`pitch_keycenter`
+in the *same* section is more specific and must survive the shorthand; the
+tests cover both directions.
+
+**Root note unchanged.** `pitch_keycenter` was already reaching the root note
+through the old `key_shorthand` fallback, so expanding it makes explicit what
+was already true — the 5 SFZ tests and the whole suite pass with no behaviour
+change there.
+
+**Tests.** `tests/test_sfz_key_precedence.py` — 5 tests. Three fail with the
+fix reverted (the headline, the `setdefault` guard, and the unit-level
+assertion that the expansion is per-section, which is the part that makes the
+merge-time fix impossible).
