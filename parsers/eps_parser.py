@@ -684,6 +684,37 @@ def _eps_audio(d: bytes, w: dict) -> bytes:
     return a.tobytes()
 
 
+def _unique_sample_name(name: str, seen_names: set) -> str:
+    """`name`'s 11-character prefix plus a counter that is NOT in `seen_names`.
+
+    EPS instrument names are not unique, so a sample name carries a **global**
+    counter for as long as it lands on a free slot -- which is the ordinary
+    case, and the one that decides the 2681 names the reference disc produces.
+    The `while` closes the remaining gap.
+
+    ⚠ THE COUNTER MUST ADVANCE WHILE THE LOOP RUNS.  It used to re-truncate
+    `nm` -- itself already suffixed -- and recompute from `len(seen_names)`,
+    which is *invariant* in the loop body: with `prefix+c` and `prefix+c+1`
+    both taken it re-derived the same second string and spun forever
+    (REVIEW1010 m7).  Two things keep that from being the only change here:
+
+    * the counter moves, so every candidate is a new one; and
+    * the `% 100000` is GONE, because it was the second half of the trap --
+      a prefix has exactly 100,000 five-digit suffixes, so a counter that
+      wraps never leaves the occupied set.  `{n:05d}` is `{n % 100000:05d}`
+      for every n below 100,000, so every name the disc produces is
+      unchanged; past that the number simply prints longer than five digits
+      instead of cycling back onto a name that is already there.
+    """
+    prefix = name[:11]
+    n = len(seen_names)
+    nm = f"{prefix}{n:05d}"
+    while nm in seen_names:
+        n += 1
+        nm = f"{prefix}{n:05d}"
+    return nm
+
+
 def parse_eps_image(path: str, wav_dir: Optional[str] = None,
                     quiet: bool = False, limit: Optional[int] = None,
                      firmware_sim: bool = False,
@@ -729,9 +760,11 @@ def parse_eps_image(path: str, wav_dir: Optional[str] = None,
                 # is therefore safe; a consumer keying PRESETS by name is not,
                 # and should use the index. `tests/test_eps_filesystem.py`
                 # asserts the sample half.
-                nm = f"{inst['name'][:11]}{len(seen_names) % 100000:05d}"
-                while nm in seen_names:
-                    nm = f"{nm[:11]}{len(seen_names) % 100000 + 1:05d}"
+                #
+                # The derivation lives in `_unique_sample_name` because its
+                # progress has to be checkable on its own: see
+                # `tests/test_eps_name_uniquifier_terminates.py`.
+                nm = _unique_sample_name(inst['name'], seen_names)
                 seen_names.add(nm)
                 pcm = _eps_audio(d, w)
                 frames = len(pcm) // 2

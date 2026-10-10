@@ -42694,3 +42694,81 @@ pass on top of that).
 
 **What did not change.** Any intact image. `_fat12_extensions` was already
 correct; the two walks now agree, which is the property the finding was about.
+
+### Finding m7 — the EPS name uniquifier could not make progress (2026-10-10)
+
+**The defect.** `parse_eps_image` named each wavesample after the instrument's
+first 11 characters plus a **global** counter, and closed the remaining gap
+with a `while`:
+
+```python
+nm = f"{inst['name'][:11]}{len(seen_names) % 100000:05d}"
+while nm in seen_names:
+    nm = f"{nm[:11]}{len(seen_names) % 100000 + 1:05d}"
+```
+
+`len(seen_names)` is invariant in the loop body, so the second line re-derives
+the **same** string for as long as it is taken: with `prefix+c` and
+`prefix+c+1` both present it never reaches a third candidate and spins for
+ever. There are two faults in those two lines, not one — the counter is
+constant **and** the `% 100000` bounds it — and a prefix has exactly 100,000
+five-digit suffixes, so once they are all taken a counter that *wraps* never
+leaves the occupied set however fast it moves. Fixing only the first half
+turns the hang into a slower hang.
+
+**Reachable, but latent.** The first repeat of a counter needs 100,001 names
+in one `parse_eps_image` call, and the reference disc produces **2,681** (0
+duplicates, against 4 duplicate *preset* names in 2,396 — all four `HARP`
+variants). Nothing in production was ever stuck; the finding is a hang waiting
+for an image two orders of magnitude larger, or for the seeded version of the
+same state at any size, which is what it was verified with.
+
+**Measured on the shipped code** at d5cce46, one instrument of 100,001
+wavesamples with an 11-character name, `faulthandler.dump_traceback_later(15)`:
+
+```
+Timeout (0:00:15)!
+  File "parsers/eps_parser.py", line 734 in parse_eps_image
+```
+
+— still inside that `while` 15 s in, and still there when it was killed at
+120 s.
+
+**The fix** moves the derivation into `_unique_sample_name`, where its
+progress is checkable on its own, and changes two things inside it: the
+counter moves (`n += 1`, then re-derive) and the modulo goes, because the
+modulo is what brings the counter back. `{n:05d}` is `{n % 100000:05d}` for
+every n below 100,000, so nothing under the wrap changes; past it the number
+prints six digits instead of cycling onto a name that is already there — the
+one regime in which the old code either hung or already emitted a
+17-character name. Termination is then structural rather than lucky: the
+candidates increase without bound and `seen_names` is finite, so a free one is
+certain.
+
+**Names, verified on the disc.** One parse with the fix, the old derivation
+replayed offline over the same instrument order: **2,681 names compared, 0
+differences**, 0 duplicates, every one ≤ 16 characters. The wrap case
+terminates as well: 100,001 names out of one instrument, the first 100,000
+byte-identical to the old 16-character form and the last `ABCDEFGHIJK100000`.
+
+**Tests.** Five in `tests/test_eps_name_uniquifier_terminates.py`; **three
+fail with the fix reverted**, the primary one by *hanging* — the test arms a
+SIGALRM so that a non-terminating loop fails with a message instead of hanging
+the suite. `test_the_wrapped_counter_terminates_inside_parse_eps_image` drives
+the real `parse_eps_image` over 100,001 fake wavesamples (0.5 s, no disc) and
+is the in-situ reproduction. `test_the_seeded_double_collision_terminates`
+plants the collision on a set of five entries — the reviewer's own isolation
+of the expression, needing no 100,001 names — and
+`test_a_full_prefix_falls_off_the_end_instead_of_wrapping` fills all 100,000
+slots of one prefix, pinning the second half of the trap: a counter that moves
+but wraps is still stuck. The two identity tests compare against the **old
+derivation spelled out verbatim**, one over a synthetic image (names shorter
+than, equal to and longer than the 11-character prefix, a repeated name, a
+skipped wavesample) and one over the reference disc itself.
+
+**What did not change.** Every name below the wrap, which is every name the
+disc produces; the 16-character budget, which the five-digit field and the
+`[:11]` truncation still define; the uniqueness invariant
+`tests/test_eps_filesystem.py` already asserts; and the preset half, which was
+never in this loop. Suite: not run in full — the EPS and dispatch tests pass
+unchanged (19 passed, 11 subtests), which is the half this file touches.
