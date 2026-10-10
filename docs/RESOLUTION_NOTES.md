@@ -41808,6 +41808,60 @@ order, the output type, and every written byte. End-to-end through
 is identical (verified: `4a7c47924282d5d0`, `6bfac07b71758558`,
 `53e39b2cf98d8bb3`, `2abf5c15d106d11f`).
 
+### §2 — `auto_loop` rebuilt sliding-window statistics per frame (2026-10-10)
+
+**Two hot spots, both byte-identical.**
+
+`_windowed_rms` called `max(0, f + 1 - win)` **twice per frame** — 352,833
+calls for one 4 s 44.1 kHz sample — on a value that is invariant: `0` while
+`f < win - 1`, then `f + 1 - win` forever. Splitting the comprehension at that
+point and using `zip(pre[win:], pre)` for the steady part removes both calls and
+the two `pre[...]` indexings.
+
+`_modulation`'s autocorrelation was
+`sum(e[j] * e[j + lag] for j in range(n - lag))` — 575,505 generator iterations
+for one sample — where `sum(map(mul, e[:n - lag], e[lag:]))` performs the same
+left-to-right sum in C. This is the exact substitution the module already
+documents for `_match_cost` ("measured 1.8x"); it generalises.
+
+```
+_windowed_rms  (win=3528, n=176400)    129.39 ->  47.26 ms   2.74x  IDENTICAL
+_modulation envelope (win=176, hop=88)  62.82 ->  36.74 ms   1.71x  IDENTICAL
+_auto_loop_sample, 4 s mono            307.30 -> 190.65 ms   1.61x  PCM identical
+```
+
+**The loop decision is unchanged, not just the audio.** Same `S`, same `E`, same
+cost, same confidence, same `info` dict — verified by comparing the whole
+returned tuple, and again for stereo.
+
+**Identity is worth pinning here specifically.** A prefix-sum refactor is the
+classic place where the arithmetic gets reassociated and the last bits move, and
+a moved last bit changes which of two near-equal loop points wins.
+`_match_cost`'s own comment already records rejecting an algebraic form for
+exactly that reason ("~8x but deviates by up to 5e-13 and can return a negative
+cost for a perfect match — it would change which loop point wins a near-tie"),
+so the same discipline is applied to these two functions rather than assumed.
+
+**A defect the first draft of the fix introduced, caught here.** The split was
+first written with a `win <= 1 or n <= win - 1` early return that computed the
+full prefix in both cases — which is right for `n <= win - 1` and **wrong for
+`win == 1`**, where the original divides by 1 per frame and never widens. The
+window-size sweep (`1, 2, 5, 88, 176, 882, 3528, 8000, N-1, N, N+1, 2N`) failed
+on `win=1` and the final version falls out of the same two lines with no branch.
+
+**Tests.** Eighteen in `tests/test_auto_loop_window_identity.py`. Both functions
+are compared against the **pre-optimisation loops spelled out verbatim** as
+references — same shapes and arguments, so a change to either side fails. The
+window sweep covers the degenerate window sizes deliberately, plus empty and
+single-frame signals; `test_windowed_rms_is_actually_rms` is a guard that the
+reference is not accidentally self-consistent (a window of four ones followed by
+four zeros must read 1.0, 0.0 and √¾, not four equal values — the symptom of
+dividing by the whole prefix). The two `_auto_loop_sample` tests assert the
+whole returned pair, so the loop *choice* is pinned as well as the PCM.
+
+**What did not change.** Any decision, any written byte; the suite passes
+unchanged (1507 passed).
+
 ### Finding 8 — the EIII sample area was sized from the buffer, not the bytes written (2026-10-10)
 
 **The defect.** `write_eiii`'s bank header computed the sample area as

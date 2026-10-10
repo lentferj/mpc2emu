@@ -117,8 +117,21 @@ def _windowed_rms(sig: list, win: int) -> list:
     # accumulate() sums left-to-right exactly as the explicit loop did, so the
     # prefix table is bit-identical -- this is a speed change, not a numeric one.
     pre = [0.0] + list(accumulate(map(mul, sig, sig)))
-    return [math.sqrt((pre[f + 1] - pre[max(0, f + 1 - win)])
-                      / (f + 1 - max(0, f + 1 - win))) for f in range(n)]
+    # §REVIEW1010 §2: `max(0, f + 1 - win)` was evaluated TWICE per frame --
+    # 352,833 times for one 4 s sample -- and it is invariant: 0 while
+    # f < win - 1, then f + 1 - win forever.  Splitting the comprehension at
+    # that point removes both calls, and using zip() for the steady part
+    # removes the two `pre[...]` indexings.  The head divides by a growing
+    # count and the steady part by the constant `win`, which is exactly what the
+    # original computed for those same frames -- same values, same order, no
+    # reassociation, and therefore bit-identical.
+    #
+    # Both halves are empty-safe, so win=1 (all steady, divisor 1) and
+    # n <= win-1 (all head) fall out of the same two lines without a branch.
+    out = [math.sqrt(pre[f + 1] / (f + 1)) for f in range(min(n, win - 1))]
+    out.extend(math.sqrt((hi - lo) / win)
+               for hi, lo in zip(pre[win:], pre))
+    return out
 
 
 def _steady_region(sig: list, sr: int, region: int) -> Tuple[int, int]:
@@ -177,7 +190,13 @@ def _modulation(sig: list, sr: int, rs: int, re: int) -> Tuple[int, float, float
     hi = min(n // 2, int(env_sr / 1.5))       # 1.5 Hz
     if hi <= lo:
         return 0, 0.0, cov
-    vals = [sum(e[j] * e[j + lag] for j in range(n - lag)) / e0
+    # §REVIEW1010 §2: this was `sum(e[j]*e[j+lag] for j in range(n-lag))` --
+    # 575,505 generator iterations for one 4 s sample -- where sum(map(mul, ...))
+    # performs the same left-to-right sum in C.  This is the exact substitution
+    # the file already documents for `_match_cost` below ("measured 1.8x"); it
+    # generalises.  `e[:n-lag]` and `e[lag:]` are two slices, so the pairing is
+    # the same pairs in the same order, so the float sum is bit-identical.
+    vals = [sum(map(mul, e[:n - lag], e[lag:])) / e0
             for lag in range(lo, hi + 1)]
     gmax = max(vals)
     if gmax <= 0.0:
