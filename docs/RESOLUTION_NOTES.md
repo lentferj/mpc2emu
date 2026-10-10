@@ -41978,3 +41978,76 @@ flakiness predates this work. Neither is caused by §3 (it touches neither
 `shrink_planner`, `bank_splitter`, nor the debt list) — but they are real and
 ordered-dependent, and they are now TODO debt rather than something that looked
 green because the last run happened to pass.
+
+### §4 — the E4B reader re-walked its 20-slot cord table for every cord it read (2026-10-10)
+
+**The hot spot.** `parsers/e4b_parser.py` reads ~25 mod cords out of each
+voice's 20-slot table: `_cord_slot` for the routing itself, once per source
+inside `_cord_amount_byte` (a velocity family is three sources), and
+`_gate_byte` again for each mod-wheel gate.  Every one of those queries walked
+all 20 slots and re-evaluated `len(mod_region)` **on every iteration** —
+218,110 `len()` calls for one 400-voice profile, on a length that is a constant
+80 from the moment `_parse_voice` has accepted the block.
+
+**The fix.** One `(src, dst) → slot` index per voice, built in a single
+20-iteration pass by `_cord_slot_index`, and the three lookups read it.  Nothing
+else moved, so the same slot is named for the same query: filter key-tracking,
+the filter-env depth, the velocity families into FilterFreq/AmpVol/AmpPan, the
+ten LFO routings with their mod-wheel gates, and the DC cord all return the
+byte they always did.
+
+**Two rules the walk carried that the index has to carry too.**  A pair wired
+TWICE answers with the FIRST slot — `_cord_amount_byte` reads the amount of
+whichever comes first, and the machine's own template plus EOS's AKAI importer
+both duplicate pairs — and a table truncated mid-cord still answers for the
+slots whose identification bytes are present.  Those are `setdefault` and
+`(len(mod_region) + 2) // 4`: the old `o + 1 < len` guard, computed once instead
+of per slot per query.
+
+**Measured on this machine**, against the pre-fix parser loaded from
+`git show d5cce46:parsers/e4b_parser.py`:
+
+```
+_parse_voice x 240 (cord-rich: filter/env, velocity->filter, 2 LFO filters,
+                    2 mod routings)
+                             34.20 ->  21.52 ms   1.59x   VoiceLayer == on every field
+parse_e4b, 100 presets / 400 voices / 20 samples
+                             59.08 ->  37.81 ms   1.56x   whole-Bank digest identical
+parse_e4b, 20 presets / 80 voices
+                             11.97 ->   7.36 ms   1.63x   identical
+the same 400 voices with their cord slots REVERSED — a layout nothing here writes
+                             57.14 ->  35.96 ms   1.59x   identical
+```
+
+The review measured 33.66 → 20.69 ms and 59.30 → 40.52 ms (1.63x / 1.46x) on
+its own machine; its fixture is the one used here.
+
+**Tests.** Forty-six in `tests/test_e4b_cord_slot_index.py`.  The pre-fix
+walks are spelled out **verbatim as references** — the same inverted shape
+`test_resampler_quantizer_identity.py` uses — and the index is compared against
+them over nine synthetic tables (pseudo-random, all-empty, the EOS template
+default, and one with the same pair at three slots) and over every table
+length from 0 to 25 plus 77–81, which is what pins the truncation bound.  Two
+tests drive the real parser: one points the index at a lie and asserts the
+parse MOVES — the only way to tell the index from the walk it replaced, since
+the two answer identically when they are right — and the other hands
+`_parse_voice` an index built by the old walk and asserts the `VoiceLayer`
+comes back field-for-field identical, on the own-template layout and on the
+reversed one.  A third drives the gate path directly: in a table where five of
+its gate pairs are wired twice at different amounts, the slot the index names
+is the slot whose amount the old `_gate_byte` walk returned, with the EOS
+template's own default gate beside it.  **45 of the 46 fail with the fix
+reverted**: `_cord_slot_index` does not exist there, so the file does not
+import.  The one survivor is the guard that an all-zero cord table still parses
+to zeros, which was true before the fix as well.  An `index[k] = s` overwrite
+instead of `setdefault` fails four of them, which is the test that says
+first-wins is load-bearing rather than incidental.
+
+**What did not change.** Any read, any byte, any decision.  The whole-Bank
+digest is identical old-vs-new on the 400-voice bank, on the 80-voice bank, and
+on the same voices with their cord slots reversed; the `VoiceLayer` fields and
+the E4B round trip are untouched.  The suite collects **1602** tests — the 1556
+§3 recorded, plus the 46 here.  Run directly rather than as a full sweep: the
+E4B subset is 84 passed (`test_e4b_parser_cord_search.py`, `test_e4b_parser.py`,
+`test_e4b_mod_routings_read.py`, `test_e4b_writer.py` and the new file) and the
+135 tests matching `e4b` pass unchanged.

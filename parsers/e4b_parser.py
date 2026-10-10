@@ -397,6 +397,37 @@ def _parse_sample_body(body: bytes) -> tuple:
 # Voice block parser
 # ---------------------------------------------------------------------------
 
+def _cord_slot_index(mod_region: bytes) -> dict:
+    """Map every `(src, dst)` in the voice's cord table to its FIRST slot.
+
+    §REVIEW1010 §4: the per-query replacement for the 20-slot walk
+    `_parse_voice` used to run for every cord read.  The review measured
+    33.66 -> 20.69 ms over 240 cord-rich voices (1.63x) and 59.30 -> 40.52 ms
+    for a whole 400-voice bank (1.46x); this machine 34.20 -> 21.52 and
+    59.08 -> 37.81 ms (1.59x / 1.56x) -- every parsed field equal either way.
+
+    FIRST WINS, which is what the walk it replaces returned and what the reads
+    depend on: a bank may wire the same `(src, dst)` twice -- the machine's own
+    template and EOS's AKAI importer both do -- and
+    `_cord_amount_byte(dst, *sources)` reads the amount of whichever comes
+    first.  `setdefault` is that rule; an overwrite would silently answer with
+    the LAST slot and move every duplicate-pair read.
+
+    `(len(mod_region) + 2) // 4` is the number of slots whose two
+    identification bytes are present -- the old guard was `o + 1 <
+    len(mod_region)`, re-evaluated for every slot of every query.  No short
+    table can reach it (`_parse_voice` rejects anything under VOICE_FIXED, so
+    the region is always the whole `data[190:270]`), but the bound is carried as
+    arithmetic rather than as an assumption so a truncated table still indexes
+    instead of raising.  The 20 is the cord count the format has room for.
+    """
+    index = {}
+    for s in range(min(20, (len(mod_region) + 2) // 4)):
+        o = s * 4
+        index.setdefault((mod_region[o], mod_region[o + 1]), s)
+    return index
+
+
 def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     """Parse one voice block from data[0:].
 
@@ -515,14 +546,18 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     # the reads that were left behind both times.
     fenv_raw = pzt[14:26]
     mod_region = data[VOICE_MOD_OFF:VOICE_MOD_OFF + 80] if len(data) >= VOICE_MOD_OFF + 27 else b''
+    # §REVIEW1010 §4: ONE (src, dst) -> slot index per voice, instead of a
+    # 20-slot walk per query.  `_cord_slot`, `_cord_amount_byte` (which calls
+    # it once per source) and `_gate_byte` together ask ~25 questions of this
+    # one table per voice, and each walk paid a `len(mod_region)` call on
+    # EVERY slot iteration -- 218,110 of them in a 400-voice profile.  One
+    # pass answers all of them, and the reads are unchanged: see
+    # `_cord_slot_index` and tests/test_e4b_cord_slot_index.py.
+    _cord_index = _cord_slot_index(mod_region)
 
     def _cord_slot(src, dst):
         """Slot index of the first cord `src`→`dst`, or -1."""
-        for s in range(20):
-            o = s * 4
-            if o + 1 < len(mod_region) and mod_region[o] == src and mod_region[o + 1] == dst:
-                return s
-        return -1
+        return _cord_index.get((src, dst), -1)
 
     def _cord_amount_byte(dst, *sources):
         """Raw amount byte of the first cord into `dst` from any of `sources`.
@@ -630,12 +665,8 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
         """Raw amount byte of the ModWheel→CordN-Amount gate for cord `slot`."""
         if slot < 0:
             return 0
-        want = _CORD_AMT_DEST_BASE + slot
-        for s in range(20):
-            o = s * 4
-            if o + 2 < len(mod_region) and mod_region[o] == _SRC_MOD_WHEEL and mod_region[o + 1] == want:
-                return mod_region[o + 2]
-        return 0
+        _g = _cord_index.get((_SRC_MOD_WHEEL, _CORD_AMT_DEST_BASE + slot), -1)
+        return mod_region[_g * 4 + 2] if _g >= 0 and _g * 4 + 2 < len(mod_region) else 0
 
     # VELOCITY -> VOLUME, read for the first time 2026-09-01. The E4XT states
     # this as a mod cord like any other, and this parser already walked the
