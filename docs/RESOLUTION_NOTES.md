@@ -43079,3 +43079,105 @@ multichannel — the clamp read the correct variable before and after. The
 untouched. Suite: 98 passed over `test_xpm*`, `test_wav_formats`,
 `test_aiff_loader` and `test_smpl_pitch_fraction`, which is everything that
 reaches this function; the full suite was not run.
+
+### Finding m11 — an AKAI image is accepted on its first 202 bytes and read from byte 17,664 (2026-10-10)
+
+**The defect.** The review cites `parsers/akel_image_parser.py:372`, which on
+this branch is `parsers/akai_image_parser.py:372`:
+
+```python
+partnum = min(data[_OFF_PARTTAB + 0x100], MAX_PARTITIONS)   # byte 17664
+```
+
+`read_aksi_image` — this branch's `read_akai_image` — decides what a file is
+from `data[:0x200]` alone. The floppy check needs an exact 800 KB / 1.6 MB
+size, and `_has_parthead_magic` needs `len(head) >= 0xCA`: **202** bytes
+carrying six of the 98 magic fields. Everything past byte 512 is unread at that
+point, and the partition table the walk then opens starts at
+`_OFF_PARTTAB + 0x100` = 0x4500 = **17,664**.
+
+So a file of 202 … 17,663 bytes carrying the magic passes the acceptance test
+and is indexed straight past its own end. The reviewer verified it with a
+512-byte file carrying the 98-magic-field pattern; measured here, that same
+input through the real entry point:
+
+```
+OLD  512 bytes  : IndexError: index out of range       (akai_image_parser.py:372)
+NEW  512 bytes  : ValueError: cut.img is not an AKAI disk image — the
+                  partition header magic is present, but the partition table
+                  behind it reaches byte 17702 and this file stops at 512.
+```
+
+An `IndexError` names neither the file nor the reason, and it is not the
+`ValueError` the gate two lines above exists to raise.
+
+**The geometry, which is the whole of the finding.** 202 bytes buy the magic.
+The count byte sits at 17,664, and the sizes behind it run to
+`_OFF_PARTTAB + 0x102 + 2 * MAX_PARTITIONS` = **17,702** when all 18 entries
+are declared. Measured across the seam:
+
+```
+17663 bytes, partnum  0 : IndexError  line 372   (the count byte itself)
+17664 bytes, partnum  0 : IndexError  line 372   (last valid index is 17663)
+17665 bytes, partnum  0 : no error — 0 volumes    (the walk completes)
+17701 bytes, partnum 18 : IndexError  line 373   (the last of the 18 sizes)
+17702 bytes, partnum 18 : no error — 0 volumes    (the walk completes)
+```
+
+A guard placed at 17,665 would have left the last line of that table open, which
+is why the threshold is the full extent of the table rather than the count byte.
+
+**The fix.** One length check in `read_akai_image`, between the magic gate and
+the walk, raising the same `ValueError` shape line 303 already uses —
+`f"{Path(path).name} is not an AKAI disk image — …"` — with the two numbers that
+make it a diagnosis instead of a refusal. The threshold is
+`_PARTTAB_END = _OFF_PARTTAB + 0x102 + 2 * MAX_PARTITIONS` = 17,702: not a
+guessed size but the deepest read the walk performs, so a shorter file cannot be
+read at all.
+
+**Why this excludes nothing readable.** Every image this project writes holds at
+least one partition header of 3 blocks (24,576 bytes) plus its volume directory
+and data; the smallest the test suite builds is 1 MB, and `build_akai_hd_image`'s
+own auto-sizing floor is 8 MB. Both regimes are far above 17,702. The nearest
+readable neighbour — a real image truncated to 160 KB — still parses, still
+drops the files whose data runs past the end and still prints
+`[WARN] … incomplete copy` through `_truncation_warning`, exactly as before: a
+truncated image has always been *reported*, not refused, and only a file that
+holds no table at all is refused now.
+
+**Tests.** `tests/test_akel_short_image_named.py`, 38 tests: the reviewer's
+512-byte reproduction, a parametrised sweep of 32 short lengths (the gate and
+its edge, every KiB up to the table, where the table starts, the count byte
+itself and the last of the 18 sizes) that must each raise a `ValueError` naming
+the file rather than an `IndexError`, a case that a short file is never returned
+as a silent empty volume list, the 201-byte boundary where the older
+"partition header magic is missing" message must survive untouched, the
+17,702-byte boundary where the walk must still complete, and two controls — a
+valid 8 MB image that still reads its volume and its three files, and a real
+image cut to 160 KB that still parses and warns. **34 of the 38 fail with the
+fix reverted**; the four survivors are the two controls, the 201-byte case
+(below the gate, so the old path) and the 17,702-byte case (which already
+worked — that is the proof the threshold is not over-strict). Suite unchanged
+otherwise: the AKAI files, `test_disk_image_dispatch`,
+`test_mpc60_truncated_image_diagnosis` and `test_fixtures_actually_fail` run
+**565 passed with the fix reverted and 565 with it applied**, the new file's 38
+on top.
+
+**What did not change.** Any image long enough to be read. The guard sits
+between the acceptance test and the walk, so `is_akai_image`,
+`akai_is_cd3000`, `akai_cd_label`, the floppy path and `_read_harddisk` itself
+are untouched — the walk still clamps its count with `min(…, MAX_PARTITIONS)`
+and still reports a table that over-declares through `_truncation_warning`.
+
+**One thing deliberately left alone.** With the table present, a *second*
+partition whose header starts near the end of a short file still over-reads:
+`head = data[base:base + PARTHEAD_BLKS*HD_BLOCK]` passes
+`_has_parthead_magic` on 202 bytes while the FAT read at
+`_OFF_FAT + 2*i` needs 17,162 and raises. Measured: 20,000 bytes, two 1-block
+partitions, partition B at 8,192 → `IndexError` inside `_u16`. That is a
+different geometry in a different length regime — it needs ≥ 17,702 bytes to
+be reached at all, so it is nowhere near this finding's 202…17,663-byte window
+— and the only fix that would cover it, skipping a partition whose header is
+truncated, is exactly the silent-drop shape this entry refuses to introduce.
+Recorded so it is not later mistaken for something the m11 gate was meant to
+catch.

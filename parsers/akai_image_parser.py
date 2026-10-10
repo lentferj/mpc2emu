@@ -52,6 +52,13 @@ _VOLDIR_LAYOUT = {
 }
 _VOLDIR_DEFAULT = (VOLDIR_HD_BLKS, VOLDIR_ENTRIES)
 
+#: One byte past the last partition-table entry the reader can reach: the
+#: count at `_OFF_PARTTAB + 0x100`, then up to MAX_PARTITIONS 16-bit sizes.
+#: `_has_parthead_magic` says yes on 202 bytes, so the table's last entry sits
+#: 17,500 bytes past everything the acceptance test looks at — see the guard in
+#: `read_akai_image` for why that distance is the whole of finding m11.
+_PARTTAB_END = _OFF_PARTTAB + 0x102 + 2 * MAX_PARTITIONS       # 17702
+
 
 def _u16(d: bytes, o: int) -> int:
     return d[o] | (d[o + 1] << 8)
@@ -304,6 +311,24 @@ def read_akai_image(path: str) -> List[AkaiVolume]:
             f"{Path(path).name} is not an AKAI disk image — the partition "
             f"header magic is missing (and it is not a 800 KB / 1.6 MB AKAI "
             f"floppy).")
+    # THE MAGIC IS THE FIRST 202 BYTES.  THE TABLE ENDS AT BYTE 17,702.
+    # The acceptance test above reads `data[:0x200]` and cannot say anything
+    # about what lies beyond it, so a file cut anywhere between the two
+    # carries the magic and holds no partition table — and `_read_harddisk`
+    # then indexed straight past its end: `data[_OFF_PARTTAB + 0x100]` is
+    # byte 17664, so a 512-byte image that passed the test died with a bare
+    # IndexError instead of a message that names the file and the reason.
+    # Requiring the table's full extent is not a guess at a size: it is the
+    # deepest read the walk below performs, `_OFF_PARTTAB + 0x102` plus
+    # MAX_PARTITIONS sizes, so a shorter file cannot be read at all.
+    # Nothing valid is excluded by it — one partition header alone is 3 blocks
+    # (24 KB), and the smallest image any test builds is 1 MB.
+    if len(data) < _PARTTAB_END:
+        raise ValueError(
+            f"{Path(path).name} is not an AKAI disk image — the partition "
+            f"header magic is present, but the partition table behind it "
+            f"reaches byte {_PARTTAB_END} and this file stops at "
+            f"{len(data)}.")
     return _read_harddisk(data)
 
 
