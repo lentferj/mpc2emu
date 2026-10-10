@@ -42152,3 +42152,92 @@ differs between two "different" hashes.
 them, or any byte of any written file. `tests/test_krz_parser.py`,
 `tests/test_krz_roundtrip.py`, `tests/test_krz_stereo.py` and the new file: 40
 passed.
+
+### §6 — the cutoff table was inverted once per voice, for the same list (2026-10-10)
+
+**The defect.** `models/common.py`'s `e4xt_cutoff_position` opened with
+
+    pts = [(f, p) for p, f in _E4XT_CUTOFF_TABLE]
+
+— a fresh 17-entry list **per call**, called once per voice from
+`e4b_writer._build_voice`. The function's own docstring says the answer depends
+on nothing but the module constant, so the work was pure repetition: the same
+17-entry list, rebuilt once per voice, 4,000 times over in the review's
+4,000-call benchmark. The review calls this the "table rebuilt instead of
+cached" shape, which it is.
+
+**The fix.** One hoist: `_E4XT_CUTOFF_PTS = tuple((f, p) for p, f in
+_E4XT_CUTOFF_TABLE)` at module level, immediately after the table it inverts,
+and the function reads it. A tuple because `_interp` only indexes it. The
+comment records the one consequence — the constant is derived at import, so
+patching `_E4XT_CUTOFF_TABLE` at runtime will not reach it — because a hoist
+that silently stops tracking its source is the next defect.
+
+**Measured on this machine** (4000 calls over a corpus-shaped 133..24163 Hz
+spread, best of 7; the review measured 16.55 → 10.08 ms / 1.64× on its own
+machine):
+
+```
+e4xt_cutoff_position, 4000 calls, best of 7
+  per-call rebuild (pre-fix)    15.44 / 15.75 ms   (3.86-3.94 us/call)
+  module-level inverted table    8.99 /  9.18 ms   (2.25-2.29 us/call)   1.72x
+  a 2800-voice bank             10.81 / 11.03 -> 6.29 / 6.43 ms          1.72x
+```
+
+Two rounds, quoted both rather than the better one.
+
+**Honest calibration, kept as the review stated it:** this is a **low-absolute-value
+win** — 4.5 ms off a 2,800-voice conversion, and nothing in the review's
+end-to-end numbers (§REVIEW1010 §8) is attributable to it. It was taken because
+it is a one-line hoist of a constant, not because the number is interesting. The
+two neighbouring candidates were measured and are **below any bar worth setting,
+and were deliberately left alone**: `_interp` at 5,120 calls is 0.65 ms total, and
+`e4xt_cutoff_hz_to_byte`'s 40-iteration binary search at 1,600 calls is 0.008 s
+in a cord-rich 400-voice write. Neither file was touched.
+
+**Identity, and why it needed a second kind of test.** `e4xt_cutoff_position`
+feeds `vpar[60]`, the byte that says where the filter corner lands, so a moved
+last bit moves a written byte. The new function is compared against the shipped
+pre-fix expression **spelled out verbatim** over **65,003 Hz values**:
+every measured knot exactly, each knot's two immediate float neighbours
+(`math.nextafter` either side), 20,000 points geometric across the measured
+span, 24,951 points linear from 50 Hz to 25 kHz, the whole 20 Hz..20 kHz
+nominal window the writer asks for, and the extremes — ±0.0, `1e-6`, negatives,
+`1e300`, ±inf. Asserted with `==` on the float *and* on `repr()`. **Zero
+mismatches**, and separately verified out of band by loading the pre-fix module
+with `importlib.util.spec_from_file_location` on `git show d5cce46:models/common.py`
+and running a 395,789-case sweep — also zero mismatches.
+
+A second kind of test had to exist, and this is the part worth remembering:
+**with the fix reverted, `e4xt_cutoff_position` IS the reference**, so every
+identity test compares the old code against itself and passes. `test_the_table_is_not_rebuilt_on_every_call`
+therefore measures the thing that actually changed — the number of row unpacks,
+read through a `tuple` subclass that records each `__iter__` (`_interp` only
+*indexes* its table, so the count is the hoisted work and nothing else) — and
+asserts zero. That is clock-free, so no shared machine can make it flaky.
+`test_the_inverted_table_is_the_exact_inversion_of_the_measured_table` also
+fails on revert, for the plain reason that the constant does not exist there.
+
+**Confirmed with the fix reverted** (`git stash` on `models/common.py`): **2
+failed, 109 passed** — the counting test reporting 51 unpacks for 3 calls (17 per
+call, exactly the hoisted comprehension), and the inversion test on the missing
+attribute. The 109 identity tests pass on both sides, which is what they are
+for.
+
+**Tests.** 111 in `tests/test_cutoff_position_identity.py`.
+`test_every_measured_node_maps_back_to_its_own_position` is the guard that the
+reference is not two implementations of one mistake: the table is its own
+inverse at the knots, so position 0.1 must be exactly `e4xt_cutoff_position(168.0)`
+with no reference involved. `test_the_vpar60_byte_the_writer_stores_is_unchanged`
+goes one step further out and asserts the byte
+`min(255, round(position * 255))` directly, because that is what lands in the
+file.
+
+**What did not change.** One float, for every Hz, in every voice, in every
+format: the returned value is the identical float (`==` and `repr()`), not an
+approximation of it. `tests/test_cutoff_position_identity.py`,
+`tests/test_law_consistency.py` (the cutoff-table section),
+`tests/test_docs_constants_agree.py`, `tests/test_e4b_writer.py`,
+`tests/test_krz_parser.py`: **151 passed**. The full suite was not run here (the
+orchestrator runs it between commits); it is not expected to move, since no
+returned value changed.

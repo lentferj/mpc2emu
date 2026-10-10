@@ -332,6 +332,26 @@ _E4XT_CUTOFF_TABLE = [
 E4XT_CUTOFF_MIN_MEASURED_HZ = _E4XT_CUTOFF_TABLE[0][1]
 E4XT_CUTOFF_MAX_MEASURED_HZ = _E4XT_CUTOFF_TABLE[-1][1]
 
+# The measured table inverted -- Hz on the left, position on the right -- built
+# ONCE at import. `e4xt_cutoff_position` used to rebuild this 17-entry list on
+# every call, once per voice from `e4b_writer._build_voice`, and its own
+# docstring says the answer depends on nothing but the module constant, so the
+# work returned the same list every time. A tuple because `_interp` only reads
+# it.
+#
+# §REVIEW1010 §6, measured on this machine, best of 7 over a corpus-shaped
+# 133..24163 Hz spread: 4000 calls 15.44/15.75 -> 8.99/9.18 ms = 1.72x, two
+# rounds, byte-identical (the review measured 16.55 -> 10.08 ms / 1.64x on its
+# own machine). The absolute value is small -- 10.81/11.03 -> 6.29/6.43 ms over a
+# 2800-voice bank -- but the work was pure repetition of a constant, so it cost
+# nothing to stop paying for it. The neighbours were measured too and are below
+# any bar: `_interp` at 5,120 calls is 0.65 ms, `e4xt_cutoff_hz_to_byte`'s
+# 40-iteration binary search at 1,600 calls is 0.008 s. Neither is touched.
+#
+# It is derived from `_E4XT_CUTOFF_TABLE` at import time, NOT looked up on each
+# call: patching that list at runtime would leave this stale.
+_E4XT_CUTOFF_PTS = tuple((f, p) for p, f in _E4XT_CUTOFF_TABLE)
+
 
 def _interp(x, pts, xi=0, yi=1, logy=True):
     """Piecewise interpolation over a monotonic table of (x, y) pairs."""
@@ -354,8 +374,7 @@ def e4xt_cutoff_position(hz: float) -> float:
     there, by inverting the measured table. Requests outside the measured
     span clamp to its ends -- the hardware cannot go below ~133 Hz, and above
     ~24 kHz it is wide open anyway."""
-    pts = [(f, p) for p, f in _E4XT_CUTOFF_TABLE]
-    return max(0.0, min(1.0, _interp(max(hz, 1e-6), pts, logy=False)))
+    return max(0.0, min(1.0, _interp(max(hz, 1e-6), _E4XT_CUTOFF_PTS, logy=False)))
 
 
 def e4b_cutoff_position_to_hz(pos: float) -> float:
