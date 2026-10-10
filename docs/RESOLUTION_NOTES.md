@@ -42378,3 +42378,110 @@ order, the output types, and every written byte. End-to-end through
 `bandpass`/`restore_level` combinations, and through `resample_to_rate` for
 stereo at three destination rates, the PCM is identical. The suite passes
 unchanged (44 passed, 97 subtests, for the four required files).
+
+### §8 — the whole conversion, end to end: 1.19–1.40x, all four files byte-identical (2026-10-10)
+
+**The claim under test.** REVIEW1010 §8 of EXECUTION SPEED measured the whole
+pipeline — `trim_start_bank` → `auto_loop_banks(workers=1)` →
+`resample_banks(profile, workers=1)` → `write_e4b`, 4 samples × 2.0 s of
+44.1 kHz 16-bit PCM — at 1.30–1.38x, and asserted the four written `.E4B` files
+are byte-for-byte identical. This entry is the independent re-measurement, against
+the pre-review tree rather than against the review's own numbers.
+
+**How it was driven.** The four stage functions were called with the defaults
+`convert.py` itself passes on a bare `--trim --auto-loop --resample PROFILE`
+(`thresh_db=-72`, `fade_ms=5.0`, `xfade_ms=25`, `max_ms=2500`,
+`min_quality=0.45`, `crossfade=True`, `bandpass=True`, `restore_level=True`,
+`workers=1` throughout — `map_over_banks` takes its serial branch at
+`workers == 1`, so no pool is built). One script,
+`/tmp/opencode/sec8_bench.py`, parametrised on the repo path and run unchanged
+against a second worktree at `717e184`, the commit BEFORE any of sections 1-7
+landed. The four `.E4B` files were then compared with `cmp`, not only by digest.
+
+**Fixture A — samples already carry a loop** (the fixture the earlier section
+probes used, and the one whose numbers the review quotes). Best of 3 after one
+warm-up, stdout suppressed, two partials plus noise:
+
+```
+mono    emulator2  1095.92 ->  812.61 ms   1.35x   sha256 9a2c3386a98bfb51  identical
+mono    emax1      1115.21 ->  844.19 ms   1.32x   sha256 a024a4deaa7e45a5  identical
+stereo  emulator2  2253.03 -> 1605.07 ms   1.40x   sha256 5c94c7c4d947f049  identical
+stereo  emax1      2265.23 -> 1653.11 ms   1.37x   sha256 1cb015ac3b1ae7f6  identical
+```
+
+The review reported 1.35x / 1.30x / 1.38x / 1.38x on its own machine. Every one
+reproduced within 2 points. Best of 1 — the review's exact "best of 1 after
+warm-up" method, run separately so the comparison is like for like — gave
+1.38x / 1.29x / 1.43x / 1.37x (1114.02 → 804.50, 1117.88 → 865.22,
+2247.02 → 1570.03, 2259.09 → 1645.76 ms). The prefixes differ from the review's
+(`23869203588b11f6` etc.) because the fixture differs; what is asserted is
+pre == post, and that holds.
+
+**Fixture B — no pre-existing loop, so `auto_loop_banks` does its full work.**
+This is the stricter test, because in fixture A `auto_loop_banks` is a no-op
+(`_auto_loop_sample` returns "already looped" without touching the PCM) and
+§2's saving is therefore invisible in the end-to-end number. Same method:
+
+```
+mono    emulator2  2874.68 -> 2386.27 ms   1.20x   sha256 8fe91d97b7490ecd  identical
+mono    emax1      2926.14 -> 2451.61 ms   1.19x   sha256 5c97c1561955e3d2  identical
+stereo  emulator2  4155.85 -> 3321.45 ms   1.25x   sha256 e8d475d8e0201752  identical
+stereo  emax1      4212.95 -> 3382.06 ms   1.25x   sha256 77c4070813c64ada  identical
+```
+
+**Both fixtures, all eight files, byte-identical.** Verified with `cmp` on the
+written bytes, not only on the digest, and in every case the warm-up run and the
+timed run also agreed with each other — so the pipeline is deterministic across a
+freshly built bank as well as across the two commits. The
+`trim_start_bank(drop_full_loop=...)` default is the one place the function's
+own default (True) differs from what `convert.py` passes on a bare `--trim`
+(False, since `--trim-start-drop-loops` is opt-in); it was run both ways and is
+inert on this fixture — the same four digests either way, because no loop starts
+inside the trimmed lead-in.
+
+**The baseline choice was checked too, and does not matter.** `717e184` is also
+the commit *before* three crash fixes — `7d16593` (KRZ loop points), `84816d4`
+(EIII area geometry) and `da73f81` (the one-sided clamp in `e4b_writer`) — so
+the "pre" tree is not literally the pre-review tree for the writer. Running the
+whole thing again at `ec45feb`, the parent of `717e184`, puts all three of those
+back in, and produces the **same four digests** (`8fe91d97b7490ecd`,
+`5c97c1561955e3d2`, `e8d475d8e0201752`, `77c4070813c64ada`), 2912.90 / 2938.94 /
+4130.45 / 4140.81 ms. That is expected rather than lucky: every key and velocity
+in the fixture is already inside 0..127, so `_key_byte` and the `min(127, …)`
+form it replaced agree on every field, and the EIII and KRZ fixes do not touch
+the E4B path at all. The byte-identity conclusion therefore does not depend on
+which of the two commits is called "before".
+
+**Where the dilution comes from, measured per stage** (best of 3, mono
+emulator2; fixture A / fixture B):
+
+```
+  stage         fixture A                    fixture B
+  trim_start    287.9 -> 217.4 ms  1.32x     295.4 -> 218.4 ms  1.35x
+  auto_loop       0.1 ->   0.1     no-op    1866.5 -> 1626.8   1.15x
+  resample      829.0 -> 624.1     1.33x     833.7 -> 607.1    1.37x
+  write_e4b       8.8 ->   8.1     ~flat      8.8 ->   8.5     ~flat
+```
+
+Two unchanged costs sit between the optimised stages, and both are the ones the
+review named. `write_e4b` is untouched by sections 1-7 and takes ~8.5 ms of a
+~813 ms mono run. And the same 16-bit PCM is **decoded once per stage** —
+`start_trim`, `auto_loop` and `resample_vintage` each hold their own
+`from processors.resampler import _pcm_to_float`, and instrumenting all three
+bindings counts **12 calls for one run** (3 stages × 4 samples). One 2.0 s mono
+decode is 7.10 ms here, so a pass over this bank is 28.4 ms and the run decodes
+~85 ms of PCM it has already decoded twice — 10.5 % of the mono pipeline, none of
+which sections 1-7 touched, because §7 measured `_pcm_to_float` (1.04x, at the
+floor the module's own comment already claims) and `_float_to_pcm` (the fast
+form is not byte-identical: it raises `OverflowError` where the shipped loop
+hard-clips) and deliberately left both alone. Removing the repetition needs a
+cross-stage cache, which is a design change and not an optimisation.
+
+**What did not change.** Any algorithm, any profile, the RNG seed, the call
+order, the output types, or any written byte. No source file was touched by this
+entry — it is a measurement, and the script that produced it lives outside the
+repo at `/tmp/opencode/sec8_bench.py`, parametrised on the repo path, so it can
+be re-run against any later tree. No test file was added: there is nothing here
+for a test to catch that `cmp` on the eight written files did not already catch,
+and a byte-identical change cannot be caught by a reverted-fix check. The full
+suite is run by the orchestrator between commits and is not expected to move.
