@@ -42916,3 +42916,102 @@ index loop — so the next person to try needs somewhere to find that it was tri
 and lost. The review says it; the resolution notes are where the project's other
 "this was measured and it did not help" records live, several of which are cited
 in the retraction comments themselves.
+
+### Findings m8/m9 — a filter-table key written twice in one literal, and a mod-region guard whose else branch could not run (2026-10-10)
+
+**The defect.** Two pieces of dead code in `parsers/e4b_parser.py`, both found by
+reading rather than by measuring. Neither is reachable, and neither changes a byte
+of any parse — which is exactly why they were worth deleting: both read as though
+they were doing something.
+
+**m8 — `0x68: 3` was bound twice in `_E4B_TO_XPM_FILTER_TYPE`** (lines 165-166 at
+4d0881f), once inside the Morph family group and once again on its own annotated
+line:
+
+    0x60: 3, 0x61: 3, 0x62: 3, 0x68: 3,
+    0x68: 3,                     # Peak/Shelf Morph → Low 4 (no XPM equiv, lossy)
+
+Same key, same value, so last binding wins and the dict was never wrong. But the
+second line was dead, and its annotation read as though 0x68 were mapped THERE
+alone, when the group line and the block above it are what define the family. The
+block already names all four bytes with their panel names (`0x60 rt17 "Dual EQ
+Morph"` … `0x68 rt20 "Peak/Shelf Morph"`) and already says why they degrade ("No
+XPM equivalent for any of them, so all four degrade to Low 4 — lossy but not
+invented"), so the group placement keeps every fact the standalone line carried and
+loses none of it.
+
+**The reviewer's counts are off by one, in both directions.** The review reports
+"1 duplicate key, 21 literal entries, 20 dict entries". The duplicate is real; the
+counts are not. Parsed at 4d0881f — by `ast` over the literal and by a regex over
+its text, which agree — the literal holds **22** entries for a **21**-key dict, and
+`len(_E4B_TO_XPM_FILTER_TYPE)` is 21. The parser has said so itself all along, in
+the comment forty lines below the table: "this E4XT filter is not in our **21-entry
+map**" (e4b_parser.py:505). Recorded here because a count that is wrong by one is
+exactly the number that gets copied onward, and the new test asserts the real one.
+
+**m9 — the `mod_region` guard's `b''` branch could never execute** (line 548 at
+4d0881f):
+
+    mod_region = data[VOICE_MOD_OFF:VOICE_MOD_OFF + 80] if len(data) >= VOICE_MOD_OFF + 27 else b''
+
+The threshold is `VOICE_MOD_OFF + 27 = 190 + 27 = 217`, while `_parse_voice` opens
+with `if len(data) < VOICE_FIXED: raise` and `VOICE_FIXED = 284`. Every buffer that
+reached the guard was therefore at least 284 — 67 bytes past the threshold — so the
+else branch was unreachable, and what reads like a bounds guard is not one. (The
+review cites "the function's own length check at line 407"; in this tree that check
+is line 443 — 438 before the m8 deletion shifted the file by five lines. The
+arithmetic, not the citation, is what was checked.) The slice end sits inside the
+same guarantee (190 + 80 = 270 ≤ 284), so the region was always the full 80 bytes:
+never short, never empty. Nothing downstream could have observed the difference,
+and `_cord_slot_index`'s own docstring already assumed as much — "the region is
+always the whole `data[190:270]`".
+
+**Checked against the alternative: this was not a guard to TIGHTEN.** Had the 27
+been a floor the walk really needs, the fix would have been to enforce it rather
+than delete it, and that reading was tested before deleting. It fails. No read off
+the region needs 217 bytes: the table they consult ends at 270, and every one of
+them is bounded by `len(mod_region)` where it indexes (`_cord_slot_index` by
+`(len(mod_region) + 2) // 4`; `_cord_amount_byte`, the attack-span scan, the
+routing scans and the dedicated reads by `_slot * 4 + 2 < len(mod_region)`). A
+217-byte floor would sit between the two with nothing to protect: it rejects
+nothing the function would otherwise accept, because 217 < 284, and it is not the
+end of any read. 284 was the only bound with a meaning here, and it was already
+there.
+
+**The fix.** Two deletions, each with a comment saying why. m8 removes the
+standalone `0x68: 3` line and keeps the four-byte Morph group, noting that the
+group line is the entry and the block above it is the annotation. m9 removes the
+conditional and its dead `else b''`, leaving the plain slice, and records the
+arithmetic that made it unreachable (217 vs the length check's 284) and which
+check covers the slice end.
+
+**Tests.** `tests/test_e4b_dead_code_removed.py`, 20 tests (10 functions, one
+parametrised over 11 lengths). **Three fail with the fix reverted**: two parse the
+literal itself — the only place a duplicate key is visible, since last binding wins
+at runtime — and fail on `keys written more than once: ['0x68']` and `22 literal
+entries for 21 distinct keys`; the third parses `_parse_voice` with `ast` and fails
+on the `IfExp` that is the dead conditional. The other 17 hold on both sides and
+are what make the deletions safe: the table pinned whole against a 21-entry
+expected mapping, so a key dropped or re-pointed while the duplicate came out fails
+too; 0x68 still one of the four Morph bytes; the placement pinned to the group
+line; the arithmetic `190 + 27 = 217 < 284` and `190 + 80 = 270 <= 284` asserted so
+the constants cannot drift under it; the eleven lengths the removed guard would
+have answered `b''` for and the ones just past its threshold (0, 1, 110, 189, 190,
+216, 217, 218, 250, 270, 283) each rejected by the length check before the mod
+region is read, which is the behavioural proof that no buffer the guard claimed to
+handle could ever reach it; and a
+writer-built voice read at exactly VOICE_FIXED bytes — the shortest the check
+admits, and 67 bytes past the removed guard's threshold — parsing the same mod
+cords, the same keytrack and the same consumed length as the full block and as the
+block with trailing bytes after it.
+
+**What did not change.** Every parse path. `_E4B_TO_XPM_FILTER_TYPE` is the same 21
+keys with the same values before and after — asserted by the pinned table rather
+than assumed — and `mod_region` is `data[190:270]` on every length the length check
+admits, so the slice was already unconditional in effect. The E4B suites that cover
+these paths pass unchanged alongside the new file: `test_e4b_parser`,
+`test_e4b_parser_cord_search`, `test_e4b_cord_slot_index`,
+`test_e4b_mod_routings_read`, `test_e4b_writer`, `test_docs_constants_agree` — 85
+passed, 9 subtests, plus the new file's 20.
+
+§REVIEW1010 findings m8/m9; full review in docs/CODE_REVIEW_2026-10-10.md.

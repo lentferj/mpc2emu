@@ -162,8 +162,13 @@ _E4B_TO_XPM_FILTER_TYPE = {
     #   0x62 rt19 "2EQMorph+Exprssn"   0x68 rt20 "Peak/Shelf Morph"
     # 0x68 was absent from this table until that run. No XPM equivalent for
     # any of them, so all four degrade to Low 4 -- lossy but not invented.
+    # §REVIEW1010 m8: a second `0x68: 3` line stood right below that group,
+    # annotated on its own. Same key, same value -- so the literal held 22
+    # entries for a 21-key dict (this is our 21-entry map, as the comment below
+    # the reads says) and the repeat was DEAD (last binding wins), while its
+    # annotation read as if 0x68 were mapped there alone. Removed: the group
+    # line below is the entry, and this block is its annotation.
     0x60: 3, 0x61: 3, 0x62: 3, 0x68: 3,
-    0x68: 3,                     # Peak/Shelf Morph → Low 4 (no XPM equiv, lossy)
 }
 
 _NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
@@ -545,7 +550,19 @@ def _parse_voice(data: bytes, idx_to_name: dict) -> tuple:
     # reader must handle the machine's files and not only its own. These are
     # the reads that were left behind both times.
     fenv_raw = pzt[14:26]
-    mod_region = data[VOICE_MOD_OFF:VOICE_MOD_OFF + 80] if len(data) >= VOICE_MOD_OFF + 27 else b''
+    # §REVIEW1010 m9: this line used to end in a conditional --
+    # `... if len(data) >= VOICE_MOD_OFF + 27 else b''` -- whose else branch
+    # was UNREACHABLE. The guard's threshold is VOICE_MOD_OFF + 27 = 217,
+    # while this function's own length check (line 443,
+    # `if len(data) < VOICE_FIXED`) already rejects anything under
+    # VOICE_FIXED = 284. Every buffer that reaches this line is >= 284 >= 217,
+    # so `b''` could never be returned and what read like a bounds guard was
+    # not one. The slice end sits inside the same guarantee (190 + 80 = 270 <=
+    # 284), so the region is always the FULL 80 bytes -- never short, never
+    # empty -- which is exactly what `_cord_slot_index`'s "the region is always
+    # the whole `data[190:270]`" already assumes. Removed; no parse path could
+    # have observed the difference, by construction.
+    mod_region = data[VOICE_MOD_OFF:VOICE_MOD_OFF + 80]
     # §REVIEW1010 §4: ONE (src, dst) -> slot index per voice, instead of a
     # 20-slot walk per query.  `_cord_slot`, `_cord_amount_byte` (which calls
     # it once per source) and `_gate_byte` together ask ~25 questions of this
