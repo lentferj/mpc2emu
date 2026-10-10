@@ -177,7 +177,12 @@ def _fat12_read_set(img: bytes) -> Tuple[str, bytes]:
 
     for e in range(rootn):
         ent = img[root_off + e * 32: root_off + e * 32 + 32]
-        if ent[0] in (0x00, 0xE5) or (ent[11] & 0x08):
+        # A short entry is a TRUNCATED IMAGE, not an empty slot: the root
+        # directory runs past the end of the file.  Skip it exactly as
+        # `_fat12_extensions` does, or `ent[11]` raises IndexError and takes
+        # the diagnosis at the end of this function with it -- the walk would
+        # crash before it could say the image holds .KRZ files.
+        if len(ent) < 32 or ent[0] in (0x00, 0xE5) or (ent[11] & 0x08):
             continue
         name = ent[0:8].decode('ascii', 'replace').rstrip()
         ext  = ent[8:11].decode('ascii', 'replace').rstrip()

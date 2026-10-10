@@ -42631,3 +42631,66 @@ sample into a voice.
 framing, its stride arithmetic, the GROUP/SAMPLE/PARAMS branches, the classic
 walk, and every byte of every well-formed file are untouched — verified above on
 251 real instruments rather than asserted.
+
+### Finding MINOR m5 — `_fat12_read_set` indexed a truncated root entry, so the K2000 diagnosis never ran (2026-10-10)
+
+**The defect.** `parsers/mpc60_parser.py:180`:
+
+```python
+ent = img[root_off + e*32: root_off + e*32 + 32]
+if ent[0] in (0x00, 0xE5) or (ent[11] & 0x08):
+    continue
+```
+
+A slice short of 32 bytes is a **truncated image**, not an empty slot: the
+root directory runs past the end of the file. `_fat12_extensions` (line 241)
+guards the identical walk with `len(ent) < 32`, which made the omission
+visible — one of two walks over the same directory was guarded and the other
+was not.
+
+**What was actually lost.** `_fat12_read_set` ends in the diagnosis written for
+the K2000 floppies this project itself emits with `--floppy`: `.img` reaches
+the MPC60 parser by elimination, so a K2000 disc was announced and then
+rejected for lacking a `.SET`. The fix that made that message correct is worth
+nothing if a crash happens before it is reached — and it did, on the exact
+input the guard exists for.
+
+Measured, on a 1.44 MB FAT12 image written by `writers/fat12.format_new` with
+one `.KRZ` in the root and truncated:
+
+```
+OLD  9728 bytes : IndexError: index out of range     (mpc60_parser.py:180)
+NEW  9728 bytes : ValueError: No .SET file found in the floppy image
+OLD  9792 bytes : IndexError: index out of range     (mpc60_parser.py:180)
+NEW  9792 bytes : ValueError: ... it holds .KRZ files ... (the K2000 diagnosis)
+```
+
+The geometry says why those two cuts are the interesting ones. 9728 is exactly
+`(1 + 2*9) * 512`, the end of the second FAT, so the root directory begins
+where the file ends and all 224 entries slice short. 9792 keeps the volume
+label and the `.KRZ` entry and cuts the other 222 — the case where the entry
+that identifies the format is still there, and the crash stopped the reader
+from ever getting to it.
+
+**The fix.** `if len(ent) < 32 or ent[0] in (0x00, 0xE5) or (ent[11] & 0x08)`,
+i.e. the same guard `_fat12_extensions` already had, plus a comment saying what
+a short entry means. Nothing else in the walk changed: the FAT-chain read, the
+`size`/`clus` unpack and the return are untouched, so an intact image behaves
+byte-identically.
+
+**Tests.** `tests/test_mpc60_truncated_image_diagnosis.py`, 44 tests: the two
+diagnosis cuts above, a sweep of 41 truncation lengths (every 512 bytes across
+the boot sector and both FATs, every 32 bytes through the first 16 root
+entries, and a coarse sweep over the data area) that must each reach a
+`ValueError` rather than an `IndexError`, and a control that a floppy really
+holding a `.SET` — again written by `writers/fat12` — still extracts and
+parses, since the guard is a skip and a skip that also swallowed a valid entry
+would be a regression. **38 of the 44 fail with the fix reverted**; the
+survivors are the control and the five cuts long enough to leave the root
+directory complete, where the unguarded walk had no short entry to trip over.
+Suite unchanged otherwise (65 passed over `test_mpc*`, `test_eps_filesystem`
+and the new file; `test_disk_image_dispatch` and `test_citations_resolve`
+pass on top of that).
+
+**What did not change.** Any intact image. `_fat12_extensions` was already
+correct; the two walks now agree, which is the property the finding was about.
