@@ -42848,3 +42848,71 @@ parametrised invariant closes the file: no sample in the bank may ever carry
 **What did not change.** Every well-formed GIG. There are no `.gig` fixtures in
 the tree, so the existing GIG coverage is synthetic and passes unchanged
 (`tests/test_gig_shared_wave.py`, 9 tests, alongside the new 19).
+
+### §RETRACTED — four optimisations that were built, measured, and rejected (2026-10-10)
+
+The review's `# RETRACTED` section records four changes this project was asked to
+make. Each was **implemented and timed**, and none is shipping. They are recorded
+here under the same status, because a repo that refuses to ship an unmeasured
+speedup has to refuse to ship an unmeasured *retraction* too — the reason these
+are written down rather than merely dropped.
+
+**1. `_sinc_resample`'s inner convolution is at the pure-Python floor.**
+Hoisting `map`/`mul`/`sum` to locals and making `w` a tuple, over 68 taps ×
+88,200 outputs:
+
+```
+  current (per-element lookup)      540.49 ms
+  hoisted locals + tuple weights    562.77 ms   0.96x   byte-identical
+```
+
+45 ns per multiply-add is what pure Python costs. This is the one place where the
+review went looking hard for a win and found none, and it says so.
+
+**2. `resampler.py:352`, the non-exact polyphase branch, cannot be fixed safely.**
+For 27777 -> 22050 (which the KRZ headroom stage and `--resample eii` +
+`--max-sample-rate` both produce, because `up = 7350 > _SINC_MAX_PHASES`), the
+per-output-sample weight rebuild `w = [a + (b-a)*f for a, b in zip(wa, wb)]` is
+2.157 s of a 3.622 s profile — 60 %. Three alternatives:
+
+```
+  current (listcomp per output sample)   1458.7 ms
+  cached DIFF rows (d = b-a, once)        1427.6 ms   1.02x   byte-identical
+  cached blended vectors                  1051.2 ms   1.39x   byte-identical
+```
+
+The 1.39x is **rejected on memory**, and the reason is worth stating because it is
+not the obvious one: the phase sequence is *pseudo-random*, not periodic, because
+`ratio` is a float rather than the exact rational. **24,944 distinct `(p0, f)`
+pairs for 88,200 output samples** of one 4 s sample, so a cache grows linearly
+with sample length (~18 MB for this one, ~330 MB at 20 s) and must live in every
+pool worker. A bounded cache does not rescue it either, measured: `lru_cache` at
+1024/4096 entries gives a 0.0 % hit rate and 1785/1789 ms — i.e. *slower than no
+cache at all*; only at 16384 entries does it reach 71.7 % hits and 956.7 ms.
+**State the non-exact branch as an unfixable-in-pure-Python hot spot, not as an
+opportunity.**
+
+**3. `heapq.nsmallest` instead of `sorted` in `_windowed_ms`:** 65.79 -> 111.09 ms
+= **0.59x** — much worse. §2 and §3 both use the full sort, and continue to.
+
+**4. The stereo downmix `zip` rewrite in `auto_loop.py:344` /
+`single_cycle.py:260`:** 0.89x / 0.91x — slower. The two strided slices cost more
+than the range-index loop saves. Odd-length buffers (7, 5, 3, 1, 0 values) were
+checked too: the results agree, so the point is purely speed.
+**`processors/auto_loop.py:344` and `processors/single_cycle.py:260` are not to be
+"fixed" this way.** Both lines were left exactly as found; §2 and §3 optimised
+around them, not through them.
+
+**What did not change.** Every byte. No source file was modified for this entry —
+verified by the commit being `docs/RESOLUTION_NOTES.md` alone. The suite is
+unchanged (1838 passed), which is the expected result and the reason the section
+exists: a retraction is a measurement, not an edit.
+
+**Why this entry is a commit at all.** The alternative is to leave the four
+rejects in the review document and nowhere else. They are the kind of thing a
+future reader re-derives from first principles — `heapq.nsmallest` looks strictly
+better than `sorted`, and a strided-zip downmix reads as obviously faster than an
+index loop — so the next person to try needs somewhere to find that it was tried
+and lost. The review says it; the resolution notes are where the project's other
+"this was measured and it did not help" records live, several of which are cited
+in the retraction comments themselves.
