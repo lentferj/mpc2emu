@@ -144,7 +144,11 @@ def _parse_rgnh(data: bytes, off: int) -> dict:
         'vel_lo':  struct.unpack_from('<H', data, off+4)[0],
         'vel_hi':  struct.unpack_from('<H', data, off+6)[0],
         'key_group': struct.unpack_from('<H', data, off+8)[0],
-        'layer':   struct.unpack_from('<H', data, off+10)[0] if len(data)-off > 10 else 0,
+        # §REVIEW1010 m2: the guard was `len(data)-off > 10`, which admits a
+        # buffer of exactly off+11 -- one byte short of the two the read at
+        # off+10 needs. An 11-byte `rgnh` therefore raised struct.error from
+        # inside its own bounds check. `>= 12` is the guard this read wants.
+        'layer':   struct.unpack_from('<H', data, off+10)[0] if len(data)-off >= 12 else 0,
     }
 
 
@@ -173,6 +177,25 @@ def _parse_wsmp(data: bytes, off: int, chunk_size: int = 0) -> dict:
         loop_type   = struct.unpack_from('<I', data, lo+4)[0]
         loop_start  = struct.unpack_from('<I', data, lo+8)[0]
         loop_length = struct.unpack_from('<I', data, lo+12)[0]
+        # §REVIEW1010 m4: `ulStart + ulLength - 1` is the inclusive end only
+        # while ulLength counts real frames. A WLOOP carrying ulLength == 0
+        # produced an end of ulStart - 1 -- an INVERTED (start, end) pair,
+        # which is not a zero-length loop and not something any target format
+        # can express: it reached SampleData and both writers, and the KRZ
+        # writer writes loopEnd against sampleEnd (krz_writer.py:668), so it
+        # laid a loopStart > loopEnd into the header.
+        #
+        # The reading taken here: at ulLength == 0 there are no frames to loop
+        # over, so the WLOOP records the ABSENCE of a loop -- which is what
+        # DLS leaves behind when a region has none, since the struct is
+        # zero-filled. Such a record is skipped, and skipping is the reading
+        # that cannot produce an inverted pair: `loops` stays empty, so
+        # `_extract_waves` keeps NO_LOOP and `_region_sample` returns the
+        # wave itself. Collapsing the end onto ulStart instead would leave a
+        # degenerate loop_start == loop_end in the model, which the writers
+        # refuse to call looped but which the E4B header still carries.
+        if loop_length == 0:
+            continue
         loops.append({
             'type':  loop_type,
             'start': loop_start,
@@ -269,12 +292,27 @@ def _parse_fmt(data: bytes, off: int) -> dict:
     }
 
 
-def _parse_smpl(data: bytes, off: int) -> dict:
-    """WAV smpl chunk (loop points)."""
+def _parse_smpl(data: bytes, off: int, size: int = 0) -> dict:
+    """WAV smpl chunk (loop points).
+
+    §REVIEW1010 m3: `cSampleLoops` at off+28 was taken straight from the file
+    and the loop ran over it unbounded, so a short `smpl` chunk -- 36 bytes
+    declaring 0xFFFF loops -- read at off+44 and raised struct.error. The loop
+    is now bounded by the chunk's own data size, or by the file when the caller
+    has none, so a malformed count yields the loops that actually exist instead
+    of a crash. One SAMPLER_LOOP record is 24 bytes (dwIdentifier, dwType,
+    dwStart, dwEnd, dwFraction, dwPlayCount), which is why type/start/end are
+    read at +4/+8/+12 and why both bounds here are 36 and 24.
+    """
+    if len(data) - off < 36:
+        return {'loops': []}          # no room for the header, let alone a loop
     num_loops = struct.unpack_from('<I', data, off+28)[0]
+    bounds = off + size if size > 0 else len(data)
     loops = []
     for li in range(num_loops):
         lo  = off + 36 + li * 24
+        if lo + 24 > bounds:
+            break
         loops.append({
             'type':  struct.unpack_from('<I', data, lo+4)[0],
             'start': struct.unpack_from('<I', data, lo+8)[0],
@@ -522,7 +560,7 @@ def _extract_waves(riff: _RiffWalker, max_samples: int = 512
         smpl_r = wave_walker.find('smpl')
         loops = wsmp_info['loops']
         if smpl_r and not loops:
-            smpl_info = _parse_smpl(riff.data, smpl_r[0])
+            smpl_info = _parse_smpl(riff.data, smpl_r[0], smpl_r[1])
             loops = smpl_info['loops']
 
         # Name from INFO

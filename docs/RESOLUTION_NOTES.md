@@ -42772,3 +42772,79 @@ disc produces; the 16-character budget, which the five-digit field and the
 `tests/test_eps_filesystem.py` already asserts; and the preset half, which was
 never in this loop. Suite: not run in full — the EPS and dispatch tests pass
 unchanged (19 passed, 11 subtests), which is the half this file touches.
+
+### Findings m2/m3/m4 — three GIG parser guards: an off-by-one bounds check, a loop count read from the file, and a WLOOP that inverted itself (2026-10-10)
+
+Three MINOR findings against `parsers/gig_parser.py`, all the same shape: a
+struct field or a loop bound taken from a number in the file rather than from
+the bytes that are actually present. None is reachable from a well-formed GIG,
+which is why they are MINOR — but each one turned a malformed input into a
+`struct.error` out of the region walk, or into a pair of loop points no target
+format can express.
+
+**m2 — the `rgnh` guard was off by one in its own favour.**
+`parsers/gig_parser.py:151` read the layer field with
+
+```python
+'layer': struct.unpack_from('<H', data, off+10)[0] if len(data)-off > 10 else 0,
+```
+
+`len(data) == off+11` passes `> 10`, but the read at `off+10` needs `off+12` — so
+an 11-byte `rgnh` raised `struct.error` *from inside its own bounds check*.
+Verified: `_parse_rgnh(b'\x00'*11, 0)` → `struct.error: unpack_from requires a
+buffer of at least 12 bytes for unpacking 2 bytes at offset 10`. The guard is now
+`>= 12`, which is exactly the read it protects.
+
+**m3 — `_parse_smpl` trusted `cSampleLoops`.** `parsers/gig_parser.py:295`
+iterated the count at `off+28` with no bound against either the chunk or the
+file. Verified: a 36-byte `smpl` body — a header and no loop records at all —
+declaring `cSampleLoops = 0xFFFF` read at `off+44` and raised `struct.error:
+unpack_from requires a buffer of at least 44 bytes for unpacking 4 bytes at
+offset 40`. The loop is now bounded by the chunk's own data size (or the file's,
+when the caller has none), so `_parse_smpl` takes the chunk size as `_parse_wsmp`
+already did and `_extract_waves` passes it. The `cSampleLoops` read itself is
+guarded by the same 36-byte header.
+
+**m4 — `ulLength == 0` subtracted a frame that is not there.** The inclusive end
+is `ulStart + ulLength - 1` (`parsers/gig_parser.py:179`), which is right for any
+positive length and *one past the wrong side of zero* at zero. Verified: a WLOOP
+with `ulStart=5000, ulLength=0` yielded `loop_start=5000, loop_end=4999`, that
+pair landed in `SampleData`, and the KRZ writer writes loopEnd against
+`sampleEnd` (`writers/krz_writer.py:668`), so a `loopStart > loopEnd` reached the
+header.
+
+**The reading taken for m4, and why it is "no loop".** Two candidates were
+available: collapse the end onto `ulStart` (a degenerate
+`loop_start == loop_end`), or treat `ulLength == 0` as the absence of a loop.
+The second is the one chosen, and it is the reading that cannot produce an
+inverted pair at all. `ulStart + ulLength - 1` is the inclusive end only while
+`ulLength` *counts real frames*; at zero there are none to loop over, so the
+WLOOP records the absence of a loop — which is precisely what DLS leaves behind
+for a region that has none, since the struct is zero-filled. Such a record is
+skipped, `loops` stays empty, `_extract_waves` keeps `NO_LOOP`, and
+`_region_sample` returns the wave itself, so the finding-1 sharing contract
+still holds. The degenerate alternative was rejected because it leaves a pair
+in the model that both writers refuse to call looped but that the E4B header
+carries regardless.
+
+**Tests.** `tests/test_gig_bounds_and_loops.py` — 19 tests in four classes, reusing
+the fixture builders of `tests/test_gig_shared_wave.py` so the end-to-end cases
+parse a real RIFF walk. **14 fail with the fix reverted**: `struct.error` on the
+two malformed-input reproductions above (m2's 11-byte `rgnh` and m3's 36-byte
+`smpl`), wrong-value assertions on the inverted pair (m4) and on the
+chunk-bound, and the same three inputs driven through `parse_gig` so the region
+walk and `_extract_waves` are covered too. One of the 14 — the test that proves
+the bound is the *chunk* and not merely the file — fails only on the signature,
+because that distinction is the new parameter.
+
+Five pass both before and after, and they are the guards that the guards do not
+eat good data: `layer` is still read from a 12-byte `rgnh`; both loops of a
+well-formed two-loop `smpl` are still returned; a non-zero `ulLength` still
+gives `ulStart + ulLength - 1`; and a real override beside a zero-length one
+still gets its own suffixed copy rather than collapsing onto the wave. A
+parametrised invariant closes the file: no sample in the bank may ever carry
+`loop_end < loop_start`.
+
+**What did not change.** Every well-formed GIG. There are no `.gig` fixtures in
+the tree, so the existing GIG coverage is synthetic and passes unchanged
+(`tests/test_gig_shared_wave.py`, 9 tests, alongside the new 19).
