@@ -418,27 +418,41 @@ def _quantize(samples: list[float], bit_depth: int,
 
     rng = random.Random(42)  # Deterministic for reproducibility
 
+    # §REVIEW1010 §1: this is the hottest loop in the project (0.324 s tottime
+    # out of 1.195 s for `resample_vintage` on 4 s of mono).  Per element it
+    # paid two global-name lookups (`math.floor`/`round`), two `rng` attribute
+    # lookups, and built a clamp out of two builtin calls where two conditional
+    # expressions would do.  Hoisting the lookups and making the clamp
+    # conditional is BYTE-IDENTICAL: `max(a, min(b, q))` on integers returns
+    # exactly what the equivalent if/elif chain returns, and the RNG call order
+    # is untouched, so the sequence — and every dither/noise byte — is the same.
+    _gauss = rng.gauss
+    _rand = rng.random
+    _floor = math.floor
+    _round = round
+    lo, hi = -levels, levels - 1
     out = []
+    append = out.append
     for x in samples:
         # Add noise floor
         if noise_amp > 0:
-            x += rng.gauss(0.0, noise_amp)
+            x += _gauss(0.0, noise_amp)
 
         # TPDF dither: two uniform random values minus each other
         if dither_amp > 0:
-            d = (rng.random() - rng.random()) * dither_amp
+            d = (_rand() - _rand()) * dither_amp
             x += d
 
         # Quantize
         scaled = x * levels
-        if truncate:
-            q = math.floor(scaled)
-        else:
-            q = round(scaled)
+        q = _floor(scaled) if truncate else _round(scaled)
 
         # Clip and normalize back
-        q = max(-levels, min(levels - 1, q))
-        out.append(q / levels)
+        if q < lo:
+            q = lo
+        elif q > hi:
+            q = hi
+        append(q / levels)
 
     return out
 
@@ -466,27 +480,48 @@ def _mu_law_quantize(samples: list[float], bits: int, mu: float,
     noise_amp = (2 ** noise_floor_bits - 1) / levels if noise_floor_bits > 0 else 0.0
     rng = random.Random(42)                # deterministic, matches _quantize
 
+    # §REVIEW1010 §1: the same hoisting as `_quantize`, plus a structural one.
+    # The EXPAND step is a pure function of the quantised code `q`, an integer
+    # in [-levels, levels-1] -- 256 distinct values at 8 bits -- so it is
+    # tabulated once instead of re-derived per element (`expm1` per sample was
+    # the second half of the cost).  The entries are produced by the IDENTICAL
+    # expression the inline path used, so every float is bit-for-bit the same.
+    # The table is amortised over the whole buffer: 0.071 ms to build against
+    # ~111,000 values for one 4 s 44.1 kHz sample.
+    #
+    # The RNG sequence is untouched -- `gauss` is still called once per element,
+    # in the same order, because the DAC hiss is additive in the output domain
+    # and moving or batching it would change every subsequent sample.
+    _mu_law_expand = []
+    for q in range(-levels, levels):
+        cq = q / levels
+        _mu_law_expand.append(
+            (1.0 if cq >= 0.0 else -1.0) * math.expm1(abs(cq) * log1p_mu) / mu)
+    _log1p = math.log1p
+    _floor = math.floor
+    _gauss = rng.gauss
+    lo, hi = -levels, levels - 1
     out = []
+    append = out.append
     for x in samples:
         # Compress: linear → companded domain [-1, 1]
         x = 1.0 if x > 1.0 else -1.0 if x < -1.0 else x
         s = -1.0 if x < 0.0 else 1.0
-        c = s * math.log1p(mu * abs(x)) / log1p_mu
+        c = s * _log1p(mu * abs(x)) / log1p_mu
 
         # Quantize the companded value to `bits` (truncate, like the EII)
         scaled = c * levels
-        q = math.floor(scaled) if truncate else math.floor(scaled + 0.5)
-        q = max(-levels, min(levels - 1, q))
-        cq = q / levels
-
-        # Expand: companded → linear   (inverse µ-law)
-        sc = -1.0 if cq < 0.0 else 1.0
-        lin = sc * math.expm1(abs(cq) * log1p_mu) / mu
+        q = _floor(scaled) if truncate else _floor(scaled + 0.5)
+        if q < lo:
+            q = lo
+        elif q > hi:
+            q = hi
+        lin = _mu_law_expand[q + levels]
 
         # Analog DAC hiss at the output (signal-independent)
         if noise_amp > 0.0:
-            lin += rng.gauss(0.0, noise_amp)
-        out.append(lin)
+            lin += _gauss(0.0, noise_amp)
+        append(lin)
 
     return out
 

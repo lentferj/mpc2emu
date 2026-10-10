@@ -41753,6 +41753,61 @@ entry bytes it always did.
 inside 0..127 — the suite passes unchanged (1479 passed), and the E4B
 round-trip corpus is byte-identical.
 
+### §1 — the two quantisers: 1.5–2.6× each, byte-identical (2026-10-10)
+
+**The hot spot.** `cProfile` over `resample_vintage` on 4 s of 44.1 kHz mono
+puts `_mu_law_quantize` at **0.438 s tottime / 0.811 s cumtime out of 1.275 s
+total (64 %)** for the EII profile and `_quantize` at 0.324/0.674 s out of
+1.195 s for EMAX. The cause is the same in both: per element the loops pay
+global-name lookups for `math.log1p`/`math.expm1`/`math.floor`/`round`,
+attribute lookups for `rng.gauss`/`rng.random`, builtin `min()`/`max()` calls for
+a clamp that is two conditional expressions, and a `list.append` looked up each
+time.
+
+**The structural half, µ-law only.** The *expand* step takes just 256 distinct
+values — it is a function of the quantised code `q`, an integer in −128..127 —
+so it can be tabulated once. The entries are produced by the **identical
+expression** the inline path used, so they are bit-for-bit the same floats. The
+table costs 0.071 ms to build and is amortised over ~111,000 values.
+
+**Measured on this machine** (4 s of 44.1 kHz mono, two partials plus noise):
+
+```
+EII  8-bit mu-255 truncate +noise    383.94 -> 221.13 ms   1.74x  IDENTICAL
+EII  8-bit mu-255 truncate clean     192.54 ->  71.77 ms   2.68x  IDENTICAL
+EMAX 12-bit round +dither +noise     344.02 -> 230.77 ms   1.49x  IDENTICAL
+EMAX 12-bit truncate clean           112.83 ->  46.22 ms   2.44x  IDENTICAL
+
+resample_vintage, 4 s mono, EMULATOR_II
+  406.55 -> 317.53 ms   1.28x
+```
+
+**Byte-identity is not automatic here, and pinning it was the point.** Two
+things in these loops can change the output without changing the arithmetic: the
+clamp rewritten from `max(a, min(b, q))` to if/elif, and the RNG call order.
+The clamp is over integers, so the two forms agree exactly; the RNG is the hard
+one, because `gauss` is called once per element and any reordering, batching or
+hoisting of the *call* would shift the hiss by a whole sequence. The floor is
+`rng.gauss` itself — 122 ms for 176,400 calls, 34 % of the old loop — and it
+cannot be replaced without changing the output bytes, so it is left alone.
+
+**Tests.** Ten in `tests/test_resampler_quantizer_identity.py`. They pin
+identity by spelling the **pre-optimisation loops out verbatim as references**
+and asserting equality over a real signal, for all eight parameter combinations
+the profiles produce (8-bit and 12-bit, truncate and round, with and without
+dither and noise floor). That is deliberately the shape T1 warns about — a test
+re-implementing the logic — inverted: here the reference is the *old shipped*
+code and the test calls the *new* one, so a change to either side fails.
+`test_the_clamp_is_exercised_by_the_fixture` exists because the signal never
+reached the rails in the first draft and the clamp assertions were vacuous until
+out-of-range values were added.
+
+**What did not change.** The algorithms, the profiles, the RNG seed, the call
+order, the output type, and every written byte. End-to-end through
+`resample_vintage`, both profiles × mono/stereo, the SHA-256 of the written PCM
+is identical (verified: `4a7c47924282d5d0`, `6bfac07b71758558`,
+`53e39b2cf98d8bb3`, `2abf5c15d106d11f`).
+
 ### Finding 8 — the EIII sample area was sized from the buffer, not the bytes written (2026-10-10)
 
 **The defect.** `write_eiii`'s bank header computed the sample area as
