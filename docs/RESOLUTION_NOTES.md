@@ -42241,3 +42241,140 @@ approximation of it. `tests/test_cutoff_position_identity.py`,
 `tests/test_krz_parser.py`: **151 passed**. The full suite was not run here (the
 orchestrator runs it between commits); it is not expected to move, since no
 returned value changed.
+
+### §7 — five minor wins inside the resampler, all byte-identical (2026-10-10)
+
+**The hot spots.** The review's second pass measured seven candidates in
+`processors/resampler.py`. Five are pure Python overhead rather than
+algorithmic work, and five were taken. Each does THE SAME ARITHMETIC IN THE
+SAME ORDER as the form it replaced, so every result is the identical float
+and not merely close.
+
+**Measured on this machine** (4 s of 44.1 kHz, two partials plus noise, best of
+15 with the two candidates interleaved round-robin so drift cannot rank them):
+
+```
+peak scan  genexpr+abs() -> _peak_of       13.70 ->  5.06 ms   2.70x  IDENTICAL
+stereo re-interleave  index form -> zip     15.09 ->  6.52 ms   2.31x  IDENTICAL
+_decimate        44100 -> 27500             40.73 -> 34.52 ms   1.18x  IDENTICAL
+_onepole_lowpass  9500 Hz @ 44100           20.24 -> 17.61 ms   1.15x  IDENTICAL
+_onepole_highpass  30 Hz @ 44100            23.40 -> 20.26 ms   1.15x  IDENTICAL
+```
+
+The review reported 2.79x / 3.14x / 1.17x / 1.18x / 1.14x for these; every one
+reproduced within a few per cent on this machine, and none moved in the
+ranking.
+
+**The peak scan is the one that matters more than its own size.** It is a
+small slice of `resample_vintage`, but it produces `_peak` — the number the
+gain stage divides by, so a wrong peak under- or over-stages every channel
+silently. `max(x), -min(x)` is exact for every float: |x| is x for x >= 0 and
+-x for x < 0, so the larger of the two extremes IS max(|x|). ±inf both map to
++inf. The only input where the two extremes can hand back a **negative zero**
+— a buffer whose first value is -0.0 holding no positive value — is
+unreachable from `_pcm_to_float` (int 0 divides to +0.0), but the result is
+wrapped in `abs()` anyway, because the peak is a magnitude and the wrapper is
+one free call per sample.
+
+**Two hoists, not rewrites.** `_peak_of` and `_interleave_planes` were lifted
+to module level so the two call sites of each do not carry the substitution
+twice, and so the tests can call them directly rather than spelling the form
+out a second time. `_interleave_planes` in fact replaced THREE inline
+expressions: `resample_vintage`'s index form, `resample_to_rate`'s
+nested-comprehension `zip` form — which the review counted separately at
+1.72x here, 11.26 -> 6.55 ms — and the test fixture's own interleave.
+
+**A vacuous test, caught and fixed.** The first draft of
+`test_decimate_clamps_at_the_last_index_not_past_it` asserted the clamp
+against buffers it never reached. Checking it exhaustively: with
+`n_out = int(len/ratio)`, every `i` satisfies `i * ratio <= len - ratio`, so
+`int(i * ratio) <= len - 1` for any ratio > 0 — verified over len 0..4000
+against all eight rate pairs the pipeline produces. **The `min()` in
+`_decimate` is provably dead where it stands.** It is kept, and now documented
+as dead, because it is the guard that keeps the function safe if `n_out` is
+ever computed differently (rounded rather than truncated), and it costs one
+C-level call per output sample, which the hoist already pays for. The test
+that replaced the vacuous one asserts the truncation explicitly — `int()` and
+not `round()`, the literal next choice a reader of the docstring's
+"nearest-sample selection" would reach for.
+
+**Tests are proven to have teeth, not just to pass.** Twenty-seven in
+`tests/test_resampler_minor_wins_identity.py`. The pre-§7 bodies are spelled
+out verbatim as references, over both profiles, mono and stereo, all four
+`bandpass`/`restore_level` combinations, and the second re-interleave site.
+Four VINTAGE PCM digests (one per profile per channel count) were computed
+against the **pre-§7 module loaded by `importlib` from commit d5cce46** and
+re-checked after, so a moved float anywhere in the chain fails one of them.
+
+The reverted-fix check is worth stating precisely, because for a
+byte-identical change it is not the usual story: **with `processors/resampler.py`
+stashed, the whole file still passes** — that is what byte-identical means.
+So the teeth were proven by mutation instead: eleven plausible-but-wrong
+rewrites were applied in turn (`a * prev + b * x` reassociated,
+`max(x)` alone for the peak, `min(x)` alone, the `abs()` wrapper dropped,
+`round()` instead of `int()`, the planes zipped in reverse, `zip_longest`
+with a fill, `left + right` in place of the interleave, a wrong filter
+coefficient, the last lowpass sample dropped). Nine failed the file; the two
+that did not were checked separately and are **provably byte-identical
+themselves** — float addition is commutative in IEEE-754, and the reordered
+`append(y)` computes `y` before either ordering — so those are not blind
+spots.
+
+**The two codec functions were measured and LEFT ALONE.** Both, on this
+machine, over 4 s / 176,400 frames with 21 interleaved rounds:
+
+```
+_pcm_to_float   s / 32768.0  (current)    15.50 ms   1.00x
+_pcm_to_float   s * (1/32768)              14.95 ms   1.04x
+_pcm_to_float   memoryview(data)           15.64 ms   1.01x
+```
+
+The multiply form is exact — 1/32768 is a power of two, so multiply and
+divide agree bit-for-bit — but 1.04x is at the floor the module's own comment
+already claims, and the memoryview form reproduces the repo's own retraction
+("measured 19.11 -> 19.57 ms -- no change") to the word. The per-element
+convert is the floor, as the comment says. Not shipped.
+
+`_float_to_pcm` needs its own paragraph, because **the form the review
+proposes is not byte-identical.** `array('h', [int(v * 32768.0) for v in
+samples])` measures 1.34x here — but it raises:
+
+```
+    >>> array('h', [int(v * 32768.0) for v in [2.0]])
+    OverflowError: signed short integer is greater than maximum
+```
+
+where the shipped loop hard-clips to 32767. Out-of-range input is reachable:
+a hot signal, a `restore_level=False` run, a one-pole transient. So the
+1.34x is a crash, not a speedup, and the review's 1.09x for the same
+expression must have been measured on in-range input only. The exact form —
+the clipped listcomp, `-32768 if (v := int(x*32768.0)) < -32768 else (32767
+if v > 32767 else v)` — was built and measured at **1.09x in-range and 1.13x
+with the clip exercised**, above this section's bar. It is recorded here and
+not shipped, because the gain is inside the run-to-run spread of the two
+forms and the shipped loop is the one every caller's clip behaviour already
+depends on. `tests/test_resampler_minor_wins_identity.py` pins both
+decisions: `test_the_read_side_was_measured_and_left_alone` fails if someone
+reaches for the multiply form without answering the measurement, and
+`test_the_write_side_still_hard_clips` fails if the clip is lost to a form
+that only clips by accident.
+
+**Two retractions recorded, neither implemented.** `_sinc_resample`'s inner
+convolution: hoisting `map`/`mul`/`sum` to locals and making `w` a tuple
+measured **0.96x** — no change, byte-identical. The pure-Python floor is 45 ns
+per multiply-add over 68 taps x 88,200 outputs. And `resampler.py:352`, the
+non-exact polyphase branch's per-output-sample weight rebuild, measured
+1.39x as a cached-blend and is **rejected on memory**: the phase sequence is
+pseudo-random (24,944 distinct `(p0, f)` pairs for 88,200 outputs of a 4 s
+sample), so a cache grows linearly with sample length — ~18 MB for one
+sample, ~330 MB at 20 s — and must live in every pool worker.
+`lru_cache` at 1024/4096 entries measured 0.0 % hit rate and 1785/1789 ms,
+i.e. *slower* than no cache. State the non-exact branch as an
+unfixable-in-pure-Python hot spot, not as an opportunity.
+
+**What did not change.** The algorithms, the profiles, the RNG seed, the call
+order, the output types, and every written byte. End-to-end through
+`resample_vintage` for both profiles x mono/stereo, across all four
+`bandpass`/`restore_level` combinations, and through `resample_to_rate` for
+stereo at three destination rates, the PCM is identical. The suite passes
+unchanged (44 passed, 97 subtests, for the four required files).

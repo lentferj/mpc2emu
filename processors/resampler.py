@@ -53,6 +53,7 @@ References:
 import array
 import math
 from functools import lru_cache
+from itertools import chain
 import os
 from operator import mul
 import struct
@@ -210,17 +211,25 @@ def _onepole_lowpass(samples: list[float], cutoff_hz: float,
     """
     First-order IIR lowpass (RC filter).
     H(z) = (1-a) / (1 - a*z^-1)   where a = exp(-2π*fc/fs)
+
+    §REVIEW1010 §7: the output used to be preallocated as `[0.0] * len(samples)`
+    and filled by `out[i] = prev` under `enumerate` -- one index-assignment per
+    element on top of the arithmetic.  Appending instead is the same sum in the
+    same order, so every returned sample is the identical float.
+    MEASURED 20.24 -> 17.61 ms = 1.15x, byte-identical, on 4 s of 44.1 kHz
+    mono through the EII's 9.5 kHz anti-alias pole.
     """
     if cutoff_hz >= sample_rate * 0.5:
         return samples[:]
     omega = 2.0 * math.pi * cutoff_hz / sample_rate
     a = math.exp(-omega)
     b = 1.0 - a
-    out = [0.0] * len(samples)
+    out = []
+    append = out.append
     prev = 0.0
-    for i, x in enumerate(samples):
+    for x in samples:
         prev = b * x + a * prev
-        out[i] = prev
+        append(prev)
     return out
 
 
@@ -363,17 +372,26 @@ def _sinc_resample(samples: list[float], src_rate: int,
 
 def _onepole_highpass(samples: list[float], cutoff_hz: float,
                       sample_rate: int) -> list[float]:
-    """First-order IIR highpass (DC blocker / low-end rolloff)."""
+    """First-order IIR highpass (DC blocker / low-end rolloff).
+
+    §REVIEW1010 §7: same substitution as `_onepole_lowpass` -- the preallocated
+    `[0.0] * len(samples)` plus one `out[i] = y` per element is replaced by an
+    append.  The recurrence is untouched, so the transient at the start of the
+    buffer is the identical float.
+    MEASURED 23.40 -> 20.26 ms = 1.15x, byte-identical, on 4 s of 44.1 kHz
+    mono at the EII's 30 Hz bandpass knee.
+    """
     if cutoff_hz <= 0:
         return samples[:]
     omega = 2.0 * math.pi * cutoff_hz / sample_rate
     a = math.exp(-omega)
-    out = [0.0] * len(samples)
+    out = []
+    append = out.append
     prev_x = 0.0
     prev_y = 0.0
-    for i, x in enumerate(samples):
+    for x in samples:
         y = a * (prev_y + x - prev_x)
-        out[i] = y
+        append(y)
         prev_x = x
         prev_y = y
     return out
@@ -385,12 +403,78 @@ def _decimate(samples: list[float], src_rate: int,
     Naive integer-ratio decimation (drop samples, no interpolation).
     This intentionally introduces aliasing — exactly like the real hardware.
     For non-integer ratios, uses nearest-sample selection.
+
+    §REVIEW1010 §7: the comprehension re-read `len(samples) - 1` and looked up
+    the `int` and `min` globals for every one of the `n_out` output samples.
+    All three are loop-invariant.
+    MEASURED 40.73 -> 34.52 ms = 1.18x, byte-identical, on 4 s of 44.1 kHz
+    mono decimated to 27.5 kHz.
+
+    ⚠ `min()` is provably dead where it stands and is kept anyway.  With
+    `n_out = int(len(samples) / ratio)`, every `i` satisfies
+    `i * ratio <= len - ratio`, so `int(i * ratio) <= len - 1` for any
+    ratio > 0 -- verified exhaustively over len 0..4000 against every rate
+    pair the pipeline produces (44100/27500, 48000/44100, 44100/22050,
+    96000/44100, 22050/44100, 8000/8001, 44100/44101, 44100/441).  It is
+    the guard that keeps the function safe if `n_out` is ever computed
+    differently -- rounded instead of truncated, say -- and it costs one
+    C-level call per output sample, which the hoist already pays for.
     """
     if src_rate == dst_rate:
         return samples[:]
     ratio = src_rate / dst_rate
     n_out = int(len(samples) / ratio)
-    return [samples[min(int(i * ratio), len(samples) - 1)] for i in range(n_out)]
+    last = len(samples) - 1
+    _int = int
+    _min = min
+    return [samples[_min(_int(i * ratio), last)] for i in range(n_out)]
+
+
+def _peak_of(samples: list[float]) -> float:
+    """Largest |x| in `samples` -- the magnitude `resample_vintage` normalises
+    by, so it is exact and not merely close.
+
+    §REVIEW1010 §7: this was `max((abs(x) for x in samples), default=0.0)` -- a
+    generator frame plus an `abs()` CALL per element.  `max(x)` and `-min(x)`
+    are the two extremes found in two C-level passes, and one of them is
+    max(|x|): |x| is x for x >= 0 and -x for x < 0, so the larger of the two
+    extremes is the largest magnitude present.
+
+    Exact for every float.  ±inf both map to +inf (`abs(inf)` is `inf`, and
+    `-min` of a list holding `-inf` is `inf`).  For zeros: the two extremes
+    can hand back a NEGATIVE zero where `max(abs(x))` returns +0.0 -- the case
+    is a buffer whose first value is -0.0 holding no positive value -- so the
+    result is wrapped in `abs()`.  That case is unreachable from
+    `_pcm_to_float` (int 0 divides to +0.0), but the peak is a magnitude and
+    the wrapper is free; `default=0.0` on both keeps an empty buffer at 0.0
+    rather than raising, which the generator form's own `default` did.
+
+    MEASURED 13.70 -> 5.06 ms = 2.70x on 4 s of 44.1 kHz mono, byte-identical.
+    """
+    return abs(max(max(samples, default=0.0), -min(samples, default=0.0)))
+
+
+def _interleave_planes(left: list[float],
+                       right: list[float]) -> list[float]:
+    """Interleave two planes into one L,R,L,R,... buffer.
+
+    §REVIEW1010 §7: this was two inline expressions -- `resample_vintage`
+    used `[v for i in range(n) for v in (left[i], right[i])]` with an
+    explicit `n = min(len(left), len(right))`, and `resample_to_rate` used the
+    nested-comprehension `zip` form.  Both touched the planes once per frame
+    in Python-level bytecode.
+
+    `zip` already stops at the shorter plane, so it reproduces the truncation
+    the explicit `min()` was doing, and `chain.from_iterable` flattens the
+    pairs in one C pass.  Same order, same values, same length, no per-element
+    Python bytecode.  MEASURED 15.09 -> 6.52 ms = 2.31x on 4 s of 44.1 kHz
+    stereo (`resample_vintage`), and 11.26 -> 6.55 ms = 1.72x at the
+    `resample_to_rate` site.
+
+    Hoisted into one function because the two call sites did the same
+    operation twice, and this is the only place the substitution lives.
+    """
+    return list(chain.from_iterable(zip(left, right)))
 
 
 def _quantize(samples: list[float], bit_depth: int,
@@ -604,7 +688,13 @@ def resample_vintage(
     else:
         planes = [_all]
 
-    _peak = max((abs(x) for x in _all), default=0.0)
+    # §REVIEW1010 §7: the peak comes from `_peak_of`, which replaces the
+    # `max((abs(x) for x in _all), default=0.0)` generator + per-element
+    # `abs()` call (13.7 ms for 4 s of mono).  This is the one change in §7
+    # worth more than its own size: `_peak` is the number the gain stage
+    # 40 lines below divides by.  MEASURED 13.70 -> 5.06 ms = 2.70x,
+    # byte-identical.
+    _peak = _peak_of(_all)
     _shared_gain = (0.99 / _peak) if _peak > 1e-9 else 1.0
 
     done = []
@@ -698,8 +788,13 @@ def resample_vintage(
 
     if channels == 2 and len(done) == 2:
         left, right = done
-        n = min(len(left), len(right))
-        signal = [v for i in range(n) for v in (left[i], right[i])]
+        # §REVIEW1010 §7: was `[v for i in range(n) for v in (left[i],
+        # right[i])]` with `n = min(len(left), len(right))` -- two list
+        # indexings per frame in Python-level bytecode.  See
+        # `_interleave_planes`: same order, same values, same length.
+        # MEASURED 15.09 -> 6.52 ms = 2.31x, byte-identical, on 4 s of
+        # 44.1 kHz stereo.
+        signal = _interleave_planes(left, right)
     else:
         signal = done[0]
     pcm_out = _float_to_pcm(signal)
@@ -787,7 +882,9 @@ def resample_to_rate(sample: SampleData, dst_rate: int,
         # interleaved stream would mix the two channels into each other.
         left  = _sinc_resample(signal[0::2], src_rate, dst_rate)
         right = _sinc_resample(signal[1::2], src_rate, dst_rate)
-        out = [v for pair in zip(left, right) for v in pair]
+        # The same re-interleave `resample_vintage` uses (§REVIEW1010 §7):
+        # see `_interleave_planes`.  MEASURED 11.26 -> 6.55 ms = 1.72x here.
+        out = _interleave_planes(left, right)
     else:
         out = _sinc_resample(signal, src_rate, dst_rate)
 
