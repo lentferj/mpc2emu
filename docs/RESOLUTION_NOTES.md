@@ -41450,3 +41450,68 @@ change there.
 fix reverted (the headline, the `setdefault` guard, and the unit-level
 assertion that the expansion is per-section, which is the part that makes the
 merge-time fix impossible).
+
+### Finding 1 — a GIG region's loop leaked into every region sharing the wave (2026-10-10)
+
+**The defect.** `_extract_waves` builds the wave pool once, and every region,
+instrument and dimension-region referencing the same index receives **the same
+object**. The region-level `wsmp` loop was applied by writing onto that shared
+object, so the last region won for all of them. This module's own comment says
+*"on the reference disc seven layers routinely share three audio regions"*, so
+it is the normal case, not an exotic one.
+
+Measured on the shipped parser, two instruments over ONE wave, each with its own
+region loop (100..189 and 0..189):
+
+```
+ORIGINAL: Loaded 2 instrument(s), 1 sample(s)
+          sample 'wave0000': loop=FORWARD 0..189
+          INSTR-A zone -> 'wave0000'      <- should be 100..189
+          INSTR-B zone -> 'wave0000'
+```
+
+**This is not the benign fold of the AKAI stereo merge.** There, two objects
+become one and every byte of PCM is conserved — each zone plays its own audio.
+Here both zones play the *same loop*, so one of the two samples genuinely loses
+its sustain: INSTR-A's 100..189 is gone in both fixtures. And with one
+overriding region beside one non-overriding one, the non-overriding region picks
+up its neighbour's loop rather than the wave's own:
+
+```
+ORIGINAL mixed: Loaded 2 instrument(s), 1 sample(s)
+                sample 'wave0000': loop=FORWARD 100..189   <- B should have none
+```
+
+**The fix has two halves, and the second is the one that makes it work.**
+`_region_sample(wave, loops, taken)` returns the wave itself when the region
+has no loop or its loop merely restates the wave's own, and a `copy.copy` when
+it genuinely differs — shallow, so the PCM bytes (possibly tens of MB) are
+shared.
+
+The second half: **the copy gets a suffixed name, never the plain one.** Every
+writer resolves a zone to audio by sample NAME (`samples_by_name` in both the
+E4B and KRZ writers), so the name is not cosmetic. Copying without renaming
+would leave both objects named `wave0000`, the `banked_names` dedup would keep
+only the first, and the other region's zone would still resolve to the wrong
+audio — the same defect with a copy in the middle. `_suffixed_name` starts at
+`#1` so the plain name stays reserved for the wave itself, which is what lets a
+no-override region keep working beside an override region.
+
+**The dimension path routes through the same helper** (`dr_sd`, not the raw
+`waves[wi]`), because before this fix it received the override *by accident*
+through the shared mutated object. `dim_roots` is keyed on the same object that
+lands in `emitted`, so the per-sample root note still resolves.
+
+**Tests.** `tests/test_gig_shared_wave.py` — 9 tests, in three classes. Six fail
+with the fix reverted, including `test_the_wave_pool_is_not_mutated`, which
+asserts the root cause directly by re-running `_extract_waves` after a parse and
+checking `waves[0]` still carries the wave's own (absent) loop. Three are
+guards: two no-override regions still share one object; an override that merely
+restates the wave's loop does not copy; and the suffixed name never returns the
+plain base, never exceeds the 16-char budget.
+
+**This is also the first test file for `gig_parser` at all** (review finding
+T4). `parse_gig`, `_extract_waves`, `_parse_wsmp` and the region walk had no
+coverage anywhere in the tree, which is why this survived: the shared pool is
+invisible unless two regions reference it with *different* loops, which is
+exactly the fixture.

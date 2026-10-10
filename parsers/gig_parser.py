@@ -56,6 +56,7 @@ References:
   - Giga format notes from jimcraiglive.com and linuxsampler wiki
 """
 
+import copy
 import struct
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -186,6 +187,66 @@ def _parse_wsmp(data: bytes, off: int, chunk_size: int = 0) -> dict:
         'gain_db':   gain_db,
         'loops':     loops,
     }
+
+
+def _region_sample(wave, loops, taken: 'set'):
+    """The SampleData one region plays, with its region-level loop applied.
+
+    §REVIEW1010 finding 1. `waves` is built once by `_extract_waves` and every
+    region, instrument and dimension-region referencing the same index receives
+    **the same object**. Applying a region's `wsmp` loop to it directly let the
+    last region win for all of them; this module's own comment says seven layers
+    routinely share three audio regions on the reference disc, so that is the
+    normal case and not an exotic one. Verified with two instruments over one
+    wave: both zones came back carrying the SECOND region's loop.
+
+    Three cases, and only the middle one copies:
+
+      * no loop in this region's `wsmp` -> the wave itself. Sharing is correct,
+        because every region without an override wants the same thing.
+      * a loop that merely restates the wave's own -> the wave itself. Copying
+        would duplicate a sample that is already right.
+      * a loop that actually differs -> a copy carrying it.
+
+    **The copy gets a suffixed name, never the plain one, and that is the other
+    half of the fix.** Every writer resolves a zone to audio by sample NAME
+    (`samples_by_name` in both the E4B and KRZ writers), so the name is not
+    cosmetic: two distinct objects sharing one name means the second is shadowed
+    and its zone silently plays the first one's audio. Suffixing from `#1` never
+    onward keeps the plain name for the wave itself, so a no-override region
+    beside an override region still resolves to the wave.
+    """
+    if not loops:
+        return wave
+    l0 = loops[0]
+    new_type = (LoopType.ALTERNATING if l0['type'] == 1 else LoopType.FORWARD)
+    if (new_type == wave.loop_type
+            and l0['start'] == wave.loop_start
+            and l0['end'] == wave.loop_end):
+        return wave                       # the override is what the wave says
+    out = copy.copy(wave)
+    out.loop_type  = new_type
+    out.loop_start = l0['start']
+    out.loop_end   = l0['end']
+    out.name = _suffixed_name(wave.name, taken)
+    return out
+
+
+def _suffixed_name(base: str, taken: 'set') -> str:
+    """`base#1`, `base#2`, ... -- never the plain `base`, never over 16 chars.
+
+    The plain name belongs to the wave itself (see `_region_sample`), and the
+    16-char budget is E4B's `SampleData.name` limit, which every writer here
+    honours. Truncating the base to make room is what GIG's own 12-char name
+    field would force anyway.
+    """
+    n = 1
+    while True:
+        suf = f"#{n}"
+        cand = base[:16 - len(suf)] + suf
+        if cand not in taken:
+            return cand
+        n += 1
 
 
 def _parse_wlnk(data: bytes, off: int) -> dict:
@@ -664,15 +725,8 @@ def parse_gig(gig_path: str, max_instruments: int = 32,
                 if wave_idx >= len(waves) or waves[wave_idx] is None:
                     continue
 
-                sd = waves[wave_idx]
-
-                # Apply region-level loop override
-                if wsmp_info['loops']:
-                    l0 = wsmp_info['loops'][0]
-                    sd.loop_type  = (LoopType.ALTERNATING if l0['type'] == 1
-                                     else LoopType.FORWARD)
-                    sd.loop_start = l0['start']
-                    sd.loop_end   = l0['end']
+                sd = _region_sample(waves[wave_idx], wsmp_info['loops'],
+                                    banked_names)
 
                 if sd.name not in banked_names:
                     banked_names.add(sd.name)
@@ -730,9 +784,16 @@ def parse_gig(gig_path: str, max_instruments: int = 32,
                         # root = the key the zone covers.
                         untracked = bool(dr_blob and len(dr_blob) > 108
                                          and (dr_blob[108] & 0x01))
-                        emitted.append((waves[wi], v_lo, v_hi, untracked))
+                        # `_region_sample`, not the raw wave: a dimension
+                        # region is part of this region, so it carries this
+                        # region's `wsmp` loop too. Before finding 1's fix it
+                        # received it by accident, through the shared object
+                        # that the region loop mutated.
+                        dr_sd = _region_sample(waves[wi], wsmp_info['loops'],
+                                               banked_names)
+                        emitted.append((dr_sd, v_lo, v_hi, untracked))
                         if dr_root:
-                            dim_roots[id(waves[wi])] = dr_root
+                            dim_roots[id(dr_sd)] = dr_root
                 if not emitted:
                     emitted = [(sd, min(127, rgn['vel_lo']),
                                 min(127, rgn['vel_hi']), False)]
