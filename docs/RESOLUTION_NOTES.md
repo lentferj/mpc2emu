@@ -43015,3 +43015,67 @@ these paths pass unchanged alongside the new file: `test_e4b_parser`,
 passed, 9 subtests, plus the new file's 20.
 
 §REVIEW1010 findings m8/m9; full review in docs/CODE_REVIEW_2026-10-10.md.
+
+### Finding m10 — `n_actual` divided by four for every channel count above mono, and nothing read it (2026-10-10)
+
+**The defect.** `parsers/xpm_parser.py:611`, two lines apart from the variable
+the clamp actually uses:
+
+```python
+n_actual        = len(raw) // (2 * (1 if channels == 1 else 2))   # DEAD
+n_frames_loaded = len(raw) // (2 * max(1, channels))               # clamped with
+```
+
+`n_actual` was assigned and never read — the only consumer of a frame count in
+`load_wav` is the `loop_end` clamp at line 623, and it reads
+`n_frames_loaded`. The dead copy is also wrong in itself: `1 if channels == 1
+else 2` divides by FOUR for every channel count above mono, and "everything
+above mono is two channels" holds for exactly one value of `channels`.
+
+    channels   bytes/frame      bytes/frame      frames counted
+               (the dead line)  (the right line)  for 300 real frames
+        1           2                 2                 300
+        2           4                 4                 300
+        3           4                 6                 450   <- 1.5x
+        4           4                 8                 600   <- 2x
+
+Mono and stereo agree, which is why nothing was ever lost. At three channels
+the dead line would have clamped a loop to half again more frames than the
+sample holds — i.e. *not* clamped it, the one thing the clamp exists to stop.
+
+**Why it is a MINOR, and what that costs the test.** A dead variable has no
+behaviour: deleting it cannot change a byte of output, so no behavioural test
+can tell the fixed code from the broken one. Verified — the two AST tests
+below fail with the fix reverted, and the six behavioural ones pass both
+before and after, which is the proof that the deletion was free. The wrong
+divisor is still worth deleting rather than repairing: it sat four lines
+above the correct computation, with the same shape and the same name, which
+is the standing invitation for the next person to clamp with the wrong one.
+
+**The fix** is the deletion, plus a comment at the surviving line recording
+why the special case was wrong and why `2 * max(1, channels)` is the right
+divisor (a frame is 2 bytes *per channel*, and the data stays interleaved
+here because the parser preserves stereo, so loop points must not shift with
+the channel count). `max(1, channels)` is `channels` in every case that
+reaches the line — `_parse_wav_chunks` rejects a channel count below 1 — so
+the `max` is defensive, not load-bearing.
+
+**Tests.** `tests/test_xpm_no_dead_frame_count.py`, 8 tests in six functions
+(one parametrised over 1, 2 and 3 channels). The behavioural half drives the real `load_wav` over a real 16-bit
+interleaved WAV carrying a one-loop `smpl` chunk whose declared end is ten
+times the sample's length, so the clamp decides the answer: for 1, 2 AND 3
+channels `loop_end` comes back as the frame count the test computes
+independently as `len(data) // (2 * channels)`. Three control tests close
+that half — an end the sample really contains is left alone (the clamp cannot
+eat well-formed data), a file with no `smpl` chunk still has no loop, and a
+truncated tail is trimmed before the count. The structural half parses
+`load_wav` with `ast` and asserts that `len(raw)` is divided exactly once and
+by `2 * max(1, channels)`, and that no local is named `n_actual`; those are
+the two that fail with the fix reverted.
+
+**What did not change.** Every sample, looped or not, mono or stereo or
+multichannel — the clamp read the correct variable before and after. The
+`smpl` reader, the ragged-tail trim and the stereo-preserving contract are
+untouched. Suite: 98 passed over `test_xpm*`, `test_wav_formats`,
+`test_aiff_loader` and `test_smpl_pitch_fraction`, which is everything that
+reaches this function; the full suite was not run.

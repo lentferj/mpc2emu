@@ -608,11 +608,23 @@ def load_wav(wav_path: str, name: str) -> Optional[SampleData]:
         # Clamp loop_end to the actual loaded frame count — the SMPL chunk uses
         # the nominal WAV header frame count, which can differ from what the
         # data chunk actually delivers.
-        n_actual = len(raw) // (2 * (1 if channels == 1 else 2))
         # Frame count, channel-aware: a frame is 2 bytes PER CHANNEL, and the
         # data stays interleaved here because the parser preserves stereo.
         # Loop points are in FRAMES either way, so they must not shift with
         # the channel count.
+        # §REVIEW1010 m10: a second, DEAD copy of this line used to sit above
+        # it, dividing by FOUR for every channel count above mono rather than
+        # by the channel count. That is right for mono and for stereo, but
+        # stereo is right by coincidence -- `2 * 2` and `2 * channels` are the
+        # same number when channels == 2. One channel up the two part company:
+        # a 3-channel take was counted 4 bytes to the frame instead of 6 (1.5x
+        # too many frames) and a 4-channel one 4 instead of 8 (twice too
+        # many), so it would have clamped the loop to less than the whole
+        # sample -- exactly what the clamp exists to prevent. Nothing read it,
+        # so the wrong special case was latent rather than live, and it is
+        # deleted rather than repaired. `max(1, channels)` is `channels` in
+        # every case that reaches this line: `_parse_wav_chunks` rejects a
+        # channel count below 1.
         n_frames_loaded = len(raw) // (2 * max(1, channels))
         loop_type_raw = LoopType.NO_LOOP
         loop_start    = 0
