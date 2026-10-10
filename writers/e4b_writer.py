@@ -649,6 +649,26 @@ def _offset_level_db(base_db: float, offset_db: float) -> float:
     return want
 
 
+def _key_byte(value: int) -> int:
+    """A MIDI key/velocity as the unsigned byte the format stores.
+
+    The whole legal domain of a MIDI key is 0..127, so a value outside it has no
+    representation in the target field at all — there is no playable key to lose
+    by clamping, which is why this is a clamp and not a diagnostic.
+
+    §REVIEW1010 finding 10: every one of these fields was clamped ONE-SIDED,
+    `min(127, …)` with no `max(0, …)`, so a negative key reached
+    `entry[2] = min(127, zone.lo_key)` and the whole write raised
+    `ValueError: byte must be in range(0, 256)` on the very first zone entry.
+    Verified on the shipped code: one zone `lo_key=-5, hi_key=200` raises, where
+    `krz_writer` guards the same field with `if not 0 <= entry < NUM_KEYS:
+    continue` and `eiii_writer` clamps to `LOWEST_KEY`/`HIGHEST_KEY`. Reachable
+    from `parsers/xpm_parser.py:1911`, which hands any integer the source file
+    carries straight into the model.
+    """
+    return max(0, min(127, int(value)))
+
+
 def _zone_entry(zone: ZoneMapping, sample_idx: int, write_absolute: bool = False,
                 level_offset_db: float = 0.0) -> bytes:
     """22-byte secondary zone entry.
@@ -668,10 +688,10 @@ def _zone_entry(zone: ZoneMapping, sample_idx: int, write_absolute: bool = False
     ASYMTEST bank multi-zone, all through this exact writer).
     """
     entry = bytearray(ZONE_ENTRY)
-    entry[2]  = min(127, zone.lo_key)
-    entry[5]  = min(127, zone.hi_key)
-    entry[6]  = min(127, zone.lo_vel)
-    entry[9]  = min(127, zone.hi_vel)
+    entry[2]  = _key_byte(zone.lo_key)
+    entry[5]  = _key_byte(zone.hi_key)
+    entry[6]  = _key_byte(zone.lo_vel)
+    entry[9]  = _key_byte(zone.hi_vel)
     # Sample reference is a big-endian u16 at [10:12] (1-indexed), matching
     # the BE-u16 index convention used everywhere else in the format (E3S1
     # sample header [0:2], TOC entry [12:14]). EOS supports up to 1000
@@ -705,7 +725,7 @@ def _zone_entry(zone: ZoneMapping, sample_idx: int, write_absolute: bool = False
     # WRONG until the same day: it wrote the sample's root and ignored the
     # zone's, and every multisample came out with a different error per
     # keygroup. The two writers share the architecture; only one shared the bug.
-    entry[14] = min(127, zone.root_key)
+    entry[14] = _key_byte(zone.root_key)
     return bytes(entry)
 
 
@@ -1148,10 +1168,10 @@ def _build_voice(voice: VoiceLayer, sample_name_to_idx: dict, is_last: bool,
     # Voice key window vpar[14]=low / vpar[17]=high (crossfades [15]/[16]=0) —
     # hardware-RE'd 2026-06-14 (RE_SUITE2 VOICE KEYWIN: C1/C5 → [14]=36,[17]=84).
     # Set from the voice's zone span so a voice no longer claims C-2..G8.
-    vpar[14] = min(127, voice_lo_key)
-    vpar[17] = min(127, voice_hi_key)
-    vpar[18] = min(127, voice_lo_vel)
-    vpar[21] = min(127, voice_hi_vel)
+    vpar[14] = _key_byte(voice_lo_key)
+    vpar[17] = _key_byte(voice_hi_key)
+    vpar[18] = _key_byte(voice_lo_vel)
+    vpar[21] = _key_byte(voice_hi_vel)
     vpar[25] = 0x7F
     # Per-voice tuning bytes (hardware-RE'd 2026-06-13 from RE_SUITE CT JL.E4B):
     #   vpar[34] = Key Transpose (semitones, −24..+24): keyboard pitch offset

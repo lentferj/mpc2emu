@@ -41708,6 +41708,51 @@ That predates this fix and comes from the end field rather than the loop clamp;
 it is recorded in the test's docstring so the next reader does not attribute it
 here.
 
+### Finding 10 — a one-sided clamp is a crash, not a clamp (2026-10-10)
+
+**The defect.** Every MIDI key/velocity byte in the E4B zone entry and voice
+window was written as `min(127, …)` with no lower bound — `entry[2]`,
+`entry[5]`, `entry[6]`, `entry[9]`, `entry[14]` (the sample root), and the same
+shape again in the voice window at `vpar[14]`/`[17]`/`[18]`/`[21]`. A
+`bytearray` byte assignment of a negative value raises, so one zone with
+`lo_key=-5` killed the whole write:
+
+```
+OLD lo_key=-5, hi_key=200 : ValueError: byte must be in range(0, 256)
+OLD root_key=-4           : ValueError: byte must be in range(0, 256)
+NEW lo_key=-5, hi_key=200 : entry [2]=0 [5]=127, written and read back
+NEW root_key=-4           : entry [14]=0
+```
+
+**Reachable from real files, not only hand-built banks.**
+`parsers/xpm_parser.py:1911` does
+`lo_key = int(_get_text(instrument, 'LowNote', '0'))`, which passes any integer
+the source carries straight into the model — and the model is free-form by
+design, because every other writer accepts it: `krz_writer.py:915` guards the
+same field with `if not 0 <= entry < NUM_KEYS: continue` and
+`eiii_writer.py:591-592` clamps to `LOWEST_KEY`/`HIGHEST_KEY`. That is what
+makes this a defect rather than a design decision: one writer of the three
+died on input the other two serialize.
+
+**The fix** is one helper, `_key_byte`, used at all nine sites. It is a clamp
+and not a diagnostic because 0..127 is the *whole legal domain* of a MIDI key —
+there is no playable key outside it to lose, so nothing is being hidden. The
+voice window needs its own call: `voice_lo_key`/`hi_key` are derived by
+`min`/`max` over the raw zone values, so clamping only inside `_zone_entry`
+would still leave `vpar[14]` raising on the same preset.
+
+**Tests.** Seven in `tests/test_e4b_key_byte_clamp.py`; **six fail with the fix
+reverted**. Both crash sites are covered separately (`lo_key` and `root_key`,
+the latter being the sample's root, which is the one field whose clamp changes
+pitch rather than key range), the voice-window path is driven through the real
+writer and read back through the real parser, and two guards pin the ordinary
+case: `_key_byte` is the identity on 0..127, so an in-range zone writes the same
+entry bytes it always did.
+
+**What did not change.** No byte for any zone whose keys and velocities are
+inside 0..127 — the suite passes unchanged (1479 passed), and the E4B
+round-trip corpus is byte-identical.
+
 ### Finding 8 — the EIII sample area was sized from the buffer, not the bytes written (2026-10-10)
 
 **The defect.** `write_eiii`'s bank header computed the sample area as
