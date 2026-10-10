@@ -695,11 +695,30 @@ def _prepare_sample_pcm(sample: SampleData) -> Tuple[bytearray, bool, int, int, 
     return pcm, has_loop, loop_start, loop_end, loop_in_release
 
 
+def _pcm_bytes_written(pcm) -> int:
+    """How many PCM bytes this sample contributes to the file.
+
+    **Must** match what `_write_sample` writes and what the sample-area layout
+    counts. `_prepare_sample_pcm` zeroes the edge frames but never pads, so a
+    buffer can hold an odd number of bytes -- a truncated 16-bit frame -- and
+    then writes one byte fewer than it holds. Declaring the larger number
+    anywhere in the geometry makes the file disagree with its own header:
+    REVIEW1010 finding 8 had the sample area sized from `len(pcm)` while the
+    write loop addressed `num_frames * 2`, and a slice assignment whose RHS is
+    longer than its slice **inserts into the bytearray instead of raising**, so
+    every odd-length sample pushed the rest of the file one byte along and left
+    the following sample's header one byte inside the previous sample's PCM.
+
+    `e4b_writer._pcm_bytes_written` and `krz_writer._pcm_words_written` are the
+    same invariant in their own units (HALFFRAME).
+    """
+    return len(pcm) // 2 * 2
+
+
 def _write_sample(data: bytearray, offset: int, name: str, pcm: bytes, sample_rate: int,
                    has_loop: bool, loop_start: int, loop_end: int, loop_in_release: bool,
                    memory_offset: int) -> int:
-    num_frames = len(pcm) // 2
-    channel_size = num_frames * 2
+    channel_size = _pcm_bytes_written(pcm)
     mono_size = SAMPLE_HEADER_SIZE + channel_size
 
     _encode_name(data, offset, name)
@@ -727,7 +746,7 @@ def _write_sample(data: bytearray, offset: int, name: str, pcm: bytes, sample_ra
     _put_u32(data, offset + SAMPLE_DATA_OFFSET_LEFT, memory_offset + SAMPLE_HEADER_SIZE)
     _put_u32(data, offset + SAMPLE_DATA_OFFSET_RIGHT, 0)
 
-    data[offset + SAMPLE_HEADER_SIZE:offset + SAMPLE_HEADER_SIZE + channel_size] = pcm
+    data[offset + SAMPLE_HEADER_SIZE:offset + SAMPLE_HEADER_SIZE + channel_size] = pcm[:channel_size]
     return SAMPLE_HEADER_SIZE + channel_size
 
 
@@ -942,7 +961,7 @@ def write_eiii(bank: Bank, output_path: str, variant: str = 'e3x') -> None:
 
     # ── assemble bank ───────────────────────────────────────────────────────
     preset_area_size = sum(len(b) for b in preset_bodies)
-    sample_area_size = sum(SAMPLE_HEADER_SIZE + len(p[1]) for p in prepared)
+    sample_area_size = sum(SAMPLE_HEADER_SIZE + _pcm_bytes_written(p[1]) for p in prepared)
     size = EMPTY_BANK_SIZE + preset_area_size + 1 + sample_area_size
     if size > MAX_BANK_SIZE:
         raise ValueError(f"EIII bank too large: {size / (1024 * 1024):.1f} MB "
@@ -975,7 +994,7 @@ def write_eiii(bank: Bank, output_path: str, variant: str = 'e3x') -> None:
         written = _write_sample(data, offset, disk_name, pcm, sample_rate, has_loop,
                                  loop_start, loop_end, loop_in_release,
                                  offset - sample_area_offset)
-        print(f"  Sample [{i + 1:03d}] '{disk_name}': {len(pcm)} bytes PCM"
+        print(f"  Sample [{i + 1:03d}] '{disk_name}': {_pcm_bytes_written(pcm)} bytes PCM"
               + (f", loop {loop_start}-{loop_end}" if has_loop else ""))
         offset += written
     _put_u32(data, sample_table + bank_format.max_samples * 4,

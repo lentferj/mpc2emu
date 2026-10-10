@@ -41707,3 +41707,56 @@ of `-1`, from `abs_end = word_offset + num_words - 1` with `num_words == 0`.
 That predates this fix and comes from the end field rather than the loop clamp;
 it is recorded in the test's docstring so the next reader does not attribute it
 here.
+
+### Finding 8 — the EIII sample area was sized from the buffer, not the bytes written (2026-10-10)
+
+**The defect.** `write_eiii`'s bank header computed the sample area as
+`sample_area_size = sum(SAMPLE_HEADER_SIZE + len(p[1]) for p in prepared)` — the
+**buffer** length — while `_write_sample` addressed
+`data[a + SAMPLE_HEADER_SIZE : a + SAMPLE_HEADER_SIZE + channel_size]` with
+`channel_size = len(pcm) // 2 * 2`. A slice assignment whose right-hand side is
+longer than its slice **inserts into the bytearray instead of raising**, so an
+odd-length PCM buffer both over-declared its size and shifted everything after
+it.
+
+**Why EIII is a separate finding from §HALFFRAME.** That fix gave
+`e4b_writer._pcm_bytes_written` and `krz_writer._pcm_words_written` for the
+stereo half-frame (`len % 4 == 2`). EIII carries mono samples only, so that
+trigger cannot occur — its trigger is an odd **byte** length, a truncated
+16-bit frame, and it had no helper at all.
+
+**Measured on the shipped code**, three mono samples of 101, 99 and 101 bytes
+against the trimmed control (100/98/100):
+
+```
+OLD odd bank     : 12000 bytes written, BANK_NEXT_SAMPLE says 574, control 11996
+OLD trimmed bank : 11996 bytes
+NEW odd bank     : byte-identical to the trimmed control
+```
+
+The damage itself is mostly masked — `_prepare_sample_pcm` silences the last
+four bytes, so the byte each odd sample clobbered in its neighbour was already
+zero, and reading back gives 50/49/50 frames either way. What is unconditional
+is the geometry disagreement: the file is longer than the layout its own header
+describes, one byte per odd-length sample, and `BANK_NEXT_SAMPLE` plus the
+`BANK_*_BLOCKS` counts under-report the area that is present.
+
+**The fix** is the invariant the other two writers already carry, not a special
+case for odd lengths: `_pcm_bytes_written(pcm) = len(pcm) // 2 * 2`, used by the
+layout, by the write (which now truncates its RHS to the slice), and by the
+progress line — so the number the writer reports is the number in the file.
+
+**Tests.** Nine in `tests/test_eiii_area_geometry.py`; **two fail with the fix
+reverted**. The strongest is byte-identity against the trimmed control: the
+odd-length bank must write exactly the file the truncated one writes. The second
+reads the area out of the file itself — `len(data) - first_header ==
+BANK_NEXT_SAMPLE + 1`, the `+1` being the trailing byte `size` has always
+carried (the preset area starts one byte before `EMPTY_BANK_SIZE` while the
+formula adds two), which is why it is subtracted rather than absorbed. There is
+a per-sample content check against the source with the edge frames silenced as
+`_prepare_sample_pcm` leaves them, spacing checks between consecutive headers,
+and an even-length guard.
+
+**What did not change.** Every even-length bank: `_pcm_bytes_written` returns
+`len(pcm)` for it, so the EIII round-trip corpus is byte-identical — the suite
+passes unchanged (1472 passed).
