@@ -391,18 +391,28 @@ def _note_name(note: int) -> str:
 
 
 def _wav_bytes_with_loop(sample: SampleData) -> bytes:
-    """Build a mono 16-bit WAV for `sample`, embedding a `smpl` chunk (loop points
-    + MIDI unity note) when it carries a forward loop, so other samplers import it
+    """Build a 16-bit WAV for `sample`, embedding a `smpl` chunk (loop points +
+    MIDI unity note) when it carries a forward loop, so other samplers import it
     with the loop and tuning intact.  Field layout matches xpm_parser's
     `_read_smpl_loop` / `_read_smpl_root`, so it also round-trips back into our own
-    importer."""
+    importer.
+
+    §REVIEW1010 finding 6: this used to hardcode `channels = 1`. The caller in
+    `auto_loop._dump_loop` passes the sample through with its channel count
+    preserved, so a *stereo* pad arrived here as interleaved bytes under a mono
+    header -- it then played at **half speed, an octave down**, and the embedded
+    `smpl` indices, which are frame indices, pointed at half the intended
+    position. `_dump_cycle` is unaffected (a single cycle is inherently mono),
+    and the two callers now share one correct implementation.
+    """
     pcm = sample.data
     data_sz = len(pcm)
     if data_sz & 1:                        # keep the data chunk word-aligned
         pcm = pcm + b'\x00'
     sr = sample.sample_rate
+    ch = max(1, getattr(sample, 'channels', 1) or 1)
 
-    fmt = struct.pack('<HHIIHH', 1, 1, sr, sr * 2, 2, 16)   # PCM, mono, 16-bit
+    fmt = struct.pack('<HHIIHH', 1, ch, sr, sr * ch * 2, ch * 2, 16)
     chunks = [b'fmt ' + struct.pack('<I', len(fmt)) + fmt,
               b'data' + struct.pack('<I', data_sz) + pcm]
 

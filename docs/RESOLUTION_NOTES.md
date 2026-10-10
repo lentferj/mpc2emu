@@ -41573,3 +41573,38 @@ is the guard — with nothing failing the new check must not fire.
 guard: the run must exit **4**, not 3, and the bank that parsed cleanly must
 still be on disk, because §SILENTFAIL separates *refused to write* from *partial*
 and this is the latter.
+
+### Finding 6 — a stereo sample dumped as a mono WAV, an octave down (2026-10-10)
+
+**The defect.** `processors/single_cycle.py::_wav_bytes_with_loop` hardcoded
+the WAV `fmt` channel count to `1`. Its caller in `auto_loop._dump_loop` passes
+the sample through with `sample.channels` preserved (`auto_loop.py:394` sets only
+loop fields), so a **stereo** pad arrived as interleaved bytes under a mono
+header.
+
+**Verified** with a 1.0 s stereo pad (44,100 frames), `--auto-loop-dump-dir`:
+
+```
+shipped:  channels=1 frames=88200   ->  2.0 s of audio from 1.0 s,
+                                        played half speed / an octave down
+fixed:    channels=2 frames=44100
+```
+
+The embedded `smpl` loop was wrong too. `loop_start`/`loop_end` are **frame**
+indices (1000..40000 here, stereo-frame indices), so under the mono header they
+addressed half the intended position.
+
+**The fix.** Read `channels` from the sample and pack `sr * ch * 2` for byte rate
+and `ch * 2` for block align. Frame indices in `smpl` are channel-independent, so
+they needed no change — and `test_the_loop_indices_are_channel_independent`
+asserts that, because it is the part a reader would reasonably doubt.
+
+**The other caller is unaffected.** `single_cycle._dump_cycle` extracts one
+cycle, which is inherently mono; the two callers now share one correct
+implementation rather than two divergent ones.
+
+**Tests.** Three appended to `tests/test_single_cycle_dump.py`.
+`test_a_stereo_sample_is_dumped_as_stereo` reads the channel count and frame
+count straight out of the RIFF `fmt`/`data` chunks and fails with the fix
+reverted. `test_a_mono_sample_is_still_dumped_as_mono` is the guard — the
+single-cycle dump must not change shape.
