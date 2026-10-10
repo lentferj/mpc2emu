@@ -513,11 +513,21 @@ def shrink_bank(bank: Bank, target_bytes: Optional[int] = None,
             # bug, where "+2 cents" and "+831 cents" both read as a bare
             # warning and every preset looked alike.
             over = plan.est_bytes - tgt
+            # §REVIEW1010 finding 7: the magnitude is a DIVISOR, and `by_pct=100`
+            # (or `--shrink-to 0`, or any negative) makes `tgt` 0 or less -- so
+            # the f-string that exists to report an unreachable target divided by
+            # the very quantity that made it unreachable, and crashed with a raw
+            # ZeroDivisionError instead of the diagnostic. `shrink_bank` is a
+            # documented VinSamLib-facing API, so this is fixed in the library
+            # and not only in the CLI's argument validation.
+            pct = (f"{plan.est_bytes / tgt * 100 - 100:.0f}%."
+                   if tgt > 0 else
+                   "no thinning can reach it.")
             _diag(_W, 'SHRINK_TARGET_UNREACHABLE',
                   f"preset '{preset.name}' cannot reach "
                   f"{tgt/1048576:.2f} MB by thinning: the smallest reachable "
                   f"size is {plan.est_bytes/1048576:.2f} MB, "
-                  f"{over/1024:.0f} KB over ({plan.est_bytes/tgt*100-100:.0f}%). "
+                  f"{over/1024:.0f} KB over ({pct}) "
                   f"Key-zone and velocity-layer thinning cannot go below one "
                   f"sample per voice, and free whole samples at a time.",
                   content_lost=True, subject=str(preset.name),

@@ -1080,6 +1080,20 @@ def main():
             print(f"Error: {opt_name} must be between 0 and 100 (got {opt_val:.0f}).")
             sys.exit(1)
 
+    # Same range check for --shrink-by, which had none: `by_pct=100` makes the
+    # per-preset target exactly 0 bytes, and the diagnostic that reports the
+    # unreachable target divides by it -- a raw ZeroDivisionError traceback on a
+    # plausible user value. §REVIEW1010 finding 7. The library is guarded too
+    # (shrink_bank is a documented in-process API), this is the usage error.
+    if args.shrink_by is not None and not 0.0 <= args.shrink_by <= 100.0:
+        print(f"Error: --shrink-by must be between 0 and 100 "
+              f"(got {args.shrink_by:.0f}).")
+        sys.exit(1)
+    if args.shrink_to is not None and not args.shrink_to > 0:
+        print(f"Error: --shrink-to must be greater than 0 "
+              f"(got {args.shrink_to:.0f}).")
+        sys.exit(1)
+
     # --auto-loop: normalise 'auto' (adaptive) | positive-float target length (ms).
     if args.auto_loop is not None and args.auto_loop != 'auto':
         try:

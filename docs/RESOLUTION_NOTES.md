@@ -41608,3 +41608,43 @@ implementation rather than two divergent ones.
 count straight out of the RIFF `fmt`/`data` chunks and fails with the fix
 reverted. `test_a_mono_sample_is_still_dumped_as_mono` is the guard — the
 single-cycle dump must not change shape.
+
+### Finding 7 — `--shrink-by 100` divided by the target it was reporting unreachable (2026-10-10)
+
+**The defect.** `shrink_bank` with `by_pct=100` computes
+`tgt = int(cur * (1.0 - 100/100)) = 0`. The plan is then infeasible, and the
+diagnostic that exists to say *"you cannot get there"* divides by `tgt` to
+express its own magnitude:
+
+```python
+f"{over/1024:.0f} KB over ({plan.est_bytes/tgt*100-100:.0f}%). "
+```
+
+So the code that reports an unreachable target crashed on the very quantity
+that made it unreachable — a raw `ZeroDivisionError` traceback, exit 1, on a
+plausible user value. `--shrink-to 0` does the same, and `by_pct > 100` gives a
+negative target with a nonsense "could not reach -0.04 MB" message.
+
+**Verified on the shipped code:** `convert.py in/t.sfz --format e4b --shrink-by 100`
+→ `ZeroDivisionError` in that f-string.
+
+**Fixed in two places, deliberately.** `shrink_bank` is a documented
+VinSamLib-facing in-process API (`TODO.md:7726`), so the library divides only
+when `tgt > 0` and otherwise writes *"no thinning can reach it"* — the bytes
+figure, which names the floor, is still there. The CLI additionally range-checks
+both options against the sibling `--reduce-key-zones` check
+(`convert.py:1077-1081`), so out-of-range values give a usage error rather than
+a diagnosis.
+
+**Tests.** Five in `tests/test_shrink_planner.py`.
+`test_a_degenerate_by_pct_reports_instead_of_dividing_by_the_target` is
+parametrised over `[100.0, 150.0, -5.0, 0.0]` and fails at 100 with the fix
+reverted. `test_the_unreachable_message_says_something_without_a_positive_target`
+asserts the percentage is *omitted* rather than guessed at, and that the byte
+figure survives — the two halves of the same sentence.
+`test_a_valid_by_pct_still_reports_its_percentage` is the guard: a normal
+unreachable target keeps its magnitude. `test_the_cli_rejects_out_of_range_shrink_values`
+drives the real `convert.py` as a subprocess and asserts exit 1 plus a message
+for the out-of-range values, and — importantly — that **100** is *not* a usage
+error: it is a request thinning genuinely cannot serve, so it must reach the
+diagnostic and finish rather than traceback.
