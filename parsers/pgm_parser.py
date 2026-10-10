@@ -436,11 +436,45 @@ def _parse_mpc60(p: Path, data: bytes,
 #   {0x00 0x00 0x40 0x00}, 64-byte MIDI-note table (pad -> note).
 # Pad[0]=sampleNumber (index into the name list; 0 = none).
 
+_MPC2_HDR_SZ    = 4                    # 0x07 0x04 + u16 numSamples
+_MPC2_NAME_SZ   = 17                   # 16-byte sample name + 1 pad index
+# Everything that follows the variable-length name list: 0x1E 0x00, program
+# name, padding, sliders, MIDI channel, the 0x23 0x40 0x00 0x19 0x00 marker,
+# 64 pads, 64 mixers, the 0x00 0x00 0x40 0x00 separator and the note table.
+_MPC2_PROG_SZ   = 2 + 16 + 1 + 9 + 1 + 5
+_MPC2_PAD_SZ    = 25
+_MPC2_MIXER_SZ  = 6
+_MPC2_N_PADS    = 64
+_MPC2_SEP_SZ    = 4
+_MPC2_NOTE_SZ   = 64
+_MPC2_FIXED_SZ  = (_MPC2_HDR_SZ + _MPC2_PROG_SZ
+                   + _MPC2_N_PADS * (_MPC2_PAD_SZ + _MPC2_MIXER_SZ)
+                   + _MPC2_SEP_SZ + _MPC2_NOTE_SZ)             # 2090
+
+
 def _parse_mpc2000(p: Path, data: bytes,
                    sample_dirs: Optional[List[str]] = None) -> Bank:
     """Akai MPC2000 / MPC2000XL `.PGM` (+ external `.WAV` samples) → Bank."""
+    # WHY: this walk had no length validation, while its sibling
+    # `_parse_mpc1000` opens with `if len(data) < _FILE_SZ` (line 190). Every
+    # read below is unconditional and the layout is variable-length, so a short
+    # file used to truncate silently on the `data[o:o+16]` slices and then raise
+    # a bare `struct.error` or `IndexError` from wherever it happened to run
+    # out — reported as §REVIEW1010 m6. `parse_pgm` dispatches on two bytes
+    # alone (`data[0] == 0x07 and data[1] == 0x04`, line 165), so a 2-byte file
+    # reaches this function. The required size is derived from the sample count
+    # the file itself declares, which is the only variable term.
+    if len(data) < _MPC2_HDR_SZ:
+        raise ValueError(
+            f"MPC2000/XL PGM too small: {len(data)} bytes (expected at least "
+            f"{_MPC2_FIXED_SZ}): {p.name}")
     o = 2
     n_samp = struct.unpack_from('<H', data, o)[0]; o += 2
+    need = _MPC2_FIXED_SZ + _MPC2_NAME_SZ * n_samp
+    if len(data) < need:
+        raise ValueError(
+            f"MPC2000/XL PGM too small: {len(data)} bytes (expected {need} for "
+            f"{n_samp} declared sample(s)): {p.name}")
     names: List[str] = []
     for _ in range(n_samp):
         names.append(data[o:o + 16].split(b'\x00')[0].decode('ascii', 'replace').strip())

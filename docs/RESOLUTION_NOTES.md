@@ -42485,3 +42485,74 @@ be re-run against any later tree. No test file was added: there is nothing here
 for a test to catch that `cmp` on the eight written files did not already catch,
 and a byte-identical change cannot be caught by a reverted-fix check. The full
 suite is run by the orchestrator between commits and is not expected to move.
+
+### Finding m6 — `_parse_mpc2000` read a variable-length layout with no length check (2026-10-10)
+
+**The defect.** `_parse_mpc2000` walked the MPC2000/XL `.PGM` with no length
+validation at all, while its sibling `_parse_mpc1000` opens with
+`if len(data) < _FILE_SZ` (line 190). The layout is variable-length only in the
+sample-name list (`numSamples` × 17 bytes); everything after it — 64 pads, 64
+mixers, the 64-byte note table — is read unconditionally. So a short file
+truncated **silently** on the `data[o:o+16]` slices and then raised whatever
+happened to be next: a bare `struct.error` from `unpack_from`, an `IndexError`
+from a `data[o]`, or — for the last section — nothing at all.
+
+`parse_pgm` dispatches on two bytes alone (`data[0] == 0x07 and
+data[1] == 0x04`, line 165), so a 2-byte file reaches the function. Measured on
+the shipped code, through the real entry point:
+
+```
+OLD b'\x07\x04'                struct.error: unpack_from requires a buffer of
+                               at least 4 bytes ... at offset 2 (buffer size 2)
+OLD n_samp=5000 in 40 bytes    IndexError: index out of range
+OLD truncated mid-pad-block    IndexError: index out of range
+OLD note table cut short       PARSES — 7 of 64 note bytes, nothing said
+NEW all four                   ValueError: MPC2000/XL PGM too small: 2 bytes
+                               (expected at least 2090): BAD.pgm
+```
+
+Three different raw exceptions and one silence from one malformed input class.
+The silence is the half worth naming: `midi_notes = data[o:o + 64]` is a slice,
+and slices do not raise, so a file 63 bytes short of its note table parsed to
+completion. Pad 0 still got its note; the other 63 pads had none to read.
+
+**The fix** is the requirement, computed once from the count the file itself
+declares: `2090 + 17 × numSamples`, where 2090 is the whole fixed part
+(header + program name + sliders + 64 × 25 pads + 64 × 6 mixers + separator +
+64-byte note table). It is checked before the walk touches anything, in two
+steps because `numSamples` is itself at offset 2 — a file that does not even
+hold its own count cannot have its requirement derived. The message names both
+sizes and the file, in the phrasing `_parse_mpc1000` already uses
+(`MPC2000/XL PGM too small: …`), so a length error reads the same for every
+format in this parser.
+
+**The floor is the parser's own reads, not a measurement.** No MPC2000/XL
+`.pgm` lives in this tree — the format was verified against an Akai factory CD
+(`TODO.md:4281`) and only the header walk is pinned in the tests. What makes
+2090 the right number is that every one of those sections is consumed
+unconditionally: a file without them was already malformed, it simply did not
+say so. Derived, and stated, rather than assumed.
+
+**Tests.** Ten in `tests/test_pgm_mpc2000_length_validation.py`. **Seven fail
+with the fix reverted** — the three reviewer reproductions (2-byte file,
+impossible sample count, truncation inside the pad block), the same truncation
+one section later inside the mixer block, the silent note-table case (which
+fails by not raising at all), and the two message tests. Three are guards on
+the fix: a program of exactly the required size still parses and still maps
+pad 0's note, tune, level, pan and envelope; a program declaring **zero**
+samples is accepted at 2090, so the check does not invent a name that is not
+declared; and trailing bytes are still harmless, matching `_parse_mpc1000`'s
+`len(data) < _FILE_SZ` tolerance for a long file. A 13-name program is pinned
+against its own requirement, which is the case that keeps the derived size
+honest — a fixture with one name would pass against a hardcoded 2107.
+
+**A fixture detail found while writing them, not a defect.** `sampleNumber` is
+1-based: index 0 is the "unassigned" sentinel and `names[0]` is empty on real
+programs (`TODO.md:3573`, CR-11b), so the code's `0 < sn` guard is correct and
+the first live name is index 1. The builder writes that shape rather than
+numbering from the first name.
+
+**What did not change.** No byte of any accepted file — the guard only rejects
+files that were previously either raising or reading past their own end. The
+MPC1000 and MPC60 paths are untouched, `tests/test_pgm_parser.py` passes
+unchanged, and the rest of the PGM/MPC/disk-image tests are unaffected.
