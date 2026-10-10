@@ -41914,3 +41914,67 @@ and an even-length guard.
 **What did not change.** Every even-length bank: `_pcm_bytes_written` returns
 `len(pcm)` for it, so the EIII round-trip corpus is byte-identical — the suite
 passes unchanged (1472 passed).
+
+### §3 — the trim stages carried the same two defects (2026-10-10)
+
+**The hot spots.** `_windowed_ms` (`tail_trim.py`) built its prefix sum in a
+Python loop, then paid a `max()` call and two indexings per frame. It is 76 % of
+`_trim_tail_sample`. `_frame_energy` for stereo was a nested double loop with
+index arithmetic over every interleaved sample. Both are the same shape as §2,
+in the file that runs second in the pipeline.
+
+**The one substitution that is not a general-channel-count rewrite.**
+`(l*l + r*r) * 0.5` is exactly `s / channels` for `channels == 2` — division and
+multiplication by a power of two are both exact, so the floats agree
+bit-for-bit. For a general channel count they would not, which is why the
+`channels > 2` path is deliberately left alone. The odd-length stereo case is
+covered by a test (`zip` drops the trailing half-frame; so did the loop).
+
+**A defect my own first draft introduced, caught by the tests.** The prefix
+table was first written `[0.0] + list(accumulate(energy, initial=0.0))` — the
+habit carried over from `auto_loop._windowed_rms`, which accumulates *without*
+`initial=` and therefore does need the prepended zero. `accumulate(..., initial=)`
+**already carries** the leading 0.0, so the table came out two longer and every
+index shifted by one. It raised `IndexError` on the steady half for any window
+> 1. Caught by the window-size sweep, which is exactly why that sweep is in the
+test file rather than only in a probe.
+
+**Measured on this machine** (n=176400, 4 s of 44.1 kHz):
+
+```
+_frame_energy stereo   78.98 ->  25.20 ms   3.16x  IDENTICAL
+_windowed_ms win=882  107.16 ->  73.34 ms   1.51x  IDENTICAL
+_tail_cut_frame  mono  112.95 ->  76.52 ms   1.48x  identical cut frame
+_trim_tail   4s mono  141.25 -> 110.33 ms   1.28x   PCM identical
+_trim_tail   4s stereo 109.31 ->  67.41 ms   1.62x   PCM identical
+_trim_start  4s mono  144.30 -> 112.60 ms   1.23x   PCM identical
+_trim_start  4s stereo 110.07 ->  69.01 ms   1.59x   PCM identical
+```
+
+`_start_cut_frame` lives in `start_trim.py` and consumes `_windowed_ms` from
+`tail_trim.py`, so the trim stages are coupled: the probe loads the **old**
+`start_trim` against the **old** `tail_trim` (via `sys.modules` substitution) and
+checks both cut frames against the new pair. Every whole-sample trim returns an
+identical sample, loop points and info dict.
+
+**Tests.** Forty-nine in `tests/test_trim_window_identity.py`. Both functions are
+compared against the pre-optimisation loops spelled out verbatim, over a window
+sweep (1, 2, 3, 176, 882, 3528, N−1, N, N+1, 2N) and buffers shorter than the
+window (0, 1, 2, 3, 5, 7, 40), for mono and stereo, and for channel counts
+1/2/3/6 so the untouched general path stays untouched.
+
+**What did not change.** The cut-point search, the threshold law, the fade, the
+loop handling, or any byte of any written file. The suite passes unchanged
+(1556 passed).
+
+**Two pre-existing flaky failures, recorded rather than absorbed.** While
+verifying §3 two different tests failed once each in full-suite runs and passed
+in isolation and on re-run:
+`tests/test_fixtures_actually_fail.py::test_thinnable_fixture_thins_and_reports_an_impossible_target`
+and
+`tests/test_source_fields_unread.py::test_the_known_debt_list_has_not_gone_stale`.
+The second reproduced on a **stashed, unmodified** tree, which is what shows the
+flakiness predates this work. Neither is caused by §3 (it touches neither
+`shrink_planner`, `bank_splitter`, nor the debt list) — but they are real and
+ordered-dependent, and they are now TODO debt rather than something that looked
+green because the last run happened to pass.

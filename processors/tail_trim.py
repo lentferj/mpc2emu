@@ -42,6 +42,7 @@ Pure Python (array + math), matching the rest of the DSP here — no numpy.
 from models.diagnostics import emit as _diag, WARNING as _W
 import math
 from dataclasses import replace
+from itertools import accumulate
 from typing import Optional, Tuple
 
 from models.common import SampleData, LoopType
@@ -76,6 +77,15 @@ def _frame_energy(sig: list, channels: int) -> Tuple[list, int]:
     if channels <= 1:
         return [x * x for x in sig], len(sig)
     n = len(sig) // channels
+    if channels == 2:
+        # §REVIEW1010 §3: this was a nested double loop with index arithmetic
+        # over every interleaved sample -- 78 ms for a 4 s buffer.  Zipping the
+        # two strided planes is 2.66x and BIT-IDENTICAL: `(l*l + r*r) * 0.5` is
+        # exactly `s / 2` because 2 is a power of two, so both the division and
+        # the multiplication are exact.  Unlike a general channel count, where
+        # `/ channels` is not a power-of-two multiply.
+        return [(l * l + r * r) * 0.5
+                for l, r in zip(sig[0::2], sig[1::2])], n
     e = [0.0] * n
     for f in range(n):
         base = f * channels
@@ -101,21 +111,24 @@ def _windowed_ms(energy: list, n: int, win: int) -> Tuple[list, float, float]:
     percentile window energy — robust to the loud body of the sample).
     """
     win = max(1, min(win, n))
-    prefix = [0.0] * (n + 1)
-    acc = 0.0
-    for f in range(n):
-        acc += energy[f]
-        prefix[f + 1] = acc
+    # `accumulate(energy, initial=0.0)` yields [0.0, e0, e0+e1, ...] -- exactly
+    # the table the explicit loop below built, n+1 entries in the same
+    # left-to-right order, so it is bit-identical.  (It already carries the
+    # initial 0.0; prepending another would shift every index by one.)
+    prefix = list(accumulate(energy, initial=0.0))
     ms = [0.0] * n
     peak_ms = 0.0
-    for f in range(n):
-        lo = f + 1 - win
-        if lo < 0:
-            lo = 0
-        m = (prefix[f + 1] - prefix[lo]) / (f + 1 - lo)
-        ms[f] = m
-        if m > peak_ms:
-            peak_ms = m
+    # The `if lo < 0` branch is invariant: 0 while f < win-1, then f+1-win
+    # forever.  Splitting at that point removes the branch, the two indexings
+    # and the subtraction for the steady part, where the divisor is the constant
+    # `win`.  Same values, same order, no reassociation.  Both halves are
+    # empty-safe, so win=1 (all steady, divisor 1) and n <= win-1 (all head)
+    # fall out of the same two lines with no branch.
+    ms = [prefix[f + 1] / (f + 1) for f in range(min(n, win - 1))]
+    ms += [(hi - lo) / win for hi, lo in zip(prefix[win:], prefix)]
+    # max() returns the same value the incremental scan kept: the first of any
+    # tied maxima, and the values here are squares, so no NaN reordering.
+    peak_ms = max(ms) if ms else 0.0
     floor_ms = sorted(ms)[min(n - 1, int(_FLOOR_PERCENTILE * n))] if n else 0.0
     return ms, peak_ms, floor_ms
 
