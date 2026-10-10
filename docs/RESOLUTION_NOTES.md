@@ -43181,3 +43181,121 @@ be reached at all, so it is nowhere near this finding's 202…17,663-byte window
 truncated, is exactly the silent-drop shape this entry refuses to introduce.
 Recorded so it is not later mistaken for something the m11 gate was meant to
 catch.
+
+---
+
+### Finding m12 — the tremolo's SHAPE was read from the block the destination SLOT named, not the block that carried the tremolo (2026-10-10)
+
+**This entry is a BEHAVIOUR CHANGE, unlike the dead-code and guard findings that
+sit around it.** The defect below is a wrong output for well-formed input: a v2
+SFZ tremolo carried by `lfo01_gain` reported the sine default, or another LFO's
+wave, whatever `lfo01_wave` said. Nothing about that is latent — the shape is
+what the converted bank claims the tremolo is.
+
+**The defect.** `parsers/sfz_parser.py`, in `_sfz_voice_params`, resolves the
+tremolo down two chains over the same four blocks (`amplfo_*`, `lfo03`, `lfo02`,
+`lfo01`) — the depth and the rate — and then picked the shape by naming a block
+after the **destination slot**:
+
+```python
+if not lfo2_claimed:
+    params['lfo2_shape'] = _sfz_lfo_wave(merged.get('lfo02_wave'))   # <- slot 2
+elif not p_depth:
+    params['lfo1_shape'] = _sfz_lfo_wave(merged.get('lfo01_wave'))   # <- slot 1
+```
+
+The rate above it is resolved per source (`amplfo_freq` → `lfo03_freq` →
+`lfo02_freq` → `lfo01_freq`); the shape was not, so the two most common
+questions the reader asks of a tremolo came from different oscillators. Which
+slot won was decided by whether a filter LFO had already claimed LFO2 — nothing
+to do with which LFO the tremolo actually rides on.
+
+**Reproduced on the shipped code**, one region per line through the real
+parser:
+
+```
+lfo01_gain=6 lfo01_freq=4.5 lfo01_wave=6
+    OLD  lfo2_rate=4.5 lfo2_shape='sine'       <- lfo02_wave absent -> default
+    NEW  lfo2_rate=4.5 lfo2_shape='sawtooth'
+
+lfo01_gain=6 lfo01_freq=4.5 lfo01_wave=6 lfo02_wave=0
+    OLD  lfo2_shape='triangle'                 <- lfo02's wave: WRONG LFO
+    NEW  lfo2_shape='sawtooth'
+
+lfo03_gain=6 lfo03_freq=4.5 lfo03_wave=6
+    OLD  lfo2_shape='sine'
+    NEW  lfo2_shape='sawtooth'
+
+lfo02_gain=6 lfo02_freq=4.0 lfo02_wave=6 lfo02_cutoff=500   (LFO2 taken)
+    OLD  lfo1_shape='sine'                    <- the LFO1 branch read lfo01_wave
+    NEW  lfo1_shape='sawtooth'
+
+lfo01_gain=6 lfo01_wave=6                      (no rate opcode at all)
+    OLD  lfo2_shape='sine'
+    NEW  lfo2_shape='sawtooth'
+```
+
+The last-but-one row is the asymmetry the reviewer named. `lfo02` is at once the
+filter LFO and the tremolo's oscillator; the tremolo is routed to LFO1, and the
+LFO1 branch reported the shape of an oscillator that is not in the file at all.
+The LFO1 branch reading `lfo01_wave` was correct for one spelling and wrong for
+every other, which is what made the asymmetry look deliberate.
+
+**The fix** resolves the wave the same way the depth is resolved — from the
+block that carries the tremolo — and feeds it to both branches:
+
+```python
+a_wave = None
+for _dk, _wk in (('amplfo_depth', None), ('lfo03_gain', 'lfo03_wave'),
+                 ('lfo02_gain',  'lfo02_wave'), ('lfo01_gain', 'lfo01_wave')):
+    if _f(_dk):
+        a_wave = merged.get(_wk) if _wk else None
+        break
+```
+
+The two chains walk the same four blocks in the same order, so this is the block
+the **rate** came from whenever a file spells one oscillator per tremolo — which
+is what "the shape follows the rate's source" buys. It is anchored on the depth
+rather than the rate only because the depth is what decides that a tremolo
+exists at all (`if a_depth:`), and because a block may carry the tremolo with no
+rate opcode (`lfo01_gain` + `lfo01_wave`, rate defaulting to 5.0). Anchoring on
+the rate would lose that file's wave. Where a file spells the gain and the rate
+on *different* blocks — `lfo01_gain` with the rate spelled `lfo02_freq` — the
+rate stays exactly where it was (4.5, from `lfo02_freq`) and the shape comes from
+the block carrying the tremolo; that is the one place the two chain principles
+can disagree and neither reading is "what the file meant".
+
+`amplfo_*` is SFZ v1 and carries no wave opcode, so its row leaves the shape at
+the 'sine' default `_sfz_lfo_wave(None)` already returns for every unspecified
+v2 LFO.
+
+**What did not change.** The rate, the depth, the slot allocation and the
+drop-when-both-slots-are-taken rule are all untouched — `a_freq` is still the
+same expression, and only `lfo{1,2}_shape` reads a different opcode. Every
+well-formed v1 `amplfo_*` tremolo and every single-oscillator v2 `lfo02_*`
+tremolo produces the identical bank as before, as does the two-oscillator v2
+file (amp LFO on `lfo01`, filter LFO on `lfo02`), which used to come out right in
+the LFO1 branch by coincidence.
+
+**Existing tests.** **None changed** — no existing test encoded this
+behaviour. `tests/test_lfo_volume.py` (4 tests) exercises `amplfo_depth` /
+`amplfo_freq` only and asserts rates and amounts, never a shape, so it passes
+byte-identically; it is the source of the control at the end of the new file.
+The `-k sfz` subset went from 10 passed to 22 passed. The code quoted under
+§CWM-LFOVOL above is the 2026-07-28 before-state and is left as history; this
+entry is what replaced it.
+
+**Tests.** `tests/test_sfz_tremolo_shape_follows_gain.py`, 12 tests. A table of
+four (gain field, wave field) rows — `amplfo_depth`/none, `lfo02_gain`/
+`lfo02_wave`, `lfo01_gain`/`lfo01_wave`, `lfo03_gain`/`lfo03_wave` — each
+asserting the shape and that the tremolo really landed on LFO2. **8 of the 12
+fail with the fix reverted**, all of them on the shape; the four survivors are
+the v1 control, the well-formed `lfo02` control, the two-oscillator v2 file (the
+old LFO1 branch's lucky reading) and the v1-only control from
+`tests/test_lfo_volume.py`. Around the table: the no-rate-opcode case
+(`lfo01_gain` + `lfo01_wave`), two disagreeing wave opcodes side by side
+(`lfo01_wave=6` beside `lfo02_wave=0`) so the answer cannot be either block by
+symmetry, the v1 depth beside a v2 wave (the defect's other half), one block
+carrying both filter and tremolo so the LFO1 destination is reached, `lfo03`
+shaped onto the LFO1 destination, a rate spelled on a different block (the rate
+must not move), and the common v1 tremolo unchanged.

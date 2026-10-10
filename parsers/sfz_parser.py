@@ -267,14 +267,40 @@ def _sfz_voice_params(merged: dict) -> dict:
     # ConvertWithMoss PR #240 -- see docs/RESOLUTION_NOTES.md.
     a_depth = _f('amplfo_depth') or _f('lfo03_gain') or _f('lfo02_gain') or _f('lfo01_gain')
     a_freq  = _f('amplfo_freq')  or _f('lfo03_freq') or _f('lfo02_freq') or _f('lfo01_freq')
+    # The SHAPE belongs to the lfoNN block that carries the tremolo -- the one
+    # whose `*_gain` supplied the depth above -- and not to whichever
+    # destination slot it is routed into below.  The two chains above walk the
+    # same four blocks in the same order (amplfo_*, lfo03, lfo02, lfo01), so in
+    # any file spelling one oscillator per tremolo this is also the block the
+    # RATE came from: the wave is read from the block, resolved once, instead
+    # of being named after the slot.  It was hard-wired instead -- `lfo02_wave`
+    # in the LFO2 branch and `lfo01_wave` in the LFO1 one -- so one region got
+    # the shape of a DIFFERENT oscillator depending only on which model slot
+    # happened to be free.  A v2 tremolo carried by `lfo01_gain`/`lfo01_freq`
+    # reported 'sine' whatever `lfo01_wave` said, and an `lfo02_gain` tremolo
+    # pushed onto LFO1 by a filter LFO reported 'sine' whatever `lfo02_wave`
+    # said; the two branches disagreed about the same SFZ, which is what made
+    # the asymmetry read as deliberate.
+    #
+    # `amplfo_*` is SFZ v1 and carries no wave opcode at all, so its block
+    # leaves the shape at the 'sine' default `_sfz_lfo_wave(None)` already
+    # returns for every unspecified v2 LFO.
+    a_wave = None
+    for _dk, _wk in (('amplfo_depth', None),
+                     ('lfo03_gain',  'lfo03_wave'),
+                     ('lfo02_gain',  'lfo02_wave'),
+                     ('lfo01_gain',  'lfo01_wave')):
+        if _f(_dk):
+            a_wave = merged.get(_wk) if _wk else None
+            break
     if a_depth:
         if not lfo2_claimed:
             params['lfo2_rate']      = a_freq if a_freq else 5.0
-            params['lfo2_shape']     = _sfz_lfo_wave(merged.get('lfo02_wave'))
+            params['lfo2_shape']     = _sfz_lfo_wave(a_wave)
             params['lfo2_to_volume'] = lfo_volume_depth_to_amount(a_depth)
         elif not p_depth:
             params['lfo1_rate']      = a_freq if a_freq else 5.0
-            params['lfo1_shape']     = _sfz_lfo_wave(merged.get('lfo01_wave'))
+            params['lfo1_shape']     = _sfz_lfo_wave(a_wave)
             params['lfo1_to_volume'] = lfo_volume_depth_to_amount(a_depth)
     return params
 
