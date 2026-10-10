@@ -42556,3 +42556,78 @@ numbering from the first name.
 files that were previously either raising or reading past their own end. The
 MPC1000 and MPC60 paths are untouched, `tests/test_pgm_parser.py` passes
 unchanged, and the rest of the PGM/MPC/disk-image tests are unaffected.
+
+### Finding m1 — the v1.1 chunk walk stopped at the header, not at the record (2026-10-10)
+
+**The defect.** `_parse_exs_v11`'s walk was guarded as
+`while offset + 8 <= len(data)` — eight bytes, which is the chunk header and
+nothing else. Every branch that ran then read the *body*: a ZONE_V11 unpacks its
+index at `offset + 8`, takes the 56-byte name from `offset + 20 .. 76`, and reads
+the key/tune/velocity fields at `ks + 9 .. ks + 18` where `ks = offset + 76`, so
+the last byte it touches is `offset + 94`. A file whose zone-chunk header fits
+but whose body does not got through the guard and died inside the handler:
+
+```
+OLD 88-byte v1.1, zone header is the last 8 bytes:
+  struct.error: unpack_from requires a buffer of at least 92 bytes for
+                unpacking 4 bytes at offset 88 (actual buffer size is 88)
+NEW 88-byte v1.1, zone header is the last 8 bytes:
+  Bank 'short', 0 zones -- parsed, not raised
+```
+
+That shape is not exotic. The v1.1 header is 80 bytes (its size is the u32 at
++4, and the walk starts there), so **any** file that ends with a zone header —
+truncated download, half-written disk, a corpus file whose tail a copy tool
+clipped — is exactly this file. The walk reads the chunk type, dispatches, and
+only then discovers there is no record behind it.
+
+**Why a widened loop condition would not have been the fix.** Bumping
+`offset + 8` to `offset + 12` silences the 88-byte case (all the index unpack
+needs is 12 bytes) and leaves the next one raising, because nothing in a loop
+condition says anything about `ks + 18`:
+
+```
+OLD 100-byte v1.1, zone header at 80 (the index fits, the body does not):
+  IndexError: index out of range                  <- data[ks + 9], ks = 156
+NEW 100-byte v1.1, zone header at 80:
+  Bank 'short', 0 zones
+```
+
+**The fix** is `_V11_ZONE_READ = 95` — the last byte the ZONE_V11 handler reads,
+and no more — and one guard in the zone branch, `if offset + _V11_ZONE_READ >
+len(data): break`. It is deliberately the shape of the classic walk two hundred
+lines below, which guards its zone record with `if offset + 104 > len(data):
+break` and its sample record with `if base + 48 > len(data): break` before
+touching either. The v1.1 walk had the shape of the classic loop and not the
+shape of its guards. The branch is the only one that needs it: GROUP_V11 and
+SAMPLE_V11 only slice, SAMPLE_V11's `+420` read already carries its own check,
+and PARAMS_V11 is bounds-guarded inside `_parse_exs_params_v11`.
+
+**It cannot fire on a well-formed file, and that was measured, not assumed.** A
+sweep of every `.exs` on this machine — **1753 files, 1731 of them v1.1,
+82,094 zone chunks** — puts the smallest zone `chunk_size` at **104 bytes** and
+the smallest number of bytes remaining from the start of any zone chunk at
+**896**. The guard's threshold is 95, so there are 93 bytes of margin on the
+tightest real zone in the corpus. 251 of those files were then parsed with the
+pre-fix and post-fix parser side by side: identical zone counts, identical
+sample counts, identical per-zone hashes (index, name, key range, root, volume,
+tune, velocity). An 11,270-case synthetic sweep (7 header sizes × 5 chunk types
+incl. the 0x40000000-flagged variant × 7 declared sizes × 46 file lengths)
+raises nothing.
+
+**Tests.** Ten in `tests/test_exs24_v11_chunk_walk.py`; **six fail with the fix
+reverted** — the reviewed 88-byte `struct.error`, the 100-byte `IndexError`, an
+11-byte variant (8 bytes satisfies the framing, 12 would satisfy the index,
+neither is a zone), a sweep over *every* truncation length from 8 bytes of
+header to one past the record, a complete zone followed by a short one, and the
+constant itself. Four pass on both sides, which is what makes them guards
+rather than regressions: a complete zone chunk still parses as one zone, two
+still parse as two with every field intact, the 200-byte zero padding the walk
+normally steps through after the last chunk is still stepped through, and a
+classic `.exs` (via `tests/re_banks/gen_exs24_fixture.py`) still loads its real
+sample into a voice.
+
+**What did not change.** The guard is inside the zone branch, so the walk's
+framing, its stride arithmetic, the GROUP/SAMPLE/PARAMS branches, the classic
+walk, and every byte of every well-formed file are untouched — verified above on
+251 real instruments rather than asserted.

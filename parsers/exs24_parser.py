@@ -148,6 +148,14 @@ _V11_CONTENT_OFF    = 84
 # it off before dispatching and before every chunk-type comparison.  (Observed
 # across the Samples-From-Mars / Drums-From-Mars EXS packs, 2026-06-12.)
 _V11_TYPE_FLAG      = 0x40000000
+# Bytes the ZONE_V11 handler actually reads from the start of its chunk: the
+# u32 index at +8, the 56-byte name at +20..76, and the key/tune/velocity
+# fields at ks+9..ks+18 where ks = chunk+76 (so the last byte read is +94).
+# The classic walk guards its zone record with `if offset + 104 > len(data):
+# break`; the v1.1 walk has to guard the same reads, because a chunk whose
+# header fits but whose body does not used to die in the unpack instead of
+# stopping the walk (docs/CODE_REVIEW_2026-10-10.md finding m1).
+_V11_ZONE_READ      = 95
 
 # EXS24 FILTER1 + ENV2 parameter IDs (ConvertWithMoss EXS24Parameters), and the
 # FILTER1_TYPE → model filter_type map (ConvertWithMoss EXS24Detector):
@@ -282,6 +290,13 @@ def _parse_exs_v11(p: Path, data: bytes,
         stride     = 8 + chunk_size + _V11_TAIL
 
         if chunk_type == CHUNK_ZONE_V11:
+            # The body, not just the header, has to be here: this handler reads
+            # through chunk+94, so the walk's 8-byte guard was never enough.
+            # Same shape as the classic walk's `if offset + 104 > len(data):
+            # break` (CODE_REVIEW_2026-10-10 finding m1) — an unreadable zone
+            # stops the walk rather than raising out of a parse.
+            if offset + _V11_ZONE_READ > len(data):
+                break
             z_idx    = struct.unpack_from('<I', data, offset + 8)[0]
             name     = data[offset+20:offset+76].split(b'\x00')[0].decode('utf-8', errors='replace')
             ks       = offset + 76
