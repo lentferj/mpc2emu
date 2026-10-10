@@ -50,6 +50,7 @@ Scope and known lossiness (mirrors docs/KRZ_FORMAT.md §7):
 import array
 import math
 import struct
+from bisect import bisect_right
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional, Tuple
 
@@ -230,13 +231,28 @@ def _pcm_extents(sample_objs: List[dict], pcm_words: int) -> Dict[Tuple[int, int
         for hi, h in enumerate(s['headers']):
             if h.has_data:
                 starts.append(h.start_w)
-    starts = sorted(set(starts)) + [pcm_words]
+    # §REVIEW1010 §5: this was `sorted(set(starts)) + [pcm_words]`, and
+    # `_next_start` walked that list linearly for every header, which made the
+    # whole function O(H²). `bisect_right` on the same sorted list answers the
+    # same question in O(log H); it is the same answer because the list was
+    # already sorted, and `bisect_right` (not `bisect_left`) is what picks the
+    # first start STRICTLY greater than `after` — headers sharing a start word
+    # are the common case, not an edge case.
+    #
+    # The sentinel is merged INTO the sorted order rather than appended after
+    # it, which is a correctness detail and not cosmetics: a start word past
+    # `pcm_words` is real (a multi-disk soundset's headers point at PCM that
+    # lives on another disk), and appending `pcm_words` after a larger value
+    # would leave the list unsorted, which bisect's contract forbids. With the
+    # sentinel in place the two forms still agree exactly, because the one case
+    # where they differ is when the linear scan returns a start ABOVE
+    # `pcm_words` and the `min` two lines below clamps it to `pcm_words`
+    # anyway — the bisect form returns `pcm_words` directly.
+    starts = sorted(set(starts) | {pcm_words})
 
     def _next_start(after: int) -> int:
-        for st in starts:
-            if st > after:
-                return st
-        return pcm_words
+        i = bisect_right(starts, after)
+        return starts[i] if i < len(starts) else pcm_words
 
     extents: Dict[Tuple[int, int], int] = {}
     for s in sample_objs:

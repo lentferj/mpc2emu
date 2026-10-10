@@ -42051,3 +42051,104 @@ the E4B round trip are untouched.  The suite collects **1602** tests — the 155
 E4B subset is 84 passed (`test_e4b_parser_cord_search.py`, `test_e4b_parser.py`,
 `test_e4b_mod_routings_read.py`, `test_e4b_writer.py` and the new file) and the
 135 tests matching `e4b` pass unchanged.
+
+### §5 — `krz_parser._pcm_extents` scanned a sorted list once per header (2026-10-10)
+
+**The defect.** `parsers/krz_parser.py` `_next_start(after)` walked the sorted
+`starts` list from the front to find the first entry greater than `after`, and
+did so **once per header** — so `_pcm_extents` was O(H²) in header count H.
+The list was already sorted, so the answer was a `bisect_right` all along.
+
+**The fix.** Two lines: `i = bisect_right(starts, after)` and
+`starts[i] if i < len(starts) else pcm_words`. `bisect_right` rather than
+`bisect_left` is load-bearing — the question is the first start **strictly**
+greater, and two headers sharing one start word is the normal case in a packed
+bank, not an edge case. Take the equal one and the sample resolves to an empty
+slice.
+
+**The sentinel moved, and that is correctness rather than tidiness.** The
+shipped line was `sorted(set(starts)) + [pcm_words]`. A start word past
+`pcm_words` is real (a multi-disk soundset's headers point at PCM that lives on
+another disk), and appending the sentinel *after* a larger value leaves the list
+unsorted, which bisect's contract forbids. The sentinel is therefore merged
+into the sorted order: `sorted(set(starts) | {pcm_words})`. The two forms still
+agree exactly, and the reason is the `min(_next_start(...), pcm_words)` two
+lines below: the only case where they differ is when the linear scan returns a
+start *above* `pcm_words`, and that clamp discards it either way.
+
+**Measured on this machine**, on start-word distributions lifted out of `.KRZ`
+files we wrote and read back (median of 9; the review measured 2.14/5.21/9.41
+on its own machine):
+
+```
+headers   linear -> bisect   speedup   identical
+   100     0.288 -> 0.161 ms   1.79x     yes
+   400     2.810 -> 0.686 ms   4.09x     yes
+   800    10.683 -> 1.396 ms   7.65x     yes   (KRZ caps at 800 samples)
+```
+
+The quadratic is real: each doubling of H costs ~4x on the linear form. A
+comparison count says the same thing without a clock — 800 headers cost 10,355
+comparisons now against 323,597 before, and both runs return the same extents.
+
+**Honest calibration, kept as the review stated it:** *a first micro-benchmark
+of this used adversarial starts and claimed 12–22×; on real files the function
+is ~4 % of `parse_krz`, so the **file-level** gain is 1.13×. The quadratic is
+real (4× cost per 2× headers, measured 2.14 → 5.21 → 9.41) and the fix is a
+two-line `bisect` swap, but it is not a headline number. KRZ cannot exceed 800
+samples (object ids 200..999), so the worst case is bounded at ~10 ms.*
+
+**This machine brackets that 1.13× rather than reproducing it**, because the
+fraction of `parse_krz` that `_pcm_extents` is depends entirely on the fixture
+— 0.4 % on a 400-sample bank with 134 programs, 6 % on one with a single
+preset. Measured end to end, best of 15, whole-Bank sha256 of the parse in
+every case:
+
+```
+parse_krz, 400 samples / 1000 frames / 1 preset     11.84 ->  9.75 ms  1.21x  identical
+parse_krz, 400 samples / 1000 frames / 4 presets    14.29 -> 12.42 ms  1.15x  identical
+parse_krz, 400 samples / 1000 frames / 40 presets   44.43 -> 41.82 ms  1.06x  identical
+parse_krz, 800 samples / 1000 frames / 4 presets    30.95 -> 21.90 ms  1.41x  identical
+```
+
+The Bank hash is identical — verified by parsing each file twice, once with
+the shipped `_pcm_extents` and once with the pre-fix function patched into the
+parser's namespace, and hashing every field of the result.
+
+**One thing the review's adversarial number could not have shown.** `starts` is
+a `set`, so the scan is bounded by the number of *distinct* start words, not the
+header count — piling every header onto one start word collapses the list to a
+single entry and is cheap, which is the opposite of the intuition. The bound is
+reached by one header per distinct start word, adjacent and ascending, which is
+exactly what a packed bank already is; the real distribution above is therefore
+the worst case, and the 12–22× was measured against something this code cannot
+produce.
+
+**Tests.** Ten in `tests/test_krz_pcm_extents_bisect.py`. Nine are identity:
+the pre-fix function is spelled out **verbatim** as `_reference_extents` and
+every distribution — packed banks at 100/400/800, start words lifted out of a
+written `.KRZ`, all-duplicates, starts past `pcm_words`, no data at all,
+multi-header objects, and 60 randomised fuzz trials — is run through both.
+Hand-computed expectations sit beside the reference comparisons in the small
+cases so they are not two algorithms agreeing with each other.
+
+**The tenth is the one that fails with the fix reverted**, and it has to exist:
+with the fix reverted `_pcm_extents` *is* `_reference_extents`, so all nine
+identity tests compare the old code against itself and pass. What changed is
+the number of comparisons, so that is what is counted — `start_w` stands in for
+an object that bumps a counter on every comparison, which makes the complexity
+assertion exact and clock-free (323,597 against 10,355 at 800 headers, so the
+test would be flaky if it were a wall-clock threshold). Reverting the fix fails
+exactly that one test, confirmed by stashing the parser and re-running.
+
+**A trap recorded because it cost an afternoon.** The whole-Bank hash first
+disagreed between old and new on every fixture; the cause was `repr()` of an
+`Envelope`, which embeds `curve=<models.common.EnvCurve object at 0x7f...>` — a
+fresh address per process. `_stable()` in the test file renders dataclasses
+field by field instead, and the memory address is now the only thing that
+differs between two "different" hashes.
+
+**What did not change.** The extents, the loop-point clamping downstream of
+them, or any byte of any written file. `tests/test_krz_parser.py`,
+`tests/test_krz_roundtrip.py`, `tests/test_krz_stereo.py` and the new file: 40
+passed.
