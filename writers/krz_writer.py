@@ -555,13 +555,26 @@ def _write_sample_object(f, sample: SampleData, obj_id: int,
     # Per-channel length.  Every word offset below is in CHANNEL words, which
     # for mono is just the sample length.
     num_words = total_words // channels
-    loop_start_w = sample.loop_start
-    loop_end_w   = sample.loop_end if sample.loop_end > 0 else num_words - 1
+    # A loop point past the end of the PCM is not a loop point. `loop_end` is an
+    # inclusive frame index, so the last addressable word is `num_words - 1`;
+    # §REVIEW1010 finding 9 wrote `num_words` (one past it) and the K2000
+    # looped one word into the NEXT sample's PCM on every cycle. The E4B writer
+    # has clamped this since §HALFFRAME (writers/e4b_writer.py:509-513); this
+    # writer did not.
+    #
+    # Clamping can collapse the loop, so `looped` is re-tested afterwards rather
+    # than before -- the same two-step the E4B writer performs, for the same
+    # reason: a loop whose whole extent falls outside the PCM must be recorded
+    # as a one-shot, not point at bytes that are not there.
+    loop_start_w = max(0, min(sample.loop_start, num_words - 1))
+    loop_end_w   = max(0, min(sample.loop_end if sample.loop_end > 0
+                              else num_words - 1, num_words - 1))
     period       = _compute_sample_period(sample.sample_rate)
     max_pitch    = _compute_max_pitch(sample.sample_rate, sample.root_note,
                                       getattr(sample, 'fine_tune', 0))
 
-    looped = sample.loop_type != LoopType.NO_LOOP
+    looped = (sample.loop_type != LoopType.NO_LOOP
+              and loop_end_w > loop_start_w)
 
     # Soundfilehead.flags — verified against real RAM-loaded soundsets (third-party soundset
     # soundset 002) and KurzFiler's WAV importer (LoadWaveMethod): a playable RAM

@@ -41648,3 +41648,62 @@ drives the real `convert.py` as a subprocess and asserts exit 1 plus a message
 for the out-of-range values, and — importantly — that **100** is *not* a usage
 error: it is a request thinning genuinely cannot serve, so it must reach the
 diagnostic and finish rather than traceback.
+
+### Finding 9 — the KRZ writer took the model's loop points as absolute (2026-10-10)
+
+**The defect.** `krz_writer._write_sample_object` wrote `loop_start_w` and
+`loop_end_w` straight from the model with no clamp against the PCM it was about
+to emit, while `krz_parser.py:2016-2017`'s counterpart clamps hard. The K2000
+defines a loop as `[sampleLoopStart, sampleEnd]` and, for a **looped** sample,
+`sampleEnd` *is* the loop end (CR-10) — so an unwritten `sampleEnd` is not
+inert padding. It is the address the machine jumps to on every cycle, one word
+past this sample's PCM, into whatever the next sample object owns.
+
+Measured on the shipped code, 64-frame mono, one Soundfilehead so every word
+offset is relative to `start_w = 0`:
+
+```
+OLD loop 0..64   : loop_start_w=0    end_w=64    <- last valid word is 63
+OLD loop 0..100  : loop_start_w=0    end_w=100
+OLD loop 100..0  : loop_start_w=100  end_w=63    <- loop starts past the PCM
+NEW loop 0..64   : loop_start_w=0    end_w=63
+NEW loop 0..100  : loop_start_w=0    end_w=63
+NEW loop 100..0  : loop_start_w=63   end_w=63, one-shot (flags 0xF0)
+```
+
+**The fix is the E4B writer's two-step, copied deliberately.** Clamp both
+points into `[0, num_words - 1]`, then **re-test `looped` afterwards**: clamping
+can collapse the loop, and a loop with no extent must be recorded as a one-shot
+rather than as a loop that points at bytes that are not there.
+`writers/e4b_writer.py:524-528` has done exactly this since §HALFFRAME, and the
+third writer of the class is already finding 8.
+
+**Reachability, stated honestly — this one is input-gated.** All three of this
+project's parsers clamp `loop_end ≤ n_frames−1` (`e4b_parser.py:376`,
+`krz_parser.py:2017`, eiii's `hi = max(6, num_frames-7)`), so an *ours-only*
+pipeline cannot produce the condition today. A source that sets
+`loop_end ≥ n_frames` directly can: SFZ, a WAV `smpl` chunk, XPM. What makes it
+worth fixing anyway is that the reader's own clamp **hid it**, so nothing in the
+tree could have noticed — see below.
+
+**A round-trip test would have passed.** `krz_parser.py:2016-2017` clamps what
+it reads back, so `write_krz → parse_krz` reports a sane loop for a file whose
+header says `end_w = 64`. The tests therefore read the written **Soundfilehead**
+directly, through `_read_objects` + `_parse_sample_object` — the same seam
+`tests/test_krz_stereo.py` already uses for its geometry checks.
+
+**Tests.** Nine in `tests/test_krz_loop_clamp.py`; **six fail with the fix
+reverted**. The consequence is asserted rather than the symptom:
+`test_a_clamped_loop_never_overlaps_the_next_sample` writes two samples and
+checks the first's `end_w` against the second's `start_w`, which is the audible
+half — a loop cycle that plays one word of the neighbouring sample. There is a
+stereo case because `num_words` is per channel, and three guards: an in-range
+loop writes the same words as before, a `NO_LOOP` sample still writes `0xF0`
+with the loop collapsed onto the end, and a loop ending on the last *valid*
+word survives as a loop instead of being mistaken for the collapse case.
+
+**Observed and deliberately not touched.** A 0-frame sample writes word offsets
+of `-1`, from `abs_end = word_offset + num_words - 1` with `num_words == 0`.
+That predates this fix and comes from the end field rather than the loop clamp;
+it is recorded in the test's docstring so the next reader does not attribute it
+here.
