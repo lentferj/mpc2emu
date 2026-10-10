@@ -1576,6 +1576,19 @@ def main():
         _rc = write_akai_output(output_banks, out_dir, bank_name, args, step_n)
         if _rc:
             sys.exit(_rc)
+        # THE PARSE COUNT MUST REACH THIS RETURN TOO. §REVIEW1010 finding 5:
+        # `write_akai_output` returns None (falsy) on its "nothing to write" and
+        # `--add-to` paths, so this early return skipped the summary's
+        # `partial` computation entirely -- and a run that had already printed
+        # "N input file(s) FAILED to parse ... This run will exit 4" exited 0.
+        # Verified: one good .sfz plus one corrupt .e4b, `--format akai`.
+        # The same run with `--format e4b` exits 4.
+        if n_parse_failed:
+            print(f"\n{'='*60}")
+            print(f"PARTIAL: {n_parse_failed} input file(s) failed to parse and "
+                  f"are not in this run's output.")
+            print(f"{'='*60}\n")
+            sys.exit(RC_PARTIAL)
         return
 
     # ── Write bank files ──────────────────────────────────────────────────────

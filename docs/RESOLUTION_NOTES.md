@@ -41515,3 +41515,61 @@ T4). `parse_gig`, `_extract_waves`, `_parse_wsmp` and the region walk had no
 coverage anywhere in the tree, which is why this survived: the shared pool is
 invisible unless two regions reference it with *different* loops, which is
 exactly the fixture.
+
+### Finding 5 — the AKAI branch returned before the summary ever computed `partial` (2026-10-10)
+
+**The defect.** `convert.py:1199-1204` prints
+
+```
+[WARN] 1 input file(s) FAILED to parse and are not in this run's output.
+       This run will exit 4.
+```
+
+and then the AKAI branch (`convert.py:1576-1579`) returns from `main()` using only
+the writer's return code:
+
+```python
+_rc = write_akai_output(output_banks, out_dir, bank_name, args, step_n)
+if _rc:
+    sys.exit(_rc)
+return
+```
+
+`write_akai_output` returns `None` — falsy — on its "nothing to write" path and
+on `--add-to`, so this return skipped the summary's
+`partial = (n_parse_failed + n_write_failed + n_append_failed) > 0` entirely.
+The single-file path computes it at `convert.py:1811` and exits 4; the AKAI path
+never sees `n_parse_failed`.
+
+**Verified on the unfixed code.** One good `.sfz` plus one corrupt `.e4b`:
+
+```
+--format akai:  [WARN] 1 input file(s) FAILED to parse ... This run will exit 4.
+                Done: 1 of 1 volume(s) written to out/
+                rc = 0            <- contradicts its own warning
+--format e4b :  same input, rc = 4
+```
+
+**This is a gap in §SILENTFAIL (`TODO.md:37`), not a new defect.** That fix
+propagated the parse count to the summary and claimed "all five sites fixed";
+the count reached the summary but not this early return, so the claim was false
+for the one branch that bypasses the summary. Worth recording because the
+project's own lesson there was *"a warning standing next to a volume that was
+still written"* — and this is that exact shape, one branch later.
+
+**The fix.** After the writer returns, if `n_parse_failed` is non-zero, print a
+`PARTIAL:` line and `sys.exit(RC_PARTIAL)`. The line is printed rather than
+exiting silently because the `[WARN]` lands several screens above whatever the
+writer last said, and a bare `rc=4` at the bottom of a `Done:` banner reads as
+a tool failure rather than a partial success.
+
+**Tests.** Three, in `tests/test_silent_failures.py` (the file whose subject is
+exactly this). They run `convert.py` as a **subprocess** and assert on
+`returncode`, for the reason that file's own docstring gives: an in-process
+`SystemExit` is catchable, so a test that catches one can be satisfied by an
+unrelated raise. Two fail with the fix reverted. `test_a_clean_akai_run_still_exits_zero`
+is the guard — with nothing failing the new check must not fire.
+`test_an_akai_run_with_a_failed_input_still_writes_what_it_can` is the other
+guard: the run must exit **4**, not 3, and the bank that parsed cleanly must
+still be on disk, because §SILENTFAIL separates *refused to write* from *partial*
+and this is the latter.
