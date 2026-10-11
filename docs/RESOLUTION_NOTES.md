@@ -44534,3 +44534,67 @@ corpus and touches neither of these two seams.
 §REVIEW1010 finding T4 (second half); full review in
 docs/CODE_REVIEW_2026-10-10.md. The first half — opcode precedence and the
 `talsmpl` round trip — is the entry above this one.
+
+---
+
+### Finding D1 — the section the loop never expanded: finding 11 live for every region but the last (2026-10-11)
+
+D1 was the first of the four defects the T4 seam work documented without
+fixing, and this entry lands it. `_parse_sfz_opcodes` appended every section
+but the last UNEXPANDED (`parsers/sfz_parser.py:83`) and ran
+`_expand_key_opcode` only on the section that ends the file (`:98`), so
+finding 11's exact defect survived on any region that is not last. Confirmed on
+the tree before fixing, with the T4 entry's own two-region file:
+`<group>lokey=0 hikey=127` + `<region>key=48` + `<region>key=60` shipped region
+1 as **lo 0 / hi 127 with root 48** — the group's range with the region's root
+— while region 2 came out 60/60/60, the one section the loop expanded. The
+section dicts showed it directly: the first region carried a bare `key: '48'`
+with no `lokey`/`hikey`, the last carried all three.
+
+**The fix is the one line the T4 entry prescribed** — expand on append rather
+than only on the way out:
+
+    sections.append(_expand_key_opcode(current))
+
+The merge-time fallback (`key_shorthand`, `:555-563`) is untouched, but its
+comment is corrected: it called itself "a defensive no-op", which was wrong for
+exactly one case — a GROUP's own `key=`, which no section expansion ever
+reached, so the fallback was the only thing applying it. Every section, group
+included, is now expanded at tokenise time, so a `key` that still reaches the
+merge always has its `lokey`/`hikey`/`pitch_keycenter` beside it and those
+defaults cannot fire for any `key` that arrived through a parsed section. The
+comment says that, instead of the no-op claim.
+
+**Two new tests, both in `tests/test_sfz_opcode_precedence.py`** (untracked, as
+all of `tests/` is), alongside the file's updated docstring — its "gap left
+open" section now records the closure rather than the gap:
+
+* `test_nonfinal_region_key_expands_before_the_merge` — the two-region file
+  above, end to end through `parse_sfz`: `[(C, 48, 48, 48, ...),
+  (D, 60, 60, 60, ...)]`. Before D1 the first row came back `(C, 0, 127, 48,
+  ...)`.
+* `test_group_key_expands_per_section` — `<group>key=55` under
+  `_parse_sfz_opcodes`: the group section itself now carries `lokey/hikey/
+  pitch_keycenter = 55`. Before D1 it carried a bare `key` (`KeyError` on
+  `lokey`), and only the merge-time fallback produced the right zones — which
+  is why the existing `group_key_applies_to_its_regions` row passed either way
+  and could not pin this.
+
+**Revert proof.** Source change stashed (`tests/` is untracked and survives),
+`__pycache__` purged, run with `python3 -B`: exactly those two tests fail, the
+other 23 in the file pass. Stash popped, fix restored.
+
+**The T4 entry's counts reproduce.** Its forward experiment reported 58 passed
+across the five SFZ files; the same subset now passes 60 — the same 58 plus
+the two new tests — so nothing in the "58" was estimated and nothing regressed.
+
+Subsets run here (the full suite was not): `tests/test_sfz_opcode_precedence.py
+tests/test_sfz_key_precedence.py tests/test_lfo_volume.py
+tests/test_sfz_tremolo_shape_follows_gain.py tests/test_talsmpl_roundtrip.py`
+— 60 passed. With the tree-policing meta-tests
+`tests/test_no_scratch_leaks.py tests/test_law_consistency.py
+tests/test_citations_resolve.py` — all green. TODO.md's D1 row removed with
+this commit; D2-D4 stay open.
+
+§REVIEW1010 follow-up D1 (from finding T4); full review in
+docs/CODE_REVIEW_2026-10-10.md.

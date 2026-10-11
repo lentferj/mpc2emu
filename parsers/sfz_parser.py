@@ -80,7 +80,7 @@ def _parse_sfz_opcodes(text: str) -> list[dict]:
 
         if token.startswith('<') and token.endswith('>'):
             if current:
-                sections.append(current)
+                sections.append(_expand_key_opcode(current))
             current = {'_type': token[1:-1].lower()}
         else:
             # Parse opcode=value pairs
@@ -551,7 +551,10 @@ def parse_sfz(sfz_path: str, wav_dir: Optional[str] = None) -> Bank:
             # section by `_expand_key_opcode` (see its docstring -- this used to
             # be the only place `key` was honoured, and as a FALLBACK, so a
             # region's key= never beat a group's lokey/hikey). The fallbacks
-            # below stay as a defensive no-op; the expansion makes them dead.
+            # below stay as pure defence-in-depth: every section, group
+            # included, is expanded at tokenise time (finding D1), so a `key`
+            # that still reaches this merge has its lokey/hikey beside it and
+            # these defaults never fire.
             key_shorthand = merged.get('key')
             lo_key  = _note_name_to_midi(merged.get('lokey',
                                          key_shorthand or '0'))
