@@ -43416,3 +43416,93 @@ and was not touched, and the coarse-tune, velocity and sample-index fields of
 the same sub-record are untouched. The Roland subset runs clean
 (`pytest -k "roland or s7xx"`, 363 passed, 27 subtests), and with it
 `-k fine_tune`, 359 passed.
+
+### Finding m18 — `single_cycle` measured its shrink against a channel-blind frame count (2026-10-10)
+
+**The defect.** `processors/single_cycle.py` set a report field to the number of
+SAMPLES and treated it as the number of FRAMES:
+
+```python
+'orig_frames': len(sample.data) // 2        # m18 — no `// ch`
+```
+
+`sample.data` is 16-bit LE PCM, so `len(data) // 2` is the sample count.
+Interleaved stereo (and anything wider) stores `ch` samples per frame, so a
+stereo source of `F` frames was reported as `2*F`. The same file divides the
+channel count out correctly everywhere else — `_wav_bytes_with_loop` uses
+`ch = max(1, getattr(sample, 'channels', 1) or 1)` (line 413), and
+`auto_loop.py:352`, `start_trim.py:164` and `tail_trim.py:185` all compute
+`(len(data) // 2) // ch` — so the line above was the single outlier.
+
+`orig_frames` feeds exactly one consumer: the printed shrink percentage in
+`single_cycle_banks` (`shrink = 100*(1 - info['loop'] / info['orig_frames'])`
+at line 523, rendered as `(-{shrink:.1f}%)`). It never reaches the returned
+`SampleData`, and it is not one of `docs/diagnostics.json`'s `orig_frames`
+detail keys (those belong to `start_trim`/`tail_trim`). The finding is
+therefore **report-only**: the shrink DECISION and the extracted audio are
+untouched.
+
+**Verified on the shipped code**, a stereo sample of 11,025 frames (44,100
+bytes) reported `orig_frames = 22050` — the reviewer's headline number — against
+a true frame count of 11,025. The reviewer's ~397-frame loop printed `-98.2%`
+where the correct figure is `-96.4%`; my sine resolved to a 300-frame loop and
+printed `-98.6%` where correct is `-97.3%`. The absolute gap is small only
+because the extracted loop is a few hundred frames; the DENOMINATOR is wrong by
+a factor of the channel count for every stereo sample, and by three for
+anything wider.
+
+**The negative percentage — a second symptom of the same line, and the
+decision.** The reviewer flagged that when a very short source's base cycle is
+pushed past the source's OWN length by the hardware-minimum tiling
+(`_MIN_LOOP_FRAMES = 256`), `loop > orig_frames` and the true shrink goes
+negative. This is **not** the channel bug: it reproduces on a MONO sample (220
+frames, its ~100-frame cycle tiled to 300), where `orig_frames` was always
+right, and so it survives a channel-only fix. Verified on the shipped code the
+`(-{shrink:.1f}%)` template prints `--36.4%` — a double sign, and a "shrink"
+that is negative. Decision, as the review permitted: **fix it in the report
+only.** The shrink ARITHMETIC is left exactly as found (`shrink =
+100*(1 - loop/orig_frames)`, negative and all); only the DISPLAYED figure is
+wrapped, `shown = max(0.0, shrink)`. When the extracted loop is no shorter than
+the source, nothing was shrunken, and the honest report is `-0.0%`, not
+`--36.4%`.
+
+**The fix.** Two lines in `processors/single_cycle.py`. The count:
+
+```python
+# §REVIEW1010 m18: bytes/2 is the SAMPLE count, not the FRAME count ...
+'orig_frames': (len(sample.data) // 2) // max(1, sample.channels),
+```
+
+and the report clamp:
+
+```python
+shown = max(0.0, shrink)   # report-only; the arithmetic above is unchanged
+```
+
+`max(1, …)` keeps a degenerate `channels == 0` from dividing by zero, and
+`// max(1, sample.channels)` is generic over the channel count — so the fix is
+correct past stereo, pinned by a 3-channel test, rather than a `// 2` that
+would pass only the reviewer's stereo case.
+
+**Tests.** Seven in `tests/test_single_cycle_frame_count_channels.py`; **six
+fail with the fix reverted.** The three channel-correctness tests (the mono
+baseline passes both ways, since `// max(1, 1)` is a no-op) and the negative
+clamp (reverted: `--36.4%`) fail; the two shrink-path tests fail their
+`loop < orig_frames == frames` assertion because the reverted denominator is
+`2*F`. The report-only contract is pinned two ways.
+`test_stereo_and_its_mono_twin_produce_identical_audio` extracts a mono source
+and a stereo source carrying the identical mono waveform on both channels, and
+asserts byte-identical `new.data`, loop, rate and root — on revert it fails
+**only** at the trailing `orig_frames` equality (`1500 == 3000`), after every
+audio assertion has already passed, which is precisely the proof that the
+channel count reached the report and nothing downstream. A cross-stash run of a
+six-sample batch (mono, stereo, 3-channel, 200-frame, 400-frame) hashed to
+`a1719a71…` both with the fix and with it reverted.
+
+**What did not change.** The shrink decision, the extracted audio, the loop,
+the retuning: the audio hash is byte-identical with and without this change.
+The shrink VALUE is unchanged — still negative where the source is shorter than
+its own minimum loop; only its printed form is clamped. The arithmetic line
+100*(1 - loop/orig_frames) is untouched. Suite: not run in full — `-k
+single_cycle` (13 passed) and `-k shrink` (20 passed, 4 subtests) pass
+unchanged, which is the surface this file touches.

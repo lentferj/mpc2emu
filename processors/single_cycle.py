@@ -252,7 +252,14 @@ def _single_cycle_sample(sample: SampleData, cycles) -> Tuple[SampleData, dict]:
     """
     info = {'ok': False, 'reason': '', 'name': sample.name,
             'period': 0, 'conf': 0.0, 'n': 0, 'loop': 0,
-            'orig_frames': len(sample.data) // 2,
+            # §REVIEW1010 m18: bytes/2 is the SAMPLE count, not the FRAME count.
+            # Interleaved stereo (or >2ch) PCM holds `ch` samples per frame, so a
+            # channel-blind count reported stereo length as 2x — inflating
+            # orig_frames and skewing the printed shrink %.  Divide out the channel
+            # count too, as auto_loop.py / start_trim.py / tail_trim.py already do;
+            # this stays a REPORT field (see the shrink print below) and never
+            # feeds the returned audio.
+            'orig_frames': (len(sample.data) // 2) // max(1, sample.channels),
             'root': sample.root_note, 'cents': 0}
 
     sig = _pcm_to_float(sample.data)
@@ -522,13 +529,21 @@ def single_cycle_banks(banks, *, cycles='auto',
                 tune[new_s.name] = new_s.root_note
                 shrink = (100.0 * (1 - info['loop'] / info['orig_frames'])
                           if info['orig_frames'] else 0.0)
+                # §REVIEW1010 m18: never report a NEGATIVE shrink.  A very short
+                # source, whose base cycle the hardware-minimum tiling
+                # (_MIN_LOOP_FRAMES) then pushes past the source's OWN length, makes
+                # loop > orig_frames and the true value negative — the "(-X%)" template
+                # would then print a nonsense double sign ("--36.4%").  Clamp the
+                # REPORTED figure to 0% only (the loop didn't shrink the source);
+                # the shrink arithmetic above, and every audio path, are untouched.
+                shown = max(0.0, shrink)
                 flag = ''
                 if info['conf'] < 0.7:
                     n_low += 1
                     flag = '  [LOW CONFIDENCE — audition]'
                 note = _note_name(info['root'])
                 print(f"    '{info['name']}': {info['n']}cyc×{info['reps']} = "
-                      f"{info['loop']}f loop (-{shrink:.1f}%), root {note} @ "
+                      f"{info['loop']}f loop (-{shown:.1f}%), root {note} @ "
                       f"{info['rate']}Hz ({info['cents']:+d}c), "
                       f"conf {info['conf']:.2f}{flag}")
             else:
