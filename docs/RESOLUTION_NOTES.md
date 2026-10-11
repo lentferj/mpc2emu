@@ -44846,3 +44846,117 @@ landed.
 
 §REVIEW1010 follow-up D3 (from finding T4); full review in
 docs/CODE_REVIEW_2026-10-10.md.
+
+---
+
+### Finding D6 — the two order-dependent failures that would not fail again: no repro, no speculative fix (2026-10-11)
+
+**Status: OPEN, and deliberately unfixed.** The TODO row reported
+`tests/test_fixtures_actually_fail.py::test_thinnable_fixture_thins_and_reports_an_impossible_target`
+and `tests/test_source_fields_unread.py::test_the_known_debt_list_has_not_gone_stale`
+failing once each in a full-suite run, passing in isolation and on re-run. A
+fix for a failure that cannot be reproduced is a guess dressed as a repair,
+and a guess here would touch production caches on the shrink path — so this
+entry records the hunt, what it ruled out, and what to capture if either
+fires again. The TODO row stays open.
+
+**Reproduction attempts, all `python3 -B` with `__pycache__` purged** (three
+full suites total; the rest are subsets):
+
+* Isolation: thinnable green (1 passed, 1.66 s); the whole
+  `test_source_fields_unread.py` green (3 passed, 45.56 s).
+* Full suite, default order: **2420 passed, 1469 subtests**, 183 s.
+* Full suite, shuffled (seed 7, order recorded via an external plugin kept
+  outside the repo): both targets green; the single failure was
+  `test_silent_failures.py::test_partial_run_exits_non_zero_and_does_not_say_done`,
+  proven below to be my harness's artifact, not the suite's.
+* Full suite, shuffled (seed 11, harness fixed): **2420 passed**,
+  1469 subtests, 183 s.
+* Every file alphabetically *before* the fixtures module, then the thinnable
+  test in the same process: 1055 passed.
+* Every file alphabetically *after* it — including the whole
+  `test_source_fields_unread.py`, whose probe permanently sets
+  `warnings.filterwarnings('ignore')` — then the thinnable test: 1361 passed.
+* The audit dumped directly (`inert=93, live=39, stale=0, new=0`) and
+  re-dumped after running `test_xpm_parser.py` in-process and after running
+  all 20 late-alphabet modules in-process: **byte-identical sets both times**.
+
+**Ruled out, each checked rather than assumed** — the TODO row's three hints
+in its order:
+
+* (a) Shared module-level state in `shrink_planner` / `bank_splitter` / the
+  fixtures. The centroid/energy caches (`processors/shrink_planner.py:94-96`)
+  are keyed by `id()` but every entry carries a weakref that evicts it from
+  all three dicts the moment the sample dies (`:99-112`), and every put
+  refreshes the weakref — so a reused address cannot serve a dead sample's
+  numbers under refcounting, including through the cyclic collector (the id
+  cannot be reused before collection, and the callback runs at collection).
+  `writers/bank_splitter.py` holds constants only (`:69-143` region: every
+  module-level name is a number, a string, or a table), and
+  `processors/zone_reducer.py` holds no module-level mutable state at all.
+  The thinnable test's two asserts (`plan.feasible and plan.key_pct > 0`,
+  then `SHRINK_TARGET_UNREACHABLE` for an unreachable target) are pure
+  functions of the fixture files — which are rewritten from scratch after a
+  per-test `rmtree` — plus these stateless paths. Corroborating detail: in
+  default order nothing that imports `shrink_planner` runs before the
+  fixtures module, so the caches are empty when it runs there anyway.
+* (b) An unreset registry or parser cache. `_DIR_INDEX_CACHE`
+  (`parsers/xpm_parser.py:2752`) is keyed by directory path, and every
+  directory the two tests parse in is fresh per run — `scratch()` mints a
+  unique `mkdtemp` per call, and the fixtures' `OUT` root is wiped by the
+  autouse fixture before each test — so a stale listing has no same-path
+  entry to collide with. It is bounded at 8 with FIFO eviction, and the
+  audit's own `_CACHE` is consistent within a process by construction.
+* (c) The local MPC corpus probe. Picking is deterministic: sorted glob,
+  first XML-and-parseable `.xpm` per archive, first two archives
+  (`PROBE_FILES = 2`). Nothing in the suite writes to that directory — the
+  only reference to it in `tests/` is the probe itself — and the
+  predecessor batteries above left the inert/live sets identical.
+
+Also checked: no test in the suite sets `warnings.simplefilter('error')`,
+`os.chdir`, locale, or `TMPDIR` in-process (the one `filterwarnings`
+call is the probe's own); no threads or worker pools anywhere on the
+exercised paths (`models/diagnostics.py:107` is thread-local by design, and
+the `collect()` nesting fix there is already landed); no `random` without a
+seed on these paths; every set on the shrink path is membership-only, and
+every ordering-sensitive walk (`glob`, dict summaries) is `sorted`.
+
+**One REAL dependence found along the way, and it was mine first.** The
+seed-7 failure looked like a suite bug until it reproduced bare: the
+`_run_main` shim in `tests/test_silent_failures.py:160-168` builds the
+child's `PYTHONPATH` as `str(d) + os.pathsep + inherited`. With no inherited
+`PYTHONPATH` that is `"<tmpdir>:"` — trailing empty entry, which puts the
+pytest cwd on the child's path — and the `import writers.e4b_writer` in the
+shim resolves iff the cwd is the repo root. Measured at sitecustomize time:
+`sys.path` holds neither the script dir nor the cwd (CPython runs
+`sitecustomize` before the script directory lands on the path, and
+`convert.py:72` inserts it too late for the shim), so the import lives or
+dies on that trailing colon. My shuffle plugin needed `PYTHONPATH` set, the
+trailing colon went away, and the shim failed cwd-independently. Reran with
+the colon restored: green. Left as-is on purpose — that file belongs to the
+CLOSED §SILENTFAIL row and is green the documented way (pytest from the repo
+root) — but the next runner who injects `PYTHONPATH` without a trailing
+colon will re-break exactly one test and it will look like the suite.
+
+**What is left.** Either an interleaving that needs *both* a before and an
+after (every one-directional subset here passed), or — likelier, given the
+41 runs spanned the REVIEW1010 landings while the tree kept changing — the
+tests firing correctly on transient states: the stale-debt probe in
+particular fails legitimately whenever a landing starts reading a new field,
+which is signal, not flake. If either fires again, capture before anything
+else: the exact assert text (which plan field, which tags flipped
+inert→live), and the exact order (`--co -q` to a file, the way the seed-7/11
+runs here recorded theirs). Without those two, any fix is speculation, and
+per the TODO row's own rule no `pytest.mark.flaky` and no weakened assert.
+
+Subsets and suites run here, all `python3 -B`, `__pycache__` purged:
+isolation of both targets; full suite default order (2420 passed);
+full suite shuffled seed 7 (both targets green, one harness-artifact
+failure accounted for above); full suite shuffled seed 11 (2420 passed);
+before-subset + thinnable (1055 passed); after-subset + thinnable
+(1361 passed); audit-diff driver, three dumps identical. TODO row for the
+flaky tests stays OPEN with a pointer to this entry; no source or test file
+changed, so there is nothing to revert-prove.
+
+§REVIEW1010 follow-up D6 (the two order-dependent tests); full review in
+docs/CODE_REVIEW_2026-10-10.md.
