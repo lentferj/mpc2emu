@@ -34,6 +34,12 @@ series.
 
 > **Legal:** [DISCLAIMER.md](DISCLAIMER.md) · [LICENSE](LICENSE)
 
+> **New here?** [Quick Start](#quick-start) has copy-paste commands,
+> [Supported Formats](#supported-formats) says what goes in and what comes out,
+> and [All Options](#all-options) is the full flag reference. The per-machine
+> parameter and measurement sections below them are reference material to come
+> back to, not a prerequisite.
+
 ---
 
 ### Part of a family of vintage-sampler tools
@@ -437,10 +443,11 @@ earlier measurement round worthless, which is its own argument for checking.
 | EMU E4B | `.e4b` / `.E4B` | EMU Emulator 4 / E4XT bank — import for resampling / re-export |
 | Kurzweil KRZ | `.krz` / `.KRZ` | Kurzweil K2000/K2500/K2600 bank — import for resampling / re-export; K2000 ROM-referenced samples are skipped (no PCM in the file) |
 | E-mu Emulator IIIX/ESI | `.e3x` / `.esi` / `.e3b` | Emulator IIIX, ESI-32/2000/4000, and the compact Emulator III (`.e3b`, read-only) |
-| Akai MPC Keygroup | `.xpm` | MPC 2.x / MPC X / Live / One (XML) |
+| Akai MPC Keygroup | `.xpm` / `.xty` / `.xpj` | MPC 2.x / MPC X / Live / One (XML); MPC 3 tracks/projects use the same container |
 | Akai MPC drum program | `.pgm` | MPC 500/1000/2500, **MPC 2000/2000XL** (`.WAV`) and MPC 60 (12-bit `.SND`) |
 | Akai MPC60 SET / floppy | `.set` / `.img` | MPC 60 RAM set; `.img` = FAT12 floppy (SET auto-extracted) |
-| AKAI S1000/S3000 program / sample | `.P3` / `.S3` / `.a3p` / `.a3s` / `.p1` / `.s1` | S3000XL, S2000, S2800, S3200(XL), S1000/S1100, CD3000 |
+| AKAI S1000/S3000 program / sample | `.P3` / `.S3` / `.a3p` / `.a3s` / `.s3p` / `.s3s` / `.p1` / `.s1` | S3000XL, S2000, S2800, S3200(XL), S1000/S1100, CD3000 |
+| AKAI auxiliary types | `.x` / `.q` / `.d` / `.t` / `.cd` / `.m3` | Effects, cue list, drum-input, take list, CD3000 setup and multi — carry no sample data; recognised and refused with a reason rather than read as phantom programs |
 | AKAI S1000/S3000 disk image | `.hda` / `.iso` / `.img` | Whole SCSI disk, CD3000 CD-ROM or 800 KB / 1.6 MB floppy — every volume on it, read without the sampler. S1000 and S3000 volumes both, on the same disk if need be; all three extensions are identified by content, not by name |
 | Ensoniq EPS/ASR disk image | `.img` / `.iso` / `.hda` | EPS, EPS-16+ and ASR-10 media — identified by content. **Geometry only** (zones, key/velocity ranges, samples, loops): envelopes, filters, LFOs and cords are not read, matching what EOS's own Ensoniq importer does with them |
 | Roland S-7xx disk image | `.img` / `.iso` / `.hda` | S-750 / S-760 / S-770 media — identified by content. **Geometry only**, for the same reason |
@@ -475,7 +482,8 @@ earlier measurement round worthless, which is its own argument for checking.
 
 ## Requirements
 
-- Python 3.8 or later
+- Python 3.9 or later (the parsers and processors use PEP 585 built-in generics
+  such as `list[float]` in function annotations, which 3.8 evaluates at import)
 - No mandatory third-party dependencies (standard library only)
 
 ---
@@ -556,8 +564,9 @@ python convert.py <input> [options]
 
 Positional:
   input               File or directory
-                      (.e4b .krz .e3x .esi .e3b .xpm .pgm .set .img .talsmpl
-                       .sfz .sf2 .exs .gig)
+                      (.e4b .krz .e3x .esi .e3b .xpm .xty .xpj .pgm .set .img
+                       .talsmpl .sfz .sf2 .exs .gig .a3p .a3s .s3p .s3s .p3 .s3
+                       .p1 .s1 .hda .iso)
 
 Info mode:
   --info              Inspect input file(s) without converting
@@ -565,7 +574,7 @@ Info mode:
   --long-help         Print the full README (long-form manual) and exit
 
 Output:
-  --format FORMAT     e4b | krz | eiii | talsmpl  (default: e4b)
+  --format FORMAT     e4b | krz | eiii | talsmpl | akai  (default: e4b)
   --eiii-variant V    With --format eiii: e3x (Emulator IIIX, default — also
                       read by the E4XT's backward-compatibility loader and
                       by the ESI samplers) | esi (ESI-32/2000/4000's own
@@ -575,7 +584,7 @@ Output:
   --overwrite         Overwrite existing output files without prompting
                       (default: prompt before clobbering any existing file;
                        non-interactive shells refuse unless --overwrite)
-  --bank-size MB      Maximum bank size  (default: 32; alias: --max-bank-size)
+  --bank-size SIZE    Maximum bank size  (default: 32; alias: --max-bank-size)
                       Accepts K/KB/M/MB/G/GB suffixes; a bare number = MB
                       (e.g. --max-bank-size 64MB).
   --pram KB           K2000 usable PRAM (--format krz). A K2000 keeps its
@@ -706,7 +715,8 @@ Output:
                       needed (e.g. 100 → B.100-NAME_01.E4B, B.101-NAME_02.E4B …)
 
 ZuluSCSI images:
-  --iso               Build CD image(s) for ZuluSCSI  (e4b/eiii → EMU3, krz → K2000 FAT16)
+  --iso               Build CD image(s) for ZuluSCSI  (e4b/eiii → EMU3, krz → K2000
+                      FAT16, akai → CD3000 AKAI-native, not ISO 9660)
   --hda               Build SCSI hard disk image (.hda) for ZuluSCSI  (e4b + krz + eiii + akai)
                       e4b/eiii → E4XT EMU-fs/FAT disk (eiii banks share the
                       E4B EOS/EMU-fs disk-image path unchanged — it's
@@ -718,6 +728,8 @@ ZuluSCSI images:
   --hda-size MB       Hard disk image size in MB
                       e4b/eiii default: auto — smallest 128 MB step that fits; max 14336
                       krz default: content + ~50% headroom to save onto (FAT16 max ~2047)
+                      akai default: content + ~25% (8 MB floor; max ~511 — AKAI
+                      block numbers are 16-bit)
                       0 = "auto" (e4b/eiii/krz), and inert without --hda/--iso;
                       a NEGATIVE value is refused with exit 2 when --hda or --iso
                       asks for an image, because no image exists at that size
@@ -731,13 +743,20 @@ ZuluSCSI images:
                             size scales with the disk (512 MB..~16 GB).
                       Both filesystems are E4XT hardware-confirmed.
 
-Floppy image (KRZ only):
-  --floppy [KB]       Write each bank to a DOS FAT12 floppy image (.img) for a
-                      Gotek / FlashFloppy on the K2000R  (default: 1440 = 1.44 MB)
+Floppy image (krz and akai):
+  --floppy [KB]       Write each bank to a floppy image (.img) for a Gotek /
+                      FlashFloppy.  krz → DOS FAT12, 720 or 1440 (default 1440 =
+                      1.44 MB).  akai → AKAI-native, 800 or 1600 (default 1600 =
+                      1.6 MB), which is not DOS-formatted, so a PC will not
+                      mount it.
 
 Add to an existing image (instead of building a new one):
-  --add-to IMAGE      Append the converted bank(s) to an existing .hda (FAT or
-                      EMU-fs, auto-detected).  Never overwrites existing banks.
+  --add-to IMAGE      Append the converted bank(s) in place to an existing image
+                      (no rebuild, no mounting).  e4b/eiii → a .hda (FAT or
+                      EMU-fs, auto-detected); krz → a K2000 FAT16 CD (.iso) or
+                      hard disk (.hda), into BANKS/; akai → an AKAI hard-disk
+                      image, one new volume per bank.  Never overwrites existing
+                      banks unless --on-duplicate overwrite.
   --folder NAME       Target folder on the image, created if absent
                       (default: root / Default Folder; EMU-fs: <=100 banks/folder).
   --on-duplicate WHAT prompt (default) | add-new (next free number/slot) |
@@ -747,8 +766,9 @@ Samples:
   --wav-dir DIR       Extra directory for WAV sample lookup
   --max-presets N     Maximum presets from SF2/GIG  (default: 64)
   --max-sample-rate HZ  Clean-downsample any sample above HZ to HZ
-                      (defaults to 24000 Hz for --format krz — up-pitch headroom
-                       + smaller banks; pass 0 to disable; no default for e4b)
+                      (under --format krz an unset value selects the headroom-
+                       aware downsample, floor 24000 Hz — up-pitch headroom +
+                       smaller banks; pass 0 to disable; no default for e4b)
                       Taken literally, with NO floor: 1 is accepted and
                       resamples every sample to 1 Hz, which is silent and comes
                       out at ~0.00 MB.  A NEGATIVE value means "unset", exactly
@@ -759,12 +779,22 @@ Samples:
                       (also auto-detected for a WAV-only dir)
   --middle-c {auto,C3,C4,C5}  Octave naming for filename root notes: which C =
                       MIDI 60  (default: auto)
-  --mono              Reduce stereo samples to mono. Stereo sources are otherwise
-                      KEPT in stereo (one voice per channel on E4B, a stereo pair
-                      on KRZ), which costs two voices per note.
-  --pan-law           How panning should affect LOUDNESS on the E4XT (--format e4b
+  --mono [mix|left|right]  Reduce stereo samples to mono. Bare/mix averages both
+                      sides; left/right keeps one side instead (prefer a side when
+                      the channels are decorrelated — averaging can cancel signal).
+                      Stereo sources are otherwise KEPT in stereo (one E4B sample
+                      object carrying both channels, as real E-mu banks store it;
+                      two planar records on krz), which costs extra voice capacity
+                      per note.  On akai a stereo source becomes a hard-panned
+                      -L/-R pair in one keygroup (two of its four velocity zones);
+                      eiii output is mono either way.
+  --pan-law hardware|constant-power
+                      How panning should affect LOUDNESS on the E4XT (--format e4b
                       only): the E4XT pans without a centre dip, so a source
                       authored against an equal-power law needs compensating.
+                      hardware (default) leaves the E4XT's own pan law alone;
+                      constant-power subtracts the excess so loudness stays put
+                      across pan.
 
 Vintage resampling:
   --resample PROFILE  emulator2  (8-bit / 27.5 kHz, EMU Emulator II)
@@ -824,9 +854,9 @@ Silence trimming (tighten sample starts and ends):
                       flag is a no-op and the run prints a Note saying so.
 
 Auto-loop (make held notes sustain indefinitely):
-  --auto-loop         Place a clean, seamless FORWARD sustain loop in each sample,
-                      so held notes sustain instead of running out of audio.
-                      Adaptive length; crossfaded at the splice.
+  --auto-loop [auto|MS]  Place a clean, seamless FORWARD sustain loop in each
+                      sample, so held notes sustain instead of running out of
+                      audio. Adaptive length; crossfaded at the splice.
   --auto-loop-xfade MS  Crossfade length at the loop splice  (default: 25; grows
                       with the loop where needed)
   --auto-loop-max-ms MS  Cap on the loop length  (default: 2500). Longer = more
@@ -843,8 +873,9 @@ Auto-loop (make held notes sustain indefinitely):
                       its loop points, for inspection in an audio editor.
 
 Sample-count reduction (fit modern libraries into vintage memory limits):
-  --shrink-to SIZE    Shrink each preset to at most SIZE (e.g. 8MB / 4096K) by
-                      CHOOSING --reduce-key-zones and --reduce-velocity-layers
+  --shrink-to SIZE    Shrink each preset to at most SIZE (e.g. 8MB / 4096K; must
+                      be > 0) by CHOOSING --reduce-key-zones and
+                      --reduce-velocity-layers
                       for you, per preset. Rather than assume which axis costs
                       less, it measures this material: thinning key zones makes
                       survivors stretch, which shifts a note's whole spectrum by
@@ -854,7 +885,7 @@ Sample-count reduction (fit modern libraries into vintage memory limits):
                       comparable, and the cheapest combination that reaches the
                       target wins.
   --shrink-by PCT     The same, relative: shrink each preset BY this percentage
-                      of its current size (40 keeps ~60%).
+                      of its current size (40 keeps ~60%; 0-100).
   --shrink-report     Print what each preset cost and which axis paid for it.
                       Note the cost compares PLANS FOR ONE PRESET; it is not a
                       fidelity score to compare between presets.
@@ -921,10 +952,10 @@ rows in **Fixed defects**.
 | code | meaning |
 |---|---|
 | `0` | everything asked for was produced |
-| `1` | nothing usable: no input parsed, output would clobber an input, or an existing image could not be found for `--add-to` |
-| `2` | a usage error: an argument that cannot produce the thing it asks for (`--firmware-sim` on an unimplemented source, `--hda-size` over the EIV limit or below zero, an `--output-dir` that cannot be created) |
-| `3` | **refused to write.** A sample is at a rate the S3000XL does not play, or a bank does not fit. The image is the whole point of the run, so it is not written in a condition where it would be wrong on the machine |
-| `4` | **partial.** Some inputs failed to parse, some banks failed to write, or an `--add-to` append failed. The outputs that *did* work are still on disk — dropping them would waste good output over one bad input — but the run did not do everything it was asked to, and the banner says `PARTIAL` rather than `Done` |
+| `1` | nothing usable: no input parsed, output would clobber an input, an existing image could not be found for `--add-to`, or a flag value the parser cannot put to use (`--floppy` size for the wrong format, `--reduce-*` / `--shrink-*` out of range, a malformed `--auto-loop` / `--single-cycle`) |
+| `2` | a usage error: an argument that cannot produce the thing it asks for (`--firmware-sim` on an unimplemented source, `--hda-size` over the EIV limit or below zero, an `--output-dir` that cannot be created, an unverifiable target — an Ensoniq or Roland source converted to `talsmpl`/`eiii`/`akai`) |
+| `3` | **refused to write.** A sample is at a rate the S3000XL does not play, so the image is not written rather than shipped wrong on the machine |
+| `4` | **partial.** Some inputs failed to parse, some banks failed to write, or an `--add-to` append failed. The outputs that *did* work are still on disk — dropping them would waste good output over one bad input — but the run did not do everything it was asked to, and the banner says `PARTIAL` rather than `Done`. (For `--format akai` an append or image-write failure exits `1` instead, because nothing landed) |
 
 `3` and `4` are different on purpose: `3` means nothing was written and nothing
 should be, `4` means something was written and the script should look at what.
@@ -1074,7 +1105,9 @@ python convert.py /mpc/programs/ --format akai --hda
 ```
 
 Each bank becomes an AKAI **volume** (one program plus its samples); volumes
-are packed into 60 MB partitions, which is the sampler's maximum.
+are packed into 60 MB partitions — the FORMAT screen's default and the size this
+writer uses, not an established hardware maximum (the field is editable on the
+sampler, so 60 MB is a safe working size).
 
 1. Copy the generated `.hda` to the ZuluSCSI SD card
 2. Rename to `HD0_512.hda` (or `HDx-<name>.hda`) — pick a free SCSI ID
@@ -1119,7 +1152,7 @@ Append converted bank(s) to an image you already built — **in place, no rebuil
 no mounting, no external tools** (pure Python):
 
 ```bash
-# E4B → an existing E4XT hard disk (.hda; FAT or EMU-fs, auto-detected)
+# E4B/EIII → an existing E4XT hard disk (.hda; FAT or EMU-fs, auto-detected)
 python convert.py NewPad.xpm --format e4b --add-to /path/to/DISK.hda
 
 # KRZ → an existing K2000 image (CD .iso OR hard disk .hda — same FAT16 format)
@@ -1132,8 +1165,9 @@ python convert.py NewKit.xpm --format akai --add-to /path/to/AKAI.hda
 - `--folder NAME` targets (and creates) a sub-folder on the image.
 - `--on-duplicate {prompt,add-new,skip,overwrite}` handles name clashes; existing
   banks are **never overwritten** unless you ask.
-- E4B appends to a `.hda` (FAT or EMU-fs); KRZ appends into the `BANKS/` directory
-  of a K2000 CD or hard-disk image; AKAI takes a free root-directory slot and free
+- E4B and EIII append to a `.hda` (FAT or EMU-fs, auto-detected — EIII shares
+  the E4B filesystem path unchanged); KRZ appends into the `BANKS/` directory of
+  a K2000 CD or hard-disk image; AKAI takes a free root-directory slot and free
   FAT blocks in the first partition that has both — the disk keeps its size and
   existing volumes keep their blocks. `overwrite` frees the old volume's blocks
   first. AKAI floppies cannot be appended to.
@@ -1395,6 +1429,7 @@ Two flags override it when you know the target channel:
 | Flag | Effect |
 |---|---|
 | `--krz-faithful` | Keep **every** layer. Makes it a drum program, playable only on a drum channel. |
+| `--krz-drum-program` | Allow a split preset over three layers to be written as a drum program deliberately — up to the K2000 maximum of **32**; beyond that is clamped. |
 
 ### `--firmware-sim` — “convert as the firmware would”
 
@@ -1468,7 +1503,6 @@ hardware and conclude the firmware read was wrong.
 `docs/FIRMWARE_IMPORT_ROUTINES.md` carries the evidence for every law, and
 `docs/firmware_sim_contract.json` is the generated, test-asserted machine
 copy of the table above.
-| `--krz-drum-program` | Allow a split preset over three layers to be written as a drum program deliberately — up to the K2000 maximum of **32**; beyond that is clamped. |
 
 The converter prints a `[layers]` line per preset saying which path it took (and,
 for a drum program, the reminder to use a drum channel). Wide-range octave-slice
@@ -1491,10 +1525,11 @@ filter corner.
 > an S3000XL has mounted images written by `build_akai_hd_image` and by
 > `append_akai_volumes` many times — 18 volumes and 364 samples were swept off
 > one live card, programs were read on the machine's own panel, and converted
-> material has been measured back off it repeatedly. What has **not** been put
-> in front of hardware is the **CD3000 `--iso`** and the **`--floppy`** paths;
-> both are byte-identical to `akaiutil`'s output, which is a code-level check.
-> See [Supported Formats](#output).
+> material has been measured back off it repeatedly. The **CD3000 `--iso`** path
+> is hardware-confirmed too — twelve program headers diffed byte-for-byte against
+> the disk-image originals (see [Supported Formats](#output)). What has **not**
+> been read back by hardware is the **`--floppy`** path; it is byte-identical to
+> `akaiutil`'s output, which is a code-level check.
 
 **What was measured, and what it changed:**
 
@@ -1621,7 +1656,7 @@ loop-dropping default cut one sample by 63% and dropped 4 of 5 loops.
 (`--trim-tail-keep-loops` is the old opt-in; keeping the loop has been the
 default since 2026-09-13, so it is now a no-op the run reports.)
 
-Runs first in the pipeline, before `--single-cycle` / `--reduce-*` /
+Runs after `--trim-start` and before `--single-cycle` / `--reduce-*` /
 `--resample`, so everything downstream sees the shortened samples.
 
 ---
@@ -1705,9 +1740,11 @@ and filter envelopes, do the sound design. It is the most extreme form of the
 handful of tiny loops (hundreds of bytes each) — and a genuine creative mode in
 its own right: an MPC multisample becomes a playable E4XT / K2000 synth patch.
 
-It runs as the first pipeline stage (right after parsing), so every later stage —
-reduction, resampling, fit, split — sees the already-tiny samples. It works for
-both E4B and KRZ output.
+It runs after the trims and `--auto-loop` and before `--reduce-*` /
+`--resample` / fit / split, so every later stage sees the already-tiny samples.
+The flag is accepted for every target, but the retuning it bakes is defined only
+for `e4b` and `krz` output; results for `eiii`, `akai` and `talsmpl` are
+unverified.
 
 ### How a cycle is extracted
 
@@ -1875,8 +1912,8 @@ shell mpc2emu prints sized suggestions — drop velocity layers → thin key zon
 downsample, least-lossy first — and applies your choice. With `--auto-fit` it
 does this automatically. A batch run without `--auto-fit` prints the suggestions
 and exits non-zero, so an oversized / unloadable bank is never silently written.
-This works for E4B (128 MB E4XT), KRZ (64 MB K2000), and EIII (128 MB
-EIIIX/ESI) output.
+This works for E4B (128 MB E4XT), KRZ (64 MB K2000), EIII (128 MB
+EIIIX/ESI) and AKAI (32 MB) output.
 
 Per-bank hardware limits: **E4B** max 1000 samples / 1000 presets, bank size
 128 MB (E4XT). **KRZ** is tighter and for a different reason — object ids run
@@ -1901,7 +1938,10 @@ mpc2emu/
 ├── README.md
 ├── convert.py                  # CLI entry point
 ├── info_cmd.py                 # --info mode implementation
-├── test_pipeline.py            # Smoke tests
+├── diagnostics_catalog.py      # Generated diagnostic-code catalogue
+├── conftest.py                 # Pytest scratch-space configuration
+├── fixtures/                   # Shared test fixtures (AKAI image / XPM builders)
+├── tools/                      # Release/measurement scripts (gitignored)
 ├── models/
 │   ├── common.py               # Internal data models (Bank / Preset / Sample) + the measured parameter laws
 │   └── diagnostics.py          # Structured diagnostic codes, so callers stop parsing stdout
@@ -1941,6 +1981,7 @@ mpc2emu/
 │   └── bank_splitter.py        # First-Fit-Decreasing bank splitting
 ├── processors/
 │   ├── resampler.py             # Vintage resampler (EMU E2 / Emax I)
+│   ├── parallel.py              # Shared process pool for the parallel stages
 │   ├── zone_reducer.py          # Key-zone / velocity-layer thinning; velocity-layer split (--split-velocity-layers)
 │   ├── shrink_planner.py        # Picks the thinning that hits a memory target (--shrink-to / --shrink-by)
 │   ├── single_cycle.py          # Single-cycle oscillator extraction + retune (--single-cycle)
