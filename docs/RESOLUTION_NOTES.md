@@ -43992,3 +43992,98 @@ suite was not run here.
 
 §REVIEW1010 finding T3; full review in
 docs/CODE_REVIEW_2026-10-10.md.
+
+### Finding T1 — a tautological test that never touched the code it named, and the GIG fixture it needed (2026-10-10)
+
+**The defect.** `tests/test_review_2026_10_02.py` (§1a) carried a test whose
+docstring said *"The flag became a set keyed on `(key_lo, key_hi)`"* and whose
+body was:
+
+```python
+import parsers.gig_parser as G
+warned = set()
+out = io.StringIO()
+for lo, hi in ((36, 48), (36, 48), (60, 72)):
+    with contextlib.redirect_stdout(out):
+        if hi != lo and (lo, hi) not in warned:
+            out.write(f"[WARN] {lo}-{hi}\n")
+            warned.add((lo, hi))
+text = out.getvalue()
+assert text.count('[WARN]') == 2, text
+```
+
+The loop re-implemented the post-fix logic and asserted on its own `out`
+buffer, and `G` was dead. **Verified** by stubbing
+`sys.modules['parsers.gig_parser']` with a module that raises on any attribute
+access: the test stayed green. Nothing in `parsers/gig_parser.py` was called,
+so it could not fail on any implementation — including the single-boolean bug
+it names.
+
+**The code path, which is not the obvious one.** The warning is not on the
+region path — a `rgnh`/`wsmp`/`wlnk` region can never reach it. It lives in
+`parse_gig`'s zone loop behind `if untracked:` (`parsers/gig_parser.py:849`),
+and `untracked` is read off the **DIMENSION REGION**: a `'3ewa'` chunk inside
+region → LIST('3prg') → LIST('3ewl'), byte 108, bit 0 set = PitchTrack off
+(`:823-824`). The suppression beside it is `_warned_span`, created once per
+**parse** (`:689`) and consulted as
+
+```python
+if rgn['key_hi'] != rgn['key_lo'] \
+        and (rgn['key_lo'], rgn['key_hi']) not in _warned_span:   # :852-853
+```
+
+So the fixture has to carry the whole chain — a `'3lnk'` with a velocity
+dimension of two zones, a `'3prg'` with one `'3ewl'` per dimension region, the
+first untracked and the second tracked. A synthetic-GIG builder of `rgnh` +
+`wlnk` alone, which is all the existing GIG test files need, would have
+produced a green test over a branch nothing reached — the same defect in a new
+place.
+
+**The rewrite.** `_gig_parse` writes that file and parses it for real with
+`parse_gig`, capturing stdout. `test_gig_warns_once_per_distinct_span_not_once_per_file`
+drives the finding's own three instruments — one region each, `(36, 48)`,
+`(36, 48)`, `(60, 72)` — and keeps `text.count('[WARN]') == 2` as the
+substance, adding that the two messages are the pitch-tracking ones, in order.
+It also asserts each warned span carries a zone rooted at its OWN low key while
+its tracked sibling keeps its own sample's root note: the branch that warns is
+the same one that reroutes `root` to `key_lo`, so a count of 2 alone would be
+satisfied by a fixture that warned for the wrong reason.
+
+**Three MUTATION CHECK companions**, for the things the three-span case cannot
+distinguish. `test_gig_span_warning_survives_a_second_parse_of_the_same_file`
+parses the same file twice: per PARSE, not per process, is the scope the
+comment at `:680` claims. `test_gig_span_warning_is_keyed_on_the_pair_not_on_one_end`
+drives `(36, 48)` with `(36, 60)` (shared low key) and with `(40, 48)` (shared
+high key) — a set keyed on ONE end of the pair is the plausible wrong version
+and reads like "the span starts here". `test_gig_a_single_key_zone_is_not_a_spanning_zone`
+puts a one-key zone `(60, 60)` beside a real span, because
+`rgn['key_hi'] != rgn['key_lo']` is what keeps a zone rooted at the one key it
+covers out of a message that says *spanning*.
+
+**Eleven mutations, all red.** Each applied to a copy of the tree, run against
+the file, and reverted: the **single boolean** the finding names
+(`_warned_span = False` / `not _warned_span` / `= True`), the same with the
+initialiser left out, **no suppression at all**, the set keyed on **`key_lo`**
+alone (in the check, and in the check and the `add`), the set keyed on
+**`key_hi`** alone, the set **re-created per instrument** rather than per
+parse, the set **hoisted to module level**, the **`key_hi != key_lo` guard
+dropped**, the **`if untracked:`** branch condition dropped, and the **reroute
+`r = min(127, rgn['key_lo'])` removed** with the message kept. The reviewer's
+stub now fails too. Run against the shipped history directly, the four tests
+are **green on `a3e79a4`, the commit that introduced the set**, and **red on
+`cedf3a0`**, the single-boolean file before it — where they fail with
+`UnboundLocalError: cannot access local variable '_warned_span'` from
+`gig_parser.py:740`, the very defect the crash-fix was written for, which is
+the pre-fix shape in its own words.
+
+**What did not change.** No source file, and no assertion strength: the
+substance is still `text.count('[WARN]') == 2`. The other 20 tests in
+`tests/test_review_2026_10_02.py` are untouched, including §1a's AST test on
+`_warned_span`'s assignment-before-read order, which pins the same local from
+the other side. The file now has 24 tests; `python3 -m pytest
+tests/test_review_2026_10_02.py tests/test_gig_shared_wave.py
+tests/test_gig_bounds_and_loops.py -q` runs 52 passed. As with every
+§REVIEW1010 commit, `tests/` is gitignored, so this commit carries only this
+note and the test file lives on disk untracked.
+
+§REVIEW1010 finding T1; full review in docs/CODE_REVIEW_2026-10-10.md.
