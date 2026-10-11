@@ -43870,4 +43870,125 @@ every other test in the tree; nothing else asserted these values.
 here.
 
 §REVIEW1010 TEST SUITE finding T2; full review in
+
+### Finding T3 — the one assertion-free test in the tree, non-vacuous by accident (2026-10-10)
+
+`tests/test_diagnostics.py:102-109`, `test_as_dict_is_json_safe` — the only
+`def test_` in the tree with no `assert` and no `pytest.raises`:
+
+```python
+def test_as_dict_is_json_safe():
+    """VinSamLib renders `as_dict()` through an existing dict-based channel."""
+    import json
+    with contextlib.redirect_stdout(io.StringIO()):
+        with collect() as diags:
+            emit(WARNING, 'C', 'm', content_lost=True, subject='s',
+                 detail={'a': [1, 2]}, remedy='r')
+    json.dumps(diags[0].as_dict())          # must not raise
+```
+
+**What it was actually guarding.** `models/diagnostics.py:44` publishes the
+claim in its own module docstring — "`diags` is a plain list of `Diagnostic`;
+`Diagnostic.as_dict()` is JSON-safe" — and the claim exists because VinSamLib
+renders `as_dict()` through an existing dict-based channel rather than reading
+the attributes. So the guarantee is real and the test name says so; what was
+missing was any statement of it.
+
+**Why "by accident" is the right description, and what the accident hid.** The
+test had exactly two safety nets, both incidental, and neither said what it
+claimed:
+
+* `json.dumps` raising `TypeError` for a non-encodable value. That holds for
+  the shipped dataclass — `severity`/`code`/`message`/`subject`/`remedy` are
+  `str`, `content_lost` is `bool`, `detail` is a `dict` — so nothing failed
+  until a field's TYPE changed.
+* `diags[0]` raising `IndexError` if nothing was emitted. The "the diagnostic
+  reached the sink" half, expressed only as an index error.
+
+Both are loud, so the test could never pass while doing nothing at all. The
+gap is the middle: **the record's SHAPE was never asserted, and the half that
+matters to a consumer is the shape.** Proved by running the OLD body against
+the mutation the new one exists for — `Diagnostic.as_dict()` returning a dict
+with `content_lost` dropped out of it:
+
+```
+  GREEN  original test on M2  <-- the reviewer's point
+```
+
+A record that no longer carries `content_lost` — the field `Diagnostic`
+deliberately gives no default, the one `models/diagnostics.py` spends twenty
+lines of commentary on, the one a consumer filters with — round-trips through
+`json.dumps` perfectly and the old test stayed green. Same for `subject`,
+`remedy`, or `content_lost` arriving as the STRING `'True'`: all JSON-safe, all
+invisible. That is the accident: the encoder was the only proof of correctness
+being offered, and the encoder cannot tell a wrong record from a right one.
+
+**The fix — three assertions, and no source line touched.** The name, the
+docstring, the `emit` call and its arguments are unchanged; only the check
+became a statement.
+
+```python
+    assert len(diags) == 1, "the diagnostic did not reach the sink"
+    d = diags[0].as_dict()
+    assert d == {
+        'severity': WARNING, 'code': 'C', 'message': 'm', 'content_lost': True,
+        'subject': 's', 'detail': {'a': [1, 2]}, 'remedy': 'r',
+    }, f"as_dict() no longer carries the whole record: {d!r}"
+    try:
+        text = json.dumps(d)
+    except (TypeError, ValueError) as exc:
+        raise AssertionError(f"as_dict() is not JSON-safe: {exc}") from exc
+    assert json.loads(text) == d, "the JSON round trip changed the record"
+```
+
+1. **The emission happened**, said rather than indexed — so a sink that never
+   filled reports "the diagnostic did not reach the sink" instead of an
+   `IndexError`.
+2. **The whole record, against an exact dict.** `code` is what a consumer
+   branches on and `content_lost` is what it filters on; both are first-class
+   dataclass fields precisely so neither can be forgotten, and that is
+   invisible unless the shape is asserted. Equality also pins the TYPES:
+   `content_lost` is a real `True`, not a string that would read back to a GUI
+   as prose.
+3. **JSON-safety as the two halves it has to mean** for a dict handed on:
+   `json.dumps` accepts it, and `json.loads` returns the same record — so
+   nothing is stringified, dropped or substituted on the way through. The
+   `try`/`raise AssertionError` exists so the encoder's own reason
+   ("Object of type X is not JSON serializable") arrives attached to a message
+   naming the guarantee, instead of surfacing as a bare `TypeError` from a
+   line whose comment used to carry the whole test.
+
+**Verified by mutation — eight, all RED.** Applied by monkeypatching from
+outside the repo (the target module's `emit`/`collect` names and
+`Diagnostic.as_dict`), so nothing under `tests/` was written and no shipped
+line was touched.
+
+| # | mutation | result |
+|---|---|---|
+| M1 | `emit` → no-op | RED — *the diagnostic did not reach the sink* |
+| M2 | `as_dict()` drops `content_lost` | RED — *no longer carries the whole record* |
+| M3 | `as_dict()` drops `subject` + `remedy` | RED — same |
+| M4 | `content_lost` becomes the string `'True'` | RED — same |
+| M5 | `detail` holds a non-encodable object | RED — same |
+| M6 | `collect()` hands back an empty list | RED — *the diagnostic did not reach the sink* |
+| M7 | a field that compares EQUAL to `True` but will not encode | RED — *as_dict() is not JSON-safe: Object of type …* |
+| M8 | `json.dumps` accepts it but the round trip drops a field | RED — *the JSON round trip changed the record* |
+
+M2–M5 are the ones the old test could not see. M7 exists to reach the
+JSON-safety half specifically: it is built to survive the record-shape
+assertion (`__eq__` returning `True`), so the failure has to come from the
+encoder guard — which is the only mutation in the table that does. M8 is the
+mirror: the encode succeeds and the JSON round trip is the thing that fails.
+The control row at the top is the old body on M2, green.
+
+**What did not change.** No source, no diagnostic, no catalog entry,
+no output byte — `python3 diagnostics_catalog.py` is still byte-identical to
+`docs/diagnostics.json`, and the three catalog tests plus the meta-tests that
+police the test tree (`test_law_consistency.py`, `test_no_scratch_leaks.py`,
+`test_no_blocking_prompts.py`, `test_citations_resolve.py`) still pass, 62
+passed with `tests/test_diagnostics.py`. `tests/test_diagnostics.py` still
+holds its 12 tests and every other test in the file is untouched. The full
+suite was not run here.
+
+§REVIEW1010 finding T3; full review in
 docs/CODE_REVIEW_2026-10-10.md.
