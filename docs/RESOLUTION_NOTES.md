@@ -43793,3 +43793,81 @@ suite was not run here.
 
 §REVIEW1010 findings m16/m17; full review in
 docs/CODE_REVIEW_2026-10-10.md.
+
+### Finding T2 — a missing-time assertion that collapsed to `r > 10` (2026-10-10)
+
+`tests/test_akai_authored_zero_and_collisions.py` asserted
+
+    assert r == 45 or r > 10, 'a missing release lost its default'
+    assert d == 50 or d > 10, 'a missing decay lost its default'
+
+and 45 already satisfies `> 10`, so the disjunction is exactly `r > 10` -- the
+first arm can never be the reason it passes. The reviewer verified by execution
+that the live bytes are 56 and 67 and that the test passes, and so would 11, a
+fast-but-wrong release. Reproduced on the pre-fix tree: the disjunction was
+evaluated for every byte 0..99 (0 is the only one it rejects; 11 and 12 both
+pass), and mutation 2 below lands on the reviewer's literal 12 with the old
+assertion still green. Beside `test_an_instant_release_stops_dead`, the first
+test in the file, which asserts `[3] == 0` exactly, the contrast is the whole
+finding.
+
+**WHY `r == 45` COULD NEVER HOLD, and how that produced the band-aid.** The
+factory value is a TIME, not a byte. `models.common.Envelope` declares
+`release = 0.5` and `decay = 0.3`, and `akai_env_bytes` substitutes those for a
+None through `_or_default` before converting, so a missing stage lands on the
+same bytes as an explicit 0.5 / 0.3. The `45` and `50` carried as
+`_rate_law_value`'s `default=` are for a stage with nowhere to travel, and
+neither of these stages has one: `span_rel_db` is forced positive by the
+sustain-0 fallback, `span_decay_db` is positive unless SUSTN1 is 99, and
+`_or_default` guarantees `seconds` is never None. Instrumented over **96 calls**
+(six sustain levels x four releases x four decays, through the shipped
+`akai_env_bytes`): the release path never once returned 45. So `r == 45` was
+already false on the current code, `or r > 10` was bolted on to make the test
+pass, and what was left could not fail on anything but byte 0 -- which the test
+directly above already pins. A test that has been adjusted into agreeing with
+the code has stopped saying anything.
+
+**THE EXACT VALUES, DERIVED RATHER THAN REMEMBERED.** sustain 0.3 -> SUSTN1 82.
+The release falls `_AK_SUSTAIN_DB_PER_UNIT * 82 = 49.754` dB in the factory 0.5 s
+= 99.5 dB/s, which inverts `_AK_RELSE1_RATE` to 55.8 -> **RELSE1 56**. The decay
+falls `0.60676 * (99 - 82) = 10.315` dB in the factory 0.3 s = 34.4 dB/s ->
+**DECAY1 67**. Both are deterministic: no environment, no ordering, no input the
+caller varies, no floating-point path that depends on the machine. They do rest
+on the three fitted constants (`_AK_RELSE1_RATE`, `_AK_DECAY1_RATE`,
+`_AK_SUSTAIN_DB_PER_UNIT`), which is why the derivation is written into the
+comment above them -- a recalibration moves the byte and the assertion says so,
+instead of the number being re-derived by hand by whoever makes the refit.
+
+**The assertions, rewritten.**
+
+    assert r == 56, (
+        f'a missing release must get the factory 0.5 s -> RELSE1 56, got {r}')
+    assert d == 67, (
+        f'a missing decay must get the factory 0.3 s -> DECAY1 67, got {d}')
+
+**PROVEN TO HAVE TEETH, three ways.** Each mutation below was applied to
+`writers/akai_s3000_writer.py:1182`, run through the one test, and reverted:
+
+1. **Drop the factory substitution** -- `_or_default(getattr(env, 'release',
+   None), 0.5)` -> `getattr(env, 'release', None)`. A missing release now falls
+   through to `_rate_law_value`'s `default=45`: 285.9 dB/s over the 49.754 dB
+   this fixture has to fall is **0.174 s where 0.5 s was asked, 2.9x too
+   fast**. Old assertion: `45 == 45` -> **green**. New:
+   `AssertionError: ... RELSE1 56, got 45`.
+2. **The regression the finding names, literally** -- the same line's `0.5`
+   -> `0.007`. RELSE1 **12**. Old assertion: `12 > 10` -> **green**, silent.
+   New: `AssertionError: ... RELSE1 56, got 12`.
+3. **The other byte** -- `_or_default(getattr(env, 'decay', None), 0.3)` ->
+   `getattr(env, 'decay', None)`. A missing decay lands on `default=50`.
+   Old assertion: `50 > 10` -> **green**. New: `AssertionError: ... DECAY1 67,
+   got 50`.
+
+**What did not change.** No source line -- this is test-only, and the writer is
+byte-for-byte the same. The other five tests in the file are untouched, as is
+every other test in the tree; nothing else asserted these values.
+`tests/test_akai_authored_zero_and_collisions.py` 6 passed;
+`-k "akai_env or auth"` 11 passed, 2311 deselected. The full suite was not run
+here.
+
+§REVIEW1010 TEST SUITE finding T2; full review in
+docs/CODE_REVIEW_2026-10-10.md.
