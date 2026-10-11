@@ -44958,6 +44958,113 @@ before-subset + thinnable (1055 passed); after-subset + thinnable
 flaky tests stays OPEN with a pointer to this entry; no source or test file
 changed, so there is nothing to revert-prove.
 
+§D6 follow-up (2026-10-11, this pass): NO REPRO of either failure across one
+more full suite (2420 passed, 186.9 s, `python3 -B` after the previous
+agent's three); the audit still dumps `inert=93, live=39, KNOWN_UNREAD∩live=0,
+new_live_not_in_KNOWN_UNREAD=39, unexpected_inert=0` -- the same numbers the
+prior D6 entry recorded, on the same two .xpm files the audit picks (the
+first valid keygroup from each of the first two archives in the corpus
+that contain parseable .xpm), and the thinnable plan is unchanged
+(`feasible=True, kp=58.0, vp=0.0, est=133176 B, cost=712.7 c`). The flake is
+real but elusive -- neither subset-of-tests in one direction reproduces,
+neither does the full suite over a fresh cap, and the stashed-tree failure
+reported in the TODO row is unaddressable from here.
+
+**What I did add: a captured-output dump on EVERY run, so the next failure is
+not lost.** Both flaky tests now `sys.stderr.write` their inputs and findings
+*before* the assertion fires:
+
+* `test_thinnable_fixture_thins_and_reports_an_impossible_target` -- emits
+  `[D6 thinnable] fixture=... preset=... presets=... samples=... cur=...B
+  target=...B plan: feasible=... kp=... vp=... est=...B cost=...c blind=...
+  rugged=... tried=...` and, after the `shrink_bank` call, emits the full
+  list of diagnostics codes the call produced. The assertion messages were
+  extended to carry the same fields inline, so the failure report has the
+  plan shape even without the captured-output section.
+* `test_the_known_debt_list_has_not_gone_stale` -- emits
+  `[D6 stale-debt] audit: inert=... live=... KNOWN_UNREAD=...
+  KNOWN_UNREAD∩live=... new_live_not_in_KNOWN_UNREAD=... unexpected_inert=...`
+  and, when the assertion would fire, a second line naming the stale tags.
+
+Going to stderr (not stdout) means pytest's per-test stderr capture picks it
+up, and the captured section of pytest's failure report carries the dump
+without `-s`. A reader running with `-s` or `--capture=no` sees the dump
+on PASS too, so a passing run's log is also the audit's record of the moment.
+
+Test files are gitignored (`tests/`); the change sits on disk under the
+worktree untracked. Re-applying it to a fresh checkout is the three
+`sys.stderr.write` blocks in the diff below, or a copy from this worktree.
+**No source or test file was committed in this pass either** -- the
+established shape holds: this entry + the TODO row append.
+
+The test-file diff itself (for posterity, since `tests/` is gitignored and
+the merge script copies files across):
+
+```diff
+--- a/tests/test_fixtures_actually_fail.py
++++ b/tests/test_fixtures_actually_fail.py
+@@ def test_thinnable_fixture_thins_and_reports_an_impossible_target():
+     cur = estimate_preset_size(pr, preset_needed_samples(pr, bank.samples))
+     plan = plan_shrink(pr, bank.samples, int(cur * 0.5))
++    target = int(cur * 0.5)
++    sys.stderr.write(
++        f"[D6 thinnable] fixture={p}  preset={pr.name!r}  "
++        f"presets={len(bank.presets)}  samples={len(bank.samples)}  "
++        f"cur={cur}B  target={target}B  "
++        f"plan: feasible={plan.feasible} kp={plan.key_pct} vp={plan.vel_pct} "
++        f"est={plan.est_bytes}B cost={plan.cost_cents:.1f}c "
++        f"blind={plan.blind} rugged={plan.rugged} tried={plan.tried}\n"
++    )
++    sys.stderr.flush()
++    assert plan.feasible and plan.key_pct > 0, (
++        f"plan: feasible={plan.feasible} kp={plan.key_pct} vp={plan.vel_pct} "
++        f"est={plan.est_bytes}B target={target}B cur={cur}B "
++        f"blind={plan.blind} rugged={plan.rugged}  -- {plan!r}"
++    )
+     with collect() as recs:
+         with _quiet():
+             shrink_bank(bank, target_bytes=1024, report=False)
+-    assert [r for r in recs if r.code == 'SHRINK_TARGET_UNREACHABLE']
++    unreachable = [r for r in recs if r.code == 'SHRINK_TARGET_UNREACHABLE']
++    sys.stderr.write(
++        f"[D6 thinnable] target=1024B diagnostics="
++        f"{[r.code for r in recs]}  unreachable={len(unreachable)}\n"
++    )
++    sys.stderr.flush()
++    assert unreachable, (
++        f"no SHRINK_TARGET_UNREACHABLE diagnostic emitted. "
++        f"All diagnostics: {[(r.code, r.severity) for r in recs]}"
++    )
+
+--- a/tests/test_source_fields_unread.py
++++ b/tests/test_source_fields_unread.py
+@@ def test_the_known_debt_list_has_not_gone_stale():
+     inert, live = _audit()
+     fixed = sorted(KNOWN_UNREAD & live)
++    sys.stderr.write(
++        f"[D6 stale-debt] audit: inert={len(inert)} live={len(live)} "
++        f"KNOWN_UNREAD={len(KNOWN_UNREAD)} "
++        f"KNOWN_UNREAD∩live={len(fixed)} "
++        f"new_live_not_in_KNOWN_UNREAD={len(live - KNOWN_UNREAD)} "
++        f"unexpected_inert={len(inert - KNOWN_UNREAD)}\n"
++    )
++    if fixed:
++        sys.stderr.write(f"[D6 stale-debt] STALE TAGS: {fixed}\n")
++    sys.stderr.flush()
+     assert not fixed, (
+         'these are now read, so the debt list is stale:\n'
+         + '\n'.join(f'  {t}' for t in fixed)
+         + '\n\nRemove them from KNOWN_UNREAD.')
+```
+(`import sys` was already present in `test_fixtures_actually_fail.py`; added to
+`test_source_fields_unread.py`.)
+
+**If either fires next, the captured stderr section of pytest's failure report
+is now the record.** Plus the assertion messages carry the same fields
+inline. The collection order (the other thing §D6 asked for) is one
+`pytest --co -q` away, no code change needed. With that, a re-run from the
+same tree reproduces the failure with full context.
+
 §REVIEW1010 follow-up D6 (the two order-dependent tests); full review in
 docs/CODE_REVIEW_2026-10-10.md.
 
