@@ -65,7 +65,8 @@ Parameter notes:
   - layertranspose{a-d}:   ±24 semitones, integer-rounded
   - samplevolume{a-d}:     0..1 linear
   - samplepan{a-d}:        0.0=L, 0.5=C, 1.0=R
-  - filtercutoff:          0..1 (maps directly to VoiceLayer.filter_cutoff)
+  - filtercutoff:          0..1 (Hz in VoiceLayer.filter_cutoff via
+                           hz_to_e4b_cutoff; parsed back via nominal_knob_to_hz)
   - filterresonance:       0..1 (maps directly to VoiceLayer.filter_resonance)
   - adsramp*:              0..1 normalised, approximate log mapping to seconds
   - loopenabled:           "0"/"1"  (NOT "false"/"true")
@@ -127,6 +128,7 @@ import xml.etree.ElementTree as ET
 from xml.dom import minidom
 
 from models.common import (
+    hz_to_e4b_cutoff,
     nominal_knob_to_hz,
     Bank, Preset, VoiceLayer, ZoneMapping, SampleData, LoopType, Envelope,
     safe_filename,
@@ -596,7 +598,7 @@ def write_talsmpl(bank: Bank, output_dir: str,
         # Filter + amp envelope are program-global in TAL; take them from V1.
         v0 = preset.voices[0] if preset.voices else None
         if v0 is not None:
-            prog.set('filtercutoff',    f"{max(0.0, min(1.0, v0.filter_cutoff)):.6f}")
+            prog.set('filtercutoff',    f"{hz_to_e4b_cutoff(v0.filter_cutoff):.6f}")
             prog.set('filterresonance', f"{max(0.0, min(1.0, v0.filter_resonance)):.6f}")
             prog.set('filtermode',      f"{_xpm_filtermode_to_tal(v0.filter_type):.6f}")
             prog.set('adsrampattack',   f"{_secs_to_tal_adsr(v0.env_attack):.6f}")

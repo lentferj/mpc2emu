@@ -44661,3 +44661,62 @@ TODO.md's D4 row removed with this commit; D2-D3 stay open.
 
 §REVIEW1010 follow-up D4 (from finding T4); full review in
 docs/CODE_REVIEW_2026-10-10.md.
+
+### Finding D2 — the knob that was fed hertz: `filtercutoff` clamped a Hz value into a 0..1 position (2026-10-11)
+
+D2 was the second of the four defects the T4 seam work documented without
+fixing, and this entry lands it. One fault on one line of the `talsmpl`
+preset writer (`parsers/talsmpl_parser.py:599`):
+`prog.set('filtercutoff', f"{max(0.0, min(1.0, v0.filter_cutoff)):.6f}")`
+clamps `VoiceLayer.filter_cutoff` — documented in HERTZ, default 20000.0 —
+as though it were already the 0..1 knob position the format wants, while the
+parser reads the knob back through `nominal_knob_to_hz` (`:370`), i.e. the
+exponential 57..20000 Hz law in `e4b_cutoff_position_to_hz`. Confirmed on the
+tree before fixing, write → parse → compare: 8000 Hz -> `1.000000` -> **20000
+Hz**; 200 Hz -> `1.000000` -> **20000 Hz**; 500 Hz -> **20000 Hz**. Every value
+except "wide open" lands on the same ceiling, and nothing warns, because any
+Hz value above 1.0 clamps to exactly the knob for fully open.
+
+**The fix is the one line the T4 entry prescribed** — convert Hz to knob with
+the inverse the tree already ships before writing:
+
+    prog.set('filtercutoff',    f"{hz_to_e4b_cutoff(v0.filter_cutoff):.6f}")
+
+`hz_to_e4b_cutoff` (`models/common.py:2548`) is the documented inverse of
+`e4b_cutoff_position_to_hz`, which is exactly the function the parser's
+`nominal_knob_to_hz` calls — so writer and parser are now the same law in
+opposite directions, not two guesses that happen to agree. The extra clamp is
+gone because the conversion already clamps: below-range Hz rails at knob 0.0
+(57 Hz back) and above-range at knob 1.0 (20000 Hz back). No invented law: the
+knob's own function defines what the correct inverse is, and the inverse was
+already in the tree. The module's parameter note (`filtercutoff: 0..1`) now
+says the field carries Hz through `hz_to_e4b_cutoff` instead of claiming it
+maps directly.
+
+**One new test and one strengthened one, both in
+`tests/test_talsmpl_roundtrip.py`** (untracked, as all of `tests/` is), and
+the file's docstring no longer lists the cutoff among the known-lossy fields:
+
+* `test_filter_cutoff_roundtrips_at_several_positions_of_the_knob_law` — 200,
+  2000 and 8000 Hz each through their own file, each back at its own
+  frequency. One value could not prove the conversion: under the old clamp
+  wide-open read back right by accident, so the test needs positions that used
+  to collapse. Before D2 all three read back 20000 Hz.
+* `test_the_layer_filter_and_envelope_roundtrips_within_knob_precision` — now
+  sets `filter_cutoff=8000.0` and asserts it within the knob's six decimals
+  (`rel=1e-4`; six decimals of an exponential knob hold Hz to ~6e-6
+  relative, so the tolerance is slack, not tight).
+
+**Revert proof.** Source change stashed (`tests/` is untracked and survives),
+`__pycache__` purged, run with `python3 -B`: exactly those two tests fail,
+the other 14 in the file pass. Stash popped, fix restored.
+
+Subsets run here (the full suite was not):
+`tests/test_talsmpl_roundtrip.py tests/test_cutoff_position_identity.py
+tests/test_law_consistency.py tests/test_xpm_filter_laws.py` — 159 passed.
+With the tree-policing meta-test still green under D4's commit, and the new
+entry a `###`, not a `##`, the notes index is untouched.
+TODO.md's D2 row removed with this commit; D3 stays open.
+
+§REVIEW1010 follow-up D2 (from finding T4); full review in
+docs/CODE_REVIEW_2026-10-10.md.
