@@ -163,7 +163,21 @@ def _krz_rom_keymap_refs(path) -> int:
     try:
         import io, contextlib
         import parsers.krz_parser as K
-        data = open(path, 'rb').read()
+        # `with`, not `open(path, 'rb').read()`. The bare form only closes on
+        # CPython's refcount dropping the temporary file object, which is an
+        # implementation detail: the same statement leaks a descriptor on any
+        # interpreter that does not collect immediately, and a traceback or a
+        # reference taken anywhere in between keeps it open here too.
+        #
+        # ⚠ STAYS INSIDE THE `try`. Everything below is guarded by
+        # `except Exception: return 0`, deliberately -- this count is
+        # informational and must never break --info -- so an unreadable or
+        # missing .krz has to reach that handler exactly as it did before.
+        # Closing the handle cannot turn a read into a success or a success
+        # into a read, so the two paths are unchanged; the handle's lifetime
+        # is the only thing that differs.
+        with open(path, 'rb') as fh:
+            data = fh.read()
         with contextlib.redirect_stdout(io.StringIO()):
             _osize, objs = K._read_objects(data)
         own = {o['id'] for o in objs if o['type'] == K.T_KEYMAP}
