@@ -44960,3 +44960,60 @@ changed, so there is nothing to revert-prove.
 
 §REVIEW1010 follow-up D6 (the two order-dependent tests); full review in
 docs/CODE_REVIEW_2026-10-10.md.
+
+---
+
+### Finding D7 — the `.E4B` name an EIII bank wears on a FAT disc: consistent with the builder, unverified against the hardware (2026-10-11)
+
+**Status: OPEN, and it is a MEASUREMENT question, not a coding one. Nothing
+is changed and nothing is confirmed wrong.** This is the TODO row
+`` `--add-to` writes an EIII bank onto a FAT image under a `.E4B` name —
+UNVERIFIED, and no EIII bank has ever been through either append path ''
+(REVIEW1010 finding T4, second half), recorded here so the next session does
+not rediscover it. The T4 entry above files it under "What is NOT covered,
+and is filed instead" (item 1); the T4-refusals entry leaves it as the one
+row still open. No EIII bank has ever been through either append path, and
+every bank in `tests/test_add_to_append_paths.py` is an E4B.
+
+**What the append does.** `fat_hda_append`
+(`writers/hda_builder.py:535`) builds its destination name as
+`f"B.{next_num():03d}-{stem}.E4B"` with the extension inside the literal.
+Measured 2026-10-11: an EIII bank `BA.E3X` appended to a 512 MB FAT16 image
+lands as **`B.000-BA.E4B`** — the content is EIII, the name says E4B.
+
+**Why it matches the builder.** `build_hda_fat` (`writers/hda_builder.py:418`)
+names a bank the same way (`B.{i:03d}-{stem}.E4B`), so the append is one
+convention applied twice. The alternative — naming by the source file's own
+extension — is equally unverified, which is why this is filed as an open
+question rather than as a defect.
+
+**What IS known (EMU3) vs what is NOT (FAT).** `docs/EMU3_ISO_FORMAT.md`
+§2.4 answers the question for the EMU3 container: `props[5]` is `b'\x00E4B0'`
+for an E4B bank and all-zero for EIII/ESI, a pattern holding over 459 E4B
+against 1028 EIII-format banks on real discs, and confirmed on hardware
+2026-07-28 — the machine's own browser reads that field to label a catalog
+entry (an EIII bank built with the old unconditional `\x00E4B0` showed as
+`Type: E4BANK` instead of loading through the EIII compatibility loader).
+`_bank_props()` now sniffs each bank's own first four bytes (`FORM` → E4B,
+anything else → all-zero), so the EMU3 arm of the "bank-content-agnostic"
+claim is byte-derived and correct. **FAT has no props field at all, and §2.4
+is silent for FAT.** What the machine's own EIII-compatibility loader
+matches on for a bank sitting on a FAT disc — the file extension, the
+content, or something FAT does not carry — is unknown, and therefore whether
+a `.E4B` name on such a disc is refused, loaded, or loaded through the wrong
+loader.
+
+**The measurement that would resolve it needs Jan's hardware.** Put an EIII
+bank on a FAT disc under the `.E4B` name the builder and the append path
+both write today, and see what the loader does with it; the control is the
+same bank renamed to its own extension. Until that call happens, the TODO
+row stays open.
+
+**Do NOT "fix" the extension for symmetry.** Renaming by source extension
+changes written bytes on every EIII `--hda` build — the same shape as the
+rows that require Jan's call — and trades one unverified convention for
+another. Consistency with the builder is the documented position until the
+hardware answers.
+
+§REVIEW1010 follow-up D7 (the EIII-on-FAT naming question); full review in
+docs/CODE_REVIEW_2026-10-10.md.
