@@ -43299,3 +43299,120 @@ symmetry, the v1 depth beside a v2 wave (the defect's other half), one block
 carrying both filter and tremolo so the LFO1 destination is reached, `lfo03`
 shaped onto the LFO1 destination, a rate spelled on a different block (the rate
 must not move), and the common v1 tremolo unchanged.
+
+### Finding m13 — `roland_fine_tune` floored where it should round, and the sign symmetry it broke was on the other rail (2026-10-10)
+
+**The finding.** `parsers/roland_s7xx_parser.py:293` converted the fine-tune
+cent value of a zone sub-record into the 1/64-semitone unit the model carries
+with
+
+```python
+return (v * 64 + 32) // 100
+```
+
+and the review measured it at `v = -1` and `v = -2`, getting `-1` and `-1`
+where it expected `0` and `0`: *"floors where it should truncate … Off by
+1.5625 cents on small negative values only."* Both measurements of the old
+code are correct. **The expected values are not, and the asymmetry is real but
+sits on the other rail**, which is the substance of what follows.
+
+`sub[6]` is cents and the target is 1/64 semitone, so the conversion is
+cents × 0.64. For `v = -1` the exact quotient is **−0.64** units, which rounds
+to −1 under every standard rule; for `v = -2` it is −1.28, which rounds to −1
+too. Only truncate-toward-zero produces the review's 0, and it produces **−1**
+for −2, not 0 — so no reading of the expression gives 0 for both cases, and the
+review's second expectation was an extrapolation of the first.
+
+**The two readings that were worked out, and the one taken.** Both are
+symmetric, because a floor is the one thing that cannot be:
+
+* `sign(v) * ((|v| * 64 + 32) // 100)` — truncate toward zero, keeping the
+  recorded `+32` bias. This does give the review's `-1 → 0`.
+* `sign(v) * ((|v| * 64 + 50) // 100)` — round half away from zero.
+
+The second ships. The `+32` is **not a rounding bias**: it is half of the 64
+units per semitone, and half a *unit* on a divide by 100 is `+50`, so the
+shipped bias put the rounding boundary at 0.32 instead of 0.5 — an off-centre
+rounding that sits one unit toward zero on 16 of the 101 cents values in the
+corpus range, with a worst-case representation error of 1.0000 cents where
+0.7500 is available. It also contradicts what this project already says the
+same expression means: `docs/E4B_FORMAT.md:838` reads Roland's importer as
+*"round-half-up on a divide by 100, i.e. `round(cents * 0.64)`"*, and every
+other conversion between the two units in the tree rounds to nearest —
+`roland_s7xx_parser.py:406`, `writers/e4b_writer.py:703`,
+`writers/eiii_writer.py:486`, `parsers/e4b_parser.py:459`,
+`parsers/eiii_parser.py:240`.
+
+`64v + 50` is never a multiple of 100 (4 divides 64 and 100 but not 50), so no
+integer v reaches a tie: half-away, half-up and nearest coincide on every
+value, and the new line is `round(cents * 0.64)` evaluated without a float.
+
+**Where the shipped code was actually wrong.** The floor and the short bias
+cancel on one side of zero and compound on the other, which is what broke
+`f(-v) == -f(v)`. The positive rail was short and the negative rail was long:
+
+| cents | exact units | shipped | correct |
+|---:|---:|---:|---:|
+| +1 | +0.64 | **0** | 1 |
+| +4 | +2.56 | **2** | 3 |
+| −7 | −4.48 | **−5** | −4 |
+| −10 | −6.40 | **−7** | −6 |
+
+Sixteen of the 101 corpus cents were wrong — eight negative (−7, −10, −21, −24,
+−32, −35, −46, −49, each one unit **too negative**, which is the direction the
+review described) and eight positive (1, 4, 15, 18, 26, 29, 40, 43, each one
+unit too small). The review's two named cases were already correct: `-1` and
+`-2` both round to −1 unit. What the fix changes on the corpus is 16 values,
+and it makes `+1` cent and `−1` cent both land one unit from zero instead of
+0 units and −1 units.
+
+**Measured on the discs present here** (15 679 zones over the five images in
+`~/temp/roland_discs`; the review's 26 925 spans seven and two are absent):
+**522 zones (3.33 %)** change, on all five discs, and every one of them moves
+the value written to the E4B zone entry by **+2 cents** — 3.79 % of
+LAComposer1, 10.79 % of LAComposer4, 1.99 % of cd1, 0.53 % of StringMasters,
+none on L-CDP-05.
+
+**The writer side is untouched, and provably so.** `z['fine']` is in 1/64
+units, `ZoneMapping.fine_tune` is in cents, and `vpar[36]` / `entry[12:14]` are
+1/64 units again, so the conversion runs in both directions. Over all 101
+corpus cents the chain
+`roland_fine_tune → int(round(z['fine'] * 100 / 64.0))` (line 406)
+`→ round(zone.fine_tune * 64.0 / 100.0)` (e4b_writer.py:703) was already the
+**identity before the fix and still is after it**, 101/101, zero drift. What
+the fix changes is *which* unit the reader picks, never whether it survives.
+
+**The one hardware check we have cannot discriminate, and that is recorded
+rather than glossed.** `tests/test_eos_foreign_sim_vs_device.py::
+TestRolandIsExact` compares our conversion of disc ROL-B against a bank
+the E4XT itself wrote from that disc, 25 voices × 284 bytes, byte for byte. It
+passes before and after — but **all 40 zones of those 25 voices carry
+`sub[6] == 0`**, which maps to 0 units under every candidate rule. The bank is
+silent on this conversion, which is why a change of this shape could reach the
+tree without the ground-truth test noticing either way.
+
+**Tests.** `tests/test_roland_fine_tune_symmetric.py` (new; tests/ is
+untracked, as with findings m5 and m7) — 356 tests in 0.5 s. **76 fail with the
+fix reverted**, across seven functions: the sign-symmetry sweep (41
+parametrised cases over ±127), the exact-rational nearest sweep (16 of the 101
+corpus cents), the two per-side regression sets (8 + 8), the end-to-end sweep
+through the real `read_roland_partials`, the quantisation-error measurement,
+and the positive-rail asymmetry.
+
+Five pass both before and after, and they are the two properties the finding
+did *not* claim: `test_the_sweep_never_goes_backwards_or_skips_a_unit` — the
+shipped `//` on a positive multiple of v was monotone by construction, so that
+is asserted as a guard rather than a defect — and `test_the_units_survive_the_trip_through_the_model_and_the_writer`,
+which is the writer-side identity above, run case by case.
+`test_the_two_cases_the_review_names` passes in both states on purpose: it
+pins the reproduction (−1 and −1, before and after) and its docstring says why
+neither value is what the review expected.
+
+**What did not change.** Any well-formed reading. `sub[6]` is confined to ±50
+on 26 925 zones over seven discs and both rails are reached, so ±50 is the
+whole of the corpus and the sweep is the whole of the input space that occurs.
+`roland_pan` beside it (`clamp(sub[4] * 2, −64, +63)`) has no rounding in it
+and was not touched, and the coarse-tune, velocity and sample-index fields of
+the same sub-record are untouched. The Roland subset runs clean
+(`pytest -k "roland or s7xx"`, 363 passed, 27 subtests), and with it
+`-k fine_tune`, 359 passed.

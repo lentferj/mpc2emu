@@ -290,7 +290,20 @@ def roland_fine_tune(sub6: int) -> int:
     rather than inferred from the arithmetic.]
     """
     v = sub6 - 256 if sub6 > 127 else sub6
-    return (v * 64 + 32) // 100
+    # §REVIEW1010 m13 — `(v * 64 + 32) // 100` was not a rounding, and its two
+    # faults CANCEL on the negative side of zero and COMPOUND on the positive
+    # one, which is what broke `f(-v) == -f(v)`. The bias `+32` is half of the
+    # 64 units per semitone, when half a unit on a divide by 100 is `+50`, so
+    # the boundary sat at 0.32 units instead of 0.5 and `+1` cent read back as
+    # 0 units; and `//` FLOORS, so `-1` cent (-0.64 units) came back as -1
+    # while `+1` cent (+0.64 units) came back as 0 — the same magnitude, two
+    # answers. Rounding the MAGNITUDE and restoring the sign is symmetric by
+    # construction, and is the round-half-up `docs/E4B_FORMAT.md` reads this
+    # same expression as. `64v + 50` is never a multiple of 100 (4 divides 64
+    # and 100 but not 50), so no integer v reaches a tie and half-away, half-up
+    # and nearest agree everywhere.
+    q = (abs(v) * 64 + 50) // 100
+    return -q if v < 0 else q
 
 ROLAND_UNUSED_SAMPLE = 0xFFFF
 
