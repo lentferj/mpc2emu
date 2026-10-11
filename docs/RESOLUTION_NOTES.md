@@ -44720,3 +44720,58 @@ TODO.md's D2 row removed with this commit; D3 stays open.
 
 §REVIEW1010 follow-up D2 (from finding T4); full review in
 docs/CODE_REVIEW_2026-10-10.md.
+
+### Finding D3 — the cent the cast ate: `detune` truncated where its sibling `transpose` rounds (2026-10-11)
+
+D3 was the third of the four defects the T4 seam work documented without
+fixing, and this entry lands it. One fault on one line of the `talsmpl`
+preset parser (`parsers/talsmpl_parser.py:432`):
+`zone_fine = int((det_norm - 0.5) * 200.0)` truncates the per-zone detune
+knob to cents, while its sibling one line below (`:440`)
+`ms_xpose = int(round((float(...) - 0.5) * 48.0))` rounds the transpose knob.
+The writer emits the knob with six decimals (`:685`), so the file's own
+quantisation lands just below the true cent for some values and the
+truncating cast throws that fraction away instead of rounding it. Confirmed
+on the tree before fixing, write → parse → compare over every cent value the
+field can hold: **40 of 201 do not round-trip, in both signs** (-66 reads
+-65, -45 reads -44, -44 reads -43, -33 reads -32, +89 reads +88, +91 reads
++90). This is a rounding call, not a calibration — the sibling in the same
+loop already made it, so the fix matches it rather than inventing one.
+
+**The fix is the one call the T4 entry prescribed** — round like the sibling:
+
+    zone_fine = int(round((det_norm - 0.5) * 200.0))   # per-zone ±100 cents
+
+No clamp is added because none is needed: the sum with the neutral
+layer-level term is clamped on the next use (`:518`), and the field's range
+is ±100 by construction. The layer-level `samplefinetune` stays neutral
+under this writer, so the per-zone term is the whole value end to end.
+
+**One new test and a docstring correction, both in
+`tests/test_talsmpl_roundtrip.py`** (untracked, as all of `tests/` is), and
+the file's docstring no longer lists detune among the known-lossy fields:
+
+* `test_every_detune_cent_value_roundtrips` — all 201 cent values from -100
+  to +100, each through its own single-key zone in one of two presets (the
+  packing keeps each preset on one layer, so every zone keeps its own
+  tuning), each back at exactly the cents it was written with. The existing
+  field-for-field test pins `fine_tune=-6`, one of the 161 values that
+  survived the old cast by accident — it passes with and without the fix, so
+  it could never guard the rounding; this one fails on 40 values without it.
+* The module docstring's item 2 now reads FIXED by D3, and the fixed-count
+  line reads four of five (1 through 4; only the unlooped `loop_end` stays
+  known-lossy).
+
+**Revert proof.** Source change stashed (`tests/` is untracked and survives),
+`__pycache__` purged, run with `python3 -B`: exactly the new test fails, the
+other 16 in the file pass. Stash popped, fix restored.
+
+Subsets run here (the full suite was not):
+`tests/test_talsmpl_roundtrip.py` — 17 passed.
+With the tree-policing meta-test still green, and the new entry a `###`, not
+a `##`, the notes index is untouched.
+TODO.md's D3 row removed with this commit; all four T4 seam defects now
+landed.
+
+§REVIEW1010 follow-up D3 (from finding T4); full review in
+docs/CODE_REVIEW_2026-10-10.md.

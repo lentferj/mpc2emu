@@ -429,7 +429,7 @@ def parse_talsmpl(talsmpl_path: str, wav_dir: Optional[str] = None) -> Bank:
             start_s  = int(ms.get('startsample', '0'))
             end_s    = int(ms.get('endsample',   '0'))
             det_norm = float(ms.get('detune', '0.5'))
-            zone_fine = int((det_norm - 0.5) * 200.0)   # per-zone ±100 cents
+            zone_fine = int(round((det_norm - 0.5) * 200.0))   # per-zone ±100 cents
             # v11 multisamples carry per-sample gain/pan/velocity/transpose — TAL
             # (and our writer) store the per-zone values here, not on the
             # layer-level sample* attrs.  Prefer them so write→read is lossless.
