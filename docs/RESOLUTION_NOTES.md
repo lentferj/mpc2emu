@@ -417,6 +417,14 @@ SPDX-FileCopyrightText: Copyright (C) 2025-2026  mpc2emu contributors
 - [§RELSE1WIN — the RELSE1 window is 0..99, and the floor we warned at was a fact about a statistic (2026-10-02)](#relse1win-the-relse1-window-is-099-and-the-floor-we-warned-at-was-a-fact-about-a-statistic-2026-10-02)
 - [§E4BSELECTORREP — three takes, and the +0.146 dB was the filter (2026-10-02)](#e4bselectorrep-three-takes-and-the-0146-db-was-the-filter-2026-10-02)
 - [§REVIEW1010 — the second full-codebase review: 42 findings, and what each fix changed (2026-10-09/10)](#review1010-the-second-full-codebase-review-42-findings-and-what-each-fix-changed-2026-10-0910)
+- [Seam 1 — what the merge actually implements](#seam-1-what-the-merge-actually-implements)
+- [Seam 2 — what a TAL preset carries](#seam-2-what-a-tal-preset-carries)
+- [The defects the seam work found, NOT fixed](#the-defects-the-seam-work-found-not-fixed)
+- [PROVEN TO HAVE TEETH — 28 mutations, all RED but one](#proven-to-have-teeth-28-mutations-all-red-but-one)
+- [Seam 1 — what finding m22 had already closed, and what it left open](#seam-1-what-finding-m22-had-already-closed-and-what-it-left-open)
+- [Seam 2 — the append paths, for real](#seam-2-the-append-paths-for-real)
+- [What is NOT covered, and is filed instead](#what-is-not-covered-and-is-filed-instead)
+- [PROVEN TO HAVE TEETH — 26 mutations, all RED](#proven-to-have-teeth-26-mutations-all-red)
 <!-- INDEX:END -->
 
 ---
@@ -44087,3 +44095,442 @@ tests/test_gig_bounds_and_loops.py -q` runs 52 passed. As with every
 note and the test file lives on disk untracked.
 
 §REVIEW1010 finding T1; full review in docs/CODE_REVIEW_2026-10-10.md.
+
+### Finding T4 — the two untested seams: opcode precedence inside `parse_sfz`, and the `talsmpl` round trip (2026-10-11)
+
+The review's T4 table names six seams; five are clean or owned elsewhere
+(`parsers/*.py ↔ writers/*.py` round-trips, `diagnostics_catalog`, `convert.py`
+error paths, `--add-to`, and `info_cmd.run_info`). The two highest-value ones
+were untested and are now covered by **37 tests**, and writing them surfaced
+**one live defect in the SFZ parser and three in the talsmpl writer/parser
+pair**. No source line was changed for any of them.
+
+* **Seam 1** — *"opcode precedence inside `parse_sfz`"*: *"`tests/test_lfo_volume.py`
+  is the only `parse_sfz` caller and only ever emits `<region>` blocks; no test
+  puts a `key=` in a region under a `<group>` that also declares
+  `lokey/hikey`. (This is the gap that let finding 11 through.)"* — **23 tests**
+  in `tests/test_sfz_opcode_precedence.py`.
+* **Seam 2** — *"`parsers/talsmpl_parser.write_talsmpl` ↔ `parse_talsmpl`"*:
+  *"Only `tests/release_matrix.py:198-212` touches it, and `pytest --co` reports
+  **0** tests from that file (it is a `main()` harness, not a `test_*.py`)."* —
+  **14 tests** in `tests/test_talsmpl_roundtrip.py`.
+
+Seam 1 does not re-litigate finding 11 — fixed and already covered by
+`tests/test_sfz_key_precedence.py`; it pins the MERGE that fix leans on, which
+is what the review's sentence is actually about. Seam 2 is the write -> parse ->
+compare that the release matrix performs and nothing else did. Neither file
+touches `_sfz_voice_params`, so neither can interact with m12's shape
+resolution; no `*lfo_*`/`amplfo_*` opcode appears in any SFZ in the new file.
+
+---
+
+## Seam 1 — what the merge actually implements
+
+`merged = {**global_defaults, **group_defaults, **region}` — three levels, one
+flat dict, later wins — plus `_expand_key_opcode`, which turns `key=X` into
+`lokey=X hikey=X pitch_keycenter=X` per section, because that is the SFZ spec's
+definition of the shorthand and it is what makes a region's `key` beat its
+group's range at all.
+
+`tests/test_sfz_opcode_precedence.py` holds one **16-row** table
+(`PRECEDENCE_TABLE`) over `(sfz text, expected zone geometry)` covering
+group-vs-region for `lokey`/`hikey`/`key`/`pitch_keycenter`, the `key` ->
+all-three equivalence in both directions, `global < group < region`, the
+velocity window that rides the same merge, and a `<control>` section between the
+two. Every row asserts the key range AND the velocity window, because the first
+draft asserted only the keys and a mutation that read the window swapped stayed
+GREEN. Around it: the per-section expansion at the level the merge cannot
+recover it from, `_expand_key_opcode` unit-tested over five spellings
+(`setdefault` both ways), section order, note names, and the top-of-keyboard
+clamp.
+
+## Seam 2 — what a TAL preset carries
+
+`tests/test_talsmpl_roundtrip.py` writes a bank, parses it back and compares:
+the empty input (no presets -> no file, and nothing left on disk), the other
+empty (a preset with no voices -> a preset with no voices, name intact), one
+zone field-for-field (geometry, velocity window, root, fine tune, pan, volume,
+loop on/off + start/end, sample rate, and the audio itself as a prefix
+comparison), many non-overlapping zones (12 -> ONE layer, all 12 zones and
+samples back), overlapping zones (two layers) and overlapping-vs-not packing,
+one file per preset, CR-7c duplicate preset names, a dangling sample reference,
+`copy_samples` off, the program-global filter/ADSR, whose voice the ADSR comes
+from when they disagree, and the written XML read directly so a round trip
+through the tolerant parser is not the only evidence.
+
+Tolerances are the format's, measured rather than guessed: the ADSR law plus six
+decimals costs 1.5e-5 s at worst (measured over 0.0005..10 s), the volume knob
+6.6e-5 dB at worst over -24..0 dB and 0.27 dB near the -96 dB floor, the pan knob
+1e-6 (half a knob step) and exactly 0 for every value the knob can spell.
+`filter_cutoff`, `fine_tune`, stereo audio and one frame per sample are
+deliberately NOT asserted — see the defects below.
+
+---
+
+## The defects the seam work found, NOT fixed
+
+**D1 (SFZ, HIGH) — `_expand_key_opcode` runs only on the section that ends the
+file.** `_parse_sfz_opcodes` appends every earlier section unexpanded
+(`sfz_parser.py:94`) and expands only the trailing one (`:98`). So finding 11's
+exact defect is still live for every region that is not the last:
+
+    <group>lokey=0 hikey=127
+    <region>sample=C.wav key=48      <- SHIPPED: lo 0 hi 127 root 48   WRONG
+    <region>sample=D.wav key=60      <- 60/60/60, because it is the last
+
+    _parse_sfz_opcodes -> [{'group', 'lokey':'0','hikey':'127'},
+                           {'region', 'key':'48'},                  <- no lokey
+                           {'region', 'key':'60', 'lokey':'60', ...}]  <- expanded
+
+Measured, not read off the source. The five finding-11 tests never see it:
+every one of their files puts the `key=` region last. The same gap means a
+GROUP's `key=` is never expanded either (a group is not last when a region
+follows), and is carried instead by the old merge-time fallback — so the comment
+in the region loop calling the fallback "a defensive no-op" is wrong for exactly
+that one case, which is also why D1 is not loud: the wrong answer only shows up
+when the same file ALSO declares `lokey`/`hikey` at group scope. The fix is one
+line, `sections.append(_expand_key_opcode(current))`; **applied as an experiment
+and reverted** — see FORWARD below — so these tests do not block it. Whoever
+lands it needs one new test for the two-region file, and the new file must say
+which of the two rows it pins.
+
+**D2 (talsmpl, HIGH) — `filtercutoff` clamps HERTZ into a 0..1 knob.**
+`prog.set('filtercutoff', f"{max(0.0, min(1.0, v0.filter_cutoff)):.6f}")` against
+a `VoiceLayer.filter_cutoff` documented in HERTZ, while the parser reads the knob
+back with `nominal_knob_to_hz`. Measured: 8000 Hz -> `1.000000` -> **20000 Hz**;
+200 Hz -> `1.000000` -> **20000 Hz**. Every cutoff but "fully open" is destroyed
+in both directions, and `hz_to_e4b_cutoff` is the inverse that already exists for
+the way out.
+
+**D3 (talsmpl, MEDIUM) — `detune` -> `fine_tune` truncates where its sibling
+rounds.** `zone_fine = int((det_norm - 0.5) * 200.0)` one line above
+`ms_xpose = int(round((float(...) - 0.5) * 48.0))`. Measured over all 201 cent
+values in range: **40 do not round-trip**, both signs (-66 reads -65, -44 reads
+-43, +13 reads +12). `transpose` is exact for all 201. The round-trip test pins
+one of the 161 values that DO survive and records the other 40 as a defect rather
+than pinning them.
+
+**D4 (talsmpl, HIGH for stereo) — the parse frame count is channel-blind and
+`endsample` is read as an exclusive end.** `n_frames = len(sd.data) // 2` and
+`trim_end = end_s`, where the writer stores `endsample` as the last INDEX (its
+own comment explains TAL needs that). Measured: a 256-frame stereo sample
+(1024 bytes) comes back **510 bytes — half its audio, ending mid-frame**; a
+300-frame mono sample comes back 299 frames. The mono half is writer/parser
+disagreeing about index-vs-count; the stereo half is `// 2` where the channel
+count belongs, which is the m10 fault again in a second module.
+
+**Minor, recorded:** an UNLOOPED sample reads back `loop_end = 299` (the
+writer's `... else last` fill) where the model said 0 — harmless, because all
+three writers gate on `loop_type` before reading it. And `ZoneMapping.volume`
+above 0 dB clamps to 0 dB, which is a target-format ceiling (TAL's knob is 0..1
+linear) rather than a bug; near the -96 dB floor the six-decimal knob costs up
+to 0.27 dB, which is why the volumes asserted here are all attenuations.
+
+---
+
+## PROVEN TO HAVE TEETH — 28 mutations, all RED but one
+
+Every row below is a single exact-string replacement in the named source file,
+run through the two new files only, and reverted; `git status` was clean
+afterwards. The driver clears `__pycache__` and imports with `-B`, because a
+size-preserving edit landing in the same second as the previous import leaves a
+`.pyc` Python considers valid, and a run can then silently execute the PREVIOUS
+mutation's bytecode.
+
+| # | mutation | result |
+|---|---|---|
+| S1 | the merge order reversed (`{**region, **group, **global}`) | RED — 10 |
+| S2 | `section.setdefault(target, kv)` -> assignment | RED — 7 |
+| S3 | `key` no longer expands `pitch_keycenter` | RED — 5 |
+| S4 | the note-name branch disabled (`if m:` -> `if m and False:`) | RED — 1 |
+| S5 | the group level dropped from the merge | RED — 5 |
+| S6 | the global level dropped from the merge | RED — 1 |
+| S7 | a `<control>` section treated as a `<group>` | RED — 1 |
+| S8 | the `if 'key' not in section:` guard removed | RED — 9 |
+| S9 | the section list returned in reverse order | RED — 8 |
+| S10 | `lovel`/`hivel` read swapped | RED — 1 |
+| T1 | `velocitystart`/`velocityend` swapped | RED — 1 |
+| T2 | the transpose knob halved (`/48.0` -> `/24.0`) | RED — 1 |
+| T3 | `loopenabled` never written as 1 | RED — 1 |
+| T4 | `rootkey` from the sample, not from the zone | RED — 2 |
+| T5 | the pan knob loses its scaling | RED — 2 |
+| T6 | the program ADSR taken from the LAST voice | RED — 1 |
+| T7 | `_tal_zones_overlap` always False (no packing) | RED — 2 |
+| T8 | the `copy_samples` flag ignored | RED — 1 |
+| T9 | the url loses its `samples/` prefix | RED — 10 of 14 |
+| T10 | the CR-7c duplicate-name suffix removed | RED — 1 |
+| T11 | a dangling sample reference kept as a zone | RED — 1 |
+| T12 | `programname` written as a constant | RED — 3 |
+| T13 | the ADSR law cube-root -> linear | RED — 2 |
+| T14 | the filter-resonance clamp dropped | **GREEN** — see below |
+| T15 | `filtermode` written as the raw int | RED — 1 |
+| T16 | a bank with no presets gets an invented one | RED — 1 |
+| T17 | the `samples/` directory created even with `copy_samples=False` | RED — 1 |
+| T18 | the url keeps its `samples/` prefix with `copy_samples=False` | RED — 1 |
+
+**37 of 37 tests are red under at least one of the first 26** — collected per test
+name, not estimated. T14 is the one green, and it is reported rather than papered
+over: `filter_resonance` is documented `0.0-1.0` and the test's value is in range,
+so the clamp is unreachable without an out-of-contract input and the mutation is a
+no-op by construction.
+
+Three rows were rewritten after their FIRST mutation came out green, because a
+green row that means nothing is worse than a missing one: a mutation that only
+renamed a neighbouring function (nothing called it), one whose branch no test
+reads, and one whose test value happened to be a fixed point of the mapping under
+test. The rows above are the corrected versions, each checked against the test it
+names.
+
+A second pass re-collected the battery by failing NODE ID rather than by file
+total and re-measured every number above (D2: 8000 Hz and 200 Hz both read back
+20000 Hz; D3: 40 of 201 cent values, both signs; D4: 256-frame stereo -> 510
+bytes, 300-frame mono -> 299 frames; the unlooped `loop_end = 299`). It also
+added the two rows the first pass missed, T17 and T18 above, which are a matched
+pair aimed at the `copy_samples=False` branch:
+
+* **T17** — the `samples/` directory created anyway (`sample_dir.mkdir` lifted
+  out of the `if copy_samples:` guard): RED on
+  `test_copy_samples_false_writes_the_preset_and_no_audio`, and nothing else.
+* **T18** — the urls given the `samples/` prefix regardless: RED on the same
+  test, and nothing else.
+
+That branch is the one place where a mutation aimed at the OTHER side is a
+no-op: T8 written the other polarity (`if copy_samples:` -> `if False:`) reddens
+ten tests and MISSES it, because the test already asks for the False branch. A
+battery that only ever mutates "make it do the thing" cannot see a branch whose
+whole contract is "do NOT do the thing".
+
+Two further experiments, both reverted:
+
+* **CONTROL** — the merge-time `key_shorthand` fallback deleted entirely: RED, on
+  `group_key_applies_to_its_regions`. That is the honest reading of D1: for a
+  region's `key` the expansion carries it, for a group's `key` the old fallback
+  still does.
+* **FORWARD** — D1's one-line fix applied: **58 passed** across both new files
+  plus `tests/test_sfz_key_precedence.py`, `tests/test_sfz_tremolo_shape_follows_gain.py`
+  and `tests/test_lfo_volume.py`, so the suite does not block the fix. The same
+  edit with `setdefault` also turned into assignment turns 10 tests red,
+  including `group_key_root_can_be_overridden_by_an_explicit_center` — the row
+  that pins the guard for a GROUP-level shorthand, which only the forward fix
+  reaches.
+
+**What did not change.** No source file, no parser behaviour, no output byte.
+`parsers/sfz_parser.py` and `parsers/talsmpl_parser.py` are byte-for-byte what
+they were (`git status` clean after every experiment). The four defects are
+documented, not fixed, and D1's fix is one line for whoever picks it up.
+
+**Housekeeping the entry itself needed.** Adding four `##` subheadings here
+turns `tests/test_citations_resolve.py::test_the_notes_index_matches_the_headings`
+red, because the index block at the top of this file lists every `##` heading in
+the body in order — so the four index lines for them were added with it
+(`#seam-1-what-the-merge-actually-implements`, `#seam-2-what-a-tal-preset-carries`,
+`#the-defects-the-seam-work-found-not-fixed`,
+`#proven-to-have-teeth-28-mutations-all-red-but-one`).
+
+Subsets run here: `tests/test_sfz_opcode_precedence.py tests/test_talsmpl_roundtrip.py`
+— 37 passed. With `tests/test_sfz_key_precedence.py tests/test_sfz_tremolo_shape_follows_gain.py
+tests/test_lfo_volume.py` — 58 passed. The full suite was not run.
+
+**Out of scope, and red before this work:** the neighbourhood meta-tests also
+include `tests/test_source_fields_unread.py::test_the_known_debt_list_has_not_gone_stale`,
+which reports `Active`, `AfterTouchToFilter`, `Application` and
+`Application_Version` as now-read and its `KNOWN_UNREAD` debt list as stale. It
+probes a local MPC expansion corpus, touches neither of these two seams, and is
+left exactly as found.
+
+§REVIEW1010 finding T4; full review in docs/CODE_REVIEW_2026-10-10.md.
+
+---
+
+### Finding T4 — the other two untested seams: `--info`'s format sniffer, and `--add-to` on the FAT16/FAT32/EMU3 images (2026-10-11)
+
+The T4 table names six seams. The sibling entry above takes opcode precedence
+inside `parse_sfz` and the `talsmpl` round trip; **this entry takes the two it
+names as owned elsewhere — `info_cmd.run_info` / `_sniff_format`, and `--add-to`
+for e4b/krz/eiii.** 43 new tests in two files, no source line changed, and one
+suspected defect filed rather than fixed.
+
+* `tests/test_info_cmd_sniff_format.py` — **28 tests**
+* `tests/test_add_to_append_paths.py` — **15 tests**
+
+## Seam 1 — what finding m22 had already closed, and what it left open
+
+`tests/test_info_cmd_file_handle_closed.py` (14 tests) drives
+`_krz_rom_keymap_refs`, `print_bank_info` on KRZ banks, `run_info` over a
+directory of two `.krz` files, and `run_info` on a missing one. Everything it
+covers is left exactly as it is — nothing below repeats it. What it does not
+reach, stated precisely because that is what this file is:
+
+* **`_sniff_format` — 0 references in `tests/`.** It is the function that
+  decides what `--info` claims a file IS, and all twenty-odd return paths were
+  unguarded. The KRZ directory test does assert one format line
+  (`Format:    Kurzweil KRZ (PRAM)`), so the PRAM-positive branch was reached by
+  accident; every other branch was not.
+* **`run_info` on any format that is not `.krz`** — the `elif input_path.suffix
+  .lower() in INPUT_EXTS` single-file branch, the `else: "No supported input
+  files found at …"` exit, the `if not files: "No supported files found in …"`
+  exit, the parse-failure `continue` *inside the directory walk*, the `wav_dir`
+  half of `search`, and the whole `verbose=True` half of `print_bank_info`.
+* **`print_bank_info`'s warning collector**, the `no loop` / `bidi` /
+  `fwd-rel` labels, `_fmt_duration`'s rate-0 guard, and the `>8 zones`
+  `use -vv` note.
+
+Two of the new tests pin structural properties rather than labels, because
+those are the ones that cannot be re-derived from reading the code:
+
+* **`test_the_sniff_reads_at_most_512_bytes`** — `path.open` is wrapped so the
+  size of every read it hands out is recorded, and the assertion is
+  `sizes == [0x200]`. The BOUNDED READ comment claims 0.1 ms / 512 bytes where
+  `path.read_bytes()` cost 265.5 ms / 300 MB on a 300 MB image; nothing checked
+  it. The wrapper also cannot be bypassed quietly: if the call is restructured
+  so the wrapper is not used, the vacuity guard (`assert handles`) fails.
+* **`test_a_krz_is_named_from_four_bytes_not_a_size_limit`** — an ordinary bank
+  carrying `osize = 5,000,000` must still be named KRZ. This is the reverted
+  6-byte `PRAM`+osize test that called every ordinary bank "unrecognised" while
+  `krz_parser` has always checked four.
+
+The AKAI branches are exercised against this project's own writer, not a
+hand-made header: `build_akai_hd_image` (16 MB partition), the same builder with
+`cdrom=True, cd_label='MYCD'`, and `build_akai_floppy_image` (1.6 MB). That
+distinguishes the three answers the sniffer can now give —
+`AKAI S1000/S3000 disk image (partitioned, 8 KB blocks)`,
+`AKAI CD3000 CD-ROM image (not ISO 9660), label 'MYCD'`, and
+`AKAI S3000 floppy image (800 KB / 1.6 MB, non-DOS)` — from each other, which is
+the difference between a hard disk and a CD to a user reading their own disc.
+
+## Seam 2 — the append paths, for real
+
+The review's complaint was exact: *"The only pytest coverage is
+`test_silent_failures.py:254-283`, which shims **all four** append entry points
+to `raise`."* Four entry points, three of them FAT/EMU (AKAI was already
+real-covered). **Nothing in the new file is shimmed.** Each test builds an image
+with the project's own builder, appends through the entry point `convert.py
+--add-to` calls, and reads the image back:
+
+| entry point | image | what is asserted |
+|---|---|---|
+| `k2000_disk_append` | `build_k2000_disk` 16 MB FAT16 | both names in `BANKS/`, the old bank's bytes **at the same offset**, the image the same size, the new bank's bytes present |
+| `k2000_disk_append` | `format_new` FAT16 with no `BANKS/` | the folder is created, and the bank lands in it |
+| `k2000_disk_append` | duplicate name | `prompt` with no tty → skip, image byte-identical; `add-new` → `BANKA2.KRZ`, both copies survive; `overwrite` → one entry, new content |
+| `emu_hdd_append` | `build_emu_hdd` 128 MB EMU3 | superblock **block 0 unchanged, checksum included**, the old bank at the same offset, the new bank present **and referenced by a dir-content entry**, both bank names in the metadata |
+| `emu_hdd_append` | `folder='MYSTUFF'` | a new root entry carrying the user-folder marker `0x40` (not the Default Folder's `0x80`), bank inside it |
+| `fat_hda_append` | `build_hda_fat` 512 MB FAT16 | `detect_hda_fs` → `fat`, `B.001-BB.E4B` naming, the old bank in place, both on the root |
+| `fat_hda_append` | `build_hda_fat` 2 GB FAT32 | the FAT32 arm is taken, the old bank in place, both on the root |
+| `fat_hda_append` | `--folder` + duplicate policies | folder created, bank inside it; `prompt` → skip with the image unchanged; `overwrite` → one entry |
+| `convert.py --format krz --add-to` | K2000 image | rc 0, `[ADD] Appending 1 bank(s) … (K2000 FAT16)`, the old bank unmoved, the new bank on the image |
+| `convert.py --format e4b --add-to` | EMU3 image | rc 0, `(EMU)` dispatch, superblock unchanged, the old bank unmoved, the new bank on the image with a dir-content entry |
+
+**Why "the pre-existing content survived" is three assertions and not one.** A
+rebuild that loses a bank satisfies any single one of them: the offset check
+fails if the image is rebuilt (the banks would be laid out from scratch), the
+size check fails if the image grows, and the byte search fails if the bank is
+dropped. The search itself is guarded — `_find_one` asserts the needle appears
+exactly once, so an absent needle cannot masquerade as a slice comparison of
+two unrelated strings.
+
+**The dir-content-entry assertion is the one with a precedent.**
+`test_iso_builder_props.py` records the defect where bank 17+ sat on a disc with
+no directory entry and the E4XT could not see it. A bank written into free
+clusters with no entry is the same fault one layer down, and nothing checked
+that the APPEND path cannot do it; the test asserts
+`b'BB'.ljust(16, b' ') in after[:data_start]` for exactly that reason.
+
+The two CLI tests matter more than their size suggests: the shimmed suite never
+reached the real dispatch, and `convert.py:1791` picks the entry point from
+`detect_hda_fs` — a one-line branch with no coverage on the success path.
+
+## What is NOT covered, and is filed instead
+
+**1. EIII content, on both append entry points — filed as a TODO row, with a
+measurement rather than a fix.** Every bank in the new file is an E4B.
+`convert.py`'s own comment says the append builders are *"bank-content-agnostic
+(they just stream whatever file they're given)"*, and that is **true for EMU3**:
+`_bank_props()` reads the file's first four bytes, and an EIII `.E3X` off
+`write_eiii(variant='e3x')` measures `props = b'\x00\x00\x00\x00\x00'`, which is
+what `docs/EMU3_ISO_FORMAT.md` §2.4 records for the 1028 EIII banks on real
+discs. It is **unverified for FAT**, where `fat_hda_append` builds the
+destination name as `f"B.{next_num():03d}-{stem}.E4B"` with the extension inside
+the literal: an EIII bank appended to a 512 MB FAT16 image lands as
+`B.000-BA.E4B`. `build_hda_fat` names one the same way, so the append matches
+the builder — which is why this is filed as an open measurement question
+(what does the E4XT's EIII-compatibility loader match on for a bank on a FAT
+disc?) rather than changed. Nothing here is a confirmed defect.
+
+**2. The refusal paths — filed as a TODO row.** The success path of each entry
+point is covered; the image-with-nowhere-to-put-the-bank half is not.
+`emu_hdd_append` raises in four places, `k2000_disk_append` inherits
+`Fat16(image)`'s refusal, `fat_hda_append` has none of its own.
+`tests/test_akai_image.py` has the shape to copy:
+`test_appending_to_a_full_disk_is_refused_not_silently_dropped`.
+
+**3. `_use_colour` and the ANSI helpers** are environment-dependent (they key on
+`sys.stdout.isatty()` at import) and are deliberately not pinned.
+
+## PROVEN TO HAVE TEETH — 26 mutations, all RED
+
+Applied by editing the source, running the target test, and restoring from a
+byte-identical backup (`/tmp/opencode/mut_backup`, `/tmp/opencode/mut_backup2`);
+`git status --short` is empty after every one, and no file under `tests/` was
+written by any of them. Each row names the test that went red.
+
+| # | mutation | red test |
+|---|---|---|
+| M1 | `.sf2` magic check dropped | `test_a_sf2_is_named_from_its_riff_magic` |
+| M2 | the two EXS24 byte-order answers swapped | `test_the_exs24_magics_name_the_byte_order` |
+| M3 | EXS24 short-buffer guard removed (`struct.error`) | `test_a_two_byte_exs24_does_not_raise` |
+| M4 | KRZ `osize < 65536` limit restored | `test_a_krz_is_named_from_four_bytes_not_a_size_limit` |
+| M5 | `.pgm` branch order inverted (MPC60 before MPC2000) | `test_the_pgm_magics_name_the_machine` |
+| M6 | bounded read reverted to a whole-file read | `test_the_sniff_reads_at_most_512_bytes` |
+| M7 | `.img` non-AKAI answer changed to the hard-disk one | `test_the_disk_image_extensions_are_identified_by_content` |
+| M8 | the empty-directory message changed | `test_run_info_reports_a_directory_with_no_supported_files` |
+| M9 | `_fmt_zone_vpt` always returns `""` | `test_run_info_verbose_prints_the_voice_and_zone_detail` |
+| M10 | `k2000_disk_append` rebuilds via `build_k2000_disk` | `test_appending_a_krz_leaves_the_existing_bank_where_it_was` |
+| M11 | `emu_hdd_append` writes the data but no dir-content entry | `test_appending_an_e4b_into_free_clusters_keeps_the_existing_bank` |
+| M12 | `emu_hdd_append` clobbers the superblock magic | same |
+| M13 | `emu_hdd_append` ignores `folder=` | `test_a_named_folder_is_created_on_the_emu_image` |
+| M14 | `fat_hda_append` drops the `B.NNN-` prefix | `test_a_fat16_hda_keeps_the_existing_bank_and_numbers_the_new_one` |
+| M15 | `fat_hda_append` always takes the FAT16 arm | `test_a_fat32_hda_takes_the_fat32_arm` |
+| M16 | the `--format krz` dispatch branch made unreachable | `test_the_cli_krz_append_reaches_the_k2000_disk_append` |
+| M17 | unusual-rate warning stops firing | `test_the_sample_warnings_are_reported` |
+| M18 | very-short warning threshold inverted | same |
+| M19 | `_Warnings.print_all` no longer returns early | `test_a_bank_with_nothing_to_warn_prints_no_warning_block` |
+| M20 | `bidi` / `fwd-rel` labels swapped | `test_every_loop_kind_and_an_unknown_rate_are_named` |
+| M21 | `_fmt_duration`'s rate-0 guard removed (`ZeroDivisionError`) | same |
+| M22 | verbose lists every zone instead of the `use -vv` note | `test_verbose_with_more_than_eight_zones_points_at_vv` |
+| M23 | FAT duplicate is not skipped | `test_a_duplicate_stem_is_skipped_on_the_fat_image` |
+| M24 | FAT overwrite keeps the old entry | `test_a_duplicate_stem_is_overwritten_on_the_fat_image` |
+| M25 | `run_info` ignores `wav_dir` | `test_run_info_over_an_sfz_finds_the_samples_through_wav_dir` |
+| M26 | `fat_hda_append` creates the folder under the wrong name | `test_a_named_folder_is_created_on_the_fat_image` |
+
+**One control that was written and then removed, because it could not hold.**
+The SFZ test's negative control ran the same SFZ with no `wav_dir` and asserted
+zero samples. It passed in a scratch directory and **failed under pytest**: the
+SFZ parser's last resort is an index built from same-named files in folders
+called `wav`/`wavs`/`audio`/`samples`/… up to six levels up, and
+`/home/lentferj/Samples` holds a real `sn.wav` — so a control that is supposed
+to prove "the sample was found through `wav_dir`" was instead reading a
+commercial sample library. The test now uses a basename nothing else on the
+disk uses (`zz_t4_probe_tone.wav`) and keeps the control; with the mutation
+applied it is red through the positive assertion (no candidate exists, so the
+bank reports `Samples: 0`). Recorded because it is the second time this shape
+has bitten here: a test that depends on what is in a directory it does not
+create is a test about the machine, not the code.
+
+**Subsets run here** (the full suite was not): `tests/test_info_cmd_sniff_format.py
+tests/test_add_to_append_paths.py` — 43 passed in 2.5 s. With
+`tests/test_info_cmd_file_handle_closed.py tests/test_silent_failures.py
+tests/test_iso_builder_props.py tests/test_disk_image_dispatch.py` — 75 passed.
+With the tree-policing meta-tests `tests/test_no_scratch_leaks.py
+tests/test_law_consistency.py tests/test_citations_resolve.py
+tests/test_no_blocking_prompts.py tests/test_docs_constants_agree.py` — 43
+passed. `tests/test_source_fields_unread.py` — 3 passed (46 s).
+
+**The sibling entry reports `test_source_fields_unread.py::test_the_known_debt_list_has_not_gone_stale`
+red before its work.** It is green here, alone and together with both new files
+(46 passed with them loaded), so whatever made it red did not reproduce in this
+worktree. Left exactly as found either way: it probes a local MPC expansion
+corpus and touches neither of these two seams.
+
+§REVIEW1010 finding T4 (second half); full review in
+docs/CODE_REVIEW_2026-10-10.md. The first half — opcode precedence and the
+`talsmpl` round trip — is the entry above this one.
