@@ -44537,6 +44537,77 @@ docs/CODE_REVIEW_2026-10-10.md. The first half — opcode precedence and the
 
 ---
 
+### Finding T4 refusals — the image-full half of `--add-to`, pinned without changing a line (2026-10-11)
+
+The T4 second-half entry above covers the SUCCESS path of each append entry
+point; the TODO row it left open asked for the refusal half — an image with
+nowhere to put the bank — and this entry closes it. **Ten new tests in
+`tests/test_add_to_append_paths.py`** (untracked, as all of `tests/` is),
+section 5, each on a real built image that is filled first and appended to
+second, the shape of
+`test_akai_image.py::test_appending_to_a_full_disk_is_refused_not_silently_dropped`.
+Every test asserts both the specific refusal and that the image survived it,
+because a partial write before the raise would otherwise pass:
+
+* `test_appending_to_a_cluster_full_emu_image_is_refused` — a 1 MB EMU3 image
+  holds one 512 KB cluster, so the second bank takes the `not enough free
+  clusters` branch; byte-identical afterwards.
+* `test_appending_the_101st_bank_to_an_emu_folder_is_refused` — 100 banks
+  built into the Default Folder, the 101st refused at the 100-bank slot
+  limit; byte-identical afterwards.
+* `test_appending_a_new_emu_folder_to_a_full_root_is_refused` — 111 appended
+  folders fill the 112-entry root beside the Default Folder, the next new
+  folder refused; byte-identical afterwards.
+* `test_appending_a_new_emu_folder_with_no_dircon_left_is_refused` — the
+  `dircon area full` branch, reached by setting block 1's next-free pointer
+  to the end of the area on a real built image.
+* `test_appending_to_an_emu_image_with_no_folder_is_refused` — the `no folder
+  found` branch, reached by zeroing the root area of a real built image.
+* `test_appending_to_a_cluster_full_k2000_image_is_refused` — a 20 MB file
+  against a 16 MB image, refused by `Fat16._alloc_chain`; byte-identical.
+* `test_appending_to_a_full_k2000_folder_is_refused` — 125 appends fill the
+  one-cluster BANKS folder (126 entries with the builder's own), the next
+  refused; the listing is unchanged. The bytes are deliberately NOT asserted:
+  `Fat16.add_file` writes file data into free clusters before finding no
+  directory room, so a refused file's content sits in unreferenced clusters
+  while FAT and directory are untouched.
+* `test_appending_to_a_non_fat_image_raises_instead_of_silently_succeeding`
+  and `test_fat_hda_append_has_no_guard_of_its_own` — the honest pair.
+  Neither entry point validates the image itself, so on zeros both surface a
+  `ZeroDivisionError` from the unvalidated FAT geometry, not a clean
+  `ValueError`. Pinned as "raises, image untouched" so a future clean guard
+  turns them red on purpose and a silent success turns them red as a defect.
+* `test_appending_to_a_full_fat_image_is_refused` — a 300 MB file against a
+  256 MB FAT image: `fat_hda_append` has no guard of its own, and this proves
+  the FAT layer's refusal propagates through it.
+
+Two reachability notes, stated rather than smoothed over. The dircon-full
+branch cannot be filled genuinely — the root caps at 112 folders before the
+169 dircon blocks run out — hence the poked pointer. And the k2000 "bad image"
+refusal the TODO row assumed (`Fat16(image)` refusing a non-FAT16 image) does
+not exist as a refusal: `Fat16` performs no magic check at all, and the
+`ZeroDivisionError` is what loud looks like today.
+
+**Revert proof.** Each guard neutered in turn (`if ...:` → `if False:`, the
+no-folder raise → `pass`, the two bad-image paths → a swallowing
+`try/except: return 0`), `__pycache__` purged, run with `python3 -B`: exactly
+the corresponding test(s) fail — ten mutations, ten reds, including the shared
+`_alloc_chain` mutation felling both cluster-full tests at once. Restored via
+`git checkout`, tree clean afterwards.
+
+Subsets run here (the full suite was not):
+`tests/test_add_to_append_paths.py tests/test_silent_failures.py
+tests/test_iso_builder_props.py tests/test_disk_image_dispatch.py
+tests/test_akai_image.py tests/test_no_scratch_leaks.py` — 131 passed,
+11 subtests passed.
+TODO.md's `--add-to` refusals row removed with this commit; the EIII-on-FAT
+naming question stays open.
+
+§REVIEW1010 finding T4 refusals (from the second half); full review in
+docs/CODE_REVIEW_2026-10-10.md.
+
+---
+
 ### Finding D1 — the section the loop never expanded: finding 11 live for every region but the last (2026-10-11)
 
 D1 was the first of the four defects the T4 seam work documented without
