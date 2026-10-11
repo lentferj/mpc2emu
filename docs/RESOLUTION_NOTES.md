@@ -43677,3 +43677,119 @@ still no-ops, with the same runtime Note they already printed.
 
 §REVIEW1010 findings m19/m20/m21/m23; full review in
 docs/CODE_REVIEW_2026-10-10.md.
+
+### Findings m16/m17 — a release factor the writer still derived the withdrawn way, and a thinner that could not survive a voice with no zones (2026-10-10)
+
+Two findings in `writers/krz_writer.py`, both of them about a number that two
+places had already stopped agreeing with. Nothing here changes a value or an
+output byte: m16 is what the file SAYS, and m17 is a path that cannot be
+reached from `write_krz`.
+
+**m16 — the arithmetic, first.** `_KRZ_RELEASE_FACTOR = 3.65` and
+`models.common.KRZ_RELEASE_FACTOR = 3.65`, while `2.63 / 1.39` is
+**1.8920863309352518**. So the trailing comment `# = 2.63 / 1.39` never
+described even the 1.9 it was remembered as, and `docs/KRZ_FORMAT.md:818`
+named that 1.9 as the factor's current value while the constant had read 3.65
+since the **2026-09-18 hardware recalibration, "1.9 ->
+3.65, AND CONFIRMED BY EAR"**, which `models.common` records in its own words
+and `TODO.md:60` already tracks.
+
+**The failure mode is the two-module private name.** `_KRZ_RELEASE_FACTOR` is a
+re-export, and `models.common` was already the owner — but the writer restated
+the derivation inline and the format doc restated the number, so the
+recalibration message stopped at `models.common` and never arrived at either
+reader. The recalibration itself was never missing; the news that the writer
+and the doc were out of date was.
+
+**m16 — the fix.** The writer keeps its own one-line history of WHY there is a
+KRZ-only factor (the shared curve under-reads the MPC's DISPLAYED release;
+scaling here avoids lengthening every E4B/E4XT envelope; a global
+recalibration of the shared curve is still a deferred TODO) and hands the
+number itself back to its owner: the comment now carries
+`**RECALIBRATED 2026-09-18 ON HARDWARE, 1.9 -> 3.65, AND CONFIRMED BY EAR**` and
+says to read `models.common.KRZ_RELEASE_FACTOR` rather than re-derive it here.
+`docs/KRZ_FORMAT.md` states `_KRZ_RELEASE_FACTOR = 3.65` with the recalibration
+date and the two-branch split that followed it
+(`KRZ_RELEASE_FACTOR_SUSTAINED`, 1.38), and mentions the withdrawn 1.9 as
+history, outside a backticked claim.
+
+**m17 — the reproduction.** `_thin_velocity_bands` grouped voices by a local
+`_terr` that re-derived `_voice_span`'s key territory without its empty-zone
+guard:
+
+    def _terr(v):
+        return (min(z.lo_key for z in v.zones), max(z.hi_key for z in v.zones))
+
+    _thin_velocity_bands([VoiceLayer(zones=[]), VoiceLayer(zones=[])], 3)
+      -> ValueError: min() arg is an empty sequence
+
+**m17 — the fix, and which sibling.** Three helpers do this same work beside it
+and all three survive an empty list: `_voice_span` (line 1008) with
+`(0, -1)`, and `_thin_velocity_voices`' `voice_lo`/`voice_hi` (1170-1173) with
+`default=0` / `default=127`. `_terr` is the key-territory pair, so it takes
+**`_voice_span`** — and it now calls it instead of restating the rule, so the
+two cannot drift apart a second time. `(0, -1)` is the right fallback for a key
+band because it is what the voice actually covers — NO keys — and because no
+populated voice can collide with it: every non-empty territory has
+`hi_key >= lo_key`, so a zone-less voice groups with the other zone-less voices
+and never takes the widest-band slot from one that sounds. The empty territory
+must NOT be the full keyboard, which is the OTHER convention this file already
+uses for the same voice: `_voice_key_vel_range` (line 3734) hands `(0, 127, 0,
+127)` to the stacking check, and `(0, 127)` here would have merged a
+full-keyboard layer with a zone-less one and dropped one of them. The velocity
+edges are the other axis and take the other sibling — `voice_lo`/`voice_hi`'s
+0 and 127, which for a velocity band means "everything it could have played",
+the honest thing to record when a band is dropped. The over-budget key-span
+sort now reads `_terr` for the same pair instead of a third `min`/`max` over
+`v.zones`.
+
+**m17 — unreachable, and proved three ways.** A zone-less voice reports the
+full key range to `_voices_stacked`, so it "overlaps" every other layer and the
+stack reads as stacked: `_spread_pick` fires and the layer-fitting chain that
+ends at `_thin_velocity_bands` never starts. Verified on the reviewer's own
+construction (five stacked layers, one with `zones=[]`, `_voices_stacked` True)
+by spying both callables from inside `write_krz`: `_spread_pick` ran once,
+`_thin_velocity_bands` was not called. Verified again over **1 900 randomly
+generated presets, each carrying one zone-less layer**: `_thin_velocity_bands`
+was reached 393 times and never once with an empty-zone voice in the list. The
+asymmetry is structural — a fused voice inherits its survivor's zones, and an
+empty voice's span is disjoint from everything, so it is the most fusable thing
+in the preset. The finding is therefore a latent inconsistency with the
+defensive helpers beside it, exactly as reported, and the fix costs nothing.
+
+**The guard, so this cannot drift again.**
+`tests/test_docs_constants_agree.py` gained one private name and one doc:
+`WATCHED['writers.krz_writer'] = ['_KRZ_RELEASE_FACTOR']` and
+`docs/KRZ_FORMAT.md` in `DOCS`. Both extensions are narrow — the format doc
+quotes exactly one watched value, that one, so `models.common`'s list is
+untouched and the check covers one more line. Verified by re-introducing the
+stale `1.9`: `test_documented_constant_values_match_the_code` fails with
+`docs/KRZ_FORMAT.md: `_KRZ_RELEASE_FACTOR was 1.9` but
+writers.krz_writer._KRZ_RELEASE_FACTOR is 3.65` — note the "was", which is the
+convention that file's own docstring sets for a historical value. The writer's
+inline comment is still outside any test's reach — it is a Python comment — so
+the new file pins it directly instead.
+
+**Tests.** `tests/test_krz_writer_docs_and_empty_zones.py` (new) — 13 tests,
+0.2 s. **Five fail with the fix reverted**: the m17 reproduction
+(`_thin_velocity_bands` on two zone-less voices, through the shipped body and
+then through the live one), the zone-less voice among real ones, the test that
+discriminates which key-span fallback was matched, and both halves of m16 (the
+withdrawn `2.63 / 1.39` no longer in the writer's source; the format doc
+stating the live value with the recalibration date). The shipped algorithm is
+kept verbatim in the file as an ORACLE and run against the fixed one over six
+populated cases — survivors, dropped bands and widened windows are compared
+element by element, which is what pins the "no behaviour change" claim. Those
+six, and the unreachability proof, pass in both states on purpose.
+
+**What did not change.** The value 3.65, the value 1.38 beside it, and every
+byte `write_krz` writes. The m17 fallback only runs on a voice with no zones,
+which no preset produced in 1 900 trials and which the writer routes to
+`_spread_pick` anyway; for voices that carry zones the oracle comparison above
+shows the same survivors, the same dropped bands and the same widened windows.
+`-k krz` runs 264 passed (89 subtests) and
+`test_docs_constants_agree.py test_citations_resolve.py` 9 passed; the full
+suite was not run here.
+
+§REVIEW1010 findings m16/m17; full review in
+docs/CODE_REVIEW_2026-10-10.md.

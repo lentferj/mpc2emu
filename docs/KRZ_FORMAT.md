@@ -815,10 +815,19 @@ byte 0 = `0` (loop Off).
 - The AMPENV User/Natural mode lives in an `ENC` segment (`ENC[1]`: `1` =
   Natural → `0` = User); mpc2emu sets User so its values apply.
 
-A KRZ-only release-time correction factor (`_KRZ_RELEASE_FACTOR = 1.9`) scales
+A KRZ-only release-time correction factor (`_KRZ_RELEASE_FACTOR = 3.65`) scales
 the release before encoding, compensating a known under-read of the MPC's
 displayed release by the shared value→seconds curve (a proper global
-recalibration is a deferred TODO).
+recalibration of that curve is a deferred TODO). **RECALIBRATED 2026-09-18 ON
+HARDWARE, 1.9 → 3.65, AND CONFIRMED BY EAR** — `models.common.KRZ_RELEASE_FACTOR`
+holds the number and records the measurements, why it is a calibration rather
+than a law, and the two-branch split that followed them. The former 1.9 came
+from reading this machine's displayed release against another machine's curve:
+two conversions of an unmeasured span instead of one measurement of a real one,
+and it left every MPC-sourced release on the K2000 running fast. Releases above
+the 33 % knee (sustaining programs) use the separate
+`KRZ_RELEASE_FACTOR_SUSTAINED`, which is 1.38 — one factor cannot serve both
+branches.
 
 **A stage whose raw time AND level bytes are both `0` is unused on the
 device and holds the level of the *previous* stage**, not a literal decay

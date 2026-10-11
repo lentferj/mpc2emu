@@ -1247,8 +1247,26 @@ def _thin_velocity_bands(voices, limit=3):
 
     Returns (kept_voices, dropped_bands) so the caller can name what was lost.
     """
+    # §REVIEW1010 m17. This re-derived `_voice_span`'s key territory without its
+    # empty-zone guard, so a voice carrying no zones raised ValueError out of
+    # `min()` -- and the three helpers that do this work next to it are written
+    # to survive an empty list (`_voice_span` itself, and `_thin_velocity_voices`
+    # `voice_lo`/`voice_hi`). It now defers to the owner rather than restating
+    # the rule, so the two cannot drift apart again.
     def _terr(v):
-        return (min(z.lo_key for z in v.zones), max(z.hi_key for z in v.zones))
+        return _voice_span(v)
+
+    # The velocity window of a band, same axis and same convention as
+    # `_thin_velocity_voices.voice_lo`/`voice_hi`: a voice with no zones has NO
+    # window, and the whole range 0..127 is what "everything it could have
+    # played" means -- both when ranking bands inside a group and when recording
+    # a dropped one. That is the honest report for a voice with no zones, and it
+    # is a number rather than a traceback.
+    def _vlo(v):
+        return min((z.lo_vel for z in getattr(v, 'zones', []) or []), default=0)
+
+    def _vhi(v):
+        return max((z.hi_vel for z in getattr(v, 'zones', []) or []), default=127)
 
     groups: dict = {}
     for v in voices:
@@ -1256,13 +1274,10 @@ def _thin_velocity_bands(voices, limit=3):
 
     kept, dropped = [], []
     for terr in sorted(groups):
-        band = sorted(groups[terr],
-                      key=lambda v: -(max(z.hi_vel for z in v.zones)
-                                      - min(z.lo_vel for z in v.zones)))
+        band = sorted(groups[terr], key=lambda v: -(_vhi(v) - _vlo(v)))
         kept.append(band[0])
         for v in band[1:]:
-            dropped.append((min(z.lo_vel for z in v.zones),
-                            max(z.hi_vel for z in v.zones)))
+            dropped.append((_vlo(v), _vhi(v)))
 
     # WIDEN THE SURVIVOR TO THE FULL VELOCITY RANGE, or the cure is worse than
     # the disease. The band we keep carries the window the SOURCE gave it —
@@ -1277,11 +1292,9 @@ def _thin_velocity_bands(voices, limit=3):
             z.lo_vel, z.hi_vel = 0, 127
     # Still over budget (many key regions): keep the widest-spanning ones.
     if len(kept) > limit:
-        kept.sort(key=lambda v: -(max(z.hi_key for z in v.zones)
-                                  - min(z.lo_key for z in v.zones)))
+        kept.sort(key=lambda v: -(_terr(v)[1] - _terr(v)[0]))
         for v in kept[limit:]:
-            dropped.append((min(z.lo_vel for z in v.zones),
-                            max(z.hi_vel for z in v.zones)))
+            dropped.append((_vlo(v), _vhi(v)))
         kept = kept[:limit]
     return kept, dropped
 
@@ -1905,12 +1918,22 @@ _ONESHOT_HOLD_S = 40.0
 
 # KRZ-only release-time correction.  The shared MPC value→seconds curve
 # (_xpm_env_to_seconds, fit in §18 to audio time-to-−40 dB) under-reads the MPC's
-# DISPLAYED release time by a ~constant factor: AlphaPad VolumeRelease 0.764 →
-# curve 1.39 s vs the MPC AMPENV display 2.63 s (Jan, 2026-06-24). Scaling here
-# (KRZ-writer only) avoids lengthening every E4B/E4XT envelope; the proper global
-# recalibration of the shared curve is a deferred TODO (needs a by-ear E4B check).
+# DISPLAYED release time by a ~constant factor, so the KRZ writer scales it here.
+# Scaling in this writer only avoids lengthening every E4B/E4XT envelope; the
+# proper global recalibration of the shared curve is a deferred TODO (needs a
+# by-ear E4B check).
+#
+# **RECALIBRATED 2026-09-18 ON HARDWARE, 1.9 -> 3.65, AND CONFIRMED BY EAR** --
+# models.common says exactly that, and owns the number from here on. A WITHDRAWN
+# derivation used to be spelled out on the next line instead (this machine's
+# displayed release read against that curve, on one program, 2026-06): it
+# produced 1.9, it left every MPC-sourced release on the K2000 running fast,
+# and the arithmetic never even gave 1.9. **The value is 3.65. How it was
+# measured, and why it is not a law, is recorded where it is owned -- read
+# `models.common.KRZ_RELEASE_FACTOR` and do not re-derive it here.**
+#
 # CR-KRZ: now lives in models.common as KRZ_RELEASE_FACTOR (shared w/ krz_parser.py).
-_KRZ_RELEASE_FACTOR = KRZ_RELEASE_FACTOR   # = 2.63 / 1.39
+_KRZ_RELEASE_FACTOR = KRZ_RELEASE_FACTOR   # 3.65, recalibrated 2026-09-18
 
 
 #: The AKAI mute-cut re-model's REAL curve (§155 amendment, s3ked, 2026-08-31)
