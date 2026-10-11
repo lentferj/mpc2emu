@@ -44598,3 +44598,66 @@ this commit; D2-D4 stay open.
 
 §REVIEW1010 follow-up D1 (from finding T4); full review in
 docs/CODE_REVIEW_2026-10-10.md.
+
+---
+
+### Finding D4 — the trim that halved every stereo sample: channel-blind frame count, index read as count (2026-10-11)
+
+D4 was the last of the four defects the T4 seam work documented without
+fixing, and this entry lands it. Two faults in two adjacent lines of the
+`talsmpl` preset parser (`parsers/talsmpl_parser.py:495-496`), both in the
+`startsample`/`endsample` playback-window trim. First, `n_frames =
+len(sd.data) // 2` divides by two regardless of channel count, while the
+writer computes the same quantity as `len(sample.data) // (2 * max(1,
+sample.channels))` (`:636`) — the m10 fault again in a second module.
+Second, `trim_end = end_s if end_s > 0 else n_frames` treats `endsample` as
+an EXCLUSIVE end, while the writer stores it as the last INDEX — `last =
+max(0, n_frames - 1)` — with a comment explaining the format wants the
+index, not the count. Confirmed on the tree before fixing, write → parse →
+compare: a 256-frame stereo sample (1024 bytes) came back **510 bytes — 127
+frames, half its audio, ending mid-frame** (510 is not divisible by the
+4-byte stereo frame); a 300-frame mono sample came back **299 frames**. The
+mono half is writer and parser disagreeing about index-versus-count; the
+stereo half is `// 2` where the channel count belongs.
+
+**The fix is the two lines the T4 entry prescribed** — count frames the way
+the writer does, and read the stored index as an index:
+
+    frame_bytes = 2 * max(1, sd.channels)
+    n_frames = len(sd.data) // frame_bytes
+    trim_end = end_s + 1 if end_s > 0 else n_frames
+    ...
+    sd.data = sd.data[start_s * frame_bytes : trim_end * frame_bytes]
+
+The `end_s > 0` guard keeps its old meaning: a one-frame sample stores
+`endsample = 0`, which still reads as the whole sample (verified: 1 frame in,
+1 frame out). The loop-point rebase below the slice is untouched — loop
+points are already in frames.
+
+**One new test and two strengthened ones, all in
+`tests/test_talsmpl_roundtrip.py`** (untracked, as all of `tests/` is), and
+the file's docstring no longer lists audio among the known-lossy fields:
+
+* `test_a_stereo_sample_roundtrips_with_all_its_frames` — the 256-frame
+  stereo file above, end to end through `write_talsmpl`/`parse_talsmpl`:
+  channel count, exact bytes, exact byte length, exact frame count. Before D4
+  it came back 510 bytes / 127 frames.
+* `test_a_single_zone_roundtrips_field_for_field` — the audio assertion was a
+  prefix comparison inside a one-frame-short range (known-lossy 4); it is now
+  byte-exact plus the frame count.
+* `test_a_zone_with_no_loop_roundtrips_with_no_loop` — the 300-frame mono
+  sample now asserts all 300 frames byte-exact (known-lossy 4's other half).
+
+**Revert proof.** Source change stashed (`tests/` is untracked and survives),
+`__pycache__` purged, run with `python3 -B`: exactly those three tests fail,
+the other 12 in the file pass. Stash popped, fix restored.
+
+Subsets run here (the full suite was not):
+`tests/test_talsmpl_roundtrip.py tests/test_info_cmd_sniff_format.py
+tests/test_source_target_restriction.py` — 50 passed, 17 subtests passed.
+With the tree-policing meta-test `tests/test_citations_resolve.py` — green
+(the new entry is a `###`, not a `##`, so the notes index is untouched).
+TODO.md's D4 row removed with this commit; D2-D3 stay open.
+
+§REVIEW1010 follow-up D4 (from finding T4); full review in
+docs/CODE_REVIEW_2026-10-10.md.

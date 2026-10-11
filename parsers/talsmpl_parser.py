@@ -491,11 +491,15 @@ def parse_talsmpl(talsmpl_path: str, wav_dir: Optional[str] = None) -> Bank:
                 if sd is None:
                     continue
 
-                # Apply startsample/endsample playback window trim
-                n_frames = len(sd.data) // 2
-                trim_end = end_s if end_s > 0 else n_frames
+                # Apply startsample/endsample playback window trim.
+                # Frame count is channel-aware (a frame is 2 bytes PER
+                # CHANNEL), and `endsample` is the last INDEX, not the
+                # count — the writer stores `max(0, n_frames - 1)`.
+                frame_bytes = 2 * max(1, sd.channels)
+                n_frames = len(sd.data) // frame_bytes
+                trim_end = end_s + 1 if end_s > 0 else n_frames
                 if start_s > 0 or trim_end < n_frames:
-                    sd.data       = sd.data[start_s * 2 : trim_end * 2]
+                    sd.data       = sd.data[start_s * frame_bytes : trim_end * frame_bytes]
                     sd.loop_start = max(0, sd.loop_start - start_s)
                     sd.loop_end   = max(0, sd.loop_end   - start_s)
 
