@@ -766,7 +766,10 @@ def main():
         help='HDA image size in MB. e4b default: auto (smallest 128 MB step that '
              'fits; max 14336). krz default: content + ~50%% headroom to save '
              'onto (FAT16 max ~2047). akai default: content + 25%% (max 511 — '
-             'AKAI block numbers are 16-bit).')
+             'AKAI block numbers are 16-bit). 0 means "auto" for e4b/eiii/krz '
+             '(and is inert without an image flag); a NEGATIVE value cannot '
+             'make an image at any size and is refused when --hda or --iso '
+             'asks for one.')
     ap.add_argument('--hda-fs', choices=['fat', 'emu'], default='fat',
         help="E4B HDA filesystem: 'fat' (EOS 4.7+, default) or "
              "'emu' (native EMU-fs, all EOS versions). Ignored for krz (K2000 "
@@ -800,6 +803,10 @@ def main():
              'floppy. **Defaults to 24000 Hz for --format krz** (the K2000 only '
              'gives +1.46 st headroom at 44.1 kHz, so wide zones clamp); pass 0 '
              'to disable, or any HZ to override. No default for e4b. '
+             'Taken literally with no floor: 1 is accepted and resamples every '
+             'sample to 1 Hz, which is silent and ~0 bytes. A NEGATIVE value '
+             'means "unset" (same as not passing the flag), so for krz it '
+             'selects the headroom-aware default below. '
              'See docs/RESOLUTION_NOTES.md "KRZ up-pitch clamp".')
     ap.add_argument('--shrink-to', dest='shrink_to', type=_size_bytes_type,
         default=None, metavar='SIZE',
@@ -848,9 +855,16 @@ def main():
     ap.add_argument('--lfo-sync-bpm', type=float, default=120.0, metavar='BPM',
         help='Reference tempo for reproducing tempo-synced MPC LFOs as a fixed '
              'rate (default: 120 — the MPC/DAW new-project default; the BPM is '
-             'not stored in the XPM). See docs/lfo_sync_rates.md for the table.')
+             'not stored in the XPM). See docs/lfo_sync_rates.md for the table. '
+             'Any value is accepted; the resulting rate is then clamped to the '
+             "E4XT's own 0.08–18.01 Hz LFO window, so 0 (or negative) yields "
+             'the slowest rate the hardware plays rather than a stopped LFO')
     ap.add_argument('--jobs', type=int, default=None, metavar='N',
-        help='Parallel workers for resampling (default: cpu_count-1)')
+        help='Parallel workers for resampling (default: cpu_count-1). At '
+             'least 1 is required; a value below that is read as "not given" '
+             'and the default is used, and the run says so — a worker count '
+             'asks for a speed, not for particular output, so every count '
+             'produces the same bytes')
     ap.add_argument('--trim', nargs='?', const=72.0, type=float, default=None,
         metavar='DB',
         help='Shorthand for --trim-start DB --trim-tail DB: cleanly cut leading '
@@ -905,8 +919,11 @@ def main():
              'attack when set high: bare/72 = "silence only" (keep the full onset); '
              '45 trims into the attack for a tighter sample. By default a sample '
              "whose loop starts in the trimmed lead-in (an autosampler's whole-take "
-             'loop) has that loop DROPPED so the result is a clean one-shot — see '
-             '--trim-start-keep-loops. Runs before --trim-tail/single-cycle/reduce/'
+             'loop) KEEPS that loop: the cut is clamped to the loop start, so the '
+             'lead-in that lies BEFORE it is still removed and a sustained sound '
+             'keeps sustaining. Pass --trim-start-drop-loops to discard the loop '
+             'instead and get a clean one-shot (a sustained sound then stops '
+             'sustaining). Runs before --trim-tail/single-cycle/reduce/'
              'resample so everything downstream sees the shortened samples.')
     ap.add_argument('--trim-start-fade', type=float, default=5.0, metavar='MS',
         help='With --trim-start: fade-in length (ms) starting exactly at the new '
@@ -1094,6 +1111,41 @@ def main():
               f"(got {args.shrink_to:.0f}).")
         sys.exit(1)
 
+    # --jobs: a resource knob, so a value below 1 is read as "not given" rather
+    # than refused. §REVIEW1010 m19. `--jobs` was a bare `int` and
+    # `map_over_banks` passed it straight to `ProcessPoolExecutor(max_workers=)`,
+    # so `--jobs 0` raised `ValueError: max_workers must be greater than 0` as a
+    # traceback and exit 1 — verified on three samples, which is what makes the
+    # pool actually open. With ONE sample `total <= 1` takes the serial branch
+    # and the same value runs, which is why this falls back instead of
+    # rejecting: refusing it would break an invocation that works today.
+    # Three siblings (--shrink-to, --single-cycle, --auto-loop) DO reject a
+    # non-positive value, and the difference is what they ask for: each of
+    # those asks for a particular OUTPUT and zero of it is not a thing, while a
+    # worker count asks for a SPEED and every count produces identical bytes.
+    # So the kind failure is the default — said out loud, exactly as the
+    # --trim-start-keep-loops note further down reads a flag it cannot honour
+    # rather than dropping it.
+    if args.jobs is not None and args.jobs < 1:
+        print(f"  Note: --jobs N needs at least 1 worker (got {args.jobs}); "
+              f"using the default (cpu_count-1).")
+        args.jobs = None
+
+    # --hda-size: same shape as m19, and the same decision taken the other way.
+    # §REVIEW1010 m23. A negative size is not merely undocumented, it cannot
+    # produce an image at all: `--format krz --hda --hda-size -5` raised a raw
+    # `ValueError: cannot fit -5 MB in a single FAT16 volume` and e4b raised
+    # out of `build_hda_fat`, both as tracebacks with exit 1. 0 is NOT refused
+    # — it means "auto" on every format that auto-sizes, and is inert without
+    # --hda/--iso, so only a negative value is rejected, and only where one is
+    # actually asked for. Exit 2, as for --hda-size over the EIV limit: the
+    # value the user passed cannot produce the thing they asked for.
+    if (args.hda_size is not None and args.hda_size < 0
+            and (args.hda or args.iso)):
+        print(f"Error: --hda-size cannot be negative (got {args.hda_size}). "
+              f"Omit it to auto-size.")
+        sys.exit(2)
+
     # --auto-loop: normalise 'auto' (adaptive) | positive-float target length (ms).
     if args.auto_loop is not None and args.auto_loop != 'auto':
         try:
@@ -1142,7 +1194,30 @@ def main():
         run_info(input_path, args.wav_dir, extra, verbose=args.verbose)
         return
 
-    out_dir.mkdir(parents=True, exist_ok=True)
+    # ── Output directory ──────────────────────────────────────────────────────
+    # §REVIEW1010 m20. `out_dir.mkdir(parents=True, exist_ok=True)` raised the
+    # raw `NotADirectoryError: [Errno 20] Not a directory: '/dev/null/x'` when
+    # any ANCESTOR is a file — a traceback and exit 1 with no diagnostic that
+    # names the flag. The same catch covers an `--output-dir` that already
+    # exists as a file (`FileExistsError`, because `exist_ok` only forgives an
+    # existing DIRECTORY) and every other reason the platform refuses. It
+    # happens before the banner and before anything is parsed, so the run costs
+    # nothing.
+    #
+    # Exit 2, matching --firmware-sim on an unimplemented source and
+    # --hda-size over the EIV limit: this is a usage error, an argument that
+    # cannot produce the thing it asks for, and not a partial result.
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        if out_dir.exists() and not out_dir.is_dir():
+            _why = "the path already exists and is not a directory"
+        else:
+            _why = e.strerror or str(e)
+        print(f"Error: cannot create output directory '{out_dir}' ({_why}).")
+        print("  Choose an --output-dir whose parents are directories, or "
+              "omit it to write to the current directory.")
+        sys.exit(2)
     bank_name = args.bank_name.upper()[:12]
 
     fmt_names = {

@@ -718,6 +718,9 @@ ZuluSCSI images:
   --hda-size MB       Hard disk image size in MB
                       e4b/eiii default: auto — smallest 128 MB step that fits; max 14336
                       krz default: content + ~50% headroom to save onto (FAT16 max ~2047)
+                      0 = "auto" (e4b/eiii/krz), and inert without --hda/--iso;
+                      a NEGATIVE value is refused with exit 2 when --hda or --iso
+                      asks for an image, because no image exists at that size
   --hda-fs FS         E4B/EIII HDA filesystem: fat | emu  (default: fat; ignored for krz)
                       fat — FAT16 image in EOS's native layout (MBR partition
                             at LBA 63, 32 KB clusters), read by EOS 4.7+;
@@ -746,6 +749,11 @@ Samples:
   --max-sample-rate HZ  Clean-downsample any sample above HZ to HZ
                       (defaults to 24000 Hz for --format krz — up-pitch headroom
                        + smaller banks; pass 0 to disable; no default for e4b)
+                      Taken literally, with NO floor: 1 is accepted and
+                      resamples every sample to 1 Hz, which is silent and comes
+                      out at ~0.00 MB.  A NEGATIVE value means "unset", exactly
+                      as if the flag had not been passed — under krz that
+                      selects the headroom-aware default.
   --from-samples      Treat the input directory as a folder of WAVs (root note in
                       filename) → one auto-built multisample preset
                       (also auto-detected for a WAV-only dir)
@@ -765,10 +773,19 @@ Vintage resampling:
   --resample-keep-gain Keep the gain-staged "hot" level instead of restoring
                       each sample's original level afterwards (default: restore)
   --jobs N            Parallel resampling workers  (default: cpu_count-1)
+                      At least 1 is required; a value below that is read as
+                      "not given" and the default is used, and the run prints a
+                      Note saying so.  A worker count asks for a speed, not for
+                      particular output, so every count — including the default
+                      — produces byte-identical banks.
 
 Modulation:
   --lfo-sync-bpm BPM  Reference tempo for reproducing tempo-synced MPC LFOs as a
                       fixed rate  (default: 120; see docs/lfo_sync_rates.md)
+                      Any value is accepted, 0 and negative included: the rate
+                      that follows from it is clamped to the E4XT's own
+                      0.08–18.01 Hz LFO window, so a 0 BPM reference yields the
+                      slowest rate the hardware plays rather than a stopped LFO.
 
 Silence trimming (tighten sample starts and ends):
   --trim [DB]         Shorthand for --trim-start DB --trim-tail DB: cleanly cut
@@ -783,6 +800,7 @@ Silence trimming (tighten sample starts and ends):
                       dropped stops sustaining.
   --trim-tail-drop-loops    The same for the tail: discard a loop whose end lies
                       in the tail instead of clamping the cut to just past it.
+                      Off by default since 2026-09-13, like its start.
                       Destructive for library material — on a real pad bank the
                       old default dropped 4 of 5 loops and cut one sample by 63%,
                       where keeping them trims nothing at all, because a looped
@@ -790,15 +808,20 @@ Silence trimming (tighten sample starts and ends):
                       sustain. Use it for autosampler takes whose whole-file loop
                       is a capture artefact.
   --trim-start-fade MS  With --trim-start: fade-in length starting exactly at the
-                      new sample start  (default: short, click-suppressing)
-  --trim-start-keep-loops  With --trim-start: never trim a sample whose loop start
-                      lies in the region that would be cut.
+                      new sample start  (default: 5 ms — short, click-suppressing)
+  --trim-start-keep-loops  Retained for command lines written before 2026-09-13.
+                      Keeping the loop IS what --trim-start now does by
+                      default — the cut is clamped to the loop start, so
+                      lead-in before it is still removed — so this flag is a
+                      no-op and the run prints a Note saying so.
+                      See --trim-start-drop-loops for the other behaviour.
   --trim-tail [DB]    Cut the decaying tail + trailing silence off the END of each
                       sample (gains the most RAM on long one-shots).
   --trim-tail-fade MS   With --trim-tail: fade-out length ending exactly at the new
-                      sample end.
-  --trim-tail-keep-loops   With --trim-tail: never trim a sample whose loop end lies
-                      in the region that would be cut.
+                      sample end  (default: 5 ms)
+  --trim-tail-keep-loops   Retained for command lines written before 2026-09-13.
+                      Keeping the loop is what --trim-tail does by default; this
+                      flag is a no-op and the run prints a Note saying so.
 
 Auto-loop (make held notes sustain indefinitely):
   --auto-loop         Place a clean, seamless FORWARD sustain loop in each sample,
@@ -810,6 +833,7 @@ Auto-loop (make held notes sustain indefinitely):
                       movement retained, at the cost of RAM.
   --auto-loop-min-quality COST  Skip a sample whose best endpoint-match cost
                       exceeds COST, rather than force an audible seam.
+                      (default: 0.45 — the level the crossfade can still hide)
   --auto-loop-force   Loop even already-looped samples, replacing the existing loop.
   --auto-loop-trim    Drop the audio after the loop end to save RAM (the recorded
                       release is lost; the sampler's own release takes over).
@@ -898,7 +922,7 @@ rows in **Fixed defects**.
 |---|---|
 | `0` | everything asked for was produced |
 | `1` | nothing usable: no input parsed, output would clobber an input, or an existing image could not be found for `--add-to` |
-| `2` | a usage error: an argument that cannot produce the thing it asks for (`--firmware-sim` on an unimplemented source, `--hda-size` over the EIV limit) |
+| `2` | a usage error: an argument that cannot produce the thing it asks for (`--firmware-sim` on an unimplemented source, `--hda-size` over the EIV limit or below zero, an `--output-dir` that cannot be created) |
 | `3` | **refused to write.** A sample is at a rate the S3000XL does not play, or a bank does not fit. The image is the whole point of the run, so it is not written in a condition where it would be wrong on the machine |
 | `4` | **partial.** Some inputs failed to parse, some banks failed to write, or an `--add-to` append failed. The outputs that *did* work are still on disk — dropping them would waste good output over one bad input — but the run did not do everything it was asked to, and the banner says `PARTIAL` rather than `Done` |
 
@@ -1553,11 +1577,14 @@ attack: bare / `72` = "silence only" (keep the full onset); `45` trims further
 into the attack for a tighter sample.
 
 **Loop handling.** Autosamplers often embed a loop spanning the *whole* fixed-
-length take, starting at or near frame 0. By default, trimming such a sample
-**drops that loop** so the result is a clean one-shot. Pass
-`--trim-start-keep-loops` to instead clamp the trim so it never cuts past a
-loop's start point — use this for percussion / drum-loop material where the
-loop is musically meaningful and may legitimately start near the sample start.
+length take, starting at or near frame 0. By default that loop is **kept**: the
+cut is clamped to its start point, so the lead-in *before* it is still removed
+and a sustained sound keeps sustaining. Pass `--trim-start-drop-loops` to
+discard the loop instead and get a clean one-shot — use that for autosampler
+takes whose whole-file loop is a capture artefact rather than musical, since a
+sustained sound whose loop is dropped stops sustaining. (`--trim-start-keep-loops`
+is the old opt-in; keeping the loop has been the default since 2026-09-13, so it
+is now a no-op the run reports.)
 
 Runs first of all in the pipeline, before `--trim-tail` / `--single-cycle` /
 `--reduce-*` / `--resample`, so everything downstream sees the shortened
@@ -1585,12 +1612,14 @@ natural release: bare / `72` = "silence only" (keep all audible decay); `45`
 trims further into the release for a tighter sample.
 
 **Loop handling.** Autosamplers often embed a loop spanning the *whole* fixed-
-length take (not a musical sustain loop). By default, trimming such a sample
-**drops that loop** so the result is a clean one-shot. Pass
-`--trim-tail-keep-loops` to instead skip trimming any sample whose loop end
-lies in the tail — use this for percussion / drum-loop material where the loop
-length is musically meaningful and legitimately may contain trailing silence
-(e.g. a one-bar loop with space on the last beat).
+length take (not a musical sustain loop). By default that loop is **kept**: the
+cut is clamped to just past its end, so a musical loop survives and a real
+library pad keeps its sustain. Pass `--trim-tail-drop-loops` to discard the
+loop instead and get a clean one-shot — use that for autosampler takes whose
+whole-file loop is a capture artefact, since on real material the old
+loop-dropping default cut one sample by 63% and dropped 4 of 5 loops.
+(`--trim-tail-keep-loops` is the old opt-in; keeping the loop has been the
+default since 2026-09-13, so it is now a no-op the run reports.)
 
 Runs first in the pipeline, before `--single-cycle` / `--reduce-*` /
 `--resample`, so everything downstream sees the shortened samples.

@@ -43506,3 +43506,174 @@ its own minimum loop; only its printed form is clamped. The arithmetic line
 100*(1 - loop/orig_frames) is untouched. Suite: not run in full — `-k
 single_cycle` (13 passed) and `-k shrink` (20 passed, 4 subtests) pass
 unchanged, which is the surface this file touches.
+
+### Findings m19/m20/m21/m23 — two raw tracebacks from the CLI, a default the docs got backwards, and four acceptances nobody had written down (2026-10-10)
+
+Four CLI findings, one shape: a value the command line accepted and then could
+not spend. Two reached a library that raises, one reached a prose paragraph
+that outlived the behaviour change it described, and four are real behaviours
+that were correct and undocumented. All of the reproductions below were run
+against the shipped code before anything was changed.
+
+```
+m19  three samples + --single-cycle --jobs 0
+  Single-cycle extraction (auto); samples: 3  (workers: 0)
+  ValueError: max_workers must be greater than 0          exit 1, traceback
+m20  --output-dir /dev/null/x
+  NotADirectoryError: [Errno 20] Not a directory: '/dev/null/x'
+                                                                  exit 1, traceback
+m23  --max-sample-rate -5     e4b: no downsampling step at all. krz: headroom-aware
+m23  --max-sample-rate  1     Downsample 'sn0' 44100 -> 1 Hz  x3, output 0.00 MB
+m23  --lfo-sync-bpm 0         [LFO] 1 tempo-synced LFO(s) reproduced at 0 BPM, exit 0
+m23  --hda-size -5 (krz)      ValueError: cannot fit -5 MB in a single FAT16 volume
+m23  --hda-size -5 (e4b)      raised out of build_hda_fat                 exit 1
+m23  --hda-size 0  (e4b/krz)  auto-size, exit 0  -- a working invocation
+```
+
+**m19 — `--jobs 0`, and the decision to fall back rather than refuse.**
+`--jobs` was declared a bare `int` with no validation and `map_over_banks`
+handed it straight to `ProcessPoolExecutor(max_workers=)` at
+`processors/parallel.py:84`. A non-positive value is now read as "not given",
+the default is used, and the run prints
+`Note: --jobs N needs at least 1 worker (got 0); using the default (cpu_count-1).`
+
+The decision is the part worth recording, because refusing would have been the
+consistent-looking choice and a reviewer could reasonably have asked for it.
+Three sibling options — `--shrink-to`, `--single-cycle`, `--auto-loop` — DO
+reject a non-positive value with exit 1, and they are the difference:
+
+* **Those three ask for a particular OUTPUT, and zero of it is not a thing.**
+  `--shrink-to 0` produces a preset of 0 bytes; `--single-cycle 0` is not a
+  cycle count. `--jobs` asks for a **speed**, and every worker count produces
+  byte-identical banks — which is not an assumption here, it is now pinned by
+  `test_jobs_zero_writes_the_same_bytes_as_no_jobs_at_all`, which diffs the E4B
+  written with `--jobs 0` against the one written with no `--jobs` at all.
+* **Refusing would have broken an invocation that works today.** With one
+  sample `map_over_banks` takes the `total <= 1` serial branch
+  (`processors/parallel.py:81`), so the pool never opens and `max_workers=0`
+  is never reached. `--jobs 0` has been a silent no-op on every single-sample
+  run. The finding itself noted this ("With a single sample the `total <= 1`
+  serial branch masks it"); the consequence is that any fix has to keep that
+  invocation working, and only a fallback does.
+* **The default is already floored.** `default_workers()` is
+  `max(1, cpu_count-1)`, so the substituted value is always valid.
+
+It is the same reading `--max-sample-rate` already gives a negative value, and
+the note is the same one the `--trim-start-keep-loops` branch already prints
+for a flag it cannot honour: read the value the user gave, and say what was
+done instead of dropping it.
+
+**m20 — `--output-dir /dev/null/x`.** `out_dir.mkdir(parents=True,
+exist_ok=True)` raised a raw `NotADirectoryError` when an ANCESTOR is a file.
+The mkdir is now caught and reports the reason, distinguishing three cases:
+an ancestor is not a directory, the path itself already exists as a file
+(`FileExistsError` — `exist_ok=True` only forgives an existing *directory*),
+and anything else the platform refuses. Exit **2**, which the README's exit
+table already defines as "a usage error: an argument that cannot produce the
+thing it asks for", alongside `--firmware-sim` on an unimplemented source and
+`--hda-size` over the EIV limit. Nothing new was invented.
+
+Two properties are deliberate and pinned by tests: the catch sits BEFORE the
+banner and before any parsing, so a refused run costs nothing; and `--info` is
+untouched, because it returns above this point and never creates an output
+directory — so `--info --output-dir /dev/null/x` still inspects the file and
+exits 0, exactly as before.
+
+**m21 — the pre-2026-09-13 `--trim-start` default.** `--trim-start-keep-loops`
+has been `argparse.SUPPRESS` since 2026-09-13, and the code passes
+`drop_full_loop=args.trim_start_drop_loops` (default `False`), so the loop is
+**kept** and the cut is clamped to the loop start — `processors/start_trim.py:191`.
+Three places still said the opposite: `convert.py`'s `--trim-start` help, and
+README's Start Trim and Tail Trim sections. The README's own All Options table
+already stated the correct default, so the file contradicted itself, and
+`tests/test_readme_options.py` only checks flag *presence* — both things were
+present and correct as text, so nothing could see it.
+
+All three now agree with the table and with the clamp that actually happens.
+The direction of harm was "the reader believes the destructive thing is the
+default", which is why this is a MINOR and not a MAJOR: nobody's output changed,
+but someone who wanted the old behaviour would not have looked for it, and
+someone relying on the documented default would have been surprised by a
+sustained sample that sustained.
+
+`tests/test_readme_options.py` gains `test_a_documented_default_matches_the_parser`:
+for the flags whose parser default is a number, the README's All Options row
+must carry that number. Curated rather than derived, with the reasoning written
+next to the map — several rows legitimately describe a `None` default in words
+(`--hda-size` says "auto"), and only a human can say which prose has to hold
+the value. The map is double-checked against the parser's own declaration, so
+it cannot quietly become a second source of truth that the README is graded
+against instead of the code.
+
+**m23 — the four acceptances, decided one at a time.** The review calls this a
+documentation finding, and the bias was to document rather than to add bounds.
+Each case was reproduced first, and two of the four turned out to be more than
+documentation.
+
+* **`--max-sample-rate -5` — BENIGN, documented only.** `max_sr > 0` is false
+  and `max_sr < 0 and format == 'krz'` selects the headroom-aware path, so a
+  negative value is *exactly* "unset". No bound: a bound here would reject a
+  value that already does something sensible. Both the help and the README now
+  say so, and that krz therefore takes its headroom-aware default.
+* **`--max-sample-rate 1` — DOCUMENTED, deliberately NOT bounded.** It is
+  accepted and resamples every sample to 1 Hz; the output is 0.00 MB and
+  silent. No lower sanity bound was added, and this was the closest call in the
+  entry. A floor is a judgement about a value nobody has measured, and any
+  floor that excludes 1 also excludes a deliberate lo-fi target — 4000 Hz is a
+  plausible thing to ask for, 1000 Hz is arguable, and there is no line in this
+  repo that says where "lo-fi" ends and "broken" begins. The honest fix is
+  prose that says the value is taken literally and what 1 costs. If the project
+  ever wants a floor, `tests/test_cli_numeric_validation.py` pins the current
+  behaviour so it cannot be introduced by accident.
+* **`--lfo-sync-bpm 0` / negative — DOCUMENTED, NOT bounded.** `_mpc_sync_hz`
+  clamps the resulting rate to the E4XT's own 0.08–18.01 Hz window
+  (`parsers/xpm_parser.py:91`), so 0 BPM yields the slowest rate the hardware
+  plays. The conversion is correct against the E4XT's own law; what was wrong
+  was only the summary line, which printed "reproduced at 0 BPM" and read as a
+  stopped LFO. Documented, and the clamp is pinned by a test that drives
+  `_mpc_sync_hz` at 0, −5 and 1e9 BPM.
+* **`--hda-size -5` — BOUNDED, because this one cannot work at all.** The
+  review called it "accepted"; it is not. `--format krz --hda --hda-size -5`
+  raised a raw `ValueError: cannot fit -5 MB in a single FAT16 volume` out of
+  `build_k2000_disk` and e4b raised out of `build_hda_fat` — two tracebacks,
+  exit 1. It is now refused with exit 2, as for the over-limit case.
+
+  **`--hda-size 0` is NOT refused**, and that asymmetry is the whole point: 0
+  means "auto" on every format that auto-sizes and is a working invocation, so
+  the guard is `< 0` and not `<= 0`. The guard is also gated on `--hda` or
+  `--iso`, because `--hda-size` is **inert without either** — an unconditional
+  guard would have broken `--hda-size -5` on a run that never builds an image,
+  which is a currently-working invocation and therefore off limits. Both halves
+  are pinned by `test_hda_size_zero_means_auto_and_negative_is_refused`.
+
+**Three README rows found while documenting, not part of the findings.**
+`--trim-start-fade` described its default in prose ("short, click-suppressing")
+where the parser's default is 5.0 ms and the section prose already said 5 ms;
+`--trim-tail-fade` stated no default at all; and `--auto-loop-min-quality`'s
+default of 0.45 was nowhere in the table. All three now carry the number, which
+is also what makes the new curated-default check possible without special cases.
+
+**Tests.** 15 in `tests/test_cli_numeric_validation.py`, plus one new test in
+`tests/test_readme_options.py`. (Nothing under `tests/` is tracked — the whole
+directory is gitignored, as with every other test file in this project — so the
+commit carries `convert.py`, `README.md` and these notes only.) **Nine of the 15
+fail with the fix reverted**: the two `--jobs` reproductions, the byte-identity
+run, both `--output-dir` refusals, both trim flag-direction checks, the
+`--hda-size` refusal, and the `--trim-tail-drop-loops` table row, whose
+"Off by default since 2026-09-13" was missing until this entry.
+
+The other six pass before and after, on purpose, and they are the guards:
+`--jobs 0` with ONE sample still runs (so the fallback cannot turn into a
+refusal), a fresh `--output-dir` with missing parents is still created (so the
+catch cannot refuse everything), `0` and a negative `--max-sample-rate` are
+still different documented behaviours, the `--lfo-sync-bpm` clamp is unchanged,
+and `--trim-start-drop-loops`'s table row was already right.
+
+**What did not change.** Every valid invocation. The two code fixes alter exit
+codes for input that was previously a traceback, and one adds a note line for
+`--jobs < 1`; no accepted value is rejected, no default moved, no output byte
+altered. The `--trim-{start,tail}-keep-loops` flags are still accepted and
+still no-ops, with the same runtime Note they already printed.
+
+§REVIEW1010 findings m19/m20/m21/m23; full review in
+docs/CODE_REVIEW_2026-10-10.md.
